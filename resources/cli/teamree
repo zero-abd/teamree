@@ -1,0 +1,49 @@
+#!/bin/sh
+# The `teamree` CLI as it ships inside the installed app (macOS and Linux).
+#
+# The CLI is a plain Node bundle, but an installed app cannot assume a Node
+# runtime is on the machine — so it runs under the Electron binary the app
+# already ships, which becomes an ordinary Node process when
+# ELECTRON_RUN_AS_NODE is set. A system Node is used only as a fallback, which
+# is what happens when this script is run straight out of a source checkout.
+#
+# Put it on PATH with a symlink; the loop below resolves symlinks so the script
+# still finds the app it lives in:
+#
+#   ln -s "/Applications/teamree.app/Contents/Resources/cli/teamree" /usr/local/bin/teamree
+set -e
+
+target=$0
+# POSIX symlink resolution: `readlink -f` is not portable to older macOS.
+while [ -L "$target" ]; do
+  link=$(readlink "$target")
+  case $link in
+    /*) target=$link ;;
+    *) target=$(dirname "$target")/$link ;;
+  esac
+done
+here=$(cd "$(dirname "$target")" && pwd)
+
+bundle="$here/teamree.mjs"
+[ -f "$bundle" ] || bundle="$here/../../out/cli/index.js"
+
+# macOS: Contents/Resources/cli -> Contents/MacOS/teamree.
+# Linux: <install>/resources/cli -> <install>/teamree.
+host=
+for candidate in "$here/../../MacOS/teamree" "$here/../../teamree"; do
+  if [ -x "$candidate" ]; then
+    host=$candidate
+    break
+  fi
+done
+
+if [ -n "$host" ]; then
+  ELECTRON_RUN_AS_NODE=1 exec "$host" "$bundle" "$@"
+fi
+
+if command -v node >/dev/null 2>&1; then
+  exec node "$bundle" "$@"
+fi
+
+echo "teamree: could not find the app runtime next to $here, and no node on PATH" >&2
+exit 1

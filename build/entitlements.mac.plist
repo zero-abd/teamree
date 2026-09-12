@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for a hardened-runtime, notarized macOS build. They are inert in
+  the default unsigned (ad-hoc) build and exist so that turning signing on is a
+  flag change rather than a research project.
+
+  - The two JIT entitlements are what V8 needs; without them the renderer
+    crashes on launch under the hardened runtime.
+  - Library validation has to be disabled because the app loads node-pty's
+    prebuilt binary, which is signed by whoever built it and not by this app's
+    team.
+  - The terminal is the product: it spawns arbitrary user processes, reads the
+    user's own files, and talks to whatever the user's tooling talks to, so
+    inherit, network and file access are all required.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.inherit</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+  </dict>
+</plist>

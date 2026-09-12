@@ -12,6 +12,25 @@ const MAX_SLUG_LENGTH = 60
 const FALLBACK_SLUG = 'worktree'
 
 /**
+ * Windows refuses to create a file or directory whose name is a DOS device,
+ * whatever the extension. That kills both halves of a worktree at once: the
+ * checkout directory, and git's own loose ref file under refs/heads. Names are
+ * therefore disambiguated at the source rather than at each use.
+ */
+const WINDOWS_DEVICE_NAMES = new Set([
+  'con',
+  'prn',
+  'aux',
+  'nul',
+  ...Array.from({ length: 10 }, (_, index) => `com${index}`),
+  ...Array.from({ length: 10 }, (_, index) => `lpt${index}`)
+])
+
+export function isWindowsDeviceName(name: string): boolean {
+  return WINDOWS_DEVICE_NAMES.has(name.toLowerCase())
+}
+
+/**
  * Lowercase ASCII words joined by dashes. This deliberately throws away more
  * than git forbids: a branch that survives being typed into a shell prompt,
  * pasted into a PR, and used as a folder name on Windows is worth more than one
@@ -27,6 +46,7 @@ export function slugify(name: string): string {
     .slice(0, MAX_SLUG_LENGTH)
     .replace(/-+$/, '')
   if (!slug) return FALLBACK_SLUG
+  if (isWindowsDeviceName(slug)) return `${slug}-1`
   // `.lock` suffixes and leading dots are rejected by git's ref rules.
   return slug.replace(/\.lock$/, 'lock')
 }

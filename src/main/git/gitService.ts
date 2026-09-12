@@ -24,7 +24,13 @@ import { createGitRunner, type GitRunner } from './gitProcess'
 import { createVersionProbe } from './gitVersion'
 import { isInside, pathKey, samePath } from './pathIdentity'
 import { createMemoryRecordStore, type GitRecordStore } from './recordStore'
-import { detectBaseRef, inspectRepository, listBranchNames, resolveCommit } from './repository'
+import { detectBaseRef, inspectRepository, listBranchNames } from './repository'
+import {
+  listStartPoints,
+  resolveStartPoint,
+  type ResolvedStartPoint,
+  type StartPointList
+} from './startPoint'
 import { readWorktreeInventory } from './worktreeInventory'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
 import { readWorktreeStatus } from './worktreeStatus'
@@ -69,6 +75,8 @@ export type GitServiceOptions = {
   store?: GitRecordStore
   /** Ceiling for `git worktree add`; big repos are slow. */
   createTimeoutMs?: number
+  /** Rows `listStartPoints` will return before it reports itself truncated. */
+  startPointLimit?: number
   now?: () => number
   createId?: () => string
 }
@@ -94,8 +102,13 @@ export class GitService {
   readonly #ensureVersion: (cwd: string) => Promise<unknown>
 
   readonly #store: GitRecordStore
+  readonly #startPointLimit: number | undefined
   readonly #creating = new Map<string, AbortController>()
   readonly #settling = new Map<string, Promise<Worktree>>()
+  // How each worktree's start point was interpreted. Advisory display detail
+  // with nowhere to live on the frozen Worktree, so it is session-scoped: the
+  // durable answer is `startedFrom`, which holds the resolved sha.
+  readonly #startPoints = new Map<string, ResolvedStartPoint>()
   #disposed = false
 
   constructor(options: GitServiceOptions = {}) {
@@ -103,6 +116,7 @@ export class GitService {
     this.#store = options.store ?? createMemoryRecordStore()
     this.#worktreesRoot = options.worktreesRoot ?? path.join(os.homedir(), '.teamree', 'worktrees')
     this.#createTimeoutMs = options.createTimeoutMs ?? DEFAULT_CREATE_TIMEOUT_MS
+    this.#startPointLimit = options.startPointLimit
     this.#now = options.now ?? Date.now
     this.#createId = options.createId ?? randomUUID
     this.#ensureVersion = createVersionProbe(this.#runner)
@@ -281,6 +295,45 @@ export class GitService {
     })
   }
 
+  // ------------------------------------------------------------- start points
+
+  /**
+   * What the create dialog can offer as a starting point: the base ref first,
+   * then the current branch, then local branches, remote branches and tags,
+   * each most-recent first. Capped, and the result says when it was capped.
+   *
+   * No method in the frozen contract exposes this, so it is reached on the
+   * service the way `events.on` and `cancelWorktreeCreate` are. See handlers.ts.
+   */
+  async listStartPoints(projectId: string, options: { limit?: number } = {}): Promise<StartPointList> {
+    const project = this.#requireProject(projectId)
+    const limit = options.limit ?? this.#startPointLimit
+    return listStartPoints(this.#runner, {
+      root: project.path,
+      baseRef: project.baseRef,
+      ...(limit === undefined ? {} : { limit })
+    })
+  }
+
+  /**
+   * How a worktree's start point was read: which ref won, what it was, whether
+   * a fetch was needed, and any same-named ref that was passed over. Present
+   * only for worktrees this process created; `Worktree.startedFrom` carries the
+   * durable part.
+   */
+  startPointFor(worktreeId: string): ResolvedStartPoint | undefined {
+    return this.#startPoints.get(worktreeId)
+  }
+
+  /** Resolves a start point without creating anything, for a dialog's preview. */
+  async describeStartPoint(projectId: string, startedFrom?: string): Promise<ResolvedStartPoint> {
+    const project = this.#requireProject(projectId)
+    return resolveStartPoint(this.#runner, {
+      root: project.path,
+      requested: startedFrom?.trim() || project.baseRef
+    })
+  }
+
   // -------------------------------------------------------------- persistence
 
   snapshot(): GitSnapshot {
@@ -343,6 +396,7 @@ export class GitService {
 
   #forget(worktree: Worktree): void {
     this.#store.removeWorktree(worktree.id)
+    this.#startPoints.delete(worktree.id)
     this.events.emit({ type: 'worktree.removed', worktreeId: worktree.id, projectId: worktree.projectId })
   }
 
@@ -368,15 +422,25 @@ export class GitService {
   async #buildCheckout(worktreeId: string, project: Project, signal: AbortSignal): Promise<Worktree> {
     const worktree = this.#requireWorktree(worktreeId)
     try {
-      const startCommit = await resolveCommit(this.#runner, project.path, worktree.startedFrom, signal)
+      const start = await resolveStartPoint(this.#runner, {
+        root: project.path,
+        requested: worktree.startedFrom,
+        signal
+      })
       await mkdir(path.dirname(worktree.path), { recursive: true })
+      // The resolved sha, never the name: git's own DWIM must not get a second
+      // vote after we have already decided what the name meant.
       await this.#runner.run({
-        args: ['worktree', 'add', '-b', worktree.branch, worktree.path, startCommit],
+        args: ['worktree', 'add', '-b', worktree.branch, worktree.path, start.sha],
         cwd: project.path,
         signal,
         timeoutMs: this.#createTimeoutMs
       })
-      return this.#patch(worktreeId, { state: 'ready', clearError: true }) ?? worktree
+      if (start.track) await this.#trackUpstream(project, worktree.branch, start.track)
+      this.#startPoints.set(worktreeId, start)
+      // What it branched from is now a fact, not a request: the name could move
+      // or disappear, the sha cannot.
+      return this.#patch(worktreeId, { state: 'ready', startedFrom: start.sha, clearError: true }) ?? worktree
     } catch (error) {
       await this.#discardPartialCheckout(project, worktree)
       const cancelled = error instanceof GitCommandError && error.cancelled
@@ -390,6 +454,24 @@ export class GitService {
       this.#creating.delete(worktreeId)
       this.#settling.delete(worktreeId)
     }
+  }
+
+  /**
+   * Points the new branch at the remote-tracking ref it came from, so push,
+   * pull and ahead/behind all work without the user configuring anything. Done
+   * explicitly rather than by handing `worktree add` the ref name, because the
+   * ref name would reopen the interpretation we just closed. Failure here is
+   * not worth discarding a good checkout over; the branch simply has no
+   * upstream, which the user can set later.
+   */
+  async #trackUpstream(project: Project, branch: string, upstream: string): Promise<void> {
+    await this.#runner
+      .tryRun({
+        args: ['branch', `--set-upstream-to=${upstream}`, branch],
+        cwd: project.path,
+        timeoutMs: 60_000
+      })
+      .catch(() => undefined)
   }
 
   /** Best effort: a failed create must not leave a half-checkout or a stray branch. */

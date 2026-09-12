@@ -2,6 +2,7 @@
   "name": "teamree",
   "version": "0.0.1",
   "description": "An ADE built for teamwork",
+  "author": "teamree contributors",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -18,7 +19,14 @@
     "smoke": "npm run build && electron scripts/smoke.mjs",
     "postinstall": "node scripts/fix-pty-permissions.mjs",
     "test:watch": "vitest",
-    "build:cli": "node scripts/build-cli.mjs"
+    "build:cli": "node scripts/build-cli.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "package": "npm run build && electron-builder --publish never",
+    "package:mac": "npm run build && electron-builder --mac --publish never",
+    "package:win": "npm run build && electron-builder --win --publish never",
+    "package:linux": "npm run build && electron-builder --linux --publish never",
+    "package:dir": "npm run build && electron-builder --dir --publish never",
+    "package:verify": "node scripts/verify-package.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

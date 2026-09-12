@@ -3,8 +3,8 @@
 // standing in. Matching is tiered, and a tier that matches more than one thing
 // is an error rather than a coin flip.
 
-import { existsSync, realpathSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { realpathSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
 import type { Project, Worktree } from '../shared/entities.js'
 import { CliError, ExitCode } from './exit.js'
 import type { RuntimeClient } from './transport.js'
@@ -17,14 +17,38 @@ export type Selectable = {
   aliases?: readonly string[]
 }
 
-/** Canonical form for path comparison; symlinked temp dirs are the usual trap. */
+/** Windows and macOS match filenames case-insensitively; Linux does not. */
+const CASE_INSENSITIVE_FILESYSTEM = process.platform === 'win32' || process.platform === 'darwin'
+
+/**
+ * Canonical form for path comparison; symlinked temp dirs are the usual trap.
+ * `realpathSync.native` rather than the JS implementation because only the
+ * former reports the on-disk spelling of a case-insensitive match, and the
+ * resolution climbs to the nearest existing ancestor so a path that is not on
+ * disk yet still passes through the same symlinks as one that is.
+ */
 export function canonicalPath(input: string): string {
   const absolute = resolve(input)
-  try {
-    return existsSync(absolute) ? realpathSync(absolute) : absolute
-  } catch {
-    return absolute
+  const missing: string[] = []
+  let current = absolute
+
+  for (;;) {
+    try {
+      const resolved = realpathSync.native(current)
+      return missing.length === 0 ? resolved : join(resolved, ...missing.reverse())
+    } catch {
+      const parent = dirname(current)
+      if (parent === current) return absolute
+      missing.push(basename(current))
+      current = parent
+    }
   }
+}
+
+/** Comparison key for a path token, folded the way this filesystem matches. */
+export function pathComparisonKey(input: string): string {
+  const canonical = canonicalPath(input)
+  return CASE_INSENSITIVE_FILESYSTEM ? canonical.toLowerCase() : canonical
 }
 
 export type SelectorTier = 'id' | 'name' | 'path' | 'id-prefix' | 'alias'
@@ -35,13 +59,13 @@ export function selectOne<T extends Selectable>(
   items: readonly T[]
 ): T {
   const lower = token.toLowerCase()
-  const tokenPath = canonicalPath(token)
+  const tokenPath = pathComparisonKey(token)
 
   const tiers: ReadonlyArray<[SelectorTier, (item: T) => boolean]> = [
     ['id', (item) => item.id === token],
     ['name', (item) => item.name === token],
     ['name', (item) => item.name.toLowerCase() === lower],
-    ['path', (item) => canonicalPath(item.path) === tokenPath],
+    ['path', (item) => pathComparisonKey(item.path) === tokenPath],
     ['id-prefix', (item) => item.id.startsWith(token)],
     ['alias', (item) => (item.aliases ?? []).some((alias) => alias === token)]
   ]

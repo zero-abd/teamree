@@ -1,0 +1,172 @@
+# Packaging for the three desktop platforms. Run it through the npm scripts
+# (`npm run package:mac`, `:win`, `:linux`) so the app is rebuilt first.
+#
+# Code signing is deliberately NOT configured here; see the `mac:` and `win:`
+# blocks for exactly what a maintainer has to supply to turn it on.
+appId: dev.teamree.app
+
+# Lower-case on purpose. Electron derives `app.getPath('userData')` from the app
+# name, and the CLI looks for the runtime's discovery file under a directory
+# literally called `teamree` (src/cli/discovery.ts). Renaming this would hide the
+# running app from its own CLI.
+productName: teamree
+copyright: Copyright © teamree contributors
+
+directories:
+  buildResources: build
+  output: dist
+
+# electron-builder resolves the production dependency tree itself, so
+# devDependencies never reach the bundle. What is listed here is everything the
+# main process loads at runtime; the renderer and the CLI are already bundled.
+files:
+  - out/main/**/*
+  - out/preload/**/*
+  - out/renderer/**/*
+  - package.json
+  - node_modules/**/*
+  # Source maps, type declarations and package docs are dead weight in a
+  # shipped app; the main process reads none of them.
+  - '!**/*.{map,md,markdown,ts,mts,cts,tsbuildinfo}'
+  - '!**/*.{test,spec}.js'
+  - '!**/{test,tests,__tests__,example,examples,docs,.github}/**'
+  # Renderer-only dependencies: Vite has already bundled these into
+  # out/renderer, so shipping their sources again is pure weight.
+  - '!node_modules/react/**'
+  - '!node_modules/react-dom/**'
+  - '!node_modules/scheduler/**'
+  - '!node_modules/@xterm/**'
+  - '!node_modules/zustand/**'
+  # node-pty's build inputs. The prebuilt binaries stay; the C++ sources,
+  # vendored dependencies and gyp files that produced them do not.
+  - '!node_modules/node-pty/{src,deps,third_party,scripts,binding.gyp}'
+  # Prebuilt binaries for the platforms this artifact is not for are stripped in
+  # scripts/afterpack.mjs, where the target platform and arch are known.
+
+# The CLI ships next to the app rather than inside the asar: it is executed as a
+# separate process (see resources/cli/teamree), and an archived file cannot be
+# handed to a Node runtime as an entry point.
+extraResources:
+  - from: out/cli/index.js
+    to: cli/teamree.mjs
+  - from: resources/cli/teamree
+    to: cli/teamree
+  - from: resources/cli/teamree.cmd
+    to: cli/teamree.cmd
+  - from: resources/cli/teamree.ps1
+    to: cli/teamree.ps1
+
+asar: true
+# node-pty loads a .node binary and then execs a sibling `spawn-helper`
+# executable. Neither can be read out of an asar archive, so the whole package
+# is unpacked; node-pty itself rewrites `app.asar` to `app.asar.unpacked` in the
+# helper path it computes. Without this, every PTY spawn fails in a packaged app.
+asarUnpack:
+  - '**/node_modules/node-pty/**'
+
+# node-pty's prebuilt binaries are N-API, so they are ABI-stable across Node and
+# Electron and must not be recompiled at package time. On Linux there is no
+# prebuilt binary at all: `npm install` compiles one into
+# node_modules/node-pty/build/Release, which is why a Linux artifact has to be
+# built on Linux.
+npmRebuild: false
+
+afterPack: scripts/afterpack.mjs
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  darkModeSupport: true
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  # Ad-hoc signature. Apple Silicon refuses to launch a Mach-O binary with no
+  # signature at all, and electron-builder invalidates the one Electron ships as
+  # soon as it rewrites the bundle — so an unsigned build still has to be
+  # ad-hoc signed to be runnable at all. It is not distributable: another
+  # machine will still see an unidentified developer.
+  #
+  # To produce a distributable macOS build, a maintainer supplies:
+  #   - a Developer ID Application certificate, as CSC_LINK (base64 .p12 or a
+  #     file path) plus CSC_KEY_PASSWORD
+  #   - an App Store Connect API key (APPLE_API_KEY, APPLE_API_KEY_ID,
+  #     APPLE_API_ISSUER) or APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID
+  # and then runs, with no change to this file:
+  #   npm run package:mac -- \
+  #     -c.mac.identity="Developer ID Application: Example Inc (TEAMID)" \
+  #     -c.mac.hardenedRuntime=true -c.mac.notarize=true
+  # Notarization requires the hardened runtime, which is why the two move
+  # together, and build/entitlements.mac.plist is already written for it.
+  identity: '-'
+  hardenedRuntime: false
+  notarize: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  contents:
+    - x: 140
+      y: 210
+      type: file
+    - x: 400
+      y: 210
+      type: link
+      path: /Applications
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  # Unsigned. To sign, a maintainer supplies a code-signing certificate and
+  # runs the build with CSC_LINK and CSC_KEY_PASSWORD set (or, for a hardware
+  # token / cloud HSM, adds a `win.signtoolOptions.sign` hook pointing at their
+  # own signing script). Nothing else in this file has to change.
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: teamree
+  artifactName: ${productName}-${version}-setup-${arch}.${ext}
+  # The installer deliberately does not edit PATH. `teamree` is put on PATH by
+  # the user with one documented command (see README), which keeps the installer
+  # out of the business of rewriting a machine-wide environment variable.
+
+linux:
+  icon: build/icons
+  category: Development
+  synopsis: An ADE built for teamwork
+  desktop:
+    entry:
+      StartupWMClass: teamree
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+
+deb:
+  # Terminals shell out to git constantly, and an ADE without it is inert.
+  depends:
+    - git
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libsecret-1-0
+
+appImage:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+# No update server is configured; `--publish never` is passed by the npm
+# scripts so a local build never tries to reach one.
+publish: null

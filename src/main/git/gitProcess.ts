@@ -55,11 +55,28 @@ export function createGitRunner(binary = process.env.TEAMREE_GIT_BINARY || 'git'
   }
 }
 
+/**
+ * Windows cannot execute a .cmd or .bat directly: CreateProcess hands it to
+ * cmd.exe, which re-parses the whole command line by its own rules. Branch names
+ * and refs are user input, so `&` or `|` in one would become a second command —
+ * the exact injection `shell: false` exists to rule out. Node refuses to spawn a
+ * batch file without a shell for the same reason; this says why first.
+ */
+export function rejectBatchBinary(binary: string, platform: NodeJS.Platform = process.platform): string | null {
+  if (platform !== 'win32' || !/\.(cmd|bat)$/i.test(binary)) return null
+  return `"${binary}" is a batch file; point TEAMREE_GIT_BINARY at git.exe itself, not at a .cmd or .bat wrapper`
+}
+
 function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
   const { args, cwd, signal } = run
   const timeoutMs = run.timeoutMs ?? DEFAULT_TIMEOUT_MS
 
   return new Promise<GitOutput>((resolve, reject) => {
+    const unusable = rejectBatchBinary(binary)
+    if (unusable) {
+      reject(new GitCommandError({ args, cwd, exitCode: null, stderr: unusable }))
+      return
+    }
     if (signal?.aborted) {
       reject(new GitCommandError({ args, cwd, exitCode: null, stderr: '', cancelled: true }))
       return

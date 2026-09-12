@@ -81,6 +81,9 @@ export function publishTerminalEvents(
     return result
   })
 
+  // terminal.resize is deliberately not a producer: the caller already gets the
+  // new size back, and a drag-resize would otherwise invalidate the terminal
+  // list on every frame.
   registry.register('layout.set', schemas['layout.set'], async (params, call) => {
     const layout = await handlers['layout.set'](params, call)
     bus.emit({ type: 'layout', worktreeId: layout.worktreeId })

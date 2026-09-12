@@ -15,6 +15,11 @@
 // `registry.context`. Throw `RuntimeError` (see runtimeError.ts) for anything the
 // caller should see as a structured error code; any other throw becomes
 // `internal`.
+//
+// An area that changes workspace state also belongs on the change stream: after
+// registering it, publish its changes onto `registry.context.workspaceEvents`
+// (see workspaceEventSources.ts). Publishing at the service, not at a transport,
+// is what lets a GUI subscriber see a mutation the CLI made.
 
 import type { MethodRegistry } from '../methodRegistry'
 import { GitService, registerGitHandlers } from '../../git'

@@ -39,17 +39,18 @@ describe('buildShellCommand', () => {
   })
 
   it('uses cmd and PowerShell conventions on Windows', () => {
+    // Windows argv is handed over pre-escaped; see tests/platform for the rules.
     expect(buildShellCommand('C:\\Windows\\system32\\cmd.exe', 'dir', 'win32')).toEqual({
       file: 'C:\\Windows\\system32\\cmd.exe',
-      args: ['/d', '/s', '/c', 'dir']
+      args: '/d /s /c "dir"'
     })
     expect(buildShellCommand('C:\\pwsh.exe', 'Get-ChildItem', 'win32')).toEqual({
       file: 'C:\\pwsh.exe',
-      args: ['-NoLogo', '-Command', 'Get-ChildItem']
+      args: '-NoLogo -Command Get-ChildItem'
     })
     expect(buildShellCommand('C:\\pwsh.exe', undefined, 'win32')).toEqual({
       file: 'C:\\pwsh.exe',
-      args: ['-NoLogo']
+      args: '-NoLogo'
     })
   })
 })

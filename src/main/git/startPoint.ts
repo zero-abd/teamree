@@ -114,7 +114,12 @@ type RefRow = {
  * them, so anything per-ref — a rev-parse each, a branch --contains each — is
  * the difference between a picker that opens and one that hangs.
  */
-async function readRefs(runner: GitRunner, root: string, patterns: readonly string[]): Promise<RefRow[]> {
+async function readRefs(
+  runner: GitRunner,
+  root: string,
+  patterns: readonly string[],
+  signal?: AbortSignal
+): Promise<RefRow[]> {
   const format = [
     '%(refname)',
     '%(objectname)',
@@ -130,6 +135,7 @@ async function readRefs(runner: GitRunner, root: string, patterns: readonly stri
     args: ['for-each-ref', `--format=${format}`, ...patterns],
     cwd: root,
     readOnly: true,
+    signal,
     timeoutMs: 60_000
   })
 
@@ -187,7 +193,7 @@ export async function resolveStartPoint(
   if (requested === 'HEAD') return resolveHead(runner, root, signal)
   if (requested.startsWith('refs/')) return resolveExactRef(runner, root, requested, signal)
 
-  const candidates = GLOB_CHARACTERS.test(requested) ? [] : await lookupCandidates(runner, root, requested)
+  const candidates = GLOB_CHARACTERS.test(requested) ? [] : await lookupCandidates(runner, root, requested, signal)
   if (candidates.length > 0) return chooseCandidate(requested, candidates, false)
 
   const bySha = await resolveAsCommit(runner, root, requested, signal)
@@ -195,7 +201,7 @@ export async function resolveStartPoint(
 
   const fetched = await fetchRemoteBranch(runner, root, requested, options.fetchTimeoutMs, signal)
   if (fetched) {
-    const afterFetch = await lookupCandidates(runner, root, requested)
+    const afterFetch = await lookupCandidates(runner, root, requested, signal)
     if (afterFetch.length > 0) return chooseCandidate(requested, afterFetch, true)
   }
 
@@ -229,7 +235,7 @@ async function resolveExactRef(
   refName: string,
   signal?: AbortSignal
 ): Promise<ResolvedStartPoint> {
-  const rows = await readRefs(runner, root, [refName])
+  const rows = await readRefs(runner, root, [refName], signal)
   const row = rows.find((candidate) => candidate.refName === refName)
   if (!row) {
     throw new GitServiceError(ErrorCode.NotFound, `start point "${refName}" is not a ref in this repository`, {
@@ -255,13 +261,23 @@ async function resolveExactRef(
  * same leaf under any remote. The glob can over-match (`*` crosses slashes), so
  * the results are filtered back down to exact names here.
  */
-async function lookupCandidates(runner: GitRunner, root: string, name: string): Promise<RefRow[]> {
+async function lookupCandidates(
+  runner: GitRunner,
+  root: string,
+  name: string,
+  signal?: AbortSignal
+): Promise<RefRow[]> {
   const patterns = [`${HEADS}${name}`, `${TAGS}${name}`, `${REMOTES}${name}`, `${REMOTES}*/${name}`]
-  const rows = await readRefs(runner, root, patterns)
+  const rows = await readRefs(runner, root, patterns, signal)
   const wanted = new Set([`${HEADS}${name}`, `${TAGS}${name}`, `${REMOTES}${name}`])
-  return rows.filter(
-    (row) => wanted.has(row.refName) || (row.refName.startsWith(REMOTES) && row.refName.endsWith(`/${name}`))
-  )
+  return rows.filter((row) => wanted.has(row.refName) || isRemoteNamed(row.refName, name))
+}
+
+/** `refs/remotes/<one segment>/<name>`, so `origin/x` counts but `origin/old/x` does not. */
+function isRemoteNamed(refName: string, name: string): boolean {
+  if (!refName.startsWith(REMOTES) || !refName.endsWith(`/${name}`)) return false
+  const remote = refName.slice(REMOTES.length, refName.length - name.length - 1)
+  return remote.length > 0 && !remote.includes('/')
 }
 
 function chooseCandidate(requested: string, candidates: readonly RefRow[], fetched: boolean): ResolvedStartPoint {
@@ -311,7 +327,9 @@ function chooseCandidate(requested: string, candidates: readonly RefRow[], fetch
 
 /**
  * Branch beats tag by a stated rule, but no rule orders one remote against
- * another. When they disagree the caller has to say which one it meant.
+ * another. When they disagree the caller has to say which one it meant; when
+ * they agree the choice is arbitrary but stable, since for-each-ref returns
+ * refs in name order.
  */
 function pickSingleRemote(requested: string, rows: readonly RefRow[]): RefRow {
   const first = rows[0]

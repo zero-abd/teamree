@@ -23,3 +23,13 @@ export { createMemoryRecordStore, type GitRecordStore } from './recordStore'
 export { parseWorktreeList, readWorktreeInventory, type InventoryEntry } from './worktreeInventory'
 export { allocateBranchName, allocateCheckoutPath, branchCollides, slugify } from './worktreeNaming'
 export { parsePorcelainV2, readWorktreeStatus, type ParsedStatus } from './worktreeStatus'
+export {
+  DEFAULT_START_POINT_LIMIT,
+  listStartPoints,
+  resolveStartPoint,
+  type ResolvedStartPoint,
+  type StartPointAlternative,
+  type StartPointKind,
+  type StartPointList,
+  type StartPointOption
+} from './startPoint'

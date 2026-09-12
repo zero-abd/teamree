@@ -14,10 +14,19 @@
 // the contract declares. Everything they throw is a GitServiceError, which is a
 // RuntimeError, so the dispatcher preserves its ErrorCode.
 //
-// Two capabilities have no method in the frozen contract and are reached on the
-// service directly:
+// These capabilities have no method in the frozen contract and are reached on
+// the service directly:
 //   git.events.on(listener)             creating -> ready | failed transitions
 //   git.cancelWorktreeCreate(id)        abort a create that is still running
+//   git.listStartPoints(projectId)      what the start-from picker can offer
+//   git.describeStartPoint(id, ref)     resolve one start point without creating
+//   git.startPointFor(worktreeId)       how a create read its start point
+//
+// The three start-point calls are the picker's data source. They are plain
+// service methods because adding `worktree.startPoints` to the contract is a
+// decision for whoever owns src/shared; the shapes are stable and adding that
+// method later is a one-line handler here. Until then a renderer reaches them
+// through the main process directly, and the CLI cannot see them at all.
 //
 // `createGitHandlers(service)` returns the same handlers as a plain object, for
 // a caller that would rather wire them up itself.

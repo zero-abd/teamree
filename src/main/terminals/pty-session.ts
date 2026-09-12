@@ -87,7 +87,7 @@ export class PtySession {
         cwd: init.cwd,
         cols: init.cols,
         rows: init.rows,
-        env: buildTerminalEnv(init.env)
+        env: buildTerminalEnv(init.env, platform)
       })
     } catch (error) {
       throw terminalFailed(`failed to start ${file}: ${describe(error)}`, { cwd: init.cwd })

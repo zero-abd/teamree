@@ -72,8 +72,8 @@ The GUI polls today, so work a CLI does is invisible until the next poll and
 terminals opened by an agent never appear at all. One coarse invalidation
 stream replaces polling entirely.
 
-- [ ] `workspace.subscribe` streaming collection invalidations
-- [ ] Producers wired: projects, worktrees, terminals, layouts, terminal exit
+- [x] `workspace.subscribe` streaming collection invalidations
+- [x] Producers wired: projects, worktrees, terminals, layouts, terminal exit
 - [ ] GUI consumes the stream and drops its poll loop
 - [x] `teamree worktree wait`, `teamree terminal wait`, and `teamree terminal run` for agents
 

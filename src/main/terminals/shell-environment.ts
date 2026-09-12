@@ -54,7 +54,23 @@ const FALLBACK_PATH: Record<string, string> = {
  *  guess that would make it exit with a usage error. */
 const LOGIN_FLAG_SHELLS = new Set(['bash', 'zsh', 'fish', 'ksh', 'mksh', 'tcsh', 'csh'])
 
-export type ShellCommand = { file: string; args: string[] }
+const CMD_SHELLS = new Set(['cmd', 'command'])
+const POWERSHELL_SHELLS = new Set(['powershell', 'pwsh'])
+
+/**
+ * How a shell wants its argv spelled. Windows hosts all three: ComSpec is cmd,
+ * PowerShell takes `-Command`, and a Git for Windows or MSYS shell takes the
+ * POSIX flags — handing that last group PowerShell's flags kills the pane
+ * immediately with a usage error.
+ */
+export type ShellFamily = 'cmd' | 'powershell' | 'posix'
+
+/**
+ * argv for the pane. On Windows this is a pre-escaped command line rather than
+ * an argv array, because the two families quote incompatibly and only the caller
+ * knows which one it is addressing.
+ */
+export type ShellCommand = { file: string; args: string[] | string }
 
 /**
  * The user's login shell. On unix SHELL is authoritative; on Windows there is no
@@ -77,6 +93,17 @@ export function resolveLoginShell(
   return platform === 'darwin' ? '/bin/zsh' : '/bin/bash'
 }
 
+/** Which argv dialect `shell` speaks. Everything off Windows is POSIX. */
+export function shellFamily(shell: string, platform: NodeJS.Platform = process.platform): ShellFamily {
+  if (platform !== 'win32') return 'posix'
+  const name = shellName(shell, platform)
+  if (CMD_SHELLS.has(name)) return 'cmd'
+  if (POWERSHELL_SHELLS.has(name)) return 'powershell'
+  // Git for Windows, MSYS2 and Cygwin all ship POSIX shells that would reject
+  // PowerShell's flags, so they are the safer default for an unknown name.
+  return 'posix'
+}
+
 /**
  * argv for the pane. With no command this is an interactive login shell, because
  * PATH additions from the user's profile are exactly what an agent CLI needs to
@@ -90,16 +117,65 @@ export function buildShellCommand(
   const name = shellName(shell, platform)
 
   if (platform === 'win32') {
-    if (name === 'cmd') return { file: shell, args: command ? ['/d', '/s', '/c', command] : [] }
-    return { file: shell, args: command ? ['-NoLogo', '-Command', command] : ['-NoLogo'] }
+    const family = shellFamily(shell, platform)
+    // cmd.exe re-parses its own command line, so the argv array node-pty would
+    // build for us is escaped by the wrong rules; everything else on Windows is
+    // parsed by CommandLineToArgvW and needs the MSVCRT rules instead.
+    if (family === 'cmd') return { file: shell, args: command ? cmdCommandLine(command) : '' }
+    const args = family === 'powershell'
+      ? command ? ['-NoLogo', '-Command', command] : ['-NoLogo']
+      : command ? ['-c', command] : ['-l']
+    return { file: shell, args: encodeWindowsCommandLine(args) }
   }
 
   if (command) return { file: shell, args: ['-c', command] }
   return { file: shell, args: LOGIN_FLAG_SHELLS.has(name) ? ['-l'] : [] }
 }
 
+/**
+ * `cmd.exe` with `/s` strips exactly the first and last quote of the tail and
+ * runs the rest verbatim, which is the only form that survives a command
+ * containing its own quotes. `/d` skips AutoRun registry hooks.
+ */
+export function cmdCommandLine(command: string): string {
+  return `/d /s /c "${command}"`
+}
+
+/**
+ * One argument escaped the way CommandLineToArgvW reads it back: a run of
+ * backslashes only doubles when it precedes a quote or ends the argument.
+ */
+export function quoteWindowsArgument(argument: string): string {
+  if (argument.length > 0 && !/[\s"]/.test(argument)) return argument
+
+  let quoted = '"'
+  let backslashes = 0
+  for (const character of argument) {
+    if (character === '\\') {
+      backslashes += 1
+      continue
+    }
+    if (character === '"') {
+      quoted += '\\'.repeat(backslashes * 2 + 1) + '"'
+      backslashes = 0
+      continue
+    }
+    quoted += '\\'.repeat(backslashes) + character
+    backslashes = 0
+  }
+  return `${quoted}${'\\'.repeat(backslashes * 2)}"`
+}
+
+/** An argv array as one Windows command line. Does not include the program. */
+export function encodeWindowsCommandLine(args: readonly string[]): string {
+  return args.map(quoteWindowsArgument).join(' ')
+}
+
 /** Environment for the child: inherited, pruned, then given a terminal identity. */
-export function buildTerminalEnv(base: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function buildTerminalEnv(
+  base: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform
+): Record<string, string> {
   const env: Record<string, string> = {}
 
   for (const [key, value] of Object.entries(base)) {
@@ -110,8 +186,10 @@ export function buildTerminalEnv(base: NodeJS.ProcessEnv = process.env): Record<
   }
 
   // The user's PATH is preserved as-is; only a missing one is substituted.
+  // Windows spells it `Path`, and its environment block is case-insensitive, so
+  // adding a second spelling would be ambiguous rather than helpful.
   if (!nonEmpty(env.PATH) && !nonEmpty(env.Path)) {
-    env.PATH = FALLBACK_PATH[process.platform] ?? FALLBACK_PATH.default ?? ''
+    env.PATH = FALLBACK_PATH[platform] ?? FALLBACK_PATH.default ?? ''
   }
 
   env.TERM = TERMINAL_TYPE
@@ -123,8 +201,9 @@ export function buildTerminalEnv(base: NodeJS.ProcessEnv = process.env): Record<
 
 /** Lowercase shell name without directory or .exe, e.g. "zsh", "cmd", "pwsh". */
 export function shellName(shell: string, platform: NodeJS.Platform = process.platform): string {
-  const raw = platform === 'win32' ? shell.replace(/\\/g, '/') : shell
-  return basename(raw).replace(/\.exe$/i, '').toLowerCase()
+  if (platform !== 'win32') return basename(shell).replace(/\.exe$/i, '').toLowerCase()
+  // Windows accepts either separator, and the extension is never part of the name.
+  return basename(shell.replace(/\\/g, '/')).replace(/\.(exe|cmd|bat|com)$/i, '').toLowerCase()
 }
 
 function nonEmpty(value: string | undefined): string | undefined {
