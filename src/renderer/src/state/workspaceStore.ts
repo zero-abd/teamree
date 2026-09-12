@@ -57,6 +57,7 @@ type WorkspaceState = {
    */
   stagedPaths: string[]
   committing: boolean
+  pushing: boolean
   diff: WorktreeDiff | null
   diffPending: boolean
 
@@ -98,6 +99,8 @@ type WorkspaceState = {
   /** Every changed path, or none. */
   setAllStaged: (staged: boolean) => void
   commitStaged: (message: string) => Promise<void>
+  /** Sends the active worktree's branch to its remote. Never forces. */
+  pushActiveWorktree: () => Promise<void>
 
   toggleProject: (projectId: string) => void
   setSidebarWidth: (width: number) => void
@@ -347,6 +350,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     selectedChangePath: null,
     stagedPaths: [],
     committing: false,
+    pushing: false,
     diff: null,
     diffPending: false,
 
@@ -618,6 +622,34 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         failed('Could not commit')(error)
       } finally {
         set({ committing: false })
+      }
+    },
+
+    async pushActiveWorktree() {
+      const worktreeId = get().activeWorktreeId
+      if (!worktreeId || get().pushing) return
+
+      set({ pushing: true })
+      try {
+        const result = await runtimeClient.call('worktree.push', { worktreeId })
+        // Three things are worth saying and none of them is "done": whether
+        // anything was actually sent, whether this push is what made the branch
+        // track anything, and what stayed behind uncommitted.
+        const parts = [
+          result.alreadyUpToDate
+            ? `${result.remote} already had ${result.branch}`
+            : `Pushed ${result.branch} to ${result.remote}`
+        ]
+        if (result.setUpstream) parts.push(`now tracking ${result.upstream}`)
+        if (result.uncommitted > 0) {
+          parts.push(`${result.uncommitted} uncommitted change${result.uncommitted === 1 ? '' : 's'} stayed behind`)
+        }
+        notify(`${parts.join(' · ')}.`, 'info')
+        refresher.request(refreshTargets({ statuses: [worktreeId] }))
+      } catch (error) {
+        failed('Could not push')(error)
+      } finally {
+        set({ pushing: false })
       }
     },
 

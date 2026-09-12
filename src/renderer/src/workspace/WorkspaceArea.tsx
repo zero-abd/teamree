@@ -31,6 +31,8 @@ export function WorkspaceArea({
   const status = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
   )
+  const pushing = useWorkspaceStore((state) => state.pushing)
+  const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -94,6 +96,22 @@ export function WorkspaceArea({
           >
             Changes
             {changedCount(status) > 0 ? <span className="button__count">{changedCount(status)}</span> : null}
+          </button>
+          <button
+            type="button"
+            className="button button--ghost button--small"
+            disabled={pushing}
+            title={
+              status === undefined
+                ? 'Send this branch to its remote'
+                : status.ahead > 0
+                  ? `Send ${status.ahead} commit${status.ahead === 1 ? '' : 's'} to the remote. Never forces.`
+                  : 'Nothing to send; the remote already has this branch.'
+            }
+            onClick={() => void pushActiveWorktree()}
+          >
+            {pushing ? 'Pushing…' : 'Push'}
+            {status !== undefined && status.ahead > 0 ? <span className="button__count">{status.ahead}</span> : null}
           </button>
           <button
             type="button"

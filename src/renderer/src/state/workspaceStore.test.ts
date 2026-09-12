@@ -180,3 +180,43 @@ it('drops a tick for a path that stopped being a change', async () => {
   useWorkspaceStore.getState().toggleChanges()
   await vi.waitFor(() => expect(useWorkspaceStore.getState().stagedPaths).toEqual([real]))
 })
+
+it('pushes the active worktree and says what actually happened', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const ahead = useWorkspaceStore
+    .getState()
+    .worktrees.find(
+      (entry) => entry.state === 'ready' && (useWorkspaceStore.getState().statuses[entry.id]?.ahead ?? 0) > 0
+    )
+  const worktreeId = (ahead ?? useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!).id
+  await store.openWorktree(worktreeId)
+
+  const call = vi.spyOn(runtimeClient, 'call')
+  await useWorkspaceStore.getState().pushActiveWorktree()
+
+  expect(call.mock.calls.filter(([method]) => method === 'worktree.push')).toHaveLength(1)
+  // The outcome reaches the user, rather than the push happening in silence.
+  const notice = useWorkspaceStore.getState().notices.at(-1)
+  expect(notice?.tone).toBe('info')
+  expect(notice?.text).toMatch(/pushed|already had/i)
+  expect(useWorkspaceStore.getState().pushing).toBe(false)
+  call.mockRestore()
+})
+
+it('never fires two pushes at once', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+  await store.openWorktree(worktreeId)
+
+  const call = vi.spyOn(runtimeClient, 'call')
+  // A double-click is one push: the second call finds the first still running.
+  await Promise.all([
+    useWorkspaceStore.getState().pushActiveWorktree(),
+    useWorkspaceStore.getState().pushActiveWorktree()
+  ])
+
+  expect(call.mock.calls.filter(([method]) => method === 'worktree.push')).toHaveLength(1)
+  call.mockRestore()
+})

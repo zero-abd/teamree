@@ -177,7 +177,9 @@ The only call in the git layer that leaves the machine.
       what landed is then not what is in the worktree
 - [x] A rejection is explained without git's hint to force it
 - [x] `teamree worktree push`
-- [ ] A push button in the GUI, and opening a review after it
+- [x] A push button in the GUI, showing what it would send and saying what it
+      did — including what stayed behind uncommitted
+- [ ] Opening a review on the forge after a push
 
 ## Known gaps
 
