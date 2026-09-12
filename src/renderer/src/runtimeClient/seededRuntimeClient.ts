@@ -295,6 +295,24 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'worktrees' }, { type: 'terminals' })
       return { removed: true }
     },
+    'worktree.startPoints': ({ projectId }) => {
+      const project = required(projects.get(projectId), 'project')
+      const branches = [...worktrees.values()].filter((row) => row.projectId === projectId)
+      const options = [
+        { ref: project.baseRef, kind: 'localBranch' as const, sha: 'seed0000', shortSha: 'seed000', refName: project.baseRef, isBase: true, isCurrent: true, updatedAt: Date.now() },
+        ...branches.map((row) => ({
+          ref: row.branch,
+          kind: 'localBranch' as const,
+          sha: `seed${row.id.slice(0, 4)}`,
+          shortSha: `seed${row.id.slice(0, 3)}`,
+          refName: row.branch,
+          isBase: false,
+          isCurrent: false,
+          updatedAt: row.createdAt
+        }))
+      ]
+      return { baseRef: project.baseRef, options, total: options.length, limit: 200, truncated: false }
+    },
     'worktree.status': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const existing = statuses.get(worktreeId)

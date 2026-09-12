@@ -3,7 +3,7 @@
 // the CLI are all typed from one declaration and cannot drift apart.
 
 import { z } from 'zod'
-import type { Layout, PaneNode, Project, RuntimeStatus, Terminal, Worktree, WorktreeStatus } from './entities'
+import type { Layout, PaneNode, Project, RuntimeStatus, StartPointList, Terminal, Worktree, WorktreeStatus } from './entities'
 
 export const Params = {
   statusGet: z.object({}),
@@ -29,6 +29,11 @@ export const Params = {
     deleteBranch: z.boolean().optional()
   }),
   worktreeStatus: z.object({ worktreeId: z.string().min(1) }),
+  /** Everything a new worktree could branch from, for the create dialog. */
+  worktreeStartPoints: z.object({
+    projectId: z.string().min(1),
+    limit: z.number().int().positive().optional()
+  }),
 
   terminalList: z.object({ worktreeId: z.string().min(1).optional() }),
   terminalCreate: z.object({
@@ -89,6 +94,7 @@ export type MethodContract = {
   'worktree.create': { params: z.infer<typeof Params.worktreeCreate>; result: Worktree }
   'worktree.remove': { params: z.infer<typeof Params.worktreeRemove>; result: { removed: true } }
   'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
+  'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
 
   'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
   'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }

@@ -77,6 +77,32 @@ export type Layout = {
   focusedTerminalId: string | null
 }
 
+/** One thing a new worktree can branch from, as offered by the create dialog. */
+export type StartPoint = {
+  /** What to pass back as `startedFrom`, e.g. "origin/main" or a sha. */
+  ref: string
+  kind: 'localBranch' | 'remoteBranch' | 'tag' | 'commit' | 'head'
+  sha: string
+  shortSha: string
+  /** Bare name without the refs/ prefix, absent for a raw commit. */
+  refName?: string
+  /** True for the project's configured base ref. */
+  isBase: boolean
+  /** True for the branch the primary checkout currently has out. */
+  isCurrent: boolean
+  updatedAt: number
+}
+
+export type StartPointList = {
+  baseRef: string
+  options: StartPoint[]
+  /** Total refs found, which may exceed what `options` carries. */
+  total: number
+  limit: number
+  /** True when `total` exceeded `limit` and a tail was dropped. */
+  truncated: boolean
+}
+
 export type RuntimeStatus = {
   version: string
   /** Socket path or named pipe the runtime is listening on. */

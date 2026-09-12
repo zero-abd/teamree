@@ -110,7 +110,31 @@ describe('dispatcher', () => {
   })
 
   it('registers every method in the contract', () => {
-    expect(registry.methods()).toContain('terminal.split')
-    expect(registry.methods()).toHaveLength(21)
+    // Named rather than counted: a bare count tells you a number changed, not
+    // which method arrived or went missing.
+    expect([...registry.methods()].sort()).toEqual([
+      'layout.get',
+      'layout.set',
+      'project.add',
+      'project.list',
+      'project.remove',
+      'status.get',
+      'terminal.close',
+      'terminal.create',
+      'terminal.list',
+      'terminal.read',
+      'terminal.resize',
+      'terminal.split',
+      'terminal.subscribe',
+      'terminal.write',
+      'unsubscribe',
+      'workspace.subscribe',
+      'worktree.create',
+      'worktree.get',
+      'worktree.list',
+      'worktree.remove',
+      'worktree.startPoints',
+      'worktree.status'
+    ])
   })
 })
