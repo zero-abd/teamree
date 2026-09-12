@@ -1,0 +1,197 @@
+/* Split tree. Every split is a flex box whose children carry an inline basis
+   computed from the layout's fractions; the gutters are siblings, which is why
+   the basis maths can subtract them up front. */
+
+.split {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split--row {
+  flex-direction: row;
+}
+
+.split--column {
+  flex-direction: column;
+}
+
+.split__cell {
+  display: flex;
+  flex-grow: 0;
+  flex-shrink: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gutter {
+  flex: 0 0 5px;
+  position: relative;
+  border-radius: 99px;
+  background: transparent;
+  transition: background var(--motion-fast) var(--ease);
+}
+
+.gutter--row {
+  cursor: col-resize;
+}
+
+.gutter--column {
+  cursor: row-resize;
+}
+
+/* A hairline at rest, the full handle on hover or focus. */
+.gutter::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 99px;
+  background: var(--line);
+}
+
+.gutter--row::before {
+  width: 1px;
+  height: 100%;
+}
+
+.gutter--column::before {
+  width: 100%;
+  height: 1px;
+}
+
+.gutter:hover::before,
+.gutter:focus-visible::before {
+  background: var(--accent);
+}
+
+.gutter--row:hover::before,
+.gutter--row:focus-visible::before {
+  width: 3px;
+}
+
+.gutter--column:hover::before,
+.gutter--column:focus-visible::before {
+  height: 3px;
+}
+
+.gutter:focus-visible {
+  outline: none;
+}
+
+/* Pane -------------------------------------------------------------------- */
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--term-bg);
+  overflow: hidden;
+  transition: border-color var(--motion-fast) var(--ease);
+}
+
+.pane--focused {
+  border-color: var(--accent-line);
+}
+
+.pane__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: none;
+  height: 24px;
+  padding: 0 var(--s2) 0 var(--s3);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.pane--focused .pane__bar {
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-raised);
+  color: var(--fg-secondary);
+}
+
+.pane__dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.pane__dot--stopped {
+  background: var(--fg-muted);
+}
+
+.pane__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.pane--focused .pane__title {
+  color: var(--fg);
+}
+
+.pane__meta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.pane__close {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.pane__close svg {
+  width: 9px;
+  height: 9px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.pane:hover .pane__close,
+.pane__close:focus-visible {
+  opacity: 1;
+}
+
+.pane__close:hover {
+  background: var(--bg-press);
+  color: var(--fg);
+}
+
+.terminal-surface {
+  flex: 1;
+  min-height: 0;
+  padding: var(--s2) var(--s2) var(--s2) var(--s3);
+}
+
+.terminal-surface .xterm {
+  height: 100%;
+}
+
+.terminal-surface .xterm-viewport {
+  background: transparent !important;
+  scrollbar-width: thin;
+}

@@ -1,0 +1,217 @@
+/* Tabs, the worktree header, and the empty states that stand in for panes. */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+
+.workspace--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+/* Tabs -------------------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: var(--s2) var(--s3) 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--bg-rail);
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-right: var(--s1);
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--r2) var(--r2) 0 0;
+  color: var(--fg-muted);
+}
+
+.tab:hover {
+  background: var(--bg-hover);
+}
+
+.tab--active {
+  background: var(--bg-panel);
+  border-color: var(--line);
+  color: var(--fg);
+}
+
+.tab__main {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-width: 0;
+  max-width: 260px;
+  padding: 5px var(--s2) 5px var(--s3);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.tab__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab__branch {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.tab__close {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.tab__close svg {
+  width: 9px;
+  height: 9px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.tab:hover .tab__close,
+.tab__close:focus-visible {
+  opacity: 1;
+}
+
+.tab__close:hover {
+  background: var(--bg-press);
+  color: var(--fg);
+}
+
+/* Header ------------------------------------------------------------------ */
+
+.workspace__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace__identity {
+  min-width: 0;
+}
+
+.workspace__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.workspace__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.workspace__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: none;
+}
+
+.workspace__panes {
+  flex: 1;
+  min-height: 0;
+  padding: var(--s3);
+}
+
+/* Empty states ------------------------------------------------------------ */
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  height: 100%;
+  padding: var(--s6);
+  text-align: center;
+}
+
+.placeholder--inset {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r3);
+}
+
+.placeholder__title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.placeholder__body {
+  max-width: 46ch;
+  color: var(--fg-secondary);
+}
+
+.legend {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: var(--s2) var(--s5);
+  margin-top: var(--s3);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+
+.legend > div {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.legend dt {
+  min-width: 44px;
+  padding: 1px 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-raised);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.legend dd {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}

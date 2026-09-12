@@ -1,0 +1,55 @@
+// The shape every command declares. Help text, argument checking and dispatch
+// all read this one declaration, so they cannot drift apart.
+
+import type { FlagSpec, ParsedFlags } from './argv.js'
+import type { CommandOutput } from './output.js'
+import type { RuntimeClient } from './transport.js'
+
+export type ArgSpec = {
+  /** Bare name; help renders it as `<name>`. */
+  name: string
+  description: string
+  required?: boolean
+}
+
+export type CommandContext = {
+  args: readonly string[]
+  flags: ParsedFlags
+  client: RuntimeClient
+  json: boolean
+  cwd: string
+  /** Where the endpoint came from; `status` reports it. */
+  endpointSource: string
+}
+
+export type CommandSpec = {
+  /** Words that invoke it, e.g. `['worktree', 'create']`. */
+  path: readonly string[]
+  summary: string
+  details?: string
+  args?: readonly ArgSpec[]
+  flags?: readonly FlagSpec[]
+  examples?: readonly string[]
+  run: (context: CommandContext) => Promise<CommandOutput>
+}
+
+export const GLOBAL_FLAGS: readonly FlagSpec[] = [
+  { name: 'json', kind: 'boolean', alias: 'j', description: 'Print one JSON document on stdout instead of text.' },
+  { name: 'help', kind: 'boolean', alias: 'h', description: 'Show help for the command and exit.' },
+  {
+    name: 'timeout',
+    kind: 'number',
+    placeholder: '<ms>',
+    description: 'Per-request budget in milliseconds (default 15000).'
+  },
+  {
+    name: 'endpoint',
+    kind: 'string',
+    placeholder: '<path>',
+    description: 'Socket path to use instead of the discovered one.'
+  }
+]
+
+export function commandName(spec: Pick<CommandSpec, 'path'>): string {
+  return spec.path.join(' ')
+}

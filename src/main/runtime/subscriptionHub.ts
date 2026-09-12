@@ -110,6 +110,7 @@ export class SubscriptionHub {
   }
 
   closeAll(): void {
+    // Copied first: closeConnection mutates the map being iterated.
     for (const connectionId of [...this.connections.keys()]) this.closeConnection(connectionId)
   }
 }

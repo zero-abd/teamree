@@ -1,0 +1,167 @@
+// The only place in the app that starts a git process.
+//
+// `shell: false` is not negotiable: worktree names, branch names and refs are
+// user input, and a shell would turn any of them into a command injection.
+// Everything else here exists so a hung or chatty git can never wedge the
+// runtime: separate pipes, a hard timeout, an abort hook, and an output cap.
+
+import { spawn } from 'node:child_process'
+import { GitCommandError } from './errors'
+
+export type GitRun = {
+  args: readonly string[]
+  cwd: string
+  /** Defaults to `DEFAULT_TIMEOUT_MS`. */
+  timeoutMs?: number
+  /** Aborting kills the process; the rejection is a cancelled GitCommandError. */
+  signal?: AbortSignal
+  /** Extra environment on top of the sanitized base. */
+  env?: NodeJS.ProcessEnv
+  /** Skip the index lock. Safe for reads, required for anything polled. */
+  readOnly?: boolean
+}
+
+export type GitOutput = { exitCode: number; stdout: string; stderr: string }
+
+export const DEFAULT_TIMEOUT_MS = 120_000
+const KILL_GRACE_MS = 2_000
+const MAX_OUTPUT_BYTES = 32 * 1024 * 1024
+
+export type GitRunner = {
+  /** Rejects with GitCommandError unless git exits 0. */
+  run(run: GitRun): Promise<GitOutput>
+  /** Resolves with the exit code even when non-zero; still rejects on timeout/abort. */
+  tryRun(run: GitRun): Promise<GitOutput>
+  readonly binary: string
+}
+
+export function createGitRunner(binary = process.env.TEAMREE_GIT_BINARY || 'git'): GitRunner {
+  const tryRun = (run: GitRun): Promise<GitOutput> => spawnGit(binary, run)
+  return {
+    binary,
+    tryRun,
+    async run(run) {
+      const output = await tryRun(run)
+      if (output.exitCode !== 0) {
+        throw new GitCommandError({
+          args: run.args,
+          cwd: run.cwd,
+          exitCode: output.exitCode,
+          stderr: output.stderr
+        })
+      }
+      return output
+    }
+  }
+}
+
+function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
+  const { args, cwd, signal } = run
+  const timeoutMs = run.timeoutMs ?? DEFAULT_TIMEOUT_MS
+
+  return new Promise<GitOutput>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new GitCommandError({ args, cwd, exitCode: null, stderr: '', cancelled: true }))
+      return
+    }
+
+    const child = spawn(binary, [...args], {
+      cwd,
+      shell: false,
+      windowsHide: true,
+      env: buildEnv(run)
+    })
+
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+    let timedOut = false
+    let cancelled = false
+    let overflowed = false
+
+    const finish = (fn: () => void): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      clearTimeout(killTimer)
+      signal?.removeEventListener('abort', onAbort)
+      fn()
+    }
+
+    let killTimer: NodeJS.Timeout | undefined
+    const stop = (): void => {
+      if (killTimer) return
+      child.kill('SIGTERM')
+      killTimer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS)
+      killTimer.unref?.()
+    }
+
+    const timer = setTimeout(() => {
+      timedOut = true
+      stop()
+    }, timeoutMs)
+    timer.unref?.()
+
+    const onAbort = (): void => {
+      cancelled = true
+      stop()
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
+      if (stdout.length + chunk.length > MAX_OUTPUT_BYTES) {
+        overflowed = true
+        stop()
+        return
+      }
+      stdout += chunk
+    })
+    child.stderr.on('data', (chunk: string) => {
+      if (stderr.length < MAX_OUTPUT_BYTES) stderr += chunk
+    })
+
+    child.on('error', (error: NodeJS.ErrnoException) => {
+      const hint =
+        error.code === 'ENOENT'
+          ? `git executable not found (tried "${binary}"); install git or set TEAMREE_GIT_BINARY`
+          : error.message
+      finish(() => reject(new GitCommandError({ args, cwd, exitCode: null, stderr: hint })))
+    })
+
+    child.on('close', (code) => {
+      finish(() => {
+        if (timedOut || cancelled) {
+          reject(new GitCommandError({ args, cwd, exitCode: code, stderr, timedOut, cancelled }))
+          return
+        }
+        if (overflowed) {
+          reject(
+            new GitCommandError({
+              args,
+              cwd,
+              exitCode: code,
+              stderr: `git produced more than ${MAX_OUTPUT_BYTES} bytes of output`
+            })
+          )
+          return
+        }
+        resolve({ exitCode: code ?? -1, stdout, stderr })
+      })
+    })
+  })
+}
+
+function buildEnv(run: GitRun): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    // A background worktree create must never stall on a credential prompt.
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_ASKPASS: process.env.GIT_ASKPASS ?? '',
+    // Status is polled; taking the index lock on every poll would fight the
+    // user's own git commands in the same checkout.
+    ...(run.readOnly ? { GIT_OPTIONAL_LOCKS: '0' } : {}),
+    ...run.env
+  }
+}

@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, shell } from 'electron'
+import { startRuntime, type Runtime } from './runtime/startRuntime'
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -35,6 +36,9 @@ function createWindow(): BrowserWindow {
   return window
 }
 
+let runtime: Runtime | undefined
+let stopping = false
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -45,11 +49,28 @@ if (!app.requestSingleInstanceLock()) {
     existing.focus()
   })
 
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
+    // The runtime comes up before any window so the first render can already
+    // call it, and so the CLI endpoint exists as early as possible.
+    try {
+      runtime = await startRuntime({ userDataDir: app.getPath('userData'), version: app.getVersion() })
+    } catch (error) {
+      console.error('[runtime] failed to start', error)
+    }
+
     createWindow()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
+  })
+
+  // Quitting waits for the runtime to release its socket and discovery file,
+  // otherwise the next launch inherits a stale endpoint.
+  app.on('before-quit', (event) => {
+    if (!runtime || stopping) return
+    stopping = true
+    event.preventDefault()
+    void runtime.stop().finally(() => app.quit())
   })
 
   app.on('window-all-closed', () => {

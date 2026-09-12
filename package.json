@@ -7,7 +7,7 @@
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && npm run build:cli",
     "start": "electron-vite preview",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
@@ -17,7 +17,8 @@
     "format": "oxfmt --write .",
     "smoke": "npm run build && electron scripts/smoke.mjs",
     "postinstall": "node scripts/fix-pty-permissions.mjs",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:cli": "node scripts/build-cli.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

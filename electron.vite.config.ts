@@ -2,6 +2,8 @@ import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
+// The CLI is a plain Node bundle, not an Electron target, so it is built by its
+// own esbuild pass in scripts/build-cli.mjs rather than by electron-vite.
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],

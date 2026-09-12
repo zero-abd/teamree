@@ -1,0 +1,206 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import type { TerminalEvent } from '../../shared/methods'
+import { isProcessAlive } from './process-tree'
+import { PtySession } from './pty-session'
+import type { PtySessionInit } from './pty-session'
+import { canSpawnPty, waitUntil } from './pty-test-support'
+
+// Real PTYs, no mocks: the interesting failures here are all in the native layer
+// and in how a shell reacts to signals, and a fake would reproduce neither.
+const describePty = canSpawnPty() ? describe : describe.skip
+const TEST_TIMEOUT_MS = 20_000
+
+const started: PtySession[] = []
+
+function start(overrides: Partial<PtySessionInit> = {}): PtySession {
+  const session = PtySession.start({
+    id: `term_${started.length}`,
+    worktreeId: 'wt_test',
+    cwd: process.cwd(),
+    shell: '/bin/sh',
+    cols: 80,
+    rows: 24,
+    ...overrides
+  })
+  started.push(session)
+  return session
+}
+
+function collect(session: PtySession): TerminalEvent[] {
+  const events: TerminalEvent[] = []
+  session.on((event) => events.push(event))
+  return events
+}
+
+const outputOf = (events: TerminalEvent[]): string =>
+  events
+    .filter((event): event is Extract<TerminalEvent, { type: 'data' }> => event.type === 'data')
+    .map((event) => event.data)
+    .join('')
+
+afterEach(async () => {
+  await Promise.all(started.splice(0).map((session) => session.close()))
+})
+
+describePty('PtySession', () => {
+  it(
+    'spawns a command and captures its output',
+    async () => {
+      const session = start({ command: 'echo hello-from-pty' })
+      const events = collect(session)
+
+      await waitUntil(() => outputOf(events).includes('hello-from-pty'), 'command output')
+      expect(session.read()).toContain('hello-from-pty')
+      expect(session.snapshot().cwd).toBe(process.cwd())
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'writes to the child and reads the response back out of scrollback',
+    async () => {
+      const session = start({ command: 'cat' })
+      session.write('ping-pong\n')
+
+      await waitUntil(() => session.read().includes('ping-pong'), 'echoed input')
+      expect(session.snapshot().running).toBe(true)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'resizes the pty and reports the new size',
+    async () => {
+      const session = start({ command: 'cat', cols: 80, rows: 24 })
+      session.resize(120, 40)
+
+      const snapshot = session.snapshot()
+      expect(snapshot.cols).toBe(120)
+      expect(snapshot.rows).toBe(40)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'reports the command the shell ran to determine the pane size',
+    async () => {
+      const session = start({ command: 'stty size', cols: 100, rows: 30 })
+      const events = collect(session)
+
+      await waitUntil(() => /30\s+100/.test(outputOf(events)), 'stty to report 30x100')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'propagates the exit code and stops running',
+    async () => {
+      const session = start({ command: 'exit 7' })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'exit'), 'exit event')
+      expect(events.at(-1)).toEqual({ type: 'exit', exitCode: 7 })
+      expect(session.snapshot()).toMatchObject({ running: false, exitCode: 7 })
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'raises a title event from an OSC sequence in the live stream',
+    async () => {
+      // printf writes the sequence in two calls, so the chunking is the shell's
+      // choice rather than the test's -- the scanner has to cope either way.
+      const session = start({ command: `printf '\\033]0;agent-run' && printf '\\007' && sleep 1` })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'title'), 'title event')
+      expect(events.find((event) => event.type === 'title')).toEqual({ type: 'title', title: 'agent-run' })
+      expect(session.snapshot().title).toBe('agent-run')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'caps scrollback no matter how much the child prints',
+    async () => {
+      const cap = 8 * 1024
+      const session = start({
+        command: 'for i in $(seq 1 4000); do echo "chatty line $i padding padding padding"; done',
+        scrollbackCapBytes: cap
+      })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
+      expect(session.retainedBytes).toBeLessThanOrEqual(cap)
+      expect(Buffer.byteLength(session.read(), 'utf8')).toBeLessThanOrEqual(cap)
+      expect(session.read()).toContain('chatty line 4000')
+      expect(session.read()).not.toContain('chatty line 1 ')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'kills the whole process tree, not just the shell',
+    async () => {
+      // The shell prints its grandchild's pid, then waits forever. Closing the
+      // session has to take the sleep with it.
+      const session = start({ command: 'sleep 120 & echo child:$!; wait' })
+      const events = collect(session)
+
+      await waitUntil(() => /child:\d+/.test(outputOf(events)), 'the grandchild pid')
+      const match = /child:(\d+)/.exec(outputOf(events))
+      const grandchild = Number(match?.[1])
+      expect(grandchild).toBeGreaterThan(0)
+      expect(isProcessAlive(grandchild)).toBe(true)
+
+      await session.close()
+
+      await waitUntil(() => !isProcessAlive(grandchild), 'the grandchild to be reaped')
+      expect(session.snapshot().running).toBe(false)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'closes an already-exited terminal without complaint',
+    async () => {
+      const session = start({ command: 'exit 0' })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'exit'), 'exit event')
+      await expect(session.close()).resolves.toBeUndefined()
+      await expect(session.close()).resolves.toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'refuses writes to a terminal whose process is gone',
+    async () => {
+      const session = start({ command: 'exit 0' })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'exit'), 'exit event')
+      expect(() => session.write('too late\n')).toThrow(/exited/)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'stops notifying a listener that unsubscribed',
+    async () => {
+      const session = start({ command: 'cat' })
+      const events: TerminalEvent[] = []
+      const off = session.on((event) => events.push(event))
+
+      session.write('before\n')
+      await waitUntil(() => outputOf(events).includes('before'), 'first echo')
+      off()
+      const seen = events.length
+      session.write('after\n')
+      await waitUntil(() => session.read().includes('after'), 'second echo in scrollback')
+      expect(events).toHaveLength(seen)
+    },
+    TEST_TIMEOUT_MS
+  )
+})

@@ -1,0 +1,327 @@
+import { existsSync } from 'node:fs'
+import { mkdir, rm } from 'node:fs/promises'
+import path from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import type { Worktree } from '../../shared/entities'
+import { ErrorCode } from '../../shared/protocol'
+import { GitServiceError } from './errors'
+import { createGitRunner } from './gitProcess'
+import { GitService, type GitEvent, type GitServiceOptions } from './gitService'
+import { createGitHandlers } from './handlers'
+import { createDelayedRunner, createTempRepo, type TempRepo, type TempRepoOptions } from './testRepository'
+
+const repos: TempRepo[] = []
+const services: GitService[] = []
+
+afterEach(async () => {
+  await Promise.all(services.splice(0).map((service) => service.dispose()))
+  await Promise.all(repos.splice(0).map((repo) => repo.cleanup()))
+})
+
+async function newRepo(options?: TempRepoOptions): Promise<TempRepo> {
+  const repo = await createTempRepo(options)
+  repos.push(repo)
+  return repo
+}
+
+function newService(repo: TempRepo, options: GitServiceOptions = {}): GitService {
+  const service = new GitService({ worktreesRoot: repo.worktreesRoot, ...options })
+  services.push(service)
+  return service
+}
+
+async function rejection(promise: Promise<unknown>): Promise<GitServiceError> {
+  try {
+    await promise
+  } catch (error) {
+    expect(error).toBeInstanceOf(GitServiceError)
+    return error as GitServiceError
+  }
+  throw new Error('expected the promise to reject')
+}
+
+async function readyWorktree(service: GitService, projectId: string, name: string): Promise<Worktree> {
+  const pending = await service.createWorktree({ projectId, name })
+  const settled = await service.whenSettled(pending.id)
+  if (settled.state !== 'ready') throw new Error(`worktree "${name}" failed: ${settled.error ?? 'unknown'}`)
+  return settled
+}
+
+describe('projects', () => {
+  it('adds a repository, derives its name, and prefers origin/HEAD as the base ref', async () => {
+    const repo = await newRepo({ withRemote: true })
+    const service = newService(repo)
+
+    const project = await service.addProject({ path: repo.repoPath })
+
+    expect(project.name).toBe('repo')
+    expect(project.path).toBe(repo.repoPath)
+    expect(project.baseRef).toBe('origin/main')
+    expect(service.listProjects()).toEqual([project])
+  })
+
+  it('falls back to the checked-out branch when there is no remote', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+
+    const project = await service.addProject({ path: repo.repoPath, name: 'Custom Name' })
+
+    expect(project.name).toBe('Custom Name')
+    expect(project.baseRef).toBe('main')
+  })
+
+  it('rejects a directory that is not a git repository', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const plainDirectory = path.join(repo.base, 'plain')
+    await mkdir(plainDirectory)
+
+    const error = await rejection(service.addProject({ path: plainDirectory }))
+
+    expect(error.code).toBe(ErrorCode.InvalidParams)
+    expect(error.message).toContain('not a git repository')
+    expect(service.listProjects()).toEqual([])
+  })
+
+  it('rejects a relative path and a repository that is already tracked', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+
+    expect((await rejection(service.addProject({ path: 'repo' }))).code).toBe(ErrorCode.InvalidParams)
+
+    await service.addProject({ path: repo.repoPath })
+    const duplicate = await rejection(service.addProject({ path: repo.repoPath }))
+    expect(duplicate.code).toBe(ErrorCode.Conflict)
+  })
+
+  it('forgets a project and its worktrees without touching the checkouts on disk', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await readyWorktree(service, project.id, 'keep me')
+
+    await service.removeProject({ projectId: project.id })
+
+    expect(service.listProjects()).toEqual([])
+    expect(await service.listWorktrees({})).toEqual([])
+    expect(existsSync(worktree.path)).toBe(true)
+  })
+})
+
+describe('worktree.create', () => {
+  it('returns immediately in state creating and transitions to ready in the background', async () => {
+    const repo = await newRepo({ withRemote: true })
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const seen: GitEvent[] = []
+    service.events.on((event) => seen.push(event))
+
+    const pending = await service.createWorktree({ projectId: project.id, name: 'Fix the login page' })
+    expect(pending.state).toBe('creating')
+    expect(pending.branch).toBe('fix-the-login-page')
+    expect(pending.startedFrom).toBe('origin/main')
+    expect(pending.path.startsWith(repo.worktreesRoot)).toBe(true)
+
+    const ready = await service.whenSettled(pending.id)
+    expect(ready.state).toBe('ready')
+    expect(ready.error).toBeUndefined()
+
+    expect(existsSync(path.join(ready.path, 'README.md'))).toBe(true)
+    const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
+    expect(branches.split('\n')).toContain('fix-the-login-page')
+    const listed = await repo.git(['worktree', 'list', '--porcelain'])
+    expect(listed).toContain(ready.path)
+
+    expect(seen.map((event) => event.type)).toEqual(['worktree.created', 'worktree.updated'])
+    const last = seen.at(-1)
+    expect(last?.type === 'worktree.updated' && last.worktree.state).toBe('ready')
+  })
+
+  it('dedupes the branch name against existing branches and other worktrees', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    await repo.git(['branch', 'fix-login'])
+
+    const first = await readyWorktree(service, project.id, 'Fix login')
+    const second = await readyWorktree(service, project.id, 'fix  LOGIN!!')
+
+    expect(first.branch).toBe('fix-login-2')
+    expect(second.branch).toBe('fix-login-3')
+    expect(first.path).not.toBe(second.path)
+    expect(existsSync(second.path)).toBe(true)
+  })
+
+  it('refuses an explicit branch name that is already taken', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const error = await rejection(service.createWorktree({ projectId: project.id, name: 'x', branch: 'main' }))
+
+    expect(error.code).toBe(ErrorCode.Conflict)
+  })
+
+  it('fails the worktree instead of the call when the start ref does not exist', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const pending = await service.createWorktree({
+      projectId: project.id,
+      name: 'doomed',
+      startedFrom: 'origin/does-not-exist'
+    })
+    expect(pending.state).toBe('creating')
+
+    const settled = await service.whenSettled(pending.id)
+    expect(settled.state).toBe('failed')
+    expect(settled.error).toContain('origin/does-not-exist')
+
+    // The row survives so the UI can offer a retry, but nothing was left behind.
+    expect(await service.listWorktrees({})).toHaveLength(1)
+    expect(existsSync(settled.path)).toBe(false)
+    const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
+    expect(branches.split('\n')).not.toContain('doomed')
+  })
+
+  it('cancels a create in flight and cleans up after it', async () => {
+    const repo = await newRepo()
+    const service = newService(repo, {
+      runner: createDelayedRunner(createGitRunner(), (args) => args[0] === 'worktree' && args[1] === 'add', 150)
+    })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const pending = await service.createWorktree({ projectId: project.id, name: 'never mind' })
+    const settled = await service.cancelWorktreeCreate(pending.id)
+
+    expect(settled?.state).toBe('failed')
+    expect(settled?.error).toBe('creation cancelled')
+    expect(existsSync(pending.path)).toBe(false)
+    const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
+    expect(branches.split('\n')).not.toContain('never-mind')
+  })
+})
+
+describe('worktree.remove', () => {
+  it('removes the checkout and the branch', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await readyWorktree(service, project.id, 'short lived')
+
+    expect(await service.removeWorktree({ worktreeId: worktree.id, deleteBranch: true })).toEqual({ removed: true })
+
+    expect(existsSync(worktree.path)).toBe(false)
+    const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
+    expect(branches.split('\n')).not.toContain('short-lived')
+    expect((await rejection(service.getWorktree({ worktreeId: worktree.id }))).code).toBe(ErrorCode.NotFound)
+  })
+
+  it('refuses to delete a branch with unmerged commits unless force is set', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await readyWorktree(service, project.id, 'real work')
+    await repo.write('feature.txt', 'work\n', worktree.path)
+    await repo.commit('add a feature', worktree.path)
+
+    const error = await rejection(service.removeWorktree({ worktreeId: worktree.id, deleteBranch: true }))
+    expect(error.code).toBe(ErrorCode.Conflict)
+    expect(error.message).toContain('not in main')
+
+    // Refusal is total: nothing was removed on the way to saying no.
+    expect(existsSync(worktree.path)).toBe(true)
+    expect((await service.getWorktree({ worktreeId: worktree.id })).state).toBe('ready')
+
+    await service.removeWorktree({ worktreeId: worktree.id, deleteBranch: true, force: true })
+    expect(existsSync(worktree.path)).toBe(false)
+    const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
+    expect(branches.split('\n')).not.toContain('real-work')
+  })
+
+  it('keeps the branch when only the checkout is removed', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await readyWorktree(service, project.id, 'keep branch')
+
+    await service.removeWorktree({ worktreeId: worktree.id })
+
+    const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
+    expect(branches.split('\n')).toContain('keep-branch')
+  })
+})
+
+describe('reconciliation', () => {
+  it('drops worktrees that were removed outside the app', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const survivor = await readyWorktree(service, project.id, 'survivor')
+    const doomed = await readyWorktree(service, project.id, 'doomed')
+
+    await rm(doomed.path, { recursive: true, force: true })
+    await repo.git(['worktree', 'prune'])
+
+    const removed: string[] = []
+    service.events.on((event) => {
+      if (event.type === 'worktree.removed') removed.push(event.worktreeId)
+    })
+
+    const listed = await service.listWorktrees({ projectId: project.id })
+
+    expect(listed.map((worktree) => worktree.id)).toEqual([survivor.id])
+    expect(removed).toEqual([doomed.id])
+  })
+})
+
+describe('persistence', () => {
+  it('marks creates that a restart interrupted as failed', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    service.hydrate({
+      projects: [{ id: 'p1', name: 'repo', path: repo.repoPath, baseRef: 'main' }],
+      worktrees: [
+        {
+          id: 'w1',
+          projectId: 'p1',
+          name: 'half built',
+          branch: 'half-built',
+          path: path.join(repo.worktreesRoot, 'repo', 'half-built'),
+          startedFrom: 'main',
+          state: 'creating',
+          createdAt: 1
+        }
+      ]
+    })
+
+    const [restored] = await service.listWorktrees({})
+    expect(restored?.state).toBe('failed')
+    expect(restored?.error).toContain('restart')
+  })
+})
+
+describe('handler seam', () => {
+  it('exposes the contract methods as plain functions', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const handlers = createGitHandlers(service)
+
+    const project = await handlers['project.add']({ path: repo.repoPath })
+    expect(await handlers['project.list']({})).toEqual([project])
+
+    const created = await handlers['worktree.create']({ projectId: project.id, name: 'via handlers' })
+    await service.whenSettled(created.id)
+    const fetched = await handlers['worktree.get']({ worktreeId: created.id })
+    expect(fetched.state).toBe('ready')
+
+    const status = await handlers['worktree.status']({ worktreeId: created.id })
+    expect(status.worktreeId).toBe(created.id)
+    expect(status.branch).toBe('via-handlers')
+
+    expect(await handlers['worktree.remove']({ worktreeId: created.id })).toEqual({ removed: true })
+    expect(await handlers['project.remove']({ projectId: project.id })).toEqual({ removed: true })
+  })
+})

@@ -1,0 +1,87 @@
+/* The whole visual language: one palette, one type scale, one spacing ramp.
+   Nothing below this file should invent a colour or a size. */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, from the window backdrop up to the things that float. */
+  --bg-window: #0a0c10;
+  --bg-rail: #0f1218;
+  --bg-panel: #12151c;
+  --bg-raised: #171b24;
+  --bg-input: #0c0f14;
+  --bg-hover: rgb(255 255 255 / 4%);
+  --bg-press: rgb(255 255 255 / 7%);
+  --scrim: rgb(4 6 9 / 62%);
+
+  --line: #202632;
+  --line-strong: #2c3444;
+
+  --fg: #dfe5ee;
+  --fg-secondary: #a3adbd;
+  --fg-muted: #6d7788;
+
+  --accent: #8b8cf7;
+  --accent-bright: #a6a7ff;
+  --accent-soft: rgb(139 140 247 / 16%);
+  --accent-line: rgb(139 140 247 / 55%);
+
+  --success: #57c38a;
+  --warning: #d6a24a;
+  --danger: #e8615a;
+  --info: #5aa9e6;
+
+  /* Terminal palette, read back by the emulator so both stay in step. */
+  --term-bg: #0f1116;
+  --term-fg: #d7dde8;
+  --term-cursor: #a6a7ff;
+  --term-selection: #2b3350;
+  --term-black: #1b1f27;
+  --term-red: #e8615a;
+  --term-green: #57c38a;
+  --term-yellow: #d6a24a;
+  --term-blue: #5aa9e6;
+  --term-magenta: #a98bf0;
+  --term-cyan: #4fb6b2;
+  --term-white: #c3cad6;
+  --term-bright-black: #5c6577;
+
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Inter, Roboto, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  --text-xs: 10.5px;
+  --text-sm: 11.5px;
+  --text-base: 12.5px;
+  --text-lg: 14px;
+  --text-xl: 17px;
+
+  --s1: 3px;
+  --s2: 6px;
+  --s3: 9px;
+  --s4: 13px;
+  --s5: 18px;
+  --s6: 26px;
+
+  --r1: 3px;
+  --r2: 6px;
+  --r3: 10px;
+
+  --ring: 0 0 0 2px var(--accent-line);
+  --shadow-pop: 0 18px 48px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 40%);
+
+  --motion-fast: 110ms;
+  --motion-base: 170ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

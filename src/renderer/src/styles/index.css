@@ -1,0 +1,11 @@
+/* Entry point for the renderer's styles; order is tokens, then base, then the
+   regions of the window. */
+
+@import './tokens.css';
+@import './base.css';
+@import './shell.css';
+@import './sidebar.css';
+@import './workspace.css';
+@import './panes.css';
+@import './dialog.css';
+@import './statusbar.css';

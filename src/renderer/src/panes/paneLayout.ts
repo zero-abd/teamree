@@ -1,0 +1,192 @@
+// Pure operations over the PaneNode split tree. Everything here is total and
+// side-effect free so the layout can be reasoned about (and tested) without a
+// DOM: the components below only translate the results into CSS.
+
+import type { PaneNode } from '@shared/entities'
+
+/** Smallest slice of a split a pane may shrink to, as a fraction of the axis. */
+export const MIN_PANE_FRACTION = 0.08
+
+/** Thickness of the draggable gutter drawn between siblings, in CSS pixels. */
+export const GUTTER_PX = 5
+
+export function leaf(terminalId: string): PaneNode {
+  return { kind: 'leaf', terminalId }
+}
+
+export function collectTerminalIds(node: PaneNode | null): string[] {
+  if (!node) return []
+  if (node.kind === 'leaf') return [node.terminalId]
+  return node.children.flatMap(collectTerminalIds)
+}
+
+export function countPanes(node: PaneNode | null): number {
+  return collectTerminalIds(node).length
+}
+
+export function hasTerminal(node: PaneNode | null, terminalId: string): boolean {
+  return collectTerminalIds(node).includes(terminalId)
+}
+
+/**
+ * Rewrites `sizes` so it is exactly `count` long, every entry is at least
+ * `min`, and the whole thing sums to 1. Missing or corrupt entries (a layout
+ * from an older build, a truncated array) fall back to an even share rather
+ * than collapsing the pane to nothing.
+ */
+export function normalizeSizes(sizes: readonly number[], count: number, min = MIN_PANE_FRACTION): number[] {
+  if (count <= 0) return []
+  const even = 1 / count
+  const cap = Math.min(min, even)
+
+  const raw: number[] = []
+  for (let i = 0; i < count; i++) {
+    const value = sizes[i]
+    raw.push(typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : even)
+  }
+
+  const total = raw.reduce((sum, value) => sum + value, 0)
+  const scaled = raw.map((value) => value / total)
+
+  // Lift anything under the floor, then take the difference back from the
+  // panes that can spare it, proportionally to their surplus.
+  const lifted = scaled.map((value) => Math.max(value, cap))
+  const overflow = lifted.reduce((sum, value) => sum + value, 0) - 1
+  if (overflow > 1e-9) {
+    const surplus = lifted.reduce((sum, value) => sum + Math.max(0, value - cap), 0)
+    if (surplus > 1e-9) {
+      for (let i = 0; i < lifted.length; i++) {
+        const value = lifted[i] ?? cap
+        lifted[i] = value - (Math.max(0, value - cap) / surplus) * overflow
+      }
+    }
+  }
+
+  const finalTotal = lifted.reduce((sum, value) => sum + value, 0)
+  return lifted.map((value) => value / finalTotal)
+}
+
+/**
+ * Moves the boundary between `index` and `index + 1` by `deltaPx`, leaving
+ * every other pane untouched — the behaviour a drag on one gutter implies.
+ */
+export function applyGutterDrag(
+  sizes: readonly number[],
+  index: number,
+  deltaPx: number,
+  containerPx: number,
+  min = MIN_PANE_FRACTION
+): number[] {
+  const next = normalizeSizes(sizes, sizes.length, min)
+  const before = next[index]
+  const after = next[index + 1]
+  if (before === undefined || after === undefined || containerPx <= 0) return next
+
+  const cap = Math.min(min, 1 / sizes.length)
+  const pair = before + after
+  const delta = clamp(deltaPx / containerPx, cap - before, pair - cap - before)
+  next[index] = before + delta
+  next[index + 1] = after - delta
+  return next
+}
+
+/** Flex basis for each child, with the gutters taken off the top first. */
+export function splitChildBases(sizes: readonly number[], gutterPx = GUTTER_PX): string[] {
+  const normalized = normalizeSizes(sizes, sizes.length)
+  const gutters = Math.max(0, normalized.length - 1) * gutterPx
+  return normalized.map((fraction) => `calc((100% - ${gutters}px) * ${round(fraction)})`)
+}
+
+/**
+ * Splits the pane holding `terminalId` in two. Splitting along the axis the
+ * parent already uses extends that parent instead of nesting another level,
+ * which keeps deep layouts flat enough to resize sensibly.
+ */
+export function splitPane(
+  root: PaneNode | null,
+  terminalId: string,
+  direction: 'row' | 'column',
+  newTerminalId: string
+): PaneNode {
+  if (!root) return leaf(newTerminalId)
+  if (root.kind === 'leaf') {
+    return root.terminalId === terminalId
+      ? { kind: 'split', direction, sizes: [0.5, 0.5], children: [root, leaf(newTerminalId)] }
+      : root
+  }
+
+  const index = root.children.findIndex((child) => child.kind === 'leaf' && child.terminalId === terminalId)
+  if (index !== -1 && root.direction === direction) {
+    const sizes = normalizeSizes(root.sizes, root.children.length)
+    const share = sizes[index] ?? 1 / sizes.length
+    const children = [...root.children]
+    children.splice(index + 1, 0, leaf(newTerminalId))
+    const nextSizes = [...sizes]
+    nextSizes.splice(index, 1, share / 2, share / 2)
+    return { kind: 'split', direction: root.direction, sizes: normalizeSizes(nextSizes, children.length), children }
+  }
+
+  return {
+    kind: 'split',
+    direction: root.direction,
+    sizes: normalizeSizes(root.sizes, root.children.length),
+    children: root.children.map((child) => splitPane(child, terminalId, direction, newTerminalId))
+  }
+}
+
+/**
+ * Removes a pane, handing its space back to its siblings in proportion. A
+ * split left with one child dissolves into that child.
+ */
+export function closePane(root: PaneNode | null, terminalId: string): PaneNode | null {
+  if (!root) return null
+  if (root.kind === 'leaf') return root.terminalId === terminalId ? null : root
+
+  const sizes = normalizeSizes(root.sizes, root.children.length)
+  const kept: PaneNode[] = []
+  const keptSizes: number[] = []
+  root.children.forEach((child, i) => {
+    const next = closePane(child, terminalId)
+    if (next) {
+      kept.push(next)
+      keptSizes.push(sizes[i] ?? 0)
+    }
+  })
+
+  if (kept.length === 0) return null
+  if (kept.length === 1) return kept[0] ?? null
+  return { kind: 'split', direction: root.direction, sizes: normalizeSizes(keptSizes, kept.length), children: kept }
+}
+
+/** Replaces the sizes of the split at `path`, addressed by child indices. */
+export function setSizesAt(root: PaneNode, path: readonly number[], sizes: readonly number[]): PaneNode {
+  if (root.kind === 'leaf') return root
+  if (path.length === 0) {
+    return { ...root, sizes: normalizeSizes(sizes, root.children.length) }
+  }
+  const [head, ...rest] = path
+  return {
+    ...root,
+    children: root.children.map((child, i) => (i === head ? setSizesAt(child, rest, sizes) : child))
+  }
+}
+
+/**
+ * The pane focus should land on once `terminalId` goes away: its next sibling
+ * in document order, or the previous one if it was last.
+ */
+export function neighbourTerminalId(root: PaneNode | null, terminalId: string): string | null {
+  const ids = collectTerminalIds(root)
+  const index = ids.indexOf(terminalId)
+  if (index === -1) return null
+  return ids[index + 1] ?? ids[index - 1] ?? null
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (max < min) return min
+  return Math.min(Math.max(value, min), max)
+}
+
+function round(value: number): number {
+  return Math.round(value * 1e6) / 1e6
+}
