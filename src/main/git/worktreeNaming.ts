@@ -7,6 +7,13 @@
 import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { pathKey } from './pathIdentity'
+import { slugifyBranchName } from '../../shared/branchName'
+
+/**
+ * The slug rule lives in shared so the create dialog previews exactly what gets
+ * created. Re-exported here because this module is where callers expect it.
+ */
+export const slugify = slugifyBranchName
 
 const MAX_SLUG_LENGTH = 60
 const FALLBACK_SLUG = 'worktree'
@@ -36,20 +43,6 @@ export function isWindowsDeviceName(name: string): boolean {
  * pasted into a PR, and used as a folder name on Windows is worth more than one
  * that faithfully preserves the task title.
  */
-export function slugify(name: string): string {
-  const slug = name
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, MAX_SLUG_LENGTH)
-    .replace(/-+$/, '')
-  if (!slug) return FALLBACK_SLUG
-  if (isWindowsDeviceName(slug)) return `${slug}-1`
-  // `.lock` suffixes and leading dots are rejected by git's ref rules.
-  return slug.replace(/\.lock$/, 'lock')
-}
 
 /**
  * git stores branches as files, so `feature` and `feature/login` cannot both
