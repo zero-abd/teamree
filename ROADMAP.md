@@ -38,7 +38,7 @@ so a change to a method signature breaks every caller at compile time rather tha
 - [x] Add and track a repo
 - [x] List worktrees, reconciled against real git state
 - [x] Create a worktree in the background with progress and failure recovery
-- [ ] Start-from picker: base ref, local branch, commit, remote branch
+- [x] Start-from picker: base ref, local branch, commit, remote branch
 - [x] Live git status per worktree
 - [x] Delete a worktree and optionally its branch
 
