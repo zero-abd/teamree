@@ -165,3 +165,28 @@ describe('the real filesystem underneath', () => {
     if (POSIX_PLATFORMS.includes(process.platform)) expect(key.startsWith('/')).toBe(true)
   })
 })
+
+describe('a path used as an identifier', () => {
+  // The defect: the store compared project paths with string equality, so on
+  // Windows or macOS the same repository reached through a different case, or
+  // through a symlinked parent, looked like a repository nobody tracks.
+  it('finds a tracked project through any spelling of its checkout', async () => {
+    const { WorkspaceStore } = await import('../../src/main/store/workspaceStore')
+
+    const home = mkdtempSync(path.join(tmpdir(), 'teamree-store-'))
+    const real = path.join(home, 'Repos', 'App')
+    mkdirSync(real, { recursive: true })
+    const link = path.join(home, 'shortcut')
+    symlinkSync(path.join(home, 'Repos'), link, process.platform === 'win32' ? 'junction' : 'dir')
+
+    const store = await WorkspaceStore.open(path.join(home, 'workspace.json'))
+    store.putProject({ id: 'p1', name: 'app', path: real, baseRef: 'main' })
+
+    expect(store.findProjectByPath(real)?.id).toBe('p1')
+    expect(store.findProjectByPath(path.join(link, 'App'))?.id).toBe('p1')
+    if (isCaseInsensitivePlatform(process.platform)) {
+      expect(store.findProjectByPath(path.join(home, 'repos', 'app'))?.id).toBe('p1')
+    }
+    expect(store.findProjectByPath(path.join(home, 'Repos', 'Other'))).toBeUndefined()
+  })
+})

@@ -4,6 +4,7 @@
 // writes are coalesced so a burst of mutations costs one rename.
 
 import type { Layout, Project, Worktree } from '../../shared/entities'
+import { samePath } from '../git/pathIdentity'
 import { readJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
 import { emptyWorkspaceDocument, parseWorkspaceDocument, type WorkspaceDocument } from './workspaceDocument'
 
@@ -43,8 +44,9 @@ export class WorkspaceStore {
     return this.projects.get(projectId)
   }
 
+  /** Matched through path identity: two spellings of one checkout are one project. */
   findProjectByPath(path: string): Project | undefined {
-    for (const project of this.projects.values()) if (project.path === path) return project
+    for (const project of this.projects.values()) if (samePath(project.path, path)) return project
     return undefined
   }
 
