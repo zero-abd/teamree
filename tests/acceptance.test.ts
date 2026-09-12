@@ -8,7 +8,7 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Project, Terminal, Worktree, WorktreeStatus } from '../src/shared/entities'
+import type { Project, Terminal, Worktree, WorktreeChanges, WorktreeDiff, WorktreeStatus } from '../src/shared/entities'
 
 const CLI = join(process.cwd(), 'out/cli/index.js')
 const HOST = join(process.cwd(), 'scripts/acceptance-host.mjs')
@@ -103,6 +103,17 @@ describe('milestone 1 acceptance', () => {
     const status = cli<WorktreeStatus>(['worktree', 'status', worktree.id])
     expect(status.untracked).toBe(1)
     expect(status.branch).toBe(worktree.branch)
+  })
+
+  it('names the changed paths and prints the patch for one of them', () => {
+    // scratch.txt is untracked, which is the case plain `git diff` answers with
+    // silence — and the case a fresh branch is usually full of.
+    const changes = cli<WorktreeChanges>(['worktree', 'changes', worktree.id])
+    expect(changes.changes.map((change) => change.path)).toContain('scratch.txt')
+    expect(changes.changes.find((change) => change.path === 'scratch.txt')?.kind).toBe('untracked')
+
+    const diff = cli<WorktreeDiff>(['worktree', 'diff', worktree.id, '--path', 'scratch.txt'])
+    expect(diff.patch).toContain('work in progress')
   })
 
   it('opens a terminal in the worktree checkout', () => {

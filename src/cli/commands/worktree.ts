@@ -130,6 +130,86 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'changes'],
+    summary: 'List the changed paths in a worktree.',
+    details:
+      'The counters in `worktree status` say whether there is anything to look at. This is the looking: ' +
+      'conflicts first, then what is staged, then the rest.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      {
+        name: 'limit',
+        kind: 'number',
+        placeholder: '<count>',
+        description: 'Rows to return before the list reports itself truncated.'
+      }
+    ],
+    examples: ['teamree worktree changes fix-login', 'teamree worktree changes fix-login --json'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const limit = readNumber(context.flags, 'limit')
+      const result = await context.client.call('worktree.changes', {
+        worktreeId: worktree.id,
+        ...(limit === undefined ? {} : { limit })
+      })
+
+      const rows = result.changes.map((change) => [
+        change.kind,
+        change.staged ? (change.unstaged ? 'both' : 'staged') : 'unstaged',
+        change.from === undefined ? change.path : `${change.from} -> ${change.path}`
+      ])
+      const table = formatTable(['KIND', 'WHERE', 'PATH'], rows, 'No changes.')
+      return {
+        data: result,
+        text: result.truncated ? `${table}\n\nShowing ${result.limit} of ${result.total}.` : table
+      }
+    }
+  },
+  {
+    path: ['worktree', 'diff'],
+    summary: 'Print the patch for a worktree, or for one path in it.',
+    details:
+      'Untracked files are included when a path names one, since git itself has nothing to compare them ' +
+      'against and would otherwise answer with silence.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      { name: 'path', kind: 'string', placeholder: '<path>', description: 'Restrict the patch to one path.' },
+      { name: 'staged', kind: 'boolean', description: 'Diff the index against HEAD instead of the working tree.' },
+      { name: 'context', kind: 'number', placeholder: '<lines>', description: 'Context lines around each hunk.' },
+      {
+        name: 'max-bytes',
+        kind: 'number',
+        placeholder: '<bytes>',
+        description: 'Ceiling on the patch returned. It is cut at a line boundary.'
+      }
+    ],
+    examples: [
+      'teamree worktree diff fix-login',
+      'teamree worktree diff fix-login --path src/app.ts',
+      'teamree worktree diff fix-login --staged'
+    ],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const patchPath = readString(context.flags, 'path')
+      const staged = readBoolean(context.flags, 'staged')
+      const contextLines = readNumber(context.flags, 'context')
+      const maxBytes = readNumber(context.flags, 'max-bytes')
+
+      const result = await context.client.call('worktree.diff', {
+        worktreeId: worktree.id,
+        ...(patchPath === undefined ? {} : { path: patchPath }),
+        ...(staged ? { staged: true } : {}),
+        ...(contextLines === undefined ? {} : { contextLines }),
+        ...(maxBytes === undefined ? {} : { maxBytes })
+      })
+
+      // The patch goes out as git wrote it, so it can be piped into `git apply`
+      // or read by anything that understands a unified diff.
+      const text = result.patch === '' ? 'No changes.' : result.patch
+      return { data: result, text: result.truncated ? `${text}\n[cut at ${result.patch.length} characters]` : text }
+    }
+  },
+  {
     path: ['worktree', 'wait'],
     summary: 'Block until a worktree finishes being created.',
     details:

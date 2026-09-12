@@ -11,6 +11,8 @@ import type {
   StartPointList,
   Terminal,
   Worktree,
+  WorktreeChanges,
+  WorktreeDiff,
   WorktreeStatus
 } from './entities'
 
@@ -38,6 +40,22 @@ export const Params = {
     deleteBranch: z.boolean().optional()
   }),
   worktreeStatus: z.object({ worktreeId: z.string().min(1) }),
+  /** Every changed path, for a review pass before committing. */
+  worktreeChanges: z.object({
+    worktreeId: z.string().min(1),
+    limit: z.number().int().positive().optional()
+  }),
+  /** The patch itself: the whole worktree, or one path in it. */
+  worktreeDiff: z.object({
+    worktreeId: z.string().min(1),
+    /** Restricts the patch to one path. Defaults to the whole worktree. */
+    path: z.string().min(1).optional(),
+    /** Diff the index against HEAD instead of the working tree. */
+    staged: z.boolean().optional(),
+    contextLines: z.number().int().min(0).max(100).optional(),
+    /** Ceiling on the patch returned, so one huge file cannot flood a caller. */
+    maxBytes: z.number().int().positive().optional()
+  }),
   /** Everything a new worktree could branch from, for the create dialog. */
   worktreeStartPoints: z.object({
     projectId: z.string().min(1),
@@ -104,6 +122,8 @@ export type MethodContract = {
   'worktree.remove': { params: z.infer<typeof Params.worktreeRemove>; result: { removed: true } }
   'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
+  'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
+  'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
 
   'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
   'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }

@@ -11,6 +11,7 @@ import type {
   StartPointList,
   Terminal,
   Worktree,
+  WorktreeChange,
   WorktreeStatus
 } from '@shared/entities'
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
@@ -34,6 +35,64 @@ type FakeTerminal = {
   buffer: string
   line: string
   listeners: Set<(event: TerminalEvent) => void>
+}
+
+/**
+ * Paths the seeded changes are drawn from, cycled so the same worktree always
+ * shows the same files. Invented, but invented once.
+ */
+const SEEDED_PATHS = [
+  'src/search/rankResults.ts',
+  'src/search/index.ts',
+  'src/search/rankResults.test.ts',
+  'src/shell/StatusBar.tsx',
+  'src/styles/tokens.css',
+  'docs/search.md',
+  'scripts/reindex.mjs',
+  'src/server/handlers.ts'
+]
+
+/**
+ * Changed paths made up to match a worktree's counters, so the list and the
+ * chips above it never contradict each other in the demo.
+ */
+function seededChanges(status: WorktreeStatus): WorktreeChange[] {
+  const changes: WorktreeChange[] = []
+  let next = 0
+  const take = (): string => SEEDED_PATHS[next++ % SEEDED_PATHS.length] as string
+
+  for (let index = 0; index < status.conflicted; index += 1) {
+    changes.push({ path: take(), kind: 'conflicted', staged: false, unstaged: true })
+  }
+  for (let index = 0; index < status.staged; index += 1) {
+    changes.push({ path: take(), kind: index === 0 ? 'added' : 'modified', staged: true, unstaged: false })
+  }
+  for (let index = 0; index < status.unstaged; index += 1) {
+    changes.push({ path: take(), kind: 'modified', staged: false, unstaged: true })
+  }
+  for (let index = 0; index < status.untracked; index += 1) {
+    changes.push({ path: take(), kind: 'untracked', staged: false, unstaged: true })
+  }
+  return changes
+}
+
+/** A small believable patch, so the diff pane has something to render. */
+function seededPatch(path: string): string {
+  return [
+    `diff --git a/${path} b/${path}`,
+    'index 3f8a1c2..9b21e40 100644',
+    `--- a/${path}`,
+    `+++ b/${path}`,
+    '@@ -14,7 +14,9 @@',
+    ' export function rankResults(hits: Hit[], query: Query): Hit[] {',
+    '-  return hits.sort((left, right) => right.score - left.score)',
+    '+  const weighted = hits.map((hit) => ({ ...hit, score: hit.score * recency(hit) }))',
+    '+  // Ties went to whichever the index happened to return first, which is',
+    '+  // not stable between runs.',
+    '+  return weighted.sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))',
+    ' }',
+    ''
+  ].join('\n')
 }
 
 export function createSeededRuntimeClient(): RuntimeClient {
@@ -336,6 +395,34 @@ export function createSeededRuntimeClient(): RuntimeClient {
           }
       statuses.set(worktreeId, status)
       return status
+    },
+    'worktree.changes': ({ worktreeId, limit }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const all = status ? seededChanges(status) : []
+      const cap = limit ?? 500
+      return {
+        worktreeId: worktree.id,
+        changes: all.slice(0, cap),
+        total: all.length,
+        limit: cap,
+        truncated: all.length > cap,
+        readAt: Date.now()
+      }
+    },
+    'worktree.diff': ({ worktreeId, path, staged }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const changes = status ? seededChanges(status) : []
+      const wanted = path === undefined ? changes.filter((change) => change.staged === (staged ?? false)) : [{ path }]
+      return {
+        worktreeId: worktree.id,
+        ...(path === undefined ? {} : { path }),
+        staged: staged ?? false,
+        patch: wanted.map((change) => seededPatch(change.path)).join('\n'),
+        truncated: false,
+        readAt: Date.now()
+      }
     },
 
     'terminal.list': ({ worktreeId }) =>

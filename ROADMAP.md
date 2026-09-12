@@ -94,6 +94,17 @@ ever as fresh as the last command boundary.
 - [x] Degrades to the git directory alone where recursive watching is unavailable
 - [x] The watch set follows git's own events, so nothing polls
 
+## M8 — Reviewing the work
+
+Counts tell you whether there is something to look at. They cannot tell you the
+file you are about to commit is a stray log.
+
+- [x] `worktree.changes`: every changed path, conflicts first, then staged
+- [x] `worktree.diff`: the patch for a worktree or one path in it
+- [x] Untracked files diffed as the patch that adds them, which plain `git diff` will not do
+- [x] `teamree worktree changes` and `teamree worktree diff`
+- [ ] A changes panel in the GUI
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,

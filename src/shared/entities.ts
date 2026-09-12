@@ -48,6 +48,55 @@ export type WorktreeStatus = {
   readAt: number
 }
 
+/** What git says happened to one path in a worktree. */
+export type WorktreeChangeKind =
+  | 'modified'
+  | 'added'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'typeChanged'
+  | 'untracked'
+  | 'conflicted'
+
+/**
+ * One changed path. `staged` and `unstaged` are not exclusive: a file edited
+ * after it was added is both, and a row that hid one of them would be lying
+ * about what a commit would capture.
+ */
+export type WorktreeChange = {
+  path: string
+  kind: WorktreeChangeKind
+  staged: boolean
+  unstaged: boolean
+  /** Where a rename or copy came from. Absent otherwise. */
+  from?: string
+}
+
+/** Every changed path in a worktree, as of one read. */
+export type WorktreeChanges = {
+  worktreeId: string
+  changes: WorktreeChange[]
+  /** Paths found, which may exceed what `changes` carries. */
+  total: number
+  limit: number
+  truncated: boolean
+  readAt: number
+}
+
+/** A unified diff for a worktree, or for one path in it. */
+export type WorktreeDiff = {
+  worktreeId: string
+  /** The single path this covers, absent when it covers the whole worktree. */
+  path?: string
+  /** True when the patch is of the index rather than the working tree. */
+  staged: boolean
+  patch: string
+  /** True when the patch was cut short at the byte ceiling. */
+  truncated: boolean
+  readAt: number
+}
+
 export type Terminal = {
   id: string
   worktreeId: string

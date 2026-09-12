@@ -26,6 +26,8 @@ const EXPECTED = [
   'worktree create',
   'worktree remove',
   'worktree status',
+  'worktree changes',
+  'worktree diff',
   'worktree wait',
   'terminal list',
   'terminal create',

@@ -16,6 +16,16 @@ export { canonicalPath, isInside, pathKey, samePath } from './pathIdentity'
 export { createMemoryRecordStore, type GitRecordStore } from './recordStore'
 export { parseWorktreeList, readWorktreeInventory, type InventoryEntry } from './worktreeInventory'
 export { allocateBranchName, allocateCheckoutPath, branchCollides, slugify } from './worktreeNaming'
+export {
+  cutToBytes,
+  DEFAULT_CHANGE_LIMIT,
+  DEFAULT_DIFF_CONTEXT_LINES,
+  DEFAULT_DIFF_MAX_BYTES,
+  parseChangeRecords,
+  readWorktreeChanges,
+  readWorktreeDiff,
+  sortChanges
+} from './worktreeChanges'
 export { parsePorcelainV2, readWorktreeStatus, type ParsedStatus } from './worktreeStatus'
 export {
   DEFAULT_MIN_INTERVAL_MS,

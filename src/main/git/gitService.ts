@@ -16,7 +16,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { Project, Worktree, WorktreeStatus } from '../../shared/entities'
+import type { Project, Worktree, WorktreeChanges, WorktreeDiff, WorktreeStatus } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
 import { ErrorCode } from '../../shared/protocol'
 import { describeError, GitCommandError, GitServiceError } from './errors'
@@ -28,6 +28,7 @@ import { detectBaseRef, inspectRepository, listBranchNames } from './repository'
 import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type StartPointList } from './startPoint'
 import { readWorktreeInventory } from './worktreeInventory'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
+import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { readWorktreeStatus } from './worktreeStatus'
 
 export type GitEvent =
@@ -288,6 +289,49 @@ export class GitService {
       baseRef: project?.baseRef,
       now: this.#now
     })
+  }
+
+  /**
+   * Every changed path in a worktree. The counters answer whether there is
+   * anything to look at; this is the looking.
+   */
+  async worktreeChanges(params: ParamsOf<'worktree.changes'>): Promise<WorktreeChanges> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'changes')
+    return readWorktreeChanges(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      ...(params.limit === undefined ? {} : { limit: params.limit }),
+      now: this.#now
+    })
+  }
+
+  /** The patch for a worktree, or for one path in it. */
+  async worktreeDiff(params: ParamsOf<'worktree.diff'>): Promise<WorktreeDiff> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'a diff')
+    return readWorktreeDiff(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      ...(params.path === undefined ? {} : { path: params.path }),
+      ...(params.staged === undefined ? {} : { staged: params.staged }),
+      ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
+      ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
+      now: this.#now
+    })
+  }
+
+  /**
+   * A worktree that can be read from. Anything not yet `ready` has no checkout
+   * on disk, so the honest answer is a conflict rather than an empty result.
+   */
+  #requireReadyWorktree(worktreeId: string, what: string): Worktree {
+    const worktree = this.#requireWorktree(worktreeId)
+    if (worktree.state !== 'ready') {
+      throw new GitServiceError(
+        ErrorCode.Conflict,
+        `worktree "${worktree.name}" is ${worktree.state}; ${what} is only available once it is ready`
+      )
+    }
+    return worktree
   }
 
   // ------------------------------------------------------------- start points
