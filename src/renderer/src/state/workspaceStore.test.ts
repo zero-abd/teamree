@@ -90,3 +90,33 @@ it('does not carry one worktree’s patch across to another worktree', async () 
   expect(useWorkspaceStore.getState().selectedChangePath).toBeNull()
   expect(useWorkspaceStore.getState().diff).toBeNull()
 })
+
+it('reads mergeability for ready worktrees, a few at a time', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+
+  let inFlight = 0
+  let peak = 0
+  const original = runtimeClient.call.bind(runtimeClient)
+  const call = vi.spyOn(runtimeClient, 'call').mockImplementation(async (method, params) => {
+    if (method !== 'worktree.mergePreview') return original(method, params as never)
+    inFlight += 1
+    peak = Math.max(peak, inFlight)
+    try {
+      return await original(method, params as never)
+    } finally {
+      inFlight -= 1
+    }
+  })
+
+  // A worktree list refresh is what drives the read, the same as it drives the
+  // status chips the badge sits beside.
+  const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+  await store.openWorktree(worktreeId)
+  await vi.waitFor(() => expect(useWorkspaceStore.getState().mergePreviews[worktreeId]).toBeDefined())
+
+  expect(useWorkspaceStore.getState().mergePreviews[worktreeId]?.baseRef).toBeTruthy()
+  // Each preview is a git process; the sidebar is not worth an unbounded fan-out.
+  expect(peak).toBeLessThanOrEqual(4)
+  call.mockRestore()
+})

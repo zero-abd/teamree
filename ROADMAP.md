@@ -144,7 +144,8 @@ question that follows.
 - [x] A base ref that does not resolve, unrelated histories, and a git too old
       to be asked each come back as themselves rather than as "clean"
 - [x] `teamree worktree merges`
-- [ ] The answer shown per worktree in the GUI
+- [x] The answer shown per worktree in the sidebar, capped at four reads in
+      flight so a refresh cannot fan out a git process per row
 
 ## Known gaps
 

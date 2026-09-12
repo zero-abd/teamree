@@ -2,12 +2,14 @@
 // still being created, and failed — because a worktree is a background job and
 // hiding that would make the sidebar lie.
 
-import type { Worktree, WorktreeStatus } from '@shared/entities'
+import type { Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import { GitStatusChips } from './GitStatusChips'
+import { mergeBadge } from './mergeBadge'
 
 type WorktreeRowProps = {
   worktree: Worktree
   status: WorktreeStatus | undefined
+  mergePreview: WorktreeMergePreview | undefined
   active: boolean
   onOpen: () => void
   onRetry: () => void
@@ -17,6 +19,7 @@ type WorktreeRowProps = {
 export function WorktreeRow({
   worktree,
   status,
+  mergePreview,
   active,
   onOpen,
   onRetry,
@@ -24,6 +27,7 @@ export function WorktreeRow({
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
+  const badge = worktree.state === 'ready' ? mergeBadge(mergePreview) : null
 
   return (
     <li className={`worktree${active ? ' worktree--active' : ''} worktree--${worktree.state}`}>
@@ -39,6 +43,11 @@ export function WorktreeRow({
           <span className="worktree__branch">{worktree.branch}</span>
         </button>
         {worktree.state === 'ready' ? <GitStatusChips status={status} /> : null}
+        {badge ? (
+          <span className={`worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
+            {badge.label}
+          </span>
+        ) : null}
         {creating ? <span className="worktree__tag">creating</span> : null}
         {failed ? <span className="worktree__tag worktree__tag--failed">failed</span> : null}
         <button

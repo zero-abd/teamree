@@ -9,6 +9,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
   const projects = useWorkspaceStore((state) => state.projects)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const statuses = useWorkspaceStore((state) => state.statuses)
+  const mergePreviews = useWorkspaceStore((state) => state.mergePreviews)
   const collapsed = useWorkspaceStore((state) => state.collapsedProjects)
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const toggleProject = useWorkspaceStore((state) => state.toggleProject)
@@ -105,6 +106,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                       key={worktree.id}
                       worktree={worktree}
                       status={statuses[worktree.id]}
+                      mergePreview={mergePreviews[worktree.id]}
                       active={worktree.id === activeWorktreeId}
                       onOpen={() => void openWorktree(worktree.id)}
                       onRetry={() => retryWorktree(worktree.id)}

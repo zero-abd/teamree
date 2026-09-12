@@ -11,6 +11,7 @@ import type {
   Worktree,
   WorktreeChanges,
   WorktreeDiff,
+  WorktreeMergePreview,
   WorktreeStatus
 } from '@shared/entities'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
@@ -43,6 +44,9 @@ type WorkspaceState = {
   layouts: Record<string, Layout>
 
   /** Open state of the changes panel, and what it is showing. */
+  /** Whether each ready worktree would merge into its base, as last read. */
+  mergePreviews: Record<string, WorktreeMergePreview>
+
   changesOpen: boolean
   changes: Record<string, WorktreeChanges>
   selectedChangePath: string | null
@@ -131,7 +135,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             ? state.activeWorktreeId
             : (openWorktreeIds[openWorktreeIds.length - 1] ?? null),
         layouts: keptFor(state.layouts, live),
-        statuses: keptFor(state.statuses, live)
+        statuses: keptFor(state.statuses, live),
+        mergePreviews: keptFor(state.mergePreviews, live)
       }
     })
 
@@ -197,6 +202,42 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set({ diff, diffPending: false })
   }
 
+  /**
+   * How many merge previews may be in flight at once.
+   *
+   * Each one is a `git merge-tree`, which is fast but is still a process. Ten
+   * worktrees refreshing together would otherwise fan out ten of them on every
+   * file change, and the sidebar is not worth that.
+   */
+  const MERGE_PREVIEW_CONCURRENCY = 4
+
+  /**
+   * Reads mergeability for the worktrees named, a few at a time.
+   *
+   * One unreadable worktree must not cost the others their badge, so each
+   * failure is dropped rather than thrown — the row simply shows nothing, which
+   * is what it showed before the read.
+   */
+  const refreshMergePreviews = async (worktreeIds: string[]): Promise<void> => {
+    if (worktreeIds.length === 0) return
+    const queue = [...worktreeIds]
+    const found: WorktreeMergePreview[] = []
+
+    const worker = async (): Promise<void> => {
+      for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+        const preview = await runtimeClient.call('worktree.mergePreview', { worktreeId: next }).catch(() => null)
+        if (preview) found.push(preview)
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(MERGE_PREVIEW_CONCURRENCY, queue.length) }, worker))
+
+    set((state) => ({
+      mergePreviews: found.reduce((map, preview) => ({ ...map, [preview.worktreeId]: preview }), {
+        ...state.mergePreviews
+      })
+    }))
+  }
+
   const markExited = (exits: RefreshTargets['exits']): void => {
     set((state) => {
       const terminals = { ...state.terminals }
@@ -238,6 +279,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const live = new Set(get().worktrees.map((worktree) => worktree.id))
     const readable = [...stale].filter((worktreeId) => live.has(worktreeId))
     await refreshStatuses(readable)
+    // After the statuses, because a row without chips has nothing to put a
+    // merge badge beside yet.
+    await refreshMergePreviews(readable)
 
     // The panel rides the same signal as the chips above it, so an edit made in
     // a shell — or by an agent through the CLI — moves both at once.
@@ -279,6 +323,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     terminals: {},
     layouts: {},
 
+    mergePreviews: {},
     changesOpen: false,
     changes: {},
     selectedChangePath: null,
