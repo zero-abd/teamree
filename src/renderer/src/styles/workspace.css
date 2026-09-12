@@ -461,3 +461,63 @@
 .patch__line--context {
   color: var(--fg-secondary);
 }
+
+/* The checkbox sits outside the row button, so clicking a file to read its
+   patch and ticking it for a commit are two different acts. */
+.changes__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding-left: var(--s3);
+}
+
+.change__tick {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.changes__item .change {
+  padding-left: 0;
+}
+
+.changes__commit {
+  padding: var(--s3) var(--s4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  border-top: 1px solid var(--line);
+  background: var(--bg-raised);
+}
+
+.changes__all {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.changes__all input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.changes__message {
+  min-width: 0;
+  flex: 1;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.changes__message:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}

@@ -160,7 +160,8 @@ rather than to guess.
       untouched when it refuses
 - [x] Reports what the commit actually captured, not what was asked for
 - [x] `teamree worktree commit`, with paths after `--` so none reads as a flag
-- [ ] Staging and committing from the changes panel
+- [x] Staging and committing from the changes panel: ticking is browsing, and
+      nothing reaches git's index until the commit itself
 
 ## Known gaps
 

@@ -120,3 +120,63 @@ it('reads mergeability for ready worktrees, a few at a time', async () => {
   expect(peak).toBeLessThanOrEqual(4)
   call.mockRestore()
 })
+
+it('commits only the ticked paths, and unticks them afterwards', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+  await store.openWorktree(worktreeId)
+  if (!useWorkspaceStore.getState().changesOpen) useWorkspaceStore.getState().toggleChanges()
+  await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[worktreeId]?.changes.length).toBeGreaterThan(1))
+
+  const rows = useWorkspaceStore.getState().changes[worktreeId]!.changes
+  const [first, second] = [rows[0]!.path, rows[1]!.path]
+
+  // Ticking is browsing: nothing is staged in git until the commit.
+  useWorkspaceStore.getState().toggleStaged(first)
+  useWorkspaceStore.getState().toggleStaged(second)
+  useWorkspaceStore.getState().toggleStaged(second)
+  expect(useWorkspaceStore.getState().stagedPaths).toEqual([first])
+
+  const call = vi.spyOn(runtimeClient, 'call')
+  await useWorkspaceStore.getState().commitStaged('a real message')
+
+  const committed = call.mock.calls.find(([method]) => method === 'worktree.commit')
+  expect(committed?.[1]).toMatchObject({ worktreeId, message: 'a real message', paths: [first] })
+  expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
+  call.mockRestore()
+})
+
+it('refuses to commit with nothing ticked or no message', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+  await store.openWorktree(worktreeId)
+
+  const call = vi.spyOn(runtimeClient, 'call')
+  // Nothing ticked: the store does not ask the runtime to decide for it.
+  await useWorkspaceStore.getState().commitStaged('has a message')
+  expect(call.mock.calls.filter(([method]) => method === 'worktree.commit')).toHaveLength(0)
+  call.mockRestore()
+})
+
+it('drops a tick for a path that stopped being a change', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+  await store.openWorktree(worktreeId)
+  if (!useWorkspaceStore.getState().changesOpen) useWorkspaceStore.getState().toggleChanges()
+  await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[worktreeId]).toBeDefined())
+
+  const real = useWorkspaceStore.getState().changes[worktreeId]!.changes[0]!.path
+  useWorkspaceStore.getState().toggleStaged(real)
+  useWorkspaceStore.getState().toggleStaged('src/reverted-since.ts')
+  expect(useWorkspaceStore.getState().stagedPaths).toHaveLength(2)
+
+  // A refresh is what prunes it: a tick that would fail the commit is worse
+  // than no tick at all.
+  await store.openWorktree(worktreeId)
+  useWorkspaceStore.getState().toggleChanges()
+  useWorkspaceStore.getState().toggleChanges()
+  await vi.waitFor(() => expect(useWorkspaceStore.getState().stagedPaths).toEqual([real]))
+})

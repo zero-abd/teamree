@@ -50,6 +50,13 @@ type WorkspaceState = {
   changesOpen: boolean
   changes: Record<string, WorktreeChanges>
   selectedChangePath: string | null
+  /**
+   * Paths ticked in the panel for the next commit. Held here rather than in
+   * git's index: ticking a box is the user browsing, and browsing should not
+   * stage anything until they say so.
+   */
+  stagedPaths: string[]
+  committing: boolean
   diff: WorktreeDiff | null
   diffPending: boolean
 
@@ -86,6 +93,11 @@ type WorkspaceState = {
   toggleChanges: () => void
   /** Shows the patch for one path, or clears the selection when given null. */
   selectChange: (path: string | null) => void
+  /** Adds or removes one path from what the next commit will capture. */
+  toggleStaged: (path: string) => void
+  /** Every changed path, or none. */
+  setAllStaged: (staged: boolean) => void
+  commitStaged: (message: string) => Promise<void>
 
   toggleProject: (projectId: string) => void
   setSidebarWidth: (width: number) => void
@@ -184,7 +196,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const refreshChanges = async (worktreeId: string): Promise<void> => {
     const changes = await runtimeClient.call('worktree.changes', { worktreeId }).catch(() => null)
     if (!changes) return
-    set((state) => ({ changes: { ...state.changes, [worktreeId]: changes } }))
+    const live = new Set(changes.changes.map((change) => change.path))
+    set((state) => ({
+      changes: { ...state.changes, [worktreeId]: changes },
+      // A path that stopped being a change — reverted, or committed from a
+      // terminal — cannot stay ticked for a commit that would then fail.
+      stagedPaths: state.stagedPaths.filter((path) => live.has(path))
+    }))
   }
 
   /**
@@ -327,6 +345,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     changesOpen: false,
     changes: {},
     selectedChangePath: null,
+    stagedPaths: [],
+    committing: false,
     diff: null,
     diffPending: false,
 
@@ -444,7 +464,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // A patch belongs to the worktree it came from; carrying one across a
         // tab switch would show this worktree's file list beside that one's
         // diff.
-        ...(switching ? { selectedChangePath: null, diff: null, diffPending: false } : {})
+        // Ticks belong to the worktree they were made in; carrying them across
+        // would stage one worktree's paths against another's index.
+        ...(switching ? { selectedChangePath: null, diff: null, diffPending: false, stagedPaths: [] } : {})
       }))
       if (get().changesOpen) void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
       // Through the queue like everything else, so opening a tab while an
@@ -551,6 +573,52 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // nothing on screen depends on it.
       const worktreeId = get().activeWorktreeId
       if (worktreeId) void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
+    },
+
+    toggleStaged(path) {
+      set((state) => ({
+        stagedPaths: state.stagedPaths.includes(path)
+          ? state.stagedPaths.filter((entry) => entry !== path)
+          : [...state.stagedPaths, path]
+      }))
+    },
+
+    setAllStaged(staged) {
+      const worktreeId = get().activeWorktreeId
+      const rows = worktreeId ? (get().changes[worktreeId]?.changes ?? []) : []
+      set({ stagedPaths: staged ? rows.map((change) => change.path) : [] })
+    },
+
+    async commitStaged(message) {
+      const worktreeId = get().activeWorktreeId
+      const paths = get().stagedPaths
+      if (!worktreeId || paths.length === 0) return
+
+      set({ committing: true })
+      try {
+        const result = await runtimeClient.call('worktree.commit', { worktreeId, message, paths })
+        // The commit can capture more than was ticked: anything staged earlier
+        // in a terminal goes in too. The runtime reports what actually landed,
+        // and saying so is the difference between a notice and a surprise.
+        const extra = result.paths.filter((path) => !paths.includes(path))
+        notify(
+          extra.length === 0
+            ? `Committed ${result.shortSha}: ${result.message}`
+            : `Committed ${result.shortSha}: ${result.message} — including ${extra.length} path${
+                extra.length === 1 ? '' : 's'
+              } already staged`,
+          'info'
+        )
+        // Everything that was ticked is in the commit now, so nothing is left
+        // ticked; the list underneath refetches on the invalidation the runtime
+        // publishes for the write.
+        set({ stagedPaths: [], selectedChangePath: null, diff: null })
+        await refreshChanges(worktreeId)
+      } catch (error) {
+        failed('Could not commit')(error)
+      } finally {
+        set({ committing: false })
+      }
     },
 
     selectChange(path) {

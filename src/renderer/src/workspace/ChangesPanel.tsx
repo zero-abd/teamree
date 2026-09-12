@@ -8,6 +8,7 @@
 // It rides the same invalidation as everything else, so an edit made in a pane
 // two inches to the left moves this list without anyone asking it to.
 
+import { useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { WorktreeChange } from '@shared/entities'
 
@@ -43,10 +44,24 @@ export function ChangesPanel(): React.JSX.Element | null {
   const diffPending = useWorkspaceStore((state) => state.diffPending)
   const selectChange = useWorkspaceStore((state) => state.selectChange)
   const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
+  const stagedPaths = useWorkspaceStore((state) => state.stagedPaths)
+  const toggleStaged = useWorkspaceStore((state) => state.toggleStaged)
+  const setAllStaged = useWorkspaceStore((state) => state.setAllStaged)
+  const commitStaged = useWorkspaceStore((state) => state.commitStaged)
+  const committing = useWorkspaceStore((state) => state.committing)
+  const [message, setMessage] = useState('')
 
   if (!open || !worktreeId) return null
 
   const rows = changes?.changes ?? []
+  const ticked = new Set(stagedPaths)
+  const allTicked = rows.length > 0 && rows.every((change) => ticked.has(change.path))
+  const canCommit = ticked.size > 0 && message.trim().length > 0 && !committing
+
+  const commit = (): void => {
+    if (!canCommit) return
+    void commitStaged(message).then(() => setMessage(''))
+  }
 
   return (
     <aside className="changes" aria-label="Changes in this worktree">
@@ -67,7 +82,14 @@ export function ChangesPanel(): React.JSX.Element | null {
       ) : (
         <ul className="changes__list">
           {rows.map((change) => (
-            <li key={change.path}>
+            <li className="changes__item" key={change.path}>
+              <input
+                type="checkbox"
+                className="change__tick"
+                checked={ticked.has(change.path)}
+                aria-label={`Include ${change.path} in the next commit`}
+                onChange={() => toggleStaged(change.path)}
+              />
               <button
                 type="button"
                 className={`change${change.path === selectedPath ? ' change--selected' : ''}`}
@@ -91,6 +113,39 @@ export function ChangesPanel(): React.JSX.Element | null {
           ))}
         </ul>
       )}
+
+      {rows.length > 0 ? (
+        <div className="changes__commit">
+          <label className="changes__all">
+            <input
+              type="checkbox"
+              checked={allTicked}
+              aria-label={allTicked ? 'Clear every file' : 'Include every file'}
+              onChange={() => setAllStaged(!allTicked)}
+            />
+            <span>
+              {ticked.size} of {rows.length} selected
+            </span>
+          </label>
+          <input
+            className="changes__message"
+            type="text"
+            value={message}
+            placeholder="Commit message"
+            aria-label="Commit message"
+            disabled={committing}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return
+              event.preventDefault()
+              commit()
+            }}
+          />
+          <button type="button" className="button button--primary button--small" disabled={!canCommit} onClick={commit}>
+            {committing ? 'Committing…' : 'Commit'}
+          </button>
+        </div>
+      ) : null}
 
       {changes?.truncated ? (
         <p className="changes__note">
