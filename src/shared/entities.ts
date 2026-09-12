@@ -97,6 +97,29 @@ export type WorktreeDiff = {
   readAt: number
 }
 
+/**
+ * Whether a worktree's branch would merge into its project's base ref.
+ *
+ * Answered without checking anything out, so it costs nothing to ask about
+ * every worktree at once — which is the point when several of them are attempts
+ * at the same task.
+ */
+export type WorktreeMergePreview = {
+  worktreeId: string
+  /** What it was compared against. */
+  baseRef: string
+  /**
+   * `clean` and `conflicts` are answers. `unrelated` and `unavailable` are
+   * refusals to guess, and carry a `reason` — because "nothing conflicts" and
+   * "could not tell" look the same to a caller and mean opposite things.
+   */
+  state: 'clean' | 'conflicts' | 'unrelated' | 'unavailable'
+  /** Paths that would conflict, for `conflicts`. Empty otherwise. */
+  conflicts: string[]
+  reason?: string
+  readAt: number
+}
+
 export type Terminal = {
   id: string
   worktreeId: string

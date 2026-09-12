@@ -16,7 +16,14 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import type { Project, Worktree, WorktreeChanges, WorktreeDiff, WorktreeStatus } from '../../shared/entities'
+import type {
+  Project,
+  Worktree,
+  WorktreeChanges,
+  WorktreeDiff,
+  WorktreeMergePreview,
+  WorktreeStatus
+} from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
 import { ErrorCode } from '../../shared/protocol'
 import { describeError, GitCommandError, GitServiceError } from './errors'
@@ -28,6 +35,7 @@ import { detectBaseRef, inspectRepository, listBranchNames } from './repository'
 import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type StartPointList } from './startPoint'
 import { readWorktreeInventory } from './worktreeInventory'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
+import { readMergePreview } from './mergePreview'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { readWorktreeStatus } from './worktreeStatus'
 
@@ -315,6 +323,27 @@ export class GitService {
       ...(params.staged === undefined ? {} : { staged: params.staged }),
       ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
       ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
+      now: this.#now
+    })
+  }
+
+  /**
+   * Whether this worktree would merge into its project's base ref.
+   *
+   * Run from the primary checkout rather than the worktree: the merge is
+   * hypothetical and belongs to the repository, not to either side of it.
+   */
+  async worktreeMergePreview(params: ParamsOf<'worktree.mergePreview'>): Promise<WorktreeMergePreview> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'a merge preview')
+    const project = this.#store.getProject(worktree.projectId)
+    if (!project) {
+      throw new GitServiceError(ErrorCode.NotFound, `worktree "${worktree.name}" has no project to merge into`)
+    }
+    return readMergePreview(this.#runner, {
+      worktreeId: worktree.id,
+      repoPath: project.path,
+      baseRef: project.baseRef,
+      branch: worktree.branch,
       now: this.#now
     })
   }

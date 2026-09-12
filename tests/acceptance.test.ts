@@ -116,6 +116,15 @@ describe('milestone 1 acceptance', () => {
     expect(diff.patch).toContain('work in progress')
   })
 
+  it('says whether the worktree would merge back without trying it', () => {
+    const preview = cli<WorktreeMergePreview>(['worktree', 'merges', worktree.id])
+    // Nothing has been committed on this branch, so it merges cleanly — and
+    // asking must leave the repository exactly as it was.
+    expect(preview.state).toBe('clean')
+    expect(preview.baseRef).toBe(project.baseRef)
+    expect(cli<WorktreeStatus>(['worktree', 'status', worktree.id]).conflicted).toBe(0)
+  })
+
   it('opens a terminal in the worktree checkout', () => {
     terminal = cli<Terminal>(['terminal', 'create', '--worktree', worktree.id])
     expect(terminal.cwd).toBe(worktree.path)

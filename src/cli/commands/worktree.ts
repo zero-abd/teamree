@@ -166,6 +166,38 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'merges'],
+    summary: 'Say whether a worktree would merge cleanly into its base.',
+    details:
+      'Answered without checking anything out or starting a merge, so it costs the repository nothing and ' +
+      'can be asked about every worktree at once. The answer is in `state` under --json: clean, conflicts, ' +
+      'unrelated, or unavailable.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    examples: ['teamree worktree merges fix-login', 'teamree worktree merges fix-login --json'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const preview = await context.client.call('worktree.mergePreview', { worktreeId: worktree.id })
+
+      const summary = {
+        clean: `${worktree.branch} merges cleanly into ${preview.baseRef}.`,
+        conflicts: `${worktree.branch} conflicts with ${preview.baseRef} in ${preview.conflicts.length} file${
+          preview.conflicts.length === 1 ? '' : 's'
+        }:`,
+        unrelated: `Cannot say: ${preview.reason ?? 'no shared history'}.`,
+        unavailable: `Cannot say: ${preview.reason ?? 'git could not answer'}.`
+      }[preview.state]
+
+      const text =
+        preview.state === 'conflicts' ? [summary, ...preview.conflicts.map((path) => `  ${path}`)].join('\n') : summary
+
+      // Exit stays 0 for every answer, including "it would conflict": the
+      // codes mean whether the command ran, and this one ran. A script branches
+      // on `state` from --json rather than on an exit code that would have to
+      // be given a second meaning.
+      return { data: preview, text }
+    }
+  },
+  {
     path: ['worktree', 'diff'],
     summary: 'Print the patch for a worktree, or for one path in it.',
     details:

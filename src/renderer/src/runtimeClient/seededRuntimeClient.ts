@@ -410,6 +410,25 @@ export function createSeededRuntimeClient(): RuntimeClient {
         readAt: Date.now()
       }
     },
+    'worktree.mergePreview': ({ worktreeId }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const project = projects.get(worktree.projectId)
+      const status = statuses.get(worktreeId)
+      // Seeded to match the chips: a worktree carrying conflicts is exactly the
+      // one that would not go in cleanly.
+      const conflicted = (status?.conflicted ?? 0) > 0
+      return {
+        worktreeId,
+        baseRef: project?.baseRef ?? 'origin/main',
+        state: conflicted ? 'conflicts' : 'clean',
+        conflicts: conflicted
+          ? seededChanges(status as WorktreeStatus)
+              .slice(0, status?.conflicted ?? 0)
+              .map((change) => change.path)
+          : [],
+        readAt: Date.now()
+      }
+    },
     'worktree.diff': ({ worktreeId, path, staged }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)

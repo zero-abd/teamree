@@ -13,6 +13,7 @@ import type {
   Worktree,
   WorktreeChanges,
   WorktreeDiff,
+  WorktreeMergePreview,
   WorktreeStatus
 } from './entities'
 
@@ -45,6 +46,8 @@ export const Params = {
     worktreeId: z.string().min(1),
     limit: z.number().int().positive().optional()
   }),
+  /** Whether this worktree would merge into its base, without merging it. */
+  worktreeMergePreview: z.object({ worktreeId: z.string().min(1) }),
   /** The patch itself: the whole worktree, or one path in it. */
   worktreeDiff: z.object({
     worktreeId: z.string().min(1),
@@ -124,6 +127,10 @@ export type MethodContract = {
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
+  'worktree.mergePreview': {
+    params: z.infer<typeof Params.worktreeMergePreview>
+    result: WorktreeMergePreview
+  }
 
   'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
   'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }

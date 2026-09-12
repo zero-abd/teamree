@@ -133,6 +133,19 @@ disk under a session id.
 - [x] The pane says how it got here — resumed, or a new shell — until the user
       types into it, at which point the badge has said what it had to
 
+## M11 — Which of these can actually go in
+
+Several attempts at one task is the point; picking the one that merges is the
+question that follows.
+
+- [x] `worktree.mergePreview`: merged in memory with `merge-tree --write-tree`,
+      so asking costs the repository nothing and starts no merge to abort
+- [x] Conflicting paths named, each once, however many ways git mentions them
+- [x] A base ref that does not resolve, unrelated histories, and a git too old
+      to be asked each come back as themselves rather than as "clean"
+- [x] `teamree worktree merges`
+- [ ] The answer shown per worktree in the GUI
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,
