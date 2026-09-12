@@ -36,6 +36,8 @@ export type StreamChannel = {
 export type LayoutRepository = {
   getLayout(worktreeId: string): Layout | undefined
   putLayout(layout: Layout): Layout
+  /** Needed to reconcile stored layouts at startup; in-memory repos can omit it. */
+  listLayouts?(): Layout[]
 }
 
 export type TerminalSessionManagerOptions = {
@@ -186,6 +188,35 @@ export class TerminalSessionManager {
 
   layoutGet(worktreeId: string): Layout {
     return this.layoutFor(worktreeId)
+  }
+
+  /**
+   * Drops pane leaves whose terminal no longer exists. Layouts are durable but
+   * terminals are not, so every stored layout is stale the moment the app
+   * restarts; without this the UI renders panes bound to dead ids.
+   * Returns the number of layouts it had to change.
+   */
+  reconcileLayouts(): number {
+    const stored = this.layouts.listLayouts?.()
+    if (!stored) return 0
+
+    let changed = 0
+    for (const layout of stored) {
+      const orphans = terminalIdsIn(layout.root).filter((id) => !this.sessions.has(id))
+      if (orphans.length === 0) continue
+
+      let root = layout.root
+      for (const orphan of orphans) root = removePane(root, orphan)
+
+      const focus = layout.focusedTerminalId
+      this.layouts.putLayout({
+        worktreeId: layout.worktreeId,
+        root,
+        focusedTerminalId: focus !== null && this.sessions.has(focus) ? focus : null
+      })
+      changed += 1
+    }
+    return changed
   }
 
   /** Replaces a worktree's tree wholesale, e.g. after a drag-resize or restore. */

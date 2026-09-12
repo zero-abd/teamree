@@ -109,11 +109,13 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
     await waitUntil(() => server.connectionCount() === 2)
 
     one.send(`${JSON.stringify({ id: 'a', method: 'status.get' })}\n`)
-    two.send(`${JSON.stringify({ id: 'b', method: 'worktree.list', params: {} })}\n`)
+    // A deliberately unknown method, so this asserts per-connection routing
+    // rather than whichever feature areas happen to be wired in.
+    two.send(`${JSON.stringify({ id: 'b', method: 'nope.nope', params: {} })}\n`)
     await Promise.all([one.waitFor(1), two.waitFor(1)])
 
     expect(one.frames[0]).toMatchObject({ id: 'a', ok: true })
-    expect(two.frames[0]).toMatchObject({ id: 'b', ok: false, error: { code: 'not_found' } })
+    expect(two.frames[0]).toMatchObject({ id: 'b', ok: false, error: { code: 'unknown_method' } })
     one.socket.destroy()
     two.socket.destroy()
   })

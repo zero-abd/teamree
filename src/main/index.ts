@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, shell } from 'electron'
+import { APP_VERSION } from './appVersion'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
 
 function createWindow(): BrowserWindow {
@@ -53,7 +54,7 @@ if (!app.requestSingleInstanceLock()) {
     // The runtime comes up before any window so the first render can already
     // call it, and so the CLI endpoint exists as early as possible.
     try {
-      runtime = await startRuntime({ userDataDir: app.getPath('userData'), version: app.getVersion() })
+      runtime = await startRuntime({ userDataDir: app.getPath('userData'), version: APP_VERSION })
     } catch (error) {
       console.error('[runtime] failed to start', error)
     }

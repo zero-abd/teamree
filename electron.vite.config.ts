@@ -1,12 +1,18 @@
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+
+// app.getVersion() reports Electron's own version when the app runs unpackaged,
+// so the real one is baked in at build time instead.
+const appVersion = JSON.parse(readFileSync(resolve('package.json'), 'utf8')).version as string
 
 // The CLI is a plain Node bundle, not an Electron target, so it is built by its
 // own esbuild pass in scripts/build-cli.mjs rather than by electron-vite.
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
+    define: { __APP_VERSION__: JSON.stringify(appVersion) },
     build: { rollupOptions: { input: { index: resolve('src/main/index.ts') } } }
   },
   preload: {

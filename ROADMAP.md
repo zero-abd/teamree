@@ -28,48 +28,48 @@ so a change to a method signature breaks every caller at compile time rather tha
 ## M1 — Contract and runtime
 
 - [x] Domain entities, wire protocol, and method catalogue
-- [ ] Method registry, dispatcher, structured errors
-- [ ] Local socket server with runtime discovery
-- [ ] Subscription manager for streaming output
-- [ ] Durable store for projects, worktrees, layouts
+- [x] Method registry, dispatcher, structured errors
+- [x] Local socket server with runtime discovery
+- [x] Subscription manager for streaming output
+- [x] Durable store for projects, worktrees, layouts
 
 ## M2 — Repos and worktrees
 
-- [ ] Add and track a repo
-- [ ] List worktrees, reconciled against real git state
-- [ ] Create a worktree in the background with progress and failure recovery
+- [x] Add and track a repo
+- [x] List worktrees, reconciled against real git state
+- [x] Create a worktree in the background with progress and failure recovery
 - [ ] Start-from picker: base ref, local branch, commit, remote branch
-- [ ] Live git status per worktree
-- [ ] Delete a worktree and optionally its branch
+- [x] Live git status per worktree
+- [x] Delete a worktree and optionally its branch
 
 ## M3 — Terminals
 
-- [ ] PTY sessions with a correct per-platform environment
-- [ ] Bounded scrollback, readable as a snapshot
-- [ ] Streaming output, title detection from escape sequences
-- [ ] Split panes, arbitrarily nested, resizable
-- [ ] Process-tree cleanup so nothing is orphaned
+- [x] PTY sessions with a correct per-platform environment
+- [x] Bounded scrollback, readable as a snapshot
+- [x] Streaming output, title detection from escape sequences
+- [x] Split panes, arbitrarily nested, resizable
+- [x] Process-tree cleanup so nothing is orphaned
 
 ## M4 — GUI
 
-- [ ] App shell: sidebar, main area, status bar
-- [ ] Projects and worktrees in the sidebar with live status
-- [ ] Create-worktree flow that does not block
-- [ ] Terminal panes rendering the split tree
-- [ ] Keyboard shortcuts with correct per-platform modifiers
+- [x] App shell: sidebar, main area, status bar
+- [x] Projects and worktrees in the sidebar with live status
+- [x] Create-worktree flow that does not block
+- [x] Terminal panes rendering the split tree
+- [x] Keyboard shortcuts with correct per-platform modifiers
 
 ## M5 — CLI
 
-- [ ] Transport, discovery, and exit codes that mean something
-- [ ] `teamree status`
-- [ ] `teamree project` and `teamree worktree`
-- [ ] `teamree terminal` including read, send, and split
-- [ ] `--json` on every command
+- [x] Transport, discovery, and exit codes that mean something
+- [x] `teamree status`
+- [x] `teamree project` and `teamree worktree`
+- [x] `teamree terminal` including read, send, and split
+- [x] `--json` on every command
 
 ## M6 — Acceptance
 
-- [ ] End-to-end: create a worktree, open a terminal, run a command, read the output back
-- [ ] The same flow driven entirely through the CLI
+- [x] End-to-end: create a worktree, open a terminal, run a command, read the output back
+- [x] The same flow driven entirely through the CLI
 - [ ] macOS, Linux, Windows path and process handling
 - [ ] Packaged build
 

@@ -90,6 +90,10 @@ export class WorkspaceStore {
     return true
   }
 
+  listLayouts(): Layout[] {
+    return [...this.layouts.values()]
+  }
+
   getLayout(worktreeId: string): Layout | undefined {
     return this.layouts.get(worktreeId)
   }

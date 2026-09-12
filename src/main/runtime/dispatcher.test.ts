@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { ErrorCode, type ErrorResponse } from '../../shared/protocol'
 import { WorkspaceStore } from '../store/workspaceStore'
+import { registerPlaceholderHandlers } from './handlers/placeholderHandlers'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { registerHandlers } from './handlers/registerHandlers'
 import { MethodRegistry } from './methodRegistry'
@@ -18,11 +19,12 @@ describe('dispatcher', () => {
   let directory: string
   let registry: MethodRegistry
   let dispatch: Dispatcher
+  let context: ReturnType<typeof createRuntimeContext>
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'teamree-dispatch-'))
     const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
-    const context = createRuntimeContext({ version: '9.9.9', store, subscriptions: new SubscriptionHub() })
+    context = createRuntimeContext({ version: '9.9.9', store, subscriptions: new SubscriptionHub() })
     context.endpoint = '/tmp/teamree-test.sock'
     registry = new MethodRegistry(context)
     registerHandlers(registry)
@@ -93,8 +95,15 @@ describe('dispatcher', () => {
     expect(response.error).toEqual({ code: ErrorCode.GitFailed, message: 'fetch failed', data: { exitCode: 128 } })
   })
 
-  it('reports unimplemented contract methods as not_found', async () => {
-    const response = (await dispatch({ id: 'e1', method: 'worktree.list', params: {} }, call)) as ErrorResponse
+  it('reports a method left as a placeholder as not_found', async () => {
+    // Every contract method now has a real handler, so the placeholder path is
+    // exercised against a registry that deliberately has not been wired.
+    const bare = new MethodRegistry(context)
+    registerPlaceholderHandlers(bare)
+    const response = (await createDispatcher(bare)(
+      { id: 'e1', method: 'worktree.list', params: {} },
+      call
+    )) as ErrorResponse
 
     expect(response.error.code).toBe(ErrorCode.NotFound)
     expect(response.error.message).toContain('not implemented')

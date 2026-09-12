@@ -42,6 +42,9 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
     layouts: registry.context.store
   })
+  // Layouts outlive the app; the terminals they point at do not. Reconciling on
+  // the way up is what stops the UI rendering panes bound to dead terminals.
+  terminals.reconcileLayouts()
   registerTerminalHandlers(registry, terminals)
 
   const git = new GitService({ store: registry.context.store })
