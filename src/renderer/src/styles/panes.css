@@ -142,6 +142,20 @@
   color: var(--fg);
 }
 
+.pane__exit {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.pane--exited .pane__title {
+  color: var(--fg-muted);
+}
+
 .pane__meta {
   margin-left: auto;
   font-family: var(--font-mono);

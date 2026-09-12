@@ -4,7 +4,7 @@
 // deliberately the only place in the renderer that fabricates data.
 
 import type { Layout, PaneNode, Project, Terminal, Worktree, WorktreeStatus } from '@shared/entities'
-import type { MethodName, ParamsOf, ResultOf, TerminalEvent } from '@shared/methods'
+import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
 import { leaf, splitPane } from '../panes/paneLayout'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
 
@@ -36,6 +36,20 @@ export function createSeededRuntimeClient(): RuntimeClient {
 
   let connection: ConnectionState = { phase: 'connecting', detail: 'Starting runtime' }
   const connectionListeners = new Set<(state: ConnectionState) => void>()
+
+  // The demo announces its own changes exactly as the real runtime does, so the
+  // browser path exercises the same subscribe-and-refetch code rather than a
+  // second, quieter one that could rot unnoticed. Delivery is deferred by a
+  // turn because a handler is still mid-call when it announces: the caller must
+  // have its result before a refetch goes looking for what it changed.
+  const workspaceWatchers = new Set<(event: WorkspaceEvent) => void>()
+  const announce = (...events: WorkspaceEvent[]): void => {
+    setTimeout(() => {
+      for (const event of events) {
+        for (const watcher of [...workspaceWatchers]) watcher(event)
+      }
+    }, 0)
+  }
 
   const setConnection = (state: ConnectionState): void => {
     connection = state
@@ -196,6 +210,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
           state: 'failed',
           error: `fatal: '${worktree.branch}' is already checked out at ${worktree.path}`
         })
+        announce({ type: 'worktrees' })
         return
       }
       const ready: Worktree = { ...worktree, state: 'ready' }
@@ -206,6 +221,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
         `${good('✓')} ${accent(ready.branch)} from ${dim(ready.startedFrom)}`
       ])
       layouts.set(worktreeId, { worktreeId, focusedTerminalId: shell.id, root: leaf(shell.id) })
+      announce({ type: 'worktrees' }, { type: 'terminals' }, { type: 'layout', worktreeId })
     }, CREATE_MS)
   }
 
@@ -231,6 +247,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
         baseRef: 'origin/main'
       }
       projects.set(project.id, project)
+      announce({ type: 'projects' })
       return project
     },
     'project.remove': ({ projectId }) => {
@@ -238,6 +255,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       for (const worktree of worktrees.values()) {
         if (worktree.projectId === projectId) worktrees.delete(worktree.id)
       }
+      announce({ type: 'projects' }, { type: 'worktrees' })
       return { removed: true }
     },
 
@@ -262,6 +280,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
         createdAt: Date.now()
       }
       worktrees.set(worktree.id, worktree)
+      announce({ type: 'worktrees' })
       // A task named "fail…" is the demo's reproducible failure path.
       finishCreation(worktree.id, /fail/i.test(name))
       return worktree
@@ -273,6 +292,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       for (const terminal of terminals.values()) {
         if (terminal.record.worktreeId === worktreeId) terminals.delete(terminal.record.id)
       }
+      announce({ type: 'worktrees' }, { type: 'terminals' })
       return { removed: true }
     },
     'worktree.status': ({ worktreeId }) => {
@@ -307,6 +327,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       if (!layout?.root) {
         layouts.set(worktreeId, { worktreeId, root: leaf(record.id), focusedTerminalId: record.id })
       }
+      announce({ type: 'terminals' }, { type: 'layout', worktreeId })
       return terminal.record
     },
     'terminal.write': ({ terminalId, data }) => {
@@ -325,6 +346,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
         terminal.record = { ...terminal.record, running: false, exitCode: 0 }
         emit(terminal, { type: 'exit', exitCode: 0 })
         terminals.delete(terminalId)
+        announce(
+          { type: 'terminalExited', terminalId, exitCode: 0 },
+          { type: 'terminals' },
+          { type: 'layout', worktreeId: terminal.record.worktreeId }
+        )
       }
       return { closed: true }
     },
@@ -347,6 +373,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
         focusedTerminalId: record.id
       }
       layouts.set(worktreeId, layout)
+      announce({ type: 'terminals' }, { type: 'layout', worktreeId })
       return { terminal: record, layout }
     },
 
@@ -354,11 +381,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'layout.set': ({ worktreeId, root, focusedTerminalId }) => {
       const layout: Layout = { worktreeId, root: (root as PaneNode | null) ?? null, focusedTerminalId }
       layouts.set(worktreeId, layout)
+      announce({ type: 'layout', worktreeId })
       return layout
     },
 
-    // Nothing in memory mutates behind the demo's back, so the stream is opened
-    // and simply stays quiet.
+    // The renderer watches through `watchWorkspace` below rather than this
+    // method, which exists only to keep the catalogue complete.
     'workspace.subscribe': () => ({ subscription: nextId('sub') }),
 
     unsubscribe: () => ({ unsubscribed: true })
@@ -378,6 +406,17 @@ export function createSeededRuntimeClient(): RuntimeClient {
       await sleep(LATENCY_MS)
       const handler = handlers[method] as (input: unknown) => unknown
       return handler(params) as ResultOf<typeof method>
+    },
+    watchWorkspace(onEvent) {
+      workspaceWatchers.add(onEvent)
+      let closed = false
+      return {
+        close: () => {
+          if (closed) return
+          closed = true
+          workspaceWatchers.delete(onEvent)
+        }
+      }
     },
     async subscribeTerminal(terminalId, onEvent) {
       await sleep(LATENCY_MS)

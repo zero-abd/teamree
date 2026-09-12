@@ -13,9 +13,6 @@ import { StatusBar } from './shell/StatusBar'
 import { useWorkspaceStore } from './state/workspaceStore'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
 
-/** Worktree creation has no push channel, so the shell re-reads on a timer. */
-const POLL_MS = 2000
-
 export function App(): React.JSX.Element {
   const modifier = useMemo(
     () =>
@@ -32,10 +29,14 @@ export function App(): React.JSX.Element {
   const notices = useWorkspaceStore((state) => state.notices)
   const dismissNotice = useWorkspaceStore((state) => state.dismissNotice)
 
+  // One subscription for the whole window: the runtime says what changed and
+  // the store re-reads it, so work done in another window or from the CLI shows
+  // up here on its own. Started before the first read, because an event that
+  // arrives during bootstrap must not be missed.
   useEffect(() => {
+    const stopWatching = useWorkspaceStore.getState().startWatching()
     void useWorkspaceStore.getState().bootstrap()
-    const timer = setInterval(() => void useWorkspaceStore.getState().poll(), POLL_MS)
-    return () => clearInterval(timer)
+    return stopWatching
   }, [])
 
   return (

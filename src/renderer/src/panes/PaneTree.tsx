@@ -39,16 +39,22 @@ function PaneLeaf({
 }: PaneCallbacks & { terminalId: string }): React.JSX.Element {
   const terminal = terminals[terminalId]
   const focused = focusedTerminalId === terminalId
+  // A shell that died has to look dead: the pane keeps its scrollback, so
+  // without this it is indistinguishable from one waiting at a prompt.
+  const exited = terminal !== undefined && !terminal.running
 
   return (
     <section
-      className={`pane${focused ? ' pane--focused' : ''}`}
+      className={`pane${focused ? ' pane--focused' : ''}${exited ? ' pane--exited' : ''}`}
       aria-label={terminal?.title ?? 'terminal'}
       onFocusCapture={() => onFocus(terminalId)}
     >
       <header className="pane__bar">
-        <span className={`pane__dot${terminal && !terminal.running ? ' pane__dot--stopped' : ''}`} aria-hidden="true" />
+        <span className={`pane__dot${exited ? ' pane__dot--stopped' : ''}`} aria-hidden="true" />
         <span className="pane__title">{terminal?.title ?? 'terminal'}</span>
+        {exited ? (
+          <span className="pane__exit">exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}</span>
+        ) : null}
         <span className="pane__meta">{terminal ? `${terminal.cols}×${terminal.rows}` : ''}</span>
         <button
           type="button"

@@ -13,6 +13,12 @@ import {
   writeStoredSidebarWidth,
   SIDEBAR_DEFAULT_PX
 } from '../shell/sidebarWidth'
+import {
+  createLocalEditFence,
+  createWorkspaceRefresher,
+  refreshTargets,
+  type RefreshTargets
+} from './workspaceRefresh'
 
 export type DialogState =
   | { kind: 'add-project' }
@@ -41,7 +47,8 @@ type WorkspaceState = {
   notices: Notice[]
 
   bootstrap: () => Promise<void>
-  poll: () => Promise<void>
+  /** Opens the change stream. Returns the stop function an effect cleans up with. */
+  startWatching: () => () => void
 
   addProject: (path: string, name?: string) => Promise<void>
   createWorktree: (input: { projectId: string; name: string; startedFrom?: string }) => void
@@ -82,22 +89,122 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     notify(`${what}: ${error instanceof Error ? error.message : String(error)}`)
   }
 
-  /** Pulls the layout and terminal records for one worktree into the store. */
-  const loadWorkspace = async (worktreeId: string): Promise<void> => {
-    const [layout, terminals] = await Promise.all([
-      runtimeClient.call('layout.get', { worktreeId }),
-      runtimeClient.call('terminal.list', { worktreeId })
-    ])
+  // Layouts are the one thing the user edits directly (dragging a gutter, moving
+  // focus), so a layout read that was already in flight must not land on top of
+  // an edit made while it travelled.
+  const layoutEdits = createLocalEditFence()
+
+  const refreshProjects = async (): Promise<void> => {
+    set({ projects: await runtimeClient.call('project.list', {}) })
+  }
+
+  /** Returns the worktrees whose git status is worth re-reading. */
+  const refreshWorktrees = async (): Promise<string[]> => {
+    const worktrees = await runtimeClient.call('worktree.list', {})
+    const live = new Set(worktrees.map((worktree) => worktree.id))
+
+    // A worktree removed from anywhere — this window, another window, the CLI —
+    // takes its tab, its panes and its status chips with it.
+    set((state) => {
+      const openWorktreeIds = state.openWorktreeIds.filter((id) => live.has(id))
+      return {
+        worktrees,
+        openWorktreeIds,
+        activeWorktreeId:
+          state.activeWorktreeId && live.has(state.activeWorktreeId)
+            ? state.activeWorktreeId
+            : (openWorktreeIds[openWorktreeIds.length - 1] ?? null),
+        layouts: keptFor(state.layouts, live),
+        statuses: keptFor(state.statuses, live)
+      }
+    })
+
+    // A worktree that only just became ready has panes now but no layout here.
+    const missing = get().openWorktreeIds.filter((id) => !(id in get().layouts))
+    if (missing.length > 0) refresher.request(refreshTargets({ layouts: missing }))
+
+    return worktrees.filter((worktree) => worktree.state === 'ready').map((worktree) => worktree.id)
+  }
+
+  const refreshTerminals = async (): Promise<void> => {
+    const terminals = await runtimeClient.call('terminal.list', {})
+    // Replaced wholesale rather than merged: the runtime's list is the whole
+    // truth, and a terminal closed elsewhere has to leave this map.
+    set({ terminals: Object.fromEntries(terminals.map((terminal) => [terminal.id, terminal])) })
+  }
+
+  const refreshLayout = async (worktreeId: string): Promise<void> => {
+    // Nothing on screen depends on the layout of a worktree with no tab open.
+    if (!get().openWorktreeIds.includes(worktreeId)) return
+    const token = layoutEdits.mark(worktreeId)
+    const layout = await runtimeClient.call('layout.get', { worktreeId })
+    if (layoutEdits.isStale(worktreeId, token)) return
+    set((state) => ({ layouts: { ...state.layouts, [worktreeId]: layout } }))
+  }
+
+  const refreshStatuses = async (worktreeIds: string[]): Promise<void> => {
+    if (worktreeIds.length === 0) return
+    const statuses = await Promise.all(
+      // One unreadable worktree must not cost the others their chips.
+      worktreeIds.map((worktreeId) => runtimeClient.call('worktree.status', { worktreeId }).catch(() => null))
+    )
     set((state) => ({
-      layouts: { ...state.layouts, [worktreeId]: layout },
-      terminals: terminals.reduce(
-        (map, terminal) => ({ ...map, [terminal.id]: terminal }),
-        { ...state.terminals }
+      statuses: statuses.reduce(
+        (map, status) => (status ? { ...map, [status.worktreeId]: status } : map),
+        { ...state.statuses }
       )
     }))
   }
 
+  const markExited = (exits: RefreshTargets['exits']): void => {
+    set((state) => {
+      const terminals = { ...state.terminals }
+      for (const exit of exits) {
+        const terminal = terminals[exit.terminalId]
+        if (terminal) terminals[exit.terminalId] = { ...terminal, running: false, exitCode: exit.exitCode }
+      }
+      return { terminals }
+    })
+  }
+
+  const applyRefresh = async (targets: RefreshTargets): Promise<void> => {
+    // An exit is fully described by its event, so it costs no call at all.
+    if (targets.exits.length > 0) markExited(targets.exits)
+
+    const stale = new Set(targets.statuses)
+    // Git status is the one thing with no change stream: nothing tells the
+    // runtime that a command edited a file. A worktree list change, or a shell
+    // starting or exiting, is the closest honest signal that the tree moved —
+    // which is why status is re-read on those events rather than on a timer.
+    if (targets.terminals || targets.exits.length > 0) {
+      for (const worktreeId of get().openWorktreeIds) stale.add(worktreeId)
+    }
+
+    const reads: Promise<unknown>[] = []
+    if (targets.projects) reads.push(refreshProjects())
+    if (targets.terminals) reads.push(refreshTerminals())
+    for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
+    if (targets.worktrees) {
+      reads.push(
+        refreshWorktrees().then((ready) => {
+          for (const worktreeId of ready) stale.add(worktreeId)
+        })
+      )
+    }
+
+    await Promise.all(reads)
+    // Last, so a status is never asked for a worktree the list just dropped.
+    const live = new Set(get().worktrees.map((worktree) => worktree.id))
+    await refreshStatuses([...stale].filter((worktreeId) => live.has(worktreeId)))
+  }
+
+  const refresher = createWorkspaceRefresher({
+    run: applyRefresh,
+    onError: failed('Could not refresh the workspace')
+  })
+
   const persistLayout = (layout: Layout): void => {
+    layoutEdits.bump(layout.worktreeId)
     set((state) => ({ layouts: { ...state.layouts, [layout.worktreeId]: layout } }))
     void runtimeClient
       .call('layout.set', {
@@ -132,55 +239,41 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     dialog: null,
     notices: [],
 
+    /**
+     * The first read of everything. It goes through the same queue the change
+     * stream uses, so the opening snapshot cannot be overtaken by an event that
+     * arrives while it is still in flight.
+     */
     async bootstrap() {
       runtimeClient.onConnectionChange((connection) => set({ connection }))
       set({ connection: runtimeClient.connection })
 
       try {
-        const [status, projects, worktrees] = await Promise.all([
-          runtimeClient.call('status.get', {}),
-          runtimeClient.call('project.list', {}),
-          runtimeClient.call('worktree.list', {})
-        ])
-        set({ runtimeVersion: status.version, projects, worktrees })
+        const status = await runtimeClient.call('status.get', {})
+        set({ runtimeVersion: status.version })
 
-        const first = worktrees.find((worktree) => worktree.state === 'ready')
-        if (first) await get().openWorktree(first.id)
-        await get().poll()
+        refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
+        await refresher.flush()
+
+        if (!get().activeWorktreeId) {
+          const first = get().worktrees.find((worktree) => worktree.state === 'ready')
+          if (first) await get().openWorktree(first.id)
+        }
       } catch (error) {
         failed('Could not reach the runtime')(error)
       }
     },
 
     /**
-     * Worktree creation happens in the background and the protocol has no
-     * change stream for it, so the shell re-reads the list on a timer and
-     * refreshes git status for what is actually on screen.
+     * The window's one subscription. Everything the runtime changes — from this
+     * window, from another, from an agent on the CLI — arrives here as a
+     * collection to re-read, which is why nothing in this store polls.
      */
-    async poll() {
-      try {
-        const worktrees = await runtimeClient.call('worktree.list', {})
-        set({ worktrees })
-
-        const visible = new Set([...get().openWorktreeIds, ...worktrees.map((worktree) => worktree.id)])
-        const ready = worktrees.filter((worktree) => worktree.state === 'ready' && visible.has(worktree.id))
-        const statuses = await Promise.all(
-          ready.map((worktree) =>
-            runtimeClient.call('worktree.status', { worktreeId: worktree.id }).catch(() => null)
-          )
-        )
-        set((state) => ({
-          statuses: statuses.reduce(
-            (map, status) => (status ? { ...map, [status.worktreeId]: status } : map),
-            { ...state.statuses }
-          )
-        }))
-
-        // A worktree that finished creating while its tab was open has panes now.
-        const openWithoutLayout = get().openWorktreeIds.filter((id) => !get().layouts[id]?.root)
-        await Promise.all(openWithoutLayout.map((id) => loadWorkspace(id)))
-      } catch (error) {
-        failed('Could not refresh worktrees')(error)
+    startWatching() {
+      const watch = runtimeClient.watchWorkspace((event) => refresher.push(event))
+      return () => {
+        watch.close()
+        refresher.cancelPending()
       }
     },
 
@@ -248,11 +341,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           ? state.openWorktreeIds
           : [...state.openWorktreeIds, worktreeId]
       }))
-      try {
-        await loadWorkspace(worktreeId)
-      } catch (error) {
-        failed('Could not open the worktree')(error)
-      }
+      // Through the queue like everything else, so opening a tab while an
+      // event-driven refetch is in flight cannot interleave the two answers.
+      refresher.request(refreshTargets({ terminals: true, layouts: [worktreeId], statuses: [worktreeId] }))
+      await refresher.flush()
     },
 
     closeWorktreeTab(worktreeId) {
@@ -386,6 +478,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }
   }
 })
+
+/** Drops entries whose worktree the runtime no longer lists. */
+function keptFor<T>(byWorktree: Record<string, T>, live: Set<string>): Record<string, T> {
+  const entries = Object.entries(byWorktree).filter(([worktreeId]) => live.has(worktreeId))
+  return entries.length === Object.keys(byWorktree).length ? byWorktree : Object.fromEntries(entries)
+}
 
 /** Terminal ids on screen right now, for the status bar's pane count. */
 export function activeTerminalIds(state: {
