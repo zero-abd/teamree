@@ -4,7 +4,7 @@
 // transport, which is what makes the stream transport-agnostic: the CLI and the
 // GUI both reach the same service, so both mutations announce themselves.
 //
-// Two shapes of producer exist, because the two services differ:
+// Three shapes of producer exist, because the services differ:
 //   - git already emits its own state transitions (including the ones that
 //     happen on a background task, long after the call returned), so that
 //     emitter is simply bridged onto the bus.
@@ -12,9 +12,13 @@
 //     are re-registered wrapped: the wrapper publishes after the inner handler
 //     succeeds. Registering a method twice is how the runtime already replaces
 //     placeholders, so this needs nothing new from the registry.
+//   - and the filesystem, which answers to nobody's call at all: files under a
+//     checkout change because of an editor or a build, and a watcher is the
+//     only way to hear about it.
 
 import type { Terminal } from '../../shared/entities'
 import type { GitService } from '../git'
+import { WorktreeWatcher, type WorktreeWatcherOptions } from '../git/worktreeWatcher'
 import type { TerminalService } from '../terminals/method-handlers'
 import type { MethodRegistry } from './methodRegistry'
 import type { WorkspaceEventBus } from './workspaceEvents'
@@ -36,6 +40,46 @@ export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () =>
         bus.emit({ type: 'worktrees' })
     }
   })
+}
+
+/**
+ * The third producer, and the only one that is not a consequence of a call:
+ * files changing under a checkout because of something outside this app
+ * entirely — an editor saving, a build writing, an agent's `git commit` in a
+ * shell we are not watching the exit of.
+ *
+ * Git status is the one part of a worktree row with no call behind it, so
+ * without this it is only ever as fresh as the last command boundary. The
+ * watcher turns a settled burst of file changes into the same coarse
+ * `worktrees` invalidation every other producer emits, and the client re-reads
+ * the statuses it already knows how to re-read.
+ *
+ * The watch set follows git's own events, so a worktree becoming ready starts
+ * being watched and a removed one stops, without anything polling.
+ */
+export function publishWorktreeFileEvents(
+  git: GitService,
+  bus: WorkspaceEventBus,
+  options: Omit<WorktreeWatcherOptions, 'onChange'> = {}
+): { close: () => void } {
+  const watcher = new WorktreeWatcher({
+    ...options,
+    onChange: () => bus.emit({ type: 'worktrees' })
+  })
+
+  const resync = (): void => watcher.sync(git.snapshot().worktrees)
+  // Records restored from a previous launch are already ready, so the first
+  // sync has to happen now rather than waiting for a transition that will
+  // never come.
+  resync()
+  const detach = git.events.on(resync)
+
+  return {
+    close: () => {
+      detach()
+      watcher.close()
+    }
+  }
 }
 
 /**

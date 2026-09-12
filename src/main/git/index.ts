@@ -18,6 +18,17 @@ export { parseWorktreeList, readWorktreeInventory, type InventoryEntry } from '.
 export { allocateBranchName, allocateCheckoutPath, branchCollides, slugify } from './worktreeNaming'
 export { parsePorcelainV2, readWorktreeStatus, type ParsedStatus } from './worktreeStatus'
 export {
+  DEFAULT_MIN_INTERVAL_MS,
+  DEFAULT_SETTLE_MS,
+  ignoresCheckoutChange,
+  ignoresGitDirChange,
+  resolveGitDir,
+  WorktreeWatcher,
+  type WatchFn,
+  type WatchHandle,
+  type WorktreeWatcherOptions
+} from './worktreeWatcher'
+export {
   DEFAULT_START_POINT_LIMIT,
   listStartPoints,
   resolveStartPoint,

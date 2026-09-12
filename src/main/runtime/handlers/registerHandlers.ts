@@ -29,12 +29,14 @@ import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerStatusHandler } from './statusHandler'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
 import { registerWorkspaceSubscribeHandler } from './workspaceSubscribeHandler'
-import { publishGitEvents, publishTerminalEvents } from '../workspaceEventSources'
+import { publishGitEvents, publishTerminalEvents, publishWorktreeFileEvents } from '../workspaceEventSources'
 
 /** Areas that own live OS resources and must be torn down when the app quits. */
 export type RegisteredAreas = {
   terminals: TerminalService
   git: GitService
+  /** Filesystem watches behind live git status. Released when the app quits. */
+  worktreeFiles: { close: () => void }
 }
 
 export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
@@ -67,6 +69,9 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   // Git transitions a worktree on a background task long after the call
   // returned, so its own emitter is the only honest source for those.
   publishGitEvents(git, workspaceEvents)
+  // Git status has no call behind it, so file changes are the only thing that
+  // can keep it honest between one command and the next.
+  const worktreeFiles = publishWorktreeFileEvents(git, workspaceEvents)
 
-  return { terminals, git }
+  return { terminals, git, worktreeFiles }
 }

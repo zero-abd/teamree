@@ -2,7 +2,7 @@
 // mutations dispatched the way a transport dispatches them, and assertions on
 // the frames that come back out of the subscription hub.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -22,7 +22,7 @@ import { registerWorkspaceSubscribeHandler } from './handlers/workspaceSubscribe
 import { MethodRegistry } from './methodRegistry'
 import { createRuntimeContext, type RuntimeContext } from './runtimeContext'
 import { SubscriptionHub } from './subscriptionHub'
-import { publishGitEvents, publishTerminalEvents } from './workspaceEventSources'
+import { publishGitEvents, publishTerminalEvents, publishWorktreeFileEvents } from './workspaceEventSources'
 
 const describePty = canSpawnPty() ? describe : describe.skip
 const WORKTREE = 'wt_terminals'
@@ -47,7 +47,16 @@ type Harness = {
   dispose: () => Promise<void>
 }
 
-type HarnessOptions = { repo?: TempRepo; slowWorktreeAddMs?: number }
+type HarnessOptions = {
+  repo?: TempRepo
+  slowWorktreeAddMs?: number
+  /**
+   * Off by default. Every other test here is about producers driven by a call,
+   * and a watcher firing on the files those calls move would put events in
+   * their way that they are not about.
+   */
+  watchFiles?: boolean
+}
 
 async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
   const dataDir = await mkdtemp(join(tmpdir(), 'teamree-workspace-stream-'))
@@ -85,6 +94,11 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
   })
   registerGitHandlers(registry, git)
   publishGitEvents(git, context.workspaceEvents)
+  const worktreeFiles = options.watchFiles
+    ? // Far shorter than the real windows: this test is about whether a file
+      // change reaches a subscriber at all, not about how long it is held.
+      publishWorktreeFileEvents(git, context.workspaceEvents, { settleMs: 20, minIntervalMs: 0 })
+    : { close: () => {} }
 
   const dispatch: Dispatcher = createDispatcher(registry)
   let requestId = 0
@@ -130,6 +144,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
     call,
     watch,
     dispose: async () => {
+      worktreeFiles.close()
       await terminals.shutdown()
       await git.dispose()
       hub.closeAll()
@@ -226,6 +241,61 @@ describe('workspace stream producers', () => {
 
       expect(countOf(watcher.events, 'projects')).toBe(1)
       expect(countOf(watcher.events, 'worktrees')).toBe(1)
+    },
+    TEST_TIMEOUT_MS
+  )
+})
+
+describe('worktree files as a producer', () => {
+  it(
+    'announces an edit nobody made through a method call',
+    async () => {
+      const repo = await repository()
+      const app = await harness({ repo, watchFiles: true })
+      const project = await app.call<Project>('c1', 'project.add', { path: repo.repoPath })
+      const worktree = await app.call<Worktree>('c1', 'worktree.create', { projectId: project.id, name: 'live status' })
+      const ready = await app.git.whenSettled(worktree.id)
+      expect(ready.state, ready.error).toBe('ready')
+
+      // Subscribed only now, and cleared, so nothing from creating the checkout
+      // can be mistaken for what the edit below produces.
+      const watcher = await app.watch('c1')
+      await settle()
+      watcher.clear()
+
+      // No call, no shell, no exit: a file appears the way an editor or an
+      // agent would leave it, and the only thing that can notice is the watch.
+      await writeFile(join(ready.path, 'NOTES.md'), '# changed underneath\n')
+
+      await watcher.waitFor(has('worktrees'), 'the invalidation for a file that changed on disk')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'stops watching a worktree it has removed',
+    async () => {
+      const repo = await repository()
+      const app = await harness({ repo, watchFiles: true })
+      const project = await app.call<Project>('c1', 'project.add', { path: repo.repoPath })
+      const worktree = await app.call<Worktree>('c1', 'worktree.create', { projectId: project.id, name: 'gone soon' })
+      const ready = await app.git.whenSettled(worktree.id)
+      const scratch = join(ready.path, 'scratch.txt')
+      await writeFile(scratch, 'before\n')
+
+      await app.call('c1', 'worktree.remove', { worktreeId: worktree.id, force: true })
+      const watcher = await app.watch('c1')
+      await settle()
+      watcher.clear()
+
+      // Put the checkout path back and write into it. It is the exact directory
+      // that was being watched, so a watch left behind would announce this.
+      await mkdir(ready.path, { recursive: true })
+      await writeFile(scratch, 'after\n')
+      await settle()
+      await settle()
+
+      expect(countOf(watcher.events, 'worktrees')).toBe(0)
     },
     TEST_TIMEOUT_MS
   )

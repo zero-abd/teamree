@@ -84,6 +84,16 @@ stream replaces polling entirely.
 - [x] macOS, Linux, Windows path and process handling
 - [x] Packaged build
 
+## M7 — Live status
+
+Status was the one part of a worktree row with no call behind it, so it was only
+ever as fresh as the last command boundary.
+
+- [x] A filesystem watch per ready worktree: the checkout and its git directory
+- [x] Bursts settled and rate-limited, so a build cannot drive a status read per file
+- [x] Degrades to the git directory alone where recursive watching is unavailable
+- [x] The watch set follows git's own events, so nothing polls
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,
@@ -93,10 +103,6 @@ recorded so none of them is discovered by surprise later.
   kills every shell. Stored pane layouts are reconciled on the way back up so no pane
   ever points at a dead terminal, but the work itself is gone. Fixing it properly means
   moving PTYs into a daemon that outlives the app.
-- **Git status goes stale during a long shell session.** It refreshes when a shell
-  starts or exits, which covers command boundaries, but an edit made mid-session does
-  not move the chips until that shell ends. The fix is a filesystem watcher in the
-  runtime publishing `worktrees`.
 - **Only macOS has been packaged and launched.** The Windows installer needs Windows or
   wine; Linux cannot be packaged off Linux because node-pty has no Linux prebuild and
   must be compiled. Both are configured, and a three-runner CI workflow exists but has
