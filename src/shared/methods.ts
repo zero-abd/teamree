@@ -65,6 +65,14 @@ export const Params = {
   layoutGet: z.object({ worktreeId: z.string().min(1) }),
   layoutSet: z.object({ worktreeId: z.string().min(1), root: z.unknown(), focusedTerminalId: z.string().nullable() }),
 
+  /**
+   * Streams coarse invalidations for everything the workspace owns. Deliberately
+   * coarse: the client refetches the affected collection rather than applying a
+   * patch, which removes a whole class of state-divergence bugs and costs one
+   * small request per change. This is what lets a GUI reflect work a CLI did.
+   */
+  workspaceSubscribe: z.object({}),
+
   unsubscribe: z.object({ subscription: z.string().min(1) })
 } as const
 
@@ -94,12 +102,26 @@ export type MethodContract = {
   'layout.get': { params: z.infer<typeof Params.layoutGet>; result: Layout }
   'layout.set': { params: z.infer<typeof Params.layoutSet>; result: Layout }
 
+  'workspace.subscribe': { params: z.infer<typeof Params.workspaceSubscribe>; result: { subscription: string } }
+
   'unsubscribe': { params: z.infer<typeof Params.unsubscribe>; result: { unsubscribed: true } }
 }
 
 export type MethodName = keyof MethodContract
 export type ParamsOf<M extends MethodName> = MethodContract[M]['params']
 export type ResultOf<M extends MethodName> = MethodContract[M]['result']
+
+/**
+ * Events pushed on a workspace.subscribe subscription. Each names a collection
+ * that changed; the client refetches it. `layout` and `terminalExited` carry the
+ * id that changed so a client can skip work it does not care about.
+ */
+export type WorkspaceEvent =
+  | { type: 'projects' }
+  | { type: 'worktrees' }
+  | { type: 'terminals' }
+  | { type: 'layout'; worktreeId: string }
+  | { type: 'terminalExited'; terminalId: string; exitCode: number }
 
 /** Events pushed on a terminal.subscribe subscription. */
 export type TerminalEvent =

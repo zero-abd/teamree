@@ -66,6 +66,17 @@ so a change to a method signature breaks every caller at compile time rather tha
 - [x] `teamree terminal` including read, send, and split
 - [x] `--json` on every command
 
+## M5b — Live workspace
+
+The GUI polls today, so work a CLI does is invisible until the next poll and
+terminals opened by an agent never appear at all. One coarse invalidation
+stream replaces polling entirely.
+
+- [ ] `workspace.subscribe` streaming collection invalidations
+- [ ] Producers wired: projects, worktrees, terminals, layouts, terminal exit
+- [ ] GUI consumes the stream and drops its poll loop
+- [ ] `teamree worktree wait` and `teamree terminal wait` for agents
+
 ## M6 — Acceptance
 
 - [x] End-to-end: create a worktree, open a terminal, run a command, read the output back
