@@ -59,8 +59,13 @@ describe('git runner', () => {
     const repo = await newRepo()
     const runner = createGitRunner()
 
+    // `hash-object --stdin` reads until end of input, and the runner never
+    // closes the child's stdin, so this one never finishes on its own. A fast
+    // command with a 1ms timeout would race instead: under load the timer fires
+    // late enough for git to have already succeeded, and the test fails for a
+    // reason that has nothing to do with timeouts.
     const error = (await runner
-      .run({ args: ['status', '--porcelain=v2', '--branch'], cwd: repo.repoPath, timeoutMs: 1 })
+      .run({ args: ['hash-object', '--stdin'], cwd: repo.repoPath, timeoutMs: 250 })
       .catch((e: unknown) => e)) as GitCommandError
 
     expect(error).toBeInstanceOf(GitCommandError)

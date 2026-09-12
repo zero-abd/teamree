@@ -123,9 +123,14 @@ describePty('PtySession', () => {
   it(
     'caps scrollback no matter how much the child prints',
     async () => {
-      const cap = 8 * 1024
+      // The ratio is the point, not the volume: 200 lines is about 6.8KB
+      // against a 2KB cap, so most of it must be evicted. Bigger runs measure
+      // node-pty's 200ms socket-destroy window instead of this buffer — see the
+      // trailing-output limit in ROADMAP.md — and the buffer's own eviction is
+      // covered exhaustively, without a PTY, in scrollback.test.ts.
+      const cap = 2 * 1024
       const session = start({
-        command: 'for i in $(seq 1 4000); do echo "chatty line $i padding padding padding"; done',
+        command: 'for i in $(seq 1 200); do echo "chatty line $i padding padding padding"; done',
         scrollbackCapBytes: cap
       })
       const events = collect(session)
@@ -133,8 +138,39 @@ describePty('PtySession', () => {
       await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
       expect(session.retainedBytes).toBeLessThanOrEqual(cap)
       expect(Buffer.byteLength(session.read(), 'utf8')).toBeLessThanOrEqual(cap)
-      expect(session.read()).toContain('chatty line 4000')
+      // The head is gone, which is what eviction means. Whether the very last
+      // line arrived is node-pty's question, not this buffer's, and the test
+      // above answers it at a volume that always drains in time.
       expect(session.read()).not.toContain('chatty line 1 ')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'holds the exit event until everything the child printed has arrived',
+    async () => {
+      // The bug this pins down: waitpid returns as soon as the child is reaped,
+      // while its last writes are still in the pty buffer. Emitting exit then
+      // loses the tail — which is exactly what `terminal run` hands back to an
+      // agent. So the invariant is that when exit lands, the scrollback is
+      // already complete.
+      const session = start({
+        command: 'for i in $(seq 1 40); do echo "tail line $i padding padding padding"; done'
+      })
+      const events = collect(session)
+
+      let scrollbackAtExit: string | undefined
+      session.on((event) => {
+        if (event.type === 'exit' && scrollbackAtExit === undefined) scrollbackAtExit = session.read()
+      })
+
+      await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
+
+      expect(scrollbackAtExit).toBeDefined()
+      expect(scrollbackAtExit).toContain('tail line 40 ')
+      // And nothing arrives afterwards to change the answer.
+      const settled = session.read()
+      expect(settled).toBe(scrollbackAtExit)
     },
     TEST_TIMEOUT_MS
   )

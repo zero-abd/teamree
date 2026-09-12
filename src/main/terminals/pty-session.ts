@@ -18,6 +18,30 @@ import { TitleSequenceScanner } from './title-sequence'
 /** How long close() waits for the tree to die before giving up on the exit event. */
 const CLOSE_TIMEOUT_MS = 5_000
 
+/**
+ * How long the exit event is held open after the last byte arrives.
+ *
+ * The child exiting and its output arriving are two different events on two
+ * different channels: waitpid returns as soon as the process is reaped, while
+ * whatever it last wrote may still be on its way to us. Holding exit until the
+ * data goes quiet is what makes "exited" mean "and everything it printed is
+ * readable" — the invariant `terminal run` hands to an agent.
+ *
+ * What this does not do is recover output the layer below has already thrown
+ * away. node-pty destroys the pty socket 200ms after the child is reaped, and
+ * anything unread at that moment is gone before this file ever sees it; a
+ * chatty command on a loaded machine can lose its tail that way. That limit is
+ * recorded in ROADMAP.md rather than papered over here.
+ */
+const EXIT_DRAIN_QUIET_MS = 50
+
+/**
+ * A ceiling on that wait, so a terminal that never goes quiet cannot hold a
+ * shutdown open. Generous: after the child is reaped only what the kernel had
+ * buffered is left, which is tens of kilobytes at most.
+ */
+const EXIT_DRAIN_MAX_MS = 500
+
 export type PtySessionInit = {
   id: string
   worktreeId: string
@@ -55,6 +79,8 @@ export class PtySession {
   private rows: number
   private running = true
   private exitCode: number | undefined
+  /** Set when the child has been reaped but its output has not gone quiet. */
+  private draining: { exitCode: number; cancelQuiet: () => void; cancelCeiling: () => void } | undefined
 
   private constructor(init: PtySessionInit, handle: IPty, platform: NodeJS.Platform) {
     this.id = init.id
@@ -123,7 +149,9 @@ export class PtySession {
   }
 
   write(data: string): void {
-    if (!this.running) {
+    // Draining counts as exited here: the child has been reaped, so there is
+    // nothing on the other end to read this, however the event is still held.
+    if (!this.running || this.draining) {
       throw new TerminalServiceError(ErrorCode.Conflict, `terminal ${this.id} has exited`)
     }
     this.pty.write(data)
@@ -132,7 +160,7 @@ export class PtySession {
   resize(cols: number, rows: number): void {
     this.cols = cols
     this.rows = rows
-    if (!this.running) return
+    if (!this.running || this.draining) return
     try {
       this.pty.resize(cols, rows)
     } catch (error) {
@@ -193,14 +221,48 @@ export class PtySession {
       this.title = title
       this.emit({ type: 'title', title })
     }
+    // Output after the child was reaped is the whole reason exit is held: each
+    // chunk pushes the quiet window out again, up to the ceiling.
+    if (this.draining) this.restartQuietWindow()
   }
 
   private finish(exitCode: number, signal: number | undefined): void {
-    if (!this.running) return
-    this.running = false
+    if (!this.running || this.draining) return
     // A signalled death has exitCode 0, which would read as success; the shell
     // convention of 128 + signal keeps the two apart.
-    this.exitCode = signal !== undefined && signal !== 0 ? 128 + signal : exitCode
+    const code = signal !== undefined && signal !== 0 ? 128 + signal : exitCode
+    const ceiling = setTimeout(() => this.settleExit(), EXIT_DRAIN_MAX_MS)
+    ceiling.unref?.()
+    this.draining = {
+      exitCode: code,
+      cancelQuiet: () => {},
+      cancelCeiling: () => clearTimeout(ceiling)
+    }
+    this.restartQuietWindow()
+  }
+
+  private restartQuietWindow(): void {
+    const draining = this.draining
+    if (!draining) return
+    draining.cancelQuiet()
+    const timer = setTimeout(() => this.settleExit(), EXIT_DRAIN_QUIET_MS)
+    timer.unref?.()
+    draining.cancelQuiet = () => clearTimeout(timer)
+  }
+
+  /**
+   * The exit everyone else sees. Only reached once the output has gone quiet
+   * or the ceiling has run out, so `running` going false and the event landing
+   * both mean the scrollback is complete.
+   */
+  private settleExit(): void {
+    const draining = this.draining
+    if (!draining || !this.running) return
+    draining.cancelQuiet()
+    draining.cancelCeiling()
+    this.draining = undefined
+    this.running = false
+    this.exitCode = draining.exitCode
     this.emit({ type: 'exit', exitCode: this.exitCode })
     for (const waiter of this.exitWaiters) waiter()
     this.exitWaiters.clear()

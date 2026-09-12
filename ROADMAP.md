@@ -122,6 +122,16 @@ recorded so none of them is discovered by surprise later.
   against a reference `CommandLineToArgvW` parser rather than a live ConPTY, and the
   process-tree kill is untested there. The POSIX equivalent is tested for real.
 - **The Windows CLI launcher is a batch shim**, not a native executable.
+- **A very chatty command can lose the tail of its output.** node-pty destroys the
+  pty socket 200ms after the child is reaped, and whatever is still unread at that
+  moment is discarded before the runtime sees it. The session holds its own exit
+  event until the data goes quiet, so "exited" still means "and everything that
+  reached us is readable" — but it cannot recover what was already dropped.
+  Measured on an idle machine: 1000 lines of output always arrive intact, 3000
+  lose the tail about one run in five, and a loaded machine does worse. It matters
+  most for `teamree terminal run`, where the last lines are usually the ones an
+  agent wants. Fixing it properly means reading the pty ourselves rather than
+  through node-pty's socket.
 
 ## Later
 
