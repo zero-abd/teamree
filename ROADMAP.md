@@ -81,7 +81,7 @@ stream replaces polling entirely.
 
 - [x] End-to-end: create a worktree, open a terminal, run a command, read the output back
 - [x] The same flow driven entirely through the CLI
-- [ ] macOS, Linux, Windows path and process handling
+- [x] macOS, Linux, Windows path and process handling
 - [x] Packaged build
 
 ## Later
