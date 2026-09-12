@@ -17,6 +17,7 @@
 //     only way to hear about it.
 
 import type { Terminal } from '../../shared/entities'
+import { Params } from '../../shared/methods'
 import type { GitService } from '../git'
 import { WorktreeWatcher, type WorktreeWatcherOptions } from '../git/worktreeWatcher'
 import type { TerminalService } from '../terminals/method-handlers'
@@ -39,6 +40,37 @@ export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () =>
         // same thing to a client: refetch the list.
         bus.emit({ type: 'worktrees' })
     }
+  })
+}
+
+/**
+ * The two git calls that write, wrapped so they announce what they did.
+ *
+ * Every other git producer rides the service's own event emitter, which fires
+ * for projects and for worktree lifecycle transitions and for nothing else. A
+ * commit and a push change what `worktree.status` answers without changing any
+ * record, so without this they are silent: a commit made through the CLI would
+ * leave every open window describing the repository as it was.
+ *
+ * A commit currently gets noticed anyway, because it writes `index` and `HEAD`
+ * and the filesystem watch below picks that up. That is luck rather than
+ * design — a push changes only remote-tracking refs, which live in the common
+ * git directory that no worktree watch covers — and relying on one producer to
+ * cover for another is how a stream quietly stops being trustworthy.
+ */
+export function publishGitWrites(registry: MethodRegistry, git: GitService, bus: WorkspaceEventBus): void {
+  registry.register('worktree.commit', Params.worktreeCommit, async (params) => {
+    const result = await git.worktreeCommit(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
+  registry.register('worktree.push', Params.worktreePush, async (params) => {
+    const result = await git.worktreePush(params)
+    // Ahead and behind moved even when nothing was sent: the remote-tracking
+    // ref is now where the branch is.
+    bus.emit({ type: 'worktrees' })
+    return result
   })
 }
 

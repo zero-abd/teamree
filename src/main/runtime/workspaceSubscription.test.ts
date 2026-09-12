@@ -22,7 +22,12 @@ import { registerWorkspaceSubscribeHandler } from './handlers/workspaceSubscribe
 import { MethodRegistry } from './methodRegistry'
 import { createRuntimeContext, type RuntimeContext } from './runtimeContext'
 import { SubscriptionHub } from './subscriptionHub'
-import { publishGitEvents, publishTerminalEvents, publishWorktreeFileEvents } from './workspaceEventSources'
+import {
+  publishGitEvents,
+  publishGitWrites,
+  publishTerminalEvents,
+  publishWorktreeFileEvents
+} from './workspaceEventSources'
 
 const describePty = canSpawnPty() ? describe : describe.skip
 const WORKTREE = 'wt_terminals'
@@ -94,6 +99,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
   })
   registerGitHandlers(registry, git)
   publishGitEvents(git, context.workspaceEvents)
+  publishGitWrites(registry, git, context.workspaceEvents)
   const worktreeFiles = options.watchFiles
     ? // Far shorter than the real windows: this test is about whether a file
       // change reaches a subscriber at all, not about how long it is held.
@@ -241,6 +247,36 @@ describe('workspace stream producers', () => {
 
       expect(countOf(watcher.events, 'projects')).toBe(1)
       expect(countOf(watcher.events, 'worktrees')).toBe(1)
+    },
+    TEST_TIMEOUT_MS
+  )
+})
+
+describe('git writes as producers', () => {
+  it(
+    'announces a commit, which moves no record and would otherwise be silent',
+    async () => {
+      const repo = await repository()
+      const app = await harness({ repo })
+      const project = await app.call<Project>('c1', 'project.add', { path: repo.repoPath })
+      const worktree = await app.call<Worktree>('c1', 'worktree.create', { projectId: project.id, name: 'commit me' })
+      const ready = await app.git.whenSettled(worktree.id)
+      expect(ready.state, ready.error).toBe('ready')
+      await writeFile(join(ready.path, 'new.txt'), 'work\n')
+
+      const watcher = await app.watch('c1')
+      await settle()
+      watcher.clear()
+
+      await app.call('c1', 'worktree.commit', {
+        worktreeId: worktree.id,
+        message: 'from the stream test',
+        paths: ['new.txt']
+      })
+
+      // Nothing about the worktree record changed, so this event can only have
+      // come from the write announcing itself.
+      await watcher.waitFor(has('worktrees'), 'the invalidation for a commit')
     },
     TEST_TIMEOUT_MS
   )

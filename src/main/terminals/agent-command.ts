@@ -18,8 +18,9 @@
 // none of this existed.
 
 import { randomUUID } from 'node:crypto'
+import type { AgentKind } from '../../shared/entities'
 
-export type AgentKind = 'claude' | 'codex' | 'gemini' | 'opencode' | 'droid'
+export type { AgentKind }
 
 /** One flag and whether a separate token follows it carrying its value. */
 type Selector = { flag: string; takesValue: boolean }

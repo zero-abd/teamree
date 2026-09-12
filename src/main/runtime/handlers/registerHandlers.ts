@@ -29,7 +29,12 @@ import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerStatusHandler } from './statusHandler'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
 import { registerWorkspaceSubscribeHandler } from './workspaceSubscribeHandler'
-import { publishGitEvents, publishTerminalEvents, publishWorktreeFileEvents } from '../workspaceEventSources'
+import {
+  publishGitEvents,
+  publishGitWrites,
+  publishTerminalEvents,
+  publishWorktreeFileEvents
+} from '../workspaceEventSources'
 
 /** Areas that own live OS resources and must be torn down when the app quits. */
 export type RegisteredAreas = {
@@ -74,6 +79,9 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   // Git transitions a worktree on a background task long after the call
   // returned, so its own emitter is the only honest source for those.
   publishGitEvents(git, workspaceEvents)
+  // Committing and pushing change what status answers without moving any
+  // record, so they have to say so themselves.
+  publishGitWrites(registry, git, workspaceEvents)
   // Git status has no call behind it, so file changes are the only thing that
   // can keep it honest between one command and the next.
   const worktreeFiles = publishWorktreeFileEvents(git, workspaceEvents)

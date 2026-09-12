@@ -218,10 +218,18 @@ export type StartPointList = {
   truncated: boolean
 }
 
+/**
+ * The coding agents this app knows how to start and resume.
+ *
+ * Lives here rather than beside the launch logic because it crosses the wire:
+ * the CLI prints it, the GUI keys buttons off it, and a bare `string` in its
+ * place is the one field in this file a caller cannot exhaust.
+ */
+export type AgentKind = 'claude' | 'codex' | 'gemini' | 'opencode' | 'droid'
+
 /** A coding agent this machine can run, found on PATH rather than configured. */
 export type InstalledAgent = {
-  /** Which agent, from the set the app knows how to resume. */
-  kind: string
+  kind: AgentKind
   /** What to run. */
   command: string
   /** Where it was found. */

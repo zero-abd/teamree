@@ -119,7 +119,10 @@ describePty('restoring terminals across a restart', () => {
     await mkdir(checkout, { recursive: true })
     await mkdir(bin, { recursive: true })
     const binary = path.join(bin, name)
-    await writeFile(binary, '#!/bin/sh\necho "AGENT ARGS: $@"\n', 'utf8')
+    // It stays running, the way a real agent does. A stub that exits at once
+    // would have the tests typing into a closed pty, which node-pty logs about
+    // and which is not what any of them are here to check.
+    await writeFile(binary, '#!/bin/sh\necho "AGENT ARGS: $@"\nsleep 30\n', 'utf8')
     await chmod(binary, 0o755)
     return { checkout, binary }
   }

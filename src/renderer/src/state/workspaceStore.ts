@@ -628,8 +628,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // Everything that was ticked is in the commit now, so nothing is left
         // ticked; the list underneath refetches on the invalidation the runtime
         // publishes for the write.
+        // The runtime announces the write, so the list and the chips refetch
+        // through the same path everything else does; doing it here as well
+        // would be a second way for this window to disagree with the others.
         set({ stagedPaths: [], selectedChangePath: null, diff: null })
-        await refreshChanges(worktreeId)
       } catch (error) {
         failed('Could not commit')(error)
       } finally {
@@ -672,7 +674,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           parts.push(`${result.uncommitted} uncommitted change${result.uncommitted === 1 ? '' : 's'} stayed behind`)
         }
         notify(`${parts.join(' · ')}.`, 'info')
-        refresher.request(refreshTargets({ statuses: [worktreeId] }))
       } catch (error) {
         failed('Could not push')(error)
       } finally {
