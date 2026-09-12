@@ -74,7 +74,7 @@ stream replaces polling entirely.
 
 - [x] `workspace.subscribe` streaming collection invalidations
 - [x] Producers wired: projects, worktrees, terminals, layouts, terminal exit
-- [ ] GUI consumes the stream and drops its poll loop
+- [x] GUI consumes the stream and drops its poll loop
 - [x] `teamree worktree wait`, `teamree terminal wait`, and `teamree terminal run` for agents
 
 ## M6 — Acceptance
