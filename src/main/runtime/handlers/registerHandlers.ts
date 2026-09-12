@@ -23,6 +23,8 @@ import type { TerminalService } from '../../terminals/method-handlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerStatusHandler } from './statusHandler'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
+import { registerWorkspaceSubscribeHandler } from './workspaceSubscribeHandler'
+import { publishGitEvents, publishTerminalEvents } from '../workspaceEventSources'
 
 /** Areas that own live OS resources and must be torn down when the app quits. */
 export type RegisteredAreas = {
@@ -34,6 +36,8 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   registerPlaceholderHandlers(registry)
   registerStatusHandler(registry)
   registerUnsubscribeHandler(registry)
+  registerWorkspaceSubscribeHandler(registry)
+  const workspaceEvents = registry.context.workspaceEvents
 
   const terminals = createTerminalService({
     subscriptions: registry.context.subscriptions,
@@ -46,12 +50,18 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   // the way up is what stops the UI rendering panes bound to dead terminals.
   terminals.reconcileLayouts()
   registerTerminalHandlers(registry, terminals)
+  // Wraps the handlers just registered, so every terminal and layout change
+  // reaches the workspace stream whichever transport asked for it.
+  publishTerminalEvents(registry, terminals, workspaceEvents)
 
   const git = new GitService({ store: registry.context.store })
   // A create interrupted by a quit can never resume, so it is marked failed and
   // offered as a retry rather than left stuck in `creating`.
   git.reviveRestoredRecords()
   registerGitHandlers(registry, git)
+  // Git transitions a worktree on a background task long after the call
+  // returned, so its own emitter is the only honest source for those.
+  publishGitEvents(git, workspaceEvents)
 
   return { terminals, git }
 }

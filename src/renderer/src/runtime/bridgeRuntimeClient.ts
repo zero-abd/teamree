@@ -3,8 +3,9 @@
 // whether the runtime is answering at all, which is the only connection state a
 // renderer speaking over IPC can actually observe.
 
-import type { MethodName, ParamsOf, ResultOf, TerminalEvent } from '@shared/methods'
+import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
 import { call, RuntimeCallError, subscribeTerminal, type Subscription } from './runtimeClient'
+import { watchWorkspace, type WorkspaceWatch } from './workspaceStream'
 
 export type ConnectionPhase = 'connecting' | 'ready' | 'retrying' | 'offline'
 
@@ -17,6 +18,11 @@ export type ConnectionState = {
 export type RuntimeClient = {
   call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>
   subscribeTerminal(terminalId: string, onEvent: (event: TerminalEvent) => void): Promise<Subscription>
+  /**
+   * Starts watching workspace changes and keeps the stream up. Replaces polling:
+   * every event names a collection the caller should refetch.
+   */
+  watchWorkspace(onEvent: (event: WorkspaceEvent) => void): WorkspaceWatch
   readonly connection: ConnectionState
   onConnectionChange(listener: (state: ConnectionState) => void): () => void
   /** Re-probes the runtime, e.g. from a "retry" affordance. */
@@ -60,6 +66,10 @@ export function createRuntimeClient(): RuntimeClient {
       }
     },
     subscribeTerminal,
+    watchWorkspace: (onEvent) =>
+      // A stream that cannot be opened says as much about the connection as a
+      // failed call does, so the status bar learns about it either way.
+      watchWorkspace(onEvent, { onError: (error) => setState({ phase: 'offline', detail: describe(error) }) }),
     get connection() {
       return state
     },

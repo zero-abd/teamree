@@ -2,6 +2,7 @@ import type { CommandSpec } from '../command-spec.js'
 import { readBoolean, readNumber, readString, requireString } from '../argv.js'
 import { formatFields, formatTable } from '../output.js'
 import { resolveWorktree } from '../selectors.js'
+import { DEFAULT_QUIET_MS, DEFAULT_WAIT_TIMEOUT_MS, waitForTerminal } from '../waiting.js'
 
 /** Terminals are addressed by id only: ids come straight from `terminal list`. */
 const TERMINAL_ARG = { name: 'terminal', description: 'Terminal id from `teamree terminal list`.', required: true } as const
@@ -156,6 +157,86 @@ export const terminalCommands: readonly CommandSpec[] = [
       const terminalId = context.args[0] as string
       await context.client.call('terminal.close', { terminalId })
       return { data: { closed: true, terminalId }, text: `closed terminal ${terminalId}` }
+    }
+  }
+  ,{
+    path: ['terminal', 'wait'],
+    summary: 'Block until a terminal goes quiet or exits.',
+    details:
+      'Quiet means no output for --quiet-ms; exit means the process ended.\n\n' +
+      'Quiet is a heuristic and it can lie: a command that pauses longer than the quiet window, such as a ' +
+      'slow test run or a sleep, looks finished while it is still going. Use it only for interactive shells, ' +
+      'and raise --quiet-ms when the command is slow.\n\n' +
+      'For running a command and knowing for certain when it finished, use `teamree terminal run`, which ' +
+      'waits on the real process exit and returns its exit code.',
+    args: [TERMINAL_ARG],
+    flags: [
+      { name: 'for', kind: 'string', placeholder: '<condition>', choices: ['quiet', 'exit'], description: 'What to wait for. Defaults to quiet.' },
+      { name: 'quiet-ms', kind: 'number', placeholder: '<ms>', description: `Silence that counts as quiet. Defaults to ${DEFAULT_QUIET_MS}.` },
+      { name: 'timeout-ms', kind: 'number', placeholder: '<ms>', description: `Give up after this long. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.` }
+    ],
+    examples: [
+      'teamree terminal send <id> --text "npm test" --enter && teamree terminal wait <id> --json'
+    ],
+    run: async (context) => {
+      const terminalId = context.args[0] as string
+      const until = (readString(context.flags, 'for') ?? 'quiet') as 'quiet' | 'exit'
+      const result = await waitForTerminal({
+        client: context.client,
+        terminalId,
+        until,
+        quietMs: readNumber(context.flags, 'quiet-ms') ?? DEFAULT_QUIET_MS,
+        timeoutMs: readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WAIT_TIMEOUT_MS
+      })
+      return {
+        data: result,
+        text: formatFields([
+          ['reason', result.reason],
+          ['terminal', result.terminalId],
+          ['exit code', result.exitCode === undefined ? '-' : String(result.exitCode)],
+          ['output bytes', String(result.output.length)]
+        ])
+      }
+    }
+  }
+  ,{
+    path: ['terminal', 'run'],
+    summary: 'Run a command in a worktree and wait for it to finish.',
+    details:
+      'The command gets its own process, so completion is the real process exit rather than a guess from ' +
+      'silence. Returns the exit code and everything the command printed. This is the command an agent ' +
+      'should reach for; `terminal send` plus `terminal wait` is for driving an interactive shell.\n\n' +
+      "The CLI's own exit code still follows the documented scheme: it reports whether teamree ran the " +
+      'command, not whether the command succeeded. Read exitCode from the payload for that.',
+    flags: [
+      { name: 'worktree', kind: 'string', placeholder: '<worktree>', description: 'Worktree id, name, path, or branch.', required: true },
+      { name: 'command', kind: 'string', placeholder: '<cmd>', description: 'Command line to run.', required: true },
+      { name: 'timeout-ms', kind: 'number', placeholder: '<ms>', description: `Give up after this long. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.` },
+      { name: 'keep', kind: 'boolean', description: 'Leave the pane open after the command exits.' }
+    ],
+    examples: ['teamree terminal run --worktree fix-login --command "npm test" --json'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, requireString(context.flags, 'worktree'))
+      const command = requireString(context.flags, 'command')
+      const terminal = await context.client.call('terminal.create', { worktreeId: worktree.id, command })
+
+      try {
+        const result = await waitForTerminal({
+          client: context.client,
+          terminalId: terminal.id,
+          until: 'exit',
+          quietMs: DEFAULT_QUIET_MS,
+          timeoutMs: readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WAIT_TIMEOUT_MS
+        })
+        return {
+          data: { terminalId: terminal.id, exitCode: result.exitCode ?? null, output: result.output },
+          text: result.output
+        }
+      } finally {
+        if (!readBoolean(context.flags, 'keep')) {
+          await context.client.call('terminal.close', { terminalId: terminal.id }).catch(() => {})
+        }
+      }
     }
   }
 ]

@@ -2,7 +2,7 @@
 // {})` and gets the contract's result type back; there is no fetch, no socket,
 // and no ipcRenderer anywhere in the renderer bundle.
 
-import type { MethodName, ParamsOf, ResultOf, TerminalEvent } from '@shared/methods'
+import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
 import type { ErrorCode, StreamEvent } from '@shared/protocol'
 
 /** A structured error from the runtime. Branch on `code`, never on `message`. */
@@ -64,12 +64,22 @@ export async function subscribe<M extends SubscribingMethod>(
   }
 }
 
-/** Typed wrapper for the one stream shape the contract defines today. */
+/** Typed wrapper for one terminal's output stream. */
 export function subscribeTerminal(
   terminalId: string,
   onEvent: (event: TerminalEvent) => void
 ): Promise<Subscription> {
   return subscribe('terminal.subscribe', { terminalId }, (event) => onEvent(event as TerminalEvent))
+}
+
+/**
+ * Typed wrapper for the workspace change stream: one invalidation per changed
+ * collection, from whichever transport caused it. Prefer `watchWorkspace` in UI
+ * code, which keeps a subscription alive across a runtime that is not answering
+ * yet.
+ */
+export function subscribeWorkspace(onEvent: (event: WorkspaceEvent) => void): Promise<Subscription> {
+  return subscribe('workspace.subscribe', {}, (event) => onEvent(event as WorkspaceEvent))
 }
 
 const listeners = new Map<string, (event: unknown) => void>()

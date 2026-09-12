@@ -357,6 +357,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
       return layout
     },
 
+    // Nothing in memory mutates behind the demo's back, so the stream is opened
+    // and simply stays quiet.
+    'workspace.subscribe': () => ({ subscription: nextId('sub') }),
+
     unsubscribe: () => ({ unsubscribed: true })
   }
 

@@ -111,6 +111,6 @@ describe('dispatcher', () => {
 
   it('registers every method in the contract', () => {
     expect(registry.methods()).toContain('terminal.split')
-    expect(registry.methods()).toHaveLength(20)
+    expect(registry.methods()).toHaveLength(21)
   })
 })

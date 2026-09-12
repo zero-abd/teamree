@@ -26,6 +26,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^38.0.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^4.0.0",
     "oxfmt": "^0.5.0",
     "oxlint": "^1.0.0",

@@ -19,12 +19,15 @@ const EXPECTED = [
   'worktree create',
   'worktree remove',
   'worktree status',
+  'worktree wait',
   'terminal list',
   'terminal create',
   'terminal read',
   'terminal send',
   'terminal split',
-  'terminal close'
+  'terminal close',
+  'terminal wait',
+  'terminal run'
 ]
 
 describe('the command table', () => {

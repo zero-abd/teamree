@@ -1,7 +1,9 @@
 import type { CommandSpec } from '../command-spec.js'
-import { readBoolean, readString, requireString } from '../argv.js'
+import { readBoolean, readNumber, readString, requireString } from '../argv.js'
 import { formatFields, formatTable } from '../output.js'
 import { resolveProject, resolveWorktree } from '../selectors.js'
+import { DEFAULT_WAIT_TIMEOUT_MS, waitForState } from '../waiting.js'
+import { CliError } from '../exit.js'
 
 export const worktreeCommands: readonly CommandSpec[] = [
   {
@@ -96,6 +98,61 @@ export const worktreeCommands: readonly CommandSpec[] = [
           ['untracked', String(status.untracked)],
           ['conflicted', String(status.conflicted)],
           ['read at', new Date(status.readAt).toISOString()]
+        ])
+      }
+    }
+  }
+  ,{
+    path: ['worktree', 'wait'],
+    summary: 'Block until a worktree finishes being created.',
+    details:
+      'Creation runs in the background, so `worktree create` answers immediately with state "creating". ' +
+      'This waits for it to settle, and exits non-zero if it settled as failed.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      { name: 'for', kind: 'string', placeholder: '<state>', choices: ['ready', 'settled'], description: 'Wait for ready, or for any settled state. Defaults to ready.' },
+      { name: 'timeout-ms', kind: 'number', placeholder: '<ms>', description: `Give up after this long. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.` }
+    ],
+    examples: ['teamree worktree create --project app --name fix-login --json && teamree worktree wait fix-login'],
+    run: async (context) => {
+      const selector = context.args[0] as string
+      const target = await resolveWorktree(context.client, selector)
+      const want = readString(context.flags, 'for') ?? 'ready'
+
+      const settled = await waitForState({
+        client: context.client,
+        what: `worktree ${target.name}`,
+        read: async () => {
+          const rows = await context.client.call('worktree.list', {})
+          return rows.find((row) => row.id === target.id)
+        },
+        settled: (row) => row === undefined || row.state === 'ready' || row.state === 'failed',
+        timeoutMs: readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WAIT_TIMEOUT_MS
+      })
+
+      if (settled === undefined) {
+        throw new CliError({
+          code: 'worktree_gone',
+          message: `Worktree ${selector} disappeared while waiting.`,
+          exitCode: 1
+        })
+      }
+      if (want === 'ready' && settled.state !== 'ready') {
+        throw new CliError({
+          code: 'worktree_failed',
+          message: `Worktree ${settled.name} settled as ${settled.state}: ${settled.error ?? 'no reason given'}`,
+          exitCode: 1,
+          data: settled
+        })
+      }
+
+      return {
+        data: settled,
+        text: formatFields([
+          ['name', settled.name],
+          ['branch', settled.branch],
+          ['state', settled.state],
+          ['path', settled.path]
         ])
       }
     }

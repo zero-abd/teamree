@@ -1,5 +1,6 @@
-// Reading facts out of a repository: is it one, what is it called, what should
-// new work branch from, and what refs already exist.
+// Reading facts out of a repository: is it one, what is it called, and what
+// should new work branch from by default. Interpreting a start point a caller
+// chose instead of that default is startPoint.ts's job.
 
 import path from 'node:path'
 import { ErrorCode } from '../../shared/protocol'
@@ -95,24 +96,4 @@ export async function listBranchNames(runner: GitRunner, root: string): Promise<
     readOnly: true
   })
   return stdout.split('\n').map((line) => line.trim()).filter(Boolean)
-}
-
-export async function resolveCommit(
-  runner: GitRunner,
-  root: string,
-  ref: string,
-  signal?: AbortSignal
-): Promise<string> {
-  assertRefShape(ref, 'start ref')
-  const result = await runner.tryRun({
-    args: ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`],
-    cwd: root,
-    readOnly: true,
-    signal
-  })
-  const sha = result.stdout.trim()
-  if (result.exitCode !== 0 || !sha) {
-    throw new GitServiceError(ErrorCode.NotFound, `start ref "${ref}" does not resolve to a commit in this repository`)
-  }
-  return sha
 }

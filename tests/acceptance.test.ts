@@ -129,6 +129,24 @@ describe('milestone 1 acceptance', () => {
     expect(cli<Terminal[]>(['terminal', 'list'])).toHaveLength(2)
   })
 
+  it('runs a command to completion and reports its real exit code', () => {
+    // The deterministic path an agent should use: the command owns its process,
+    // so completion is a real exit rather than a guess from output going quiet.
+    const result = cli<{ exitCode: number | null; output: string }>([
+      'terminal', 'run', '--worktree', worktree.id, '--command', 'sh -c "sleep 1; echo BUILD_DONE; exit 3"'
+    ])
+    expect(result.exitCode).toBe(3)
+    expect(result.output).toContain('BUILD_DONE')
+  }, 30_000)
+
+  it('waits for a worktree to settle before reporting it ready', () => {
+    const created = cli<Worktree>(['worktree', 'create', '--project', project.id, '--name', 'wait target'])
+    expect(created.state).toBe('creating')
+
+    const settled = cli<Worktree>(['worktree', 'wait', created.id])
+    expect(settled.state).toBe('ready')
+  }, 60_000)
+
   it('removes a worktree and its branch', () => {
     cli(['worktree', 'remove', worktree.id, '--force', '--delete-branch'])
     const remaining = cli<Worktree[]>(['worktree', 'list'])

@@ -388,7 +388,8 @@ describe('help', () => {
     const result = await cli.run(['--help', '--json'])
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
-    expect(data.commands.length).toBe(14)
+    // Kept in step with EXPECTED in command-table.test.ts, which names them all.
+    expect(data.commands.length).toBe(17)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })
