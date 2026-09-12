@@ -48,3 +48,29 @@ describe('seeded runtime client workspace stream', () => {
     expect(events).toEqual([])
   })
 })
+
+describe('seeded start points', () => {
+  it('offers remote branches and tags, not just local branches', async () => {
+    const client = createSeededRuntimeClient()
+    const [project] = await client.call('project.list', {})
+    const listing = await client.call('worktree.startPoints', { projectId: project!.id })
+
+    const kinds = new Set(listing.options.map((option) => option.kind))
+    expect(kinds).toContain('localBranch')
+    expect(kinds).toContain('remoteBranch')
+    expect(kinds).toContain('tag')
+    expect(listing.options[0]).toMatchObject({ ref: listing.baseRef, isBase: true })
+    expect(listing.options.some((option) => option.isCurrent)).toBe(true)
+  })
+
+  it('caps a long listing so the truncated notice is reachable', async () => {
+    const client = createSeededRuntimeClient()
+    const projects = await client.call('project.list', {})
+    const busy = projects.find((project) => project.name === 'ledger-api')
+    const listing = await client.call('worktree.startPoints', { projectId: busy!.id })
+
+    expect(listing.truncated).toBe(true)
+    expect(listing.total).toBeGreaterThan(listing.options.length)
+    expect(listing.options).toHaveLength(listing.limit)
+  })
+})

@@ -2,36 +2,36 @@
 // at once: creation is a background job, and its progress belongs on the
 // sidebar row, not behind a spinner in a box.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { branchNameFromTask } from './branchNameFromTask'
 import { Modal } from './Modal'
-
-const CUSTOM = '__custom__'
+import { StartPointPicker, type StartPointValue } from './StartPointPicker'
+import { useStartPoints } from './useStartPoints'
 
 export function CreateWorktreeDialog({ projectId }: { projectId: string }): React.JSX.Element | null {
   const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === projectId))
-  const worktrees = useWorkspaceStore((state) => state.worktrees)
   const createWorktree = useWorkspaceStore((state) => state.createWorktree)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   const [name, setName] = useState('')
-  const [choice, setChoice] = useState<string>(project?.baseRef ?? 'HEAD')
-  const [customRef, setCustomRef] = useState('')
+  const [startPoint, setStartPoint] = useState<StartPointValue>({ text: project?.baseRef ?? '', option: null })
+  const [touched, setTouched] = useState(false)
+  const { state, reload } = useStartPoints(projectId)
 
-  const startPoints = useMemo(() => {
-    const refs = new Set<string>()
-    if (project) refs.add(project.baseRef)
-    refs.add('HEAD')
-    for (const worktree of worktrees) {
-      if (worktree.projectId === projectId && worktree.state === 'ready') refs.add(worktree.branch)
-    }
-    return [...refs]
-  }, [project, projectId, worktrees])
+  // The listing lands after the dialog opens, so the base ref it names — and
+  // the sha behind it — replace the placeholder, unless the user has already
+  // put something of their own in the box.
+  useEffect(() => {
+    if (touched || state.phase !== 'ready') return
+    const base = state.list.options.find((option) => option.isBase) ?? null
+    setStartPoint({ text: base?.ref ?? state.list.baseRef, option: base })
+  }, [state, touched])
 
   if (!project) return null
 
-  const startedFrom = choice === CUSTOM ? customRef.trim() : choice
+  const branchName = branchNameFromTask(name)
+  const startedFrom = startPoint.text.trim()
   const canSubmit = name.trim().length > 0 && startedFrom.length > 0
 
   const submit = (event: React.FormEvent): void => {
@@ -54,35 +54,20 @@ export function CreateWorktreeDialog({ projectId }: { projectId: string }): Reac
             spellCheck={false}
           />
           <span className="field__hint">
-            branch <code>{branchNameFromTask(name)}</code>
+            branch <code>{branchName}</code>
           </span>
         </label>
 
-        <label className="field">
-          <span className="field__label">Start from</span>
-          <select className="field__input" value={choice} onChange={(event) => setChoice(event.target.value)}>
-            {startPoints.map((ref) => (
-              <option key={ref} value={ref}>
-                {ref}
-              </option>
-            ))}
-            <option value={CUSTOM}>Another ref or commit…</option>
-          </select>
-        </label>
-
-        {choice === CUSTOM ? (
-          <label className="field">
-            <span className="field__label">Ref or commit</span>
-            <input
-              className="field__input field__input--mono"
-              value={customRef}
-              onChange={(event) => setCustomRef(event.target.value)}
-              placeholder="origin/release-4.2"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </label>
-        ) : null}
+        <StartPointPicker
+          state={state}
+          onReload={reload}
+          value={startPoint}
+          onChange={(value) => {
+            setTouched(true)
+            setStartPoint(value)
+          }}
+          branchName={branchName}
+        />
 
         <footer className="form__actions">
           <p className="form__note">Creation continues in the background.</p>

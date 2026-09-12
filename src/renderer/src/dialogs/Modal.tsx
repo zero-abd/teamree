@@ -1,9 +1,31 @@
 // A minimal modal: focus moves in on open, is trapped while open, and returns
 // to whatever opened it on close. Escape and a backdrop click both dismiss.
 
-import { useEffect, useRef } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef } from 'react'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Escape has to reach the innermost thing that is open. This modal listens on
+ * the window in the capture phase, so a popup inside it cannot claim the key by
+ * stopping propagation — it registers here instead, and takes Escape for itself
+ * by returning true.
+ */
+type EscapeClaim = () => boolean
+
+const EscapeClaims = createContext<((claim: EscapeClaim) => () => void) | null>(null)
+
+/** Gives an inner popup first refusal on Escape while that popup is open. */
+export function useEscapeClaim(claim: EscapeClaim): void {
+  const register = useContext(EscapeClaims)
+  const latest = useRef(claim)
+  latest.current = claim
+
+  useEffect(() => {
+    if (!register) return
+    return register(() => latest.current())
+  }, [register])
+}
 
 type ModalProps = {
   title: string
@@ -14,6 +36,14 @@ type ModalProps = {
 
 export function Modal({ title, description, onClose, children }: ModalProps): React.JSX.Element {
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const claims = useRef(new Set<EscapeClaim>())
+
+  const register = useCallback((claim: EscapeClaim) => {
+    claims.current.add(claim)
+    return () => {
+      claims.current.delete(claim)
+    }
+  }, [])
 
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null
@@ -23,6 +53,9 @@ export function Modal({ title, description, onClose, children }: ModalProps): Re
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
         event.preventDefault()
+        for (const claim of [...claims.current]) {
+          if (claim()) return
+        }
         onClose()
         return
       }
@@ -61,7 +94,7 @@ export function Modal({ title, description, onClose, children }: ModalProps): Re
           <h2 className="modal__title">{title}</h2>
           {description ? <p className="modal__description">{description}</p> : null}
         </header>
-        {children}
+        <EscapeClaims value={register}>{children}</EscapeClaims>
       </div>
     </div>
   )

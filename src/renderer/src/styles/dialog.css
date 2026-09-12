@@ -122,3 +122,162 @@ select.field__input {
     transform: translateY(-8px) scale(0.99);
   }
 }
+
+/* Start-from combobox ----------------------------------------------------- */
+
+.combo {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+/* The list opens below the summary line, never over it: what the highlighted
+   row resolves to has to stay readable while the list is being browsed. */
+.combo__box {
+  position: relative;
+}
+
+.combo__toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--s2);
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.combo__toggle:hover {
+  color: var(--fg);
+}
+
+.combo__toggle svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.combo__pop {
+  position: absolute;
+  z-index: 1;
+  top: calc(100% + var(--s1));
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  animation: combo-in var(--motion-fast) var(--ease);
+}
+
+.combo__list {
+  max-height: 232px;
+  overflow-y: auto;
+  padding: var(--s1) 0;
+}
+
+.combo__grouphead {
+  position: sticky;
+  top: 0;
+  padding: var(--s2) var(--s3) var(--s1);
+  background: var(--bg-raised);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.combo__group + .combo__group .combo__grouphead {
+  border-top: 1px solid var(--line);
+}
+
+.combo__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: 4px var(--s3);
+  cursor: pointer;
+}
+
+.combo__row.is-active {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.combo__ref {
+  overflow: hidden;
+  flex: 1;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combo__row.is-active .combo__ref {
+  color: var(--accent-bright);
+}
+
+.combo__sha {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.combo__note {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.combo__badge {
+  padding: 0 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 99px;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.combo__badge--base {
+  border-color: var(--accent-line);
+  color: var(--accent-bright);
+}
+
+.combo__badge--current {
+  border-color: color-mix(in srgb, var(--success) 55%, transparent);
+  color: var(--success);
+}
+
+.combo__empty,
+.combo__footer {
+  padding: var(--s2) var(--s3);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.combo__footer {
+  border-top: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.combo__warn {
+  color: var(--warning);
+}
+
+@keyframes combo-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}

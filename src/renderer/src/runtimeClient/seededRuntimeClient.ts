@@ -3,7 +3,16 @@
 // failures, live terminal output — before the real transport exists. It is
 // deliberately the only place in the renderer that fabricates data.
 
-import type { Layout, PaneNode, Project, Terminal, Worktree, WorktreeStatus } from '@shared/entities'
+import type {
+  Layout,
+  PaneNode,
+  Project,
+  StartPoint,
+  StartPointList,
+  Terminal,
+  Worktree,
+  WorktreeStatus
+} from '@shared/entities'
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
 import { leaf, splitPane } from '../panes/paneLayout'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
@@ -295,23 +304,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'worktrees' }, { type: 'terminals' })
       return { removed: true }
     },
-    'worktree.startPoints': ({ projectId }) => {
+    'worktree.startPoints': ({ projectId, limit }) => {
       const project = required(projects.get(projectId), 'project')
-      const branches = [...worktrees.values()].filter((row) => row.projectId === projectId)
-      const options = [
-        { ref: project.baseRef, kind: 'localBranch' as const, sha: 'seed0000', shortSha: 'seed000', refName: project.baseRef, isBase: true, isCurrent: true, updatedAt: Date.now() },
-        ...branches.map((row) => ({
+      // Branches this window has already made are start points in their own right.
+      const fromWorktrees = [...worktrees.values()]
+        .filter((row) => row.projectId === projectId)
+        .map((row) => ({
           ref: row.branch,
           kind: 'localBranch' as const,
-          sha: `seed${row.id.slice(0, 4)}`,
-          shortSha: `seed${row.id.slice(0, 3)}`,
-          refName: row.branch,
-          isBase: false,
-          isCurrent: false,
-          updatedAt: row.createdAt
+          minutesAgo: (Date.now() - row.createdAt) / 60_000
         }))
-      ]
-      return { baseRef: project.baseRef, options, total: options.length, limit: 200, truncated: false }
+      const seeds = SEEDED_REFS[project.name] ?? REFS_FOR_A_NEW_PROJECT
+      const rows = [...seeds, ...fromWorktrees].map(startPointRow)
+      return capStartPoints(project.baseRef, rows, limit ?? SEEDED_LIMITS[project.name] ?? 200)
     },
     'worktree.status': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
@@ -480,6 +485,91 @@ function echo(
       emit(terminal, { type: 'data', data: char })
     }
   }
+}
+
+// --- start points ------------------------------------------------------------
+//
+// A repository's refs are the one thing the demo cannot derive from its own
+// worktrees, so they are seeded outright, remotes and tags included: a stand-in
+// that only ever showed local branches would leave the picker's other sections
+// and its truncation notice unexercised in the browser.
+
+type SeedRef = { ref: string; kind: StartPoint['kind']; minutesAgo: number; current?: boolean }
+
+const SEEDED_REFS: Record<string, SeedRef[]> = {
+  atlas: [
+    { ref: 'main', kind: 'localBranch', minutesAgo: 26, current: true },
+    { ref: 'legacy/import-pipeline', kind: 'localBranch', minutesAgo: 60 * 24 * 96 },
+    { ref: 'origin/main', kind: 'remoteBranch', minutesAgo: 24 },
+    { ref: 'origin/next', kind: 'remoteBranch', minutesAgo: 60 * 7 },
+    { ref: 'origin/release-4.2', kind: 'remoteBranch', minutesAgo: 60 * 31 },
+    { ref: 'origin/hotfix/token-leak', kind: 'remoteBranch', minutesAgo: 60 * 3 },
+    { ref: 'upstream/main', kind: 'remoteBranch', minutesAgo: 60 * 19 },
+    { ref: 'v4.2.0', kind: 'tag', minutesAgo: 60 * 24 * 5 },
+    { ref: 'v4.1.3', kind: 'tag', minutesAgo: 60 * 24 * 41 },
+    { ref: 'v4.0.0', kind: 'tag', minutesAgo: 60 * 24 * 190 }
+  ],
+  'ledger-api': [
+    { ref: 'trunk', kind: 'localBranch', minutesAgo: 52, current: true },
+    { ref: 'origin/trunk', kind: 'remoteBranch', minutesAgo: 41 },
+    { ref: 'v2.9.0', kind: 'tag', minutesAgo: 60 * 24 * 12 },
+    { ref: 'v2.8.4', kind: 'tag', minutesAgo: 60 * 24 * 33 },
+    // A wall of stale integration branches, which is what a long-lived
+    // repository looks like and what makes the cap worth showing.
+    ...Array.from({ length: 46 }, (_, index) => ({
+      ref: `origin/integration/batch-${String(index + 1).padStart(3, '0')}`,
+      kind: 'remoteBranch' as const,
+      minutesAgo: 60 * 24 * (index + 2)
+    }))
+  ]
+}
+
+/** Projects whose listing is deliberately capped, to exercise `truncated`. */
+const SEEDED_LIMITS: Record<string, number> = { 'ledger-api': 14 }
+
+const REFS_FOR_A_NEW_PROJECT: SeedRef[] = [
+  { ref: 'main', kind: 'localBranch', minutesAgo: 12, current: true },
+  { ref: 'origin/main', kind: 'remoteBranch', minutesAgo: 12 }
+]
+
+function startPointRow(seed: SeedRef): StartPoint {
+  const sha = fakeSha(seed.ref)
+  const namespace = seed.kind === 'tag' ? 'tags' : seed.kind === 'remoteBranch' ? 'remotes' : 'heads'
+  return {
+    ref: seed.ref,
+    kind: seed.kind,
+    sha,
+    shortSha: sha.slice(0, 7),
+    refName: `refs/${namespace}/${seed.ref}`,
+    isBase: false,
+    isCurrent: seed.current === true,
+    updatedAt: Math.round((Date.now() - seed.minutesAgo * 60_000) / 1000)
+  }
+}
+
+/** Marks the base ref, orders exactly as the runtime does, then applies the cap. */
+function capStartPoints(baseRef: string, rows: StartPoint[], limit: number): StartPointList {
+  const rank = (option: StartPoint): number => {
+    if (option.isBase) return 0
+    if (option.isCurrent) return 1
+    return { head: 2, localBranch: 3, remoteBranch: 4, tag: 5, commit: 6 }[option.kind]
+  }
+  const marked = rows.map((row) => (row.ref === baseRef ? { ...row, isBase: true } : row))
+  marked.sort((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt || a.ref.localeCompare(b.ref))
+  return { baseRef, options: marked.slice(0, limit), total: marked.length, limit, truncated: marked.length > limit }
+}
+
+/** Stable digits per ref name, so a row keeps its sha across refetches. */
+function fakeSha(ref: string): string {
+  let hash = 0x81_1c_9d_c5
+  for (const character of ref) hash = Math.imul(hash ^ character.charCodeAt(0), 0x01_00_01_93) >>> 0
+  let sha = ''
+  let state = hash
+  while (sha.length < 40) {
+    state = Math.imul(state ^ (state >>> 15), 0x25_45_f4_91) >>> 0
+    sha += state.toString(16).padStart(8, '0')
+  }
+  return sha.slice(0, 40)
 }
 
 function required<T>(value: T | undefined, what: string): T {
