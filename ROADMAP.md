@@ -84,6 +84,28 @@ stream replaces polling entirely.
 - [x] macOS, Linux, Windows path and process handling
 - [x] Packaged build
 
+## Known gaps
+
+Milestone 1 is complete and verified. These are the honest limits of what it does,
+recorded so none of them is discovered by surprise later.
+
+- **Terminals do not survive an app restart.** Sessions are in-process, so quitting
+  kills every shell. Stored pane layouts are reconciled on the way back up so no pane
+  ever points at a dead terminal, but the work itself is gone. Fixing it properly means
+  moving PTYs into a daemon that outlives the app.
+- **Git status goes stale during a long shell session.** It refreshes when a shell
+  starts or exits, which covers command boundaries, but an edit made mid-session does
+  not move the chips until that shell ends. The fix is a filesystem watcher in the
+  runtime publishing `worktrees`.
+- **Only macOS has been packaged and launched.** The Windows installer needs Windows or
+  wine; Linux cannot be packaged off Linux because node-pty has no Linux prebuild and
+  must be compiled. Both are configured, and a three-runner CI workflow exists but has
+  never been run.
+- **Windows behaviour is reasoned, not observed.** Command-line encoding is proved
+  against a reference `CommandLineToArgvW` parser rather than a live ConPTY, and the
+  process-tree kill is untested there. The POSIX equivalent is tested for real.
+- **The Windows CLI launcher is a batch shim**, not a native executable.
+
 ## Later
 
 Graph-based unified memory. Multi-user networking. Per-person attribution of work
