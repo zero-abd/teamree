@@ -126,8 +126,17 @@ export class TerminalSessionManager {
     return { terminal: session.snapshot(), layout: saved }
   }
 
-  write(terminalId: string, data: string): void {
-    this.require(terminalId).write(data)
+  /**
+   * Returns true when this write cleared the pane's restored badge, which is
+   * the one thing a keystroke changes that anyone else needs to hear about.
+   * Reported rather than published here, so the manager stays unaware of the
+   * workspace stream.
+   */
+  write(terminalId: string, data: string): boolean {
+    const session = this.require(terminalId)
+    const wasRestored = session.snapshot().restored !== undefined
+    session.write(data)
+    return wasRestored
   }
 
   resize(terminalId: string, cols: number, rows: number): Terminal {
@@ -246,7 +255,8 @@ export class TerminalSessionManager {
             rows: record.rows,
             ...(launch.command === undefined ? {} : { command: launch.command })
           },
-          record
+          record,
+          launch.resumed ? 'agent' : 'shell'
         )
         restored += 1
         if (launch.resumed) resumed += 1
@@ -314,7 +324,11 @@ export class TerminalSessionManager {
     await Promise.all(sessions.map((session) => session.close()))
   }
 
-  private startSession(params: ParamsOf<'terminal.create'>, restoring?: TerminalRecord): PtySession {
+  private startSession(
+    params: ParamsOf<'terminal.create'>,
+    restoring?: TerminalRecord,
+    restored?: 'shell' | 'agent'
+  ): PtySession {
     const cwd = params.cwd ?? this.options.resolveWorktreeCwd?.(params.worktreeId)
     if (cwd === undefined || cwd.length === 0) {
       throw invalidParams(`no cwd for worktree ${params.worktreeId}`)
@@ -336,6 +350,7 @@ export class TerminalSessionManager {
       ...(launch.command === undefined ? {} : { command: launch.command }),
       cols: params.cols ?? DEFAULT_COLS,
       rows: params.rows ?? DEFAULT_ROWS,
+      ...(restored === undefined ? {} : { restored }),
       ...(this.options.scrollbackCapBytes === undefined ? {} : { scrollbackCapBytes: this.options.scrollbackCapBytes })
     })
 

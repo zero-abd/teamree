@@ -194,6 +194,33 @@ describePty('restoring terminals across a restart', () => {
     expect((await readFile(marker, 'utf8')).trim().split('\n')).toEqual(['once'])
   }, 20_000)
 
+  it('says how each pane got here, and stops saying it once the user types', async () => {
+    const { checkout, binary } = await fakeAgent('claude')
+    const repositories = createRepositories()
+
+    const first = manager(repositories, checkout)
+    const agentPane = first.create({ worktreeId: 'wt_1', command: binary })
+    const plainPane = first.create({ worktreeId: 'wt_1', command: 'echo hello' })
+    // A pane opened now is not a restored one, whatever else is true of it.
+    expect(first.list('wt_1').every((terminal) => terminal.restored === undefined)).toBe(true)
+    await first.shutdown()
+
+    const second = manager(repositories, checkout)
+    second.restoreSessions()
+
+    const byId = new Map(second.list('wt_1').map((terminal) => [terminal.id, terminal]))
+    expect(byId.get(agentPane.id)?.restored).toBe('agent')
+    // The command was not re-run, so this one is honest about being new.
+    expect(byId.get(plainPane.id)?.restored).toBe('shell')
+
+    // Typing is the user taking the pane over, and the write says so, which is
+    // what lets the change stream retire the badge.
+    expect(second.write(agentPane.id, 'x')).toBe(true)
+    expect(second.list('wt_1').find((terminal) => terminal.id === agentPane.id)?.restored).toBeUndefined()
+    // A second keystroke has nothing left to announce.
+    expect(second.write(agentPane.id, 'y')).toBe(false)
+  }, 20_000)
+
   it('forgets a pane the user closed, so a restart does not reopen it', async () => {
     const { checkout, binary } = await fakeAgent('claude')
     const repositories = createRepositories()

@@ -108,6 +108,15 @@ export type Terminal = {
   /** False once the child process has exited; the pane stays until closed. */
   running: boolean
   exitCode?: number
+  /**
+   * How this terminal came back from a previous run, when it did. `agent` means
+   * a conversation was resumed; `shell` means the pane and its directory came
+   * back but whatever was running did not. Absent for a terminal opened now.
+   *
+   * It clears the moment the user types into the pane: by then they know what
+   * they are looking at, and a badge that never leaves is noise.
+   */
+  restored?: 'shell' | 'agent'
 }
 
 /**

@@ -54,6 +54,8 @@ export type PtySessionInit = {
   env?: NodeJS.ProcessEnv
   platform?: NodeJS.Platform
   scrollbackCapBytes?: number
+  /** Set when this session is a previous run's pane being brought back. */
+  restored?: 'shell' | 'agent'
 }
 
 export type TerminalEventListener = (event: TerminalEvent) => void
@@ -79,6 +81,7 @@ export class PtySession {
   private rows: number
   private running = true
   private exitCode: number | undefined
+  private restored: 'shell' | 'agent' | undefined
   /** Set when the child has been reaped but its output has not gone quiet. */
   private draining: { exitCode: number; cancelQuiet: () => void; cancelCeiling: () => void } | undefined
 
@@ -95,6 +98,7 @@ export class PtySession {
     this.pid = handle.pid
     this.scrollback = new ScrollbackBuffer(init.scrollbackCapBytes)
     this.title = initialTitle(init, platform)
+    this.restored = init.restored
 
     this.subscriptions.push(
       handle.onData((chunk) => this.receive(chunk)),
@@ -132,7 +136,8 @@ export class PtySession {
       cols: this.cols,
       rows: this.rows,
       running: this.running,
-      ...(this.exitCode === undefined ? {} : { exitCode: this.exitCode })
+      ...(this.exitCode === undefined ? {} : { exitCode: this.exitCode }),
+      ...(this.restored === undefined ? {} : { restored: this.restored })
     }
   }
 
@@ -154,6 +159,9 @@ export class PtySession {
     if (!this.running || this.draining) {
       throw new TerminalServiceError(ErrorCode.Conflict, `terminal ${this.id} has exited`)
     }
+    // Typing into a restored pane is the user taking it over; the badge has
+    // said what it had to say by then.
+    this.restored = undefined
     this.pty.write(data)
   }
 

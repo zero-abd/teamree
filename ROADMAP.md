@@ -130,7 +130,8 @@ disk under a session id.
       stored pane trees need no rewriting
 - [x] Agent panes resume; every other command is dropped for a plain shell,
       because restarting the app is not a request to run a deploy again
-- [ ] Surfacing in the GUI which panes resumed and which came back fresh
+- [x] The pane says how it got here — resumed, or a new shell — until the user
+      types into it, at which point the badge has said what it had to
 
 ## Known gaps
 
