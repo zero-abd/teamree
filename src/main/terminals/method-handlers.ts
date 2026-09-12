@@ -97,6 +97,7 @@ export type TerminalService = {
   /** Kills every PTY. Call before the app quits. */
   shutdown: () => Promise<void>
   /** Drops stored pane leaves whose terminal is gone. Call once at startup. */
+  restoreSessions: () => { restored: number; resumed: number }
   reconcileLayouts: () => number
   /** Escape hatch for callers that need more than the method surface. */
   manager: TerminalSessionManager
@@ -138,6 +139,7 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
     schemas: terminalMethodSchemas,
     unsubscribe: (subscription) => manager.unsubscribe(subscription),
     shutdown: () => manager.shutdown(),
+    restoreSessions: () => manager.restoreSessions(),
     reconcileLayouts: () => manager.reconcileLayouts(),
     manager
   }

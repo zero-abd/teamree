@@ -35,7 +35,7 @@ describe('workspace store', () => {
 
   it('starts empty when the file does not exist', async () => {
     const store = await WorkspaceStore.open(filePath)
-    expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [] })
+    expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [], terminals: [] })
   })
 
   it('writes through a temp file and leaves none behind', async () => {
@@ -70,7 +70,7 @@ describe('workspace store', () => {
 
     const store = await WorkspaceStore.open(corruptPath)
 
-    expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [] })
+    expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [], terminals: [] })
     store.putProject(project)
     await store.flush()
     expect(JSON.parse(await readFile(corruptPath, 'utf8'))).toMatchObject({ projects: [project] })
@@ -104,6 +104,6 @@ describe('workspace store', () => {
 
     expect(store.removeProject('p1')).toBe(true)
     expect(store.removeProject('p1')).toBe(false)
-    expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [] })
+    expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [], terminals: [] })
   })
 })

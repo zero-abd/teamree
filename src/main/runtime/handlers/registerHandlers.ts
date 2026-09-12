@@ -51,10 +51,15 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
     // Terminals open in their worktree's checkout, so the store is the authority
     // on where that is.
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
-    layouts: registry.context.store
+    layouts: registry.context.store,
+    sessions: registry.context.store
   })
-  // Layouts outlive the app; the terminals they point at do not. Reconciling on
-  // the way up is what stops the UI rendering panes bound to dead terminals.
+  // Terminals first: each recorded one comes back under the id its panes
+  // already name, and an agent pane comes back with its conversation resumed.
+  terminals.restoreSessions()
+  // Then the layouts, for whatever did not come back — a worktree deleted while
+  // the app was closed, a shell that no longer exists. Without this the UI
+  // renders panes bound to dead ids.
   terminals.reconcileLayouts()
   registerTerminalHandlers(registry, terminals)
   // Wraps the handlers just registered, so every terminal and layout change

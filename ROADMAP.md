@@ -116,15 +116,33 @@ Tabs stop being a way to navigate somewhere around the sixth one.
 - [x] The same chord closes it, arrows and Enter drive it, the mouse agrees
       with the keyboard about what is selected
 
+## M10 — Picking a session back up
+
+A PTY is a child process, so quitting ends it. For a coding agent that was
+never the valuable part: the conversation is, and the agent already keeps it on
+disk under a session id.
+
+- [x] A durable record per terminal: worktree, directory, shell, and the agent
+      session it was running
+- [x] A session id pinned at launch where the agent's CLI allows one, so the
+      next launch has an id to resume rather than a guess to make
+- [x] Startup relaunches each recorded pane under its own terminal id, so
+      stored pane trees need no rewriting
+- [x] Agent panes resume; every other command is dropped for a plain shell,
+      because restarting the app is not a request to run a deploy again
+- [ ] Surfacing in the GUI which panes resumed and which came back fresh
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,
 recorded so none of them is discovered by surprise later.
 
-- **Terminals do not survive an app restart.** Sessions are in-process, so quitting
-  kills every shell. Stored pane layouts are reconciled on the way back up so no pane
-  ever points at a dead terminal, but the work itself is gone. Fixing it properly means
-  moving PTYs into a daemon that outlives the app.
+- **A restarted shell is a fresh shell.** Panes and their directories come back, and
+  an agent pane comes back with its conversation (see M10), but an ordinary pane's
+  scrollback and whatever it was running are gone: the PTY died with the app. A
+  command is never re-issued unless it resumes something, so a pane left on a deploy
+  or a migration comes back as a shell rather than running it twice. Keeping the
+  process itself alive would mean moving PTYs into a daemon that outlives the app.
 - **Only macOS has been packaged and launched.** The Windows installer needs Windows or
   wine; Linux cannot be packaged off Linux because node-pty has no Linux prebuild and
   must be compiled. Both are configured, and a three-runner CI workflow exists but has

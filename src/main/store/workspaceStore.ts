@@ -4,6 +4,7 @@
 // writes are coalesced so a burst of mutations costs one rename.
 
 import type { Layout, Project, Worktree } from '../../shared/entities'
+import type { TerminalRecord } from '../terminals/session-restore'
 import { samePath } from '../git/pathIdentity'
 import { readJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
 import { emptyWorkspaceDocument, parseWorkspaceDocument, type WorkspaceDocument } from './workspaceDocument'
@@ -12,12 +13,14 @@ export type WorkspaceSnapshot = {
   projects: Project[]
   worktrees: Worktree[]
   layouts: Layout[]
+  terminals: TerminalRecord[]
 }
 
 export class WorkspaceStore {
   private readonly projects = new Map<string, Project>()
   private readonly worktrees = new Map<string, Worktree>()
   private readonly layouts = new Map<string, Layout>()
+  private readonly terminals = new Map<string, TerminalRecord>()
 
   private queue: Promise<void> = Promise.resolve()
   private queued = false
@@ -30,6 +33,7 @@ export class WorkspaceStore {
     for (const project of document.projects) this.projects.set(project.id, project)
     for (const worktree of document.worktrees) this.worktrees.set(worktree.id, worktree)
     for (const layout of document.layouts) this.layouts.set(layout.worktreeId, layout)
+    for (const terminal of document.terminals) this.terminals.set(terminal.id, terminal)
   }
 
   /** Opens the file if it is readable, and starts empty if it is not. */
@@ -109,8 +113,33 @@ export class WorkspaceStore {
     return layout
   }
 
+  /**
+   * Terminal records, which are descriptions rather than live terminals: the
+   * PTY they name died with the process that started it.
+   */
+  listTerminals(): TerminalRecord[] {
+    return [...this.terminals.values()]
+  }
+
+  putTerminal(terminal: TerminalRecord): TerminalRecord {
+    this.terminals.set(terminal.id, terminal)
+    this.persist()
+    return terminal
+  }
+
+  removeTerminal(terminalId: string): boolean {
+    const removed = this.terminals.delete(terminalId)
+    if (removed) this.persist()
+    return removed
+  }
+
   snapshot(): WorkspaceSnapshot {
-    return { projects: this.listProjects(), worktrees: this.listWorktrees(), layouts: [...this.layouts.values()] }
+    return {
+      projects: this.listProjects(),
+      worktrees: this.listWorktrees(),
+      layouts: [...this.layouts.values()],
+      terminals: this.listTerminals()
+    }
   }
 
   /** Waits for every scheduled write and surfaces the last write failure once. */

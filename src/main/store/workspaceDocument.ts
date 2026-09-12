@@ -5,6 +5,8 @@
 
 import { z } from 'zod'
 import type { Layout, PaneNode, Project, Worktree } from '../../shared/entities'
+import { AGENT_KINDS } from '../terminals/agent-command'
+import type { TerminalRecord } from '../terminals/session-restore'
 
 export const WORKSPACE_DOCUMENT_VERSION = 1
 
@@ -45,15 +47,33 @@ const LayoutSchema = z.object({
   focusedTerminalId: z.string().min(1).nullable()
 })
 
+/**
+ * A terminal as it outlives the process that ran it. The PTY is gone on the
+ * next launch; this is what startup rebuilds a pane from.
+ */
+const TerminalRecordSchema = z.object({
+  id: z.string().min(1),
+  worktreeId: z.string().min(1),
+  cwd: z.string().min(1),
+  shell: z.string().min(1),
+  command: z.string().min(1).optional(),
+  agent: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
+  agentSessionId: z.string().min(1).optional(),
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+  createdAt: z.number()
+})
+
 export type WorkspaceDocument = {
   version: number
   projects: Project[]
   worktrees: Worktree[]
   layouts: Layout[]
+  terminals: TerminalRecord[]
 }
 
 export function emptyWorkspaceDocument(): WorkspaceDocument {
-  return { version: WORKSPACE_DOCUMENT_VERSION, projects: [], worktrees: [], layouts: [] }
+  return { version: WORKSPACE_DOCUMENT_VERSION, projects: [], worktrees: [], layouts: [], terminals: [] }
 }
 
 /**
@@ -68,7 +88,8 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     version: WORKSPACE_DOCUMENT_VERSION,
     projects: salvage(record.projects, ProjectSchema),
     worktrees: salvage(record.worktrees, WorktreeSchema),
-    layouts: salvage(record.layouts, LayoutSchema)
+    layouts: salvage(record.layouts, LayoutSchema),
+    terminals: salvage(record.terminals, TerminalRecordSchema) as TerminalRecord[]
   }
 }
 

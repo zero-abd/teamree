@@ -9,7 +9,9 @@ import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
 import type { Layout, PaneNode, Terminal } from '../../shared/entities'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
+import { detectAgent, newSessionId, pinSessionCommand, pinsOwnSessionId, type AgentKind } from './agent-command'
 import { appendPane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
+import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { PtySession } from './pty-session'
 import { invalidParams, notFound } from './service-error'
 import { resolveLoginShell } from './shell-environment'
@@ -40,6 +42,17 @@ export type LayoutRepository = {
   listLayouts?(): Layout[]
 }
 
+/**
+ * Where terminal records live between launches. Optional for the same reason
+ * layouts are: an in-memory manager has nothing to restore from and should not
+ * have to pretend otherwise.
+ */
+export type SessionRepository = {
+  listTerminals(): TerminalRecord[]
+  putTerminal(record: TerminalRecord): TerminalRecord
+  removeTerminal(terminalId: string): boolean
+}
+
 export type TerminalSessionManagerOptions = {
   /**
    * Where a terminal starts when terminal.create omits `cwd`: the worktree's
@@ -47,6 +60,8 @@ export type TerminalSessionManagerOptions = {
    */
   resolveWorktreeCwd?: (worktreeId: string) => string | undefined
   layouts?: LayoutRepository
+  /** Pass the workspace store and terminals come back after a restart. */
+  sessions?: SessionRepository
   /**
    * Delivers events for subscriptions opened through subscribe(). Ignored when
    * the caller attaches streams itself via attachStream().
@@ -64,9 +79,11 @@ export class TerminalSessionManager {
   private readonly streams = new Map<string, Set<AttachedStream>>()
   private readonly ownSubscriptions = new Map<string, { terminalId: string; end: () => void }>()
   private readonly layouts: LayoutRepository
+  private readonly records: SessionRepository
 
   constructor(private readonly options: TerminalSessionManagerOptions = {}) {
     this.layouts = options.layouts ?? new InMemoryLayoutRepository()
+    this.records = options.sessions ?? new InMemorySessionRepository()
   }
 
   list(worktreeId?: string): Terminal[] {
@@ -130,6 +147,9 @@ export class TerminalSessionManager {
   async close(terminalId: string): Promise<void> {
     const session = this.require(terminalId)
     this.sessions.delete(terminalId)
+    // Closing a pane is the user saying they are done with it, so the record
+    // goes too: a restart must not bring back what was deliberately shut.
+    this.records.removeTerminal(terminalId)
     this.endStreamsFor(terminalId)
 
     const layout = this.layoutFor(session.worktreeId)
@@ -191,6 +211,55 @@ export class TerminalSessionManager {
   }
 
   /**
+   * Brings back the terminals of the last run, before layouts are reconciled.
+   *
+   * Each record keeps its own terminal id, so the stored pane trees still point
+   * at the terminals they always did and no layout has to be rewritten. What
+   * comes back is not the old process — that died with the app — but a shell in
+   * the same worktree, and for an agent pane, the same conversation resumed.
+   *
+   * A worktree that has gone takes its terminals with it, and anything that
+   * fails to start is simply left out; the reconciliation that follows drops
+   * the panes pointing at whatever did not come back.
+   *
+   * Returns how many terminals were restored, and how many of those resumed a
+   * conversation rather than opening a fresh shell.
+   */
+  restoreSessions(): { restored: number; resumed: number } {
+    const records = restorableRecords(this.records.listTerminals(), (worktreeId) => {
+      const cwd = this.options.resolveWorktreeCwd?.(worktreeId)
+      return cwd !== undefined && cwd.length > 0 && isDirectory(cwd)
+    })
+
+    let restored = 0
+    let resumed = 0
+    for (const record of records) {
+      if (this.sessions.has(record.id)) continue
+      const launch = restoreLaunch(record)
+      try {
+        this.startSession(
+          {
+            worktreeId: record.worktreeId,
+            cwd: record.cwd,
+            shell: record.shell,
+            cols: record.cols,
+            rows: record.rows,
+            ...(launch.command === undefined ? {} : { command: launch.command })
+          },
+          record
+        )
+        restored += 1
+        if (launch.resumed) resumed += 1
+      } catch {
+        // One terminal that cannot start — a shell that is gone, a directory
+        // that moved — must not cost the others their restore.
+        this.records.removeTerminal(record.id)
+      }
+    }
+    return { restored, resumed }
+  }
+
+  /**
    * Drops pane leaves whose terminal no longer exists. Layouts are durable but
    * terminals are not, so every stored layout is stale the moment the app
    * restarts; without this the UI renders panes bound to dead ids.
@@ -245,25 +314,54 @@ export class TerminalSessionManager {
     await Promise.all(sessions.map((session) => session.close()))
   }
 
-  private startSession(params: ParamsOf<'terminal.create'>): PtySession {
+  private startSession(params: ParamsOf<'terminal.create'>, restoring?: TerminalRecord): PtySession {
     const cwd = params.cwd ?? this.options.resolveWorktreeCwd?.(params.worktreeId)
     if (cwd === undefined || cwd.length === 0) {
       throw invalidParams(`no cwd for worktree ${params.worktreeId}`)
     }
     if (!isDirectory(cwd)) throw notFound(`cwd is not a directory: ${cwd}`)
 
+    const shell = params.shell ?? resolveLoginShell()
+    // A command that launches a known agent gets a session id chosen now, so
+    // the next launch has something to resume rather than something to guess.
+    // A restore arrives with its command already settled and must not be
+    // rewritten again.
+    const launch = restoring ? { command: params.command } : pinAgentSession(params.command)
+
     const session = PtySession.start({
-      id: `term_${this.nextId()}`,
+      id: restoring?.id ?? `term_${this.nextId()}`,
       worktreeId: params.worktreeId,
       cwd,
-      shell: params.shell ?? resolveLoginShell(),
-      ...(params.command === undefined ? {} : { command: params.command }),
+      shell,
+      ...(launch.command === undefined ? {} : { command: launch.command }),
       cols: params.cols ?? DEFAULT_COLS,
       rows: params.rows ?? DEFAULT_ROWS,
       ...(this.options.scrollbackCapBytes === undefined ? {} : { scrollbackCapBytes: this.options.scrollbackCapBytes })
     })
 
     this.sessions.set(session.id, session)
+    const snapshot = session.snapshot()
+    this.records.putTerminal({
+      id: session.id,
+      worktreeId: session.worktreeId,
+      cwd,
+      shell,
+      // The record keeps the *original* launch of an agent, not the resume
+      // form: the pinned id is what identifies the conversation, and rewriting
+      // the record on every restart would stack one selector on the next.
+      ...(restoring?.command === undefined
+        ? launch.command === undefined
+          ? {}
+          : { command: launch.command }
+        : { command: restoring.command }),
+      ...((restoring?.agent ?? launch.agent) ? { agent: restoring?.agent ?? launch.agent } : {}),
+      ...((restoring?.agentSessionId ?? launch.agentSessionId)
+        ? { agentSessionId: restoring?.agentSessionId ?? launch.agentSessionId }
+        : {}),
+      cols: snapshot.cols,
+      rows: snapshot.rows,
+      createdAt: restoring?.createdAt ?? Date.now()
+    })
     return session
   }
 
@@ -317,6 +415,49 @@ class InMemoryLayoutRepository implements LayoutRepository {
   putLayout(layout: Layout): Layout {
     this.layouts.set(layout.worktreeId, layout)
     return layout
+  }
+}
+
+/**
+ * Gives an agent command a session id we can resume later.
+ *
+ * Only the agents that let a caller choose their id get one; the rest mint
+ * their own, and the record simply remembers which agent it was so the restore
+ * can ask for that agent's most recent session in this directory instead.
+ */
+function pinAgentSession(command: string | undefined): {
+  command?: string
+  agent?: AgentKind
+  agentSessionId?: string
+} {
+  if (command === undefined) return {}
+  const agent = detectAgent(command)
+  if (agent === null) return { command }
+  if (!pinsOwnSessionId(agent)) return { command, agent }
+
+  const agentSessionId = newSessionId()
+  const pinned = pinSessionCommand(command, agent, agentSessionId)
+  // The command came back untouched, which means it already named a session of
+  // its own. That choice is the caller's, so nothing is recorded to override it.
+  if (pinned === command) return { command, agent }
+  return { command: pinned, agent, agentSessionId }
+}
+
+/** Records nothing worth keeping: an in-memory manager has no next launch. */
+class InMemorySessionRepository implements SessionRepository {
+  private readonly records = new Map<string, TerminalRecord>()
+
+  listTerminals(): TerminalRecord[] {
+    return [...this.records.values()]
+  }
+
+  putTerminal(record: TerminalRecord): TerminalRecord {
+    this.records.set(record.id, record)
+    return record
+  }
+
+  removeTerminal(terminalId: string): boolean {
+    return this.records.delete(terminalId)
   }
 }
 
