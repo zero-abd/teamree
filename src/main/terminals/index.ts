@@ -1,11 +1,7 @@
 // Public surface of the terminal service. The runtime imports from here.
 // The wiring itself is spelled out at the top of method-handlers.ts.
 
-export {
-  createTerminalService,
-  registerTerminalHandlers,
-  terminalMethodSchemas
-} from './method-handlers'
+export { createTerminalService, registerTerminalHandlers, terminalMethodSchemas } from './method-handlers'
 export type {
   MethodRegistry,
   StreamChannel,

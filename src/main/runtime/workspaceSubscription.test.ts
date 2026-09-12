@@ -89,7 +89,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
   const dispatch: Dispatcher = createDispatcher(registry)
   let requestId = 0
 
-  const call = async <T,>(connectionId: string, method: string, params: unknown = {}): Promise<T> => {
+  const call = async <T>(connectionId: string, method: string, params: unknown = {}): Promise<T> => {
     requestId += 1
     const response = (await dispatch({ id: `r${requestId}`, method, params }, { connectionId })) as Response
     if (!response.ok) throw new Error(`${method} failed: ${response.error.code} ${response.error.message}`)
@@ -144,8 +144,10 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 /** Longer than the coalescing window, so "nothing more arrived" means it. */
 const settle = (): Promise<void> => sleep(150)
 
-const has = (type: WorkspaceEvent['type']) => (events: WorkspaceEvent[]): boolean =>
-  events.some((event) => event.type === type)
+const has =
+  (type: WorkspaceEvent['type']) =>
+  (events: WorkspaceEvent[]): boolean =>
+    events.some((event) => event.type === type)
 
 const countOf = (events: WorkspaceEvent[], type: WorkspaceEvent['type']): number =>
   events.filter((event) => event.type === type).length

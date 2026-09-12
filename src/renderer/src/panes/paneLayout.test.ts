@@ -124,10 +124,7 @@ describe('splitPane', () => {
       kind: 'split',
       direction: 'row',
       sizes: [0.5, 0.5],
-      children: [
-        leaf('a'),
-        { kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [leaf('b'), leaf('c')] }
-      ]
+      children: [leaf('a'), { kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [leaf('b'), leaf('c')] }]
     }
     expect(collectTerminalIds(splitPane(start, 'c', 'row', 'd'))).toEqual(['a', 'b', 'c', 'd'])
   })
@@ -185,10 +182,7 @@ describe('setSizesAt', () => {
       kind: 'split',
       direction: 'row',
       sizes: [0.5, 0.5],
-      children: [
-        leaf('a'),
-        { kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [leaf('b'), leaf('c')] }
-      ]
+      children: [leaf('a'), { kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [leaf('b'), leaf('c')] }]
     }
     const root = setSizesAt(start, [1], [0.7, 0.3])
     if (root.kind === 'split' && root.children[1]?.kind === 'split') {

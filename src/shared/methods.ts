@@ -3,7 +3,16 @@
 // the CLI are all typed from one declaration and cannot drift apart.
 
 import { z } from 'zod'
-import type { Layout, PaneNode, Project, RuntimeStatus, StartPointList, Terminal, Worktree, WorktreeStatus } from './entities'
+import type {
+  Layout,
+  PaneNode,
+  Project,
+  RuntimeStatus,
+  StartPointList,
+  Terminal,
+  Worktree,
+  WorktreeStatus
+} from './entities'
 
 export const Params = {
   statusGet: z.object({}),
@@ -110,7 +119,7 @@ export type MethodContract = {
 
   'workspace.subscribe': { params: z.infer<typeof Params.workspaceSubscribe>; result: { subscription: string } }
 
-  'unsubscribe': { params: z.infer<typeof Params.unsubscribe>; result: { unsubscribed: true } }
+  unsubscribe: { params: z.infer<typeof Params.unsubscribe>; result: { unsubscribed: true } }
 }
 
 export type MethodName = keyof MethodContract

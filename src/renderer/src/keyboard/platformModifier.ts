@@ -58,9 +58,7 @@ export type ModifierState = {
 
 /** True when the app modifier is held and the foreign modifier is not. */
 export function holdsModifier(event: ModifierState, modifier: PlatformModifier): boolean {
-  return modifier.eventFlag === 'metaKey'
-    ? event.metaKey && !event.ctrlKey
-    : event.ctrlKey && !event.metaKey
+  return modifier.eventFlag === 'metaKey' ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
 }
 
 export type Chord = {
@@ -70,7 +68,11 @@ export type Chord = {
   alt?: boolean
 }
 
-export function matchesChord(event: ModifierState & { key: string }, chord: Chord, modifier: PlatformModifier): boolean {
+export function matchesChord(
+  event: ModifierState & { key: string },
+  chord: Chord,
+  modifier: PlatformModifier
+): boolean {
   if (!holdsModifier(event, modifier)) return false
   if (event.shiftKey !== Boolean(chord.shift)) return false
   if (event.altKey !== Boolean(chord.alt)) return false

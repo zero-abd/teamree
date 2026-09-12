@@ -72,9 +72,7 @@ export function publishTerminalEvents(
   registry.register('terminal.close', schemas['terminal.close'], async (params, call) => {
     // Read before closing: afterwards the session is gone and with it the only
     // record of which worktree's layout just changed.
-    const worktreeId = terminals.manager
-      .list()
-      .find((terminal) => terminal.id === params.terminalId)?.worktreeId
+    const worktreeId = terminals.manager.list().find((terminal) => terminal.id === params.terminalId)?.worktreeId
     const result = await handlers['terminal.close'](params, call)
     bus.emit({ type: 'terminals' })
     if (worktreeId !== undefined) bus.emit({ type: 'layout', worktreeId })

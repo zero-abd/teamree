@@ -27,7 +27,9 @@ export function commandGroups(): string[] {
 }
 
 export function findCommand(path: readonly string[]): CommandSpec | undefined {
-  return COMMANDS.find((spec) => spec.path.length === path.length && spec.path.every((word, index) => word === path[index]))
+  return COMMANDS.find(
+    (spec) => spec.path.length === path.length && spec.path.every((word, index) => word === path[index])
+  )
 }
 
 export type Resolution =
@@ -51,7 +53,8 @@ export function scanCommandWords(tokens: readonly string[]): { word: string; ind
       const inline = token.includes('=')
       const head = inline ? token.slice(0, token.indexOf('=')) : token
       const spec = GLOBAL_FLAGS.find(
-        (candidate) => `--${candidate.name}` === head || (candidate.alias !== undefined && `-${candidate.alias}` === head)
+        (candidate) =>
+          `--${candidate.name}` === head || (candidate.alias !== undefined && `-${candidate.alias}` === head)
       )
       if (spec && spec.kind !== 'boolean' && !inline) index += 1
       continue
@@ -100,7 +103,9 @@ export function parseCommand(spec: CommandSpec, tokens: readonly string[]): Pars
   }
   if (parsed.positionals.length > args.length) {
     throw new UsageError(
-      `${spec.path.join(' ')} takes ${args.length} argument${args.length === 1 ? '' : 's'}, got ${parsed.positionals.length}.`,
+      `${spec.path.join(' ')} takes ${args.length} argument${
+        args.length === 1 ? '' : 's'
+      }, got ${parsed.positionals.length}.`,
       `Unexpected: ${parsed.positionals.slice(args.length).join(' ')}`
     )
   }

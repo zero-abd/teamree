@@ -162,7 +162,10 @@ async function readRefs(
 async function readRemotes(runner: GitRunner, root: string): Promise<string[]> {
   const result = await runner.tryRun({ args: ['remote'], cwd: root, readOnly: true, timeoutMs: 30_000 })
   if (result.exitCode !== 0) return []
-  return result.stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+  return result.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
 }
 
 function kindOf(refName: string): StartPointKind {
@@ -211,9 +214,13 @@ export async function resolveStartPoint(
 async function resolveHead(runner: GitRunner, root: string, signal?: AbortSignal): Promise<ResolvedStartPoint> {
   const sha = await revParse(runner, root, 'HEAD', signal)
   if (!sha) {
-    throw new GitServiceError(ErrorCode.NotFound, 'HEAD does not point at a commit yet; this repository has no history', {
-      requested: 'HEAD'
-    })
+    throw new GitServiceError(
+      ErrorCode.NotFound,
+      'HEAD does not point at a commit yet; this repository has no history',
+      {
+        requested: 'HEAD'
+      }
+    )
   }
   const branch = await runner.tryRun({ args: ['symbolic-ref', '--short', 'HEAD'], cwd: root, readOnly: true, signal })
   const on = branch.exitCode === 0 && branch.stdout.trim() ? ` (on ${branch.stdout.trim()})` : ' (detached)'
@@ -364,11 +371,9 @@ async function resolveAsCommit(
   const sha = result.stdout.trim()
   if (result.exitCode !== 0 || !sha) {
     if (/ambiguous/i.test(result.stderr)) {
-      throw new GitServiceError(
-        ErrorCode.Conflict,
-        `"${requested}" matches more than one object; use a longer sha`,
-        { requested }
-      )
+      throw new GitServiceError(ErrorCode.Conflict, `"${requested}" matches more than one object; use a longer sha`, {
+        requested
+      })
     }
     return null
   }

@@ -67,7 +67,11 @@ describe('buildPickerModel grouping', () => {
   })
 
   it('preserves the order the runtime returned within each group', () => {
-    const unsorted = list([option('zeta', 'localBranch'), option('alpha', 'localBranch'), option('middle', 'localBranch')])
+    const unsorted = list([
+      option('zeta', 'localBranch'),
+      option('alpha', 'localBranch'),
+      option('middle', 'localBranch')
+    ])
     const model = buildPickerModel(unsorted, '')
     expect(model.groups[0]!.rows.map((row) => row.option.ref)).toEqual(['zeta', 'alpha', 'middle'])
   })

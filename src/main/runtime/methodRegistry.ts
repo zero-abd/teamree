@@ -33,11 +33,7 @@ export class MethodRegistry {
    * placeholders are installed first and real handlers overwrite them as they
    * land, so a half-built runtime still answers every method in the contract.
    */
-  register<M extends MethodName>(
-    method: M,
-    schema: z.ZodType<ParamsOf<M>>,
-    handler: MethodHandler<M>
-  ): void {
+  register<M extends MethodName>(method: M, schema: z.ZodType<ParamsOf<M>>, handler: MethodHandler<M>): void {
     this.entries.set(method, {
       method,
       schema: schema as unknown as z.ZodType<unknown>,

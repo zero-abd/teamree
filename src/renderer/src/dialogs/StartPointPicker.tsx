@@ -272,7 +272,8 @@ function StartPointStatus({
   if (state.phase === 'error') {
     return (
       <>
-        <span className="combo__warn">Could not list refs — {startPointErrorText(state.message)}</span> Type a ref or sha instead.{' '}
+        <span className="combo__warn">Could not list refs — {startPointErrorText(state.message)}</span> Type a ref or
+        sha instead.{' '}
         <button type="button" className="button button--ghost button--tiny" onClick={onReload}>
           Retry
         </button>

@@ -15,7 +15,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "lint": "oxlint src",
-    "format": "oxfmt --write .",
+    "format": "oxfmt -c=.oxfmtrc.json .",
     "smoke": "npm run build && electron scripts/smoke.mjs",
     "postinstall": "node scripts/fix-pty-permissions.mjs",
     "test:watch": "vitest",
@@ -26,7 +26,8 @@
     "package:win": "npm run build && electron-builder --win --publish never",
     "package:linux": "npm run build && electron-builder --linux --publish never",
     "package:dir": "npm run build && electron-builder --dir --publish never",
-    "package:verify": "node scripts/verify-package.mjs"
+    "package:verify": "node scripts/verify-package.mjs",
+    "format:check": "oxfmt --check -c=.oxfmtrc.json ."
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

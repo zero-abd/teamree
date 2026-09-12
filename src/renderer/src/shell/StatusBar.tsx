@@ -18,9 +18,7 @@ const CONNECTION_LABEL: Record<string, string> = {
 export function StatusBar({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
   const connection = useWorkspaceStore((state) => state.connection)
   const runtimeVersion = useWorkspaceStore((state) => state.runtimeVersion)
-  const worktree = useWorkspaceStore((state) =>
-    state.worktrees.find((entry) => entry.id === state.activeWorktreeId)
-  )
+  const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
   const layout = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
   )

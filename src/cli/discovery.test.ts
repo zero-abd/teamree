@@ -35,9 +35,9 @@ describe('userDataDir', () => {
     )
     expect(userDataDir({ platform: 'linux', env: {}, home: '/home/dev' })).toBe('/home/dev/.config/teamree')
     expect(userDataDir({ platform: 'linux', env: { XDG_CONFIG_HOME: '/xdg' }, home: '/home/dev' })).toBe('/xdg/teamree')
-    expect(userDataDir({ platform: 'win32', env: { APPDATA: 'C:\\Users\\dev\\AppData\\Roaming' }, home: 'C:\\Users\\dev' })).toContain(
-      'teamree'
-    )
+    expect(
+      userDataDir({ platform: 'win32', env: { APPDATA: 'C:\\Users\\dev\\AppData\\Roaming' }, home: 'C:\\Users\\dev' })
+    ).toContain('teamree')
     expect(userDataDir({ platform: 'win32', env: {}, home: 'C:/Users/dev' })).toContain('Roaming')
   })
 
@@ -47,7 +47,7 @@ describe('userDataDir', () => {
 })
 
 describe('discoveryPath', () => {
-  it('sits in the user data dir under the runtime\'s own file name', () => {
+  it("sits in the user data dir under the runtime's own file name", () => {
     expect(discoveryPath({ platform: 'linux', env: {}, home: '/home/dev' })).toBe(
       `/home/dev/.config/teamree/${DISCOVERY_FILE_NAME}`
     )

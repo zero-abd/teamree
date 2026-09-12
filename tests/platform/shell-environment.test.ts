@@ -69,7 +69,10 @@ describe('quoteWindowsArgument', () => {
   }
 
   it('round-trips through the documented parser', () => {
-    for (const argv of [['a b', 'c"d', 'e\\', '', 'f\\\\g'], ['--flag', 'value with "quotes" and \\slashes\\']]) {
+    for (const argv of [
+      ['a b', 'c"d', 'e\\', '', 'f\\\\g'],
+      ['--flag', 'value with "quotes" and \\slashes\\']
+    ]) {
       expect(parseWindowsCommandLine(encodeWindowsCommandLine(argv))).toEqual(argv)
     }
   })

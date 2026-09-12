@@ -268,7 +268,9 @@ describePty('terminal handlers', () => {
       const terminal = await newTerminal(service)
       await service.handlers['terminal.close']({ terminalId: terminal.id })
 
-      const failure = await service.handlers['terminal.read']({ terminalId: terminal.id }).catch((error: unknown) => error)
+      const failure = await service.handlers['terminal.read']({ terminalId: terminal.id }).catch(
+        (error: unknown) => error
+      )
       expect(isTerminalServiceError(failure)).toBe(true)
       expect(isTerminalServiceError(failure) ? failure.code : undefined).toBe(ErrorCode.NotFound)
     },
@@ -303,9 +305,7 @@ describePty('terminal handlers', () => {
 
       let grandchild = 0
       await waitUntil(() => {
-        const text = published
-          .map((entry) => (entry.event.type === 'data' ? entry.event.data : ''))
-          .join('')
+        const text = published.map((entry) => (entry.event.type === 'data' ? entry.event.data : '')).join('')
         grandchild = Number(/child:(\d+)/.exec(text)?.[1] ?? 0)
         return grandchild > 0
       }, 'the grandchild pid')
@@ -362,11 +362,13 @@ describe('layout handlers', () => {
 
   it('accepts an empty layout', async () => {
     const service = createTerminalService()
-    expect(await service.handlers['layout.set']({ worktreeId: WORKTREE, root: null, focusedTerminalId: null })).toEqual({
-      worktreeId: WORKTREE,
-      root: null,
-      focusedTerminalId: null
-    })
+    expect(await service.handlers['layout.set']({ worktreeId: WORKTREE, root: null, focusedTerminalId: null })).toEqual(
+      {
+        worktreeId: WORKTREE,
+        root: null,
+        focusedTerminalId: null
+      }
+    )
   })
 
   it('rejects a tree that is not a tree', async () => {

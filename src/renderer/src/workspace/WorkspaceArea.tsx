@@ -15,9 +15,7 @@ export function WorkspaceArea({
   isAppChord: (event: KeyboardEvent) => boolean
 }): React.JSX.Element {
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
-  const worktree = useWorkspaceStore((state) =>
-    state.worktrees.find((entry) => entry.id === state.activeWorktreeId)
-  )
+  const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
   const layout = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
   )
@@ -42,8 +40,7 @@ export function WorkspaceArea({
         <div className="placeholder">
           <h1 className="placeholder__title">Nothing open</h1>
           <p className="placeholder__body">
-            Pick a worktree on the left, or start a new one with{' '}
-            <kbd>{shortcutHint('new-worktree', modifier)}</kbd>.
+            Pick a worktree on the left, or start a new one with <kbd>{shortcutHint('new-worktree', modifier)}</kbd>.
           </p>
           <dl className="legend">
             <div>

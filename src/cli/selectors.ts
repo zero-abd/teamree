@@ -53,11 +53,7 @@ export function pathComparisonKey(input: string): string {
 
 export type SelectorTier = 'id' | 'name' | 'path' | 'id-prefix' | 'alias'
 
-export function selectOne<T extends Selectable>(
-  kind: string,
-  token: string,
-  items: readonly T[]
-): T {
+export function selectOne<T extends Selectable>(kind: string, token: string, items: readonly T[]): T {
   const lower = token.toLowerCase()
   const tokenPath = pathComparisonKey(token)
 
@@ -87,7 +83,8 @@ export function selectOne<T extends Selectable>(
     code: 'not_found',
     message: `No ${kind} matches "${token}".`,
     exitCode: ExitCode.Failure,
-    hint: items.length === 0 ? `No ${kind}s exist yet.` : `Known ${kind}s: ${items.map((item) => item.name).join(', ')}.`,
+    hint:
+      items.length === 0 ? `No ${kind}s exist yet.` : `Known ${kind}s: ${items.map((item) => item.name).join(', ')}.`,
     data: { known: items.map((item) => ({ id: item.id, name: item.name, path: item.path })) }
   })
 }

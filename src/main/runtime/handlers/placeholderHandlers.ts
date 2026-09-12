@@ -32,11 +32,7 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'layout.set', Params.layoutSet)
 }
 
-function placeholder<M extends MethodName>(
-  registry: MethodRegistry,
-  method: M,
-  schema: z.ZodType<ParamsOf<M>>
-): void {
+function placeholder<M extends MethodName>(registry: MethodRegistry, method: M, schema: z.ZodType<ParamsOf<M>>): void {
   registry.register(method, schema, () => {
     throw notFound(`${method} is not implemented yet`)
   })

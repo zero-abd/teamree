@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { COMMANDS, commandGroups, findCommand, parseCommand, resolveCommand, scanCommandWords } from './command-table.js'
+import {
+  COMMANDS,
+  commandGroups,
+  findCommand,
+  parseCommand,
+  resolveCommand,
+  scanCommandWords
+} from './command-table.js'
 import { commandName, type CommandSpec } from './command-spec.js'
 import { helpDocument, renderCommandHelp, renderGroupHelp, renderRootHelp, usageLine } from './help.js'
 import { UsageError } from './exit.js'
@@ -134,7 +141,9 @@ describe('parseCommand', () => {
       const args = (command.args ?? []).map((arg) => `x-${arg.name}`)
       const flags = (command.flags ?? [])
         .filter((flag) => flag.required)
-        .flatMap((flag) => (flag.kind === 'boolean' ? [`--${flag.name}`] : [`--${flag.name}`, flag.choices?.[0] ?? 'v']))
+        .flatMap((flag) =>
+          flag.kind === 'boolean' ? [`--${flag.name}`] : [`--${flag.name}`, flag.choices?.[0] ?? 'v']
+        )
       const parsed = parseCommand(command, [...args, ...flags, '--json', '--timeout', '100'])
       expect(parsed.flags['json']).toBe(true)
       expect(parsed.flags['timeout']).toBe(100)
@@ -166,7 +175,10 @@ describe('help rendering', () => {
   })
 
   it('describes the whole surface as data', () => {
-    const document = helpDocument() as { commands: Array<{ name: string; flags: unknown[] }>; exitCodes: Record<string, string> }
+    const document = helpDocument() as {
+      commands: Array<{ name: string; flags: unknown[] }>
+      exitCodes: Record<string, string>
+    }
     expect(document.commands.map((command) => command.name).sort()).toEqual([...EXPECTED].sort())
     expect(document.exitCodes['3']).toBe('no runtime running')
   })

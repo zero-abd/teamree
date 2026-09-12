@@ -122,9 +122,14 @@ export function buildShellCommand(
     // build for us is escaped by the wrong rules; everything else on Windows is
     // parsed by CommandLineToArgvW and needs the MSVCRT rules instead.
     if (family === 'cmd') return { file: shell, args: command ? cmdCommandLine(command) : '' }
-    const args = family === 'powershell'
-      ? command ? ['-NoLogo', '-Command', command] : ['-NoLogo']
-      : command ? ['-c', command] : ['-l']
+    const args =
+      family === 'powershell'
+        ? command
+          ? ['-NoLogo', '-Command', command]
+          : ['-NoLogo']
+        : command
+          ? ['-c', command]
+          : ['-l']
     return { file: shell, args: encodeWindowsCommandLine(args) }
   }
 
@@ -201,9 +206,14 @@ export function buildTerminalEnv(
 
 /** Lowercase shell name without directory or .exe, e.g. "zsh", "cmd", "pwsh". */
 export function shellName(shell: string, platform: NodeJS.Platform = process.platform): string {
-  if (platform !== 'win32') return basename(shell).replace(/\.exe$/i, '').toLowerCase()
+  if (platform !== 'win32')
+    return basename(shell)
+      .replace(/\.exe$/i, '')
+      .toLowerCase()
   // Windows accepts either separator, and the extension is never part of the name.
-  return basename(shell.replace(/\\/g, '/')).replace(/\.(exe|cmd|bat|com)$/i, '').toLowerCase()
+  return basename(shell.replace(/\\/g, '/'))
+    .replace(/\.(exe|cmd|bat|com)$/i, '')
+    .toLowerCase()
 }
 
 function nonEmpty(value: string | undefined): string | undefined {

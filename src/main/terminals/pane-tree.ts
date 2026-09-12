@@ -62,11 +62,7 @@ export function splitPane(
 }
 
 /** Adds a pane at the top level, keeping the existing panes' relative sizes. */
-export function appendPane(
-  root: PaneNode | null,
-  terminalId: string,
-  direction: SplitDirection = 'row'
-): PaneNode {
+export function appendPane(root: PaneNode | null, terminalId: string, direction: SplitDirection = 'row'): PaneNode {
   if (root === null) return leafPane(terminalId)
 
   if (root.kind === 'split' && root.direction === direction) {
@@ -179,9 +175,7 @@ function parseNode(value: unknown, depth: number): PaneNode | null {
   const node = value as Record<string, unknown>
 
   if (node.kind === 'leaf') {
-    return typeof node.terminalId === 'string' && node.terminalId.length > 0
-      ? leafPane(node.terminalId)
-      : null
+    return typeof node.terminalId === 'string' && node.terminalId.length > 0 ? leafPane(node.terminalId) : null
   }
 
   if (node.kind !== 'split') return null

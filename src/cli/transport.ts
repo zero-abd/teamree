@@ -27,7 +27,11 @@ export type RuntimeClient = {
   readonly endpoint: string
   call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>
   /** Subscribes and routes every pushed event to `onEvent` until unsubscribed. */
-  subscribe<M extends MethodName>(method: M, params: ParamsOf<M>, onEvent: (event: unknown) => void): Promise<Subscription>
+  subscribe<M extends MethodName>(
+    method: M,
+    params: ParamsOf<M>,
+    onEvent: (event: unknown) => void
+  ): Promise<Subscription>
   close(): void
 }
 
@@ -38,8 +42,7 @@ type Pending = {
   method: string
 }
 
-const CONNECT_HINT =
-  'Start the teamree desktop app (npm run dev in the repo, or launch the installed app), then retry.'
+const CONNECT_HINT = 'Start the teamree desktop app (npm run dev in the repo, or launch the installed app), then retry.'
 
 /** Narrows a decoded value to a frame; anything else is a protocol violation. */
 export function classifyFrame(value: unknown): Frame | null {
@@ -227,7 +230,8 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
 }
 
 function readSubscriptionId(result: unknown): string {
-  const id = typeof result === 'object' && result !== null ? (result as Record<string, unknown>)['subscription'] : undefined
+  const id =
+    typeof result === 'object' && result !== null ? (result as Record<string, unknown>)['subscription'] : undefined
   if (typeof id !== 'string' || id.length === 0) {
     throw new CliError({
       code: 'protocol_error',
@@ -250,11 +254,10 @@ function toCallError(frame: ErrorResponse, method: string): RuntimeCallError {
 /** ENOENT and friends mean nothing is listening, which is exit code 3, not 1. */
 export function describeConnectFailure(error: NodeJS.ErrnoException, endpoint: string): CliError {
   if (error.code === 'ENOENT' || error.code === 'ECONNREFUSED' || error.code === 'EACCES') {
-    return new NoRuntimeError(
-      `No teamree runtime is listening at ${endpoint} (${error.code}).`,
-      CONNECT_HINT,
-      { endpoint, errno: error.code }
-    )
+    return new NoRuntimeError(`No teamree runtime is listening at ${endpoint} (${error.code}).`, CONNECT_HINT, {
+      endpoint,
+      errno: error.code
+    })
   }
   return new CliError({
     code: 'connect_failed',

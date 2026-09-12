@@ -145,7 +145,8 @@ describe('allocateCheckoutPath', () => {
     const checkout = await allocateCheckoutPath(root, 'app', 'login')
 
     // On Windows and macOS `LOGIN` already occupies `login`; on Linux it does not.
-    const filesystemIsCaseInsensitive = pathKey(path.join(root, 'app', 'LOGIN')) === pathKey(path.join(root, 'app', 'login'))
+    const filesystemIsCaseInsensitive =
+      pathKey(path.join(root, 'app', 'LOGIN')) === pathKey(path.join(root, 'app', 'login'))
     expect(path.basename(checkout)).toBe(filesystemIsCaseInsensitive ? 'login-2' : 'login')
   })
 

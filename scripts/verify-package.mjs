@@ -176,11 +176,15 @@ ok(`app launched: pid ${record.pid}, version ${record.version}, endpoint ${recor
 /** Runs the CLI exactly as a user with it on PATH would. */
 function cli(...args) {
   const isCmd = app.launcher.endsWith('.cmd')
-  const result = spawnSync(isCmd ? process.env.ComSpec || 'cmd.exe' : app.launcher, isCmd ? ['/c', app.launcher, ...args] : args, {
-    encoding: 'utf8',
-    timeout: STEP_TIMEOUT_MS,
-    env: { ...process.env, TEAMREE_USER_DATA_DIR: userData }
-  })
+  const result = spawnSync(
+    isCmd ? process.env.ComSpec || 'cmd.exe' : app.launcher,
+    isCmd ? ['/c', app.launcher, ...args] : args,
+    {
+      encoding: 'utf8',
+      timeout: STEP_TIMEOUT_MS,
+      env: { ...process.env, TEAMREE_USER_DATA_DIR: userData }
+    }
+  )
   if (result.error) {
     cleanup()
     fail(`teamree ${args.join(' ')} could not run`, String(result.error))

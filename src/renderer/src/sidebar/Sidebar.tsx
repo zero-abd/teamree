@@ -23,8 +23,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
     const needle = filter.trim().toLowerCase()
     if (!needle) return worktrees
     return worktrees.filter(
-      (worktree) =>
-        worktree.name.toLowerCase().includes(needle) || worktree.branch.toLowerCase().includes(needle)
+      (worktree) => worktree.name.toLowerCase().includes(needle) || worktree.branch.toLowerCase().includes(needle)
     )
   }, [filter, worktrees])
 
@@ -32,7 +31,8 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
     <nav className="sidebar" aria-label="Projects and worktrees">
       <div className="sidebar__head">
         <span className="wordmark">
-          teamree<span className="wordmark__dot" aria-hidden="true" />
+          teamree
+          <span className="wordmark__dot" aria-hidden="true" />
         </span>
         <button
           type="button"
@@ -74,7 +74,11 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                   aria-expanded={!isCollapsed}
                   onClick={() => toggleProject(project.id)}
                 >
-                  <svg className={`chevron${isCollapsed ? '' : ' chevron--open'}`} viewBox="0 0 12 12" aria-hidden="true">
+                  <svg
+                    className={`chevron${isCollapsed ? '' : ' chevron--open'}`}
+                    viewBox="0 0 12 12"
+                    aria-hidden="true"
+                  >
                     <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
                   </svg>
                   <span className="project__name">{project.name}</span>

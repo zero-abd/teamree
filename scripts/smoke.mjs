@@ -56,14 +56,16 @@ async function run() {
   const mounted = await window.webContents.executeJavaScript(
     'Boolean(document.querySelector("#root")?.childElementCount)'
   )
-  const bridged = await window.webContents.executeJavaScript(
-    'typeof window.teamree?.versions?.electron === "string"'
-  )
+  const bridged = await window.webContents.executeJavaScript('typeof window.teamree?.versions?.electron === "string"')
 
   if (!mounted) failures.push('renderer did not mount into #root')
   if (!bridged) failures.push('preload bridge is not exposed on window.teamree')
 }
 
-app.whenReady().then(run).catch((error) => {
-  failures.push(String(error))
-}).finally(finish)
+app
+  .whenReady()
+  .then(run)
+  .catch((error) => {
+    failures.push(String(error))
+  })
+  .finally(finish)

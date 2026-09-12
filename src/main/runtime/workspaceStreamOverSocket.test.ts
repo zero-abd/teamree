@@ -51,7 +51,7 @@ async function openClient(endpoint: string, name: string): Promise<Client> {
   return {
     socket,
     frames,
-    call: async <T,>(method: string, params: unknown = {}): Promise<T> => {
+    call: async <T>(method: string, params: unknown = {}): Promise<T> => {
       counter += 1
       const id = `${name}-${counter}`
       socket.write(`${JSON.stringify({ id, method, params })}\n`)

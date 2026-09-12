@@ -25,12 +25,7 @@ import { createVersionProbe } from './gitVersion'
 import { isInside, pathKey, samePath } from './pathIdentity'
 import { createMemoryRecordStore, type GitRecordStore } from './recordStore'
 import { detectBaseRef, inspectRepository, listBranchNames } from './repository'
-import {
-  listStartPoints,
-  resolveStartPoint,
-  type ResolvedStartPoint,
-  type StartPointList
-} from './startPoint'
+import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type StartPointList } from './startPoint'
 import { readWorktreeInventory } from './worktreeInventory'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
 import { readWorktreeStatus } from './worktreeStatus'

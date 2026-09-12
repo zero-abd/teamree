@@ -138,7 +138,7 @@ function shade(x, y, pixel) {
   // the tile does not read as a flat rectangle at large sizes.
   const t = Math.min(1, Math.max(0, (y - TILE_INSET) / (GRID - 2 * TILE_INSET)))
   const base = mix(INK_TOP, INK_BOTTOM, Math.pow(t, 0.85))
-  const sheen = Math.max(0, 1 - t * 4.2) * 0.10
+  const sheen = Math.max(0, 1 - t * 4.2) * 0.1
   over(out, mix(base, [255, 255, 255], sheen), tileAlpha)
 
   const trunk = Math.min(
@@ -292,4 +292,6 @@ writeFileSync(join(buildDir, 'icon.png'), pngBySize.get(1024))
 writeFileSync(join(buildDir, 'icon.ico'), encodeIco(ICO_SIZES.map((size) => ({ size, png: pngBySize.get(size) }))))
 writeFileSync(join(buildDir, 'icon.icns'), encodeIcns(pngBySize))
 
-console.log(`make-icons: wrote build/icon.png, build/icon.icns, build/icon.ico and ${LINUX_SIZES.length} files in build/icons`)
+console.log(
+  `make-icons: wrote build/icon.png, build/icon.icns, build/icon.ico and ${LINUX_SIZES.length} files in build/icons`
+)

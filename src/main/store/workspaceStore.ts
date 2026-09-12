@@ -23,7 +23,10 @@ export class WorkspaceStore {
   private queued = false
   private writeError: unknown
 
-  private constructor(readonly filePath: string, document: WorkspaceDocument) {
+  private constructor(
+    readonly filePath: string,
+    document: WorkspaceDocument
+  ) {
     for (const project of document.projects) this.projects.set(project.id, project)
     for (const worktree of document.worktrees) this.worktrees.set(worktree.id, worktree)
     for (const layout of document.layouts) this.layouts.set(layout.worktreeId, layout)

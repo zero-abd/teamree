@@ -33,9 +33,7 @@ export function emitSuccess(command: string, output: CommandOutput, json: boolea
 
 export function emitFailure(command: string, error: CliError, json: boolean, streams: Streams): void {
   if (json) {
-    streams.err(
-      `${JSON.stringify({ ok: false, command, error: error.serialize(), exitCode: error.exitCode })}\n`
-    )
+    streams.err(`${JSON.stringify({ ok: false, command, error: error.serialize(), exitCode: error.exitCode })}\n`)
     return
   }
   streams.err(`error: ${error.message}\n`)

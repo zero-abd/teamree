@@ -72,7 +72,9 @@ describe('git runner', () => {
     const repo = await newRepo()
     const runner = createGitRunner('teamree-definitely-not-git')
 
-    const error = (await runner.run({ args: ['status'], cwd: repo.repoPath }).catch((e: unknown) => e)) as GitCommandError
+    const error = (await runner
+      .run({ args: ['status'], cwd: repo.repoPath })
+      .catch((e: unknown) => e)) as GitCommandError
 
     expect(error.stderr).toContain('git executable not found')
   })

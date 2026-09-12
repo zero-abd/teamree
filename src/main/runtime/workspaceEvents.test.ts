@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceEvent } from '../../shared/methods'
-import {
-  createCoalescedStream,
-  WorkspaceEventBus,
-  WORKSPACE_EVENT_COALESCE_MS
-} from './workspaceEvents'
+import { createCoalescedStream, WorkspaceEventBus, WORKSPACE_EVENT_COALESCE_MS } from './workspaceEvents'
 
 /** A schedule the test advances by hand, so no assertion waits on a real clock. */
-function manualClock(): { schedule: (run: () => void, ms: number) => () => void; tick: () => void; pending: () => number } {
+function manualClock(): {
+  schedule: (run: () => void, ms: number) => () => void
+  tick: () => void
+  pending: () => number
+} {
   const runs: Array<{ run: () => void; cancelled: boolean }> = []
   return {
     schedule: (run) => {

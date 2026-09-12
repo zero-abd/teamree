@@ -1,13 +1,7 @@
 // Public face of the git and worktree service. The runtime imports from here.
 
 export { GitCommandError, GitServiceError, describeError } from './errors'
-export {
-  createGitHandlers,
-  registerGitHandlers,
-  GIT_METHODS,
-  type GitHandlers,
-  type GitMethodName
-} from './handlers'
+export { createGitHandlers, registerGitHandlers, GIT_METHODS, type GitHandlers, type GitMethodName } from './handlers'
 export {
   GitService,
   GitEventEmitter,

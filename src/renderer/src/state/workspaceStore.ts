@@ -13,17 +13,9 @@ import {
   writeStoredSidebarWidth,
   SIDEBAR_DEFAULT_PX
 } from '../shell/sidebarWidth'
-import {
-  createLocalEditFence,
-  createWorkspaceRefresher,
-  refreshTargets,
-  type RefreshTargets
-} from './workspaceRefresh'
+import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 
-export type DialogState =
-  | { kind: 'add-project' }
-  | { kind: 'create-worktree'; projectId: string }
-  | null
+export type DialogState = { kind: 'add-project' } | { kind: 'create-worktree'; projectId: string } | null
 
 export type Notice = { id: number; text: string; tone: 'error' | 'info' }
 
@@ -149,10 +141,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       worktreeIds.map((worktreeId) => runtimeClient.call('worktree.status', { worktreeId }).catch(() => null))
     )
     set((state) => ({
-      statuses: statuses.reduce(
-        (map, status) => (status ? { ...map, [status.worktreeId]: status } : map),
-        { ...state.statuses }
-      )
+      statuses: statuses.reduce((map, status) => (status ? { ...map, [status.worktreeId]: status } : map), {
+        ...state.statuses
+      })
     }))
   }
 
@@ -359,7 +350,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     recordTerminal(terminal) {
-      set((state) => (state.terminals[terminal.id] ? { terminals: { ...state.terminals, [terminal.id]: terminal } } : {}))
+      set((state) =>
+        state.terminals[terminal.id] ? { terminals: { ...state.terminals, [terminal.id]: terminal } } : {}
+      )
     },
 
     focusPane(terminalId) {

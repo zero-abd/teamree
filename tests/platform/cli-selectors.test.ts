@@ -31,9 +31,7 @@ describe('canonicalPath', () => {
     const link = path.join(home, 'worktrees')
     symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir')
 
-    expect(canonicalPath(path.join(link, 'never-created'))).toBe(
-      path.join(realpathSync.native(real), 'never-created')
-    )
+    expect(canonicalPath(path.join(link, 'never-created'))).toBe(path.join(realpathSync.native(real), 'never-created'))
   })
 })
 

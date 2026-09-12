@@ -59,7 +59,6 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
   const label = resolution.kind === 'command' ? commandName(resolution.spec) : tokens.join(' ')
 
   try {
-
     if (resolution.kind === 'empty') {
       emitSuccess('help', helpOutput({ kind: 'root' }), json, streams)
       return ExitCode.Success

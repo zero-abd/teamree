@@ -59,7 +59,13 @@ const TERMINAL = {
 const defaultHandler: StubHandler = (method) => {
   switch (method) {
     case 'status.get':
-      return { version: '9.9.9', endpoint: '/tmp/teamree.sock', pid: 4242, platform: 'darwin', startedAt: 1700000000000 }
+      return {
+        version: '9.9.9',
+        endpoint: '/tmp/teamree.sock',
+        pid: 4242,
+        platform: 'darwin',
+        startedAt: 1700000000000
+      }
     case 'project.list':
       return PROJECTS
     case 'project.add':
@@ -93,7 +99,10 @@ const defaultHandler: StubHandler = (method) => {
     case 'terminal.read':
       return { data: 'build ok\n' }
     case 'terminal.split':
-      return { terminal: { ...TERMINAL, id: 't_2' }, layout: { worktreeId: 'wt_1', root: null, focusedTerminalId: 't_2' } }
+      return {
+        terminal: { ...TERMINAL, id: 't_2' },
+        layout: { worktreeId: 'wt_1', root: null, focusedTerminalId: 't_2' }
+      }
     case 'terminal.close':
       return { closed: true }
     default:

@@ -9,7 +9,10 @@ afterEach(async () => {
   while (open.length > 0) await open.pop()?.close()
 })
 
-async function withStub(handler: Parameters<typeof startStubRuntime>[0], timeoutMs = 2000): Promise<{ stub: StubRuntime; client: RuntimeClient }> {
+async function withStub(
+  handler: Parameters<typeof startStubRuntime>[0],
+  timeoutMs = 2000
+): Promise<{ stub: StubRuntime; client: RuntimeClient }> {
   const stub = await startStubRuntime(handler)
   open.push(stub)
   const client = await connectRuntime({ endpoint: stub.endpoint, timeoutMs })
@@ -104,7 +107,9 @@ describe('connectRuntime', () => {
 
   it('rejects a subscription the runtime did not identify', async () => {
     const { client } = await withStub(() => ({ nope: true }))
-    await expect(client.subscribe('terminal.subscribe', { terminalId: 't1' }, () => {})).rejects.toThrow(/subscription id/)
+    await expect(client.subscribe('terminal.subscribe', { terminalId: 't1' }, () => {})).rejects.toThrow(
+      /subscription id/
+    )
   })
 
   it('reports a dead endpoint as no runtime running', async () => {

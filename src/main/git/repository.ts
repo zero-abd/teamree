@@ -95,5 +95,8 @@ export async function listBranchNames(runner: GitRunner, root: string): Promise<
     cwd: root,
     readOnly: true
   })
-  return stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+  return stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
 }

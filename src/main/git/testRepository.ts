@@ -82,7 +82,11 @@ export async function createTempRepo(options: TempRepoOptions = {}): Promise<Tem
 }
 
 /** Wraps a runner so one command is delayed, making cancellation deterministic. */
-export function createDelayedRunner(inner: GitRunner, match: (args: readonly string[]) => boolean, delayMs: number): GitRunner {
+export function createDelayedRunner(
+  inner: GitRunner,
+  match: (args: readonly string[]) => boolean,
+  delayMs: number
+): GitRunner {
   const stall = async (args: readonly string[]): Promise<void> => {
     if (match(args)) await new Promise((resolve) => setTimeout(resolve, delayMs))
   }

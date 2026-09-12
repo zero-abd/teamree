@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { flagKey, flagLabel, parseArgs, readBoolean, readNumber, readString, requireString, type FlagSpec } from './argv.js'
+import {
+  flagKey,
+  flagLabel,
+  parseArgs,
+  readBoolean,
+  readNumber,
+  readString,
+  requireString,
+  type FlagSpec
+} from './argv.js'
 import { UsageError } from './exit.js'
 
 const SPECS: FlagSpec[] = [

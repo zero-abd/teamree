@@ -260,9 +260,7 @@ export class TerminalSessionManager {
       ...(params.command === undefined ? {} : { command: params.command }),
       cols: params.cols ?? DEFAULT_COLS,
       rows: params.rows ?? DEFAULT_ROWS,
-      ...(this.options.scrollbackCapBytes === undefined
-        ? {}
-        : { scrollbackCapBytes: this.options.scrollbackCapBytes })
+      ...(this.options.scrollbackCapBytes === undefined ? {} : { scrollbackCapBytes: this.options.scrollbackCapBytes })
     })
 
     this.sessions.set(session.id, session)

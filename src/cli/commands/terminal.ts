@@ -5,14 +5,23 @@ import { resolveWorktree } from '../selectors.js'
 import { DEFAULT_QUIET_MS, DEFAULT_WAIT_TIMEOUT_MS, waitForTerminal } from '../waiting.js'
 
 /** Terminals are addressed by id only: ids come straight from `terminal list`. */
-const TERMINAL_ARG = { name: 'terminal', description: 'Terminal id from `teamree terminal list`.', required: true } as const
+const TERMINAL_ARG = {
+  name: 'terminal',
+  description: 'Terminal id from `teamree terminal list`.',
+  required: true
+} as const
 
 export const terminalCommands: readonly CommandSpec[] = [
   {
     path: ['terminal', 'list'],
     summary: 'List terminals, optionally for one worktree.',
     flags: [
-      { name: 'worktree', kind: 'string', placeholder: '<worktree>', description: 'Restrict to one worktree (id, name, path, or branch).' }
+      {
+        name: 'worktree',
+        kind: 'string',
+        placeholder: '<worktree>',
+        description: 'Restrict to one worktree (id, name, path, or branch).'
+      }
     ],
     run: async (context) => {
       const selector = readString(context.flags, 'worktree')
@@ -39,10 +48,31 @@ export const terminalCommands: readonly CommandSpec[] = [
     path: ['terminal', 'create'],
     summary: 'Open a terminal in a worktree.',
     flags: [
-      { name: 'worktree', kind: 'string', placeholder: '<worktree>', description: 'Worktree id, name, path, or branch.', required: true },
-      { name: 'command', kind: 'string', placeholder: '<cmd>', description: 'Run this instead of an interactive shell.' },
-      { name: 'shell', kind: 'string', placeholder: '<shell>', description: "Shell to spawn; defaults to the user's login shell." },
-      { name: 'cwd', kind: 'string', placeholder: '<dir>', description: "Working directory; defaults to the worktree's checkout." },
+      {
+        name: 'worktree',
+        kind: 'string',
+        placeholder: '<worktree>',
+        description: 'Worktree id, name, path, or branch.',
+        required: true
+      },
+      {
+        name: 'command',
+        kind: 'string',
+        placeholder: '<cmd>',
+        description: 'Run this instead of an interactive shell.'
+      },
+      {
+        name: 'shell',
+        kind: 'string',
+        placeholder: '<shell>',
+        description: "Shell to spawn; defaults to the user's login shell."
+      },
+      {
+        name: 'cwd',
+        kind: 'string',
+        placeholder: '<dir>',
+        description: "Working directory; defaults to the worktree's checkout."
+      },
       { name: 'cols', kind: 'number', placeholder: '<n>', description: 'Initial column count.' },
       { name: 'rows', kind: 'number', placeholder: '<n>', description: 'Initial row count.' }
     ],
@@ -77,7 +107,7 @@ export const terminalCommands: readonly CommandSpec[] = [
   },
   {
     path: ['terminal', 'read'],
-    summary: 'Print a terminal\'s scrollback snapshot.',
+    summary: "Print a terminal's scrollback snapshot.",
     details: 'Text mode writes the raw buffer to stdout so it can be read directly; --json wraps it instead.',
     args: [TERMINAL_ARG],
     flags: [
@@ -97,7 +127,8 @@ export const terminalCommands: readonly CommandSpec[] = [
   {
     path: ['terminal', 'send'],
     summary: 'Write text to a terminal.',
-    details: 'The text is sent verbatim; --enter appends a carriage return, which is what a PTY expects for a keypress.',
+    details:
+      'The text is sent verbatim; --enter appends a carriage return, which is what a PTY expects for a keypress.',
     args: [TERMINAL_ARG],
     flags: [
       { name: 'text', kind: 'string', placeholder: '<text>', description: 'Exact bytes to write.', required: true },
@@ -109,7 +140,10 @@ export const terminalCommands: readonly CommandSpec[] = [
       const data = requireString(context.flags, 'text') + (readBoolean(context.flags, 'enter') ? '\r' : '')
       await context.client.call('terminal.write', { terminalId, data })
       const bytes = Buffer.byteLength(data)
-      return { data: { terminalId, bytes, enter: readBoolean(context.flags, 'enter') }, text: `sent ${bytes} bytes to ${terminalId}` }
+      return {
+        data: { terminalId, bytes, enter: readBoolean(context.flags, 'enter') },
+        text: `sent ${bytes} bytes to ${terminalId}`
+      }
     }
   },
   {
@@ -125,7 +159,12 @@ export const terminalCommands: readonly CommandSpec[] = [
         choices: ['row', 'column'],
         required: true
       },
-      { name: 'command', kind: 'string', placeholder: '<cmd>', description: 'Run this in the new pane instead of a shell.' }
+      {
+        name: 'command',
+        kind: 'string',
+        placeholder: '<cmd>',
+        description: 'Run this in the new pane instead of a shell.'
+      }
     ],
     examples: ['teamree terminal split t_12 --direction column'],
     run: async (context) => {
@@ -158,8 +197,8 @@ export const terminalCommands: readonly CommandSpec[] = [
       await context.client.call('terminal.close', { terminalId })
       return { data: { closed: true, terminalId }, text: `closed terminal ${terminalId}` }
     }
-  }
-  ,{
+  },
+  {
     path: ['terminal', 'wait'],
     summary: 'Block until a terminal goes quiet or exits.',
     details:
@@ -171,13 +210,27 @@ export const terminalCommands: readonly CommandSpec[] = [
       'waits on the real process exit and returns its exit code.',
     args: [TERMINAL_ARG],
     flags: [
-      { name: 'for', kind: 'string', placeholder: '<condition>', choices: ['quiet', 'exit'], description: 'What to wait for. Defaults to quiet.' },
-      { name: 'quiet-ms', kind: 'number', placeholder: '<ms>', description: `Silence that counts as quiet. Defaults to ${DEFAULT_QUIET_MS}.` },
-      { name: 'timeout-ms', kind: 'number', placeholder: '<ms>', description: `Give up after this long. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.` }
+      {
+        name: 'for',
+        kind: 'string',
+        placeholder: '<condition>',
+        choices: ['quiet', 'exit'],
+        description: 'What to wait for. Defaults to quiet.'
+      },
+      {
+        name: 'quiet-ms',
+        kind: 'number',
+        placeholder: '<ms>',
+        description: `Silence that counts as quiet. Defaults to ${DEFAULT_QUIET_MS}.`
+      },
+      {
+        name: 'timeout-ms',
+        kind: 'number',
+        placeholder: '<ms>',
+        description: `Give up after this long. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.`
+      }
     ],
-    examples: [
-      'teamree terminal send <id> --text "npm test" --enter && teamree terminal wait <id> --json'
-    ],
+    examples: ['teamree terminal send <id> --text "npm test" --enter && teamree terminal wait <id> --json'],
     run: async (context) => {
       const terminalId = context.args[0] as string
       const until = (readString(context.flags, 'for') ?? 'quiet') as 'quiet' | 'exit'
@@ -198,8 +251,8 @@ export const terminalCommands: readonly CommandSpec[] = [
         ])
       }
     }
-  }
-  ,{
+  },
+  {
     path: ['terminal', 'run'],
     summary: 'Run a command in a worktree and wait for it to finish.',
     details:
@@ -209,9 +262,20 @@ export const terminalCommands: readonly CommandSpec[] = [
       "The CLI's own exit code still follows the documented scheme: it reports whether teamree ran the " +
       'command, not whether the command succeeded. Read exitCode from the payload for that.',
     flags: [
-      { name: 'worktree', kind: 'string', placeholder: '<worktree>', description: 'Worktree id, name, path, or branch.', required: true },
+      {
+        name: 'worktree',
+        kind: 'string',
+        placeholder: '<worktree>',
+        description: 'Worktree id, name, path, or branch.',
+        required: true
+      },
       { name: 'command', kind: 'string', placeholder: '<cmd>', description: 'Command line to run.', required: true },
-      { name: 'timeout-ms', kind: 'number', placeholder: '<ms>', description: `Give up after this long. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.` },
+      {
+        name: 'timeout-ms',
+        kind: 'number',
+        placeholder: '<ms>',
+        description: `Give up after this long. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.`
+      },
       { name: 'keep', kind: 'boolean', description: 'Leave the pane open after the command exits.' }
     ],
     examples: ['teamree terminal run --worktree fix-login --command "npm test" --json'],

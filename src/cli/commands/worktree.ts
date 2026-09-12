@@ -10,7 +10,12 @@ export const worktreeCommands: readonly CommandSpec[] = [
     path: ['worktree', 'list'],
     summary: 'List worktrees, optionally for one project.',
     flags: [
-      { name: 'project', kind: 'string', placeholder: '<project>', description: 'Restrict to one project (id, name, or path).' }
+      {
+        name: 'project',
+        kind: 'string',
+        placeholder: '<project>',
+        description: 'Restrict to one project (id, name, or path).'
+      }
     ],
     examples: ['teamree worktree list --json', 'teamree worktree list --project api'],
     run: async (context) => {
@@ -32,10 +37,32 @@ export const worktreeCommands: readonly CommandSpec[] = [
     summary: 'Create a worktree and its branch.',
     details: 'Returns as soon as the runtime accepts the request; the row may still be in the "creating" state.',
     flags: [
-      { name: 'project', kind: 'string', placeholder: '<project>', description: 'Project id, name, or path.', required: true },
-      { name: 'name', kind: 'string', placeholder: '<name>', description: 'Task name; also seeds the branch name.', required: true },
-      { name: 'from', kind: 'string', placeholder: '<ref>', description: "Ref or sha to branch from; defaults to the project's base ref." },
-      { name: 'branch', kind: 'string', placeholder: '<branch>', description: 'Explicit branch name instead of one derived from --name.' }
+      {
+        name: 'project',
+        kind: 'string',
+        placeholder: '<project>',
+        description: 'Project id, name, or path.',
+        required: true
+      },
+      {
+        name: 'name',
+        kind: 'string',
+        placeholder: '<name>',
+        description: 'Task name; also seeds the branch name.',
+        required: true
+      },
+      {
+        name: 'from',
+        kind: 'string',
+        placeholder: '<ref>',
+        description: "Ref or sha to branch from; defaults to the project's base ref."
+      },
+      {
+        name: 'branch',
+        kind: 'string',
+        placeholder: '<branch>',
+        description: 'Explicit branch name instead of one derived from --name.'
+      }
     ],
     examples: ['teamree worktree create --project api --name fix-login --from origin/main'],
     run: async (context) => {
@@ -101,8 +128,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
         ])
       }
     }
-  }
-  ,{
+  },
+  {
     path: ['worktree', 'wait'],
     summary: 'Block until a worktree finishes being created.',
     details:
@@ -110,8 +137,19 @@ export const worktreeCommands: readonly CommandSpec[] = [
       'This waits for it to settle, and exits non-zero if it settled as failed.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     flags: [
-      { name: 'for', kind: 'string', placeholder: '<state>', choices: ['ready', 'settled'], description: 'Wait for ready, or for any settled state. Defaults to ready.' },
-      { name: 'timeout-ms', kind: 'number', placeholder: '<ms>', description: `Give up after this long. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.` }
+      {
+        name: 'for',
+        kind: 'string',
+        placeholder: '<state>',
+        choices: ['ready', 'settled'],
+        description: 'Wait for ready, or for any settled state. Defaults to ready.'
+      },
+      {
+        name: 'timeout-ms',
+        kind: 'number',
+        placeholder: '<ms>',
+        description: `Give up after this long. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.`
+      }
     ],
     examples: ['teamree worktree create --project app --name fix-login --json && teamree worktree wait fix-login'],
     run: async (context) => {

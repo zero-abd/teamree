@@ -237,7 +237,10 @@ describe('parsePaneNode', () => {
       kind: 'split',
       direction: 'column',
       sizes: [3, 1],
-      children: [{ kind: 'leaf', terminalId: 'a' }, { kind: 'leaf', terminalId: 'b' }]
+      children: [
+        { kind: 'leaf', terminalId: 'a' },
+        { kind: 'leaf', terminalId: 'b' }
+      ]
     })
     expect(parsed).toEqual({
       kind: 'split',
@@ -251,7 +254,10 @@ describe('parsePaneNode', () => {
     const parsed = parsePaneNode({
       kind: 'split',
       direction: 'row',
-      children: [{ kind: 'leaf', terminalId: 'a' }, { kind: 'leaf', terminalId: 'b' }]
+      children: [
+        { kind: 'leaf', terminalId: 'a' },
+        { kind: 'leaf', terminalId: 'b' }
+      ]
     })
     expect(parsed).toEqual({
       kind: 'split',
@@ -267,7 +273,9 @@ describe('parsePaneNode', () => {
     expect(parsePaneNode({ kind: 'leaf' })).toBeNull()
     expect(parsePaneNode({ kind: 'leaf', terminalId: '' })).toBeNull()
     expect(parsePaneNode({ kind: 'branch', children: [] })).toBeNull()
-    expect(parsePaneNode({ kind: 'split', direction: 'diagonal', children: [{ kind: 'leaf', terminalId: 'a' }] })).toBeNull()
+    expect(
+      parsePaneNode({ kind: 'split', direction: 'diagonal', children: [{ kind: 'leaf', terminalId: 'a' }] })
+    ).toBeNull()
     expect(parsePaneNode({ kind: 'split', direction: 'row', children: [] })).toBeNull()
     expect(parsePaneNode({ kind: 'split', direction: 'row', children: [{ kind: 'leaf' }] })).toBeNull()
   })

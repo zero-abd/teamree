@@ -23,8 +23,21 @@ export const projectCommands: readonly CommandSpec[] = [
   {
     path: ['project', 'add'],
     summary: 'Track a repository.',
-    args: [{ name: 'path', description: 'Path to the repository checkout; relative paths resolve from the cwd.', required: true }],
-    flags: [{ name: 'name', kind: 'string', placeholder: '<name>', description: 'Display name; defaults to the directory name.' }],
+    args: [
+      {
+        name: 'path',
+        description: 'Path to the repository checkout; relative paths resolve from the cwd.',
+        required: true
+      }
+    ],
+    flags: [
+      {
+        name: 'name',
+        kind: 'string',
+        placeholder: '<name>',
+        description: 'Display name; defaults to the directory name.'
+      }
+    ],
     examples: ['teamree project add ~/repos/api', 'teamree project add . --name api'],
     run: async (context) => {
       const path = resolve(context.cwd, context.args[0] as string)

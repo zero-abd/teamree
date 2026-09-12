@@ -1,0 +1,7 @@
+{
+  "semicolons": "as-needed",
+  "quoteStyle": "single",
+  "lineWidth": 120,
+  "indentWidth": 2,
+  "trailingCommas": "none"
+}

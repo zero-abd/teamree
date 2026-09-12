@@ -112,7 +112,14 @@ describe('milestone 1 acceptance', () => {
   })
 
   it('runs a command in the terminal and reads the output back', async () => {
-    cli(['terminal', 'send', terminal.id, '--text', 'echo TEAMREE_MARKER_OK; git rev-parse --abbrev-ref HEAD', '--enter'])
+    cli([
+      'terminal',
+      'send',
+      terminal.id,
+      '--text',
+      'echo TEAMREE_MARKER_OK; git rev-parse --abbrev-ref HEAD',
+      '--enter'
+    ])
     await sleep(3000)
     const { data } = cli<{ data: string }>(['terminal', 'read', terminal.id])
     expect(data).toContain('TEAMREE_MARKER_OK')
@@ -122,7 +129,11 @@ describe('milestone 1 acceptance', () => {
 
   it('splits a terminal into a two-pane layout', () => {
     const split = cli<{ terminal: Terminal; layout: { root: { kind: string; children?: unknown[] } } }>([
-      'terminal', 'split', terminal.id, '--direction', 'row'
+      'terminal',
+      'split',
+      terminal.id,
+      '--direction',
+      'row'
     ])
     expect(split.layout.root.kind).toBe('split')
     expect(split.layout.root.children).toHaveLength(2)
@@ -133,7 +144,12 @@ describe('milestone 1 acceptance', () => {
     // The deterministic path an agent should use: the command owns its process,
     // so completion is a real exit rather than a guess from output going quiet.
     const result = cli<{ exitCode: number | null; output: string }>([
-      'terminal', 'run', '--worktree', worktree.id, '--command', 'sh -c "sleep 1; echo BUILD_DONE; exit 3"'
+      'terminal',
+      'run',
+      '--worktree',
+      worktree.id,
+      '--command',
+      'sh -c "sleep 1; echo BUILD_DONE; exit 3"'
     ])
     expect(result.exitCode).toBe(3)
     expect(result.output).toContain('BUILD_DONE')

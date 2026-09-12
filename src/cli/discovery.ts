@@ -107,7 +107,9 @@ export function isPipe(endpoint: string): boolean {
 }
 
 /** Parses one discovery file's text. Never throws; malformed input is a result. */
-export function parseDiscoveryRecord(text: string): { ok: true; record: DiscoveryRecord } | { ok: false; message: string } {
+export function parseDiscoveryRecord(
+  text: string
+): { ok: true; record: DiscoveryRecord } | { ok: false; message: string } {
   let value: unknown
   try {
     value = JSON.parse(text)

@@ -163,7 +163,12 @@ describe('resolveStartPoint', () => {
 
     const resolved = await resolve(repo, 'origin/spike/parser')
 
-    expect(resolved).toMatchObject({ kind: 'remoteBranch', sha: remoteSha, track: 'origin/spike/parser', fetched: true })
+    expect(resolved).toMatchObject({
+      kind: 'remoteBranch',
+      sha: remoteSha,
+      track: 'origin/spike/parser',
+      fetched: true
+    })
     expect(resolved.interpretation).toContain('fetched and used')
     // The fetch left a real remote-tracking ref behind, which is what tracking needs.
     expect(await repo.git(['rev-parse', 'refs/remotes/origin/spike/parser'])).toBe(remoteSha)
@@ -291,7 +296,10 @@ describe('listStartPoints', () => {
     expect(listed.total).toBe(listed.options.length)
 
     // The dialog can preview a choice before anything is created.
-    expect(await service.describeStartPoint(project.id)).toMatchObject({ requested: 'origin/main', kind: 'remoteBranch' })
+    expect(await service.describeStartPoint(project.id)).toMatchObject({
+      requested: 'origin/main',
+      kind: 'remoteBranch'
+    })
     expect(await service.describeStartPoint(project.id, 'v9')).toMatchObject({ kind: 'tag' })
 
     const head = await repo.git(['rev-parse', 'HEAD'])

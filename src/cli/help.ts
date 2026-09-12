@@ -110,9 +110,8 @@ function describeFlags(flags: readonly FlagSpec[]): unknown[] {
 
 /** The whole command surface as data, for an agent discovering the CLI. */
 export function helpDocument(scope?: readonly string[]): unknown {
-  const commands = scope === undefined
-    ? COMMANDS
-    : COMMANDS.filter((spec) => scope.every((word, index) => spec.path[index] === word))
+  const commands =
+    scope === undefined ? COMMANDS : COMMANDS.filter((spec) => scope.every((word, index) => spec.path[index] === word))
   return {
     binary: BINARY,
     groups: commandGroups(),
@@ -135,7 +134,9 @@ export function helpDocument(scope?: readonly string[]): unknown {
   }
 }
 
-export function helpOutput(target: { kind: 'root' } | { kind: 'group'; group: string } | { kind: 'command'; spec: CommandSpec }): CommandOutput {
+export function helpOutput(
+  target: { kind: 'root' } | { kind: 'group'; group: string } | { kind: 'command'; spec: CommandSpec }
+): CommandOutput {
   if (target.kind === 'root') return { data: helpDocument(), text: renderRootHelp() }
   if (target.kind === 'group') return { data: helpDocument([target.group]), text: renderGroupHelp(target.group) }
   return { data: helpDocument(target.spec.path), text: renderCommandHelp(target.spec) }

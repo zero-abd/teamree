@@ -65,10 +65,7 @@ export async function subscribe<M extends SubscribingMethod>(
 }
 
 /** Typed wrapper for one terminal's output stream. */
-export function subscribeTerminal(
-  terminalId: string,
-  onEvent: (event: TerminalEvent) => void
-): Promise<Subscription> {
+export function subscribeTerminal(terminalId: string, onEvent: (event: TerminalEvent) => void): Promise<Subscription> {
   return subscribe('terminal.subscribe', { terminalId }, (event) => onEvent(event as TerminalEvent))
 }
 

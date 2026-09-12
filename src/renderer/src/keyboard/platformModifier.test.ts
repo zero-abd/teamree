@@ -12,7 +12,9 @@ import { commandForEvent, shortcutHint, WORKSPACE_SHORTCUTS } from './workspaceS
 const mac = resolvePlatformModifier('darwin')
 const pc = resolvePlatformModifier('win32')
 
-const event = (overrides: Partial<{ key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }>) => ({
+const event = (
+  overrides: Partial<{ key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }>
+) => ({
   key: 'd',
   metaKey: false,
   ctrlKey: false,
