@@ -28,6 +28,8 @@ files:
   # Source maps, type declarations and package docs are dead weight in a
   # shipped app; the main process reads none of them.
   - '!**/*.{map,md,markdown,ts,mts,cts,tsbuildinfo}'
+  # Windows debug symbols shipped alongside node-pty's prebuilt binaries.
+  - '!**/*.pdb'
   - '!**/*.{test,spec}.js'
   - '!**/{test,tests,__tests__,example,examples,docs,.github}/**'
   # Renderer-only dependencies: Vite has already bundled these into

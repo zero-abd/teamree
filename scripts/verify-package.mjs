@@ -10,7 +10,7 @@
 // binary and its spawn-helper outside the asar with the executable bit intact,
 // and nothing short of spawning one proves that survived packaging.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -126,7 +126,25 @@ child.on('error', (error) => fail(`could not launch ${app.binary}`, String(error
 let exited = null
 child.on('exit', (code, signal) => (exited = { code, signal }))
 
+// Worktree checkouts are created under the user's home, not under the scratch
+// directory, so they have to be handed back before the app goes away.
+let createdWorktree = null
+
 function cleanup() {
+  if (createdWorktree && !exited) {
+    try {
+      cliQuiet('worktree', 'remove', createdWorktree.id, '--force', '--delete-branch')
+      cliQuiet('project', 'remove', 'verify')
+    } catch {
+      // Best effort: a failed run has already reported the real problem.
+    }
+    try {
+      rmSync(createdWorktree.path, { recursive: true, force: true })
+      rmdirSync(join(createdWorktree.path, '..'))
+    } catch {
+      // Already gone, or shared with another project's worktrees.
+    }
+  }
   if (!exited) child.kill('SIGTERM')
   try {
     rmSync(scratch, { recursive: true, force: true })
@@ -174,6 +192,16 @@ function cli(...args) {
   return result.stdout
 }
 
+/** Same launcher, but a failure is not worth aborting teardown over. */
+function cliQuiet(...args) {
+  const isCmd = app.launcher.endsWith('.cmd')
+  spawnSync(isCmd ? process.env.ComSpec || 'cmd.exe' : app.launcher, isCmd ? ['/c', app.launcher, ...args] : args, {
+    encoding: 'utf8',
+    timeout: STEP_TIMEOUT_MS,
+    env: { ...process.env, TEAMREE_USER_DATA_DIR: userData }
+  })
+}
+
 function cliJson(...args) {
   const text = cli(...args, '--json')
   try {
@@ -189,17 +217,22 @@ ok(`shipped CLI reached the packaged runtime (status: ${JSON.stringify(status.da
 
 cliJson('project', 'add', repo, '--name', 'verify')
 
-let worktrees = cliJson('worktree', 'list').data ?? []
+// Creation is asynchronous by design, so poll the list rather than leaning on
+// any one wait command staying in the CLI surface.
+const created = cliJson('worktree', 'create', '--project', 'verify', '--name', 'verify').data
+let worktree = created
 const waitUntil = Date.now() + STEP_TIMEOUT_MS
-while (worktrees.length === 0 && Date.now() < waitUntil) {
+while (worktree.state !== 'ready' && Date.now() < waitUntil) {
   await sleep(500)
-  worktrees = cliJson('worktree', 'list').data ?? []
+  const rows = cliJson('worktree', 'list').data ?? []
+  worktree = rows.find((row) => row.id === created.id) ?? worktree
+  if (worktree.state === 'failed') break
 }
-if (worktrees.length === 0) {
+if (worktree.state !== 'ready') {
   cleanup()
-  fail('the project produced no worktree to open a terminal in')
+  fail(`the worktree never became ready (state ${worktree.state})`, appOutput)
 }
-const worktree = worktrees[0]
+createdWorktree = worktree
 ok(`worktree ${worktree.id} (${worktree.branch}) at ${worktree.path}`)
 
 // ------------------------------------------------------------ the real PTY --
