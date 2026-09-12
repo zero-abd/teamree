@@ -130,6 +130,7 @@ describe('dispatcher', () => {
       'unsubscribe',
       'workspace.subscribe',
       'worktree.changes',
+      'worktree.commit',
       'worktree.create',
       'worktree.diff',
       'worktree.get',

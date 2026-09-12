@@ -10,6 +10,12 @@ export type ArgSpec = {
   name: string
   description: string
   required?: boolean
+  /**
+   * Takes every remaining positional rather than one. Only the last argument
+   * may be variadic, and a command has at most one — otherwise there is no
+   * saying where the first ends and the second begins.
+   */
+  variadic?: boolean
 }
 
 export type CommandContext = {

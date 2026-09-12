@@ -20,6 +20,7 @@ import type {
   Project,
   Worktree,
   WorktreeChanges,
+  WorktreeCommit,
   WorktreeDiff,
   WorktreeMergePreview,
   WorktreeStatus
@@ -36,6 +37,7 @@ import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type Start
 import { readWorktreeInventory } from './worktreeInventory'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
 import { readMergePreview } from './mergePreview'
+import { commitWorktree } from './worktreeCommit'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { readWorktreeStatus } from './worktreeStatus'
 
@@ -323,6 +325,21 @@ export class GitService {
       ...(params.staged === undefined ? {} : { staged: params.staged }),
       ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
       ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
+      now: this.#now
+    })
+  }
+
+  /**
+   * Commits in a worktree. The first write this service makes to a repository,
+   * and the only one; everything else here reads.
+   */
+  async worktreeCommit(params: ParamsOf<'worktree.commit'>): Promise<WorktreeCommit> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'committing')
+    return commitWorktree(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      message: params.message,
+      ...(params.paths === undefined ? {} : { paths: params.paths }),
       now: this.#now
     })
   }

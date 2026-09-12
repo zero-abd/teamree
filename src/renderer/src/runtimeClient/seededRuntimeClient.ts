@@ -410,6 +410,34 @@ export function createSeededRuntimeClient(): RuntimeClient {
         readAt: Date.now()
       }
     },
+    'worktree.commit': ({ worktreeId, message, paths }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const changes = status ? seededChanges(status) : []
+      const captured = paths && paths.length > 0 ? paths : changes.filter((c) => c.staged).map((c) => c.path)
+      // The seeded workspace moves with it: what was committed is no longer a
+      // pending change, so the chips settle the way they would for real.
+      if (status) {
+        seedStatus(worktree, {
+          ahead: status.ahead + 1,
+          behind: status.behind,
+          staged: 0,
+          unstaged: status.unstaged,
+          untracked: status.untracked,
+          conflicted: status.conflicted
+        })
+      }
+      announce({ type: 'worktrees' })
+      const sha = nextId('sha').replace(/[^a-z0-9]/g, '')
+      return {
+        worktreeId,
+        sha,
+        shortSha: sha.slice(0, 7),
+        message,
+        paths: [...captured].sort(),
+        committedAt: Date.now()
+      }
+    },
     'worktree.mergePreview': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const project = projects.get(worktree.projectId)

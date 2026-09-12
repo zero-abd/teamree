@@ -5,7 +5,8 @@ import {
   findCommand,
   parseCommand,
   resolveCommand,
-  scanCommandWords
+  scanCommandWords,
+  usageName
 } from './command-table.js'
 import { commandName, type CommandSpec } from './command-spec.js'
 import { helpDocument, renderCommandHelp, renderGroupHelp, renderRootHelp, usageLine } from './help.js'
@@ -29,6 +30,7 @@ const EXPECTED = [
   'worktree changes',
   'worktree diff',
   'worktree merges',
+  'worktree commit',
   'worktree wait',
   'terminal list',
   'terminal create',
@@ -189,5 +191,33 @@ describe('help rendering', () => {
   it('scopes the data document to one command', () => {
     const document = helpDocument(['terminal', 'read']) as { commands: Array<{ name: string }> }
     expect(document.commands.map((command) => command.name)).toEqual(['terminal read'])
+  })
+})
+
+describe('a variadic tail', () => {
+  const spec = findCommand(['worktree', 'commit'])
+
+  it('is how the commit command takes its paths', () => {
+    expect(spec?.args?.[spec.args.length - 1]?.variadic).toBe(true)
+  })
+
+  it('accepts as many paths as it is given', () => {
+    const parsed = parseCommand(spec as CommandSpec, ['fix-login', '-m', 'msg', '--', 'a.ts', 'b.ts', 'c.ts'])
+    expect(parsed.positionals).toEqual(['fix-login', 'a.ts', 'b.ts', 'c.ts'])
+  })
+
+  it('still insists on the argument before it', () => {
+    expect(() => parseCommand(spec as CommandSpec, ['-m', 'msg'])).toThrow(/needs <worktree>/)
+  })
+
+  it('reads as repeatable in the usage line', () => {
+    expect(usageName({ name: 'path', required: false, variadic: true })).toBe('[<path>...]')
+    expect(usageName({ name: 'worktree', required: true })).toBe('<worktree>')
+    expect(usageName({ name: 'project', required: false })).toBe('[<project>]')
+  })
+
+  it('leaves a fixed-arity command refusing extra words', () => {
+    const status = findCommand(['worktree', 'status'])
+    expect(() => parseCommand(status as CommandSpec, ['one', 'two'])).toThrow(/takes 1 argument/)
   })
 })

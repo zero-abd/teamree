@@ -116,6 +116,21 @@ describe('milestone 1 acceptance', () => {
     expect(diff.patch).toContain('work in progress')
   })
 
+  it('commits only the path it was given, and says what landed', () => {
+    writeFileSync(join(worktree.path, 'kept.txt'), 'keep me\n')
+    // No `--` here: it would terminate flag parsing and swallow the --json the
+    // harness appends, which is exactly what `--` is supposed to do. It is only
+    // needed for a path that could be read as a flag.
+    const committed = cli<WorktreeCommit>(['worktree', 'commit', worktree.id, '--message', 'keep this one', 'kept.txt'])
+
+    expect(committed.paths).toEqual(['kept.txt'])
+    expect(committed.shortSha).toHaveLength(7)
+    // scratch.txt was never named, so it is still sitting there untracked.
+    const after = cli<WorktreeChanges>(['worktree', 'changes', worktree.id])
+    expect(after.changes.map((change) => change.path)).toContain('scratch.txt')
+    expect(after.changes.map((change) => change.path)).not.toContain('kept.txt')
+  })
+
   it('says whether the worktree would merge back without trying it', () => {
     const preview = cli<WorktreeMergePreview>(['worktree', 'merges', worktree.id])
     // Nothing has been committed on this branch, so it merges cleanly — and

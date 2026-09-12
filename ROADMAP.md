@@ -147,6 +147,21 @@ question that follows.
 - [x] The answer shown per worktree in the sidebar, capped at four reads in
       flight so a refresh cannot fan out a git process per row
 
+## M12 — Committing from the app
+
+The first thing here that writes to a repository, so it is built to refuse
+rather than to guess.
+
+- [x] `worktree.commit`: stages only the paths named, or commits what is
+      already staged — there is deliberately no "commit everything"
+- [x] Refuses an unresolved conflict, and names the files, rather than
+      committing the markers as if they were code
+- [x] Refuses an empty message and an empty commit, and leaves the history
+      untouched when it refuses
+- [x] Reports what the commit actually captured, not what was asked for
+- [x] `teamree worktree commit`, with paths after `--` so none reads as a flag
+- [ ] Staging and committing from the changes panel
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,

@@ -166,6 +166,49 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'commit'],
+    summary: 'Commit staged work in a worktree.',
+    details:
+      'Nothing is staged for you beyond the paths you name. With no --path, it commits what is already ' +
+      'staged and refuses if that is nothing — there is deliberately no "commit everything", because a ' +
+      'sweep picks up the one file you did not mean to keep.',
+    args: [
+      { name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true },
+      {
+        name: 'path',
+        description: 'Stage these before committing. Put them after `--` so none is read as a flag.',
+        required: false,
+        variadic: true
+      }
+    ],
+    flags: [{ name: 'message', kind: 'string', alias: 'm', placeholder: '<text>', description: 'The commit message.' }],
+    examples: [
+      'teamree worktree commit fix-login -m "tighten the retry"',
+      'teamree worktree commit fix-login -m "only this" -- src/app.ts src/app.test.ts'
+    ],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const message = requireString(context.flags, 'message')
+      const paths = context.args.slice(1)
+
+      const result = await context.client.call('worktree.commit', {
+        worktreeId: worktree.id,
+        message,
+        ...(paths.length === 0 ? {} : { paths })
+      })
+
+      return {
+        data: result,
+        text: formatFields([
+          ['commit', result.shortSha],
+          ['message', result.message],
+          ['files', String(result.paths.length)],
+          ...result.paths.map((path): [string, string] => ['', path])
+        ])
+      }
+    }
+  },
+  {
     path: ['worktree', 'merges'],
     summary: 'Say whether a worktree would merge cleanly into its base.',
     details:

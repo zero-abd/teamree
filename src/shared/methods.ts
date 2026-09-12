@@ -12,6 +12,7 @@ import type {
   Terminal,
   Worktree,
   WorktreeChanges,
+  WorktreeCommit,
   WorktreeDiff,
   WorktreeMergePreview,
   WorktreeStatus
@@ -45,6 +46,16 @@ export const Params = {
   worktreeChanges: z.object({
     worktreeId: z.string().min(1),
     limit: z.number().int().positive().optional()
+  }),
+  /**
+   * Commits staged work. Nothing is staged on the caller's behalf beyond the
+   * paths named, and there is deliberately no "commit everything".
+   */
+  worktreeCommit: z.object({
+    worktreeId: z.string().min(1),
+    message: z.string().min(1),
+    /** Stage these before committing. Omitted commits what is already staged. */
+    paths: z.array(z.string().min(1)).optional()
   }),
   /** Whether this worktree would merge into its base, without merging it. */
   worktreeMergePreview: z.object({ worktreeId: z.string().min(1) }),
@@ -127,6 +138,7 @@ export type MethodContract = {
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
+  'worktree.commit': { params: z.infer<typeof Params.worktreeCommit>; result: WorktreeCommit }
   'worktree.mergePreview': {
     params: z.infer<typeof Params.worktreeMergePreview>
     result: WorktreeMergePreview

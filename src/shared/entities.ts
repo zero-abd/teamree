@@ -120,6 +120,21 @@ export type WorktreeMergePreview = {
   readAt: number
 }
 
+/** A commit this app made, reported back so the caller can see what landed. */
+export type WorktreeCommit = {
+  worktreeId: string
+  sha: string
+  shortSha: string
+  message: string
+  /**
+   * What the commit actually captured, which is not always what was asked for:
+   * a path staged earlier goes in too, and saying so is the difference between
+   * a report and a guess.
+   */
+  paths: string[]
+  committedAt: number
+}
+
 export type Terminal = {
   id: string
   worktreeId: string

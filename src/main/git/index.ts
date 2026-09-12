@@ -27,6 +27,7 @@ export {
   sortChanges
 } from './worktreeChanges'
 export { lacksWriteTree, parseMergeTree, readMergePreview } from './mergePreview'
+export { commitWorktree } from './worktreeCommit'
 export { parsePorcelainV2, readWorktreeStatus, type ParsedStatus } from './worktreeStatus'
 export {
   DEFAULT_MIN_INTERVAL_MS,

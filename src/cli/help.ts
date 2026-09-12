@@ -2,7 +2,7 @@
 // describe a flag the parser does not accept.
 
 import { flagLabel, type FlagSpec } from './argv.js'
-import { COMMANDS, commandGroups } from './command-table.js'
+import { COMMANDS, commandGroups, usageName } from './command-table.js'
 import { GLOBAL_FLAGS, commandName, type CommandSpec } from './command-spec.js'
 import { ExitCode } from './exit.js'
 import type { CommandOutput } from './output.js'
@@ -32,7 +32,7 @@ function flagEntries(flags: readonly FlagSpec[]): Array<readonly [string, string
 
 export function usageLine(spec: CommandSpec): string {
   const parts = [BINARY, ...spec.path]
-  for (const arg of spec.args ?? []) parts.push(arg.required === false ? `[<${arg.name}>]` : `<${arg.name}>`)
+  for (const arg of spec.args ?? []) parts.push(usageName(arg))
   for (const flag of spec.flags ?? []) {
     if (!flag.required) continue
     parts.push(`--${flag.name}${flag.kind === 'boolean' ? '' : ` ${flag.placeholder ?? `<${flag.kind}>`}`}`)
@@ -85,7 +85,7 @@ export function renderCommandHelp(spec: CommandSpec): string {
 
   const args = spec.args ?? []
   if (args.length > 0) {
-    sections.push('', 'Arguments:', indentedList(args.map((arg) => [`<${arg.name}>`, arg.description] as const)))
+    sections.push('', 'Arguments:', indentedList(args.map((arg) => [usageName(arg), arg.description] as const)))
   }
   if ((spec.flags ?? []).length > 0) {
     sections.push('', 'Flags:', indentedList(flagEntries(spec.flags ?? [])))
