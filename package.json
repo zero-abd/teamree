@@ -16,7 +16,8 @@
     "lint": "oxlint src",
     "format": "oxfmt --write .",
     "smoke": "npm run build && electron scripts/smoke.mjs",
-    "postinstall": "node scripts/fix-pty-permissions.mjs"
+    "postinstall": "node scripts/fix-pty-permissions.mjs",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -47,5 +48,8 @@
     "esbuild@0.28.2": true,
     "fsevents@2.3.3": true,
     "node-pty@1.1.0": true
+  },
+  "bin": {
+    "teamree": "./out/cli/index.js"
   }
 }
