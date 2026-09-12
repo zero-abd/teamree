@@ -30,6 +30,8 @@ export type DialogState =
   | { kind: 'add-project' }
   | { kind: 'create-worktree'; projectId: string }
   | { kind: 'palette' }
+  /** Raised only when git has already refused: there is work here to lose. */
+  | { kind: 'confirm-remove'; worktreeId: string; reason: string }
   | null
 
 export type Notice = { id: number; text: string; tone: 'error' | 'info' }
@@ -81,6 +83,8 @@ type WorkspaceState = {
   createWorktree: (input: { projectId: string; name: string; startedFrom?: string }) => void
   retryWorktree: (worktreeId: string) => void
   removeWorktree: (worktreeId: string) => Promise<void>
+  /** Goes through with a removal git refused, discarding the work in it. */
+  forceRemoveWorktree: (worktreeId: string) => Promise<void>
 
   openWorktree: (worktreeId: string) => Promise<void>
   closeWorktreeTab: (worktreeId: string) => void
@@ -334,6 +338,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       .catch(failed('Could not save the layout'))
   }
 
+  /** Drops a worktree from this window once the runtime has really removed it. */
+  const forgetWorktree = (worktreeId: string): void => {
+    useWorkspaceStore.getState().closeWorktreeTab(worktreeId)
+    set((state) => ({ worktrees: state.worktrees.filter((entry) => entry.id !== worktreeId) }))
+  }
+
   const activeLayout = (): Layout | null => {
     const { activeWorktreeId, layouts } = get()
     return activeWorktreeId ? (layouts[activeWorktreeId] ?? null) : null
@@ -460,11 +470,40 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         .catch(failed('Retry failed'))
     },
 
+    /**
+     * Removes a worktree, and asks first when there is something to lose.
+     *
+     * Not forced. The runtime refuses to delete a checkout with uncommitted
+     * changes and says so, which is a protection worth keeping rather than
+     * defeating: the only thing between a small cross in a sidebar and
+     * somebody's afternoon is that refusal.
+     */
     async removeWorktree(worktreeId) {
       try {
+        await runtimeClient.call('worktree.remove', { worktreeId })
+        forgetWorktree(worktreeId)
+      } catch (error) {
+        // A conflict here means exactly one thing: git found work in the
+        // checkout. Anything else is a real failure and is reported as one.
+        if ((error as { code?: string } | null)?.code === 'conflict') {
+          set({
+            dialog: {
+              kind: 'confirm-remove',
+              worktreeId,
+              reason: error instanceof Error ? error.message : 'this worktree has uncommitted changes'
+            }
+          })
+          return
+        }
+        failed('Could not remove the worktree')(error)
+      }
+    },
+
+    async forceRemoveWorktree(worktreeId) {
+      set({ dialog: null })
+      try {
         await runtimeClient.call('worktree.remove', { worktreeId, force: true })
-        get().closeWorktreeTab(worktreeId)
-        set((state) => ({ worktrees: state.worktrees.filter((entry) => entry.id !== worktreeId) }))
+        forgetWorktree(worktreeId)
       } catch (error) {
         failed('Could not remove the worktree')(error)
       }

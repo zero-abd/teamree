@@ -198,6 +198,16 @@ terminal and typed the name yourself.
 - [x] A pane started this way is an ordinary pane: the runtime pins its session
       id, so it comes back resumed after a restart like any other
 
+## M15 — Not losing somebody's afternoon
+
+- [x] Removing a worktree from the sidebar is no longer forced. The runtime
+      already refused to delete a checkout with uncommitted work; the GUI was
+      passing `force` unconditionally and defeating it
+- [x] That refusal now raises a confirmation naming what would be thrown away,
+      and the removal only proceeds from there
+- [x] A clean worktree still goes without a dialog, so the one that matters is
+      not the one people learn to click through
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,

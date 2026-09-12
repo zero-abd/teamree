@@ -1,0 +1,41 @@
+// The one dialog in the app that exists to slow somebody down.
+//
+// It is never shown speculatively: it appears only after git has already
+// refused to remove the checkout, which it does for exactly one reason — there
+// is work in there that is not committed anywhere. So the question is not
+// "are you sure" but "this will be thrown away, and here is what".
+
+import { Modal } from './Modal'
+import { useWorkspaceStore } from '../state/workspaceStore'
+
+export function ConfirmRemoveDialog({ worktreeId, reason }: { worktreeId: string; reason: string }): React.JSX.Element {
+  const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
+  const status = useWorkspaceStore((state) => state.statuses[worktreeId])
+  const closeDialog = useWorkspaceStore((state) => state.closeDialog)
+  const forceRemoveWorktree = useWorkspaceStore((state) => state.forceRemoveWorktree)
+
+  const pending = status === undefined ? 0 : status.staged + status.unstaged + status.untracked + status.conflicted
+
+  return (
+    <Modal title={`Discard ${worktree?.name ?? 'this worktree'}?`} onClose={closeDialog}>
+      <div className="confirm">
+        <p className="confirm__body">{reason}</p>
+        {pending > 0 ? (
+          <p className="confirm__detail">
+            {pending} uncommitted change{pending === 1 ? '' : 's'} will be deleted with the checkout. Nothing here is on
+            any branch, so there is no undo.
+          </p>
+        ) : null}
+        {worktree ? <p className="confirm__path">{worktree.path}</p> : null}
+        <div className="confirm__actions">
+          <button type="button" className="button" onClick={closeDialog}>
+            Keep it
+          </button>
+          <button type="button" className="button button--danger" onClick={() => void forceRemoveWorktree(worktreeId)}>
+            Discard the work
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}

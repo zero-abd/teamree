@@ -220,3 +220,66 @@ it('never fires two pushes at once', async () => {
   expect(call.mock.calls.filter(([method]) => method === 'worktree.push')).toHaveLength(1)
   call.mockRestore()
 })
+
+it('never forces a worktree removal without asking first', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  // A worktree with uncommitted work is exactly the case the runtime refuses.
+  const dirty = useWorkspaceStore.getState().worktrees.find((entry) => {
+    const status = useWorkspaceStore.getState().statuses[entry.id]
+    return entry.state === 'ready' && status !== undefined && status.unstaged + status.staged > 0
+  })!
+
+  const call = vi.spyOn(runtimeClient, 'call')
+  await useWorkspaceStore.getState().removeWorktree(dirty.id)
+
+  const attempts = call.mock.calls.filter(([method]) => method === 'worktree.remove')
+  expect(attempts).toHaveLength(1)
+  // The whole point: the first attempt is unforced, so git gets to refuse.
+  expect(attempts[0]?.[1]).toEqual({ worktreeId: dirty.id })
+  // Nothing was removed, and the user is being asked.
+  expect(useWorkspaceStore.getState().worktrees.some((entry) => entry.id === dirty.id)).toBe(true)
+  expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: dirty.id })
+  call.mockRestore()
+})
+
+it('discards the work only once that has been confirmed', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const dirty = useWorkspaceStore.getState().worktrees.find((entry) => {
+    const status = useWorkspaceStore.getState().statuses[entry.id]
+    return entry.state === 'ready' && status !== undefined && status.unstaged + status.staged > 0
+  })!
+
+  await useWorkspaceStore.getState().removeWorktree(dirty.id)
+  const call = vi.spyOn(runtimeClient, 'call')
+  await useWorkspaceStore.getState().forceRemoveWorktree(dirty.id)
+
+  expect(call.mock.calls.find(([method]) => method === 'worktree.remove')?.[1]).toEqual({
+    worktreeId: dirty.id,
+    force: true
+  })
+  expect(useWorkspaceStore.getState().worktrees.some((entry) => entry.id === dirty.id)).toBe(false)
+  expect(useWorkspaceStore.getState().dialog).toBeNull()
+  call.mockRestore()
+})
+
+it('removes a clean worktree without stopping to ask', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const clean = useWorkspaceStore.getState().worktrees.find((entry) => {
+    const status = useWorkspaceStore.getState().statuses[entry.id]
+    return (
+      entry.state === 'ready' &&
+      status !== undefined &&
+      status.staged + status.unstaged + status.untracked + status.conflicted === 0
+    )
+  })!
+
+  await useWorkspaceStore.getState().removeWorktree(clean.id)
+
+  // Nothing is lost by removing a clean checkout, so nagging about it would
+  // only teach people to click through the dialog that matters.
+  expect(useWorkspaceStore.getState().dialog).toBeNull()
+  expect(useWorkspaceStore.getState().worktrees.some((entry) => entry.id === clean.id)).toBe(false)
+})

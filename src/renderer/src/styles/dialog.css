@@ -362,3 +362,48 @@ select.field__input {
   color: var(--fg-muted);
   font-size: var(--text-xs);
 }
+
+/* The confirmation for discarding a worktree. Wordy on purpose: this is the
+   one place in the app where reading the sentence matters. */
+.confirm {
+  width: min(440px, 84vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.confirm__body {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-base);
+}
+
+.confirm__detail {
+  margin: 0;
+  color: var(--warning);
+  font-size: var(--text-sm);
+}
+
+.confirm__path {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
+}
+
+.button--danger {
+  border-color: rgb(232 97 90 / 55%);
+  background: rgb(232 97 90 / 16%);
+  color: var(--danger);
+}
+
+.button--danger:hover {
+  background: rgb(232 97 90 / 26%);
+}

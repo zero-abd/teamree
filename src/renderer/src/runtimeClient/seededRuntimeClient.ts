@@ -353,7 +353,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
       finishCreation(worktree.id, /fail/i.test(name))
       return worktree
     },
-    'worktree.remove': ({ worktreeId }) => {
+    'worktree.remove': ({ worktreeId, force }) => {
+      const status = statuses.get(worktreeId)
+      const pending = status ? status.staged + status.unstaged + status.untracked + status.conflicted : 0
+      // The same refusal the real runtime makes, so the confirmation this
+      // provokes is demonstrable rather than only reachable against git.
+      if (!force && pending > 0) {
+        throw Object.assign(
+          new Error(`worktree has ${pending} uncommitted changes; remove with force to discard them`),
+          {
+            code: 'conflict'
+          }
+        )
+      }
       worktrees.delete(worktreeId)
       statuses.delete(worktreeId)
       layouts.delete(worktreeId)

@@ -7,6 +7,7 @@ import { CreateWorktreeDialog } from './dialogs/CreateWorktreeDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
+import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { SidebarResizer } from './shell/SidebarResizer'
@@ -77,6 +78,9 @@ export function App(): React.JSX.Element {
       ) : null}
 
       {dialog?.kind === 'palette' ? <CommandPalette modifier={modifier} /> : null}
+      {dialog?.kind === 'confirm-remove' ? (
+        <ConfirmRemoveDialog worktreeId={dialog.worktreeId} reason={dialog.reason} />
+      ) : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
       {dialog?.kind === 'create-worktree' ? <CreateWorktreeDialog projectId={dialog.projectId} /> : null}
     </div>
