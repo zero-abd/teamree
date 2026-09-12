@@ -1,21 +1,62 @@
 # teamree
 
-An ADE built for teamwork.
+An ADE built for teamwork: run several coding agents at once, each in its own
+git worktree, and keep track of all of them in one window.
 
 ## Status
 
-Early development. Not yet runnable.
+Single-user and working. Runs from source with `npm run dev`, and packages for
+macOS, Windows and Linux — though only macOS has actually been built and
+launched; see the known gaps in `ROADMAP.md`, which are recorded rather than
+discovered. Team features come after this works.
 
-## Scope
+## What it does
 
-A desktop agentic development environment. The first milestone is single-user:
+**A worktree per task.** Add a repository, start a worktree from any base ref,
+local branch, tag, commit or remote branch. Each one is its own checkout, so
+five attempts at the same task never see each other's files.
 
-- Parallel git worktrees, one per task
-- Split terminals
-- A CLI so agents can drive the app
-- The GUI tying them together
+**Terminals, split however you like.** Arbitrarily nested, resizable panes per
+worktree, with a real PTY behind each one.
 
-Team features come after that works.
+**Terminals that come back.** Quitting kills every shell — a PTY is a child
+process — but a pane running a coding agent comes back with its conversation
+resumed, because the agent keeps that on disk and teamree remembers which
+session was in which pane. An ordinary pane comes back as a shell in the same
+directory, and its command is deliberately never re-run.
+
+**A live picture of the work.** Status per worktree, updated by watching the
+checkout rather than by polling, so an edit made by an agent inside a
+ten-minute shell session moves the chips immediately. A panel shows the changed
+paths and the patch for any of them.
+
+**Enough git to finish.** See what changed, tick what should go in, commit it,
+and check whether the branch would merge into its base — answered in memory, so
+asking costs the repository nothing. Push when it is ready. There is no force
+push and no flag to ask for one.
+
+**Everything the GUI can do, the CLI can do.** `teamree` talks to the running
+app over a local socket, so an agent can create a worktree, open a terminal,
+run a command and read the output back — and the GUI reflects all of it live,
+because both ends meet at the same runtime rather than at a transport.
+
+```sh
+teamree worktree create --project app --name "fix login"
+teamree worktree wait fix-login
+teamree terminal run --worktree fix-login --command "npm test"
+teamree worktree changes fix-login
+```
+
+## Running it
+
+```sh
+npm install
+npm run dev
+```
+
+`npm test` runs the suite, including an acceptance pass that drives a real
+runtime over the real socket. `npm run typecheck`, `npm run lint` and
+`npm run format` are what CI would check.
 
 ## Packaged builds
 
