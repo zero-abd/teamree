@@ -19,8 +19,14 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
       if (!command) return
 
       const store = useWorkspaceStore.getState()
-      // A modal owns the keyboard while it is up.
-      if (store.dialog) return
+      // A modal owns the keyboard while it is up — except the palette's own
+      // chord, which closes it again the way every palette does.
+      if (store.dialog) {
+        if (command !== 'open-palette' || store.dialog.kind !== 'palette') return
+        event.preventDefault()
+        store.closeDialog()
+        return
+      }
 
       event.preventDefault()
       event.stopPropagation()
@@ -52,6 +58,9 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
           break
         case 'focus-next-pane':
           store.focusNextPane()
+          break
+        case 'open-palette':
+          store.openDialog({ kind: 'palette' })
           break
       }
     }

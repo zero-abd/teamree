@@ -7,6 +7,7 @@ import { CreateWorktreeDialog } from './dialogs/CreateWorktreeDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
+import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
@@ -75,6 +76,7 @@ export function App(): React.JSX.Element {
         </div>
       ) : null}
 
+      {dialog?.kind === 'palette' ? <CommandPalette modifier={modifier} /> : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
       {dialog?.kind === 'create-worktree' ? <CreateWorktreeDialog projectId={dialog.projectId} /> : null}
     </div>

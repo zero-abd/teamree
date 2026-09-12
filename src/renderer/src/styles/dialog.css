@@ -281,3 +281,84 @@ select.field__input {
     transform: translateY(-3px);
   }
 }
+
+/* The palette. Same modal chrome as the dialogs, but the input is the whole
+   header: there is nothing to fill in, only something to find. */
+.palette {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: min(560px, 86vw);
+}
+
+.palette__input {
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-size: var(--text-base);
+}
+
+.palette__input:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.palette__list {
+  margin: var(--s3) 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  max-height: min(52vh, 400px);
+}
+
+.palette__empty {
+  margin: var(--s4) 0 0;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.palette__row {
+  width: 100%;
+  padding: var(--s2) var(--s3);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.palette__row--selected {
+  background: var(--accent-soft);
+}
+
+.palette__label {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The branch is the middle column and the only one allowed to be clipped: it
+   is the longest and the least likely to be what is being read. */
+.palette__hint {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.palette__detail {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}

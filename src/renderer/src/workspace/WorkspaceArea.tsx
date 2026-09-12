@@ -65,6 +65,10 @@ export function WorkspaceArea({
               <dt>{shortcutHint('focus-next-pane', modifier)}</dt>
               <dd>next pane</dd>
             </div>
+            <div>
+              <dt>{shortcutHint('open-palette', modifier)}</dt>
+              <dd>go to anything</dd>
+            </div>
           </dl>
         </div>
       </main>
@@ -85,7 +89,7 @@ export function WorkspaceArea({
             type="button"
             className={`button button--ghost button--small${changesOpen ? ' button--on' : ''}`}
             aria-pressed={changesOpen}
-            title="Show what changed in this worktree"
+            title={`Show what changed in this worktree · ${shortcutHint('open-palette', modifier)} to jump anywhere`}
             onClick={toggleChanges}
           >
             Changes

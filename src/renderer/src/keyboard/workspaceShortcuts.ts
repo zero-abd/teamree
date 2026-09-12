@@ -12,6 +12,7 @@ export type WorkspaceCommand =
   | 'new-worktree'
   | 'toggle-sidebar'
   | 'focus-next-pane'
+  | 'open-palette'
 
 export type WorkspaceShortcut = {
   command: WorkspaceCommand
@@ -26,7 +27,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'new-terminal', chord: { key: 't' }, title: 'New terminal' },
   { command: 'new-worktree', chord: { key: 'n' }, title: 'New worktree' },
   { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Toggle sidebar' },
-  { command: 'focus-next-pane', chord: { key: ']' }, title: 'Focus next pane' }
+  { command: 'focus-next-pane', chord: { key: ']' }, title: 'Focus next pane' },
+  { command: 'open-palette', chord: { key: 'k' }, title: 'Go to worktree or command' }
 ]
 
 export function commandForEvent(

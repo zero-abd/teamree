@@ -105,6 +105,17 @@ file you are about to commit is a stray log.
 - [x] `teamree worktree changes` and `teamree worktree diff`
 - [x] A changes panel in the GUI, live off the same watch as the chips
 
+## M9 — Getting around
+
+Tabs stop being a way to navigate somewhere around the sixth one.
+
+- [x] A palette on one chord: worktrees by name, branch or project, and the
+      actions worth reaching without the mouse
+- [x] Ranking that puts the thing you meant first — whole-query hits over
+      scattered letters, word starts over mid-word, initialisms over neither
+- [x] The same chord closes it, arrows and Enter drive it, the mouse agrees
+      with the keyboard about what is selected
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,

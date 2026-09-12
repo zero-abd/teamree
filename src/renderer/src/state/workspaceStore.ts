@@ -24,7 +24,11 @@ import {
 } from '../shell/sidebarWidth'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 
-export type DialogState = { kind: 'add-project' } | { kind: 'create-worktree'; projectId: string } | null
+export type DialogState =
+  | { kind: 'add-project' }
+  | { kind: 'create-worktree'; projectId: string }
+  | { kind: 'palette' }
+  | null
 
 export type Notice = { id: number; text: string; tone: 'error' | 'info' }
 
