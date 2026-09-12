@@ -24,7 +24,10 @@ export function mergeBadge(preview: WorktreeMergePreview | undefined): MergeBadg
   switch (preview.state) {
     case 'nothingToMerge':
       return {
-        label: 'nothing to merge',
+        // Short on purpose. This sits in a sidebar beside the worktree's name,
+        // and the name is what somebody is reading; the least important thing
+        // on the row must not be what pushes it out of view.
+        label: 'no commits',
         tone: 'spent',
         // Never "merged": a branch whose commits are all in the base and one
         // that never made any are the same fact to git, and the row must not

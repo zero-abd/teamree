@@ -3,6 +3,8 @@
 An ADE built for teamwork: run several coding agents at once, each in its own
 git worktree, and keep track of all of them in one window.
 
+![Two split terminals in a worktree, with the changed files and a patch beside them](docs/screenshot.png)
+
 ## Status
 
 Single-user and working. Runs from source with `npm run dev`, and packages for

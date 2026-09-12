@@ -113,7 +113,24 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                       onRemove={() => void removeWorktree(worktree.id)}
                     />
                   ))}
-                  {rows.length === 0 ? <li className="project__none">No matching worktrees</li> : null}
+                  {rows.length === 0 ? (
+                    <li className="project__none">
+                      {filter.trim().length > 0 ? (
+                        'No worktrees match that.'
+                      ) : (
+                        <>
+                          {'No worktrees yet. '}
+                          <button
+                            type="button"
+                            className="project__none-action"
+                            onClick={() => openDialog({ kind: 'create-worktree', projectId: project.id })}
+                          >
+                            Start one
+                          </button>
+                        </>
+                      )}
+                    </li>
+                  ) : null}
                 </ul>
               )}
             </section>
