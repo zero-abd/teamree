@@ -13,9 +13,9 @@ Milestone 1 is single-user. Team features are deliberately out of scope until it
 
 ## M0 — Scaffold
 
-- [ ] Electron + Vite + React + TypeScript builds and launches
-- [ ] Main, preload, renderer split with strict process boundaries
-- [ ] Typecheck, lint, format, test wired up
+- [x] Electron + Vite + React + TypeScript builds and launches
+- [x] Main, preload, renderer split with strict process boundaries
+- [x] Typecheck, lint, format, test wired up
 
 ## M1 — Runtime and RPC
 
