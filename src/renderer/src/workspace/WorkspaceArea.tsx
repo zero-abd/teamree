@@ -4,6 +4,7 @@ import { useCallback } from 'react'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { PaneTree } from '../panes/PaneTree'
+import { ChangesPanel } from './ChangesPanel'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { WorktreeTabs } from './WorktreeTabs'
 
@@ -25,6 +26,11 @@ export function WorkspaceArea({
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
   const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
   const applySplitSizes = useWorkspaceStore((state) => state.applySplitSizes)
+  const changesOpen = useWorkspaceStore((state) => state.changesOpen)
+  const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
+  const status = useWorkspaceStore((state) =>
+    state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
+  )
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -77,6 +83,16 @@ export function WorkspaceArea({
         <div className="workspace__tools">
           <button
             type="button"
+            className={`button button--ghost button--small${changesOpen ? ' button--on' : ''}`}
+            aria-pressed={changesOpen}
+            title="Show what changed in this worktree"
+            onClick={toggleChanges}
+          >
+            Changes
+            {changedCount(status) > 0 ? <span className="button__count">{changedCount(status)}</span> : null}
+          </button>
+          <button
+            type="button"
             className="button button--ghost button--small"
             title={`Split right · ${shortcutHint('split-right', modifier)}`}
             onClick={() => void splitFocusedPane('row')}
@@ -102,42 +118,58 @@ export function WorkspaceArea({
         </div>
       </header>
 
-      <div className="workspace__panes">
-        {layout?.root ? (
-          <PaneTree
-            key={activeWorktreeId}
-            node={layout.root}
-            path={[]}
-            terminals={terminals}
-            focusedTerminalId={layout.focusedTerminalId}
-            onFocus={focusPane}
-            onClose={onClose}
-            onResize={onResize}
-            isAppChord={isAppChord}
-            closeHint={shortcutHint('close-pane', modifier)}
-          />
-        ) : (
-          <div className="placeholder placeholder--inset">
-            <h2 className="placeholder__title">
-              {worktree.state === 'creating' ? 'Preparing the worktree' : 'No terminals here yet'}
-            </h2>
-            <p className="placeholder__body">
-              {worktree.state === 'creating'
-                ? 'Panes appear as soon as the checkout is ready.'
-                : `Start one with ${shortcutHint('new-terminal', modifier)}.`}
-            </p>
-            {worktree.state === 'ready' ? (
-              <button
-                type="button"
-                className="button button--primary"
-                onClick={() => void createTerminal(activeWorktreeId)}
-              >
-                New terminal
-              </button>
-            ) : null}
-          </div>
-        )}
+      <div className="workspace__body">
+        <div className="workspace__panes">
+          {layout?.root ? (
+            <PaneTree
+              key={activeWorktreeId}
+              node={layout.root}
+              path={[]}
+              terminals={terminals}
+              focusedTerminalId={layout.focusedTerminalId}
+              onFocus={focusPane}
+              onClose={onClose}
+              onResize={onResize}
+              isAppChord={isAppChord}
+              closeHint={shortcutHint('close-pane', modifier)}
+            />
+          ) : (
+            <div className="placeholder placeholder--inset">
+              <h2 className="placeholder__title">
+                {worktree.state === 'creating' ? 'Preparing the worktree' : 'No terminals here yet'}
+              </h2>
+              <p className="placeholder__body">
+                {worktree.state === 'creating'
+                  ? 'Panes appear as soon as the checkout is ready.'
+                  : `Start one with ${shortcutHint('new-terminal', modifier)}.`}
+              </p>
+              {worktree.state === 'ready' ? (
+                <button
+                  type="button"
+                  className="button button--primary"
+                  onClick={() => void createTerminal(activeWorktreeId)}
+                >
+                  New terminal
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <ChangesPanel />
       </div>
     </main>
   )
+}
+
+/**
+ * What the button's badge counts: everything a commit would have to deal with.
+ * Ahead and behind are about the branch rather than the tree, so they are the
+ * status bar's business, not this button's.
+ */
+export function changedCount(
+  status: { staged: number; unstaged: number; untracked: number; conflicted: number } | undefined
+): number {
+  if (!status) return 0
+  return status.staged + status.unstaged + status.untracked + status.conflicted
 }

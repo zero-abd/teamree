@@ -103,7 +103,7 @@ file you are about to commit is a stray log.
 - [x] `worktree.diff`: the patch for a worktree or one path in it
 - [x] Untracked files diffed as the patch that adds them, which plain `git diff` will not do
 - [x] `teamree worktree changes` and `teamree worktree diff`
-- [ ] A changes panel in the GUI
+- [x] A changes panel in the GUI, live off the same watch as the chips
 
 ## Known gaps
 

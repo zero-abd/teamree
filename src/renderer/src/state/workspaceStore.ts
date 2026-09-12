@@ -3,7 +3,16 @@
 // are open, which pane has focus, how wide the sidebar is).
 
 import { create } from 'zustand'
-import type { Layout, PaneNode, Project, Terminal, Worktree, WorktreeStatus } from '@shared/entities'
+import type {
+  Layout,
+  PaneNode,
+  Project,
+  Terminal,
+  Worktree,
+  WorktreeChanges,
+  WorktreeDiff,
+  WorktreeStatus
+} from '@shared/entities'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
@@ -28,6 +37,13 @@ type WorkspaceState = {
   statuses: Record<string, WorktreeStatus>
   terminals: Record<string, Terminal>
   layouts: Record<string, Layout>
+
+  /** Open state of the changes panel, and what it is showing. */
+  changesOpen: boolean
+  changes: Record<string, WorktreeChanges>
+  selectedChangePath: string | null
+  diff: WorktreeDiff | null
+  diffPending: boolean
 
   collapsedProjects: Record<string, boolean>
   openWorktreeIds: string[]
@@ -58,6 +74,10 @@ type WorkspaceState = {
   createTerminal: (worktreeId: string) => Promise<void>
   focusNextPane: () => void
   applySplitSizes: (worktreeId: string, path: number[], sizes: number[]) => void
+
+  toggleChanges: () => void
+  /** Shows the patch for one path, or clears the selection when given null. */
+  selectChange: (path: string | null) => void
 
   toggleProject: (projectId: string) => void
   setSidebarWidth: (width: number) => void
@@ -147,6 +167,32 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }))
   }
 
+  /**
+   * The changed-paths list, read only while the panel is open and only for the
+   * worktree on screen. It is a `git status` per read, and a panel nobody has
+   * opened is not worth one.
+   */
+  const refreshChanges = async (worktreeId: string): Promise<void> => {
+    const changes = await runtimeClient.call('worktree.changes', { worktreeId }).catch(() => null)
+    if (!changes) return
+    set((state) => ({ changes: { ...state.changes, [worktreeId]: changes } }))
+  }
+
+  /**
+   * The patch for the selected path. Re-read whenever the tree moves, so the
+   * pane on the right is never describing an older version of the file than the
+   * list on the left.
+   */
+  const refreshDiff = async (worktreeId: string, path: string): Promise<void> => {
+    set({ diffPending: true })
+    const diff = await runtimeClient.call('worktree.diff', { worktreeId, path }).catch(() => null)
+    // The selection can move while a patch is in flight; a late answer for a
+    // path nobody is looking at any more must not replace the current one.
+    const current = get()
+    if (current.selectedChangePath !== path || current.activeWorktreeId !== worktreeId) return
+    set({ diff, diffPending: false })
+  }
+
   const markExited = (exits: RefreshTargets['exits']): void => {
     set((state) => {
       const terminals = { ...state.terminals }
@@ -163,10 +209,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.exits.length > 0) markExited(targets.exits)
 
     const stale = new Set(targets.statuses)
-    // Git status is the one thing with no change stream: nothing tells the
-    // runtime that a command edited a file. A worktree list change, or a shell
-    // starting or exiting, is the closest honest signal that the tree moved —
-    // which is why status is re-read on those events rather than on a timer.
+    // The runtime watches each checkout and publishes `worktrees` when its files
+    // move, so status has a change stream of its own now. A terminal starting or
+    // exiting is still worth a read: it is a command boundary, and it costs one
+    // call for the worktrees already on screen.
     if (targets.terminals || targets.exits.length > 0) {
       for (const worktreeId of get().openWorktreeIds) stale.add(worktreeId)
     }
@@ -186,7 +232,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     await Promise.all(reads)
     // Last, so a status is never asked for a worktree the list just dropped.
     const live = new Set(get().worktrees.map((worktree) => worktree.id))
-    await refreshStatuses([...stale].filter((worktreeId) => live.has(worktreeId)))
+    const readable = [...stale].filter((worktreeId) => live.has(worktreeId))
+    await refreshStatuses(readable)
+
+    // The panel rides the same signal as the chips above it, so an edit made in
+    // a shell — or by an agent through the CLI — moves both at once.
+    const { changesOpen, activeWorktreeId, selectedChangePath } = get()
+    if (!changesOpen || !activeWorktreeId || !readable.includes(activeWorktreeId)) return
+    await refreshChanges(activeWorktreeId)
+    if (selectedChangePath !== null) await refreshDiff(activeWorktreeId, selectedChangePath)
   }
 
   const refresher = createWorkspaceRefresher({
@@ -220,6 +274,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     statuses: {},
     terminals: {},
     layouts: {},
+
+    changesOpen: false,
+    changes: {},
+    selectedChangePath: null,
+    diff: null,
+    diffPending: false,
 
     collapsedProjects: {},
     openWorktreeIds: [],
@@ -326,12 +386,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async openWorktree(worktreeId) {
+      const switching = get().activeWorktreeId !== worktreeId
       set((state) => ({
         activeWorktreeId: worktreeId,
         openWorktreeIds: state.openWorktreeIds.includes(worktreeId)
           ? state.openWorktreeIds
-          : [...state.openWorktreeIds, worktreeId]
+          : [...state.openWorktreeIds, worktreeId],
+        // A patch belongs to the worktree it came from; carrying one across a
+        // tab switch would show this worktree's file list beside that one's
+        // diff.
+        ...(switching ? { selectedChangePath: null, diff: null, diffPending: false } : {})
       }))
+      if (get().changesOpen) void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
       // Through the queue like everything else, so opening a tab while an
       // event-driven refetch is in flight cannot interleave the two answers.
       refresher.request(refreshTargets({ terminals: true, layouts: [worktreeId], statuses: [worktreeId] }))
@@ -426,6 +492,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const layout = get().layouts[worktreeId]
       if (!layout?.root) return
       persistLayout({ ...layout, root: setSizesAt(layout.root, path, sizes) as PaneNode })
+    },
+
+    toggleChanges() {
+      const opening = !get().changesOpen
+      set({ changesOpen: opening })
+      if (!opening) return
+      // Read on the way open rather than kept warm: until the panel is shown,
+      // nothing on screen depends on it.
+      const worktreeId = get().activeWorktreeId
+      if (worktreeId) void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
+    },
+
+    selectChange(path) {
+      const worktreeId = get().activeWorktreeId
+      set({ selectedChangePath: path, diff: null, diffPending: path !== null })
+      if (path === null || !worktreeId) return
+      void refreshDiff(worktreeId, path).catch((error: unknown) => {
+        set({ diffPending: false })
+        failed('Could not read the patch')(error)
+      })
     },
 
     toggleProject(projectId) {
