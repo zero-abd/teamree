@@ -472,6 +472,34 @@ export function createSeededRuntimeClient(): RuntimeClient {
         pushedAt: Date.now()
       }
     },
+    'worktree.log': ({ worktreeId, limit }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const project = projects.get(worktree.projectId)
+      const ahead = statuses.get(worktreeId)?.ahead ?? 0
+      const subjects = [
+        'rank results by recency, not just score',
+        'pull the tie-break out of the comparator',
+        'cover the empty-query case'
+      ]
+      const commits = Array.from({ length: ahead }, (_, index) => {
+        const sha = `${nextId('c').replace(/[^a-z0-9]/g, '')}0000000000000000000000000000`.slice(0, 40)
+        return {
+          sha,
+          shortSha: sha.slice(0, 7),
+          author: 'you',
+          committedAt: new Date(Date.now() - (index + 1) * 1_800_000).toISOString(),
+          subject: subjects[index % subjects.length] as string
+        }
+      })
+      const cap = limit ?? 50
+      return {
+        worktreeId,
+        baseRef: project?.baseRef ?? 'origin/main',
+        commits: commits.slice(0, cap),
+        truncated: commits.length > cap,
+        readAt: Date.now()
+      }
+    },
     'worktree.mergePreview': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const project = projects.get(worktree.projectId)

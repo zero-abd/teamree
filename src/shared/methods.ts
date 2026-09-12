@@ -15,6 +15,7 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeDiff,
+  WorktreeLog,
   WorktreeMergePreview,
   WorktreePush,
   WorktreeStatus
@@ -67,6 +68,11 @@ export const Params = {
     worktreeId: z.string().min(1),
     /** Defaults to origin. */
     remote: z.string().min(1).optional()
+  }),
+  /** The commits this worktree has made that its base does not have. */
+  worktreeLog: z.object({
+    worktreeId: z.string().min(1),
+    limit: z.number().int().positive().optional()
   }),
   /** Whether this worktree would merge into its base, without merging it. */
   worktreeMergePreview: z.object({ worktreeId: z.string().min(1) }),
@@ -154,6 +160,7 @@ export type MethodContract = {
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
   'worktree.commit': { params: z.infer<typeof Params.worktreeCommit>; result: WorktreeCommit }
   'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
+  'worktree.log': { params: z.infer<typeof Params.worktreeLog>; result: WorktreeLog }
   'worktree.mergePreview': {
     params: z.infer<typeof Params.worktreeMergePreview>
     result: WorktreeMergePreview

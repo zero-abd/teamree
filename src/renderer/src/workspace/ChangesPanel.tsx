@@ -49,6 +49,7 @@ export function ChangesPanel(): React.JSX.Element | null {
   const setAllStaged = useWorkspaceStore((state) => state.setAllStaged)
   const commitStaged = useWorkspaceStore((state) => state.commitStaged)
   const committing = useWorkspaceStore((state) => state.committing)
+  const log = useWorkspaceStore((state) => (worktreeId ? state.logs[worktreeId] : undefined))
   const [message, setMessage] = useState('')
 
   if (!open || !worktreeId) return null
@@ -78,7 +79,9 @@ export function ChangesPanel(): React.JSX.Element | null {
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
-        <p className="changes__empty">Nothing changed here yet.</p>
+        <p className="changes__empty">
+          {(log?.commits.length ?? 0) > 0 ? 'Everything here is committed.' : 'Nothing changed here yet.'}
+        </p>
       ) : (
         <ul className="changes__list">
           {rows.map((change) => (
@@ -151,6 +154,24 @@ export function ChangesPanel(): React.JSX.Element | null {
         <p className="changes__note">
           Showing {changes.limit} of {changes.total}.
         </p>
+      ) : null}
+
+      {log && log.commits.length > 0 ? (
+        <section className="commits" aria-label="Commits this worktree has made">
+          <h3 className="commits__title">
+            {log.commits.length}
+            {log.truncated ? '+' : ''} commit{log.commits.length === 1 && !log.truncated ? '' : 's'} not in{' '}
+            {log.baseRef}
+          </h3>
+          <ul className="commits__list">
+            {log.commits.map((commit) => (
+              <li className="commit" key={commit.sha} title={`${commit.author} · ${commit.committedAt}`}>
+                <span className="commit__sha">{commit.shortSha}</span>
+                <span className="commit__subject">{commit.subject}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {selectedPath === null ? null : (

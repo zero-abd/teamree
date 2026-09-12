@@ -208,6 +208,21 @@ terminal and typed the name yourself.
 - [x] A clean worktree still goes without a dialog, so the one that matters is
       not the one people learn to click through
 
+## M16 — What the worktree actually did
+
+An agent that finishes commits its work, and at that moment every view in the
+app went quiet: the changes list emptied, the chips dropped to zero, and a
+worktree that had just produced a day's work looked like one where nothing
+happened.
+
+- [x] `worktree.log`: the commits this branch has that its base does not,
+      newest first, scoped to `base..branch`
+- [x] Fields separated by NUL, since a commit subject can contain newlines and
+      a line-based reader turns one commit into two
+- [x] `teamree worktree log`, and a commits section in the changes panel
+- [x] An empty changes list now distinguishes "everything here is committed"
+      from "nothing changed here yet"
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,

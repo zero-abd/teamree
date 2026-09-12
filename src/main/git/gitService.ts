@@ -22,6 +22,7 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeDiff,
+  WorktreeLog,
   WorktreeMergePreview,
   WorktreePush,
   WorktreeStatus
@@ -38,6 +39,7 @@ import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type Start
 import { readWorktreeInventory } from './worktreeInventory'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
 import { readMergePreview } from './mergePreview'
+import { readWorktreeLog } from './worktreeLog'
 import { commitWorktree } from './worktreeCommit'
 import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
@@ -342,6 +344,25 @@ export class GitService {
       worktreePath: worktree.path,
       message: params.message,
       ...(params.paths === undefined ? {} : { paths: params.paths }),
+      now: this.#now
+    })
+  }
+
+  /**
+   * What this worktree has committed that its base has not.
+   *
+   * Read from the worktree rather than the primary checkout, so the branch
+   * resolves against the HEAD the user is actually looking at.
+   */
+  async worktreeLog(params: ParamsOf<'worktree.log'>): Promise<WorktreeLog> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'a log')
+    const project = this.#store.getProject(worktree.projectId)
+    return readWorktreeLog(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      baseRef: project?.baseRef ?? 'HEAD',
+      branch: worktree.branch,
+      ...(params.limit === undefined ? {} : { limit: params.limit }),
       now: this.#now
     })
   }

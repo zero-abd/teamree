@@ -162,6 +162,30 @@ export type WorktreePush = {
   pushedAt: number
 }
 
+/** One commit a worktree made. */
+export type WorktreeCommitSummary = {
+  sha: string
+  shortSha: string
+  author: string
+  /** ISO 8601 as git wrote it, offset and all. */
+  committedAt: string
+  subject: string
+}
+
+/**
+ * What a worktree has done that its base has not, newest first.
+ *
+ * Scoped to `base..branch`: the question is what this worktree produced, and
+ * everything before the fork belongs to everyone.
+ */
+export type WorktreeLog = {
+  worktreeId: string
+  baseRef: string
+  commits: WorktreeCommitSummary[]
+  truncated: boolean
+  readAt: number
+}
+
 export type Terminal = {
   id: string
   worktreeId: string

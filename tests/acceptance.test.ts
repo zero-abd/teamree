@@ -131,6 +131,14 @@ describe('milestone 1 acceptance', () => {
     expect(after.changes.map((change) => change.path)).not.toContain('kept.txt')
   })
 
+  it('shows what the worktree committed, which nothing else would say', () => {
+    // The commit above left the changes list empty for that path. Without a log
+    // the app would have nothing at all to show for the work.
+    const log = cli<WorktreeLog>(['worktree', 'log', worktree.id])
+    expect(log.commits.map((commit) => commit.subject)).toContain('keep this one')
+    expect(log.commits[0]?.shortSha).toHaveLength(7)
+  })
+
   it('says whether the worktree would merge back without trying it', () => {
     const preview = cli<WorktreeMergePreview>(['worktree', 'merges', worktree.id])
     // One commit was made above, so there is something to merge and it merges

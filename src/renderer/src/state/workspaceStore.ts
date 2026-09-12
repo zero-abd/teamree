@@ -12,6 +12,7 @@ import type {
   Worktree,
   WorktreeChanges,
   WorktreeDiff,
+  WorktreeLog,
   WorktreeMergePreview,
   WorktreeStatus
 } from '@shared/entities'
@@ -52,6 +53,8 @@ type WorkspaceState = {
 
   changesOpen: boolean
   changes: Record<string, WorktreeChanges>
+  /** What each worktree has committed that its base has not. */
+  logs: Record<string, WorktreeLog>
   selectedChangePath: string | null
   /**
    * Paths ticked in the panel for the next commit. Held here rather than in
@@ -160,7 +163,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             : (openWorktreeIds[openWorktreeIds.length - 1] ?? null),
         layouts: keptFor(state.layouts, live),
         statuses: keptFor(state.statuses, live),
-        mergePreviews: keptFor(state.mergePreviews, live)
+        mergePreviews: keptFor(state.mergePreviews, live),
+        logs: keptFor(state.logs, live)
       }
     })
 
@@ -205,6 +209,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
    * worktree on screen. It is a `git status` per read, and a panel nobody has
    * opened is not worth one.
    */
+  /**
+   * The commits this worktree made, read on the same trigger as its changes.
+   *
+   * Without it the panel goes quiet at exactly the wrong moment: an agent that
+   * finishes its work commits it, and every uncommitted change disappears.
+   */
+  const refreshLog = async (worktreeId: string): Promise<void> => {
+    const log = await runtimeClient.call('worktree.log', { worktreeId }).catch(() => null)
+    if (!log) return
+    set((state) => ({ logs: { ...state.logs, [worktreeId]: log } }))
+  }
+
   const refreshChanges = async (worktreeId: string): Promise<void> => {
     const changes = await runtimeClient.call('worktree.changes', { worktreeId }).catch(() => null)
     if (!changes) return
@@ -317,7 +333,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     // a shell — or by an agent through the CLI — moves both at once.
     const { changesOpen, activeWorktreeId, selectedChangePath } = get()
     if (!changesOpen || !activeWorktreeId || !readable.includes(activeWorktreeId)) return
-    await refreshChanges(activeWorktreeId)
+    await Promise.all([refreshChanges(activeWorktreeId), refreshLog(activeWorktreeId)])
     if (selectedChangePath !== null) await refreshDiff(activeWorktreeId, selectedChangePath)
   }
 
@@ -362,6 +378,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     mergePreviews: {},
     changesOpen: false,
     changes: {},
+    logs: {},
     selectedChangePath: null,
     stagedPaths: [],
     committing: false,
@@ -523,7 +540,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // would stage one worktree's paths against another's index.
         ...(switching ? { selectedChangePath: null, diff: null, diffPending: false, stagedPaths: [] } : {})
       }))
-      if (get().changesOpen) void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
+      if (get().changesOpen) {
+        void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
+        void refreshLog(worktreeId).catch(() => undefined)
+      }
       // Through the queue like everything else, so opening a tab while an
       // event-driven refetch is in flight cannot interleave the two answers.
       refresher.request(refreshTargets({ terminals: true, layouts: [worktreeId], statuses: [worktreeId] }))
@@ -627,7 +647,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Read on the way open rather than kept warm: until the panel is shown,
       // nothing on screen depends on it.
       const worktreeId = get().activeWorktreeId
-      if (worktreeId) void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
+      if (!worktreeId) return
+      void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
+      void refreshLog(worktreeId).catch(() => undefined)
     },
 
     toggleStaged(path) {

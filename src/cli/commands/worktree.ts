@@ -241,6 +241,38 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'log'],
+    summary: 'List the commits a worktree has made that its base has not.',
+    details:
+      'Scoped to base..branch, because the question is what this worktree did rather than what is in the ' +
+      'repository. Newest first.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      { name: 'limit', kind: 'number', placeholder: '<count>', description: 'Commits before the list is capped.' }
+    ],
+    examples: ['teamree worktree log fix-login', 'teamree worktree log fix-login --limit 5 --json'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const limit = readNumber(context.flags, 'limit')
+      const log = await context.client.call('worktree.log', {
+        worktreeId: worktree.id,
+        ...(limit === undefined ? {} : { limit })
+      })
+
+      const table = formatTable(
+        ['COMMIT', 'WHEN', 'AUTHOR', 'SUBJECT'],
+        log.commits.map((commit) => [
+          commit.shortSha,
+          commit.committedAt.slice(0, 10),
+          commit.author,
+          commit.subject.split('\n')[0] ?? ''
+        ]),
+        `Nothing committed here that ${log.baseRef} does not already have.`
+      )
+      return { data: log, text: log.truncated ? `${table}\n\nCapped; there are more.` : table }
+    }
+  },
+  {
     path: ['worktree', 'merges'],
     summary: 'Say whether a worktree would merge cleanly into its base.',
     details:
