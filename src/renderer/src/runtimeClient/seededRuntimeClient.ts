@@ -494,6 +494,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
       }
     },
 
+    'agent.list': () => [
+      { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
+      { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex' }
+    ],
     'terminal.list': ({ worktreeId }) =>
       [...terminals.values()]
         .map((terminal) => terminal.record)

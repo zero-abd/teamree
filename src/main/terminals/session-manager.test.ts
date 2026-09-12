@@ -448,6 +448,7 @@ describe('registerTerminalHandlers', () => {
     registerTerminalHandlers(registry, service)
 
     expect([...registered.keys()].sort()).toEqual([
+      'agent.list',
       'layout.get',
       'layout.set',
       'terminal.close',

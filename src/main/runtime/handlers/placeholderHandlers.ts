@@ -35,6 +35,7 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
 
   placeholder(registry, 'layout.get', Params.layoutGet)
   placeholder(registry, 'layout.set', Params.layoutSet)
+  placeholder(registry, 'agent.list', Params.agentList)
 }
 
 function placeholder<M extends MethodName>(registry: MethodRegistry, method: M, schema: z.ZodType<ParamsOf<M>>): void {

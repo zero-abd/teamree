@@ -181,6 +181,20 @@ The only call in the git layer that leaves the machine.
       did — including what stayed behind uncommitted
 - [ ] Opening a review on the forge after a push
 
+## M14 — Starting an agent
+
+The app is built around coding agents and had no way to start one: you opened a
+terminal and typed the name yourself.
+
+- [x] `agent.list` probes PATH for the agents teamree knows how to resume,
+      rather than asking the user to configure a list that goes stale
+- [x] First match wins, the way a shell resolves it, and an empty PATH entry is
+      not treated as the working directory
+- [x] A button per installed agent in the header and in an empty worktree, and
+      `teamree agent list`
+- [x] A pane started this way is an ordinary pane: the runtime pins its session
+      id, so it comes back resumed after a restart like any other
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,

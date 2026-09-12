@@ -40,7 +40,8 @@ const EXPECTED = [
   'terminal split',
   'terminal close',
   'terminal wait',
-  'terminal run'
+  'terminal run',
+  'agent list'
 ]
 
 describe('the command table', () => {
@@ -49,7 +50,7 @@ describe('the command table', () => {
   })
 
   it('groups the nouns', () => {
-    expect(commandGroups()).toEqual(['project', 'worktree', 'terminal'])
+    expect(commandGroups()).toEqual(['project', 'worktree', 'terminal', 'agent'])
   })
 
   it('resolves every command from its own words', () => {

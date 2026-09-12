@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import type {
+  InstalledAgent,
   Layout,
   PaneNode,
   Project,
@@ -86,6 +87,9 @@ export const Params = {
     limit: z.number().int().positive().optional()
   }),
 
+  /** Coding agents found on PATH, so a pane can start one without being told. */
+  agentList: z.object({}),
+
   terminalList: z.object({ worktreeId: z.string().min(1).optional() }),
   terminalCreate: z.object({
     worktreeId: z.string().min(1),
@@ -154,6 +158,8 @@ export type MethodContract = {
     params: z.infer<typeof Params.worktreeMergePreview>
     result: WorktreeMergePreview
   }
+
+  'agent.list': { params: z.infer<typeof Params.agentList>; result: InstalledAgent[] }
 
   'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
   'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }

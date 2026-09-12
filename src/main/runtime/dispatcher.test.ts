@@ -113,6 +113,7 @@ describe('dispatcher', () => {
     // Named rather than counted: a bare count tells you a number changed, not
     // which method arrived or went missing.
     expect([...registry.methods()].sort()).toEqual([
+      'agent.list',
       'layout.get',
       'layout.set',
       'project.add',

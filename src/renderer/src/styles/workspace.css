@@ -521,3 +521,11 @@
   outline: none;
   box-shadow: var(--ring);
 }
+
+/* The empty pane offers the agents this machine has, then a plain shell. */
+.placeholder__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s2);
+}

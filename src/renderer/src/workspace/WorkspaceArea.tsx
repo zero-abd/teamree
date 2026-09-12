@@ -32,6 +32,8 @@ export function WorkspaceArea({
     state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
   )
   const pushing = useWorkspaceStore((state) => state.pushing)
+  const agents = useWorkspaceStore((state) => state.agents)
+  const startAgent = useWorkspaceStore((state) => state.startAgent)
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
 
   const onResize = useCallback(
@@ -129,6 +131,17 @@ export function WorkspaceArea({
           >
             Split down
           </button>
+          {agents.map((agent) => (
+            <button
+              type="button"
+              key={agent.kind}
+              className="button button--ghost button--small"
+              title={`Open a pane running ${agent.command} (${agent.binary})`}
+              onClick={() => void startAgent(agent.command)}
+            >
+              {agent.command}
+            </button>
+          ))}
           <button
             type="button"
             className="button button--small"
@@ -166,13 +179,25 @@ export function WorkspaceArea({
                   : `Start one with ${shortcutHint('new-terminal', modifier)}.`}
               </p>
               {worktree.state === 'ready' ? (
-                <button
-                  type="button"
-                  className="button button--primary"
-                  onClick={() => void createTerminal(activeWorktreeId)}
-                >
-                  New terminal
-                </button>
+                <div className="placeholder__actions">
+                  {agents.map((agent) => (
+                    <button
+                      type="button"
+                      key={agent.kind}
+                      className="button button--primary"
+                      onClick={() => void startAgent(agent.command)}
+                    >
+                      Start {agent.command}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={agents.length === 0 ? 'button button--primary' : 'button'}
+                    onClick={() => void createTerminal(activeWorktreeId)}
+                  >
+                    New terminal
+                  </button>
+                </div>
               ) : null}
             </div>
           )}

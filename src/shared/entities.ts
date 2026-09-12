@@ -218,6 +218,16 @@ export type StartPointList = {
   truncated: boolean
 }
 
+/** A coding agent this machine can run, found on PATH rather than configured. */
+export type InstalledAgent = {
+  /** Which agent, from the set the app knows how to resume. */
+  kind: string
+  /** What to run. */
+  command: string
+  /** Where it was found. */
+  binary: string
+}
+
 export type RuntimeStatus = {
   version: string
   /** Socket path or named pipe the runtime is listening on. */

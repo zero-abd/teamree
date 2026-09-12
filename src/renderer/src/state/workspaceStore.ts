@@ -4,6 +4,7 @@
 
 import { create } from 'zustand'
 import type {
+  InstalledAgent,
   Layout,
   PaneNode,
   Project,
@@ -58,6 +59,8 @@ type WorkspaceState = {
   stagedPaths: string[]
   committing: boolean
   pushing: boolean
+  /** Coding agents this machine can run, probed once at startup. */
+  agents: InstalledAgent[]
   diff: WorktreeDiff | null
   diffPending: boolean
 
@@ -101,6 +104,8 @@ type WorkspaceState = {
   commitStaged: (message: string) => Promise<void>
   /** Sends the active worktree's branch to its remote. Never forces. */
   pushActiveWorktree: () => Promise<void>
+  /** Opens a pane already running one of the agents found on this machine. */
+  startAgent: (command: string) => Promise<void>
 
   toggleProject: (projectId: string) => void
   setSidebarWidth: (width: number) => void
@@ -351,6 +356,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     stagedPaths: [],
     committing: false,
     pushing: false,
+    agents: [],
     diff: null,
     diffPending: false,
 
@@ -375,6 +381,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const status = await runtimeClient.call('status.get', {})
         set({ runtimeVersion: status.version })
+        // Asked once, and never fatal: an app that cannot list agents is still
+        // an app, and the answer only decides which buttons to offer.
+        void runtimeClient
+          .call('agent.list', {})
+          .then((agents) => set({ agents }))
+          .catch(() => set({ agents: [] }))
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
         await refresher.flush()
@@ -622,6 +634,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         failed('Could not commit')(error)
       } finally {
         set({ committing: false })
+      }
+    },
+
+    async startAgent(command) {
+      const worktreeId = get().activeWorktreeId
+      if (!worktreeId) return
+      try {
+        // Straight through terminal.create: the runtime is what pins the
+        // session id, so a pane started here resumes like any other.
+        const terminal = await runtimeClient.call('terminal.create', { worktreeId, command })
+        set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+        refresher.request(refreshTargets({ layouts: [worktreeId] }))
+        await refresher.flush()
+      } catch (error) {
+        failed('Could not start the agent')(error)
       }
     },
 
