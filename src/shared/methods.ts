@@ -1,0 +1,111 @@
+// The method catalogue: the single list of everything the runtime can be asked
+// to do. Params and results live here so the runtime, the renderer client, and
+// the CLI are all typed from one declaration and cannot drift apart.
+
+import { z } from 'zod'
+import type { Layout, PaneNode, Project, RuntimeStatus, Terminal, Worktree, WorktreeStatus } from './entities'
+
+export const Params = {
+  statusGet: z.object({}),
+
+  projectList: z.object({}),
+  projectAdd: z.object({ path: z.string().min(1), name: z.string().min(1).optional() }),
+  projectRemove: z.object({ projectId: z.string().min(1) }),
+
+  worktreeList: z.object({ projectId: z.string().min(1).optional() }),
+  worktreeGet: z.object({ worktreeId: z.string().min(1) }),
+  worktreeCreate: z.object({
+    projectId: z.string().min(1),
+    name: z.string().min(1),
+    /** Ref or sha to branch from. Defaults to the project's baseRef. */
+    startedFrom: z.string().min(1).optional(),
+    branch: z.string().min(1).optional()
+  }),
+  worktreeRemove: z.object({
+    worktreeId: z.string().min(1),
+    /** Remove even with uncommitted changes or unmerged commits. */
+    force: z.boolean().optional(),
+    /** Delete the branch alongside the checkout. */
+    deleteBranch: z.boolean().optional()
+  }),
+  worktreeStatus: z.object({ worktreeId: z.string().min(1) }),
+
+  terminalList: z.object({ worktreeId: z.string().min(1).optional() }),
+  terminalCreate: z.object({
+    worktreeId: z.string().min(1),
+    /** Defaults to the user's login shell. */
+    shell: z.string().min(1).optional(),
+    /** Run this instead of an interactive shell. */
+    command: z.string().min(1).optional(),
+    cwd: z.string().min(1).optional(),
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional()
+  }),
+  terminalWrite: z.object({ terminalId: z.string().min(1), data: z.string() }),
+  terminalResize: z.object({
+    terminalId: z.string().min(1),
+    cols: z.number().int().positive(),
+    rows: z.number().int().positive()
+  }),
+  terminalClose: z.object({ terminalId: z.string().min(1) }),
+  /** Point-in-time scrollback snapshot; for live output use terminal.subscribe. */
+  terminalRead: z.object({
+    terminalId: z.string().min(1),
+    /** Trailing bytes to return. Defaults to the full retained buffer. */
+    tailBytes: z.number().int().positive().optional()
+  }),
+  terminalSubscribe: z.object({ terminalId: z.string().min(1) }),
+  terminalSplit: z.object({
+    /** Pane to divide. The new terminal takes half of it. */
+    terminalId: z.string().min(1),
+    direction: z.enum(['row', 'column']),
+    command: z.string().min(1).optional()
+  }),
+
+  layoutGet: z.object({ worktreeId: z.string().min(1) }),
+  layoutSet: z.object({ worktreeId: z.string().min(1), root: z.unknown(), focusedTerminalId: z.string().nullable() }),
+
+  unsubscribe: z.object({ subscription: z.string().min(1) })
+} as const
+
+/** Maps every method name to its params schema and its result type. */
+export type MethodContract = {
+  'status.get': { params: z.infer<typeof Params.statusGet>; result: RuntimeStatus }
+
+  'project.list': { params: z.infer<typeof Params.projectList>; result: Project[] }
+  'project.add': { params: z.infer<typeof Params.projectAdd>; result: Project }
+  'project.remove': { params: z.infer<typeof Params.projectRemove>; result: { removed: true } }
+
+  'worktree.list': { params: z.infer<typeof Params.worktreeList>; result: Worktree[] }
+  'worktree.get': { params: z.infer<typeof Params.worktreeGet>; result: Worktree }
+  'worktree.create': { params: z.infer<typeof Params.worktreeCreate>; result: Worktree }
+  'worktree.remove': { params: z.infer<typeof Params.worktreeRemove>; result: { removed: true } }
+  'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
+
+  'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
+  'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }
+  'terminal.write': { params: z.infer<typeof Params.terminalWrite>; result: { written: true } }
+  'terminal.resize': { params: z.infer<typeof Params.terminalResize>; result: Terminal }
+  'terminal.close': { params: z.infer<typeof Params.terminalClose>; result: { closed: true } }
+  'terminal.read': { params: z.infer<typeof Params.terminalRead>; result: { data: string } }
+  'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
+  'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
+
+  'layout.get': { params: z.infer<typeof Params.layoutGet>; result: Layout }
+  'layout.set': { params: z.infer<typeof Params.layoutSet>; result: Layout }
+
+  'unsubscribe': { params: z.infer<typeof Params.unsubscribe>; result: { unsubscribed: true } }
+}
+
+export type MethodName = keyof MethodContract
+export type ParamsOf<M extends MethodName> = MethodContract[M]['params']
+export type ResultOf<M extends MethodName> = MethodContract[M]['result']
+
+/** Events pushed on a terminal.subscribe subscription. */
+export type TerminalEvent =
+  | { type: 'data'; data: string }
+  | { type: 'exit'; exitCode: number }
+  | { type: 'title'; title: string }
+
+/** Convenience re-export so consumers import layout shapes from one place. */
+export type { PaneNode, Layout }
