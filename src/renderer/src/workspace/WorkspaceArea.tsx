@@ -105,6 +105,7 @@ export function WorkspaceArea({
       <div className="workspace__panes">
         {layout?.root ? (
           <PaneTree
+            key={activeWorktreeId}
             node={layout.root}
             path={[]}
             terminals={terminals}

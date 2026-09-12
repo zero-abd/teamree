@@ -24,6 +24,7 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
 
       event.preventDefault()
       event.stopPropagation()
+      if (event.repeat) return
 
       switch (command) {
         case 'split-right':

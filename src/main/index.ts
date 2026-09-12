@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { APP_VERSION } from './appVersion'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
 
@@ -51,6 +51,16 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(async () => {
+    ipcMain.handle('teamree:select-project-folder', async (event) => {
+      const owner = BrowserWindow.fromWebContents(event.sender)
+      if (!owner || event.senderFrame !== event.sender.mainFrame) return null
+      const result = await dialog.showOpenDialog(owner, {
+        title: 'Select project folder',
+        properties: ['openDirectory'],
+        buttonLabel: 'Select folder'
+      })
+      return result.canceled ? null : (result.filePaths[0] ?? null)
+    })
     // The runtime comes up before any window so the first render can already
     // call it, and so the CLI endpoint exists as early as possible.
     try {

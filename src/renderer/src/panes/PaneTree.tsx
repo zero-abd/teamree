@@ -6,6 +6,7 @@ import { Fragment, useCallback, useRef, useState } from 'react'
 import type { PaneNode, Terminal } from '@shared/entities'
 import { TerminalView } from '../terminal/TerminalView'
 import { applyGutterDrag, GUTTER_PX, splitChildBases } from './paneLayout'
+import { usePointerDrag } from './usePointerDrag'
 
 export type PaneCallbacks = {
   terminals: Record<string, Terminal>
@@ -47,7 +48,6 @@ function PaneLeaf({
     <section
       className={`pane${focused ? ' pane--focused' : ''}${exited ? ' pane--exited' : ''}`}
       aria-label={terminal?.title ?? 'terminal'}
-      onFocusCapture={() => onFocus(terminalId)}
     >
       <header className="pane__bar">
         <span className={`pane__dot${exited ? ' pane__dot--stopped' : ''}`} aria-hidden="true" />
@@ -85,6 +85,7 @@ function PaneSplit({
   ...callbacks
 }: PaneCallbacks & { node: Extract<PaneNode, { kind: 'split' }>; path: number[] }): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const startDrag = usePointerDrag()
   // Sizes are tracked locally while a handle is held so the drag stays at
   // frame rate and only the released position is persisted.
   const [draft, setDraft] = useState<number[] | null>(null)
@@ -103,21 +104,18 @@ function PaneSplit({
     if (total <= 0) return
     const start = node.direction === 'row' ? event.clientX : event.clientY
     const origin = [...sizes]
-    event.currentTarget.setPointerCapture(event.pointerId)
 
     const move = (moveEvent: PointerEvent): void => {
       const delta = (node.direction === 'row' ? moveEvent.clientX : moveEvent.clientY) - start
       setDraft(applyGutterDrag(origin, index, delta, total))
     }
-    const finish = (upEvent: PointerEvent): void => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', finish)
-      const delta = (node.direction === 'row' ? upEvent.clientX : upEvent.clientY) - start
+    const finish = (upEvent: PointerEvent | null): void => {
       setDraft(null)
+      if (!upEvent) return
+      const delta = (node.direction === 'row' ? upEvent.clientX : upEvent.clientY) - start
       onResize(path, applyGutterDrag(origin, index, delta, total))
     }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', finish)
+    startDrag(event, node.direction === 'row' ? 'col-resize' : 'row-resize', move, finish)
   }
 
   const nudge = (index: number) => (event: React.KeyboardEvent<HTMLDivElement>) => {

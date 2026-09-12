@@ -3,7 +3,7 @@
 
 .shell {
   display: grid;
-  grid-template-columns: var(--sidebar-width, 272px) 1px minmax(0, 1fr);
+  grid-template-columns: min(var(--sidebar-width, 272px), 45%) 1px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
     'sidebar seam workspace'
@@ -32,6 +32,8 @@
 }
 
 .shell__resizer {
+  touch-action: none;
+  z-index: 2;
   grid-area: seam;
   position: relative;
   background: var(--line);

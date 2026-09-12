@@ -3,29 +3,25 @@
 
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { SIDEBAR_MAX_PX, SIDEBAR_MIN_PX } from './sidebarWidth'
+import { usePointerDrag } from '../panes/usePointerDrag'
 
 const NUDGE_PX = 16
 
 export function SidebarResizer(): React.JSX.Element {
   const width = useWorkspaceStore((state) => state.sidebarWidth)
   const setSidebarWidth = useWorkspaceStore((state) => state.setSidebarWidth)
+  const startDrag = usePointerDrag()
 
   const beginDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
     const startX = event.clientX
     const startWidth = width
-    event.currentTarget.setPointerCapture(event.pointerId)
-    document.body.classList.add('is-resizing')
 
     const move = (moveEvent: PointerEvent): void => {
       setSidebarWidth(startWidth + (moveEvent.clientX - startX))
     }
-    const finish = (): void => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', finish)
-      document.body.classList.remove('is-resizing')
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', finish)
+    startDrag(event, 'col-resize', move, (upEvent) => {
+      if (upEvent) move(upEvent)
+    })
   }
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {

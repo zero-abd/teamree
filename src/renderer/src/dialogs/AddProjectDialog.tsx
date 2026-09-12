@@ -1,7 +1,7 @@
 // Adding a repository. The runtime validates the path; this only insists that
 // something was typed and offers to infer the display name from it.
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { Modal } from './Modal'
 
@@ -11,8 +11,32 @@ export function AddProjectDialog(): React.JSX.Element {
 
   const [path, setPath] = useState('')
   const [name, setName] = useState('')
+  const [browsing, setBrowsing] = useState(false)
+  const [browseError, setBrowseError] = useState('')
+  const pickerOpen = useRef(false)
+  const initiallyOpened = useRef(false)
 
-  const inferred = path.split('/').filter(Boolean).pop() ?? ''
+  const inferred = path.split(/[/\\]/).filter(Boolean).pop() ?? ''
+  const browse = useCallback(async (): Promise<void> => {
+    if (pickerOpen.current) return
+    pickerOpen.current = true
+    setBrowsing(true)
+    setBrowseError('')
+    try {
+      const selected = await window.teamree.selectProjectFolder()
+      if (selected) setPath(selected)
+    } catch {
+      setBrowseError('Could not open the folder picker. You can enter the path below.')
+    } finally {
+      pickerOpen.current = false
+      setBrowsing(false)
+    }
+  }, [])
+  useEffect(() => {
+    if (initiallyOpened.current) return
+    initiallyOpened.current = true
+    void browse()
+  }, [browse])
   const canSubmit = path.trim().length > 0
 
   const submit = (event: React.FormEvent): void => {
@@ -24,6 +48,10 @@ export function AddProjectDialog(): React.JSX.Element {
   return (
     <Modal title="Add project" description="Point teamree at an existing git checkout." onClose={closeDialog}>
       <form className="form" onSubmit={submit}>
+        <button type="button" className="button" onClick={() => void browse()} disabled={browsing}>
+          {browsing ? 'Choosing folder…' : 'Browse folders…'}
+        </button>
+        {browseError ? <p role="alert">{browseError}</p> : null}
         <label className="field">
           <span className="field__label">Repository path</span>
           <input

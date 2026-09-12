@@ -29,6 +29,11 @@ body.is-resizing {
   user-select: none;
 }
 
+body.is-resizing * {
+  cursor: inherit !important;
+  user-select: none !important;
+}
+
 h1,
 h2,
 h3,

@@ -347,9 +347,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
       const terminal = required(terminals.get(record.id), 'terminal')
       terminal.record = { ...record, cols: cols ?? record.cols, rows: rows ?? record.rows }
       const layout = layouts.get(worktreeId)
-      if (!layout?.root) {
-        layouts.set(worktreeId, { worktreeId, root: leaf(record.id), focusedTerminalId: record.id })
-      }
+        if (!layout?.root) {
+          layouts.set(worktreeId, { worktreeId, root: leaf(record.id), focusedTerminalId: record.id })
+        } else {
+          const root = layout.root
+          const share = root.kind === 'split' && root.direction === 'row' ? 1 / (root.children.length + 1) : 0.5
+          layouts.set(worktreeId, {
+            worktreeId,
+            focusedTerminalId: record.id,
+            root: root.kind === 'split' && root.direction === 'row'
+              ? { ...root, children: [...root.children, leaf(record.id)], sizes: [...root.sizes.map((size) => size * (1 - share)), share] }
+              : { kind: 'split', direction: 'row', children: [root, leaf(record.id)], sizes: [0.5, 0.5] }
+          })
+        }
       announce({ type: 'terminals' }, { type: 'layout', worktreeId })
       return terminal.record
     },

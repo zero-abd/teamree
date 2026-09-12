@@ -405,23 +405,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const terminal = await runtimeClient.call('terminal.create', { worktreeId })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
-        const layout = get().layouts[worktreeId]
-        if (!layout?.root) {
-          persistLayout({
-            worktreeId,
-            root: { kind: 'leaf', terminalId: terminal.id },
-            focusedTerminalId: terminal.id
-          })
-        } else {
-          const focused = layout.focusedTerminalId ?? collectTerminalIds(layout.root)[0] ?? null
-          if (focused) {
-            const { layout: next } = await runtimeClient.call('terminal.split', {
-              terminalId: focused,
-              direction: 'row'
-            })
-            set((state) => ({ layouts: { ...state.layouts, [worktreeId]: next } }))
-          }
-        }
+        // Creation already appends and focuses one pane in the runtime.
+        refresher.request(refreshTargets({ layouts: [worktreeId] }))
+        await refresher.flush()
       } catch (error) {
         failed('Could not start a terminal')(error)
       }

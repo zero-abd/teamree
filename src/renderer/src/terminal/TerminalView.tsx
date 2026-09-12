@@ -27,6 +27,8 @@ type TerminalViewProps = {
 export function TerminalView({ terminalId, focused, onFocus, isAppChord }: TerminalViewProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const termRef = useRef<XTerm | null>(null)
+  const chordRef = useRef(isAppChord)
+  chordRef.current = isAppChord
 
   useEffect(() => {
     const host = hostRef.current
@@ -38,6 +40,7 @@ export function TerminalView({ terminalId, focused, onFocus, isAppChord }: Termi
       convertEol: false,
       cursorBlink: true,
       cursorStyle: 'bar',
+      cursorInactiveStyle: 'none',
       fontFamily: TERMINAL_FONT_FAMILY,
       fontSize: 12,
       lineHeight: 1.25,
@@ -68,7 +71,7 @@ export function TerminalView({ terminalId, focused, onFocus, isAppChord }: Termi
       webgl = null
     }
 
-    term.attachCustomKeyEventHandler((event) => !isAppChord(event))
+    term.attachCustomKeyEventHandler((event) => !chordRef.current(event))
     term.onData((data) => {
       void runtimeClient.call('terminal.write', { terminalId, data }).catch(() => {})
     })
@@ -145,11 +148,12 @@ export function TerminalView({ terminalId, focused, onFocus, isAppChord }: Termi
       term.dispose()
       termRef.current = null
     }
-  }, [terminalId, isAppChord])
+  }, [terminalId])
 
   useEffect(() => {
     if (focused) termRef.current?.focus()
-  }, [focused])
+    else termRef.current?.blur()
+  }, [focused, terminalId])
 
-  return <div className="terminal-surface" ref={hostRef} onMouseDown={onFocus} />
+  return <div className="terminal-surface" ref={hostRef} onFocus={onFocus} onMouseDown={onFocus} />
 }

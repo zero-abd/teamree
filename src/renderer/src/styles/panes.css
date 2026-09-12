@@ -27,6 +27,8 @@
 }
 
 .gutter {
+  touch-action: none;
+  user-select: none;
   flex: 0 0 5px;
   position: relative;
   border-radius: 99px;
@@ -197,7 +199,9 @@
 
 .terminal-surface {
   flex: 1;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
   padding: var(--s2) var(--s2) var(--s2) var(--s3);
 }
 

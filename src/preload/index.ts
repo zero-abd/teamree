@@ -44,6 +44,9 @@ const runtime = {
 } as const
 
 const api = {
+  selectProjectFolder(): Promise<string | null> {
+    return ipcRenderer.invoke('teamree:select-project-folder')
+  },
   platform: process.platform,
   versions: {
     electron: process.versions.electron,
