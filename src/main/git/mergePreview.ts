@@ -74,7 +74,7 @@ export type MergePreviewOptions = {
  */
 export async function readMergePreview(runner: GitRunner, options: MergePreviewOptions): Promise<WorktreeMergePreview> {
   const readAt = (options.now ?? Date.now)()
-  const base = { worktreeId: options.worktreeId, baseRef: options.baseRef, readAt }
+  const base = { worktreeId: options.worktreeId, baseRef: options.baseRef, readAt, ahead: 0 }
   const run = { cwd: options.repoPath, readOnly: true, timeoutMs: 60_000 } as const
   const signal = options.signal ? { signal: options.signal } : {}
 
@@ -108,6 +108,23 @@ export async function readMergePreview(runner: GitRunner, options: MergePreviewO
     }
   }
 
+  // How much there is to merge at all. A branch with nothing the base lacks
+  // needs no merge preview and no `merge-tree` process to say so.
+  const counted = await runner.tryRun({
+    args: ['rev-list', '--count', `${options.baseRef}..${options.branch}`],
+    ...run,
+    ...signal
+  })
+  const ahead = counted.exitCode === 0 ? Number.parseInt(counted.stdout.trim(), 10) || 0 : 0
+  if (counted.exitCode === 0 && ahead === 0) {
+    return {
+      ...base,
+      state: 'nothingToMerge',
+      conflicts: [],
+      reason: `${options.branch} has nothing ${options.baseRef} does not already have`
+    }
+  }
+
   const merged = await runner.tryRun({
     args: [
       'merge-tree',
@@ -127,6 +144,7 @@ export async function readMergePreview(runner: GitRunner, options: MergePreviewO
   if (merged.exitCode > 1) {
     return {
       ...base,
+      ahead,
       state: 'unavailable',
       conflicts: [],
       reason: lacksWriteTree(merged.stderr)
@@ -138,8 +156,8 @@ export async function readMergePreview(runner: GitRunner, options: MergePreviewO
   const { conflicts } = parseMergeTree(merged.stdout)
   // Trust the exit code over the parse: a clean merge writes no file list, and
   // a conflicted one always sets 1.
-  if (merged.exitCode === 0) return { ...base, state: 'clean', conflicts: [] }
-  return { ...base, state: 'conflicts', conflicts }
+  if (merged.exitCode === 0) return { ...base, ahead, state: 'clean', conflicts: [] }
+  return { ...base, ahead, state: 'conflicts', conflicts }
 }
 
 function firstLine(text: string): string {

@@ -10,8 +10,8 @@ import type { WorktreeMergePreview } from '@shared/entities'
 export type MergeBadge = {
   /** What the row shows. */
   label: string
-  /** Drives the colour; `unknown` is deliberately not a warning. */
-  tone: 'clean' | 'conflicts' | 'unknown'
+  /** Drives the colour; neither `unknown` nor `spent` is a warning. */
+  tone: 'clean' | 'conflicts' | 'unknown' | 'spent'
   /** The full sentence, for the title attribute. */
   detail: string
 }
@@ -22,11 +22,22 @@ export function mergeBadge(preview: WorktreeMergePreview | undefined): MergeBadg
   if (!preview) return null
 
   switch (preview.state) {
+    case 'nothingToMerge':
+      return {
+        label: 'nothing to merge',
+        tone: 'spent',
+        // Never "merged": a branch whose commits are all in the base and one
+        // that never made any are the same fact to git, and the row must not
+        // talk somebody into deleting a worktree they had not finished with.
+        detail: preview.reason ?? `Nothing here that ${preview.baseRef} does not already have.`
+      }
     case 'clean':
       return {
         label: 'merges',
         tone: 'clean',
-        detail: `Merges into ${preview.baseRef} without conflicts.`
+        detail: `${preview.ahead} commit${
+          preview.ahead === 1 ? '' : 's'
+        } that merge into ${preview.baseRef} without conflicts.`
       }
     case 'conflicts':
       return {

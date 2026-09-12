@@ -109,11 +109,19 @@ export type WorktreeMergePreview = {
   /** What it was compared against. */
   baseRef: string
   /**
-   * `clean` and `conflicts` are answers. `unrelated` and `unavailable` are
-   * refusals to guess, and carry a `reason` — because "nothing conflicts" and
-   * "could not tell" look the same to a caller and mean opposite things.
+   * `nothingToMerge`, `clean` and `conflicts` are answers. `unrelated` and
+   * `unavailable` are refusals to guess, and carry a `reason` — because
+   * "nothing conflicts" and "could not tell" look the same to a caller and mean
+   * opposite things.
+   *
+   * `nothingToMerge` is deliberately not called "merged". A branch whose
+   * commits are all in the base and a branch that never made any are the same
+   * fact to git, and claiming the first when it might be the second would have
+   * someone delete a worktree they had not finished with.
    */
-  state: 'clean' | 'conflicts' | 'unrelated' | 'unavailable'
+  state: 'nothingToMerge' | 'clean' | 'conflicts' | 'unrelated' | 'unavailable'
+  /** Commits this branch has that the base does not. */
+  ahead: number
   /** Paths that would conflict, for `conflicts`. Empty otherwise. */
   conflicts: string[]
   reason?: string

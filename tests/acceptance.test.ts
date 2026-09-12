@@ -133,9 +133,10 @@ describe('milestone 1 acceptance', () => {
 
   it('says whether the worktree would merge back without trying it', () => {
     const preview = cli<WorktreeMergePreview>(['worktree', 'merges', worktree.id])
-    // Nothing has been committed on this branch, so it merges cleanly — and
-    // asking must leave the repository exactly as it was.
+    // One commit was made above, so there is something to merge and it merges
+    // cleanly — and asking must leave the repository exactly as it was.
     expect(preview.state).toBe('clean')
+    expect(preview.ahead).toBe(1)
     expect(preview.baseRef).toBe(project.baseRef)
     expect(cli<WorktreeStatus>(['worktree', 'status', worktree.id]).conflicted).toBe(0)
   })

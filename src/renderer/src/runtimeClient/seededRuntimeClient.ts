@@ -470,7 +470,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       return {
         worktreeId,
         baseRef: project?.baseRef ?? 'origin/main',
-        state: conflicted ? 'conflicts' : 'clean',
+        state: conflicted ? 'conflicts' : (status?.ahead ?? 0) === 0 ? 'nothingToMerge' : 'clean',
+        ahead: status?.ahead ?? 0,
         conflicts: conflicted
           ? seededChanges(status as WorktreeStatus)
               .slice(0, status?.conflicted ?? 0)

@@ -398,3 +398,9 @@
   background: rgb(214 162 74 / 16%);
   color: var(--warning);
 }
+
+/* Nothing to merge: not a problem and not an achievement, so it stays the
+   quietest thing on the row. */
+.worktree__merge--spent {
+  color: var(--fg-muted);
+}

@@ -143,6 +143,9 @@ question that follows.
 - [x] Conflicting paths named, each once, however many ways git mentions them
 - [x] A base ref that does not resolve, unrelated histories, and a git too old
       to be asked each come back as themselves rather than as "clean"
+- [x] A branch with nothing the base lacks reads "nothing to merge", never
+      "merged": git cannot tell a finished branch from one that never started,
+      and the row must not talk somebody into deleting unfinished work
 - [x] `teamree worktree merges`
 - [x] The answer shown per worktree in the sidebar, capped at four reads in
       flight so a refresh cannot fan out a git process per row

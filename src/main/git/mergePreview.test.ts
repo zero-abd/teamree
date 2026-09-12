@@ -75,6 +75,7 @@ describe('previewing a merge against a real repository', () => {
       worktreeId: 'wt',
       baseRef: 'main',
       state: 'clean',
+      ahead: 1,
       conflicts: [],
       readAt: 99
     })
@@ -182,6 +183,59 @@ describe('previewing a merge against a real repository', () => {
     expect(preview.reason).toContain('share no history')
   })
 
+  // git cannot tell these two apart, and neither should the report: both are
+  // "this branch has nothing the base lacks".
+  it('says there is nothing to merge for a branch that never diverged', async () => {
+    const repo = await repository()
+    await repo.git(['checkout', '-q', '-b', 'feature', 'main'])
+    await repo.git(['checkout', '-q', 'main'])
+
+    const preview = await readMergePreview(repo.runner, {
+      worktreeId: 'wt',
+      repoPath: repo.repoPath,
+      baseRef: 'main',
+      branch: 'feature'
+    })
+
+    expect(preview.state).toBe('nothingToMerge')
+    expect(preview.ahead).toBe(0)
+  })
+
+  it('says the same once the branch has been merged in', async () => {
+    const repo = await repository()
+    await branch(repo, 'feature', 'only-here.txt', 'work\n')
+    await repo.git(['merge', '--no-edit', '-q', 'feature'])
+
+    const preview = await readMergePreview(repo.runner, {
+      worktreeId: 'wt',
+      repoPath: repo.repoPath,
+      baseRef: 'main',
+      branch: 'feature'
+    })
+
+    expect(preview.state).toBe('nothingToMerge')
+  })
+
+  it('counts what a diverged branch is carrying', async () => {
+    const repo = await repository()
+    await repo.git(['checkout', '-q', '-b', 'feature', 'main'])
+    await repo.write('one.txt', 'a\n')
+    await repo.commit('one')
+    await repo.write('two.txt', 'b\n')
+    await repo.commit('two')
+    await repo.git(['checkout', '-q', 'main'])
+
+    const preview = await readMergePreview(repo.runner, {
+      worktreeId: 'wt',
+      repoPath: repo.repoPath,
+      baseRef: 'main',
+      branch: 'feature'
+    })
+
+    expect(preview.state).toBe('clean')
+    expect(preview.ahead).toBe(2)
+  })
+
   it('is clean for a branch that is merely behind', async () => {
     const repo = await repository()
     await repo.git(['checkout', '-q', '-b', 'feature', 'main'])
@@ -196,6 +250,6 @@ describe('previewing a merge against a real repository', () => {
       branch: 'feature'
     })
 
-    expect(preview.state).toBe('clean')
+    expect(preview.state).toBe('nothingToMerge')
   })
 })

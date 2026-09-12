@@ -254,6 +254,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
       const preview = await context.client.call('worktree.mergePreview', { worktreeId: worktree.id })
 
       const summary = {
+        nothingToMerge: `${worktree.branch} has nothing ${preview.baseRef} does not already have.`,
         clean: `${worktree.branch} merges cleanly into ${preview.baseRef}.`,
         conflicts: `${worktree.branch} conflicts with ${preview.baseRef} in ${preview.conflicts.length} file${
           preview.conflicts.length === 1 ? '' : 's'

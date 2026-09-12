@@ -7,6 +7,7 @@ function preview(overrides: Partial<WorktreeMergePreview> = {}): WorktreeMergePr
     worktreeId: 'wt',
     baseRef: 'origin/main',
     state: 'clean',
+    ahead: 3,
     conflicts: [],
     readAt: 0,
     ...overrides
@@ -20,11 +21,22 @@ describe('mergeBadge', () => {
     expect(mergeBadge(undefined)).toBeNull()
   })
 
-  it('names the base ref it would merge into', () => {
+  it('names the base ref it would merge into, and how much', () => {
     const badge = mergeBadge(preview())
     expect(badge?.label).toBe('merges')
     expect(badge?.tone).toBe('clean')
     expect(badge?.detail).toContain('origin/main')
+    expect(badge?.detail).toContain('3 commits')
+  })
+
+  // Two branches git cannot tell apart — one whose work is all in the base, and
+  // one that never did any — must not be labelled as though it could, or
+  // somebody deletes a worktree they had not finished with.
+  it('says "nothing to merge" and never "merged"', () => {
+    const badge = mergeBadge(preview({ state: 'nothingToMerge', ahead: 0 }))
+    expect(badge?.label).toBe('nothing to merge')
+    expect(badge?.label).not.toContain('merged')
+    expect(badge?.tone).toBe('spent')
   })
 
   it('counts the conflicts, and agrees with itself about the plural', () => {
