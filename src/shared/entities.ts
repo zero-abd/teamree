@@ -135,6 +135,25 @@ export type WorktreeCommit = {
   committedAt: number
 }
 
+/** The outcome of pushing a worktree's branch, as it actually went. */
+export type WorktreePush = {
+  worktreeId: string
+  remote: string
+  branch: string
+  /** True when the remote already had every commit; nothing was sent. */
+  alreadyUpToDate: boolean
+  /** What the branch tracks now. */
+  upstream: string
+  /** True when this push is what set that tracking. */
+  setUpstream: boolean
+  /**
+   * Changes left behind in the worktree. Pushing while still editing is
+   * ordinary, but it means what landed is not what is on screen.
+   */
+  uncommitted: number
+  pushedAt: number
+}
+
 export type Terminal = {
   id: string
   worktreeId: string

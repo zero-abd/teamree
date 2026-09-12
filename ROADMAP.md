@@ -163,6 +163,22 @@ rather than to guess.
 - [x] Staging and committing from the changes panel: ticking is browsing, and
       nothing reaches git's index until the commit itself
 
+## M13 — Sending it somewhere
+
+The only call in the git layer that leaves the machine.
+
+- [x] `worktree.push`, with an explicit refspec so `push.default` cannot land
+      the branch under another name
+- [x] No force, and no flag to ask for one: the value of a force push is
+      overwriting somebody else's history
+- [x] Sets the upstream on the first push, and knows the difference between
+      sending work and having had nothing to send
+- [x] Uncommitted work is counted and reported rather than blocked, because
+      what landed is then not what is in the worktree
+- [x] A rejection is explained without git's hint to force it
+- [x] `teamree worktree push`
+- [ ] A push button in the GUI, and opening a review after it
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,

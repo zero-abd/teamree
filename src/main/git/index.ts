@@ -28,6 +28,7 @@ export {
 } from './worktreeChanges'
 export { lacksWriteTree, parseMergeTree, readMergePreview } from './mergePreview'
 export { commitWorktree } from './worktreeCommit'
+export { pushRefusal, pushWorktree } from './worktreePush'
 export { parsePorcelainV2, readWorktreeStatus, type ParsedStatus } from './worktreeStatus'
 export {
   DEFAULT_MIN_INTERVAL_MS,

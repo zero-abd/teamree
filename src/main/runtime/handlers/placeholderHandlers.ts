@@ -22,6 +22,7 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'worktree.diff', Params.worktreeDiff)
   placeholder(registry, 'worktree.commit', Params.worktreeCommit)
   placeholder(registry, 'worktree.mergePreview', Params.worktreeMergePreview)
+  placeholder(registry, 'worktree.push', Params.worktreePush)
 
   placeholder(registry, 'terminal.list', Params.terminalList)
   placeholder(registry, 'terminal.create', Params.terminalCreate)

@@ -31,6 +31,7 @@ const EXPECTED = [
   'worktree diff',
   'worktree merges',
   'worktree commit',
+  'worktree push',
   'worktree wait',
   'terminal list',
   'terminal create',

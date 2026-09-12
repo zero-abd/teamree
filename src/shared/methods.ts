@@ -15,6 +15,7 @@ import type {
   WorktreeCommit,
   WorktreeDiff,
   WorktreeMergePreview,
+  WorktreePush,
   WorktreeStatus
 } from './entities'
 
@@ -56,6 +57,15 @@ export const Params = {
     message: z.string().min(1),
     /** Stage these before committing. Omitted commits what is already staged. */
     paths: z.array(z.string().min(1)).optional()
+  }),
+  /**
+   * Sends the branch to its remote. There is deliberately no force: the value
+   * of one is overwriting somebody else's history.
+   */
+  worktreePush: z.object({
+    worktreeId: z.string().min(1),
+    /** Defaults to origin. */
+    remote: z.string().min(1).optional()
   }),
   /** Whether this worktree would merge into its base, without merging it. */
   worktreeMergePreview: z.object({ worktreeId: z.string().min(1) }),
@@ -139,6 +149,7 @@ export type MethodContract = {
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
   'worktree.commit': { params: z.infer<typeof Params.worktreeCommit>; result: WorktreeCommit }
+  'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
   'worktree.mergePreview': {
     params: z.infer<typeof Params.worktreeMergePreview>
     result: WorktreeMergePreview

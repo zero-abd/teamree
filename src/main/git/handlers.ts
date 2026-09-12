@@ -49,6 +49,7 @@ export const GIT_METHODS = [
   'worktree.diff',
   'worktree.commit',
   'worktree.mergePreview',
+  'worktree.push',
   'worktree.startPoints'
 ] as const
 
@@ -72,6 +73,7 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.diff': (params) => service.worktreeDiff(params),
     'worktree.commit': (params) => service.worktreeCommit(params),
     'worktree.mergePreview': (params) => service.worktreeMergePreview(params),
+    'worktree.push': (params) => service.worktreePush(params),
     'worktree.startPoints': (params) =>
       service.listStartPoints(params.projectId, params.limit === undefined ? {} : { limit: params.limit })
   }
@@ -91,6 +93,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.diff', Params.worktreeDiff, handlers['worktree.diff'])
   registry.register('worktree.commit', Params.worktreeCommit, handlers['worktree.commit'])
   registry.register('worktree.mergePreview', Params.worktreeMergePreview, handlers['worktree.mergePreview'])
+  registry.register('worktree.push', Params.worktreePush, handlers['worktree.push'])
   registry.register('worktree.startPoints', Params.worktreeStartPoints, handlers['worktree.startPoints'])
   return service
 }

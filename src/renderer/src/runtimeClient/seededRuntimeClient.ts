@@ -438,6 +438,28 @@ export function createSeededRuntimeClient(): RuntimeClient {
         committedAt: Date.now()
       }
     },
+    'worktree.push': ({ worktreeId, remote }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const target = remote ?? 'origin'
+      // Nothing ahead means nothing to send, which is the outcome worth seeing
+      // in a demo as much as the other one.
+      const alreadyUpToDate = (status?.ahead ?? 0) === 0
+      if (status && !alreadyUpToDate) {
+        seedStatus(worktree, { ...status, ahead: 0 })
+        announce({ type: 'worktrees' })
+      }
+      return {
+        worktreeId,
+        remote: target,
+        branch: worktree.branch,
+        alreadyUpToDate,
+        upstream: `${target}/${worktree.branch}`,
+        setUpstream: false,
+        uncommitted: (status?.staged ?? 0) + (status?.unstaged ?? 0),
+        pushedAt: Date.now()
+      }
+    },
     'worktree.mergePreview': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const project = projects.get(worktree.projectId)

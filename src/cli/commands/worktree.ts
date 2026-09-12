@@ -209,6 +209,38 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'push'],
+    summary: "Send a worktree's branch to its remote.",
+    details:
+      'Sets the upstream on the first push. There is deliberately no force: the value of one is overwriting ' +
+      "somebody else's history. Uncommitted work is reported, not blocked — but what lands is then not what " +
+      'is in the worktree.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      { name: 'remote', kind: 'string', placeholder: '<name>', description: 'Where to push. Defaults to origin.' }
+    ],
+    examples: ['teamree worktree push fix-login', 'teamree worktree push fix-login --remote upstream'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const remote = readString(context.flags, 'remote')
+      const result = await context.client.call('worktree.push', {
+        worktreeId: worktree.id,
+        ...(remote === undefined ? {} : { remote })
+      })
+
+      const lines = [
+        result.alreadyUpToDate
+          ? `${result.remote} already had ${result.branch}.`
+          : `Pushed ${result.branch} to ${result.remote}.`
+      ]
+      if (result.setUpstream) lines.push(`${result.branch} now tracks ${result.upstream}.`)
+      if (result.uncommitted > 0) {
+        lines.push(`${result.uncommitted} uncommitted change${result.uncommitted === 1 ? '' : 's'} stayed behind.`)
+      }
+      return { data: result, text: lines.join('\n') }
+    }
+  },
+  {
     path: ['worktree', 'merges'],
     summary: 'Say whether a worktree would merge cleanly into its base.',
     details:

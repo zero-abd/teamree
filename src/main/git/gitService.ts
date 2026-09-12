@@ -23,6 +23,7 @@ import type {
   WorktreeCommit,
   WorktreeDiff,
   WorktreeMergePreview,
+  WorktreePush,
   WorktreeStatus
 } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
@@ -38,6 +39,7 @@ import { readWorktreeInventory } from './worktreeInventory'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
 import { readMergePreview } from './mergePreview'
 import { commitWorktree } from './worktreeCommit'
+import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { readWorktreeStatus } from './worktreeStatus'
 
@@ -340,6 +342,21 @@ export class GitService {
       worktreePath: worktree.path,
       message: params.message,
       ...(params.paths === undefined ? {} : { paths: params.paths }),
+      now: this.#now
+    })
+  }
+
+  /**
+   * Sends a worktree's branch to its remote. The only call in this service that
+   * leaves the machine, and the only one that cannot be undone from here.
+   */
+  async worktreePush(params: ParamsOf<'worktree.push'>): Promise<WorktreePush> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'pushing')
+    return pushWorktree(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      branch: worktree.branch,
+      ...(params.remote === undefined ? {} : { remote: params.remote }),
       now: this.#now
     })
   }
