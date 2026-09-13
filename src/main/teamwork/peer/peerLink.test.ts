@@ -135,8 +135,10 @@ describe('two peers over a relay', () => {
     // what time it is and an instant from a fast clock renders as the future.
     expect(pane?.quietForMs).toBeGreaterThanOrEqual(90_000)
     // Nothing that could carry a line of terminal output is on the wire at all.
+    // The dimensions are metadata and are here so a watcher can letterbox to
+    // them; a scrollback, a cursor position and a byte of output are not.
     expect(Object.keys(pane ?? {}).sort()).toEqual(
-      ['agent', 'busy', 'id', 'quietForMs', 'running', 'shell', 'title'].sort()
+      ['agent', 'busy', 'cols', 'id', 'quietForMs', 'rows', 'running', 'shell', 'title'].sort()
     )
   })
 

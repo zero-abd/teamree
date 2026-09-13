@@ -1,0 +1,118 @@
+/* ---------------------------------------------------------------------------
+   Watching a teammate's pane.
+
+   A window onto somebody else's machine, and it is built to be impossible to
+   mistake for one of your own panes. It floats over the window rather than
+   taking a slot in the pane tree, it says whose it is and that it is read-only
+   in words, and the terminal inside it is the owner's size rather than yours.
+
+   The letterboxing is the part that matters and it is not cosmetic:
+   `docs/teamwork.md` says a watcher with a smaller window is letterboxed
+   rather than resizing somebody else's pty under a program that is only being
+   read. So the emulator is built at their columns and rows, and the whole
+   picture is scaled to fit — a CSS transform, which touches nothing on their
+   machine — with the frame's own ground showing where it does not reach.
+   --------------------------------------------------------------------------- */
+
+.watch {
+  position: fixed;
+  inset: auto var(--s4) var(--s4) auto;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: min(880px, 70vw);
+  height: min(560px, 70vh);
+  overflow: hidden;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+}
+
+.watch__head {
+  display: flex;
+  flex: none;
+  gap: var(--s2);
+  align-items: center;
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.watch__title {
+  display: flex;
+  min-width: 0;
+  gap: var(--s2);
+  align-items: baseline;
+}
+
+.watch__owner {
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.watch__label {
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Spelled out, always, never a lock icon. A symbol is a thing a reader has to
+   already know the meaning of; this is a promise about what their keyboard
+   does and it is worth the room. */
+.watch__readonly {
+  margin-left: auto;
+  padding: 1px var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+}
+
+.watch__size {
+  flex: none;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.watch__close {
+  flex: none;
+}
+
+/* The bars. Whatever is left over around the owner's picture is this ground,
+   deliberately darker than the terminal's own so the edge of what they can see
+   is visible rather than implied. */
+.watch__frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: var(--s2);
+  background: var(--bg-window);
+}
+
+.watch__surface {
+  min-width: 0;
+  min-height: 0;
+}
+
+.watch__note {
+  position: absolute;
+  inset: auto 0 var(--s3) 0;
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.watch__note--ended {
+  color: var(--warning);
+}

@@ -2,8 +2,8 @@
 // still being created, and failed — because a worktree is a background job and
 // hiding that would make the sidebar lie.
 
-import type { Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
-import { ACTIVITY_LABEL, agentRows, sinceLabel, worktreeActivity, type AgentRow } from './agentRows'
+import type { PaneWatcher, Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
+import { ACTIVITY_LABEL, agentRows, sinceLabel, watchedBy, worktreeActivity, type AgentRow } from './agentRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 
@@ -15,6 +15,14 @@ type WorktreeRowProps = {
   terminals: Terminal[]
   /** Last line read from each pane, keyed by terminal id. */
   evidence: Readonly<Record<string, string | null>>
+  /**
+   * Who is reading each of these panes right now, keyed by terminal id.
+   *
+   * Not decoration. The argument in `docs/teamwork.md` for why a project where
+   * anyone can type is survivable is that nothing can be done invisibly, and
+   * this row is the half of that which covers reading.
+   */
+  watchers: Readonly<Record<string, readonly PaneWatcher[]>>
   now: number
   onFocusTerminal: (terminalId: string) => void
   active: boolean
@@ -29,6 +37,7 @@ export function WorktreeRow({
   mergePreview,
   terminals,
   evidence,
+  watchers,
   now,
   active,
   onFocusTerminal,
@@ -95,25 +104,36 @@ export function WorktreeRow({
 
       {rows.length > 0 ? (
         <ul className="panes">
-          {rows.map((row) => (
-            <li key={row.terminalId}>
-              <button
-                type="button"
-                className="pane-row"
-                title={paneTitle(row)}
-                onClick={() => onFocusTerminal(row.terminalId)}
-              >
-                <span className="pane-row__head">
-                  <span className={`activity activity--${row.activity}`} aria-hidden="true" />
-                  <span className="pane-row__label">{row.label}</span>
-                  <span className="pane-row__since">{sinceLabel(row.quietFor)}</span>
-                </span>
-                {/* Nothing at all when the pane has printed nothing worth
+          {rows.map((row) => {
+            const reading = watchers[row.terminalId] ?? []
+            return (
+              <li key={row.terminalId}>
+                <button
+                  type="button"
+                  className="pane-row"
+                  title={paneTitle(row, reading)}
+                  onClick={() => onFocusTerminal(row.terminalId)}
+                >
+                  <span className="pane-row__head">
+                    <span className={`activity activity--${row.activity}`} aria-hidden="true" />
+                    <span className="pane-row__label">{row.label}</span>
+                    {/* Named, never counted. "2 watching" tells the owner
+                      something is happening and not who is doing it, which is
+                      the half that matters. */}
+                    {reading.length > 0 ? (
+                      <span className="pane-row__watchers" title={watchedBy(reading)}>
+                        {watchedBy(reading)}
+                      </span>
+                    ) : null}
+                    <span className="pane-row__since">{sinceLabel(row.quietFor)}</span>
+                  </span>
+                  {/* Nothing at all when the pane has printed nothing worth
                     quoting: an empty line here would read as an answer. */}
-                {row.evidence ? <span className="pane-row__evidence">{row.evidence}</span> : null}
-              </button>
-            </li>
-          ))}
+                  {row.evidence ? <span className="pane-row__evidence">{row.evidence}</span> : null}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       ) : null}
 
@@ -137,7 +157,8 @@ export function WorktreeRow({
 
 /** The hover text, which says where the quoted line came from — the row itself
  *  has no room to, and a line with no provenance reads as a verdict. */
-function paneTitle(row: AgentRow): string {
+function paneTitle(row: AgentRow, watchers: readonly PaneWatcher[]): string {
   const head = `${row.label} · ${ACTIVITY_LABEL[row.activity]} · last output ${sinceLabel(row.quietFor)} ago`
-  return row.evidence ? `${head}\nlast printed: ${row.evidence}` : head
+  const withEvidence = row.evidence ? `${head}\nlast printed: ${row.evidence}` : head
+  return watchers.length > 0 ? `${withEvidence}\n${watchedBy(watchers)}` : withEvidence
 }

@@ -11,7 +11,7 @@
 // the process ended. Every state below is one of those two facts, and none of
 // them is a guess dressed up as a reading.
 
-import type { AgentKind, Terminal } from '@shared/entities'
+import type { AgentKind, PaneWatcher, Terminal } from '@shared/entities'
 
 export type AgentActivity =
   /** Output is still arriving. */
@@ -52,6 +52,22 @@ export const ACTIVITY_LABEL: Record<AgentActivity, string> = {
   quiet: 'waiting — no output',
   done: 'finished',
   failed: 'exited with an error'
+}
+
+/**
+ * Whose eyes are on a pane, in words rather than as a number.
+ *
+ * Here with the rest of the phrases, because the sidebar and anything else that
+ * ever says this must say it the same way — and because "2 watching" tells an
+ * owner that something is happening without telling them the half that
+ * matters, which is who.
+ */
+export function watchedBy(watchers: readonly PaneWatcher[]): string {
+  const handles = watchers.map((watcher) => watcher.handle)
+  if (handles.length === 0) return 'nobody is watching'
+  if (handles.length === 1) return `${handles[0]} is watching`
+  const last = handles[handles.length - 1]
+  return `${handles.slice(0, -1).join(', ')} and ${last} are watching`
 }
 
 /** The one-word form, for counts and column headings. */

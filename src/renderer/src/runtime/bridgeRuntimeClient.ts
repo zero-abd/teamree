@@ -3,8 +3,8 @@
 // whether the runtime is answering at all, which is the only connection state a
 // renderer speaking over IPC can actually observe.
 
-import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
-import { call, RuntimeCallError, subscribeTerminal, type Subscription } from './runtimeClient'
+import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WatchedPaneEvent, WorkspaceEvent } from '@shared/methods'
+import { call, openStream, RuntimeCallError, subscribeTerminal, type Subscription } from './runtimeClient'
 import { watchWorkspace, type WorkspaceWatch } from './workspaceStream'
 
 export type ConnectionPhase = 'connecting' | 'ready' | 'retrying' | 'offline'
@@ -15,9 +15,19 @@ export type ConnectionState = {
   detail?: string
 }
 
+/** A teammate's pane, opened for reading, with the owner's dimensions. */
+export type WatchedPaneHandle = {
+  subscription: Subscription
+  cols: number
+  rows: number
+  handle: string
+}
+
 export type RuntimeClient = {
   call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>
   subscribeTerminal(terminalId: string, onEvent: (event: TerminalEvent) => void): Promise<Subscription>
+  /** Live output for one of a teammate's panes. Read-only; there is no write. */
+  watchPane(projectId: string, paneId: string, onEvent: (event: WatchedPaneEvent) => void): Promise<WatchedPaneHandle>
   /**
    * Starts watching workspace changes and keeps the stream up. Replaces polling:
    * every event names a collection the caller should refetch.
@@ -66,6 +76,15 @@ export function createRuntimeClient(): RuntimeClient {
       }
     },
     subscribeTerminal,
+    async watchPane(projectId, paneId, onEvent) {
+      // The dimensions come back with the subscription rather than after it,
+      // which is why this cannot be the generic subscribe: the viewer needs the
+      // owner's size before it draws anything.
+      const { subscription, result } = await openStream('teamwork.watch', { projectId, paneId }, (event) =>
+        onEvent(event as WatchedPaneEvent)
+      )
+      return { subscription, cols: result.cols, rows: result.rows, handle: result.handle }
+    },
     watchWorkspace: (onEvent) =>
       // A stream that cannot be opened says as much about the connection as a
       // failed call does, so the status bar learns about it either way.

@@ -10,9 +10,9 @@
 // visibility rather than admission.
 //
 // Metadata only. `docs/teamwork.md` is exact about this: names, branches, pane
-// states and how long each has been quiet are automatic, and a pane's actual
-// output is milestone C and flows only for a pane somebody has opened. Nothing
-// in this file reads a scrollback.
+// states, dimensions and how long each has been quiet are automatic; a pane's
+// actual output flows only for a pane somebody has opened, over a subscription
+// they asked for. Nothing in this file reads a scrollback.
 
 import type { PeerPane, PeerPresence, PeerProject, PeerWorktree, Terminal, Worktree } from '../../../shared/entities'
 
@@ -82,6 +82,11 @@ function describePane(terminal: Terminal, at: number): PeerPane {
     shell: terminal.shell,
     running: terminal.running,
     busy: terminal.busy,
+    // The owner's dimensions, for a watcher to letterbox to. They are sent and
+    // never asked for: a reader that could change them would be resizing a pty
+    // under a program it is only reading.
+    cols: terminal.cols,
+    rows: terminal.rows,
     // Converted from an instant to a duration on the way out: the receiver's
     // clock is the only one it can trust, and a duration survives the crossing.
     quietForMs: Math.max(0, at - terminal.lastOutputAt)

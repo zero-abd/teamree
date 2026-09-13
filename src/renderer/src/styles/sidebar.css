@@ -659,3 +659,36 @@
 .pane-row--teammate:hover {
   background: transparent;
 }
+
+/* A teammate's pane is the one thing on their row that can be acted on, and
+   only in one direction: it can be read. So it gets a pointer back, and the
+   row it is on says nothing about typing because nothing here types. */
+.pane-row--watchable {
+  cursor: pointer;
+}
+
+.pane-row--watchable:hover {
+  background: var(--bg-hover);
+}
+
+/* The pane this window is currently reading. Marked on the row as well as in
+   the viewer, so closing the viewer is never the only way to know. */
+.pane-row--watching {
+  background: var(--bg-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Who is reading one of *your* panes. In the accent and on the row itself
+   rather than in a tooltip: the design's case for why a project where anyone
+   can type is survivable is that none of it can happen unseen, and a fact
+   behind a hover is a fact somebody can miss. */
+.pane-row__watchers {
+  flex: 0 0 auto;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

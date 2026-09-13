@@ -10,14 +10,31 @@
 // The filter matches on task name and branch,
 // which is how people actually look for a piece of work in flight.
 
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import type { PaneWatcher, PaneWatchers } from '@shared/entities'
+import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { evidenceLine } from './outputEvidence'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
-import { teammateRows } from './teammateRows'
+import { teammateRows, type TeammatePaneRow } from './teammateRows'
 import { teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { WorktreeRow } from './WorktreeRow'
+
+/**
+ * One teammate's pane at a time, and the whole of what the window remembers
+ * about watching.
+ *
+ * One rather than many because bytes cost a relay budget and a reader has one
+ * pair of eyes: `docs/teamwork.md` is explicit that output flows only for a
+ * pane somebody has open, and "open" meaning "was opened once and never shut"
+ * is how that turns into the N² traffic it exists to prevent.
+ */
+type OpenWatch = { projectId: string; paneId: string; label: string; handle: string }
+
+/** How much of a watched pane is kept to quote its last line from. */
+const WATCH_TAIL_CHARS = 4_000
 
 export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
@@ -58,6 +75,29 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
   }, [collapsed, matching, paneList])
 
   const evidence = usePaneEvidence(onScreen, terminals)
+  const watching = useWorkspaceStore((state) => state.watchers)
+
+  const [watch, setWatch] = useState<OpenWatch | null>(null)
+  // Whatever the pane this window is watching has said since it was opened.
+  // Nothing else has a line to quote, because nothing else is streaming.
+  const [watchTail, setWatchTail] = useState('')
+
+  const openWatch = useCallback((projectId: string, pane: TeammatePaneRow) => {
+    setWatchTail('')
+    setWatch((current) =>
+      // A second press on the pane already open stops watching, which is also
+      // what makes stopping reachable without reaching for the viewer.
+      current?.paneId === pane.terminalId
+        ? null
+        : { projectId, paneId: pane.terminalId, label: pane.label, handle: pane.handle }
+    )
+  }, [])
+
+  const onWatchOutput = useCallback((data: string) => {
+    setWatchTail((tail) => (tail + data).slice(-WATCH_TAIL_CHARS))
+  }, [])
+
+  const watchEvidence = useMemo(() => (watch ? { [watch.paneId]: evidenceLine(watchTail) } : {}), [watch, watchTail])
 
   return (
     <nav className="sidebar" aria-label="Projects and worktrees">
@@ -91,7 +131,8 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
           // Under the same project, because that is what they are: the same
           // repository, checked out somewhere else. The rows below make whose
           // they are unmissable, which is what lets them share the list.
-          const theirs = teammateRows(teammates[project.id]?.worktrees ?? [], now)
+          const theirs = teammateRows(teammates[project.id]?.worktrees ?? [], now, watchEvidence)
+          const reading = watchersByPane(watching[project.id])
           return (
             <section className="project" key={project.id}>
               <div className="project__head">
@@ -162,6 +203,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                       mergePreview={mergePreviews[worktree.id]}
                       terminals={paneList}
                       evidence={evidence}
+                      watchers={reading}
                       now={now}
                       onFocusTerminal={(terminalId) => void revealPane(worktree.id, terminalId)}
                       active={worktree.id === activeWorktreeId}
@@ -171,7 +213,12 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                     />
                   ))}
                   {theirs.map((row) => (
-                    <TeammateWorktreeRow key={row.id} row={row} />
+                    <TeammateWorktreeRow
+                      key={row.id}
+                      row={row}
+                      watchingPaneId={watch?.paneId ?? null}
+                      onWatch={(pane) => openWatch(project.id, pane)}
+                    />
                   ))}
                   {rows.length === 0 && theirs.length === 0 ? (
                     <li className="project__none">
@@ -197,6 +244,28 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
           )
         })}
       </div>
+
+      {/* Over the window rather than in the pane tree, because it is not one of
+          your panes: it is a window onto somebody else's machine, and it goes
+          away when you stop looking. */}
+      {watch ? (
+        <WatchedPaneView
+          key={watch.paneId}
+          projectId={watch.projectId}
+          paneId={watch.paneId}
+          label={watch.label}
+          handle={watch.handle}
+          onOutput={onWatchOutput}
+          onClose={() => setWatch(null)}
+        />
+      ) : null}
     </nav>
   )
+}
+
+/** The watcher list per pane, in the shape a row reads. */
+function watchersByPane(watchers: PaneWatchers | undefined): Record<string, readonly PaneWatcher[]> {
+  const byPane: Record<string, readonly PaneWatcher[]> = {}
+  for (const pane of watchers?.panes ?? []) byPane[pane.terminalId] = pane.watchers
+  return byPane
 }

@@ -21,6 +21,8 @@ import { createDispatcher, type Dispatcher } from '../../runtime/dispatcher'
 import { MethodRegistry } from '../../runtime/methodRegistry'
 import { createRuntimeContext } from '../../runtime/runtimeContext'
 import { SubscriptionHub } from '../../runtime/subscriptionHub'
+import { createTerminalService, registerTerminalHandlers, type TerminalService } from '../../terminals/method-handlers'
+import { registerUnsubscribeHandler } from '../../runtime/handlers/unsubscribeHandler'
 import { registerPeerHandlers } from './handlers'
 import type { LinkScheduler } from './peerLink'
 import { PeerService } from './peerService'
@@ -294,6 +296,15 @@ export type PeerRuntime = {
   subscriptions: SubscriptionHub
   workspace: FakeWorkspace
   dataDir: string
+  /**
+   * Real PTYs, when the runtime was built with them.
+   *
+   * A watch test needs a pane that actually exists on the owner's machine: the
+   * point of milestone C is that a teammate reaches `terminal.subscribe` and
+   * `terminal.read` as the terminal service already implements them, and a
+   * stand-in for that service would be testing the stand-in.
+   */
+  terminals?: TerminalService
   /** Fires the change the workspace bus would have fired. */
   changed: () => void
   changes: () => number
@@ -314,6 +325,12 @@ export type PeerRuntimeOptions = {
   runner?: GitRunner
   /** Lets a test wait on a condition instead of on the clock. */
   onChange?: () => void
+  /**
+   * Registers the real terminal service, with real PTYs, and reports its panes
+   * as this runtime's terminals. Off by default: most peer tests are about the
+   * transport and have no use for a process.
+   */
+  withTerminals?: boolean
 }
 
 /** One origin per checkout, for tests about two repositories at once. */
@@ -380,14 +397,33 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
   })
   const registry = new MethodRegistry(context)
 
+  // Registered before the dispatcher exists, exactly as the real runtime does
+  // it, so a teammate that arrives early cannot be told a method is missing
+  // when it merely was not registered yet.
+  const terminals = options.withTerminals
+    ? createTerminalService({
+        subscriptions,
+        resolveWorktreeCwd: () => tmpdir()
+      })
+    : undefined
+  if (terminals) registerTerminalHandlers(registry, terminals)
+  // Transport-level and always present in the real runtime. Without it every
+  // stream a test opened would stay open, which is the opposite of what the
+  // bytes-on-demand rule is for.
+  registerUnsubscribeHandler(registry)
+
   let changes = 0
   const service = new PeerService({
     workspace: {
       listProjects: () => options.workspace.projects,
       listWorktrees: (projectId) =>
         options.workspace.worktrees.filter((worktree) => projectId === undefined || worktree.projectId === projectId),
+      // Real panes when there are real panes, so a snapshot a watcher resolves
+      // a pane id against describes a process that is genuinely running.
       listTerminals: (worktreeId) =>
-        options.workspace.terminals.filter((terminal) => terminal.worktreeId === worktreeId)
+        terminals
+          ? terminals.manager.list(worktreeId)
+          : options.workspace.terminals.filter((terminal) => terminal.worktreeId === worktreeId)
     },
     dataDir,
     subscriptions,
@@ -411,6 +447,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     subscriptions,
     workspace: options.workspace,
     dataDir,
+    ...(terminals ? { terminals } : {}),
     changed: () => service.notifyWorkspaceChanged(),
     changes: () => changes
   }

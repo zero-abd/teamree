@@ -461,9 +461,41 @@ onto the method catalogue that already exists, not a new protocol.
   - [x] Tested against the relay itself: the built container host, as a child
         process, on a real port, over real WebSockets, between two runtimes with
         their own data directories and their own identities
-- [ ] **C — Watching a pane.** `terminal.subscribe` over the peer transport,
+- [x] **C — Watching a pane.** `terminal.subscribe` over the peer transport,
       read-only, letterboxed to the owner's dimensions, and the pane says it is
       being watched.
+  - [x] The allow-list widened by exactly two methods, both reads:
+        `terminal.read` for the scrollback a watcher joins at and
+        `terminal.subscribe` for everything after it. `terminal.write`,
+        `terminal.resize` and `terminal.close` stay absent, and that absence is
+        the whole of what makes watching read-only — a watcher's keystroke
+        reaches a method the far runtime does not admit to having. Neither the
+        terminal service nor the dispatcher was touched
+  - [x] Bytes flow only for a pane somebody has open and stop when they close
+        it, because ten people streaming forty panes at each other is N²
+        bandwidth for output nobody is reading
+  - [x] The join between the scrollback and the live tail, with neither a gap
+        nor a duplicated overlap, and with no byte arithmetic: the subscribe
+        goes first, everything the stream says is held until the read's answer
+        lands, and the held output is discarded because the transport's own
+        ordering guarantees the snapshot already contains it. An exit and a
+        title survive that discarding, because a scrollback holds neither
+  - [x] The owner's dimensions cross as metadata and a watcher letterboxes to
+        them. There is no method through which a reader could change them
+  - [x] A pane that outruns the relay's 200 frames and 4 MiB a second is
+        coalesced first, which is lossless, and only then trimmed — and when it
+        is trimmed the watcher is told how many bytes went, in the stream,
+        where the hole is. Output dropped silently would make the view a lie
+  - [x] A watch that ends for a reason the reader cannot see says so: the owner
+        closing the pane, the pane exiting, and the link dropping are three
+        notices rather than a window that quietly stops updating
+  - [x] The owner sees who is reading each of their panes, by name and live,
+        because the design's case for why "anyone can type" is survivable is
+        that none of it can be done invisibly
+  - [x] Tested against the relay itself again, with real PTYs behind it: two
+        watchers on one pane, the owner watching their own pane while a
+        teammate does, the pane exiting under a watcher, the owner closing it
+        under a watcher, and the link dropping mid-stream and coming back
 - [ ] **D — Typing into a pane.** `terminal.write` over the same transport, with
       live attribution, a local audit log, and per-pane mute. The milestone that
       needs the most care: it is the one that hands somebody else a shell.

@@ -38,6 +38,7 @@
 // boundary assert behaviour rather than wait for it.
 
 import type { PeerLink as PeerLinkStatus, PeerLinkPhase, PeerPresence } from '../../../shared/entities'
+import type { MethodName, ParamsOf, ResultOf } from '../../../shared/methods'
 import { createInitiatorSession, createResponderSession, isPeerError, type PeerSession } from '../../../shared/peer'
 import { createPeerTransport, type PeerTransport } from '../../runtime/peerTransport'
 import type { Dispatcher } from '../../runtime/dispatcher'
@@ -54,6 +55,19 @@ export const HANDSHAKE_TIMEOUT_MS = 15_000
 
 export const BACKOFF_START_MS = 1_000
 export const BACKOFF_CEILING_MS = 60_000
+
+/**
+ * How much of a stream is held while its own subscribe answer is still in
+ * flight.
+ *
+ * A subscription's first events can beat the response that names it: the far
+ * side attaches the stream inside the handler, and a pane already printing
+ * writes frames behind the answer rather than after it. The window is one round
+ * trip, so these are generous; they are bounds rather than a capacity, and a
+ * stream nobody ever claims cannot grow without limit.
+ */
+export const MAX_UNROUTED_STREAMS = 16
+export const MAX_UNROUTED_EVENTS = 256
 
 /**
  * Timers and the clock, as one seam.
@@ -101,6 +115,14 @@ export type PeerLinkOptions = {
   onStatusChange: (status: PeerLinkStatus) => void
   /** A snapshot this teammate pushed. Dropped by the caller if it is behind. */
   onPresence: (presence: PeerPresence) => void
+  /**
+   * Which of *this* machine's panes the teammate has open, whenever it changes.
+   *
+   * The owner's half of the bargain in `docs/teamwork.md`: watching cannot be
+   * done invisibly, so the fact travels up from the transport that saw the
+   * subscription rather than being inferred anywhere later.
+   */
+  onWatchersChange?: (terminalIds: readonly string[]) => void
   onError?: (error: unknown) => void
 }
 
@@ -109,6 +131,23 @@ export type PeerLink = {
   start: () => void
   /** Stops for good: no reconnect, no timers, no socket. */
   stop: () => void
+  /**
+   * Asks the teammate for something, from the same catalogue.
+   *
+   * Refused unless the session is confirmed, which is the rule this whole file
+   * is written around: a replayed handshake reaches `established` holding
+   * somebody else's key, and a call made on that basis would be a request sent
+   * into a session nobody is on the other end of.
+   */
+  call: <M extends MethodName>(method: M, params: ParamsOf<M>) => Promise<ResultOf<M>>
+  /**
+   * Directs one of the teammate's streams somewhere. Returns the undo.
+   *
+   * Presence has a route of its own from the moment the link confirms; this is
+   * how a watched pane gets one, and why a stream frame is never guessed at by
+   * its shape.
+   */
+  route: (subscription: string, onEvent: (event: unknown) => void) => () => void
 }
 
 type HandshakeOutcome =
@@ -133,6 +172,11 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   let rolledOverThisAttempt = false
   /** Scoped to one session: has anything from the far end ever decrypted? */
   let confirmed = false
+  /** Streams this side opened on the teammate, by subscription id. */
+  const routes = new Map<string, (event: unknown) => void>()
+  /** Events for a subscription whose answer has not landed yet. */
+  const unrouted = new Map<string, unknown[]>()
+  let cancelPresenceRoute: (() => void) | undefined
   let connection: RelayConnection | undefined
   let session: PeerSession | undefined
   let transport: PeerTransport | undefined
@@ -180,6 +224,9 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
    */
   const teardown = (reason: string): void => {
     clearTimers()
+    cancelPresenceRoute = undefined
+    routes.clear()
+    unrouted.clear()
     transport?.close(reason)
     transport = undefined
     session?.close()
@@ -310,6 +357,42 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   }
 
   /**
+   * One of the teammate's streams, to whoever asked for it.
+   *
+   * By the id the subscription was answered with, never by the shape of what
+   * arrived: a pane's output and a presence snapshot are both just objects, and
+   * a link that guessed could be made to guess wrong.
+   */
+  const deliver = (stream: string, event: unknown): void => {
+    const route = routes.get(stream)
+    if (route) {
+      route(event)
+      return
+    }
+    let held = unrouted.get(stream)
+    if (!held) {
+      if (unrouted.size >= MAX_UNROUTED_STREAMS) return
+      held = []
+      unrouted.set(stream, held)
+    }
+    if (held.length >= MAX_UNROUTED_EVENTS) held.shift()
+    held.push(event)
+  }
+
+  const route = (subscription: string, onEvent: (event: unknown) => void): (() => void) => {
+    routes.set(subscription, onEvent)
+    // Whatever came in before the answer did, in the order it came in. This is
+    // the join a watcher depends on: the first bytes of a live pane must not be
+    // the ones lost to the round trip that asked for them.
+    const held = unrouted.get(subscription)
+    unrouted.delete(subscription)
+    for (const event of held ?? []) onEvent(event)
+    return () => {
+      routes.delete(subscription)
+    }
+  }
+
+  /**
    * Key confirmation: a transport message from the far end that authenticated.
    *
    * This is the moment a peer stops being a handshake that parsed and starts
@@ -337,10 +420,16 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     moveTo('connected')
     // One subscription for the life of the link. It answers immediately, so
     // there is no separate first read to race with the stream.
-    void transport.call('peer.subscribe', {}).catch((error: unknown) => {
-      options.onError?.(error)
-      connection?.close(1000, '')
-    })
+    void transport
+      .call('peer.subscribe', {})
+      .then(({ subscription }) => {
+        cancelPresenceRoute?.()
+        cancelPresenceRoute = route(subscription, (event) => options.onPresence(event as PeerPresence))
+      })
+      .catch((error: unknown) => {
+        options.onError?.(error)
+        connection?.close(1000, '')
+      })
   }
 
   const establish = (): void => {
@@ -359,13 +448,15 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       // somebody holding the private key is actually on the other end. Until
       // then the handshake has only been parsed.
       onConfirmed: confirm,
-      onStreamEvent: (_stream, event) => {
+      onStreamEvent: (stream, event) => {
         // Cannot arrive before confirmation — it had to be decrypted to get
         // here — but the ordering is asserted rather than assumed, because a
         // forged snapshot is exactly what a replayer would want.
         if (!confirmed) return
-        options.onPresence(event as PeerPresence)
+        deliver(stream, event)
       },
+      onWatchChange: options.onWatchersChange,
+      scheduler: options.scheduler,
       onFatal: () => {
         // A Noise stream with a hole in it is over: there is no point it could
         // be picked up from, so the socket goes and the link rebuilds.
@@ -448,7 +539,15 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     stop: () => {
       running = false
       teardown('teamwork stopped')
-    }
+    },
+    call: <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> => {
+      const active = transport
+      if (!confirmed || !active) {
+        return Promise.reject(new Error('this teammate’s session is not confirmed'))
+      }
+      return active.call(method, params)
+    },
+    route
   }
 }
 

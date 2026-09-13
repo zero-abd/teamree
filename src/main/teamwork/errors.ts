@@ -20,6 +20,11 @@ export function badHandle(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.InvalidParams, message)
 }
 
+/** An id that is not shaped like anything this runtime hands out. */
+export function badPaneId(message: string): TeamworkError {
+  return new TeamworkError(ErrorCode.InvalidParams, message)
+}
+
 /** The repository is already in a state this call would have to overwrite. */
 export function rosterConflict(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.Conflict, message)

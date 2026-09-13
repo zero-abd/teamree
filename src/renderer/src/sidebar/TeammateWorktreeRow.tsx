@@ -8,16 +8,27 @@
 // down the list has to be able to see where their checkouts stop without
 // reading a word.
 //
-// **That it is not theirs to act on.** There is no remove button, no retry, and
-// nothing to open: this is not a button with a disabled attribute, it is a
-// `<div>`, because a disabled button is a thing that would work if something
-// were different and this is a thing that will not. Milestone C makes a pane
-// openable for reading; until then the honest affordance is none.
+// **That it is not theirs to act on.** There is no remove button and no retry:
+// the worktree row is a `<div>` rather than a button with a disabled attribute,
+// because a disabled control is a thing that would work if something were
+// different and this is a thing that will not.
+//
+// The panes underneath it are the one exception, and only in one direction. A
+// pane can be opened for *reading*, so it is a real button and says "watch" —
+// and what it opens is a viewer that cannot be typed into, rather than a pane
+// of your own that happens to be somebody else's.
 
 import { ACTIVITY_LABEL, sinceLabel } from './agentRows'
-import { teammateTitle, type TeammateWorktreeRowModel } from './teammateRows'
+import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 
-export function TeammateWorktreeRow({ row }: { row: TeammateWorktreeRowModel }): React.JSX.Element {
+type TeammateWorktreeRowProps = {
+  row: TeammateWorktreeRowModel
+  /** The pane this window currently has open for reading, if any. */
+  watchingPaneId: string | null
+  onWatch: (pane: TeammatePaneRow) => void
+}
+
+export function TeammateWorktreeRow({ row, watchingPaneId, onWatch }: TeammateWorktreeRowProps): React.JSX.Element {
   return (
     <li className={`worktree worktree--teammate worktree--${row.state}`}>
       <div className="worktree__row worktree__row--teammate" title={teammateTitle(row)}>
@@ -45,13 +56,24 @@ export function TeammateWorktreeRow({ row }: { row: TeammateWorktreeRowModel }):
         <ul className="panes panes--teammate">
           {row.panes.map((pane) => (
             <li key={pane.terminalId}>
-              <div className="pane-row pane-row--teammate" title={`${pane.label} · ${ACTIVITY_LABEL[pane.activity]}`}>
+              <button
+                type="button"
+                className={`pane-row pane-row--teammate pane-row--watchable${
+                  pane.terminalId === watchingPaneId ? ' pane-row--watching' : ''
+                }`}
+                title={`Watch ${row.handle}’s ${pane.label} · ${ACTIVITY_LABEL[pane.activity]} · reading only`}
+                aria-pressed={pane.terminalId === watchingPaneId}
+                onClick={() => onWatch(pane)}
+              >
                 <span className="pane-row__head">
                   <span className={`activity activity--${pane.activity}`} aria-hidden="true" />
                   <span className="pane-row__label">{pane.label}</span>
                   <span className="pane-row__since">{sinceLabel(pane.quietFor)}</span>
                 </span>
-              </div>
+                {/* Only ever a line the pane actually printed while somebody had
+                    it open, which is why it is absent on every other row. */}
+                {pane.evidence ? <span className="pane-row__evidence">{pane.evidence}</span> : null}
+              </button>
             </li>
           ))}
         </ul>

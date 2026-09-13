@@ -83,11 +83,33 @@ describe('a teammate’s rows', () => {
     expect(row?.panes[0]?.quietFor).toBe(1_000)
   })
 
-  it('quotes nothing a pane printed, because nothing a pane printed crosses yet', () => {
-    // Milestone B sends metadata and no output. An empty evidence line would
-    // read as an answer; null is the row saying it has nothing to quote.
+  it('quotes nothing from a pane nobody has opened, because nothing of it has crossed', () => {
+    // Output flows only for a pane somebody is watching. An empty evidence line
+    // would read as an answer; null is the row saying it has nothing to quote.
     const [row] = teammateRows([theirWorktree({ panes: [pane()] })], NOW)
     expect(row?.panes[0]?.evidence).toBeNull()
+  })
+
+  it('quotes the last line of a pane somebody has open, and only that pane', () => {
+    const [row] = teammateRows([theirWorktree({ panes: [pane(), pane({ id: 'peer:abc123:t_2' })] })], NOW, {
+      'peer:abc123:t_1': '28 passed in 4.11s'
+    })
+    expect(row?.panes[0]?.evidence).toBe('28 passed in 4.11s')
+    expect(row?.panes[1]?.evidence).toBeNull()
+  })
+
+  it('carries the owner’s dimensions, which is what a watcher letterboxes to', () => {
+    const [row] = teammateRows([theirWorktree({ panes: [pane({ cols: 120, rows: 40 })] })], NOW)
+    expect(row?.panes[0]?.cols).toBe(120)
+    expect(row?.panes[0]?.rows).toBe(40)
+  })
+
+  it('leaves the dimensions unknown rather than guessing when a teammate sends none', () => {
+    // A peer that has not been rebuilt sends no size, and a row that answered
+    // 80x24 anyway would have a watcher draw a frame the output does not fit.
+    const [row] = teammateRows([theirWorktree({ panes: [pane()] })], NOW)
+    expect(row?.panes[0]?.cols).toBeUndefined()
+    expect(row?.panes[0]?.rows).toBeUndefined()
   })
 
   it('says whose it is before it says anything else', () => {

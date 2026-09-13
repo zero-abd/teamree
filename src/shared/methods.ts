@@ -8,6 +8,7 @@ import type {
   Layout,
   MemberList,
   PaneNode,
+  PaneWatchers,
   PeerPresence,
   Project,
   RuntimeStatus,
@@ -127,6 +128,20 @@ export const Params = {
   teamworkStatus: z.object({ projectId: z.string().min(1) }),
   /** A teammate's worktrees and panes in one project, as last heard. */
   teamworkPresence: z.object({ projectId: z.string().min(1) }),
+  /**
+   * Opens a teammate's pane for reading. Read-only, and there is no companion
+   * method that writes: typing is milestone D.
+   *
+   * `paneId` is the namespaced id `teamwork.presence` hands out, and the
+   * project is named alongside it because one teammate can be reached over one
+   * link per shared repository and a pane id alone does not say which.
+   *
+   * Nothing streams until this is called, and everything stops when the
+   * subscription is released: output flows only for a pane somebody has open.
+   */
+  teamworkWatch: z.object({ projectId: z.string().min(1), paneId: z.string().min(1) }),
+  /** Who is reading this machine's panes, right now, in one project. */
+  teamworkWatchers: z.object({ projectId: z.string().min(1) }),
 
   /**
    * PEER-ONLY. Reachable over the peer transport and nowhere else.
@@ -216,6 +231,18 @@ export type MethodContract = {
 
   'teamwork.status': { params: z.infer<typeof Params.teamworkStatus>; result: TeamworkStatus }
   'teamwork.presence': { params: z.infer<typeof Params.teamworkPresence>; result: TeammatePresence }
+  'teamwork.watch': {
+    params: z.infer<typeof Params.teamworkWatch>
+    result: {
+      subscription: string
+      /** The owner's pty size, to letterbox to. Never negotiated by the reader. */
+      cols: number
+      rows: number
+      /** Whose pane it is, so the view is never ambiguous about that. */
+      handle: string
+    }
+  }
+  'teamwork.watchers': { params: z.infer<typeof Params.teamworkWatchers>; result: PaneWatchers }
 
   'peer.presence': { params: z.infer<typeof Params.peerPresence>; result: PeerPresence }
   'peer.subscribe': { params: z.infer<typeof Params.peerSubscribe>; result: { subscription: string } }
@@ -274,6 +301,23 @@ export type TerminalEvent =
   | { type: 'data'; data: string }
   | { type: 'exit'; exitCode: number }
   | { type: 'title'; title: string }
+
+/**
+ * Events pushed on a teamwork.watch subscription.
+ *
+ * A teammate's pane says everything a local one does, plus the two things only
+ * a reader on the far end of a relay can be told, and both exist because a
+ * viewer that quietly showed less than the truth would be a lie:
+ *
+ * `elided` is output the owner produced and this side will never see, because
+ * the pane outran what `relay/README.md` budgets for one connection. It carries
+ * the byte count so the gap can be drawn where it happened.
+ *
+ * `lost` is the link going away underneath the stream. A watcher whose teammate
+ * closed their laptop must not be left looking at a frozen pane that appears
+ * live.
+ */
+export type WatchedPaneEvent = TerminalEvent | { type: 'elided'; bytes: number } | { type: 'lost'; reason: string }
 
 /** Convenience re-export so consumers import layout shapes from one place. */
 export type { PaneNode, Layout }

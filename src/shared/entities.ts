@@ -397,6 +397,17 @@ export type PeerPane = {
   exitCode?: number
   busy: boolean
   /**
+   * The size of the owner's pty, so a watcher can letterbox to it.
+   *
+   * Optional because a peer that has not been rebuilt sends none, and a watcher
+   * that guessed 80x24 at one would draw a frame the output does not fit. The
+   * numbers are the owner's and are never negotiated: `docs/teamwork.md` is
+   * explicit that a reader letterboxes rather than resizing a pty under a
+   * program that is only being read.
+   */
+  cols?: number
+  rows?: number
+  /**
    * Silence as a duration measured by the owner, never as an instant.
    *
    * Two machines do not agree about what time it is, and a `lastOutputAt` from
@@ -503,6 +514,38 @@ export type TeammateWorktree = PeerWorktree & {
   publicKey: string
   /** When this was last heard, by this machine's clock. */
   heardAt: number
+}
+
+/**
+ * One person reading one of this machine's panes, right now.
+ *
+ * The whole argument in `docs/teamwork.md` for why "anyone can type" is
+ * survivable is that nothing can be done invisibly, and watching is the first
+ * half of that. So this is not decoration: it is the half of the bargain the
+ * owner is owed, and it is live rather than a log.
+ */
+export type PaneWatcher = {
+  /** What the roster files their key under. */
+  handle: string
+  /** Their public key, which is the identity the handshake authenticated. */
+  publicKey: string
+  /** When they started watching, by this machine's clock. */
+  since: number
+}
+
+/** One of this machine's panes and who is reading it. */
+export type WatchedPane = {
+  terminalId: string
+  /** Sorted by handle, so two reads compare cleanly. */
+  watchers: PaneWatcher[]
+}
+
+/** Every pane of this machine somebody is watching, in one project. */
+export type PaneWatchers = {
+  projectId: string
+  /** Only panes with at least one watcher; an empty list means nobody is reading. */
+  panes: WatchedPane[]
+  readAt: number
 }
 
 /** Every teammate's worktrees in one project, as last heard. */
