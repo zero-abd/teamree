@@ -98,6 +98,13 @@ jobs:
       - name: Format
         run: npm run format:check
 
+      # The acceptance pass drives the CLI as a real executable, so it has to
+      # exist before the suite runs. A developer's checkout usually has one
+      # lying around from an earlier build, which is exactly why this was
+      # invisible until CI ran on a clean tree.
+      - name: Build the CLI the acceptance suite drives
+        run: npm run build:cli
+
       # Includes the acceptance pass, which drives a real runtime over the real
       # socket — a unix socket here, a named pipe on Windows.
       - name: Test
