@@ -66,6 +66,16 @@ export type StartTeamworkInput = {
 }
 
 /**
+ * The label on the button that writes this machine's key into the repository.
+ *
+ * A constant because the sidebar names it from a long way away: the header's
+ * "Your key is not here" tooltip tells somebody which button to press, and a
+ * tooltip naming a button that has since been renamed is the failure this
+ * whole file exists to avoid being on the other end of.
+ */
+export const ADD_KEY_BUTTON = 'Add my key'
+
+/**
  * What adding a key to `.teamree/members/` actually grants, said before the
  * button that adds one and not in a footnote.
  *
