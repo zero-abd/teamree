@@ -9,6 +9,7 @@ import type {
   MemberList,
   PaneNode,
   Project,
+  RemoteWrite,
   StartPoint,
   StartPointList,
   Terminal,
@@ -142,6 +143,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
   const layouts = new Map<string, Layout>()
   /** Rosters by project id, so joining one in the demo really does add a row. */
   const rosters = new Map<string, Member[]>()
+  /** Panes muted in the demo. A mute is local, so this one is not a pretence. */
+  const seededMutes = new Set<string>()
+  /** One remote write, so the record's shape is visible without a teammate. */
+  const seededWrites: RemoteWrite[] = []
 
   let connection: ConnectionState = { phase: 'connecting', detail: 'Starting runtime' }
   const connectionListeners = new Set<(state: ConnectionState) => void>()
@@ -719,16 +724,52 @@ export function createSeededRuntimeClient(): RuntimeClient {
       if (!pane) throw new Error(`${paneId} is not a teammate’s pane`)
       return { subscription: nextId('sub'), cols: pane.cols, rows: pane.rows, handle: pane.handle }
     },
-    // One teammate reading one of this machine's panes, so the owner's half of
-    // the bargain is visible in the demo rather than only in the design.
+    // Typing into a teammate's pane, refused here rather than pretended at.
+    // There is no relay and no teammate, so a keystroke has nowhere to land,
+    // and answering "written" would be the one lie this feature must not tell.
+    'teamwork.type': () => {
+      throw new Error('there is no teammate to type to in the demo runtime')
+    },
+    // One teammate reading one of this machine's panes, and one who has typed
+    // into it, so both halves of the owner's bargain are visible in the demo
+    // rather than only in the design.
     'teamwork.watchers': ({ projectId }) => ({
       projectId,
       panes: [...terminals.keys()].slice(0, 1).map((terminalId) => ({
         terminalId,
-        watchers: [{ handle: 'priya', publicKey: SEEDED_PEER_KEY, since: Date.now() - 120_000 }]
+        watchers: [{ handle: 'priya', publicKey: SEEDED_PEER_KEY, since: Date.now() - 120_000 }],
+        typists: [
+          {
+            handle: 'priya',
+            publicKey: SEEDED_PEER_KEY,
+            since: Date.now() - 90_000,
+            at: Date.now() - 40_000,
+            writes: 12,
+            bytes: 48,
+            refused: 0
+          }
+        ],
+        muted: seededMutes.has(terminalId)
       })),
       readAt: Date.now()
     }),
+    // The one thing in this area a demo can do for real: a mute is local, needs
+    // nobody's agreement, and takes effect on a machine that has no peers at all.
+    'teamwork.mute': ({ terminalId, muted }) => {
+      const worktreeId = terminals.get(terminalId)?.record.worktreeId
+      const projectId = worktreeId === undefined ? undefined : worktrees.get(worktreeId)?.projectId
+      if (projectId === undefined) throw new Error(`no pane of this machine with id ${terminalId}`)
+      if (muted) seededMutes.add(terminalId)
+      else seededMutes.delete(terminalId)
+      announce({ type: 'teammates' })
+      return handlers['teamwork.watchers']({ projectId })
+    },
+    // Seeded with one entry so the shape of the record is visible: who, when,
+    // which pane, how much — and, deliberately, not a byte of what was typed.
+    'teamwork.writeLog': ({ limit }) => {
+      const writes = [...seededWrites]
+      return { writes: limit === undefined ? writes : writes.slice(-limit), problem: null, readAt: Date.now() }
+    },
 
     // PEER-ONLY, and refused here rather than seeded. These are what a teammate
     // calls over the peer transport; a window asking for one is a bug, and

@@ -547,10 +547,57 @@ onto the method catalogue that already exists, not a new protocol.
         watchers on one pane, the owner watching their own pane while a
         teammate does, the pane exiting under a watcher, the owner closing it
         under a watcher, and the link dropping mid-stream and coming back
-- [ ] **D — Typing into a pane.** `terminal.write` over the same transport, with
+- [x] **D — Typing into a pane.** `terminal.write` over the same transport, with
       live attribution, a local audit log, and per-pane mute. The milestone that
       needs the most care: it is the one that hands somebody else a shell.
+  - [x] The allow-list widened by exactly one method, and it is the only one on
+        it that changes anything. `terminal.resize` and `terminal.close` stay
+        absent — a teammate's window is not this pane's window and their
+        keyboard is not its power switch — and so does everything touching git.
+        Neither the terminal service nor the dispatcher was touched
+  - [x] Being on the list is not the same as being allowed: every keystroke
+        passes a verdict from the thing that knows whose link it arrived on,
+        and a transport wired without one carries no keystrokes at all. A byte
+        reaching a pty that nobody can attribute is the one outcome this
+        milestone exists to make unreachable
+  - [x] Attribution is live and is updated before the write is dispatched, in
+        memory, where it cannot fail. The pane names whoever is typing while
+        they type, and goes on saying they typed here after they stop, because
+        a pane a teammate has run commands in is not a pane whose history is
+        the owner's alone
+  - [x] **The audit log holds who, when, which pane, how many bytes, how many
+        submissions, and whether it landed — and never the bytes.** A remote
+        write carries input, and input includes what a program deliberately
+        does not echo; keeping it would build a plaintext store of teammates'
+        passphrases out of a safety feature, and would hold strictly more than
+        the screen the owner can already read. Refusals are recorded too:
+        somebody still typing at a muted pane is the thing an owner most wants
+        to know. It is JSON Lines beside the identity, rotated once at a cap,
+        and it survives a restart because a record that did not would not be one
+  - [x] Mute is the owner's, per-pane, and instant: no round trip, no
+        agreement, and no way for a teammate to refuse it. It is checked in the
+        same task that dispatches the write with nothing awaited in between, so
+        a keystroke still in flight when the mute lands is refused rather than
+        run. A muted pane keeps streaming and keeps its row — mute stops the
+        bytes, it does not hide the worktree
+  - [x] Nothing is dropped in silence. A refusal is answered with the owner's
+        own words and drawn in the pane where the keystroke would have gone, so
+        a mute, a pane that exited and a link that went are three sentences
+        rather than a keyboard that quietly stopped working
+  - [x] One write is capped below the relay's per-second byte budget, refused
+        whole rather than chunked: half a paste landing in somebody's shell is
+        worse than none of it
+  - [x] A message that arrives over a session refused while that same message
+        was being read runs nothing from it. Key confirmation can tear the link
+        down mid-message, and a keystroke behind it must not run merely because
+        the loop had already started
+  - [x] Tested against the relay itself again, with real PTYs behind it: a
+        keystroke landing and coming back out of the pty, the owner muting
+        mid-stream, a muted pane still streaming and still in the sidebar, two
+        teammates typing at once, a pane whose process has exited, a link that
+        went while a keystroke travelled, and a key taken off the roster
 - [x] **E — Staleness.** The local cache, stale marking with its age, and
+
       reconnection that reconciles rather than re-fetching the world.
   - [x] A teammate's worktrees stay in the sidebar when their machine goes,
         marked away and dated. A row vanishing reads as a worktree deleted,

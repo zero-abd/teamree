@@ -1,22 +1,26 @@
-// A teammate's pane, open for reading and for nothing else.
+// A teammate's pane, open for reading and — since milestone D — for typing.
 //
-// This is deliberately NOT `TerminalView` with a flag. A pane you can type into
-// and a pane you are reading over somebody's shoulder are two different objects
-// in the world, and the differences are structural rather than cosmetic:
+// This is deliberately NOT `TerminalView` with a flag. A pane of your own and a
+// pane on somebody else's machine are two different objects in the world, and
+// the differences are structural rather than cosmetic:
 //
-// **There is no write path at all.** No `onData` handler is attached, xterm is
-// created with `disableStdin`, and the method that would carry a keystroke is
-// not on the teammate's allow-list. A watcher's keys reach nothing, and the
-// surface says so in words rather than by looking greyed out — a disabled
-// control is a thing that would work if something were different, and this is a
-// thing that will not until milestone D exists.
+// **Typing is a request, not a write.** A keystroke here goes to
+// `teamwork.type`, crosses a relay as `terminal.write`, and is judged by the
+// owner's machine before it reaches anything. It can be refused — the owner can
+// mute this pane, their process can have exited, their link can have gone — and
+// every refusal is printed into the pane where the keystroke would have
+// appeared. A keystroke that silently went nowhere would leave somebody
+// believing they had typed into a shell two thousand miles away, which is its
+// own kind of lie and the failure this view exists to make impossible.
 //
 // **The size is the owner's.** `docs/teamwork.md` is explicit: a watcher with a
 // smaller window is letterboxed rather than resizing a pty under a program that
 // is only being read. So the emulator is built at the owner's columns and rows
 // and never refits; the whole picture is scaled down to fit the viewer, with
 // bars where it does not reach. Scaling is a CSS transform, which touches
-// nothing on the far machine.
+// nothing on the far machine. That stays true now that typing works: a
+// keystroke is not a resize, and `terminal.resize` is still not a method a
+// teammate may call.
 //
 // **The stream can be honest about its own gaps.** A local pane cannot lose
 // output on the way to the screen. This one can — the relay has a budget and a
@@ -34,6 +38,17 @@ import { readTerminalTheme, TERMINAL_FONT_FAMILY } from './terminalTheme'
 /** Written into the pane itself, because that is where the fact belongs. */
 const DIM = '\u001b[38;5;244m'
 const RESET = '\u001b[0m'
+const WARN = '\u001b[38;5;173m'
+
+/**
+ * How long one refusal stands for the keystrokes behind it.
+ *
+ * Somebody typing at a muted pane sends a keystroke per key, and would
+ * otherwise be told once per key. Saying it once and holding for a moment keeps
+ * the pane readable without ever letting a keystroke vanish in silence: the
+ * ones in between met the same refusal, and it is already on the screen.
+ */
+const REFUSAL_QUIET_MS = 3_000
 
 type WatchedPaneViewProps = {
   projectId: string
@@ -52,6 +67,9 @@ type WatchState =
   | { phase: 'watching'; cols: number; rows: number }
   | { phase: 'ended'; reason: string }
 
+/** The last thing the owner's machine said no to, for the header to repeat. */
+type Refusal = { reason: string; at: number }
+
 export function WatchedPaneView({
   projectId,
   paneId,
@@ -63,6 +81,7 @@ export function WatchedPaneView({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [state, setState] = useState<WatchState>({ phase: 'opening' })
+  const [refused, setRefused] = useState<Refusal | null>(null)
   const outputRef = useRef(onOutput)
   outputRef.current = onOutput
 
@@ -98,6 +117,45 @@ export function WatchedPaneView({
     const write = (text: string): void => {
       term?.write(text)
       outputRef.current?.(text)
+    }
+
+    /**
+     * Says no once, in the pane, where the keystroke would have gone.
+     *
+     * Deduplicated by reason and not by keystroke: a held key against a muted
+     * pane is one refusal repeated, and printing it forty times would bury the
+     * output the reader is actually here for. A *different* refusal is always
+     * printed, and so is the same one again after the pane has been quiet.
+     */
+    let last: Refusal | null = null
+    const refuse = (reason: string): void => {
+      if (!alive) return
+      const at = Date.now()
+      if (last && last.reason === reason && at - last.at < REFUSAL_QUIET_MS) return
+      last = { reason, at }
+      term?.write(`\r\n${WARN}[not typed: ${reason}]${RESET}\r\n`)
+      setRefused(last)
+    }
+
+    /** Typing is working again, so the header must stop saying it is not. */
+    const accepted = (): void => {
+      if (!alive || last === null) return
+      last = null
+      setRefused(null)
+    }
+
+    /**
+     * One keystroke, on its way to somebody else's shell.
+     *
+     * Not awaited and not queued: the transport writes frames in the order
+     * `call` was made and this handler is synchronous, so the order keys were
+     * pressed in is the order they arrive in. Awaiting would make a slow link
+     * reorder nothing and drop everything a person typed while it thought.
+     */
+    const send = (data: string): void => {
+      void runtimeClient.call('teamwork.type', { projectId, paneId, data }).then(accepted, (error: unknown) => {
+        refuse(error instanceof Error ? error.message : String(error))
+      })
     }
 
     const onEvent = (event: WatchedPaneEvent): void => {
@@ -137,10 +195,9 @@ export function WatchedPaneView({
         term = new XTerm({
           allowProposedApi: true,
           convertEol: false,
-          // The whole of the read-only guarantee that xterm itself can make.
-          // The rest of it is that nothing below ever attaches `onData`, and
-          // that `terminal.write` is not a method a teammate may call.
-          disableStdin: true,
+          // The cursor is the owner's and is drawn by their pty in the bytes
+          // they send. A second one blinking here would be this window's guess
+          // at where the far end's is, which is a thing it cannot know.
           cursorBlink: false,
           cursorInactiveStyle: 'none',
           fontFamily: TERMINAL_FONT_FAMILY,
@@ -153,6 +210,7 @@ export function WatchedPaneView({
           rows: opened.rows
         })
         term.open(host)
+        term.onData(send)
 
         try {
           webgl = new WebglAddon()
@@ -189,15 +247,20 @@ export function WatchedPaneView({
   }, [handle, paneId, projectId])
 
   return (
-    <section className="watch" aria-label={`${handle}’s pane ${label}, read only`}>
+    <section className="watch" aria-label={`${handle}’s pane ${label}, which you can type into`}>
       <header className="watch__head">
         <span className="watch__title">
           <span className="watch__owner">{handle}</span>
           <span className="watch__label">{label}</span>
         </span>
-        {/* Said in words, on the pane, at all times. The design's argument for
-            why any of this is survivable is that nothing is ambiguous. */}
-        <span className="watch__readonly">reading only — you cannot type here</span>
+        {/* Said in words, on the pane, at all times, and said about the person
+            reading it rather than about the feature. The design's argument for
+            why any of this is survivable is that nothing is ambiguous — and
+            that includes being unambiguous with the person doing the typing
+            about the fact that their name is on it. */}
+        <span className={`watch__typing${refused ? ' watch__typing--refused' : ''}`}>
+          {refused ? refused.reason : `what you type runs on ${handle}’s machine, as ${handle}, with your name on it`}
+        </span>
         {state.phase === 'watching' ? (
           <span className="watch__size" title="their pane’s size, which a reader never changes">
             {`${state.cols}×${state.rows}`}

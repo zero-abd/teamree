@@ -203,6 +203,16 @@ type WorkspaceState = {
    * the only step that makes the key mean anything.
    */
   joinProject: (projectId: string, handle?: string) => Promise<void>
+  /**
+   * Stops, or restarts, teammates' keystrokes reaching one of this machine's
+   * panes.
+   *
+   * The answer is applied here rather than waited for from the change stream,
+   * because a mute is the one control in this app whose whole value is that it
+   * is instant: a button that took a round trip and a refetch to look pressed
+   * would be pressed twice.
+   */
+  mutePane: (terminalId: string, muted: boolean) => Promise<void>
 
   toggleProject: (projectId: string) => void
   toggleDashboard: () => void
@@ -1014,6 +1024,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         set({ diffPending: false })
         failed('Could not read the patch')(error)
       })
+    },
+
+    async mutePane(terminalId, muted) {
+      try {
+        const answer = await runtimeClient.call('teamwork.mute', { terminalId, muted })
+        set((state) => ({ watchers: { ...state.watchers, [answer.projectId]: answer } }))
+      } catch (error) {
+        failed('Could not change this pane’s mute')(error)
+      }
     },
 
     toggleProject(projectId) {

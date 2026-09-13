@@ -128,13 +128,19 @@ describe('dispatcher', () => {
       'project.list',
       'project.remove',
       'status.get',
+      // Local, not peer-reachable, and the owner's own: a mute needs nobody's
+      // agreement and the write log never leaves this machine.
+      'teamwork.mute',
       'teamwork.presence',
       'teamwork.status',
-      // Local, not peer-reachable. `teamwork.watch` is this machine asking to
-      // read somebody else's pane; what crosses the wire underneath it is
-      // `terminal.subscribe` and `terminal.read` on their runtime.
+      // Local, not peer-reachable. `teamwork.watch` and `teamwork.type` are
+      // this machine asking to read and to type into somebody else's pane; what
+      // crosses the wire underneath them is `terminal.subscribe`,
+      // `terminal.read` and `terminal.write` on their runtime.
+      'teamwork.type',
       'teamwork.watch',
       'teamwork.watchers',
+      'teamwork.writeLog',
       'terminal.close',
       'terminal.create',
       'terminal.list',

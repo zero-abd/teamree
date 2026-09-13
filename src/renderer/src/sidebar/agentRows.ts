@@ -63,11 +63,29 @@ export const ACTIVITY_LABEL: Record<AgentActivity, string> = {
  * matters, which is who.
  */
 export function watchedBy(watchers: readonly PaneWatcher[]): string {
-  const handles = watchers.map((watcher) => watcher.handle)
-  if (handles.length === 0) return 'nobody is watching'
-  if (handles.length === 1) return `${handles[0]} is watching`
+  const who = listOf(watchers.map((watcher) => watcher.handle))
+  return who === '' ? 'nobody is watching' : `${who}watching`
+}
+
+/**
+ * Whose keystrokes are landing in a pane, right now, in the same words.
+ *
+ * The present tense is the whole point and is why the caller has to have
+ * filtered by the clock first: this is the sentence that stands between a
+ * teammate running something as the owner and the owner not knowing it
+ * happened, and it must never be shown about somebody who has stopped.
+ */
+export function typedBy(typists: readonly { handle: string }[]): string {
+  const who = listOf(typists.map((typist) => typist.handle))
+  return who === '' ? 'nobody is typing' : `${who}typing`
+}
+
+/** "ana is", "ana and bo are", "" — the half of a sentence both phrases share. */
+function listOf(handles: readonly string[]): string {
+  if (handles.length === 0) return ''
+  if (handles.length === 1) return `${handles[0]} is `
   const last = handles[handles.length - 1]
-  return `${handles.slice(0, -1).join(', ')} and ${last} are watching`
+  return `${handles.slice(0, -1).join(', ')} and ${last} are `
 }
 
 /** The one-word form, for counts and column headings. */

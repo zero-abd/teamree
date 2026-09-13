@@ -2,8 +2,9 @@
 // still being created, and failed — because a worktree is a background job and
 // hiding that would make the sidebar lie.
 
-import type { PaneWatcher, Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
-import { ACTIVITY_LABEL, agentRows, sinceLabel, watchedBy, worktreeActivity, type AgentRow } from './agentRows'
+import type { Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
+import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
+import { ACTIVITY_LABEL, agentRows, sinceLabel, typedBy, watchedBy, worktreeActivity, type AgentRow } from './agentRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 
@@ -16,13 +17,13 @@ type WorktreeRowProps = {
   /** Last line read from each pane, keyed by terminal id. */
   evidence: Readonly<Record<string, string | null>>
   /**
-   * Who is reading each of these panes right now, keyed by terminal id.
+   * Who is reading and typing into each of these panes, keyed by terminal id.
    *
    * Not decoration. The argument in `docs/teamwork.md` for why a project where
    * anyone can type is survivable is that nothing can be done invisibly, and
-   * this row is the half of that which covers reading.
+   * this row is where a pane nobody is looking at says it anyway.
    */
-  watchers: Readonly<Record<string, readonly PaneWatcher[]>>
+  watchers: Readonly<Record<string, PaneAttention>>
   now: number
   onFocusTerminal: (terminalId: string) => void
   active: boolean
@@ -105,13 +106,18 @@ export function WorktreeRow({
       {rows.length > 0 ? (
         <ul className="panes">
           {rows.map((row) => {
-            const reading = watchers[row.terminalId] ?? []
+            const attention = watchers[row.terminalId] ?? NO_ATTENTION
+            const typing = typingNow(attention.typists, now)
+            // Typing outranks watching in the one slot the row has: somebody
+            // running commands as you is the more urgent of the two facts, and
+            // they are almost always the same person anyway.
+            const hands = typing.length > 0 ? typedBy(typing) : watchedBy(attention.watchers)
             return (
               <li key={row.terminalId}>
                 <button
                   type="button"
                   className="pane-row"
-                  title={paneTitle(row, reading)}
+                  title={paneTitle(row, attention, typing)}
                   onClick={() => onFocusTerminal(row.terminalId)}
                 >
                   <span className="pane-row__head">
@@ -120,9 +126,19 @@ export function WorktreeRow({
                     {/* Named, never counted. "2 watching" tells the owner
                       something is happening and not who is doing it, which is
                       the half that matters. */}
-                    {reading.length > 0 ? (
-                      <span className="pane-row__watchers" title={watchedBy(reading)}>
-                        {watchedBy(reading)}
+                    {typing.length > 0 || attention.watchers.length > 0 ? (
+                      <span
+                        className={`pane-row__watchers${typing.length > 0 ? ' pane-row__watchers--typing' : ''}`}
+                        title={hands}
+                      >
+                        {hands}
+                      </span>
+                    ) : null}
+                    {/* A muted pane says so wherever it is listed. Mute is the
+                      owner's and is not hidden from them. */}
+                    {attention.muted ? (
+                      <span className="pane-row__muted" title="muted: teammates can read this pane, not type into it">
+                        muted
                       </span>
                     ) : null}
                     <span className="pane-row__since">{sinceLabel(row.quietFor)}</span>
@@ -157,8 +173,17 @@ export function WorktreeRow({
 
 /** The hover text, which says where the quoted line came from — the row itself
  *  has no room to, and a line with no provenance reads as a verdict. */
-function paneTitle(row: AgentRow, watchers: readonly PaneWatcher[]): string {
+function paneTitle(row: AgentRow, attention: PaneAttention, typing: readonly { handle: string }[]): string {
   const head = `${row.label} · ${ACTIVITY_LABEL[row.activity]} · last output ${sinceLabel(row.quietFor)} ago`
-  const withEvidence = row.evidence ? `${head}\nlast printed: ${row.evidence}` : head
-  return watchers.length > 0 ? `${withEvidence}\n${watchedBy(watchers)}` : withEvidence
+  const lines = [row.evidence ? `${head}\nlast printed: ${row.evidence}` : head]
+  if (attention.watchers.length > 0) lines.push(watchedBy(attention.watchers))
+  if (typing.length > 0) lines.push(typedBy(typing))
+  // Said even when nobody is typing now: the point of the record is that a pane
+  // somebody else has run commands in does not go back to being only yours.
+  for (const typist of attention.typists) {
+    if (typist.writes > 0) lines.push(`${typist.handle} has typed ${typist.writes} keystrokes here`)
+    if (typist.refused > 0) lines.push(`${typist.handle} tried ${typist.refused} this machine refused`)
+  }
+  if (attention.muted) lines.push('muted: their keystrokes are refused, their reading is not')
+  return lines.join('\n')
 }

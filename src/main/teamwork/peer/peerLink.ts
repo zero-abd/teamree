@@ -40,7 +40,12 @@
 import type { PeerLink as PeerLinkStatus, PeerLinkPhase, PeerPresence } from '../../../shared/entities'
 import type { MethodName, ParamsOf, ResultOf } from '../../../shared/methods'
 import { createInitiatorSession, createResponderSession, isPeerError, type PeerSession } from '../../../shared/peer'
-import { createPeerTransport, type PeerTransport } from '../../runtime/peerTransport'
+import {
+  createPeerTransport,
+  type PeerTransport,
+  type RemoteWriteRequest,
+  type RemoteWriteVerdict
+} from '../../runtime/peerTransport'
 import type { Dispatcher } from '../../runtime/dispatcher'
 import type { SubscriptionHub } from '../../runtime/subscriptionHub'
 import { openRelayConnection, reconnectPolicyFor, type RelayClosure, type RelayConnection } from './relayConnection'
@@ -123,6 +128,16 @@ export type PeerLinkOptions = {
    * subscription rather than being inferred anywhere later.
    */
   onWatchersChange?: (terminalIds: readonly string[]) => void
+  /**
+   * Whether one of this teammate's keystrokes may reach one of this machine's
+   * panes.
+   *
+   * Passed straight through to the transport, which is where the gate has to
+   * be: it is the last place that still knows the caller is a teammate. A link
+   * left without one carries no keystrokes, which is the correct default for
+   * the one method on the allow-list that runs code.
+   */
+  onRemoteWrite?: (write: RemoteWriteRequest) => RemoteWriteVerdict
   onError?: (error: unknown) => void
 }
 
@@ -456,6 +471,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
         deliver(stream, event)
       },
       onWatchChange: options.onWatchersChange,
+      ...(options.onRemoteWrite ? { onRemoteWrite: options.onRemoteWrite } : {}),
       scheduler: options.scheduler,
       onFatal: () => {
         // A Noise stream with a hole in it is over: there is no point it could

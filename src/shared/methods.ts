@@ -11,6 +11,7 @@ import type {
   PaneWatchers,
   PeerPresence,
   Project,
+  RemoteWriteLog,
   RuntimeStatus,
   StartPointList,
   TeammatePresence,
@@ -25,6 +26,22 @@ import type {
   WorktreePush,
   WorktreeStatus
 } from './entities'
+
+/**
+ * The most one remote keystroke may carry.
+ *
+ * `relay/README.md` gives a connection 200 frames and 4 MiB a second, shared
+ * with whatever output that same link is streaming back. Sixty-four kilobytes
+ * is a very large paste and a sixteenth of that second; past it, a write is not
+ * typing, and carrying it would cost the pane the live output it is being typed
+ * into. Refusing outright rather than chunking is deliberate — half a paste
+ * landing in somebody's shell is worse than none of it.
+ *
+ * Counted in characters by the schema and in bytes where the bytes are: a
+ * schema cap bounds what has to be parsed, and the transport that is about to
+ * put it on a wire is the thing that knows what a byte is.
+ */
+export const MAX_REMOTE_WRITE_BYTES = 65_536
 
 export const Params = {
   statusGet: z.object({}),
@@ -129,8 +146,7 @@ export const Params = {
   /** A teammate's worktrees and panes in one project, as last heard. */
   teamworkPresence: z.object({ projectId: z.string().min(1) }),
   /**
-   * Opens a teammate's pane for reading. Read-only, and there is no companion
-   * method that writes: typing is milestone D.
+   * Opens a teammate's pane for reading.
    *
    * `paneId` is the namespaced id `teamwork.presence` hands out, and the
    * project is named alongside it because one teammate can be reached over one
@@ -140,8 +156,48 @@ export const Params = {
    * subscription is released: output flows only for a pane somebody has open.
    */
   teamworkWatch: z.object({ projectId: z.string().min(1), paneId: z.string().min(1) }),
-  /** Who is reading this machine's panes, right now, in one project. */
+  /**
+   * Types into a teammate's pane, over the link that is already watching it.
+   *
+   * The companion to `teamwork.watch`, and the reason milestone D needed the
+   * most care: what crosses the wire under this is `terminal.write`, answered
+   * by the owner's own terminal service. It resolves to nothing unless that
+   * teammate is on this project's roster and their session is confirmed, and
+   * the owner's end refuses it outright when the pane is muted — so a caller
+   * has to be ready to be told no, and has to say so rather than swallow it.
+   *
+   * `data` is capped here as well as at the far end. Keystrokes are small and a
+   * paste is not, and one write large enough to spend a connection's whole
+   * second of relay budget would cost the pane its live output to carry it.
+   */
+  teamworkType: z.object({
+    projectId: z.string().min(1),
+    paneId: z.string().min(1),
+    data: z.string().min(1).max(MAX_REMOTE_WRITE_BYTES)
+  }),
+  /** Who is reading and typing into this machine's panes, right now, in one project. */
   teamworkWatchers: z.object({ projectId: z.string().min(1) }),
+  /**
+   * Stops, or restarts, remote keystrokes reaching one of *this machine's*
+   * panes.
+   *
+   * The owner's alone: there is no project id because there is nobody to agree
+   * with and nothing to negotiate, and no handle because a mute is of a pane
+   * rather than of a person. A muted pane keeps streaming and keeps appearing
+   * in everyone's sidebar — `docs/teamwork.md` is explicit that mute stops the
+   * bytes and does not hide the worktree.
+   */
+  teamworkMute: z.object({ terminalId: z.string().min(1), muted: z.boolean() }),
+  /**
+   * The owner's record of every remote write, oldest first.
+   *
+   * Local, on their machine, and readable after the fact — including after a
+   * restart, which is what makes it a record rather than a display.
+   */
+  teamworkWriteLog: z.object({
+    /** Trailing entries to return. Defaults to everything retained. */
+    limit: z.number().int().positive().optional()
+  }),
 
   /**
    * PEER-ONLY. Reachable over the peer transport and nowhere else.
@@ -242,7 +298,11 @@ export type MethodContract = {
       handle: string
     }
   }
+  'teamwork.type': { params: z.infer<typeof Params.teamworkType>; result: { written: true } }
   'teamwork.watchers': { params: z.infer<typeof Params.teamworkWatchers>; result: PaneWatchers }
+  /** Answers with the pane's project, so the caller sees the mute it just set. */
+  'teamwork.mute': { params: z.infer<typeof Params.teamworkMute>; result: PaneWatchers }
+  'teamwork.writeLog': { params: z.infer<typeof Params.teamworkWriteLog>; result: RemoteWriteLog }
 
   'peer.presence': { params: z.infer<typeof Params.peerPresence>; result: PeerPresence }
   'peer.subscribe': { params: z.infer<typeof Params.peerSubscribe>; result: { subscription: string } }

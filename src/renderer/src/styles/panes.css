@@ -209,6 +209,46 @@
   min-height: 0;
 }
 
+/* Whose hands are on this pane besides the owner's. It floats over the terminal
+   rather than taking a row, for the same reason the search bar does: anything
+   that changes the surface's height refits the pty and makes the program
+   running in it redraw, and a pane must not resize because somebody looked at
+   it. It is quiet until somebody is actually typing, and then it is not. */
+.pane-hands {
+  display: flex;
+  position: absolute;
+  z-index: 3;
+  top: var(--s1);
+  right: var(--s1);
+  align-items: center;
+  gap: var(--s2);
+  padding: 2px var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-raised);
+  font-size: var(--text-xs);
+}
+
+.pane-hands--typing {
+  border-color: var(--accent-line);
+}
+
+.pane-hands__who {
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.pane-hands--typing .pane-hands__who {
+  color: var(--fg-primary);
+}
+
+/* A mute that is on says so in the word on the button, never only in a colour:
+   the whole control is a statement about what reaches this machine. */
+.pane-hands__mute--on {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
 .terminal-surface {
   flex: 1;
   min-width: 0;

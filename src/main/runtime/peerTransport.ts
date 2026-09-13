@@ -17,12 +17,26 @@
 // `peerFraming.ts` owns the boundary between the two.
 //
 // **The catalogue is not fully open.** A CLI client is the user; a peer is a
-// teammate. `docs/teamwork.md` means for a teammate to see panes and eventually
-// to type into one, and it does not mean for them to remove a worktree or drop
-// a project. So a peer's reachable surface is an explicit allow-list, and it is
-// the seam the later milestones widen: C has added the two reads that stream a
-// pane's output, D adds `terminal.write`. Everything absent from the set
-// answers as an unknown method, which is what it is from where the peer stands.
+// teammate. `docs/teamwork.md` means for a teammate to see panes and to type
+// into one, and it does not mean for them to remove a worktree or drop a
+// project. So a peer's reachable surface is an explicit allow-list: C added the
+// two reads that stream a pane's output and D added `terminal.write`, and
+// nothing else has ever been on it. Everything absent from the set answers as
+// an unknown method, which is what it is from where the peer stands.
+//
+// **One of those methods runs code.** `terminal.write` is the whole of
+// milestone D and the whole of the risk in this product, so it does not simply
+// join the list. Every one of them passes `onRemoteWrite` first — a synchronous
+// verdict from the thing that knows whose link this is, whether that person is
+// still on the roster, and whether the owner has muted the pane — and a
+// transport given no such verdict carries no keystrokes at all. The check and
+// the dispatch are in one task with nothing awaited between them, which is what
+// makes a mute instant: a mute can only be applied in some later task, and the
+// keystroke after it is refused.
+//
+// Refusals are answered rather than dropped. A keystroke that went nowhere and
+// said nothing would leave the person who typed it believing they had typed
+// into somebody's shell, which is its own kind of lie.
 //
 // **The wire has a budget and a pane can outrun it.** `relay/README.md` gives a
 // connection 200 frames and 4 MiB a second, and an agent that prints a build log
@@ -35,7 +49,7 @@
 // carries the byte count, in the stream, where the hole is. Dropping output
 // silently would make the whole feature a lie.
 
-import type { MethodName, ParamsOf, ResultOf } from '../../shared/methods'
+import { MAX_REMOTE_WRITE_BYTES, type MethodName, type ParamsOf, type ResultOf } from '../../shared/methods'
 import type { PeerSession } from '../../shared/peer'
 import {
   encodeFrame,
@@ -50,13 +64,18 @@ import { createLineReader, encodeLine } from './peerFraming'
 import type { SubscriptionHub } from './subscriptionHub'
 
 /**
- * What a teammate may ask this runtime to do, in milestone C.
+ * What a teammate may ask this runtime to do.
  *
- * Presence, and the two reads that let somebody watch a pane: `terminal.read`
- * for the scrollback they are joining, `terminal.subscribe` for everything
- * after it. Both are reads. `terminal.write` is milestone D and its absence
- * here is the whole of what makes watching read-only — a watcher's keystrokes
- * reach a method this runtime answers as one it has never heard of.
+ * Presence, the two reads that let somebody watch a pane — `terminal.read` for
+ * the scrollback they are joining, `terminal.subscribe` for everything after it
+ * — and `terminal.write`, which types into one. That last is the only entry
+ * that changes anything on this machine, and it is gated again below.
+ *
+ * `terminal.resize` and `terminal.close` are absent and stay absent: a
+ * teammate's window is not this pane's window, and a reader who could end
+ * somebody's process would be a different feature. Everything touching git is
+ * absent for the reason `docs/teamwork.md` gives — "anyone can type" is a
+ * statement about panes, not a licence to delete a colleague's worktree.
  *
  * Adding a method here is the deliberate act of handing a teammate a new
  * capability, so the set is spelled out rather than derived.
@@ -66,6 +85,7 @@ export const PEER_METHODS: readonly MethodName[] = [
   'peer.subscribe',
   'terminal.read',
   'terminal.subscribe',
+  'terminal.write',
   'unsubscribe'
 ] as const
 
@@ -99,6 +119,23 @@ export const STREAM_BYTES_PER_SECOND = 1_048_576
  */
 export const STREAM_BUFFER_BYTES = 262_144
 
+/** One keystroke a teammate sent, before anything has been decided about it. */
+export type RemoteWriteRequest = {
+  terminalId: string
+  data: string
+  /** Counted once, here, because every decision below is about size. */
+  bytes: number
+}
+
+/**
+ * What the owner's machine decided about one keystroke.
+ *
+ * A refusal carries the words the teammate is given, because they are the only
+ * thing that tells somebody two thousand miles away why their typing went
+ * nowhere.
+ */
+export type RemoteWriteVerdict = { ok: true } | { ok: false; code: ErrorCode; message: string }
+
 export type PeerTransportOptions = {
   session: PeerSession
   /** Hands one Noise transport message to whatever is carrying them. */
@@ -121,6 +158,22 @@ export type PeerTransportOptions = {
    * can be told who is reading without the pane learning what a peer is.
    */
   onWatchChange?: (terminalIds: readonly string[]) => void
+  /**
+   * Asked about every keystroke this teammate sends, before it reaches a pane.
+   *
+   * Observed in the same place and for the same reason as the watching above:
+   * this is the only layer that knows the caller is a teammate at all, so it is
+   * the only layer that can attribute a write, record it, or refuse it — and
+   * the terminal service on the other side of the dispatcher goes on not
+   * knowing what a peer is.
+   *
+   * Synchronous on purpose. Nothing is awaited between the verdict and the
+   * dispatch, so a mute applied while a keystroke was in flight is applied to
+   * that keystroke rather than to some later one. **A transport without this
+   * refuses every write**, because a byte reaching a pty with nobody able to
+   * say who sent it is the one thing this design may not do.
+   */
+  onRemoteWrite?: (write: RemoteWriteRequest) => RemoteWriteVerdict
   /**
    * Timers and the clock, so the pacing below is driven rather than slept
    * through. Defaults to the real ones.
@@ -382,6 +435,13 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       })
       return
     }
+    if (method === 'terminal.write') {
+      const verdict = judgeWrite(value)
+      if (!verdict.ok) {
+        write({ id: idOf(value), ok: false, error: { code: verdict.code, message: verdict.message } })
+        return
+      }
+    }
     // Noted before the call and answered after it: the subscription id only
     // exists once the handler has minted one, and it is the id the pane is
     // remembered under for as long as the teammate holds it.
@@ -402,6 +462,47 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         options.onError?.(error)
       }
     )
+  }
+
+  /**
+   * Whether one keystroke may reach a pane, and nothing else.
+   *
+   * Everything here is a refusal this transport can make on its own, in front
+   * of the owner's own decision: a session that has never decrypted anything, a
+   * request that is not shaped like a write, a write too large for the wire it
+   * arrived on, and a transport with nobody to report the write to. The owner's
+   * verdict is asked last, because it is the one that has to be freshest.
+   */
+  const judgeWrite = (value: unknown): RemoteWriteVerdict => {
+    // A replayed handshake reaches `established` holding somebody's key and can
+    // never produce a transport message. Nothing can arrive here without having
+    // decrypted, so this is already true — and it is asserted rather than
+    // assumed, because "typing was possible before the keys were confirmed" is
+    // not a sentence anybody should have to reconstruct from the call graph.
+    if (!confirmed) {
+      return { ok: false, code: ErrorCode.NotFound, message: 'this session is not confirmed' }
+    }
+    const terminalId = terminalIdOf(value)
+    const data = paramOf(value, 'data')
+    if (terminalId === undefined || data === undefined) {
+      return { ok: false, code: ErrorCode.InvalidParams, message: 'a write needs a terminal and some data' }
+    }
+    const bytes = byteLength(data)
+    if (bytes > MAX_REMOTE_WRITE_BYTES) {
+      return {
+        ok: false,
+        code: ErrorCode.InvalidParams,
+        message: `${bytes} bytes is more than one keystroke may carry (${MAX_REMOTE_WRITE_BYTES})`
+      }
+    }
+    const judge = options.onRemoteWrite
+    // Not a fallback to "allow". A transport wired without a verdict has no way
+    // to attribute or record what it is about to run, and typing into a pane
+    // unattributably is exactly what this milestone exists to prevent.
+    if (!judge) {
+      return { ok: false, code: ErrorCode.UnknownMethod, message: 'this runtime is not accepting remote keystrokes' }
+    }
+    return judge({ terminalId, data, bytes })
   }
 
   /** Files the subscription a `terminal.subscribe` answered with under its pane. */
@@ -447,6 +548,13 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         return
       }
       for (const value of values) {
+        // Re-checked every turn, because confirming the keys can itself end the
+        // link: a session that authenticated a different key than the one this
+        // side dialled is torn down inside `onConfirmed`, in the middle of this
+        // message. Whatever else that message was carrying arrived over a
+        // session this machine has just refused, and a keystroke in it must not
+        // be run merely because the loop had already started.
+        if (!live) return
         if (isResponse(value)) handleResponse(value)
         else if (isStreamFrame(value)) options.onStreamEvent?.(value.stream, value.event)
         else handleRequest(value)
