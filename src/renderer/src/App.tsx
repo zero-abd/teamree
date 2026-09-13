@@ -2,8 +2,10 @@
 // live above all of them, the key map and the modal layer.
 
 import { useEffect, useMemo } from 'react'
+import { resolvePalette } from '@shared/theme'
 import { MAC_CONTENT_INSET_PX, TITLEBAR_HEIGHT_PX } from '@shared/windowChrome'
 import { AddProjectDialog } from './dialogs/AddProjectDialog'
+import { AppearanceDialog } from './dialogs/AppearanceDialog'
 import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
@@ -17,6 +19,7 @@ import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
 import { TitleBar } from './shell/TitleBar'
 import { useWorkspaceStore } from './state/workspaceStore'
+import { applyPalette } from './theme/applyPalette'
 import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
 
@@ -33,6 +36,16 @@ export function App(): React.JSX.Element {
   const dialog = useWorkspaceStore((state) => state.dialog)
   const notices = useWorkspaceStore((state) => state.notices)
   const dismissNotice = useWorkspaceStore((state) => state.dismissNotice)
+  const appearance = useWorkspaceStore((state) => state.appearance)
+
+  // The one place a colour is applied. `tokens.css` has already painted the
+  // window in the default palette by the time this runs, so the common case —
+  // the default theme, unedited — writes the same values back and nothing
+  // flickers; anything else takes over here, before the first frame anybody
+  // looks at.
+  useEffect(() => {
+    applyPalette(document.documentElement, resolvePalette(appearance))
+  }, [appearance])
 
   // One subscription for the whole window: the runtime says what changed and
   // the store re-reads it, so work done in another window or from the CLI shows
@@ -62,6 +75,7 @@ export function App(): React.JSX.Element {
           <Sidebar
             newWorktreeHint={shortcutHint('new-worktree', modifier)}
             searchHint={shortcutHint('open-palette', modifier)}
+            appearanceHint={shortcutHint('open-appearance', modifier)}
           />
           <SidebarResizer />
         </>
@@ -104,6 +118,7 @@ export function App(): React.JSX.Element {
         <ConfirmRemoveDialog worktreeId={dialog.worktreeId} reason={dialog.reason} />
       ) : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
+      {dialog?.kind === 'appearance' ? <AppearanceDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
     </div>

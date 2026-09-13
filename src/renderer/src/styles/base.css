@@ -59,9 +59,13 @@ kbd,
   outline: none;
 }
 
+/* Two pixels away from the control, not one. A focus ring drawn tight against
+   a border is a thicker border, and on a black ground where the border is
+   already the brightest edge in the area that is exactly how it read. The gap
+   is the window showing through, so the ring is a separate mark. */
 :focus-visible {
   outline: 2px solid var(--accent-bright);
-  outline-offset: 1px;
+  outline-offset: 2px;
   border-radius: var(--r1);
 }
 
@@ -114,7 +118,7 @@ kbd {
 .button--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0b0c14;
+  color: var(--on-accent);
   font-weight: 600;
 }
 

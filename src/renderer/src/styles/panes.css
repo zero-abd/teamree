@@ -158,11 +158,15 @@
   color: var(--fg-muted);
 }
 
+/* The pane's size, which is the least urgent thing on its bar. Dimmed with a
+   colour rather than with opacity, so it lands on the palette's own floor
+   instead of underneath it — the bar is already the quietest text in the
+   window, and a fraction of that is nothing at all. */
 .pane__meta {
   margin-left: auto;
+  color: var(--fg-muted);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  opacity: 0.7;
 }
 
 .pane__close {

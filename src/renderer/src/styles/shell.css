@@ -24,7 +24,15 @@
 }
 
 /* The window's drag region. Without this the macOS window cannot be moved at
-   all, because `titleBarStyle: 'hiddenInset'` takes the native bar away. */
+   all, because `titleBarStyle: 'hiddenInset'` takes the native bar away.
+
+   Painted in the rail's colour rather than the window's, which is what turns
+   the four edges into one frame: the strip, the sidebar and the status rail all
+   sit one step above the ground, and everything they surround — the panes, the
+   dashboard, the empty states — is the ground itself. On a near-black window
+   that reads as a slight unevenness; on absolute black it reads as chrome
+   around content, which is what it is, and it gives the traffic lights a
+   surface to sit on instead of a void. */
 .titlebar {
   grid-area: titlebar;
   -webkit-app-region: drag;
@@ -32,6 +40,7 @@
   align-items: center;
   padding: 0 var(--s4);
   border-bottom: 1px solid var(--line);
+  background: var(--bg-rail);
 }
 
 /* macOS keeps drawing the window buttons over the top-left of our content, so
@@ -73,7 +82,7 @@
   border: 1px solid var(--line);
   border-radius: 22.5%;
   background: var(--bg-raised);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg) 8%, transparent);
 }
 
 /* Two thirds of the tile, the same proportion the site gives it, and the

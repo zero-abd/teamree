@@ -1,50 +1,86 @@
 /* The whole visual language: one palette, one type scale, one spacing ramp.
-   Nothing below this file should invent a colour or a size. */
+   Nothing below this file should invent a colour or a size.
+
+   THE COLOURS HERE ARE A COPY, AND THE ORIGINAL IS `src/shared/theme.ts`.
+
+   Every value in the palette block is the Absolute Black preset as that module
+   resolves it, and `stylesheets.test.ts` recomputes them and fails if the two
+   have drifted. They are written out rather than left to script for one reason:
+   this file paints the first frame. The renderer resolves the stored appearance
+   and writes it onto the root element as soon as it mounts, but a window whose
+   colours arrived a tick late would open as a flash of unstyled dark, and a
+   packaged app that failed to read its theme would open as no colours at all.
+
+   So: change a colour in `theme.ts`, run the suite, and paste what it tells
+   you. Change one only here and the app reverts it on the first render. */
 
 :root {
   color-scheme: dark;
 
-  /* Surfaces, from the window backdrop up to the things that float. */
-  --bg-window: #0a0c10;
-  --bg-rail: #0f1218;
-  --bg-panel: #12151c;
-  --bg-raised: #171b24;
-  --bg-input: #0c0f14;
-  --bg-hover: rgb(255 255 255 / 4%);
-  --bg-press: rgb(255 255 255 / 7%);
-  --scrim: rgb(4 6 9 / 62%);
+  /* Surfaces, from the window backdrop up to the things that float.
 
-  --line: #202632;
-  --line-strong: #2c3444;
+     The ground is absolute black, and the chrome — the title strip, the
+     sidebar, the status rail — is the first step off it. That is the whole
+     structure of the window: a frame with some light in it around a content
+     area with none, so a pane of terminal output sits on nothing at all. */
+  --bg-window: #000000;
+  --bg-rail: #0b0b0b;
+  --bg-panel: #0d0d0e;
+  --bg-raised: #171718;
+  /* A field cut into black has nowhere darker to go, so it is read from its
+     border. Every input in these stylesheets has one for that reason. */
+  --bg-input: #000000;
+  --bg-hover: rgb(238 241 248 / 5%);
+  --bg-press: rgb(238 241 248 / 9%);
+  --scrim: rgb(0 0 0 / 66%);
 
-  --fg: #dfe5ee;
-  --fg-secondary: #a3adbd;
-  --fg-muted: #6d7788;
+  --line: #1d1d1e;
+  --line-strong: #323334;
+
+  --fg: #e4e7ee;
+  --fg-secondary: #a0a2a7;
+  --fg-muted: #7f8083;
 
   --accent: #8b8cf7;
-  --accent-bright: #a6a7ff;
+  --accent-bright: #9e9ef8;
   --accent-soft: rgb(139 140 247 / 16%);
   --accent-line: rgb(139 140 247 / 55%);
+  /* The label on a filled accent button: a tint of the accent rather than flat
+     black, so the one saturated shape on screen still belongs to the window. */
+  --on-accent: #0e0e19;
 
   --success: #57c38a;
   --warning: #d6a24a;
   --danger: #e8615a;
   --info: #5aa9e6;
 
-  /* Terminal palette, read back by the emulator so both stay in step. */
-  --term-bg: #0f1116;
-  --term-fg: #d7dde8;
-  --term-cursor: #a6a7ff;
-  --term-selection: #2b3350;
-  --term-black: #1b1f27;
+  /* Terminal palette, read back by the emulator so both stay in step. The
+     background is the window's own ground, which is what keeps a pane from
+     being a slightly different black inside the same window.
+
+     The bright half is here rather than left to the emulator's defaults: xterm
+     falls back to its own sixteen when a colour is not supplied, and a theme
+     that supplied eight was a theme whose other eight never moved. */
+  --term-bg: #000000;
+  --term-fg: #e4e7ee;
+  --term-cursor: #9e9ef8;
+  --term-selection: #2f3054;
+  --term-black: #212223;
   --term-red: #e8615a;
   --term-green: #57c38a;
   --term-yellow: #d6a24a;
   --term-blue: #5aa9e6;
   --term-magenta: #a98bf0;
   --term-cyan: #4fb6b2;
-  --term-white: #c3cad6;
-  --term-bright-black: #5c6577;
+  --term-white: #bbbdc3;
+  --term-bright-black: #737577;
+  --term-bright-red: #ed847e;
+  --term-bright-green: #7cd0a4;
+  --term-bright-yellow: #dfb672;
+  --term-bright-blue: #7ebcec;
+  --term-bright-magenta: #bca5f3;
+  --term-bright-cyan: #76c6c3;
+  --term-bright-white: #e4e7ee;
 
   --font-ui:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Inter, Roboto, sans-serif;
@@ -68,8 +104,21 @@
   --r2: 6px;
   --r3: 10px;
 
-  --ring: 0 0 0 2px var(--accent-line);
-  --shadow-pop: 0 18px 48px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 40%);
+  /* Two rings, not one: a gap of the surface the control sits on, then the
+     accent. A single accent ring drawn tight against a control's own border is
+     legible on a grey window and almost invisible on this one, because the
+     border it is touching is the only other bright edge in the area. The first
+     stop pushes the ring off the control; the second is the mark itself.
+
+     The gap is the raised surface because everything that wears this ring — the
+     fields, the palette's input, the resizer — is either on a dialog or beside
+     one, and a stop painted in the window's ground would read as a hole. */
+  --ring: 0 0 0 2px var(--bg-raised), 0 0 0 4px var(--accent-bright);
+  /* Deeper than a lifted-grey app needs. On a black ground a shadow cannot
+     announce a floating panel — there is nothing for it to darken — so the
+     panels are separated by their own surface and their border, and this only
+     has to keep the window behind them from reading as part of them. */
+  --shadow-pop: 0 24px 56px rgb(0 0 0 / 72%), 0 2px 10px rgb(0 0 0 / 60%);
 
   --motion-fast: 110ms;
   --motion-base: 170ms;

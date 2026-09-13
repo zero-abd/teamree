@@ -72,6 +72,7 @@ export function TerminalView({
   const now = useNow(attention.typists.length > 0 ? TYPING_TICK_MS : undefined)
   const typing = useMemo(() => typingNow(attention.typists, now), [attention.typists, now])
   const mutePane = useWorkspaceStore((state) => state.mutePane)
+  const appearance = useWorkspaceStore((state) => state.appearance)
 
   useEffect(() => {
     const host = hostRef.current
@@ -218,6 +219,22 @@ export function TerminalView({
     if (focused) termRef.current?.focus()
     else termRef.current?.blur()
   }, [focused, terminalId])
+
+  // The palette changed, so the emulator's copy of it has to. This reads the
+  // custom properties back off the document rather than taking the appearance
+  // apart itself, which is what keeps one derivation behind both the chrome and
+  // the panes — and it runs after `App` has written them, because that effect
+  // is above this one in the tree.
+  //
+  // Without it, switching a theme repainted the window around panes that stayed
+  // the colour they were created in, and the only way to bring them over was to
+  // close and reopen every one.
+  useEffect(() => {
+    const term = termRef.current
+    if (!term) return
+    term.options.theme = readTerminalTheme(document.documentElement)
+    decorationsRef.current = readSearchDecorations(document.documentElement)
+  }, [appearance])
 
   // Re-running the search on every keystroke is what makes the counter live,
   // and `incremental` keeps the current selection while the term is still

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Project, Worktree } from '../../shared/entities'
 import type { TerminalRecord } from '../terminals/session-restore'
+import { DEFAULT_APPEARANCE } from '../../shared/theme'
 import { describeStoreProblem, WorkspaceStore, type StoreProblem } from './workspaceStore'
 
 const project: Project = { id: 'p1', name: 'teamree', path: '/repos/teamree', baseRef: 'origin/main' }
@@ -299,6 +300,65 @@ describe('workspace store', () => {
 
       await writeFile(path, JSON.stringify({ version: 1, mutedTerminals: ['t1', 7, '', null] }), 'utf8')
       expect((await WorkspaceStore.open(path)).listMutedTerminals()).toEqual(['t1'])
+    })
+  })
+  // The theme is a preference about the installation rather than about the
+  // workspace, and it lives in this file for the same reason `asked` does: the
+  // main process needs it before a window exists, to open that window in the
+  // colour it is about to paint itself.
+  describe('how this installation is painted', () => {
+    it('opens on absolute black until somebody chooses otherwise', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
+      expect(store.getAppearance().themeId).toBe('black')
+    })
+
+    it('is still there after the app is closed and opened again', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.setAppearance({ themeId: 'graphite', ground: '#101820', accent: '#3fbfa6', overrides: { line: '#445566' } })
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(filePath)
+      expect(reopened.getAppearance()).toEqual({
+        themeId: 'graphite',
+        ground: '#101820',
+        accent: '#3fbfa6',
+        overrides: { line: '#445566' }
+      })
+    })
+
+    // A colour file is hand-edited more often than anybody admits, and the cost
+    // of being strict about one bad hex would be an app that opens with no
+    // theme at all.
+    it('keeps the colours it understands out of a file somebody has edited', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(
+        path,
+        JSON.stringify({
+          version: 1,
+          appearance: {
+            themeId: 'a theme that was removed',
+            ground: 'rebeccapurple',
+            accent: '#3fbfa6',
+            overrides: { line: 'not a colour', 'bg-panel': '#123456', invented: '#123456' }
+          }
+        }),
+        'utf8'
+      )
+
+      const store = await WorkspaceStore.open(path)
+      expect(store.getAppearance()).toEqual({
+        themeId: 'black',
+        ground: null,
+        accent: '#3fbfa6',
+        overrides: { 'bg-panel': '#123456' }
+      })
+    })
+
+    it('survives a file that has never heard of a theme', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(path, JSON.stringify({ version: 1, projects: [project] }), 'utf8')
+      expect((await WorkspaceStore.open(path)).getAppearance()).toEqual(DEFAULT_APPEARANCE)
     })
   })
 })

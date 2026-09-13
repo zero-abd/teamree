@@ -114,6 +114,11 @@ describe('dispatcher', () => {
     // which method arrived or went missing.
     expect([...registry.methods()].sort()).toEqual([
       'agent.list',
+      // How this machine paints itself. Local by nature: a theme is a fact
+      // about one person's screen, and there is nothing for a teammate to read
+      // in it or ask of it.
+      'appearance.get',
+      'appearance.set',
       // This machine's own, and deliberately not on the peer list: linking a
       // command into /usr/local/bin is not something a teammate gets to ask
       // for, and neither is a password dialog on somebody else's screen.

@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 import type { Layout, PaneNode, Project, Worktree } from '../../shared/entities'
+import { sanitizeAppearance, type Appearance } from '../../shared/theme'
 import { AGENT_KINDS } from '../terminals/agent-command'
 import type { TerminalRecord } from '../terminals/session-restore'
 
@@ -125,6 +126,18 @@ export type WorkspaceDocument = {
    */
   mutedTerminals: string[]
   asked: AskedQuestions
+  /**
+   * How this installation paints itself: a preset, an optional ground and
+   * accent, and any per-token edits.
+   *
+   * Here rather than in the renderer's local storage because it is a fact about
+   * the installation and not about one window: the main process reads it before
+   * any window exists, to give the window the background colour it will open
+   * with, and a second window has to open the same colour as the first. It is
+   * also the shape of preference this file already holds — `asked` is the same
+   * kind of thing — so it costs no new file on disk.
+   */
+  appearance: Appearance
   /** The update check's preference and clock. See `UpdatesSchema`. */
   updates: UpdateRecord
 }
@@ -138,6 +151,7 @@ export function emptyWorkspaceDocument(): WorkspaceDocument {
     terminals: [],
     mutedTerminals: [],
     asked: {},
+    appearance: sanitizeAppearance(undefined),
     updates: {}
   }
 }
@@ -160,6 +174,9 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     // Salvaged like everything else: a date somebody hand-edited into a string
     // means the question has not been asked, never that the file is unusable.
     asked: AskedSchema.safeParse(record.asked).data ?? {},
+    // Salvaged one colour at a time rather than parsed whole: a theme with a
+    // single bad hex in it should cost that colour, not the whole choice.
+    appearance: sanitizeAppearance(record.appearance),
     // Salvaged on the same terms: a preference nobody can read is a preference
     // that has not been expressed, which is the default rather than a failure.
     updates: UpdatesSchema.safeParse(record.updates).data ?? {}

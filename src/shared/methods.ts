@@ -33,6 +33,7 @@ import type {
   WorktreePush,
   WorktreeStatus
 } from './entities'
+import { THEME_TOKENS, type Appearance } from './theme'
 
 /**
  * The most one remote keystroke may carry.
@@ -418,6 +419,28 @@ export const Params = {
     command: z.string().min(1).optional()
   }),
 
+  appearanceGet: z.object({}),
+  /**
+   * The whole appearance, replaced.
+   *
+   * Replaced rather than patched because that is what the editor has in its
+   * hand: a preset, two choices and a bag of edits, all of which move together
+   * when somebody presses a swatch. The schema only checks shape and size — a
+   * value that is not a colour is dropped by `sanitizeAppearance` on the way in
+   * rather than refused here, because a stored theme with one bad hex in it
+   * should cost that colour and nothing else.
+   */
+  appearanceSet: z.object({
+    themeId: z.string().min(1).max(64),
+    ground: z.string().max(32).nullable(),
+    accent: z.string().max(32).nullable(),
+    overrides: z
+      .record(z.string().max(64), z.string().max(32))
+      .refine((overrides) => Object.keys(overrides).length <= THEME_TOKENS.length, {
+        message: 'more overrides than there are tokens to override'
+      })
+  }),
+
   layoutGet: z.object({ worktreeId: z.string().min(1) }),
   layoutSet: z.object({ worktreeId: z.string().min(1), root: z.unknown(), focusedTerminalId: z.string().nullable() }),
 
@@ -512,6 +535,10 @@ export type MethodContract = {
   'terminal.read': { params: z.infer<typeof Params.terminalRead>; result: { data: string } }
   'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
   'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
+
+  /** How this installation is painted. Per machine, not per project. */
+  'appearance.get': { params: z.infer<typeof Params.appearanceGet>; result: Appearance }
+  'appearance.set': { params: z.infer<typeof Params.appearanceSet>; result: Appearance }
 
   'layout.get': { params: z.infer<typeof Params.layoutGet>; result: Layout }
   'layout.set': { params: z.infer<typeof Params.layoutSet>; result: Layout }
