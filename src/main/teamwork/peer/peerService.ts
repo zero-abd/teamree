@@ -27,6 +27,7 @@
 // member of — the key is a hash of a remote, and somebody who knows the
 // repository exists can compute one.
 
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { z } from 'zod'
 import {
@@ -206,6 +207,16 @@ export class PeerService {
    * look like one.
    */
   readonly #typists = new Map<string, Map<string, PaneTypist>>()
+  /**
+   * When each teammate was last heard typing anywhere, by their key.
+   *
+   * The clock the window's throttle is decided against. It is per person rather
+   * than per pane because the pane is named by the caller and the person is
+   * named by their handshake: a burst is one burst however many pane ids it
+   * mentions, and only the second of those two facts is one the far end gets a
+   * vote on.
+   */
+  readonly #lastTypedAt = new Map<string, number>()
   /**
    * Panes the owner has muted, by this machine's own terminal id.
    *
@@ -707,7 +718,14 @@ export class PeerService {
       // Nothing to attribute it to, which is itself the reason to refuse: this
       // is a connection the peer service never opened.
       return this.#refuse(
-        { at, handle: 'unknown', publicKey: '', projectId: '', terminalId: write.terminalId },
+        {
+          at,
+          handle: 'unknown',
+          publicKey: '',
+          projectId: '',
+          terminalId: strangePaneId(write.terminalId),
+          known: false
+        },
         write,
         'not-a-member',
         'this connection is not a peer link'
@@ -715,12 +733,15 @@ export class PeerService {
     }
 
     const handle = this.#handleFor(peer.publicKey) ?? peer.publicKey.slice(0, 8)
-    const stamp = {
+    const stamp: WriteStamp = {
       at,
       handle,
       publicKey: peer.publicKey,
       projectId: '',
-      terminalId: write.terminalId
+      // Until a pane of this machine answers to it, the id is a string the
+      // caller chose and is filed as one — see `strangePaneId`.
+      terminalId: strangePaneId(write.terminalId),
+      known: false
     }
 
     const project = this.#projectForPeer(peer)
@@ -734,8 +755,15 @@ export class PeerService {
     // the same scoping `teamwork.watch` puts on reading.
     const pane = this.#paneOf(project.projectId, write.terminalId)
     if (!pane) {
-      return this.#refuse(stamp, write, 'no-pane', `there is no pane ${write.terminalId} in this project`)
+      // Worded without the id the caller named, for two reasons: the reason is
+      // recorded on the owner's disk, and a refusal that quotes its input is a
+      // way to put whatever you like there. It stays the same answer a pane in
+      // another project gets, which is the point of saying it this way.
+      return this.#refuse(stamp, write, 'no-pane', 'there is no such pane in this project')
     }
+    // This machine's own id for it, from this machine's own list.
+    stamp.terminalId = pane.id
+    stamp.known = true
     if (!pane.running) {
       return this.#refuse(stamp, write, 'no-pane', 'that pane’s process has exited')
     }
@@ -1006,14 +1034,25 @@ export class PeerService {
     }
     if (reason !== undefined) entry.reason = reason
     this.#log.record(entry)
-    this.#attribute(entry)
+    // Attributed only for a pane this machine has. "Who is typing here" is a
+    // statement about the owner's own panes — nothing reads the map under an id
+    // that is not one — so filing a made-up id there was a map the far end
+    // chose the keys of, and a window woken once per made-up id was a refetch
+    // of three collections per keystroke that could never be shown.
+    if (stamp.known) this.#attribute(entry)
   }
 
   /** Who is typing in which pane, kept live so the owner is never in doubt. */
   #attribute(entry: RemoteWrite): void {
     const held = this.#typists.get(entry.terminalId) ?? new Map<string, PaneTypist>()
     const existing = held.get(entry.publicKey)
-    const fresh = existing === undefined || entry.at - existing.at > TYPING_WINDOW_MS
+    // Fresh is about the *person*, not the pane. Per pane, somebody naming a
+    // different one each time was fresh every time, and "fresh" is what skips
+    // the pulse the window is otherwise refetched on — so the throttle could be
+    // turned off from the other end of a relay by varying an id.
+    const lastHeard = this.#lastTypedAt.get(entry.publicKey)
+    const fresh = lastHeard === undefined || entry.at - lastHeard > TYPING_WINDOW_MS
+    this.#noteTypedAt(entry.publicKey, entry.at)
     const typist: PaneTypist = existing ?? {
       handle: entry.handle,
       publicKey: entry.publicKey,
@@ -1043,6 +1082,22 @@ export class PeerService {
     }
 
     this.#tellWindowAboutTyping(entry.at, fresh)
+  }
+
+  /**
+   * Remembers when somebody last typed, and forgets whoever has stopped.
+   *
+   * Bounded by the same argument as `#typists`: a key is a string from a
+   * handshake, and a machine left running for a month must not accumulate one
+   * of these per person it has ever met. Anything older than the typing window
+   * is no longer the answer to any question this map is asked.
+   */
+  #noteTypedAt(publicKey: string, at: number): void {
+    this.#lastTypedAt.set(publicKey, at)
+    if (this.#lastTypedAt.size <= MAX_TYPED_PANES) return
+    for (const [key, last] of this.#lastTypedAt) {
+      if (at - last > TYPING_WINDOW_MS) this.#lastTypedAt.delete(key)
+    }
   }
 
   /**
@@ -1191,6 +1246,12 @@ type WriteStamp = {
   publicKey: string
   projectId: string
   terminalId: string
+  /**
+   * Whether `terminalId` is a pane of this machine rather than a string the
+   * caller made up. The record keeps both; only the first is attributed, because
+   * the owner's "who is typing here" is about panes this machine has.
+   */
+  known: boolean
 }
 
 /** What `openWatch` resolved, and the start the subscription hub drives. */
@@ -1284,6 +1345,23 @@ type HeardPresence = {
  */
 export function isNewerPresence(held: PeerPresence | undefined, incoming: PeerPresence): boolean {
   return held === undefined || incoming.revision > held.revision
+}
+
+/**
+ * How a pane id that is not this machine's is written down.
+ *
+ * Never the caller's own string. An id that names nothing here is a value from
+ * the wire, and the record it goes into is the owner's evidence, kept on the
+ * owner's disk, rotated at a size — so a verbatim copy of it is somebody else
+ * choosing what that file contains and how much of it fits. A digest is a fixed
+ * twenty-two characters, says nothing the caller did not already know, and
+ * still tells the owner that the same made-up id came back a hundred times.
+ *
+ * Short on purpose: this is a label for a thing that does not exist, not a
+ * cryptographic commitment to anything.
+ */
+export function strangePaneId(terminalId: string): string {
+  return `unknown:${createHash('sha256').update(terminalId, 'utf8').digest('hex').slice(0, 12)}`
 }
 
 /** The most recent keystroke in one pane, whoever sent it. */
