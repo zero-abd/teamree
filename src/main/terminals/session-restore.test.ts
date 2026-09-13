@@ -3,7 +3,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Layout } from '../../shared/entities'
+import { ScrollbackArchive } from '../store/scrollbackArchive'
 import { canSpawnPty, waitUntil } from './pty-test-support'
+import { INERT_RECORD } from './scrollbackRecord'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { TerminalSessionManager, type LayoutRepository, type SessionRepository } from './session-manager'
 
@@ -138,14 +140,26 @@ describePty('restoring terminals across a restart', () => {
     return { checkout, launch: `"${binary}"` }
   }
 
-  function manager(repositories: LayoutRepository & SessionRepository, checkout: string): TerminalSessionManager {
+  function manager(
+    repositories: LayoutRepository & SessionRepository,
+    checkout: string,
+    scrollback?: ScrollbackArchive
+  ): TerminalSessionManager {
     const created = new TerminalSessionManager({
       resolveWorktreeCwd: (worktreeId) => (worktreeId === 'wt_1' ? checkout : undefined),
       layouts: repositories,
-      sessions: repositories
+      sessions: repositories,
+      ...(scrollback === undefined ? {} : { scrollback })
     })
     managers.push(created)
     return created
+  }
+
+  /** The directory a restart's worth of pane output is kept in. */
+  async function scrollbackArchive(keep: string[] = []): Promise<ScrollbackArchive> {
+    const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-scrollback-'))
+    created.push(base)
+    return ScrollbackArchive.open(path.join(base, 'scrollback'), keep)
   }
 
   it('gives an agent a session id, then hands the same id back after a restart', async () => {
@@ -287,5 +301,121 @@ describePty('restoring terminals across a restart', () => {
     managers.push(second)
 
     expect(second.restoreSessions()).toEqual({ restored: 0, resumed: 0 })
+  }, 20_000)
+
+  it('comes back showing what the pane printed, with the new shell under a line that says so', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const marker = path.join(checkout, 'ran.txt')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive)
+    const opened = first.create({ worktreeId: 'wt_1', command: `echo hello-from-before; echo ran >> ${marker}` })
+    await waitUntil(() => first.read(opened.id).includes('hello-from-before'), 'the command to print')
+    await first.shutdown()
+
+    const reopened = await ScrollbackArchive.open(archive.directory, [opened.id])
+    const second = manager(repositories, checkout, reopened)
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+
+    const shown = second.read(opened.id)
+    expect(shown).toContain('hello-from-before')
+    // And it is unmistakably a record rather than a process: what it is, said
+    // above it, and where this run begins, said below it.
+    expect(shown).toContain('nothing in it is running')
+    expect(shown.indexOf('hello-from-before')).toBeLessThan(shown.indexOf('a new shell starts below'))
+    expect(second.list('wt_1')[0]?.restored).toBe('shell')
+
+    // The output came back; the command did not run again. Restoring a
+    // transcript must never be a second deploy.
+    const { readFile } = await import('node:fs/promises')
+    expect((await readFile(marker, 'utf8')).trim().split('\n')).toEqual(['ran'])
+  }, 20_000)
+
+  it('does not replay a transcript into an agent pane that is resuming the conversation', async () => {
+    const { checkout, launch } = await fakeAgent('claude')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive)
+    const opened = first.create({ worktreeId: 'wt_1', command: launch })
+    await waitUntil(() => first.read(opened.id).includes('AGENT ARGS:'), 'the agent to print its arguments')
+    await first.shutdown()
+
+    const reopened = await ScrollbackArchive.open(archive.directory, [opened.id])
+    const second = manager(repositories, checkout, reopened)
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 1 })
+
+    // The agent is about to print the conversation itself, out of its own
+    // store. A record above it would be the same exchange twice.
+    expect(second.read(opened.id)).not.toContain('nothing in it is running')
+    // Kept all the same: whether a pane can resume is decided at each launch,
+    // and an agent that stops being resumable still has a pane to come back to.
+    expect(reopened.read(opened.id)?.text).toContain('AGENT ARGS:')
+  }, 20_000)
+
+  it('takes a pane record with the pane when the user closes it', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive)
+    const opened = first.create({ worktreeId: 'wt_1', command: 'echo hello-from-before' })
+    await waitUntil(() => first.read(opened.id).includes('hello-from-before'), 'the command to print')
+    await waitUntil(() => archive.read(opened.id) !== undefined, 'the record to be written at the exit')
+
+    await first.close(opened.id)
+    await archive.flush()
+    expect(archive.read(opened.id)).toBeUndefined()
+  }, 20_000)
+
+  it('opens a pane with nothing above the prompt when its record cannot be read', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive)
+    const opened = first.create({ worktreeId: 'wt_1', command: 'echo hello-from-before' })
+    await waitUntil(() => first.read(opened.id).includes('hello-from-before'), 'the command to print')
+    await first.shutdown()
+
+    await writeFile(path.join(archive.directory, `${opened.id}.json`), '{ half a fi', 'utf8')
+
+    const reopened = await ScrollbackArchive.open(archive.directory, [opened.id], { onProblem: () => {} })
+    const second = manager(repositories, checkout, reopened)
+    // The pane opens. That is the whole point: an unreadable transcript costs a
+    // transcript, never a pane.
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+    expect(second.read(opened.id)).not.toContain('nothing in it is running')
+  }, 20_000)
+
+  it('cannot be made to act by anything the last session printed', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    // A cursor-position report, a clipboard write and a window rename, printed
+    // by whatever the pane was running. Live, the first was answered by the
+    // emulator to the program that asked. Replayed, there is no such program —
+    // only a new shell that would be typed into.
+    const hostile = String.raw`printf '\033]0;renamed\007\033]52;c;ZXZpbA==\007\033[6ndone\n'`
+    const first = manager(repositories, checkout, archive)
+    const opened = first.create({ worktreeId: 'wt_1', command: hostile })
+    await waitUntil(() => first.read(opened.id).includes('done'), 'the command to print')
+    await first.shutdown()
+
+    const reopened = await ScrollbackArchive.open(archive.directory, [opened.id])
+    const second = manager(repositories, checkout, reopened)
+    second.restoreSessions()
+
+    const shown = second.read(opened.id)
+    const boundary = shown.indexOf('a new shell starts below')
+    expect(boundary).toBeGreaterThan(-1)
+    expect(shown).toContain('done')
+    expect(shown).not.toContain('renamed')
+    expect(shown).not.toContain('ZXZpbA==')
+    // Everything down to the boundary is text and colour and nothing else; what
+    // is below it is this session's own shell, live and unchanged.
+    expect(shown.slice(0, boundary)).toMatch(INERT_RECORD)
   }, 20_000)
 })

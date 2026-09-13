@@ -12,6 +12,7 @@ import type { ParamsOf, TerminalEvent } from '../../shared/methods'
 import { detectAgent, newSessionId, pinSessionCommand, pinsOwnSessionId, type AgentKind } from './agent-command'
 import { appendPane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
+import type { RecordedScrollback } from './scrollbackRecord'
 import { PtySession } from './pty-session'
 import { invalidParams, notFound } from './service-error'
 import { resolveLoginShell } from './shell-environment'
@@ -53,6 +54,23 @@ export type SessionRepository = {
   removeTerminal(terminalId: string): boolean
 }
 
+/**
+ * Where a pane's output lives between launches, which is deliberately not where
+ * the pane's own record lives: a description of a pane is a few hundred bytes
+ * and belongs in the workspace file, and a transcript is orders of magnitude
+ * larger and does not. `scrollbackArchive.ts` is the implementation and makes
+ * that argument in full; this is the whole of what the manager asks of it.
+ *
+ * Optional for the same reason the two repositories above are: an in-memory
+ * manager has no previous launch and should not have to pretend otherwise.
+ */
+export type ScrollbackRepository = {
+  read(terminalId: string): RecordedScrollback | undefined
+  put(terminalId: string, text: string): void
+  remove(terminalId: string): void
+  flush(): Promise<void>
+}
+
 export type TerminalSessionManagerOptions = {
   /**
    * Where a terminal starts when terminal.create omits `cwd`: the worktree's
@@ -62,6 +80,8 @@ export type TerminalSessionManagerOptions = {
   layouts?: LayoutRepository
   /** Pass the workspace store and terminals come back after a restart. */
   sessions?: SessionRepository
+  /** Pass an archive and they come back showing what they last printed. */
+  scrollback?: ScrollbackRepository
   /**
    * Delivers events for subscriptions opened through subscribe(). Ignored when
    * the caller attaches streams itself via attachStream().
@@ -88,10 +108,12 @@ export class TerminalSessionManager {
   private readonly ownSubscriptions = new Map<string, { terminalId: string; end: () => void }>()
   private readonly layouts: LayoutRepository
   private readonly records: SessionRepository
+  private readonly scrollback: ScrollbackRepository | undefined
 
   constructor(private readonly options: TerminalSessionManagerOptions = {}) {
     this.layouts = options.layouts ?? new InMemoryLayoutRepository()
     this.records = options.sessions ?? new InMemorySessionRepository()
+    this.scrollback = options.scrollback
   }
 
   list(worktreeId?: string): Terminal[] {
@@ -166,7 +188,7 @@ export class TerminalSessionManager {
     this.sessions.delete(terminalId)
     // Closing a pane is the user saying they are done with it, so the record
     // goes too: a restart must not bring back what was deliberately shut.
-    this.records.removeTerminal(terminalId)
+    this.forget(terminalId)
     this.endStreamsFor(terminalId)
 
     const layout = this.layoutFor(session.worktreeId)
@@ -276,7 +298,7 @@ export class TerminalSessionManager {
     // alone, because one bad start is no reason to throw a pane away.
     for (const record of stored) {
       const cwd = worktreeCwd(record.worktreeId)
-      if (cwd === undefined || cwd.length === 0) this.records.removeTerminal(record.id)
+      if (cwd === undefined || cwd.length === 0) this.forget(record.id)
     }
 
     let restored = 0
@@ -284,6 +306,13 @@ export class TerminalSessionManager {
     for (const record of records) {
       if (this.sessions.has(record.id)) continue
       const launch = restoreLaunch(record)
+      // A pane that resumes a conversation is about to print that conversation
+      // itself, from the agent's own store, so replaying a transcript into it
+      // would show the same exchange twice — once as a record of what the agent
+      // said and once as the agent saying it. The record is kept either way,
+      // because whether a pane can resume is decided at each launch and an
+      // agent that stops being resumable still has a pane to come back to.
+      const kept = launch.resumed ? undefined : this.scrollback?.read(record.id)
       try {
         this.startSession(
           {
@@ -292,7 +321,8 @@ export class TerminalSessionManager {
             shell: record.shell,
             cols: record.cols,
             rows: record.rows,
-            ...(launch.command === undefined ? {} : { command: launch.command })
+            ...(launch.command === undefined ? {} : { command: launch.command }),
+            ...(kept === undefined ? {} : { restoredRecord: kept })
           },
           record,
           launch.resumed ? 'agent' : 'shell'
@@ -302,7 +332,7 @@ export class TerminalSessionManager {
       } catch {
         // One terminal that cannot start — a shell that is gone, a directory
         // that moved — must not cost the others their restore.
-        this.records.removeTerminal(record.id)
+        this.forget(record.id)
       }
     }
     return { restored, resumed }
@@ -361,10 +391,18 @@ export class TerminalSessionManager {
     for (const terminalId of [...this.streams.keys()]) this.endStreamsFor(terminalId)
     this.ownSubscriptions.clear()
     await Promise.all(sessions.map((session) => session.close()))
+
+    // After the closes, not before them: closing a pty drains whatever the
+    // child had written and not yet delivered — see `pty-tail.ts` — and the
+    // last thing a command printed is the part somebody comes back for.
+    if (this.scrollback !== undefined) {
+      for (const session of sessions) this.scrollback.put(session.id, session.recordedOutput())
+      await this.scrollback.flush()
+    }
   }
 
   private startSession(
-    params: ParamsOf<'terminal.create'>,
+    params: ParamsOf<'terminal.create'> & { restoredRecord?: RecordedScrollback },
     restoring?: TerminalRecord,
     restored?: 'shell' | 'agent'
   ): PtySession {
@@ -391,6 +429,7 @@ export class TerminalSessionManager {
       cols: params.cols ?? DEFAULT_COLS,
       rows: params.rows ?? DEFAULT_ROWS,
       ...(restored === undefined ? {} : { restored }),
+      ...(params.restoredRecord === undefined ? {} : { restoredRecord: params.restoredRecord }),
       ...(agent === undefined ? {} : { agent }),
       ...(this.options.onActivityChange === undefined
         ? {}
@@ -425,6 +464,21 @@ export class TerminalSessionManager {
     return session
   }
 
+  /**
+   * Drops everything this launch keeps about a terminal.
+   *
+   * The pane's record and the pane's transcript go together, always, and from
+   * one place so they cannot drift apart: a pane the user closed must not come
+   * back, and what it printed must not outlive it on disk. Both are keyed to
+   * the terminal id and dropped with it, which is the same arrangement the
+   * workspace file describes for mutes and standing permissions, and it is what
+   * leaves nothing anywhere needing to be swept.
+   */
+  private forget(terminalId: string): void {
+    this.records.removeTerminal(terminalId)
+    this.scrollback?.remove(terminalId)
+  }
+
   private require(terminalId: string): PtySession {
     const session = this.sessions.get(terminalId)
     if (!session) throw notFound(`no such terminal: ${terminalId}`)
@@ -450,6 +504,11 @@ export class TerminalSessionManager {
       // that removal is what a client was told about, and an exit event for a
       // terminal it can no longer list would be news about nothing.
       if (this.sessions.get(session.id) !== session) return
+      // A pane whose process has ended appends nothing more, so this is the
+      // moment its output is final and the cheapest one at which to write it
+      // down. The quit path writes every pane again; this is what stands
+      // between a finished build and an app that never got to quit properly.
+      this.scrollback?.put(session.id, session.recordedOutput())
       for (const listener of this.exitListeners) listener(session.id, event.exitCode)
     })
   }
