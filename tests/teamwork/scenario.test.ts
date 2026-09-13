@@ -115,10 +115,10 @@ beforeAll(async () => {
   // that skipped it would be testing a pair who are not on a team.
   //
   // Each key is the runtime's own, asked of the runtime and written by it —
-  // `members.join` is the button in the Members dialog. A harness that minted
-  // its own keypairs would fill the roster with keys neither app has ever heard
-  // of, and every handshake in act II would fail for a reason no assertion here
-  // would explain.
+  // `members.join` is the Add my key button in the Start teamwork panel. A
+  // harness that minted its own keypairs would fill the roster with keys neither
+  // app has ever heard of, and every handshake in act II would fail for a reason
+  // no assertion here would explain.
   for (const peer of peers.peers) await peer.addSelfToRoster()
   await peers.leader.commit('Add ana to the team', ['.teamree'])
   await peers.leader.gitPush()
@@ -489,8 +489,10 @@ describe.skipIf(!RELAY_BUILT)('act II — across the relay', () => {
     const before = (await bosView()).worktrees.filter((row) => row.handle === 'ana')
     expect(before.length).toBeGreaterThan(0)
 
-    // Her laptop closes. From bo's end that is the machine going away, which is
-    // the only thing it can be told apart from a teammate who is merely quiet.
+    // Her runtime stops, so the socket closes and bo's end learns of it at once.
+    // The other ending — a lid shut on a live socket — takes bo's own silence
+    // deadline in `peerLink.ts` to notice, and is covered there rather than here,
+    // because five minutes of real time is not a thing to put in this file.
     await peers.leader.stop()
 
     await until(async () => {
