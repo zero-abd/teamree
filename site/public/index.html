@@ -194,6 +194,15 @@ h2{ font-size:var(--text-2xl); max-width:24ch; }
   border-radius:0 var(--r1) var(--r1) 0;
   color:var(--fg); font-size:var(--text-base);
 }
+.gate-warn{
+  display:flex; gap:var(--s3); align-items:flex-start;
+  margin-top:var(--s4); padding:var(--s4);
+  background:rgb(232 97 90 / 10%); border:1px solid rgb(232 97 90 / 38%);
+  border-radius:var(--r2); color:var(--fg);
+}
+.gate-warn svg{ width:19px; height:19px; fill:var(--danger); flex:none; margin-top:3px; }
+.gate-warn b{ color:var(--fg); font-weight:640; }
+.gate .quote b{ color:var(--fg); font-weight:640; }
 .gate ol{ margin-top:var(--s5); padding-left:0; list-style:none; counter-reset:step; }
 .gate ol li{ counter-increment:step; position:relative; padding-left:38px; margin-top:var(--s4); color:var(--fg-secondary); }
 .gate ol li:first-child{ margin-top:0; }
@@ -392,9 +401,10 @@ pre code{ font-size:inherit; }
 
   <p class="dl-meta">teamree-0.1.0.dmg<span class="sep" aria-hidden="true">/</span>192&nbsp;MiB<span class="sep" aria-hidden="true">/</span>free</p>
   <p class="dl-note">
-    <b>It is not signed</b> — macOS will stop you the first time, and there is one command past it.
-    <a href="#install">The whole of it is below</a>, before you need it. macOS is the only
-    platform teamree is packaged for today.
+    <b>It is not signed.</b> macOS will stop you the first time with a dialog whose prominent
+    button is <b>Move to Trash</b> — press <b>Done</b> instead, then run one command.
+    <a href="#install">The whole of it is below</a>, before you need it. macOS 12 or later;
+    the only platform teamree is packaged for today.
   </p>
 </div>
 
@@ -789,6 +799,7 @@ demo:video:parked -->
       <nav class="footer-links" aria-label="Footer">
         <a href="https://github.com/zero-abd/teamree" rel="noopener">Source</a>
         <a href="https://github.com/zero-abd/teamree/releases" rel="noopener">Releases</a>
+        <a href="https://github.com/zero-abd/teamree/blob/main/LICENSE" rel="noopener">MIT licence</a>
         <a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md" rel="noopener">Installing</a>
         <a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md" rel="noopener">Trying teamwork</a>
         <a href="https://github.com/zero-abd/teamree/blob/main/ROADMAP.md" rel="noopener">Roadmap</a>
