@@ -1,0 +1,224 @@
+# site
+
+The landing page at <https://teamree.us>. One static HTML file with its CSS and
+its JavaScript inline, a handful of images, and no build step — `public/` is
+exactly what is served.
+
+```
+public/
+  index.html     the page; CSS and JS inline, so the page itself is one request
+  favicon.svg    the application mark, as SVG
+  icon-256.png   the same mark as PNG, for apple-touch-icon and older browsers
+  og.png         1200x630 social card, generated (see below)
+  screenshot.png the window, copied from docs/screenshot.png
+  demos/         feature clips: <id>.webm, <id>.mp4, <id>.jpg, manifest.json
+  _headers       security headers and cache lifetimes
+  _redirects     /download/mac and /download
+og/
+  card.html      source for og.png
+  render.sh      rasterises it with headless Chrome
+tools/
+  sync-demos.mjs reconciles the page with demos/manifest.json
+```
+
+## Branding
+
+**The mark is being redesigned.** A design agent owns `public/favicon.svg`,
+`public/icon-256.png`, `public/og.png` and the header wordmark; they are
+replaced in place under the same filenames, so nothing in the page needs to
+change when they land. The mark also exists inline in two places that must be
+updated with them: the `<symbol id="mark">` at the top of `public/index.html`,
+and the same paths in `og/card.html`. What follows describes the mark as it
+stands today.
+
+The mark is the application icon — the trunk with two worktrees branching off
+it, drawn by `scripts/make-icons.mjs` and reproduced here as SVG paths on the
+same 1024 grid, so the dock, the installer, the favicon and the social card are
+one mark rather than three. The palette and the spacing steps are the app's own
+tokens from `src/renderer/src/styles/tokens.css`, including the accent the
+wordmark's dot uses. Two values are tuned for the web and say so in a comment:
+the muted foreground, which needs 4.5:1 against this background at body sizes,
+and the type scale, because a page is read further away than an IDE chrome.
+
+Regenerating the social card after an edit to `og/card.html`:
+
+```sh
+sh site/og/render.sh        # needs Google Chrome; CHROME=/path/to/chrome to override
+```
+
+## The feature clips
+
+Four sections carry a short screen capture of the real application: `worktrees`,
+`terminals`, `cli`, `teamwork`. Each ships as `<id>.webm`, `<id>.mp4` and an
+`<id>.jpg` poster, listed in `public/demos/manifest.json` with a width, a height
+and a caption.
+
+The page hard-codes each clip's dimensions and caption, because a `<video>`
+without `width`/`height` shifts the layout while it loads, and the page's own
+content-security-policy forbids fetching a manifest at runtime. Hard-coded
+numbers rot, so they are not maintained by hand:
+
+```sh
+node site/tools/sync-demos.mjs          # rewrite the page from the manifest
+node site/tools/sync-demos.mjs --check  # exit 1 if the page is out of date
+```
+
+**Until the clips exist the four `<video>` elements ship parked inside an HTML
+comment**, so a visitor fires no 404s at a page whose clips have not landed.
+`sync-demos.mjs` un-parks them the first time it runs against a real manifest.
+The frames reserve their space either way, so dropping the clips in changes
+nothing structural — the placeholder underneath is simply covered.
+
+Playback, for anyone changing it: the markup carries native `controls` so the
+page works with JavaScript off; the script removes them, fits a custom play
+button, and plays a clip only while it is on screen. `prefers-reduced-motion`
+suppresses autoplay entirely and leaves the poster and the button, and a change
+to that preference while the page is open is honoured too.
+
+## Where the download points
+
+The button links to
+
+```
+https://github.com/zero-abd/teamree/releases/latest/download/teamree-0.1.0.dmg
+```
+
+`latest` resolves to whatever release is current, so this survives a new release
+only as long as the version in the file name is bumped with it — the `latest`
+path does **not** wildcard the asset name. `grep -rn "0\.1\.0" site/public` lists
+every place that needs changing; at the time of writing that is two `href`s, two
+size lines, the `shasum` example, the hero eyebrow, the status heading, and the
+alias in `_redirects`.
+
+The page also shows the SHA-256 of the published `.dmg`, labelled with the
+version so a stale one is visibly stale. For v0.1.0 that is
+`ccf09c74af6ba75a032fee58b11dc578ece77dd3ec38401328fe34a8131bf8d2`, which matches
+the `SHA256SUMS.txt` published beside it.
+
+## Claims the page makes
+
+Every factual claim on the page was checked against the repository rather than
+written from memory, and three were cut because they did not survive it:
+
+- **"open source"** is not claimed anywhere, because there is no `LICENSE` file
+  and no `license` field in `package.json`. Published source with no licence is
+  all-rights-reserved. The page says "free" and "the source is on GitHub", both
+  of which are true. **Add a licence and this can go back.**
+- **"runs whatever agent is on your PATH"** was cut. Agent support is a closed
+  catalogue of five — `claude`, `codex`, `gemini`, `opencode`, `droid`
+  (`src/main/terminals/agent-command.ts`) — and the page now names them.
+- **"Windows comes later"** was cut. `ROADMAP.md` is explicit that macOS-only is
+  a decision rather than a gap waiting to close, and that the Windows packaging
+  has never been built or launched by anybody.
+
+One known staleness, in the repository rather than here: `docs/install.md` still
+opens with "nothing has been published", which stopped being true when v0.1.0
+shipped. The page links to that document.
+
+## Deploying
+
+One command, from the repository root:
+
+```sh
+npm run site:deploy
+```
+
+That uploads `public/` and promotes it. It is a **Worker with static assets**
+named `teamree-site` in the `Dev Abd` account — not a Pages project. Cloudflare
+serves the directory directly; there is no build step, so what is in `public/`
+is what ships. The configuration is `site/wrangler.jsonc` and it is committed,
+so the deploy takes no flags and no arguments.
+
+Three hostnames serve the result, all of them live:
+
+| URL | What it is |
+| --- | --- |
+| <https://teamree.us> | the site |
+| <https://www.teamree.us> | same content, same certificate |
+| <https://teamree-site.almahmud-zero.workers.dev> | the origin, useful for checking a deploy landed before DNS caches catch up |
+
+### Rolling back
+
+Deploys are versioned, and the previous version is still there:
+
+```sh
+npm run site:versions     # lists version IDs, newest last
+npm run site:rollback     # roll back to the previous version
+```
+
+`site:rollback` prompts for the version to roll back to and asks for
+confirmation. To go to a specific one, pass its ID:
+
+```sh
+npx wrangler rollback <version-id> --cwd site
+```
+
+A rollback restores the previous *deployment*, assets included, so it is the
+right move when a bad page is live and you want it gone now. It does not touch
+`public/` on disk — fix the files and run `npm run site:deploy` to move forward
+again.
+
+### Checking a deploy actually worked
+
+Wrangler printing "Success" only means the upload succeeded. What matters is
+what the edge returns:
+
+```sh
+curl -sSI https://teamree.us/ | head -3          # 200, and the etag should change after a deploy
+curl -sS -o /dev/null -w '%{http_code}\n' https://teamree.us/no-such-page   # 404, not 200
+curl -sSI https://teamree.us/download/mac | grep -E '^(HTTP|location|cache-control)'
+```
+
+Two things that are easy to get wrong and worth re-checking after any change to
+`_headers` or `_redirects`:
+
+- the download redirects must come back `cache-control: no-store`. They point at
+  GitHub's `releases/latest`, and caching that redirect would pin it to whichever
+  release was current when it was cached.
+- the images must **not** get a long `max-age`. They are not content-hashed, so
+  a stale copy cannot be busted except by renaming the file.
+
+If `curl` says `Could not resolve host: www.teamree.us` on a Mac that resolved it
+before, that is the macOS resolver holding a negative answer, not an outage —
+`dig www.teamree.us` will disagree with it. Flush it with
+`sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder`, or test with
+`curl --resolve www.teamree.us:443:104.21.71.87 https://www.teamree.us/`.
+
+### Two things still needing a click in the dashboard
+
+Neither can be done from this repo, because both are zone settings rather than
+deploy artefacts. Both are at <https://dash.cloudflare.com> → **Dev Abd** →
+**teamree.us**.
+
+1. **`http://teamree.us/` serves the page over plaintext with a `200` and no
+   redirect.** The HSTS header is sent, but a browser ignores HSTS delivered
+   over HTTP, so it protects nobody on a first visit. That matters more here
+   than on most sites: the download is unsigned and the page's answer is "verify
+   the SHA-256", which an attacker on the network path defeats by rewriting the
+   binary and the published hash together. Fix: **SSL/TLS → Edge Certificates →
+   Always Use HTTPS → On**.
+
+2. **`www.teamree.us` serves the page rather than redirecting to the apex.**
+   Both hostnames return `200` with identical content. `index.html` carries
+   `<link rel="canonical" href="https://teamree.us/">` so crawlers consolidate
+   correctly and nothing is broken, but one canonical hostname is cleaner. A
+   Pages-style `_redirects` file **cannot** do this — domain-level redirects are
+   explicitly unsupported there. It needs **Rules → Redirect Rules → Create
+   rule**, matching `(http.host eq "www.teamree.us")`, with a dynamic target of
+   `concat("https://teamree.us", http.request.uri)` and status `301`.
+
+### Unresolved: byte ranges on the demo clips
+
+A `Range` request against a static asset comes back `200` with the whole file,
+not `206`. Measured on both this Worker and on a Pages project built to compare,
+using ~100 KB test clips; GitHub's asset host returns `206` and `content-range`
+for the same request. It may be that only small assets are served whole. It is
+not proof that a multi-megabyte clip will behave the same, so re-check once real
+clips land in `public/demos/`:
+
+```sh
+curl -sS -r 0-1023 -o /dev/null -D- https://teamree.us/demos/<clip>.mp4
+```
+
+Expect `HTTP/2 206` with a `content-range`. Without it Safari will not seek and
+may refuse to start playback.

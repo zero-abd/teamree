@@ -1,0 +1,10 @@
+# Short, shareable aliases.
+#
+# NOTE, and this is the trap: `latest` resolves the RELEASE, not the asset name.
+# `latest/download/teamree-0.1.0.dmg` therefore keeps pointing at a file called
+# teamree-0.1.0.dmg, and 404s the moment v0.2.0 ships. The filename below MUST be
+# bumped with every release. `grep -rn '0\.1\.0' site/public` lists every place
+# the version appears; the SHA-256 and the "192 MiB" size in index.html need
+# changing too and the grep will not find those.
+/download/mac  https://github.com/zero-abd/teamree/releases/latest/download/teamree-0.1.0.dmg  302
+/download      https://github.com/zero-abd/teamree/releases/latest  302

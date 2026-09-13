@@ -33,6 +33,9 @@
     "sign:verify": "node scripts/verify-signing.mjs",
     "release": "node scripts/release.mjs",
     "release:dry-run": "node scripts/release.mjs --dry-run",
+    "site:deploy": "npx --yes wrangler@4.131.1 deploy --cwd site",
+    "site:versions": "npx --yes wrangler@4.131.1 versions list --cwd site",
+    "site:rollback": "npx --yes wrangler@4.131.1 rollback --cwd site",
     "install:verify": "node scripts/verify-quarantine-advice.mjs",
     "format:check": "oxfmt --check -c=.oxfmtrc.json ."
   },

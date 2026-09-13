@@ -1,0 +1,46 @@
+{
+  // The landing page at teamree.us. A Worker with static assets and no script:
+  // Cloudflare serves public/ directly, and _headers and _redirects in that
+  // directory are honoured the same way Pages honours them.
+  //
+  // Why a Worker and not Pages: both were built and compared on the live edge.
+  // The Worker returns a real 404 for a missing path (with not_found_handling
+  // below), where the Pages project answered every unknown path with 200 and
+  // the whole home page -- which would have hidden a missing demo clip behind a
+  // success code and told crawlers every typo was a real page.
+  //
+  // UNRESOLVED, and it matters once the demo clips land: neither Pages nor this
+  // Worker answered a Range request with a 206. Both returned the whole file
+  // with a 200 on test clips of ~100 KB, while GitHub's asset host returns
+  // `206` + `content-range` for the same request. That may only be because
+  // small assets are served whole; it is NOT evidence that multi-megabyte video
+  // will behave the same way. Re-test with a real clip before trusting seeking:
+  //   curl -sS -r 0-1023 -o /dev/null -D- https://teamree.us/demos/<clip>.mp4
+  // Expect `HTTP/2 206` and `content-range`. Without it Safari will not seek,
+  // and may refuse to start playback at all.
+  //
+  // This is its own Worker. It shares nothing with `teamree-relay`, which is a
+  // different project in the same account, configured in relay/wrangler.jsonc.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "teamree-site",
+  "compatibility_date": "2026-09-13",
+  "assets": {
+    "directory": "./public",
+
+    // Serve public/404.html, with a real 404 status, for any path that does not
+    // exist. Without this every typo returns 200 and the home page, which tells
+    // search engines the junk URL is a real page and hides a missing asset
+    // behind a success code.
+    "not_found_handling": "404-page"
+  },
+  "workers_dev": true,
+
+  // The apex and www, both attached as Worker custom domains. Cloudflare writes
+  // the DNS records itself, because teamree.us is a zone in the same account:
+  // the two proxied AAAA 100:: placeholders in that zone are these, and nothing
+  // else in the zone is touched.
+  "routes": [
+    { "pattern": "teamree.us", "custom_domain": true },
+    { "pattern": "www.teamree.us", "custom_domain": true }
+  ]
+}
