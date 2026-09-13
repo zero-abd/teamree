@@ -211,9 +211,24 @@ export async function startRelay(options: RelayOptions = {}): Promise<Relay> {
       return
     }
 
+    // Counted here rather than in the completion callback below. `ws` calls that
+    // back in the same tick today, so nothing can slip between the check and the
+    // count — but a per-address cap should be a property of the decision, not of
+    // when a dependency happens to call back, and adding `verifyClient` or an
+    // extension to the server above is all it would take to change that.
+    record.connections += 1
+    let admitted = false
+    socket.once('close', () => {
+      // An upgrade that never completed: the count has to come back off, and no
+      // connection object exists to do it on the way out.
+      if (admitted) return
+      record.connections -= 1
+      record.lastSeen = clock.now()
+    })
+
     wss.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+      admitted = true
       nextConnectionId += 1
-      record.connections += 1
       const connection = attachWebSocket(`conn_${nextConnectionId}`, address, ws, {
         config,
         clock,

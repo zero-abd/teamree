@@ -28,6 +28,12 @@ class FakeSocket implements PairSocket {
   closedWith: { code: number | undefined; reason: string | undefined } | undefined
   /** The runtime keeps this across hibernation; a closed socket loses it. */
   private attachment: unknown = null
+  private readable = true
+
+  /** Stands in for a socket the runtime is part-way through taking away. */
+  breakAttachment(): void {
+    this.readable = false
+  }
 
   send(data: string | ArrayBuffer | ArrayBufferView): void {
     if (typeof data === 'string') this.sent.push({ text: data })
@@ -46,6 +52,7 @@ class FakeSocket implements PairSocket {
   }
 
   deserializeAttachment(): unknown {
+    if (!this.readable) throw new Error('this websocket is not in a state to be read')
     return this.attachment
   }
 
@@ -61,6 +68,7 @@ class FakeSocket implements PairSocket {
 class FakeState implements PairState {
   readonly sockets: FakeSocket[] = []
   private alarmAt: number | null = null
+  private readonly autoResponses = new Map<FakeSocket, number>()
 
   acceptWebSocket(socket: PairSocket): void {
     this.sockets.push(socket as FakeSocket)
@@ -71,6 +79,21 @@ class FakeState implements PairState {
   }
 
   setWebSocketAutoResponse(): void {}
+
+  /**
+   * The runtime answering a peer's keepalive on the object's behalf, which is
+   * the whole point of the auto-response: the object is not woken, so the
+   * timestamp below is the only trace that the peer is still there.
+   */
+  autoRespond(socket: FakeSocket, at: number): void {
+    socket.send(PONG_FRAME)
+    this.autoResponses.set(socket, at)
+  }
+
+  getWebSocketAutoResponseTimestamp(socket: PairSocket): Date | null {
+    const at = this.autoResponses.get(socket as FakeSocket)
+    return at === undefined ? null : new Date(at)
+  }
 
   readonly storage = {
     getAlarm: async (): Promise<number | null> => this.alarmAt,
@@ -105,9 +128,15 @@ function hibernatingPair(overrides: Record<string, string> = {}) {
     log,
     connect: (origin = '203.0.113.1'): FakeSocket => {
       const socket = new FakeSocket()
-      object().accept(socket, origin)
+      expect(object().accept(socket, origin)).toBe(true)
       return socket
     },
+    /** An upgrade the object is free to refuse, which `connect` is not. */
+    offer: (origin = '203.0.113.1'): { socket: FakeSocket; accepted: boolean } => {
+      const socket = new FakeSocket()
+      return { socket, accepted: object().accept(socket, origin) }
+    },
+    keepalive: (socket: FakeSocket): void => state.autoRespond(socket, clock.now()),
     say: async (socket: FakeSocket, message: string | Uint8Array): Promise<void> => {
       const frame = typeof message === 'string' ? message : toArrayBuffer(message)
       await object().onMessage(socket, frame)
@@ -242,6 +271,106 @@ describe('a pairing held by a durable object', () => {
     await relay.say(peer, hello(rendezvousToken()))
 
     expect(relay.state.pendingAlarm).toBe(relay.clock.now() + 30_000)
+  })
+
+  it('takes no more sockets than a pairing can account for, however many are offered', () => {
+    const relay = hibernatingPair()
+
+    // The object's name is a hex string the client picked, with no token behind
+    // it: anybody may address any object, so the object is what has to say no.
+    const offered = Array.from({ length: 200 }, () => relay.offer())
+
+    expect(offered.filter((attempt) => attempt.accepted)).toHaveLength(3)
+    expect(relay.log.records.filter((record) => record.event === 'upgrade.refused')).toHaveLength(197)
+  })
+
+  it('still has room for the peer that arrives to displace the pair', async () => {
+    const relay = hibernatingPair()
+    const token = rendezvousToken()
+    const first = relay.connect()
+    const stale = relay.connect()
+    await relay.say(first, hello(token))
+    await relay.say(stale, hello(token))
+
+    // Two is what an object holds and three is what it must admit, or a peer
+    // whose laptop slept could never take its own session back.
+    const returning = relay.offer()
+    expect(returning.accepted).toBe(true)
+    await relay.say(returning.socket, hello(token))
+
+    const partner = relay.offer()
+    expect(partner.accepted).toBe(true)
+    await relay.say(partner.socket, hello(token))
+    expect(JSON.parse(returning.socket.control.at(-1) ?? '{}')).toMatchObject({ t: 'paired' })
+  })
+
+  it('counts the keepalive the runtime answered without waking it', async () => {
+    const relay = hibernatingPair({ RELAY_IDLE_TIMEOUT_MS: '600000' })
+    const token = rendezvousToken()
+    const first = relay.connect()
+    const second = relay.connect()
+    await relay.say(first, hello(token))
+    await relay.say(second, hello(token))
+
+    // Twenty-two rounds of the keepalive this relay documents, which is the
+    // only one a peer has on this host. None of them wakes the object, so if
+    // the alarm went by what it had been handed it would reap a live pair.
+    for (let round = 0; round < 22; round += 1) {
+      relay.keepalive(first)
+      relay.keepalive(second)
+      relay.clock.advance(30_000)
+      await relay.tick()
+    }
+
+    expect(first.closedWith).toBeUndefined()
+    expect(second.closedWith).toBeUndefined()
+  })
+
+  it('tells both halves the truth when it reaps a pair for silence', async () => {
+    const relay = hibernatingPair({ RELAY_IDLE_TIMEOUT_MS: '600000' })
+    const token = rendezvousToken()
+    const first = relay.connect()
+    const second = relay.connect()
+    await relay.say(first, hello(token))
+    await relay.say(second, hello(token))
+
+    relay.clock.advance(600_000)
+    await relay.tick()
+
+    // Neither of them disconnected, so neither may be told the other did.
+    expect(first.closedWith?.code).toBe(CloseCode.Idle)
+    expect(second.closedWith?.code).toBe(CloseCode.Idle)
+  })
+
+  it('says so rather than dropping a frame it has no state for', async () => {
+    const relay = hibernatingPair()
+    const stranger = new FakeSocket()
+
+    await relay.say(stranger, new Uint8Array([1]))
+
+    // Sessions are found by the identity of the socket the runtime hands back.
+    // Nothing here can check that a hibernation wake preserves it, so the one
+    // thing that must not happen is losing a frame in silence.
+    expect(relay.log.records.some((record) => record.event === 'connection.unknown')).toBe(true)
+    expect(stranger.closedWith?.code).toBe(CloseCode.GoingAway)
+  })
+
+  it('still tells a survivor its partner left when another socket cannot be read', async () => {
+    const relay = hibernatingPair()
+    const token = rendezvousToken()
+    const first = relay.connect()
+    const second = relay.connect()
+    await relay.say(first, hello(token))
+    await relay.say(second, hello(token))
+
+    // A socket the runtime is part-way through taking away. Whatever the real
+    // platform does with a read like this, one of them failing must not cost
+    // the pair beside it the message that matters most.
+    const breaking = relay.connect()
+    breaking.breakAttachment()
+    await relay.vanish(second)
+
+    expect(first.closedWith?.code).toBe(CloseCode.PartnerGone)
   })
 
   it('gives whoever deployed it no way to read what the pair is saying', async () => {

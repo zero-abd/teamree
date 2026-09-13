@@ -5,7 +5,7 @@
 // time.
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { CloseCode } from '../src/core/protocol.js'
+import { CloseCode, PING_FRAME } from '../src/core/protocol.js'
 import { connectPeer, joinPeer, rendezvousToken, startTestRelay, type TestRelay } from './support/harness.js'
 
 let harness: TestRelay
@@ -169,7 +169,7 @@ describe('sessions that end badly', () => {
     expect((await replacement.waitPaired()).session).toBe((await partner.waitPaired()).session)
   })
 
-  it('closes a paired session that has said nothing within the idle budget', async () => {
+  it('closes a paired session that has shown no sign of life within the idle budget', async () => {
     harness = await startTestRelay({ idleTimeoutMs: 120_000 })
     const token = rendezvousToken()
     const first = await joinPeer(harness, token)
@@ -179,8 +179,34 @@ describe('sessions that end badly', () => {
     harness.clock.advance(120_000)
     harness.relay.sweep()
 
+    // Both halves, and the same code for both: neither of them disconnected, so
+    // neither may be told that the other one did. A peer that believed that
+    // would reconnect at once and rebuild a Noise session for nothing.
     expect((await first.waitClosed()).code).toBe(CloseCode.Idle)
-    expect((await second.waitClosed()).code).not.toBe(1006)
+    expect((await second.waitClosed()).code).toBe(CloseCode.Idle)
+  })
+
+  it('keeps a quiet pair that is sending the keepalive the relay documents', async () => {
+    harness = await startTestRelay({ idleTimeoutMs: 600_000, keepaliveIntervalMs: 3_600_000 })
+    const token = rendezvousToken()
+    const first = await joinPeer(harness, token)
+    const second = await joinPeer(harness, token)
+    await first.waitPaired()
+
+    // Twenty-two rounds at the documented interval, which carries the pair well
+    // past the idle budget. Telling a peer to send keepalives and then hanging
+    // up on it anyway is worse than having no keepalive to offer.
+    for (let round = 0; round < 22; round += 1) {
+      first.raw(PING_FRAME)
+      second.raw(PING_FRAME)
+      await Promise.all([first.control.atLeast(round + 2), second.control.atLeast(round + 2)])
+      harness.clock.advance(30_000)
+      harness.relay.sweep()
+    }
+
+    expect(first.control.items.filter((frame) => frame.t === 'pong')).toHaveLength(22)
+    expect(first.closed.items).toHaveLength(0)
+    expect(second.closed.items).toHaveLength(0)
   })
 
   it('keeps a session that is still carrying content', async () => {

@@ -11,7 +11,18 @@ and **it is never trusted with content**: the two peers run a Noise `IK` session
 over the spliced connection, keyed from the public keys already committed to
 your repository, and everything after that handshake is ciphertext. A relay that
 was compromised — or simply run by someone you would rather not read your
-terminal — can drop frames or refuse to pair. That is the whole of its power.
+terminal — cannot read a byte of it.
+
+What it can do is get in the way. It can drop frames, delay them, refuse to
+pair, end a session, or claim a rendezvous itself and keep two teammates apart.
+It also holds two things worth naming: the rendezvous token, which is the whole
+of what a peer presents to be paired, and a copy of every frame that has passed
+through it, the handshake's included. Whether holding those is enough for it to
+pass for one of you, rather than only to stand in your way, is a property of the
+peer handshake and not of this program — it is being settled there, in the
+transport above this relay. So read this as: **the relay cannot read your
+terminals, and it can deny and disrupt.** Do not read it as a bound on
+impersonation, because this program is not where that bound lives.
 
 Your team runs this. We do not run one for you, and there is nothing to sign up
 for.
@@ -84,7 +95,9 @@ route](https://developers.cloudflare.com/workers/configuration/routing/custom-do
 
 To change a limit, edit the matching entry under `vars` in `wrangler.jsonc` and
 deploy again. A value the relay cannot parse stops the Worker starting rather
-than being quietly ignored.
+than being quietly ignored. Only the limits this host can actually enforce are
+listed there, and the ones missing from it are named below rather than left for
+you to notice.
 
 ### Cloudflare's limits, and whether they bite
 
@@ -99,22 +112,46 @@ and hits a wall an hour later is worse off than one that was told up front.
   connection, and forwarding one frame is microseconds of it. A WebSocket held
   by a Durable Object is not on a request clock, which is exactly why the pairing
   lives in the object rather than in the Worker.
-- **Concurrency: 32,768 WebSockets per Durable Object.** Each object here holds
-  two. Irrelevant by four orders of magnitude.
+- **Concurrency: 32,768 WebSockets per Durable Object.** An object here refuses
+  the fourth: it holds one pairing, which is two peers plus room for the one
+  arriving to displace them. Cloudflare's ceiling is irrelevant by four orders
+  of magnitude; the object's own is the one that matters, and the next section
+  says why.
 - **Hibernation is the reason this is cheap.** A pair that sits quiet overnight
   has its object evicted from memory while both sockets stay connected, and it
   is rebuilt on the next frame. That is why nothing is kept in a field anywhere
   in `src/workers/`, and why the tests throw the object away between every single
   frame.
-- **One real gap.** The Workers runtime does not expose a send-queue depth to a
-  Durable Object, so the relay's slow-consumer rule — close a peer that has
-  stopped reading rather than buffer for it — cannot fire there. Cloudflare owns
-  that queue instead. The frame-rate and byte-rate budgets still apply and are
-  what bound the work. On the container host, where the depth is visible, the
-  rule is enforced and tested.
 
-Nothing here makes this a bad fit. It is close to the shape Durable Objects were
-built for.
+### Two things this host does not do
+
+Both are real, and neither is a reason to prefer the container. They are here so
+that nobody reads the limits table further down as a description of this host.
+
+**There is no connection cap, no per-address cap and no connection-rate cap.**
+`RELAY_MAX_CONNECTIONS`, `RELAY_MAX_CONNECTIONS_PER_ADDRESS` and
+`RELAY_MAX_CONNECTIONS_PER_ADDRESS_PER_MINUTE` are counts across a whole process,
+and a Worker has no process to count across. They are not in `wrangler.jsonc`
+and setting them there would do nothing. What bounds this host instead is that
+**one Durable Object takes three sockets and refuses the fourth** with a `503`.
+That matters because the object's name in the URL is a hash anybody may compute
+or simply invent — it carries no token and proves nothing — so without a refusal
+a single client could aim every socket it can open at one object, and every
+frame that object then handled would cost work in proportion to how many were
+attached. Three is the number because two is what a pairing is and the third is
+the peer arriving to displace a stale one, which is how a laptop that slept gets
+its session back. Cloudflare's own per-account and per-request limits are what
+stand between you and a flood of objects; the relay's job is to make each one
+cheap and bounded, and that it does.
+
+**The slow-consumer rule cannot fire.** The runtime does not expose a send-queue
+depth to a Durable Object, so the relay has nothing to measure and never closes
+a peer for not reading. Cloudflare owns that queue instead. The frame-rate and
+byte-rate budgets still apply and are what bound the work. On the container host,
+where the depth is visible, the rule is enforced and tested.
+
+Neither makes this a bad fit. It is close to the shape Durable Objects were built
+for.
 
 ---
 
@@ -202,6 +239,14 @@ observable half of this — that no payload byte and no rendezvous token reaches
 log or the health endpoint, on both hosts — but the load-bearing part is the
 encryption, which is not this program's to get wrong.
 
+Reading is the claim. **Impersonation is a separate question and it is not
+settled here.** The relay sees every frame, including the handshake ones, and it
+sees the rendezvous token, which is the whole of what a peer presents to be
+paired. Whether that lets it pass for a teammate rather than only disrupt one is
+decided by the peer handshake, above this program. Assume the relay can deny and
+disrupt; do not assume anything stronger about impersonation on the strength of
+this file.
+
 What the operator **does** learn:
 
 - **The social graph.** Which pseudonymous pair is talking, when they started,
@@ -260,11 +305,18 @@ hex, and sends the token itself in the first WebSocket frame.
 
 The split exists because URLs are the least private thing in an HTTP stack —
 they reach proxy logs, analytics and error reports — and the token is a
-capability: whoever holds it can claim the pairing. Its hash names the same
-pairing without conferring that. On the Worker host the hash is also what names
-the Durable Object, which is why it has to be in the URL at all: the object must
-be chosen before the first frame arrives. The container host has no use for it
-and ignores it.
+capability: whoever holds it can claim the pairing. Its hash does not confer
+that. On the Worker host the hash is also what names the Durable Object, which is
+why it has to be in the URL at all: the object must be chosen before the first
+frame arrives. The container host has no use for it and ignores it.
+
+The hash is not nothing, though, and on the Worker host it is worth being exact:
+because it names an object and an object takes three sockets, whoever holds the
+hash can hold those three open and keep the real pair from being admitted, until
+the greeting deadline reaps them. That is denial of service against one pairing
+for as long as they keep it up — weaker than what the token itself buys, and no
+more than what anyone able to see the URL could already do by refusing to carry
+traffic. Nobody sees that URL but the two peers and the relay.
 
 Neither host checks that the hash and the token agree. Neither needs to: a peer
 that sends a hint for one pairing and a token for another simply lands where its
@@ -329,7 +381,11 @@ was given.
 
 A peer may send `{"t":"ping"}` at any time after its hello and will get
 `{"t":"pong"}` back. On the Worker host the runtime answers it without waking
-anything, which is what keeps a quiet pair cheap.
+anything, which is what keeps a quiet pair cheap; the relay learns of it from a
+timestamp the runtime kept, not from the frame. Either way it counts: send one
+more often than `RELAY_IDLE_TIMEOUT_MS` and a session that is otherwise silent
+stays up. On the Worker host this is the only keepalive a peer has, because a
+Durable Object is not given the WebSocket protocol's own ping.
 
 Control frames from the relay are advisory. A relay that lied in one could, at
 worst, tear a session down — which it could do anyway by hanging up.
@@ -343,7 +399,7 @@ worst, tear a session down — which it could do anyway by hanging up.
 | `4002` | A newer connection claimed this rendezvous | Back off, then reconnect |
 | `4003` | You stopped reading and the relay will not queue for you | Reconnect |
 | `4004` | Over the frame or byte budget | Slow down, then reconnect |
-| `4005` | Paired but silent past the idle budget | Reconnect; send keepalives |
+| `4005` | The session showed no sign of life past the idle budget. Both halves get this | Reconnect, and keepalive more often than `RELAY_IDLE_TIMEOUT_MS` |
 | `4006` | Nobody joined you within the pairing budget | Reconnect |
 | `4007` | The relay is at capacity | Back off |
 | `4008` | You sent something the protocol does not allow there | Fix the client |
@@ -354,6 +410,11 @@ worst, tear a session down — which it could do anyway by hanging up.
 superseded as a partner leaving would reconnect immediately, displace each other,
 and do it again for as long as both were running.
 
+`4005` goes to both halves for the same reason. Nobody disconnected — the two of
+them were quiet and both are being reaped for it — so telling either one its
+partner left would be false, and would send it into an immediate reconnect for a
+fault that did not happen.
+
 ---
 
 ## Limits, and why each one is where it is
@@ -361,26 +422,33 @@ and do it again for as long as both were running.
 Every one is an environment variable. All of them have a default that is safe to
 deploy unchanged, and a value that cannot be parsed stops the relay starting.
 
-| Variable | Default | Why |
-| --- | --- | --- |
-| `RELAY_HOST` | `0.0.0.0` | Bind address. `127.0.0.1` if a proxy on the same box is the only client. |
-| `RELAY_PORT` | `8787` | Listen port. `0` picks a free one. |
-| `RELAY_PATH` | `/v1/relay` | The only upgradable path. Everything else is a 404. |
-| `RELAY_MAX_CONNECTIONS` | `512` | 256 concurrent pairs. Far past any team, and a bound on the memory one process can be asked for. |
-| `RELAY_MAX_CONNECTIONS_PER_ADDRESS` | `32` | A team behind one office NAT shares an address; 32 leaves room for that without letting one address take the whole relay. |
-| `RELAY_MAX_CONNECTIONS_PER_ADDRESS_PER_MINUTE` | `60` | Makes a reconnect loop cost the looper rather than the relay. |
-| `RELAY_MAX_FRAME_BYTES` | `262144` | Noise caps a message at 65535 bytes, so 256 KiB carries several batched and still refuses anything designed to make the relay allocate. |
-| `RELAY_MAX_FRAMES_PER_SECOND` | `200` | A terminal at full tilt is tens of frames a second. 200 is generous for typing and streaming, and stops a peer spending the relay's event loop. |
-| `RELAY_MAX_BYTES_PER_SECOND` | `4194304` | 4 MiB/s per connection — more than a terminal produces, less than a peer needs to saturate a host. |
-| `RELAY_MAX_BUFFERED_BYTES` | `4194304` | The memory bound that matters. Past it the peer that stopped reading is closed; the relay never queues without limit. |
-| `RELAY_HELLO_TIMEOUT_MS` | `10000` | A connection that opens and says nothing is the cheapest way to hold a slot, so this is the tightest deadline here. |
-| `RELAY_PAIR_TIMEOUT_MS` | `600000` | How long a peer may park waiting for a teammate. `0` parks until the socket dies. |
-| `RELAY_IDLE_TIMEOUT_MS` | `600000` | Silence on a paired session, counting content frames only. Peers should keepalive more often than this. `0` disables. |
-| `RELAY_KEEPALIVE_INTERVAL_MS` | `30000` | How often deadlines are checked, and how often a half-open socket is probed. |
-| `RELAY_SHUTDOWN_GRACE_MS` | `5000` | How long shutdown waits for closing handshakes before cutting what is left. |
-| `RELAY_TRUSTED_PROXY_HOPS` | `0` | Proxies in front. `0` uses the socket address, which a client cannot forge. |
-| `RELAY_LOG_CLIENT_ADDRESS` | `0` | Off by default. Addresses appear as refs unless you turn this on. |
-| `RELAY_HEALTH_TOKEN` | unset | When set, `/healthz` needs `Authorization: Bearer <token>`. |
+This table is the **container host**. Ten of its eighteen rows have nowhere to
+apply on the Worker, and the "Where" column says which: `both` means the limit is
+enforced on either host, `container` means the Worker has nothing to enforce it
+with and setting the variable there would do nothing at all. The section on path
+1 above says the same in longer form, and `wrangler.jsonc` carries only the rows
+marked `both`.
+
+| Variable | Default | Where | Why |
+| --- | --- | --- | --- |
+| `RELAY_HOST` | `0.0.0.0` | container | Bind address. `127.0.0.1` if a proxy on the same box is the only client. |
+| `RELAY_PORT` | `8787` | container | Listen port. `0` picks a free one. |
+| `RELAY_PATH` | `/v1/relay` | both | The only upgradable path. Everything else is a 404. |
+| `RELAY_MAX_CONNECTIONS` | `512` | container | 256 concurrent pairs. Far past any team, and a bound on the memory one process can be asked for. A Worker has no process to count across. |
+| `RELAY_MAX_CONNECTIONS_PER_ADDRESS` | `32` | container | A team behind one office NAT shares an address; 32 leaves room for that without letting one address take the whole relay. |
+| `RELAY_MAX_CONNECTIONS_PER_ADDRESS_PER_MINUTE` | `60` | container | Makes a reconnect loop cost the looper rather than the relay. |
+| `RELAY_MAX_FRAME_BYTES` | `262144` | both | Noise caps a message at 65535 bytes, so 256 KiB carries several batched and still refuses anything designed to make the relay allocate. |
+| `RELAY_MAX_FRAMES_PER_SECOND` | `200` | both | A terminal at full tilt is tens of frames a second. 200 is generous for typing and streaming, and stops a peer spending the relay's event loop. |
+| `RELAY_MAX_BYTES_PER_SECOND` | `4194304` | both | 4 MiB/s per connection — more than a terminal produces, less than a peer needs to saturate a host. |
+| `RELAY_MAX_BUFFERED_BYTES` | `4194304` | container | The memory bound that matters. Past it the peer that stopped reading is closed; the relay never queues without limit. The Worker runtime owns that queue and does not show its depth. |
+| `RELAY_HELLO_TIMEOUT_MS` | `10000` | both | A connection that opens and says nothing is the cheapest way to hold a slot, so this is the tightest deadline here. |
+| `RELAY_PAIR_TIMEOUT_MS` | `600000` | both | How long a peer may park waiting for a teammate. `0` parks until the socket dies. |
+| `RELAY_IDLE_TIMEOUT_MS` | `600000` | both | How long a paired session may show no sign of life at all — no content either way, and nothing from the peer, keepalives included. A pair that keepalives never reaches it. `0` disables. |
+| `RELAY_KEEPALIVE_INTERVAL_MS` | `30000` | both | How often deadlines are checked, and how often a half-open socket is probed. |
+| `RELAY_SHUTDOWN_GRACE_MS` | `5000` | container | How long shutdown waits for closing handshakes before cutting what is left. |
+| `RELAY_TRUSTED_PROXY_HOPS` | `0` | container | Proxies in front. `0` uses the socket address, which a client cannot forge. |
+| `RELAY_LOG_CLIENT_ADDRESS` | `0` | container | Off by default. Addresses appear as refs unless you turn this on; the Worker logs the ref and never the address. |
+| `RELAY_HEALTH_TOKEN` | unset | container | When set, `/healthz` needs `Authorization: Bearer <token>`. |
 
 The rate limits are token buckets with a burst equal to one second's budget, so
 a peer that is quiet then sends a batch is fine, and a peer that is never quiet
@@ -430,10 +498,19 @@ does not slow the sender down — a Noise stream with a hole in it is over anywa
 so ending it cleanly is better than any of those. (On the Worker host this rule
 cannot fire; see the limits section above.)
 
-**A peer goes quiet but stays connected.** On the container host the relay pings
-it at the WebSocket layer and cuts it if two intervals pass with no answer. On
-the Worker host liveness is Cloudflare's, and peers use the `{"t":"ping"}`
-control frame, which the runtime answers without waking anything.
+**A peer goes quiet but stays connected.** Nothing happens to it, as long as it
+is still there. On the container host the relay pings it at the WebSocket layer
+and cuts it only if two intervals pass with no answer. On the Worker host
+liveness is Cloudflare's, and peers use the `{"t":"ping"}` control frame, which
+the runtime answers without waking anything — and the object reads back the
+timestamp of that answer when it next wakes, so a keepalive it never saw still
+counts as a sign of life. Either way, a pair that is keeping itself alive is left
+alone: `RELAY_IDLE_TIMEOUT_MS` reaps a session that has gone silent altogether,
+not one that is merely not typing.
+
+**Both peers go quiet at once and neither keepalives.** Both are closed with
+`4005` after `RELAY_IDLE_TIMEOUT_MS`. Both, and with the same code: nothing
+disconnected, so neither of them is told its partner did.
 
 ---
 
@@ -442,7 +519,7 @@ control frame, which the runtime answers without waking anything.
 ```sh
 cd relay
 npm install
-npm test          # 62 tests
+npm test          # 71 tests
 npm run typecheck # both hosts: Node types and Workers types
 npm run build     # the container host's JavaScript, into dist/
 ```
@@ -460,6 +537,15 @@ every single frame**, which is the worst case hibernation is allowed to put it
 in. What has not been exercised here is a deployed Worker; the bundle is checked
 with `wrangler deploy --dry-run`, and the first real deploy is the first time
 that code meets `workerd`.
+
+Worth knowing which claims rest on which. That a peer's keepalive holds a session
+open, and that both halves of a reaped session are told the same true thing, are
+proved on real sockets against the container host. The Worker host's three-socket
+refusal, and its reading back of the timestamp the runtime kept for a keepalive it
+answered on the object's behalf, are proved only against the fake — they follow
+Cloudflare's documented behaviour for `getWebSocketAutoResponseTimestamp` and for
+`getWebSockets`, and the first deploy is still the first time either meets the
+real runtime.
 
 ### How it is laid out
 

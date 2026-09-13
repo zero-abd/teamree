@@ -26,7 +26,14 @@ export function attachWebSocket(id: string, origin: string, socket: WebSocket, h
   socket.on('error', (error: Error) => {
     // Frame-level failures — an oversized payload, a malformed frame — arrive
     // here. They are a fact about one peer, never a reason to stop serving.
-    host.log.warn('connection.error', { conn: id, reason: error.message })
+    //
+    // The code is logged and the message is not. `ws` names every failure a peer
+    // can provoke with a stable code (`WS_ERR_INVALID_UTF8` and the rest) and
+    // Node names every socket failure the same way, so nothing is lost that an
+    // operator needs; what is gained is that the promise of no payload byte in a
+    // log stops depending on auditing a dependency's wording at every upgrade.
+    const code = (error as NodeJS.ErrnoException).code
+    host.log.warn('connection.error', { conn: id, reason: code ?? error.name })
   })
   socket.on('close', (code: number) => session.onSocketClosed(code))
 

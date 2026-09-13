@@ -55,7 +55,11 @@ export const CloseCode = {
   SlowConsumer: 4003,
   /** Frame or byte rate over the per-connection budget. */
   RateLimited: 4004,
-  /** Paired but silent for longer than the idle budget. */
+  /**
+   * The session showed no sign of life for longer than the idle budget. Both
+   * halves get this one: neither of them left, so neither may be told the other
+   * did.
+   */
   Idle: 4005,
   /** Waited for a partner for longer than the pairing budget. */
   PairTimeout: 4006,

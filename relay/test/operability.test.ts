@@ -104,6 +104,22 @@ describe('what running the relay shows you', () => {
     expect(harness.log.lines.join('\n')).not.toContain(secret)
   })
 
+  it('names a frame-level failure with a code rather than with prose it did not write', async () => {
+    await start()
+    const peer = await joinPeer(harness, rendezvousToken())
+
+    // A text frame that is not valid UTF-8. The library underneath rejects it
+    // and hands up an Error whose message is its own wording — which is the
+    // one thing not logged, so that "no payload byte reaches a log" does not
+    // quietly become a claim about a dependency's release notes.
+    peer.socket.send(Buffer.from([0xff, 0xfe, 0xfd]), { binary: false })
+    await peer.waitClosed()
+
+    const errors = harness.log.records.filter((record) => record.event === 'connection.error')
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.reason).toBe('WS_ERR_INVALID_UTF8')
+  })
+
   it('records both sides of a pairing under one reference so a session can be followed', async () => {
     await start()
     const token = rendezvousToken()

@@ -134,6 +134,17 @@ describe('admission control', () => {
     await expect(connectPeer(harness)).rejects.toThrow(/429/)
   })
 
+  it('holds the per-address cap against a burst that arrives all at once', async () => {
+    harness = await startTestRelay({ maxConnections: 10_000, maxConnectionsPerAddress: 2 })
+
+    // Sequential arrivals would be admitted one decision at a time. These are
+    // offered together, which is the shape that finds out whether the count is
+    // taken at the decision or somewhere after it.
+    const attempts = await Promise.allSettled(Array.from({ length: 200 }, () => connectPeer(harness)))
+
+    expect(attempts.filter((attempt) => attempt.status === 'fulfilled')).toHaveLength(2)
+  })
+
   it('counts the address a trusted proxy reports rather than the proxy itself', async () => {
     harness = await startTestRelay({
       maxConnections: 100,
