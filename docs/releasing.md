@@ -6,18 +6,24 @@ install it, [`install.md`](install.md) is the one to read.
 ## Why this is a script and not a workflow
 
 `.github/workflows/release.yml` was written to turn a `v*` tag into a download,
-and it has never run. Neither has anything else in `.github/workflows/`.
+and it has never run.
 
-That is not a guess. Every Actions run in this repository ends after six or
-seven seconds, with no steps, no logs, and one annotation:
+`build.yml` did, earlier on 13 September 2026. Of the 161 Actions runs this
+repository has, 11 finished green, and the last of those — run `34740171822`, at
+05:23 UTC — executed every step: typecheck, lint, format, the suite, the build,
+the smoke test, `package:mac`, the packaged-app check, and `npm run
+install:verify`. So the instructions in [`install.md`](install.md) have been
+machine-checked on a real runner, which is what that document claims.
+
+Nothing has run since. Every run after that ends in six or seven seconds, with
+no steps, no logs, and one annotation:
 
 > The job was not started because recent account payments have failed or your
 > spending limit needs to be increased. Please check the 'Billing & plans'
 > section in your settings
 
-No runner is provisioned, so no step of any workflow has ever executed — not a
-checkout, not an `npm ci`, not a test. The green-or-red next to a commit in this
-repository has only ever meant "GitHub declined to start a machine".
+No runner is provisioned now, so a red cross next to a recent commit means
+"GitHub declined to start a machine" rather than a failure.
 
 So the tag trigger has been removed from `release.yml`: a tag pushed while it
 was there produced nothing and hung a red cross off the release, which reads as

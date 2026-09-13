@@ -12,10 +12,11 @@ milestones have landed, the relay in `relay/` ships with the repository, and
 `docs/trying-teamwork.md` walks two people through it — including the one thing
 still untested, which is two Macs in two places.
 
-Releases are macOS only: one unsigned universal `.dmg`. **Nothing has been
-published yet** — there is no releases page to send anybody to, and the first
-release is a command somebody has to run. It is one command:
-`npm run release`, which is [`docs/releasing.md`](docs/releasing.md).
+Releases are macOS only: one unsigned universal `.dmg`. **v0.1.0 is published**
+— [the releases page](https://github.com/zero-abd/teamree/releases/latest) has
+the `.dmg` and a `SHA256SUMS.txt` beside it, and both download without a GitHub
+account. Cutting the next one is one command: `npm run release`, which is
+[`docs/releasing.md`](docs/releasing.md).
 
 **GitHub Actions no longer runs here.** It did, earlier on the same day this was
 written: the last run that executed any step finished at about 05:42 UTC on 13
@@ -35,15 +36,23 @@ succeed as configured (see "Packaged builds"). The known gaps are in
 
 ## Installing a build
 
-There are no published builds yet: the releases page is empty, and the way to
-run teamree today is from a checkout, two commands below. When there is one, it
-will be a single universal macOS `.dmg` on the releases page, and
-**[`docs/install.md`](docs/install.md) will be the thing to read first**. Not
-because installing is hard; it is a drag to Applications. It is because an
-unsigned build makes macOS stop you with a warning the first time. That document
-explains what the warning is actually saying, what it is not saying, and the
-exact way past it, and every release carries the checksums that stand in for the
-signature.
+One universal macOS `.dmg`, Apple Silicon and Intel in the same file:
+
+**[Download teamree 0.1.0 for macOS](https://github.com/zero-abd/teamree/releases/latest/download/teamree-0.1.0.dmg)**
+
+**[`docs/install.md`](docs/install.md) is the thing to read first** — not
+because installing is hard, it is a drag to Applications, but because this build
+is unsigned and macOS will stop you the first time you open it. That document
+has the exact wording you will see, what it is and is not saying, and the one
+command past it. Verify the download first; every release carries a
+`SHA256SUMS.txt` that stands in for the signature:
+
+```sh
+shasum -a 256 teamree-0.1.0.dmg
+```
+
+Running from a checkout instead is the two commands below, and needs none of
+this.
 
 ## What it does
 
@@ -285,9 +294,11 @@ explicit about which of those steps nobody has been able to verify, because
 nobody involved has a Developer ID certificate.
 
 Until somebody does that, every download is an unsigned one, and the person on
-the other end meets a warning rather than an app.
-[`docs/install.md`](docs/install.md) is written for them: what macOS and Windows
-each say, what they mean by it, and the way through on each platform.
+the other end meets a warning rather than an app. On macOS 15 and later that
+warning is **`"teamree" Not Opened`**, offering only Move to Trash and Done —
+no way through in the dialog itself.
+[`docs/install.md`](docs/install.md) is written for them: the exact wording, what
+it means, and the way through on each platform.
 
 ## The `teamree` CLI from a packaged install
 

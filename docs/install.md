@@ -4,16 +4,25 @@ This is for somebody who has downloaded a build rather than cloned the
 repository. If you want to run it from source, the README covers that in two
 commands and none of this applies.
 
-**As of this writing nothing has been published**: the releases page is empty,
-and the only way to get teamree is to build it. This document describes what a
-download will be when there is one, and it is checked against real packaged
-builds rather than written from memory — but if you are here because you were
-sent a link, and the link goes nowhere, that is why.
+**v0.1.0 is published.** The download is here, and it needs no GitHub account:
+
+**<https://github.com/zero-abd/teamree/releases/latest/download/teamree-0.1.0.dmg>**
+
+The releases page itself is
+<https://github.com/zero-abd/teamree/releases/latest>, and everything below was
+walked through against that exact file, on macOS 26, by somebody who had not
+installed it before. Where this document quotes a warning, the words are the
+ones that were on the screen.
 
 **There is one download: `teamree-<version>.dmg`**, plus a `SHA256SUMS.txt`
 beside it. It is a universal build, so it runs on Apple Silicon and on Intel
 and there is nothing to choose between. If you have wondered which Mac you
 have, you do not need to find out.
+
+One thing to know before the next release rather than after it: the file name
+carries the version, so the link above stops working the day v0.2.0 is
+published — it resolves to the new release and then 404s on the old file name.
+The releases page link never goes stale.
 
 **Releases are macOS only.** That is a decision rather than a gap: the Windows
 and Linux packaging is still configured and the sections below still describe
@@ -54,12 +63,25 @@ checksum gives you the same guarantee by a different route, which is why every
 release publishes them. Before you install, compare:
 
 ```sh
-shasum -a 256 teamree-0.1.0.dmg
+cd ~/Downloads
+curl -LO https://github.com/zero-abd/teamree/releases/latest/download/SHA256SUMS.txt
+shasum -a 256 -c SHA256SUMS.txt
 ```
 
-against the matching line in `SHA256SUMS.txt` on the release. If they agree, the
-file you have is the file the build produced. If they do not, stop — and that is
-the case the signature would have caught too.
+That prints `teamree-0.1.0.dmg: OK`. For v0.1.0 the line it is checking against
+is:
+
+```
+ccf09c74af6ba75a032fee58b11dc578ece77dd3ec38401328fe34a8131bf8d2  teamree-0.1.0.dmg
+```
+
+If they agree, the file you have is the file the build produced. If they do not,
+stop — and that is the case the signature would have caught too.
+
+One trap if you are working in a clone of this repository: `dist/` holds
+whatever you last built locally, and a local build is *not* byte-identical to
+the published one. Checking a download against `dist/SHA256SUMS.txt` will fail
+even though nothing is wrong. Fetch the checksums from the release, as above.
 
 A checksum cannot tell you the build itself is trustworthy. Nothing on the
 release page can; that judgement comes from the source, which is here, and from
@@ -68,9 +90,30 @@ whoever sent you the link.
 ## macOS
 
 Open the `.dmg` and drag teamree to Applications, the way any Mac app installs.
-Then, the first time you open it, macOS will refuse:
+There is an Applications shortcut in the window to drag onto, and no licence to
+agree to. Then, the first time you open it, macOS will refuse — with a dialog
+whose two buttons are **Move to Trash** and **Done**:
 
-> **"teamree" cannot be opened because the developer cannot be verified.**
+> **"teamree" Not Opened**
+>
+> Apple could not verify "teamree" is free of malware that may harm your Mac or
+> compromise your privacy.
+
+**Do not press Move to Trash.** It is the prominent button and it is the wrong
+one; press **Done**. Nothing has been found wrong with teamree — see above for
+what that sentence is actually reporting.
+
+Two things about this dialog are worth knowing in advance, because both of them
+mislead people who are trying to be careful:
+
+- **There is no "Open Anyway" button in it.** Through macOS 14 you could
+  Control-click the app and choose Open. macOS 15 removed that, and on 15 and
+  later — including macOS 26 — the dialog offers you no way through at all.
+- **`open teamree.app` from a terminal prints nothing and exits 0**, and the app
+  still does not start. The same is true of the bundled `teamree` CLI, which is
+  killed outright: no output on stdout or stderr, exit status 137. If you have
+  put the CLI on your PATH before doing what follows, that silence is this, and
+  not a bug in the CLI.
 
 The reliable way past it is to clear the quarantine flag. Every file a browser
 downloads gets an extended attribute called `com.apple.quarantine`; Gatekeeper
@@ -95,18 +138,25 @@ This is checked rather than asserted. `npm run install:verify` in the repository
 installs a real packaged build at the path named above, quarantines it both ways
 a download arrives, and runs the command in this document — read out of this
 file, so the instruction cannot rot into being wrong while the check stays green.
-It last ran in CI on 13 September 2026; GitHub has provisioned no runner for this
+It last ran green in CI on 13 September 2026, in run `34740171822`, as the step
+"Verify the install instructions". GitHub has provisioned no runner for this
 repository since, so it is a command a maintainer runs rather than something that
 happens on every commit.
 
-There is a route through the interface as well, but where it is depends on your
-macOS version, which is worth knowing before you go hunting for it. Through
-macOS 14 you could Control-click the app and choose **Open**, and get a dialog
-with an Open button on it. macOS 15 removed that shortcut for apps in this
-situation. On 15 and later you attempt to open it, let it fail, then go to
-**System Settings → Privacy & Security**, scroll to the security section, and
-use the **Open Anyway** button that has appeared there with teamree's name on
-it. It will ask for your password.
+There is a route through the interface as well, for anyone who would rather not
+type a command. You attempt to open teamree, get the dialog above, and press
+**Done**. Then go to **System Settings → Privacy & Security** and scroll to the
+Security section: a line naming teamree has appeared there, with an **Open
+Anyway** button beside it. It will ask for your password or Touch ID. Do this
+reasonably soon after the refusal — the offer is tied to the attempt, and a
+stale one goes away.
+
+One thing that will look like failure and is not: `spctl -a -vv` on the app says
+`rejected` before you clear quarantine **and after**. Clearing the attribute
+removes what makes macOS enforce the check; it does not give the app a
+signature, and nothing you can do short of an Apple Developer certificate will
+make `spctl` say `accepted`. The app opens regardless. If you went looking for a
+way to confirm the fix worked, open the app — do not ask `spctl`.
 
 One detail that explains a confusing failure mode: the macOS builds *are* signed,
 but only ad-hoc — a signature with no identity attached. Apple Silicon will not
@@ -116,11 +166,30 @@ on sight once you are past Gatekeeper. It is not a Developer ID and it does not
 make the app distributable in Apple's sense. You will still see the warning
 above.
 
+What that looks like if you check it yourself, on the published v0.1.0:
+
+```
+$ codesign -dv --verbose=4 /Applications/teamree.app
+Identifier=dev.teamree.app
+Format=app bundle with Mach-O universal (x86_64 arm64)
+CodeDirectory v=20400 ... flags=0x2(adhoc)
+Signature=adhoc
+TeamIdentifier=not set
+```
+
+No Authority line, because there is no certificate chain to name, and no team.
+`codesign --verify --deep --strict` still passes — the bundle's own seal is
+intact and nothing in it has been altered — and `xcrun stapler validate` exits
+65 with `teamree.app does not have a ticket stapled to it`, which is
+notarisation, which there is none of. The `.dmg` itself is not signed at all.
+
 ## Windows
 
-Nothing publishes this installer today; the section is kept because the
-packaging is kept, and describes what it would produce. To run teamree on
-Windows now, build from source.
+Nothing publishes this installer today, and more than that: `npm run package:win`
+**cannot succeed as configured**, so nobody can build one either. The section is
+kept because the packaging is kept, and describes what that configuration would
+produce if it were fixed. To run teamree on Windows now, build from source and
+run it from the checkout. README.md has the diagnosis under "Packaged builds".
 
 Run `teamree-<version>-setup-x64.exe`. It installs per-user, into
 `%LOCALAPPDATA%\Programs\teamree`, and asks no administrator password.
@@ -133,8 +202,10 @@ General tab.
 
 Then SmartScreen will show a blue panel:
 
-> **Windows protected your PC.** Microsoft Defender SmartScreen prevented an
-> unrecognised app from starting.
+> **Windows protected your PC**
+>
+> Microsoft Defender SmartScreen prevented an unrecognized app from starting.
+> Running this app might put your PC at risk.
 
 The button that continues is hidden behind **More info** — click that, and
 **Run anyway** appears below the file name. There is no way to avoid this panel
@@ -326,7 +397,15 @@ Then, with the app running:
 teamree status
 ```
 
-If the app is not running the CLI says so and exits 3, rather than hanging.
+If the app is not running the CLI says so and exits 3, rather than hanging:
+
+```
+error: The teamree runtime is not running (no discovery file found).
+```
+
+The one exception, on macOS, is an app you have not yet de-quarantined: then the
+CLI is killed before it can say anything at all — no output, exit status 137.
+Clear the quarantine flag on the app bundle, as above, and it behaves.
 
 ## The first time you open it
 
