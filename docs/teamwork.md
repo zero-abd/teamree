@@ -36,6 +36,33 @@ repository, you are on the team, and if you are removed from the repository you
 can no longer change it. There is no second list to keep in step with the first,
 no invitations, and no accounts.
 
+**What the file actually holds**, now that milestone A has shipped it: a short
+comment header saying what the thing is and that push access is what makes it
+membership, then three labelled lines — `handle:`, `key: x25519 <base64>`, and
+`added:`. The key is base64 of the raw 32 bytes, not PEM and not a hex blob,
+because this file is read in a diff far more often than it is read by a parser
+and a reviewer should be able to see at a glance that a person was added and
+which key they were added with. The parser forgives reordering, comments, blank
+lines and labels it has never heard of, and refuses anything it cannot read
+exactly — a guess here is a stranger in the roster.
+
+**A handle is lowercase**, drawn from `[a-z0-9._-]`, at most 48 characters, and
+derived from the local part of `git config user.email` unless someone sets their
+own. The lowercasing is not cosmetic and is the reason this is written down:
+macOS folds `Ana.pub` and `ana.pub` into one file and Linux does not, so a
+mixed-platform team could otherwise end up with a roster that disagrees with
+itself about how many people are on it. Windows device names are refused outright
+for the same family of reason — `nul.pub` cannot be created there whatever the
+extension, and a member file the whole team can read except one person is not a
+roster.
+
+**Two people joining at once is the first thing a real pair hits.** Both commit a
+key onto the same base, and the second push is rejected. This is not a merge
+conflict and should not be presented as one: the two keys are different files and
+git merges them without complaint. The resolution is `git pull --rebase` and push
+again. It is worth saying because the failure arrives as a scary-looking push
+rejection at the exact moment two people are first trying to work together.
+
 The consequences are worth stating plainly:
 
 - **Revocation happens at git-fetch speed.** Deleting a key removes someone at
@@ -51,8 +78,23 @@ Two machines behind two NATs cannot reach each other. So neither tries: **each
 opens an outbound WebSocket to a relay, and the relay splices the two streams
 together**. Outbound-only means no port forwarding, no STUN, no public address.
 
-The relay is **self-hosted by the team**. It is a small program with no
-database and no accounts, and it is deliberately boring, because:
+The relay is **hosted by the team, never by us**. There is no service to sign up
+for and nothing of ours to depend on, which also means no baked-in default URL:
+a team that has not stood one up has no relay, and the app must say so rather
+than quietly reaching somewhere.
+
+There are two ways to stand one up, and both are supported because they fail in
+different directions. A team can **deploy the Worker to their own account**,
+which is one command, needs no server, and works from anywhere because both
+peers dial out to it. Or they can **run the container themselves** on a box, a
+NAS or a laptop — direct if everyone is on one network, and needing a tunnel or a
+port forward to cross the internet. The second option is the one to reach for if
+a team will not use a hosted runtime; it is not the one to lead with, because a
+relay on a laptop re-inherits the NAT problem the relay exists to solve, and goes
+away when the laptop sleeps.
+
+It is a small program with no database and no accounts, and it is deliberately
+boring, because:
 
 **The relay is never trusted with content.** Peers establish a
 [Noise](https://noiseprotocol.org/) `IK` session over the spliced connection —
@@ -134,6 +176,15 @@ read the directory, and show the project's members in the app. No sockets, no
 relay, nothing to deploy. This is the whole trust model, testable offline.
 
 ### B — The relay, and presence
+
+**Still to settle here:** how a peer learns which relay to dial. The roster says
+who is on the team and nothing about where they meet, and the two are not
+obviously the same kind of fact — a key is a permanent statement about a person,
+a relay URL is an operational detail a team may change. Putting it in the
+repository makes it travel with membership and be reviewable in a diff; keeping
+it in local settings makes it a per-machine choice that two teammates can get
+wrong independently. Whichever is chosen, the absence of one must read as "this
+team has not set up a relay" rather than as a connection failure.
 
 The relay itself; outbound connections from each peer; the Noise `IK` handshake
 against keys from the roster; teammates' worktrees appearing in the sidebar with
