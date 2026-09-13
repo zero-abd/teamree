@@ -489,8 +489,10 @@ export function WatchedPaneView({
    *
    * Read back off the document rather than derived from the appearance here, so
    * that one derivation stands behind both the chrome and the panes — and it
-   * runs after `App` has written it, because that effect is above this one in
-   * the tree.
+   * runs after `App` has written it because that write is a *layout* effect.
+   * Being above this one in the tree is not what puts it first; React flushes
+   * passive effects child-first, so a plain `useEffect` there would land after
+   * this one and this pane would repaint itself in the theme before last.
    */
   useEffect(() => {
     const term = termRef.current

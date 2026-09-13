@@ -1,7 +1,7 @@
 // App shell: sidebar, workspace, status bar — plus the two things that have to
 // live above all of them, the key map and the modal layer.
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { resolvePalette } from '@shared/theme'
 import { MAC_CONTENT_INSET_PX, TITLEBAR_HEIGHT_PX } from '@shared/windowChrome'
 import { AddProjectDialog } from './dialogs/AddProjectDialog'
@@ -51,7 +51,16 @@ export function App(): React.JSX.Element {
   // the default theme, unedited — writes the same values back and nothing
   // flickers; anything else takes over here, before the first frame anybody
   // looks at.
-  useEffect(() => {
+  //
+  // A layout effect, and that is not about avoiding a flash of the old colours
+  // — it is about the panes. Every emulator re-reads the palette off this
+  // element in an effect of its own, because xterm cannot read CSS, and React
+  // flushes effects child-first: an ordinary `useEffect` here would run *after*
+  // every pane's, so each pane would read the palette this component had not
+  // written yet and repaint itself in the theme before last. Layout effects all
+  // run before any passive one, which puts the write back in front of the reads
+  // it exists for. See `terminalTheme.ts` and the two views that call it.
+  useLayoutEffect(() => {
     applyPalette(document.documentElement, resolvePalette(appearance))
   }, [appearance])
 
