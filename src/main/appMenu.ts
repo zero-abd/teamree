@@ -22,9 +22,15 @@
 // keystroke people press out of habit. It is offered only when a dev server is
 // what is being rendered, which is the only time reloading is the point.
 //
-// Nothing here is invented: every item is an Electron role, so each one does
-// what the platform's own menu of that name does, and there is no menu entry
-// for a command this app does not have.
+// Almost nothing here is invented: every item but one is an Electron role, so
+// each does what the platform's own menu of that name does, and there is no
+// menu entry for a command this app does not have.
+//
+// The exception is "Check for Updates…", which has no role because Electron has
+// none to offer — an unsigned build cannot use the platform's updater at all
+// (see src/main/updates/updateService.ts). It is under About because that is
+// where a Mac user looks for it, and it appears only when the caller hands over
+// something for it to do.
 
 import type { MenuItemConstructorOptions } from 'electron'
 
@@ -33,6 +39,17 @@ export type ApplicationMenuOptions = {
   platform?: NodeJS.Platform
   /** True under `electron-vite dev`, where reloading the renderer is wanted. */
   developing?: boolean
+  /**
+   * Asks GitHub whether there is a newer release, and leaves the answer to the
+   * window. Omitted, the item is not offered at all — a menu item that does
+   * nothing is worse than one that is absent.
+   *
+   * It sits directly under About, with a separator between it and Services,
+   * because that is where a Mac user looks for it: every Mac app that checks
+   * for its own updates puts the item there, and a menu that agrees with the
+   * platform is one nobody has to be shown.
+   */
+  checkForUpdates?: () => void
 }
 
 export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): MenuItemConstructorOptions[] {
@@ -46,6 +63,16 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
       role: 'appMenu',
       submenu: [
         { role: 'about' },
+        ...(options.checkForUpdates
+          ? ([
+              { type: 'separator' },
+              // No accelerator, like everything else here: the roles bring their
+              // own and this one has no platform binding to claim. It says
+              // "Check for Updates…" because pressing it goes and asks, and the
+              // ellipsis is the platform's word for exactly that.
+              { label: 'Check for Updates…', click: options.checkForUpdates }
+            ] as MenuItemConstructorOptions[])
+          : []),
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },

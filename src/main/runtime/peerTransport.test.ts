@@ -289,6 +289,13 @@ describe('what a teammate can reach', () => {
     expect(PEER_METHODS).not.toHaveProperty('cli.install')
     expect(PEER_METHODS).not.toHaveProperty('cli.status')
     expect(PEER_METHODS).not.toHaveProperty('cli.dismissPrompt')
+    // Nor does a teammate get to make this machine ask GitHub anything, change
+    // a preference on it, or open a page in the browser of whoever is sitting
+    // in front of it.
+    expect(PEER_METHODS).not.toHaveProperty('update.check')
+    expect(PEER_METHODS).not.toHaveProperty('update.download')
+    expect(PEER_METHODS).not.toHaveProperty('update.setAutomatic')
+    expect(PEER_METHODS).not.toHaveProperty('update.state')
   })
 
   it('says of every admitted method which project check it goes through', () => {

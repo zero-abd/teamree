@@ -23,6 +23,7 @@ import type {
   TeamworkPublishPlan,
   TeamworkStatus,
   Terminal,
+  UpdateState,
   Worktree,
   WorktreeChanges,
   WorktreeCommit,
@@ -186,6 +187,33 @@ export const Params = {
    * first run is made once and never again. Declining is an answer.
    */
   cliDismissPrompt: z.object({}),
+
+  /**
+   * What this build is, what the download page has, and whether teamree looks.
+   *
+   * A read out of memory: it never asks GitHub anything. The answer includes
+   * whatever the last check found, including a check made in an earlier run.
+   */
+  updateState: z.object({}),
+  /**
+   * Asks GitHub now, because somebody chose to.
+   *
+   * The rate limit that governs the automatic check does not apply here: it
+   * exists to stop the app asking on its own account, and a person who has just
+   * picked "Check for updates" is owed an answer rather than a cached one.
+   */
+  updateCheck: z.object({}),
+  /** Turns the automatic check on or off. Remembered between runs. */
+  updateSetAutomatic: z.object({ automatic: z.boolean() }),
+  /**
+   * Opens the newer release's download in the user's browser.
+   *
+   * Takes no URL, and that is the point: the address came off the GitHub API,
+   * so the only thing this can open is the release the runtime is already
+   * holding. A call that named a page would be a way to aim somebody's browser
+   * through this app.
+   */
+  updateDownload: z.object({}),
 
   /**
    * Everyone whose public key is committed to the project, and who this
@@ -440,6 +468,12 @@ export type MethodContract = {
   'cli.install': { params: z.infer<typeof Params.cliInstall>; result: CliInstall }
   'cli.dismissPrompt': { params: z.infer<typeof Params.cliDismissPrompt>; result: CliStatus }
 
+  'update.state': { params: z.infer<typeof Params.updateState>; result: UpdateState }
+  'update.check': { params: z.infer<typeof Params.updateCheck>; result: UpdateState }
+  'update.setAutomatic': { params: z.infer<typeof Params.updateSetAutomatic>; result: UpdateState }
+  /** Answers with the address that was opened, so a caller can say what it was. */
+  'update.download': { params: z.infer<typeof Params.updateDownload>; result: { opened: string } }
+
   'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
   'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }
 
@@ -516,6 +550,17 @@ export type WorkspaceEvent =
    * few projects a window has open.
    */
   | { type: 'teammates' }
+  /**
+   * The update check has something new to say: it ran, it finished, or the
+   * preference changed.
+   *
+   * On this stream rather than on one of its own because the check is started
+   * from places the window cannot see — a timer half a minute after launch, and
+   * the macOS app menu, which lives in the main process — and this is already
+   * the channel by which a window hears about work it did not do. Like every
+   * other event here it names no detail: the client re-reads `update.state`.
+   */
+  | { type: 'updates' }
   | { type: 'layout'; worktreeId: string }
   | { type: 'terminalExited'; terminalId: string; exitCode: number }
 

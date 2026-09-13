@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { MenuItemConstructorOptions } from 'electron'
 import { applicationMenuTemplate } from './appMenu'
 
@@ -68,6 +68,41 @@ describe('the application menu', () => {
     expect(template[0]?.label).toBe('&File')
     expect(roles(submenuOf(template, '&File'))).toEqual(['quit'])
     expect(roles(submenuOf(template, '&Window'))).toEqual(['minimize', 'zoom'])
+  })
+
+  // Where a Mac user looks for it, which is the only reason it is in a menu at
+  // all: the palette already has the same command, and the menu is what
+  // somebody who has never opened the palette will find.
+  it('puts Check for Updates under About, above Services', () => {
+    const checkForUpdates = vi.fn()
+    const template = applicationMenuTemplate({ platform: 'darwin', checkForUpdates })
+    const appMenu = Array.isArray(template[0]?.submenu) ? template[0].submenu : []
+    const labels = appMenu.map((item) => item.label ?? item.role ?? item.type)
+
+    expect(labels.indexOf('Check for Updates…')).toBe(2)
+    expect(labels.indexOf('Check for Updates…')).toBeLessThan(labels.indexOf('services'))
+    // No accelerator here either: this item has no platform binding to claim,
+    // and one invented for it would be one taken from the renderer.
+    expect(appMenu.find((item) => item.label === 'Check for Updates…')?.accelerator).toBeUndefined()
+  })
+
+  it('runs the check when it is chosen', () => {
+    const checkForUpdates = vi.fn()
+    const template = applicationMenuTemplate({ platform: 'darwin', checkForUpdates })
+    const appMenu = Array.isArray(template[0]?.submenu) ? template[0].submenu : []
+    const item = appMenu.find((entry) => entry.label === 'Check for Updates…')
+
+    item?.click?.(undefined as never, undefined, undefined as never)
+    expect(checkForUpdates).toHaveBeenCalledTimes(1)
+  })
+
+  // A menu item that does nothing is worse than one that is absent, and a
+  // runtime that cannot check — a harness, a build with the check off — hands
+  // nothing over.
+  it('leaves the item out when there is nothing behind it', () => {
+    const appMenu = applicationMenuTemplate({ platform: 'darwin' })[0]?.submenu
+    const labels = (Array.isArray(appMenu) ? appMenu : []).map((item) => item.label)
+    expect(labels).not.toContain('Check for Updates…')
   })
 
   // Cmd+R reloads the renderer and takes every pane view, the palette and the
