@@ -132,6 +132,8 @@ describe('dispatcher', () => {
       // agreement and the write log never leaves this machine.
       'teamwork.mute',
       'teamwork.presence',
+      'teamwork.relay',
+      'teamwork.setRelay',
       'teamwork.status',
       // Local, not peer-reachable. `teamwork.watch` and `teamwork.type` are
       // this machine asking to read and to type into somebody else's pane; what

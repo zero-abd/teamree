@@ -24,7 +24,7 @@
 import { dirname } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
 import { GitService, registerGitHandlers } from '../../git'
-import { registerTeamworkHandlers, TeamworkService } from '../../teamwork'
+import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import type { TerminalService } from '../../terminals/method-handlers'
@@ -45,6 +45,11 @@ export type RegisteredAreas = {
   git: GitService
   /** Filesystem watches behind live git status. Released when the app quits. */
   worktreeFiles: { close: () => void }
+  /**
+   * Filesystem watches on each project's `.teamree`, which is what makes a
+   * teammate's key arriving in a pull reach the app without a restart.
+   */
+  teamworkFiles: { close: () => void }
   /**
    * Outbound relay connections, one per teammate. Started after the dispatcher
    * exists, because a peer that reached a half-built registry would be told a
@@ -104,14 +109,27 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   // the runtime context, but the store's path is exactly it plus a file name,
   // and the store is already the authority on where this app keeps things.
   const dataDir = dirname(registry.context.store.filePath)
+
+  // `.teamree` lives in the primary checkout, and a pull that brings in a
+  // teammate's key or the team's relay is nobody's method call. Without this
+  // both machines sit on the roster they read before the pull, and the runbook
+  // had to tell people to quit the app and open it again.
+  const teamworkWatcher = new TeamreeWatcher({
+    onChange: () => workspaceEvents.emit({ type: 'members' }),
+    onDegraded: (event) => console.warn(`[teamwork] ${degradedTeamreeWatchReport(event)}`)
+  })
+  teamworkWatcher.sync(registry.context.store.listProjects())
+
   registerTeamworkHandlers(
     registry,
     new TeamworkService({
       store: registry.context.store,
       dataDir,
-      // Joining writes a file that no watcher covers — `.teamree/members` lives
-      // in the primary checkout, which nothing here watches — so the service is
-      // the only thing that can say the roster moved.
+      // So a roster read can say whether it will stay true by itself, rather
+      // than letting a list nothing is following look as live as one that is.
+      watching: (projectId) => teamworkWatcher.watches(projectId),
+      // Writing a member file or a relay is this app's own change to `.teamree`,
+      // and the watch above can be degraded, so the service says so itself.
       onRosterChange: () => workspaceEvents.emit({ type: 'members' })
     })
   )
@@ -143,9 +161,11 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
     // link changing phase cost every peer a fresh snapshot of a workspace that
     // did not move.
     if (event.type === 'teammates') return
+    // A project added or removed changes which checkouts are watched.
+    if (event.type === 'projects') teamworkWatcher.sync(registry.context.store.listProjects())
     if (event.type === 'projects' || event.type === 'members') void peers.reconcile().catch(() => {})
     peers.notifyWorkspaceChanged()
   })
 
-  return { terminals, git, worktreeFiles, peers }
+  return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers }
 }

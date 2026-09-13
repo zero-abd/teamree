@@ -83,6 +83,37 @@ export const RECONNECT_FLOOR_MS = 1_000
 export const HEALTHY_SESSION_MS = KEEPALIVE_MS
 
 /**
+ * How many hourly rendezvous rotations a link waits through before it says more
+ * than "not connected".
+ *
+ * Two, because one proves nothing: a link started at any point in an hour
+ * crosses its first boundary after anywhere from a second to an hour, and a
+ * colleague making a coffee covers that. Two rotations is between one and two
+ * hours of nobody arriving at an address only these two machines can compute,
+ * which is long enough that the ordinary explanations are used up.
+ */
+export const WAITING_EPOCHS_BEFORE_DIAGNOSIS = 2
+
+/** What waiting means before anything is odd about it. */
+export const WAITING_DETAIL = 'your teammate’s machine is not connected'
+
+/**
+ * What the client can honestly say when nobody has arrived for that long.
+ *
+ * A clock far enough out to straddle the hourly boundary and a teammate
+ * pointing at a different relay both present as this, for ever, and the relay
+ * genuinely cannot help: it sees opaque tokens by design, and to it an
+ * unanswered rendezvous is indistinguishable from a rendezvous nobody else has
+ * ever computed. So this names what is known — nobody has answered here — and
+ * the two things that are checkable from this side, and diagnoses neither.
+ */
+export const WAITING_TOO_LONG_DETAIL =
+  'nobody has answered on this rendezvous across two hourly rotations, which is longer than a teammate ' +
+  'who is simply away. The relay cannot tell either of us why: it only ever sees opaque tokens. Two things ' +
+  'can be checked from here — that both machines agree about the time, because the rendezvous changes on ' +
+  'the hour and teamree will not pair across two of them, and that .teamree/relay names the same relay on both.'
+
+/**
  * How much of a stream is held while its own subscribe answer is still in
  * flight.
  *
@@ -211,6 +242,12 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   /** Scoped to one attempt: why this socket is about to end, when we ended it. */
   let refusedThisAttempt = false
   let rolledOverThisAttempt = false
+  /**
+   * Rotations waited through since anybody was last on the other end. Not per
+   * attempt: it is the whole point that it survives the reconnect each rollover
+   * causes, and it is cleared by somebody arriving rather than by time passing.
+   */
+  let rolloversWaiting = 0
   /** Scoped to one session: has anything from the far end ever decrypted? */
   let confirmed = false
   /** When that happened, so a session can be asked how long it lasted. */
@@ -551,7 +588,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       dial: options.dial,
       events: {
         onWaiting: () => {
-          moveTo('waiting', 'your teammate’s machine is not connected')
+          moveTo(
+            'waiting',
+            rolloversWaiting >= WAITING_EPOCHS_BEFORE_DIAGNOSIS ? WAITING_TOO_LONG_DETAIL : WAITING_DETAIL
+          )
           // A peer still parked when the hour turns re-registers under the new
           // token, which is what `relay/README.md` says a client does. Two
           // machines whose clocks straddle the boundary do not meet until the
@@ -562,6 +602,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
             () => {
               cancelEpochWatch = undefined
               rolledOverThisAttempt = true
+              // Counted here rather than where the next one is dialled: this is
+              // the only place that knows a whole rotation was spent parked on
+              // the relay with nobody arriving.
+              rolloversWaiting += 1
               connection?.close(1000, '')
             },
             Math.max(1, epochEndsAt(options.scheduler.now()) - options.scheduler.now())
@@ -570,6 +614,8 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
         onPaired: ({ initiator }) => {
           cancelEpochWatch?.()
           cancelEpochWatch = undefined
+          // Somebody answered here, so whatever the wait was, it was not this.
+          rolloversWaiting = 0
           runHandshake(initiator, token)
         },
         onBinary: (payload) => {
@@ -594,6 +640,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       if (running) return
       running = true
       backoffMs = BACKOFF_START_MS
+      rolloversWaiting = 0
       connect()
     },
     stop: () => {

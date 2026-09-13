@@ -163,3 +163,101 @@
   color: var(--fg-muted);
   font-size: var(--text-xs);
 }
+
+/* The other team-wide fact, in the same dialog and with the same bargain as a
+   key: the app writes the file and the user pushes it. */
+.members__relay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.members__relay-head {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.members__relay-current {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.members__relay-current code {
+  overflow: hidden;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+}
+
+/* A surprising URL needs a source, and this is where it says which of the two
+   places it came from. */
+.members__relay-source {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* Not configured is not broken: it is the ordinary state of a project nobody
+   has done this to yet. */
+.members__relay-none {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.members__relay-note {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.members__relay-note code {
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+}
+
+/* A refusal that carries the URL to type instead, kept beside the field it is
+   about rather than in a notice in the corner. */
+.members__relay-error {
+  color: var(--warning);
+  font-size: var(--text-xs);
+}
+
+.members__push {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.members__push code {
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+}
+
+.members__push-commands {
+  padding: var(--s3);
+  overflow-x: auto;
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* Said only when the roster is not being followed: a list that is true now and
+   a list that stays true read identically, and the difference matters. */
+.members__stale {
+  color: var(--warning);
+  font-size: var(--text-xs);
+}

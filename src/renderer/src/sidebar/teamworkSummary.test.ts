@@ -49,6 +49,25 @@ describe('what the project header says about teamwork', () => {
     expect(away).toMatchObject({ tone: 'pending', label: 'Nobody connected' })
   })
 
+  it('carries what a link that has waited too long has to say, under the same label', () => {
+    // "Nobody connected" is still the right label — nothing has established
+    // that anything is wrong — but a link that has waited across two hourly
+    // rotations knows more than the header alone can hold.
+    const summary = teamworkSummary(
+      status({
+        links: [
+          link({
+            handle: 'marcus',
+            phase: 'waiting',
+            detail: 'nobody has answered on this rendezvous across two hourly rotations'
+          })
+        ]
+      })
+    )
+    expect(summary).toMatchObject({ tone: 'pending', label: 'Nobody connected' })
+    expect(summary?.detail).toContain('marcus: nobody has answered on this rendezvous')
+  })
+
   it('puts a refused handshake above everything, because somebody was there', () => {
     const summary = teamworkSummary(
       status({
