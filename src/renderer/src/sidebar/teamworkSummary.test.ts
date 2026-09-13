@@ -13,7 +13,7 @@ function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
     projectId: 'p1',
     relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
     disabledReason: null,
-    origin: { ok: true },
+    origin: { ok: true, url: 'https://example.com/ada/pager.git' },
     enrolled: true,
     links: [],
     readAt: 0,

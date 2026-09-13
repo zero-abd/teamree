@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
 import { createTempRepo, type TempRepo } from './testRepository'
-import { parsePushStatus, pushRefusal, pushWorktree } from './worktreePush'
+import { parsePushStatus, pushFailureKind, pushRefusal, pushWorktree } from './worktreePush'
 
 describe('parsePushStatus', () => {
   const refspec = 'refs/heads/work:refs/heads/work'
@@ -53,10 +53,40 @@ describe('pushRefusal', () => {
     expect(message).toContain('origin has commits that main does not')
   })
 
-  it('says when the remote would not let this machine in', () => {
-    expect(pushRefusal('fatal: Authentication failed for https://example.invalid/x.git', 'origin', 'work')).toContain(
-      'Check that this machine can write to it'
+  // "Check that this machine can write to it" was a diagnosis wearing the
+  // clothes of a remedy. These are the failures a person is least able to work
+  // out for themselves — the app runs git with no terminal to prompt on, so a
+  // machine that would have asked for a password simply refuses — so each shape
+  // of refusal now names the command that fixes that shape.
+  it('says when the remote would not let this machine in, and what to do about it', () => {
+    const general = pushRefusal('fatal: Authentication failed for https://example.invalid/x.git', 'origin', 'work')
+    expect(general).toContain('fatal: Authentication failed')
+    expect(general).toContain('Check that this account has push access')
+
+    expect(
+      pushRefusal("fatal: could not read Username for 'https://x': terminal prompts disabled", 'origin', 'work')
+    ).toContain('credential.helper osxkeychain')
+
+    expect(pushRefusal('git@example.invalid: Permission denied (publickey).', 'origin', 'work')).toContain(
+      'ssh-add --apple-use-keychain'
     )
+  })
+
+  // ssh refusing to guess at a host it has never met is neither a credential
+  // nor a rejection, and the remedy is neither of theirs.
+  it('says when ssh has never accepted the host key, rather than blaming the account', () => {
+    const message = pushRefusal('Host key verification failed.', 'origin', 'work')
+    expect(message).toContain('never accepted the host key')
+    expect(message).not.toContain('push access')
+  })
+
+  // A string of git's is the right thing to show and the wrong thing to branch
+  // on, so the shape of the refusal is reported separately from its prose.
+  it('reports the shape of the refusal, for a caller that has to do more than print it', () => {
+    expect(pushFailureKind('', { flag: '!', summary: '[rejected] (non-fast-forward)' })).toBe('rejected')
+    expect(pushFailureKind('fatal: Authentication failed')).toBe('auth')
+    expect(pushFailureKind('Host key verification failed.')).toBe('host-key')
+    expect(pushFailureKind('fatal: the remote end hung up unexpectedly')).toBe('other')
   })
 
   it('drops git’s "To <url>" line, which is not the reason for anything', () => {

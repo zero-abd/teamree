@@ -70,7 +70,10 @@ it('reports an origin set after the last reconcile, without an unrelated event',
   // No restart, no roster change, no project added: the next read is the only
   // thing that happens.
   const after = await status(runtime)
-  expect(after.origin).toEqual({ ok: true })
+  // The URL comes back with the verdict, because the thing that names the
+  // repository to a teammate — the invitation on the setup page — has to be
+  // able to say what to clone rather than describe it.
+  expect(after.origin).toEqual({ ok: true, url: 'https://example.invalid/team/app.git' })
 })
 
 it('notices a remote removed as readily as one added', async () => {

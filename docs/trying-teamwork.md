@@ -70,6 +70,17 @@ does each thing first. Neither of you hosts anything for the other, and the
 roles have no meaning to the software — after setup you are two members of the
 same project with identical powers.
 
+**The app asks which of the two you are, and it is the first thing it asks.**
+Opening **Start teamwork** on a project nobody has set up leads with one
+question — *Start a team here* or *Join a team I was invited to* — and every step
+after it is worded for the answer. It is not a permission or a role stored
+anywhere; it is only which half of the work is left, so that the page can say
+"your teammate is waiting for exactly this file" instead of writing every
+sentence for both of you at once. The option the repository points at is marked
+with the reason — a `.teamree/relay` already in the checkout, a colleague's key
+already on the roster — and neither is chosen for you. If you pick the wrong
+one, **Not that** puts the question back.
+
 ## What you need
 
 - A Mac each, with teamree on it. `docs/install.md` covers installing a build,
@@ -255,8 +266,17 @@ disabled with a sentence when the build in front of you carries no relay
 project. teamree still runs no relay of its own: it runs a deploy to your team's
 own Cloudflare account, and nobody hosts one for you.
 
+**Joiner**: if you chose *Join a team* and `.teamree/relay` is not in your
+checkout yet, the step says so before it offers you anything — whoever set this
+up has not got that far, and pulling in a moment is the answer. Only stand one
+up yourself if the two of you have agreed that you are the one doing it. Two
+relays is two halves of a team that never meet, and it looks like nothing being
+wrong on either machine.
+
 If you already have a URL, paste it into **Or paste a relay URL** and press
-**Write relay file**. That writes `.teamree/relay` — the same file, with the
+**Write relay file**. Paste the whole message your teammate sent if that is what
+you have — the field takes the URL out of it, and a full stop on the end of a
+sentence does not count. That writes `.teamree/relay` — the same file, with the
 same comment header — and stops there, exactly as adding your key does. The
 panel then names both files it has written and the one commit that covers them,
 which is step 4's commit: you can do this step and the next one and push once.
@@ -348,6 +368,25 @@ words in full alongside one sentence about what to do: a rejected
 non-fast-forward, a branch with no upstream and a remote you cannot write to all
 read as themselves rather than as "push failed".
 
+**While it runs, it says what it is doing.** The push is the only part of this
+that crosses a network and it is the one that can take a while, so the step
+shows git's own progress line, how long it has been going, and — if git has said
+nothing for half a minute — that a push this quiet is usually waiting for a
+credential teamree cannot be asked for. **Stop** is beside the button the whole
+time, and stopping it leaves whatever was committed committed. Afterwards
+there is **Try the push again**, with the one thing to do first: `git pull
+--rebase` after a rejection, or fixing the credential, which is not something
+this window can do for you.
+
+**If a push waits on a credential, it now fails instead of hanging.** teamree
+runs git with no terminal to prompt on, and ssh is a separate program that would
+otherwise open `/dev/tty` for a passphrase or an unknown host key — behind the
+app's own window, where nobody can answer it. So the push runs ssh in batch
+mode: a machine with no key in the agent gets an immediate refusal naming
+`ssh-add --apple-use-keychain`, and an https remote with no stored credential
+gets one naming `credential.helper osxkeychain`, rather than ten minutes of
+nothing.
+
 The commands are still there, one disclosure down, if you would rather — so if
 you also set the relay in step 3, this one commit carries both:
 
@@ -394,6 +433,24 @@ Both handles, or you are not done. If your own key is missing after a pull, you
 never pushed it. If your teammate's is missing, they never pushed theirs — and
 no message on your machine will ever say so, because your machine has no way to
 know they meant to.
+
+### What to send the other person
+
+At the bottom of **Start teamwork** is the state this ended in, as four separate
+verdicts rather than one: your key, the relay, the push, and whether anything is
+connected. They are separate because half-working is the ordinary outcome — the
+commit lands and the push is refused, or everything on this machine is done and
+the other person has not opened the app — and one tick would have to be wrong
+about one of those halves. The push is marked *teamree cannot check this* unless
+teamree made it, because it cannot see a commit you made in a terminal.
+
+Under that is **Invite somebody**: the message to send, written out in full with
+a button that copies it. There is no invitation in this protocol — nothing is
+sent anywhere, and push access is the whole of membership — which is exactly why
+one has to be written by hand: you are explaining a system with no invitations
+to somebody who is expecting one. It names the repository to clone, all four
+steps including the push people forget, and what a key in the roster grants,
+because the person receiving it is the one taking that on.
 
 ## 5. Both open the project
 

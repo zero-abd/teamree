@@ -189,7 +189,7 @@ describe('a project header', () => {
       projectId: 'p1',
       relay: null,
       disabledReason: 'no .teamree/relay in this project',
-      origin: { ok: true },
+      origin: { ok: true, url: 'https://example.com/ada/pager.git' },
       enrolled: false,
       links: [],
       readAt: NOW

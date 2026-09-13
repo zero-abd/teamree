@@ -139,15 +139,21 @@ describe('dispatcher', () => {
       'project.list',
       'project.remove',
       'status.get',
+      // Stops a push this machine started, so it is local for exactly the
+      // reason the push is: a teammate has no business halting a commit on
+      // somebody else's laptop.
+      'teamwork.cancelPublish',
       // Local, not peer-reachable, and the owner's own: a mute needs nobody's
       // agreement and the write log never leaves this machine.
       'teamwork.mute',
       'teamwork.presence',
-      // Local, and emphatically not peer-reachable: these three write to the
+      // Local, and emphatically not peer-reachable: these write to the
       // repository this machine owns — a remote, a commit, a push — and the
-      // peer allow-list admits none of them.
+      // peer allow-list admits none of them. `publishProgress` only reads, and
+      // what it reads is what that push is doing right now.
       'teamwork.publish',
       'teamwork.publishPlan',
+      'teamwork.publishProgress',
       'teamwork.relay',
       'teamwork.setOrigin',
       'teamwork.setRelay',

@@ -21,6 +21,7 @@ import type {
   TeamworkOrigin,
   TeamworkPublish,
   TeamworkPublishPlan,
+  TeamworkPublishProgress,
   TeamworkStatus,
   Terminal,
   UpdateState,
@@ -288,6 +289,24 @@ export const Params = {
     /** Overrides the message the plan proposed. */
     message: z.string().min(1).optional()
   }),
+  /**
+   * What the publish that is running is doing, while it is still doing it.
+   *
+   * `teamwork.publish` does not answer until the push is over, which for the
+   * one call here that crosses a network can be minutes — so without a second
+   * question to ask, a window has nothing to show between the button and the
+   * result. This is that question: the phase, what git has printed, when it
+   * started and when it last said anything.
+   */
+  teamworkPublishProgress: z.object({ projectId: z.string().min(1) }),
+  /**
+   * Stops the publish that is running.
+   *
+   * A way out is not a nicety on a call that can wait ten minutes on a
+   * credential nothing can supply. Whatever was committed stays committed;
+   * `teamwork.publish` reports it.
+   */
+  teamworkCancelPublish: z.object({ projectId: z.string().min(1) }),
 
   /**
    * Whether teamwork is running for a project, and how each link is going.
@@ -505,6 +524,16 @@ export type MethodContract = {
   'teamwork.setOrigin': { params: z.infer<typeof Params.teamworkSetOrigin>; result: TeamworkOrigin }
   'teamwork.publishPlan': { params: z.infer<typeof Params.teamworkPublishPlan>; result: TeamworkPublishPlan }
   'teamwork.publish': { params: z.infer<typeof Params.teamworkPublish>; result: TeamworkPublish }
+  'teamwork.publishProgress': {
+    params: z.infer<typeof Params.teamworkPublishProgress>
+    /** Null when this project has never had a publish in this run of the app. */
+    result: TeamworkPublishProgress | null
+  }
+  'teamwork.cancelPublish': {
+    params: z.infer<typeof Params.teamworkCancelPublish>
+    /** False when there was nothing running to stop. */
+    result: { cancelled: boolean }
+  }
   'teamwork.status': { params: z.infer<typeof Params.teamworkStatus>; result: TeamworkStatus }
   'teamwork.presence': { params: z.infer<typeof Params.teamworkPresence>; result: TeammatePresence }
   'teamwork.watch': {

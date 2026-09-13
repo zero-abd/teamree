@@ -821,3 +821,306 @@
   color: var(--fg-secondary);
   line-height: 1.55;
 }
+
+/* The question that used to be missing: which end of a two-sided thing you are
+   on. It gets the whole column before anything else, because a page written
+   for both answers at once is the page the feedback was about. */
+.path-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+}
+
+.path-choice__head {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.path-choice__lead {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.path-choice__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin-top: var(--s2);
+  list-style: none;
+}
+
+.path-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  align-items: flex-start;
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+
+/* Marked, never taken. The repository is very good evidence about which of
+   these is happening and still only evidence. */
+.path-option--suggested {
+  border-color: var(--accent-line);
+  background: var(--bg-raised);
+}
+
+.path-option__because {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.path-option__what,
+.path-option__them {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+/* The answer, kept where it can be seen and undone: people pick the wrong one. */
+.chosen-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  font-size: var(--text-sm);
+}
+
+.chosen-path__line {
+  flex: 1 1 20rem;
+  color: var(--fg);
+  line-height: 1.55;
+}
+
+.chosen-path__label {
+  color: var(--fg-muted);
+}
+
+.chosen-path__them {
+  color: var(--fg-secondary);
+}
+
+/* Why this step is here, and what the far end sees while it is not done. The
+   second is the sentence that stops two people waiting for each other. */
+.step__why {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.step__other-side {
+  padding: var(--s2);
+  border-left: 2px solid var(--accent-line);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.step__other-side-label {
+  margin-right: var(--s1);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Only a joiner sees this, and only when the relay they were promised is not
+   here yet: two relays is two halves of a team that never meet. */
+.relay-waiting {
+  padding: var(--s2);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.push__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+}
+
+/* The push, while it is happening. This whole block exists because it used to
+   say "Pushing…" and nothing else for up to ten minutes. */
+.push__progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s2);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+}
+
+.push__progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s2);
+  color: var(--fg);
+  font-size: var(--text-xs);
+}
+
+.push__progress-doing {
+  font-weight: 600;
+}
+
+/* The counter. Tabular figures so the seconds do not shuffle the line sideways
+   twice a second. */
+.push__progress-elapsed {
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.push__progress-line {
+  overflow-x: auto;
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+}
+
+.push__progress-line--quiet {
+  color: var(--fg-muted);
+  font-family: inherit;
+}
+
+/* git having gone quiet for long enough that "still working" is no longer the
+   likeliest explanation. */
+.push__stalled {
+  color: var(--warning);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.push__retry-hint {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+/* Whether it worked, and when it half worked, which half. */
+.outcome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+}
+
+.outcome--done {
+  border-color: var(--success);
+}
+
+.outcome__head {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.outcome__facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  list-style: none;
+}
+
+.outcome__fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2);
+  font-size: var(--text-sm);
+}
+
+.outcome__mark {
+  flex: none;
+  width: 14px;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+.outcome__fact--yes .outcome__mark,
+.outcome__fact--yes .outcome__state {
+  color: var(--success);
+}
+
+.outcome__fact--no .outcome__state {
+  color: var(--warning);
+}
+
+.outcome__label {
+  min-width: 6rem;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.outcome__state {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.outcome__detail {
+  flex-basis: 100%;
+  padding-left: calc(14px + var(--s2));
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.outcome__next {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+/* The message to send a teammate, shown in full rather than hidden behind the
+   button that copies it: it goes out under this person's name. */
+.invite {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+
+.invite__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.invite__title {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.invite__text {
+  max-height: 18rem;
+  padding: var(--s2);
+  overflow: auto;
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}

@@ -9,16 +9,19 @@
 // about whichever worktree happens to be open, which is exactly the kind of
 // question that should not be framed by that worktree's tab.
 //
-// Nothing about the steps themselves changed. `TeamworkSteps` is the same
-// component under the same props, and `startTeamwork.ts` is the same reading of
-// the same three runtime answers. This is presentation, and it says so by
-// owning nothing but the chrome, the three reads on open, and the way out.
+// What the steps say is still entirely `TeamworkSteps`'s business, and what
+// they mean is still `startTeamwork.ts`'s. This owns the chrome, the reads, and
+// the way out — plus the three things that are genuinely about *this* window
+// rather than about the flow: which of the two jobs this visit is (state of a
+// visit, not of a project), the clock the push's elapsed time is measured
+// against, and the clipboard.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalView } from '../terminal/TerminalView'
 import { TeamworkSteps } from './TeamworkSteps'
+import type { TeamworkPath } from './startTeamwork'
 
 /**
  * How often the deploy pane is read for the URL it printed.
@@ -32,6 +35,53 @@ const DEPLOY_POLL_MS = 1_500
 
 /** Enough of the tail to hold the endpoint the deploy prints at the very end. */
 const DEPLOY_TAIL_BYTES = 32_768
+
+/**
+ * How often a running push is asked what it is doing.
+ *
+ * Twice a second, which is what makes an elapsed counter read as a counter
+ * rather than as a number that occasionally changes — and it is also the tick
+ * that moves that counter at all, since the whole view re-renders on the answer
+ * and the clock is read then. It costs one map lookup in the main process and
+ * runs only while a push is in flight.
+ */
+const PUBLISH_POLL_MS = 500
+
+/**
+ * Puts text on the clipboard, by whichever of the two ways is available.
+ *
+ * The async clipboard API needs a secure context, and a renderer loaded from a
+ * file URL in a packaged build is not reliably one — so the old selection-based
+ * copy is kept as the fallback rather than as a relic. There is nothing to
+ * report back: a copy that fails both ways leaves the text on screen, which is
+ * where it already was, and the invitation is rendered in full for exactly that
+ * reason.
+ */
+function copyToClipboard(text: string): void {
+  const async = navigator.clipboard?.writeText(text)
+  if (async !== undefined) {
+    void async.catch(() => selectAndCopy(text))
+    return
+  }
+  selectAndCopy(text)
+}
+
+function selectAndCopy(text: string): void {
+  const field = document.createElement('textarea')
+  field.value = text
+  // Off-screen rather than hidden: a `display: none` element cannot be selected,
+  // which is the whole mechanism this depends on.
+  field.style.position = 'fixed'
+  field.style.left = '-9999px'
+  document.body.append(field)
+  field.select()
+  try {
+    document.execCommand('copy')
+  } catch {
+    // Nothing to do and nothing to say. The text is on screen either way.
+  }
+  field.remove()
+}
 
 export function TeamworkView({ projectId }: { projectId: string }): React.JSX.Element {
   const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === projectId))
@@ -63,6 +113,9 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   const publishResult = useWorkspaceStore((state) => state.publishResults[projectId])
   const loadPublishPlan = useWorkspaceStore((state) => state.loadPublishPlan)
   const publishTeamwork = useWorkspaceStore((state) => state.publishTeamwork)
+  const publishProgress = useWorkspaceStore((state) => state.publishProgress[projectId])
+  const loadPublishProgress = useWorkspaceStore((state) => state.loadPublishProgress)
+  const cancelPublish = useWorkspaceStore((state) => state.cancelPublish)
   const deployRunning = useWorkspaceStore((state) =>
     deploy === undefined ? false : (state.terminals[deploy.terminalId]?.running ?? false)
   )
@@ -92,6 +145,34 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   useEffect(() => {
     void loadPublishPlan(projectId)
   }, [enrolled, loadPublishPlan, projectId, relayOnDisk, selfFile])
+
+  // What the push is doing, asked for only while one is running.
+  //
+  // This is the whole of the fix for "it gets stuck at git push" on this side
+  // of the wire: `teamwork.publish` does not answer until the push is over, so
+  // the only way to say anything in between is to ask a second question. It is
+  // a poll rather than a subscription for the same reason the deploy pane below
+  // is polled — the thing being watched lives for seconds, and a subscription
+  // to set up and tear down for it would be more machinery than the question
+  // deserves. `now` moves with it, so the elapsed time on screen is this
+  // render's clock rather than the one from whenever the panel last happened to
+  // redraw.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!publishPending) return
+    let alive = true
+    const tick = (): void => {
+      if (!alive) return
+      setNow(Date.now())
+      void loadPublishProgress(projectId)
+    }
+    tick()
+    const timer = setInterval(tick, PUBLISH_POLL_MS)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [loadPublishProgress, projectId, publishPending])
 
   // What the deploy pane has printed, asked for while one is on screen and
   // never otherwise. The endpoint is the last thing the command says and there
@@ -165,6 +246,12 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
 
   const name = project?.name ?? 'this repository'
 
+  // Which of the two jobs this is, kept here and not in the store: it is a
+  // statement about this visit rather than about the project, and a project
+  // that remembered "I am joining" would go on saying it to whoever opened the
+  // panel next, including the person who set the team up.
+  const [path, setPath] = useState<TeamworkPath | null>(null)
+
   return (
     <main className="workspace teamwork-view" aria-label={`Set up teamwork in ${name}`} tabIndex={-1} ref={region}>
       <header className="teamwork-view__head">
@@ -211,9 +298,16 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
               plan: publishPlan,
               pending: publishPending,
               error: publishError,
-              result: publishResult
+              result: publishResult,
+              progress: publishProgress
             }}
             onPublish={() => void publishTeamwork(projectId)}
+            onCancelPublish={() => void cancelPublish(projectId)}
+            now={now}
+            path={path}
+            onChoosePath={setPath}
+            projectName={name}
+            onCopy={copyToClipboard}
           />
         </div>
       </div>

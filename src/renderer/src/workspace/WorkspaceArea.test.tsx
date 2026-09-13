@@ -94,7 +94,7 @@ const teamworkUp = (overrides: Partial<TeamworkStatus> = {}): Record<string, Tea
     projectId: 'p1',
     relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
     disabledReason: null,
-    origin: { ok: true },
+    origin: { ok: true, url: 'https://example.com/ada/pager.git' },
     enrolled: true,
     links: [{ publicKey: 'k', handle: 'bo', phase: 'connected', since: 0, attempts: 1 }],
     readAt: 0,

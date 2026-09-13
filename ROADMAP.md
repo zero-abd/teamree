@@ -317,8 +317,10 @@ recorded so none of them is discovered by surprise later.
 - **A repository shared over a filesystem path cannot take part.** What makes
   two checkouts the same project is a hash of the normalised `origin` remote,
   and a path is not a URL — `file://localhost/...` loses its host to the URL
-  parser. The app says so plainly rather than matching nothing quietly, but a
-  team whose remote is a shared directory will get no further than that message.
+  parser. The message now names the path it read and says that a repository
+  shared over one cannot take part, at the top of **Start teamwork** rather than
+  at the end of the flow, so a team whose remote is a shared directory learns it
+  before they spend an afternoon — but learning it is still as far as they get.
 - **A restarted shell is a fresh shell.** Panes and their directories come back, and
   an agent pane comes back with its conversation (see M10), but an ordinary pane's
   scrollback and whatever it was running are gone: the PTY died with the app. A

@@ -60,7 +60,35 @@ describe('the key itself', () => {
 describe('reading it out of a checkout', () => {
   it('takes origin, because the remote several people push to is the project', async () => {
     const result = await readProjectKey(fixedRemoteRunner('git@github.com:team/repo.git'), '/anywhere')
-    expect(result).toEqual({ ok: true, key: projectKeyFor('github.com/team/repo') })
+    // The raw URL travels with the key: hashing it is what matching needs, and
+    // naming it is what an invitation to a teammate needs.
+    expect(result).toEqual({
+      ok: true,
+      key: projectKeyFor('github.com/team/repo'),
+      url: 'git@github.com:team/repo.git'
+    })
+  })
+
+  // A repository on a file server or a shared volume is a perfectly good git
+  // remote, is how plenty of teams already work, and can never take part here.
+  // "Not a URL teamree can compare" is true and tells that team nothing: the
+  // sentence has to name their own path and say why it is the wrong kind of
+  // thing, or they find out by spending an afternoon on the other four steps.
+  it('names a filesystem remote as the reason, rather than calling it an unreadable URL', async () => {
+    for (const remote of ['/Volumes/team/app.git', '~/shared/app.git', 'file:///Volumes/team/app.git', '../app.git']) {
+      const result = await readProjectKey(fixedRemoteRunner(remote), '/anywhere')
+      expect(result.ok).toBe(false)
+      if (result.ok) continue
+      expect(result.reason, remote).toContain(remote)
+      expect(result.reason, remote).toContain('filesystem path')
+      expect(result.reason, remote).toContain('cannot take part')
+    }
+  })
+
+  it('still says only that it cannot compare a remote that is neither a path nor a URL', async () => {
+    const result = await readProjectKey(fixedRemoteRunner('just-a-word'), '/anywhere')
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.reason).toContain('not a URL teamree can compare')
   })
 
   it('says a project with no origin cannot be matched, rather than matching it to nothing', async () => {
