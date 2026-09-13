@@ -72,6 +72,31 @@ export type TeamreeWatchDegraded = {
   error: unknown
 }
 
+/**
+ * The direct child of the watched directory that an event names.
+ *
+ * Not the same thing as the reported name, and the difference is a platform
+ * one that cost a CI failure. Linux's inotify reports only the direct child,
+ * so `.teamree` arrives as `.teamree`. macOS has no non-recursive watch to
+ * give: `fs.watch` is backed by FSEvents, which is recursive by nature, and
+ * libuv reports the path *relative to the watched directory* — so the same
+ * event arrives as `.teamree/members/bo.pub`.
+ *
+ * Comparing the whole string therefore worked on the platform this was written
+ * on and silently failed on the only platform this ships to, in the case that
+ * matters most: a project whose `.teamree` arrives in somebody else's commit
+ * is watched at its root and nowhere else, so the root's filter is the only
+ * thing that can notice it at all. Rejecting the event leaves the app holding
+ * the roster from before the pull with nothing on screen to say so — which is
+ * the exact failure this file exists to remove.
+ */
+function firstSegment(relative: string): string {
+  // Both separators, because the reported path is the platform's own and this
+  // comparison should not be a second thing that only holds on one of them.
+  const cut = relative.search(/[\\/]/)
+  return cut === -1 ? relative : relative.slice(0, cut)
+}
+
 /** What a lost watch means, in terms somebody could act on. */
 export function degradedTeamreeWatchReport(event: TeamreeWatchDegraded): string {
   const code = (event.error as NodeJS.ErrnoException | null)?.code
@@ -191,7 +216,7 @@ export class TeamreeWatcher {
     // writes and an agent works, and a report per file written there would cost
     // a roster read for every one of them.
     this.#attachOne(watched, projectId, projectPath, {
-      interesting: (relative) => relative === null || relative === TEAMREE_DIR,
+      interesting: (relative) => relative === null || firstSegment(relative) === TEAMREE_DIR,
       // The checkout itself is the one directory that has to be there: it is
       // what notices `.teamree` appearing, so a project whose path has gone is
       // a project nothing can be heard about.

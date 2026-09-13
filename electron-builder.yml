@@ -92,6 +92,23 @@ mac:
   target:
     - target: dmg
       arch: [universal]
+  # node-pty's prebuilt binaries are the one thing in this app that is
+  # deliberately *not* merged into a fat binary, and this names them so the
+  # merge lets them through.
+  #
+  # Each architecture's slice carries both of them — see scripts/afterpack.mjs
+  # for why: `node-gyp-build` resolves `prebuilds/darwin-<arch>` from
+  # `process.arch` at run time, so a universal app needs both present under
+  # their own names. That makes each file byte-identical in the two slices, and
+  # an identical single-architecture Mach-O is exactly what the merger refuses
+  # by default, because it is usually a mistake: a binary that will not run on
+  # half the machines the artifact claims. Here it is intentional, and this is
+  # how that is said.
+  #
+  # The option is named for x64 and is not limited to it; it governs any Mach-O
+  # the two slices agree on. Everything it does not match — the Electron
+  # framework, the helpers — is still lipo'd into one binary as it should be.
+  x64ArchFiles: '**/node-pty/prebuilds/**'
   # Ad-hoc signature. Apple Silicon refuses to launch a Mach-O binary with no
   # signature at all, and electron-builder invalidates the one Electron ships as
   # soon as it rewrites the bundle — so an unsigned build still has to be

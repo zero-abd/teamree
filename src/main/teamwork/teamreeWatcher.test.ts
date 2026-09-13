@@ -158,6 +158,48 @@ describe('the watch set', () => {
     expect(reports).toBe(1)
   })
 
+  it('hears .teamree arriving even when the platform names the file inside it', () => {
+    // The two platforms do not report the same string, and the difference is
+    // invisible on the one this was written on. Linux's inotify names the
+    // direct child, so `.teamree` appearing arrives as `.teamree`. macOS has no
+    // non-recursive watch to offer: `fs.watch` is FSEvents underneath, which is
+    // recursive by nature, and the event arrives as the path relative to the
+    // watched directory — `.teamree/members/bo.pub`.
+    //
+    // Matching the whole string therefore passed here and failed on the only
+    // platform this ships to, in the case that matters most. A project whose
+    // `.teamree` arrives in somebody else's commit has a watch on its checkout
+    // root and nowhere else, because the other two directories do not exist
+    // yet — so this filter is the only thing that can notice teamwork being set
+    // up at all, and rejecting the event leaves the app on the roster from
+    // before the pull with nothing on screen to say so.
+    const fake = fakeWatches()
+    let reports = 0
+    const watcher = new TeamreeWatcher({
+      onChange: () => {
+        reports += 1
+      },
+      watch: fake.watch,
+      schedule: (task) => {
+        task()
+        return () => {}
+      }
+    })
+    watcher.sync([{ id: 'p1', path: '/repo' }])
+
+    // Spelled with a literal separator rather than `join`, because this is the
+    // string macOS hands over and not a path this code is constructing.
+    fake.fire('/repo', '.teamree/members/bo.pub')
+    expect(reports).toBe(1)
+
+    // And the reason the filter exists is intact: a build writing into the
+    // checkout still costs nothing.
+    fake.fire('/repo', 'node_modules/.vite/deps/chunk.js')
+    expect(reports).toBe(1)
+
+    watcher.close()
+  })
+
   it('ignores everything in the checkout that is not .teamree', () => {
     const fake = fakeWatches()
     let reports = 0
