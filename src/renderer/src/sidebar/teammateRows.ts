@@ -20,6 +20,9 @@ import { activityOf, paneLabel, worktreeActivity, type AgentActivity, type Agent
 export type TeammatePaneRow = AgentRow & {
   /** Whose pane it is, so a row is never ambiguous about that. */
   handle: string
+  /** The owner's pty size, for a watcher to letterbox to. */
+  cols: number | undefined
+  rows: number | undefined
 }
 
 export type TeammateWorktreeRowModel = {
@@ -40,10 +43,21 @@ export type TeammateWorktreeRowModel = {
  * `now` is this machine's clock and `heardAt` is a stamp it made itself, so
  * nothing here trusts a timestamp from the other end.
  */
-export function teammateRows(worktrees: readonly TeammateWorktree[], now: number): TeammateWorktreeRowModel[] {
+export function teammateRows(
+  worktrees: readonly TeammateWorktree[],
+  now: number,
+  /**
+   * The last line each watched pane has said, keyed by the namespaced pane id.
+   *
+   * Only panes somebody has open have one, and that is the point: a teammate's
+   * pane does not stream until it is opened, so a row that quoted one nobody is
+   * watching would be quoting something this machine has never been sent.
+   */
+  evidence: Readonly<Record<string, string | null>> = {}
+): TeammateWorktreeRowModel[] {
   return worktrees.map((worktree) => {
     const heardAgoMs = Math.max(0, now - worktree.heardAt)
-    const panes = worktree.panes.map((pane) => paneRow(pane, worktree.handle, heardAgoMs))
+    const panes = worktree.panes.map((pane) => paneRow(pane, worktree.handle, heardAgoMs, evidence[pane.id] ?? null))
     return {
       id: worktree.id,
       handle: worktree.handle,
@@ -57,7 +71,7 @@ export function teammateRows(worktrees: readonly TeammateWorktree[], now: number
   })
 }
 
-function paneRow(pane: PeerPane, handle: string, heardAgoMs: number): TeammatePaneRow {
+function paneRow(pane: PeerPane, handle: string, heardAgoMs: number, evidence: string | null): TeammatePaneRow {
   return {
     terminalId: pane.id,
     agent: pane.agent,
@@ -67,11 +81,12 @@ function paneRow(pane: PeerPane, handle: string, heardAgoMs: number): TeammatePa
     // the two is the only arithmetic that does not involve believing somebody
     // else's clock.
     quietFor: pane.quietForMs + heardAgoMs,
-    // Milestone C is what makes this anything but null. A teammate's pane does
-    // not stream, so there is no line it has printed to quote — and quoting an
-    // empty one would read as an answer.
-    evidence: null,
-    handle
+    // Null until somebody opens the pane, because until then no byte of it has
+    // crossed the wire and a quotation would be an invention.
+    evidence,
+    handle,
+    cols: pane.cols,
+    rows: pane.rows
   }
 }
 

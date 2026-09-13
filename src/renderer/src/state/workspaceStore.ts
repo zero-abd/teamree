@@ -8,6 +8,7 @@ import type {
   Layout,
   MemberList,
   PaneNode,
+  PaneWatchers,
   Project,
   TeammatePresence,
   TeamworkStatus,
@@ -121,6 +122,13 @@ type WorkspaceState = {
   teamwork: Record<string, TeamworkStatus>
   /** What each project's teammates are showing, by project id. */
   teammates: Record<string, TeammatePresence>
+  /**
+   * Who is reading this machine's panes, by project id.
+   *
+   * Read on the same invalidation the rest of teamwork is, because it changes
+   * for the same reason: somebody's link moved, or somebody opened a pane.
+   */
+  watchers: Record<string, PaneWatchers>
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
   /** True once the probe has answered, however it answered. Until then an
@@ -470,18 +478,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       projectIds.map((projectId) =>
         Promise.all([
           runtimeClient.call('teamwork.status', { projectId }).catch(() => null),
-          runtimeClient.call('teamwork.presence', { projectId }).catch(() => null)
+          runtimeClient.call('teamwork.presence', { projectId }).catch(() => null),
+          runtimeClient.call('teamwork.watchers', { projectId }).catch(() => null)
         ])
       )
     )
     set((state) => {
       const teamwork = { ...state.teamwork }
       const teammates = { ...state.teammates }
-      for (const [status, presence] of answers) {
+      const watchers = { ...state.watchers }
+      for (const [status, presence, reading] of answers) {
         if (status) teamwork[status.projectId] = status
         if (presence) teammates[presence.projectId] = presence
+        if (reading) watchers[reading.projectId] = reading
       }
-      return { teamwork, teammates }
+      return { teamwork, teammates, watchers }
     })
   }
 
@@ -539,6 +550,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     membersPending: false,
     teamwork: {},
     teammates: {},
+    watchers: {},
     changesOpen: false,
     changes: {},
     logs: {},

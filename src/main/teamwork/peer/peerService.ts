@@ -28,13 +28,17 @@
 // repository exists can compute one.
 
 import type {
+  PaneWatcher,
+  PaneWatchers,
   PeerLink as PeerLinkStatus,
+  PeerPane,
   PeerPresence,
   Project,
   TeammatePresence,
   TeammateWorktree,
   TeamworkStatus,
   Terminal,
+  WatchedPane,
   Worktree
 } from '../../../shared/entities'
 import type { ParamsOf } from '../../../shared/methods'
@@ -42,8 +46,10 @@ import { createGitRunner, type GitRunner } from '../../git/gitProcess'
 import type { Dispatcher } from '../../runtime/dispatcher'
 import type { SubscriptionChannel, SubscriptionHub } from '../../runtime/subscriptionHub'
 import { notFound } from '../../runtime/runtimeError'
+import { badPaneId } from '../errors'
 import { loadIdentity, loadStaticPrivateKey } from '../identity'
 import { readRoster } from '../roster'
+import { watchPane } from './paneWatch'
 import { createPeerLink, type LinkScheduler, type PeerLink } from './peerLink'
 import { presenceFor, type PresenceProject, type PresenceSource } from './presence'
 import { readProjectKey } from './projectKey'
@@ -126,6 +132,22 @@ export class PeerService {
    */
   readonly #heard = new Map<string, { publicKey: string; presence: PeerPresence; heardAt: number }>()
   readonly #subscribers = new Map<string, SubscriptionChannel>()
+  /**
+   * Which of this machine's panes each link's teammate has open, and since
+   * when.
+   *
+   * Keyed by the link, so the answer is per teammate per project and a watcher
+   * on one repository is never reported on another's row.
+   */
+  readonly #watchers = new Map<string, Map<string, number>>()
+  /**
+   * Panes *this* machine is reading, by the link they are read over.
+   *
+   * Kept so a link going down can say so. A stream that simply stopped would
+   * leave a reader looking at a window that no longer updates, which reads as a
+   * teammate who went quiet rather than a teammate who went away.
+   */
+  readonly #watching = new Map<string, Set<SubscriptionChannel>>()
 
   #dispatch: Dispatcher | undefined
   #identityKey: string | null = null
@@ -165,6 +187,8 @@ export class PeerService {
     this.#links.clear()
     this.#peerByConnection.clear()
     this.#subscribers.clear()
+    this.#watchers.clear()
+    for (const linkId of Array.from(this.#watching.keys())) this.#endWatches(linkId, 'teamwork stopped')
   }
 
   /**
@@ -209,6 +233,8 @@ export class PeerService {
       this.#links.delete(linkId)
       this.#peerByConnection.delete(linkId)
       this.#heard.delete(linkId)
+      this.#watchers.delete(linkId)
+      this.#endWatches(linkId, 'this teammate is no longer on the project’s roster')
     }
 
     if (wanted.size > 0) this.#privateKey ??= await loadStaticPrivateKey(this.#options.dataDir)
@@ -279,6 +305,109 @@ export class PeerService {
 
     worktrees.sort((a, b) => a.handle.localeCompare(b.handle) || a.name.localeCompare(b.name))
     return { projectId: facts.projectId, worktrees, readAt: now }
+  }
+
+  /**
+   * Opens one of a teammate's panes for reading.
+   *
+   * Two steps rather than one, because the caller needs the owner's dimensions
+   * in the same answer as the subscription id: this resolves the pane and the
+   * link now, and hands back the start the subscription hub calls once it has a
+   * channel. Nothing has been asked of the teammate until that runs, and
+   * everything asked of them is released when it is torn down.
+   */
+  openWatch(params: ParamsOf<'teamwork.watch'>): OpenedWatch {
+    const facts = this.#projects.get(params.projectId)
+    if (!facts) throw notFound(`no project with id ${params.projectId}`)
+    if (facts.projectKey === undefined) {
+      throw notFound(`project ${params.projectId} is not shared with anyone`)
+    }
+
+    const target = parsePeerPaneId(params.paneId)
+    if (!target) throw badPaneId(`${params.paneId} is not a teammate’s pane id`)
+
+    // Resolved through the roster and this project's own links, exactly as
+    // `presence` is: a pane id is a string a caller can type, and the thing
+    // that makes it mean somebody is their key being on this project's roster.
+    for (const publicKey of facts.rosterKeys) {
+      if (publicKey === this.#identityKey) continue
+      if (publicKey.slice(0, KEY_PREFIX_LENGTH) !== target.keyPrefix) continue
+      const linkId = linkIdFor(publicKey, facts.projectKey)
+      const record = this.#links.get(linkId)
+      const heard = this.#heard.get(linkId)
+      if (!record || !heard) continue
+      const pane = findPane(heard.presence, facts.projectKey, target.terminalId)
+      if (!pane) continue
+      if (record.status.phase !== 'connected') {
+        throw notFound(`${record.status.handle} is not connected, so their pane cannot be read`)
+      }
+
+      const handle = this.#handleFor(publicKey) ?? heard.presence.handle ?? publicKey.slice(0, 8)
+      return {
+        handle,
+        // The owner's, and never negotiated. `docs/teamwork.md`: a watcher with
+        // a smaller window letterboxes rather than resizing a pty under a
+        // program that is only being read.
+        cols: pane.cols ?? DEFAULT_COLS,
+        rows: pane.rows ?? DEFAULT_ROWS,
+        start: (channel) => {
+          const stop = watchPane({
+            target: record.link,
+            terminalId: target.terminalId,
+            channel,
+            ...(this.#options.onError ? { onError: this.#options.onError } : {})
+          })
+          const open = this.#watching.get(linkId) ?? new Set<SubscriptionChannel>()
+          open.add(channel)
+          this.#watching.set(linkId, open)
+          return () => {
+            open.delete(channel)
+            if (open.size === 0) this.#watching.delete(linkId)
+            stop()
+          }
+        }
+      }
+    }
+
+    throw notFound(`no teammate pane with id ${params.paneId} in this project`)
+  }
+
+  /**
+   * Who is reading this machine's panes, right now.
+   *
+   * The owner's half of "everyone sees everything": watching is visible while
+   * it happens, in the same list the panes are in, because the argument in
+   * `docs/teamwork.md` for why any of this is survivable is that none of it can
+   * be done invisibly.
+   */
+  watchers(params: ParamsOf<'teamwork.watchers'>): PaneWatchers {
+    const facts = this.#projects.get(params.projectId)
+    if (!facts) throw notFound(`no project with id ${params.projectId}`)
+
+    const byPane = new Map<string, PaneWatcher[]>()
+    if (facts.projectKey !== undefined) {
+      for (const publicKey of facts.rosterKeys) {
+        if (publicKey === this.#identityKey) continue
+        const linkId = linkIdFor(publicKey, facts.projectKey)
+        const held = this.#watchers.get(linkId)
+        if (!held || held.size === 0) continue
+        const handle = this.#handleFor(publicKey) ?? publicKey.slice(0, 8)
+        for (const [terminalId, since] of held) {
+          const watchers = byPane.get(terminalId) ?? []
+          watchers.push({ handle, publicKey, since })
+          byPane.set(terminalId, watchers)
+        }
+      }
+    }
+
+    const panes: WatchedPane[] = [...byPane]
+      .map(([terminalId, watchers]) => ({
+        terminalId,
+        watchers: watchers.sort((a, b) => a.handle.localeCompare(b.handle))
+      }))
+      .sort((a, b) => a.terminalId.localeCompare(b.terminalId))
+
+    return { projectId: facts.projectId, panes, readAt: this.#scheduler.now() }
   }
 
   /**
@@ -360,10 +489,21 @@ export class PeerService {
         // Anything but `connected` means nothing has confirmed on this session,
         // so what it last showed is no longer something this app will render as
         // live. Milestone E is what gives it a stale life instead.
-        if (status.phase !== 'connected') this.#heard.delete(linkId)
+        if (status.phase !== 'connected') {
+          this.#heard.delete(linkId)
+          // A link that is not up is not carrying anybody's eyes either, and a
+          // row that kept saying "watched by ana" after her machine went would
+          // be the one thing this display must never be: wrong in the
+          // reassuring direction.
+          this.#watchers.delete(linkId)
+          // And the other direction: whatever this machine was reading over
+          // that link has stopped arriving, so say so rather than freezing.
+          this.#endWatches(linkId, `the link to ${want.handle} dropped`)
+        }
         this.#options.onChange()
       },
       onPresence: (presence) => this.#record(linkId, want.publicKey, presence),
+      onWatchersChange: (terminalIds) => this.#recordWatchers(linkId, terminalIds),
       onError: this.#options.onError
     })
 
@@ -376,6 +516,28 @@ export class PeerService {
     if (!isPresence(presence)) return
     if (!isNewerPresence(this.#heard.get(linkId)?.presence, presence)) return
     this.#heard.set(linkId, { publicKey, presence, heardAt: this.#scheduler.now() })
+    this.#options.onChange()
+  }
+
+  /** Tells everything reading over one link that it has stopped, then ends it. */
+  #endWatches(linkId: string, reason: string): void {
+    const open = this.#watching.get(linkId)
+    if (!open) return
+    // Copied first: closing a channel runs the teardown that mutates this set.
+    for (const channel of Array.from(open)) {
+      channel.emit({ type: 'lost', reason })
+      channel.close()
+    }
+    this.#watching.delete(linkId)
+  }
+
+  /** Keeps the moment each watch started, so a row can say how long. */
+  #recordWatchers(linkId: string, terminalIds: readonly string[]): void {
+    const held = this.#watchers.get(linkId) ?? new Map<string, number>()
+    const next = new Map<string, number>()
+    for (const terminalId of terminalIds) next.set(terminalId, held.get(terminalId) ?? this.#scheduler.now())
+    if (next.size === 0) this.#watchers.delete(linkId)
+    else this.#watchers.set(linkId, next)
     this.#options.onChange()
   }
 
@@ -430,6 +592,50 @@ export class PeerService {
     }
     return facts
   }
+}
+
+/** What `openWatch` resolved, and the start the subscription hub drives. */
+export type OpenedWatch = {
+  handle: string
+  cols: number
+  rows: number
+  start: (channel: SubscriptionChannel) => () => void
+}
+
+/**
+ * How much of a public key a namespaced id carries. Twelve base64 characters is
+ * seventy-two bits, which is not an identity — the roster it is matched against
+ * is — but is plenty to pick one row out of a team.
+ */
+const KEY_PREFIX_LENGTH = 12
+
+/**
+ * What a watcher letterboxes to when a teammate's runtime predates milestone C
+ * and sends no dimensions. Eighty by twenty-four because that is what a pty
+ * with nothing better to say is.
+ */
+const DEFAULT_COLS = 80
+const DEFAULT_ROWS = 24
+
+/** Splits `peer:<key prefix>:<the owner's own terminal id>`. */
+export function parsePeerPaneId(paneId: string): { keyPrefix: string; terminalId: string } | undefined {
+  const match = /^peer:([A-Za-z0-9+/=_-]+):(.+)$/.exec(paneId)
+  const keyPrefix = match?.[1]
+  const terminalId = match?.[2]
+  if (keyPrefix === undefined || terminalId === undefined) return undefined
+  if (keyPrefix.length !== KEY_PREFIX_LENGTH) return undefined
+  return { keyPrefix, terminalId }
+}
+
+/** The pane as the teammate last described it, in the project this link is for. */
+function findPane(presence: PeerPresence, projectKey: string, terminalId: string): PeerPane | undefined {
+  const project = presence.projects.find((candidate) => candidate.projectKey === projectKey)
+  if (!project) return undefined
+  for (const worktree of project.worktrees) {
+    const pane = worktree.panes.find((candidate) => candidate.id === terminalId)
+    if (pane) return pane
+  }
+  return undefined
 }
 
 /**

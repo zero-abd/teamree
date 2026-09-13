@@ -10,14 +10,52 @@
 
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+import { Params } from '../../shared/methods'
 import { createInitiatorSession, createResponderSession, generateStaticKeyPair } from '../../shared/peer'
 import type { PeerSession } from '../../shared/peer'
 import { ErrorCode } from '../../shared/protocol'
 import { createDispatcher } from './dispatcher'
 import { MethodRegistry } from './methodRegistry'
-import { createPeerTransport, PEER_METHODS, type PeerTransport } from './peerTransport'
+import {
+  createPeerTransport,
+  PEER_METHODS,
+  STREAM_BUFFER_BYTES,
+  STREAM_FLUSH_MS,
+  type PeerTransport,
+  type TransportScheduler
+} from './peerTransport'
 import { createRuntimeContext } from './runtimeContext'
 import { SubscriptionHub } from './subscriptionHub'
+
+/** A clock a test moves by hand, so pacing is asserted rather than waited out. */
+function manualClock(): TransportScheduler & { advance: (ms: number) => void } {
+  let now = 1_000
+  const timers = new Map<number, { at: number; run: () => void }>()
+  let sequence = 0
+  return {
+    now: () => now,
+    setTimer: (run, delayMs) => {
+      sequence += 1
+      const id = sequence
+      timers.set(id, { at: now + Math.max(0, delayMs), run })
+      return () => {
+        timers.delete(id)
+      }
+    },
+    advance: (ms) => {
+      const target = now + ms
+      for (;;) {
+        const due = [...timers.entries()].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)
+        const next = due[0]
+        if (!next) break
+        timers.delete(next[0])
+        now = Math.max(now, next[1].at)
+        next[1].run()
+      }
+      now = target
+    }
+  }
+}
 
 /** Two halves of one completed IK handshake, with nothing in between. */
 function handshakenPair(): [PeerSession, PeerSession] {
@@ -43,7 +81,16 @@ type Rig = {
   answerer: PeerTransport
   registry: MethodRegistry
   hub: SubscriptionHub
+  /** Every stream event the teammate received, in order. */
+  received: { stream: string; event: unknown }[]
+  /** The panes the answering side believes the teammate has open. */
+  watched: () => readonly string[]
+  /** Pushes one event into a pane the teammate subscribed to. */
+  pane: (terminalId: string) => { emit: (event: unknown) => void; close: () => void } | undefined
+  clock: ReturnType<typeof manualClock>
 }
+
+type RigOptions = { allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][] }
 
 /**
  * Two transports wired mouth to ear.
@@ -52,10 +99,28 @@ type Rig = {
  * property under test is message boundaries, and a queue between them would
  * only prove the queue kept order.
  */
-function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][]): Rig {
+function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][], _options?: RigOptions): Rig {
   const [callerSession, answererSession] = handshakenPair()
   const hub = new SubscriptionHub()
+  const clock = manualClock()
+  const received: { stream: string; event: unknown }[] = []
+  const panes = new Map<string, { emit: (event: unknown) => void; close: () => void }>()
+  let watched: readonly string[] = []
   const registry = new MethodRegistry(createRuntimeContext({ version: 't', store: {} as never, subscriptions: hub }))
+
+  // Stands in for the terminal service, and only for the part the transport can
+  // see: an id, a stream, and a teardown. What is under test here is the wire,
+  // not the pty — `relayProcess.test.ts` runs the real one.
+  registry.register('terminal.subscribe', Params.terminalSubscribe, (params, call) => ({
+    subscription: hub.subscribe(call.connectionId, (channel) => {
+      panes.set(params.terminalId, channel)
+      return () => panes.delete(params.terminalId)
+    })
+  }))
+  registry.register('terminal.read', Params.terminalRead, () => ({ data: 'scrollback\r\n' }))
+  registry.register('unsubscribe', Params.unsubscribe, (params, call) => ({
+    unsubscribed: hub.unsubscribe(call.connectionId, params.subscription) as true
+  }))
 
   registry.register('status.get', z.object({}), () => ({
     version: 't',
@@ -78,6 +143,7 @@ function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0]
     ),
     subscriptions: new SubscriptionHub(),
     connectionId: 'peer_caller',
+    onStreamEvent: (stream, event) => received.push({ stream, event }),
     onFatal: () => {}
   })
   answerer = createPeerTransport({
@@ -86,11 +152,36 @@ function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0]
     dispatch: createDispatcher(registry),
     subscriptions: hub,
     connectionId: 'peer_answerer',
+    scheduler: clock,
+    onWatchChange: (terminalIds) => {
+      watched = terminalIds
+    },
     ...(allowedMethods ? { allowedMethods } : {}),
     onFatal: () => {}
   })
 
-  return { caller, answerer, registry, hub }
+  return {
+    caller,
+    answerer,
+    registry,
+    hub,
+    received,
+    clock,
+    watched: () => watched,
+    pane: (terminalId) => panes.get(terminalId)
+  }
+}
+
+/** Everything one stream carried, concatenated, as the watcher would see it. */
+function outputOn(received: readonly { stream: string; event: unknown }[]): string {
+  return received
+    .filter((frame): frame is { stream: string; event: { type: 'data'; data: string } } => isData(frame.event))
+    .map((frame) => frame.event.data)
+    .join('')
+}
+
+function isData(event: unknown): boolean {
+  return typeof event === 'object' && event !== null && (event as { type?: unknown }).type === 'data'
 }
 
 describe('what a teammate can reach', () => {
@@ -109,13 +200,22 @@ describe('what a teammate can reach', () => {
     })
   })
 
-  it('does not stream terminal output in this milestone', () => {
-    // The seam for milestone C, asserted so that widening it is a deliberate
-    // edit to one list and not a side effect of registering a handler.
-    expect(PEER_METHODS).not.toContain('terminal.subscribe')
-    expect(PEER_METHODS).not.toContain('terminal.read')
+  it('lets a teammate read a pane and gives them no way at all to write to one', () => {
+    // The list is asserted whole, so widening it stays a deliberate edit to one
+    // line and never a side effect of registering a handler. C added the two
+    // reads that a watcher needs; D is what adds `terminal.write`, and until it
+    // does, a teammate's keystroke reaches a method this runtime does not admit
+    // to having. That absence is the whole of "read-only".
+    expect([...PEER_METHODS]).toEqual([
+      'peer.presence',
+      'peer.subscribe',
+      'terminal.read',
+      'terminal.subscribe',
+      'unsubscribe'
+    ])
     expect(PEER_METHODS).not.toContain('terminal.write')
-    expect([...PEER_METHODS]).toEqual(['peer.presence', 'peer.subscribe', 'unsubscribe'])
+    expect(PEER_METHODS).not.toContain('terminal.resize')
+    expect(PEER_METHODS).not.toContain('terminal.close')
   })
 
   it('widens by exactly the list it is given, which is how C plugs in', async () => {
@@ -268,5 +368,122 @@ describe('subscriptions a teammate opened', () => {
 
     answerer.close('the teammate went away')
     expect(hub.countFor('peer_answerer')).toBe(0)
+  })
+})
+
+describe('a pane against the relay’s budget', () => {
+  it('merges a burst into one frame instead of spending the relay’s frame budget', async () => {
+    const { caller, received, pane, clock } = rig()
+    await caller.call('terminal.subscribe', { terminalId: 't1' })
+    const channel = pane('t1')
+
+    // The first chunk after a pause goes straight out: watching is not
+    // uniformly a flush behind for a pane that only speaks occasionally.
+    channel?.emit({ type: 'data', data: 'first\r\n' })
+    expect(received).toHaveLength(1)
+
+    // The rest of the burst arrives inside one flush window and leaves as one
+    // frame, which is lossless: two chunks of a byte stream concatenated are
+    // the same byte stream.
+    for (let chunk = 0; chunk < 50; chunk += 1) channel?.emit({ type: 'data', data: `line ${chunk}\r\n` })
+    expect(received).toHaveLength(1)
+
+    clock.advance(STREAM_FLUSH_MS)
+    expect(received).toHaveLength(2)
+    expect(outputOn(received)).toContain('line 0\r\nline 1\r\n')
+    expect(outputOn(received)).toContain('line 49\r\n')
+  })
+
+  it('tells the watcher how much it threw away rather than dropping output silently', async () => {
+    const { caller, received, pane, clock } = rig()
+    await caller.call('terminal.subscribe', { terminalId: 't1' })
+    const channel = pane('t1')
+
+    channel?.emit({ type: 'data', data: 'x' })
+    // Far past what may wait for the wire. The tail is what a reader wants, so
+    // the head goes — and the count of what went is sent with it.
+    const overflow = 'y'.repeat(STREAM_BUFFER_BYTES * 2)
+    channel?.emit({ type: 'data', data: overflow })
+    clock.advance(STREAM_FLUSH_MS)
+
+    const elided = received.find((frame) => (frame.event as { type?: string }).type === 'elided')?.event as
+      | { type: string; bytes: number }
+      | undefined
+    expect(elided?.type).toBe('elided')
+    expect(elided?.bytes ?? 0).toBeGreaterThanOrEqual(STREAM_BUFFER_BYTES)
+    // What survived is the end of the burst, not the beginning of it.
+    expect(outputOn(received).endsWith('y')).toBe(true)
+  })
+
+  it('never throws away an exit, because a pane that finished is a fact and not a volume', async () => {
+    const { caller, received, pane, clock } = rig()
+    await caller.call('terminal.subscribe', { terminalId: 't1' })
+    const channel = pane('t1')
+
+    channel?.emit({ type: 'data', data: 'z'.repeat(STREAM_BUFFER_BYTES * 3) })
+    channel?.emit({ type: 'exit', exitCode: 0 })
+    // Generous: the byte budget is spent over several flushes, and the point is
+    // that the exit is still there at the end of them rather than how fast.
+    for (let tick = 0; tick < 200; tick += 1) clock.advance(STREAM_FLUSH_MS)
+
+    expect(received.map((frame) => frame.event)).toContainEqual({ type: 'exit', exitCode: 0 })
+  })
+
+  it('keeps an exit behind the output it follows, so a pane never finishes before it speaks', async () => {
+    const { caller, received, pane, clock } = rig()
+    await caller.call('terminal.subscribe', { terminalId: 't1' })
+    const channel = pane('t1')
+
+    channel?.emit({ type: 'data', data: 'a' })
+    channel?.emit({ type: 'data', data: 'b' })
+    channel?.emit({ type: 'exit', exitCode: 0 })
+    clock.advance(STREAM_FLUSH_MS)
+
+    const types = received.map((frame) => (frame.event as { type: string }).type)
+    expect(types.indexOf('exit')).toBeGreaterThan(types.lastIndexOf('data'))
+  })
+})
+
+describe('what the owner is told about who is reading', () => {
+  it('names the pane a teammate opened, and forgets it when they close it', async () => {
+    const { caller, watched } = rig()
+    const { subscription } = await caller.call('terminal.subscribe', { terminalId: 't1' })
+    expect(watched()).toEqual(['t1'])
+
+    await caller.call('unsubscribe', { subscription })
+    expect(watched()).toEqual([])
+  })
+
+  it('forgets a pane whose stream the owner ended, and says so rather than going quiet', async () => {
+    const { caller, received, pane, watched } = rig()
+    await caller.call('terminal.subscribe', { terminalId: 't1' })
+    expect(watched()).toEqual(['t1'])
+
+    // What the owner closing their own pane looks like from here: the producer
+    // ends the stream, and nothing else would ever tell the reader.
+    pane('t1')?.close()
+
+    expect(watched()).toEqual([])
+    expect(received.map((frame) => frame.event)).toContainEqual({
+      type: 'lost',
+      reason: 'the owner closed this pane'
+    })
+  })
+
+  it('reports one pane per teammate however many streams they hold on it', async () => {
+    const { caller, watched } = rig()
+    await caller.call('terminal.subscribe', { terminalId: 't1' })
+    await caller.call('terminal.subscribe', { terminalId: 't1' })
+
+    expect(watched()).toEqual(['t1'])
+  })
+
+  it('says nobody is reading a pane a teammate asked for and was refused', async () => {
+    const { caller, watched } = rig(['peer.presence', 'unsubscribe'])
+    await expect(caller.call('terminal.subscribe', { terminalId: 't1' })).rejects.toMatchObject({
+      code: ErrorCode.UnknownMethod
+    })
+
+    expect(watched()).toEqual([])
   })
 })

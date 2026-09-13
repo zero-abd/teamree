@@ -61,6 +61,32 @@ const SEEDED_PEER_KEY = 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='
 const SEEDED_AWAY_KEY = 'Qw8ErTyUiOpAsDfGhJkLzXcVbNm1234567890QwErTy='
 const SEEDED_PUBLIC_KEY = 'EA3VNMgROVtL/oUJhTmpENptwwkAWhc1HD2SIqJTHE4='
 
+/**
+ * The teammate panes this demo can open, and the scrollback each joins at.
+ *
+ * A watcher joining a running pane is shown what it has already said and then
+ * whatever it says next. With no relay and no teammate there is no "next", so
+ * these are the first half only — which is the honest half to invent.
+ */
+const SEEDED_WATCHABLE: Record<string, { handle: string; cols: number; rows: number; scrollback: string }> = {
+  [`peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_1`]: {
+    handle: 'priya',
+    cols: 96,
+    rows: 30,
+    scrollback:
+      'priya@studio compaction % claude\r\n' +
+      '\u001b[38;5;244m· reading src/index/segment.rs\u001b[0m\r\n' +
+      '\u001b[38;5;244m· 412 lines, 3 merge candidates\u001b[0m\r\n' +
+      'compacting segments 0..7\r\n'
+  },
+  [`peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_2`]: {
+    handle: 'priya',
+    cols: 120,
+    rows: 40,
+    scrollback: 'priya@studio compaction % pytest -q\r\n............................\r\n28 passed in 4.11s\r\n'
+  }
+}
+
 function seededMember(handle: string, publicKey: string, addedAt: string): Member {
   return { handle, publicKey, addedAt, file: `.teamree/members/${handle}.pub`, isSelf: false }
 }
@@ -636,6 +662,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
               agent: 'claude' as const,
               running: true,
               busy: true,
+              cols: 96,
+              rows: 30,
               quietForMs: 0
             },
             {
@@ -644,11 +672,32 @@ export function createSeededRuntimeClient(): RuntimeClient {
               shell: '/bin/zsh',
               running: true,
               busy: false,
+              cols: 120,
+              rows: 40,
               quietForMs: 260_000
             }
           ]
         }
       ],
+      readAt: Date.now()
+    }),
+
+    // A teammate's pane, as the demo can honestly show one: the scrollback it
+    // joins at and nothing after it. There is no relay here and no teammate, so
+    // inventing live output would be inventing a person.
+    'teamwork.watch': ({ paneId }) => {
+      const pane = SEEDED_WATCHABLE[paneId]
+      if (!pane) throw new Error(`${paneId} is not a teammate’s pane`)
+      return { subscription: nextId('sub'), cols: pane.cols, rows: pane.rows, handle: pane.handle }
+    },
+    // One teammate reading one of this machine's panes, so the owner's half of
+    // the bargain is visible in the demo rather than only in the design.
+    'teamwork.watchers': ({ projectId }) => ({
+      projectId,
+      panes: [...terminals.keys()].slice(0, 1).map((terminalId) => ({
+        terminalId,
+        watchers: [{ handle: 'priya', publicKey: SEEDED_PEER_KEY, since: Date.now() - 120_000 }]
+      })),
       readAt: Date.now()
     }),
 
@@ -786,6 +835,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
           closed = true
           workspaceWatchers.delete(onEvent)
         }
+      }
+    },
+    async watchPane(projectId, paneId, onEvent) {
+      await sleep(LATENCY_MS)
+      const opened = handlers['teamwork.watch']({ projectId, paneId })
+      // The scrollback, and then silence: a demo with no peer has nothing live
+      // to say, and saying something anyway would be inventing a teammate.
+      onEvent({ type: 'data', data: SEEDED_WATCHABLE[paneId]?.scrollback ?? '' })
+      return {
+        subscription: { close: () => {} },
+        cols: opened.cols,
+        rows: opened.rows,
+        handle: opened.handle
       }
     },
     async subscribeTerminal(terminalId, onEvent) {

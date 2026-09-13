@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Terminal } from '@shared/entities'
-import { activityOf, agentRows, paneLabel, sinceLabel, worktreeActivity, type AgentRow } from './agentRows'
+import { activityOf, agentRows, paneLabel, sinceLabel, watchedBy, worktreeActivity, type AgentRow } from './agentRows'
 
 function terminal(overrides: Partial<Terminal> & { id: string }): Terminal {
   return {
@@ -162,5 +162,25 @@ describe('sinceLabel', () => {
   // number whose whole job is to say something has been sitting there.
   it('rounds down, so it never flatters the silence', () => {
     expect(sinceLabel(119_000)).toBe('1m')
+  })
+})
+
+describe('who is reading a pane', () => {
+  const watcher = (handle: string): { handle: string; publicKey: string; since: number } => ({
+    handle,
+    publicKey: `${handle}-key`,
+    since: 0
+  })
+
+  it('names one reader rather than counting them', () => {
+    expect(watchedBy([watcher('ana')])).toBe('ana is watching')
+  })
+
+  it('names every reader, because a count is the half that does not matter', () => {
+    expect(watchedBy([watcher('ana'), watcher('bo'), watcher('cy')])).toBe('ana, bo and cy are watching')
+  })
+
+  it('says so plainly when nobody is', () => {
+    expect(watchedBy([])).toBe('nobody is watching')
   })
 })
