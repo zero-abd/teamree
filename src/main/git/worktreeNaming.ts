@@ -22,19 +22,12 @@ export const slugify = slugifyBranchName
  * whatever the extension. That kills both halves of a worktree at once: the
  * checkout directory, and git's own loose ref file under refs/heads. Names are
  * therefore disambiguated at the source rather than at each use.
+ *
+ * The list itself is in shared, because member filenames obey it too and the
+ * window now reads that rule. Re-exported here because this module is where
+ * callers expect it.
  */
-const WINDOWS_DEVICE_NAMES = new Set([
-  'con',
-  'prn',
-  'aux',
-  'nul',
-  ...Array.from({ length: 10 }, (_, index) => `com${index}`),
-  ...Array.from({ length: 10 }, (_, index) => `lpt${index}`)
-])
-
-export function isWindowsDeviceName(name: string): boolean {
-  return WINDOWS_DEVICE_NAMES.has(name.toLowerCase())
-}
+export { isWindowsDeviceName } from '../../shared/windowsNames'
 
 /**
  * Lowercase ASCII words joined by dashes. This deliberately throws away more

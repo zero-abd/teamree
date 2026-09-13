@@ -95,9 +95,11 @@ function render(overrides: Partial<TeamworkStepsProps> = {}): string {
     membersError: null,
     relayPending: false,
     relayError: null,
+    readErrors: {},
     onJoin: () => {},
     onClearMembersError: () => {},
     onSetRelay: () => {},
+    onRetry: () => {},
     ...overrides
   }
   return renderToStaticMarkup(<TeamworkSteps {...props} />)
@@ -308,5 +310,54 @@ describe('before anything has been read', () => {
     expect(shown).toMatch(/Reading this machine’s identity/)
     expect(shown).toMatch(/Reading where this project’s relay is recorded/)
     expect(render({ list: undefined, relay: undefined, status: undefined })).not.toContain(JOIN_BUTTON)
+  })
+})
+
+describe('a read that threw', () => {
+  // A zero-byte identity.key is the common one. Before this the panel said
+  // "Reading this machine's identity…" for the life of the window, with the
+  // whole of the explanation in a toast that had already gone.
+  it('says what failed, in the step it failed for, and offers to read again', () => {
+    const shown = text(
+      render({
+        list: undefined,
+        status: undefined,
+        readErrors: { list: 'EISDIR: illegal operation on a directory, read', status: 'identity.key is empty' }
+      })
+    )
+    expect(shown).toContain('EISDIR: illegal operation on a directory, read')
+    expect(shown).toMatch(/identity\.key is empty/i)
+    expect(shown).not.toMatch(/Reading this machine’s identity/)
+    expect(shown).toContain('Try again')
+  })
+})
+
+describe('a roster nothing is watching', () => {
+  // The sweep is the floor under a lost watch: the roster catches up on a timer
+  // rather than on an event. Telling somebody to reopen the dialog describes a
+  // version of this app that no longer exists.
+  it('says how far behind it can be, rather than telling somebody to reopen it', () => {
+    const shown = text(render({ list: roster({ watched: false }), relay: committedRelay() }))
+    expect(shown).toContain('half a minute behind the last pull')
+    expect(shown).not.toMatch(/Open this dialog again after a pull/)
+  })
+})
+
+describe('a relay that only the environment names', () => {
+  const overridden = (): RelaySetting => ({
+    ...noRelay(),
+    url: 'wss://tunnel.example/v1/relay',
+    source: 'environment',
+    problem: null,
+    override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' }
+  })
+
+  // This is what the tunnel option tells people to do, and following it used to
+  // leave step 3 not done for ever — so the wall of four options stayed on
+  // screen underneath a working relay.
+  it('stops offering the four ways to get one to somebody who has followed one', () => {
+    const shown = text(render({ list: enrolled(), relay: overridden() }))
+    expect(shown).not.toContain('A VPS you rent')
+    expect(shown).toContain('done for this run')
   })
 })

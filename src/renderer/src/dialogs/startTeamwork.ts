@@ -20,7 +20,8 @@
 // set, because the project's identity is a hash of the normalised origin. That
 // is why `TeamworkStatus` reports the two separately and why this reads both.
 
-import type { MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
+import type { Member, MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
+import { sanitiseHandle } from '@shared/handle'
 import { parseRelayUrl } from '@shared/relayUrl'
 
 export type StepId = 'identity' | 'key' | 'relay' | 'push' | 'connected'
@@ -28,6 +29,13 @@ export type StepId = 'identity' | 'key' | 'relay' | 'push' | 'connected'
 export type StepMark =
   /** Checked, and true. */
   | 'done'
+  /**
+   * True for this run and not written down anywhere a teammate reads. The
+   * environment override is the whole of this case: the panel's own tunnel
+   * option tells people to use it, so calling it unfinished work parks the flow
+   * on that step for the session.
+   */
+  | 'this-run'
   /** Checked, and not true yet. */
   | 'todo'
   /** teamree cannot check this one and says so rather than guessing. */
@@ -59,10 +67,30 @@ export type StartTeamworkFlow = {
   blocker: string | null
 }
 
+/**
+ * Why each of the three reads behind this panel last failed, for the ones that
+ * did.
+ *
+ * A read that threw and a read still in flight both leave the answer
+ * `undefined`, and they are not the same thing to say: one is "wait a moment"
+ * and the other is "this will never arrive". Without this the panel said the
+ * first about the second for the life of the window.
+ */
+export type StartTeamworkReadErrors = {
+  /** `members.list`, which carries both the identity and the roster. */
+  list?: string | undefined
+  relay?: string | undefined
+  status?: string | undefined
+}
+
+/** Which of the three reads a retry is for. */
+export type StartTeamworkRead = keyof StartTeamworkReadErrors
+
 export type StartTeamworkInput = {
   list: MemberList | undefined
   relay: RelaySetting | undefined
   status: TeamworkStatus | undefined
+  failedReads?: StartTeamworkReadErrors | undefined
 }
 
 /**
@@ -258,7 +286,9 @@ export function checkRelayDraft(raw: string): RelayDraftCheck {
 
 export function startTeamworkFlow(input: StartTeamworkInput): StartTeamworkFlow {
   const steps = [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)]
-  const current = steps.find((step) => step.mark !== 'done')
+  // `unchecked` is deliberately not settled: the push step never self-completes
+  // and is the one to lead with for as long as anything is written.
+  const current = steps.find((step) => step.mark !== 'done' && step.mark !== 'this-run')
   const origin = input.status?.origin
   return {
     steps,
@@ -272,14 +302,40 @@ export function selfFileOf(list: MemberList): string | undefined {
   return list.members.find((member) => member.isSelf)?.file
 }
 
+/** Where member keys live, relative to the checkout root. */
+const MEMBERS_DIR = '.teamree/members'
+
+/**
+ * The file the join button will write, named the way the runtime will name it.
+ *
+ * The field used to echo what was typed, so `Ada Lovelace` promised
+ * `.teamree/members/Ada Lovelace.pub` and `ada-lovelace.pub` is what appeared.
+ * Null when there is no name to promise: nothing typed and git has no email to
+ * fall back on, or nothing in what was typed survives sanitising.
+ */
+export function memberFilePreview(list: MemberList, typed: string): string | null {
+  const name = typed.trim() === '' ? (list.self.handle ?? undefined) : sanitiseHandle(typed)
+  return name === undefined ? null : `${MEMBERS_DIR}/${name}.pub`
+}
+
 /** Enough of a key to compare two of them by eye. Never enough to type one. */
 export function shortKey(publicKey: string): string {
   return `${publicKey.slice(0, 16)}…`
 }
 
-function identityStep({ list }: StartTeamworkInput): StartTeamworkStep {
+function identityStep({ list, failedReads }: StartTeamworkInput): StartTeamworkStep {
   const title = 'Your identity'
-  if (list === undefined) return { id: 'identity', title, mark: 'todo', summary: 'Reading this machine’s identity…' }
+  if (list === undefined) {
+    if (failedReads?.list !== undefined) {
+      return {
+        id: 'identity',
+        title,
+        mark: 'blocked',
+        summary: readFailure('This machine’s identity', failedReads.list)
+      }
+    }
+    return { id: 'identity', title, mark: 'todo', summary: 'Reading this machine’s identity…' }
+  }
   // The keypair is made on first run, so this is never a thing to do — only a
   // thing to show. A missing handle is step two's problem: it is the name on
   // the file, not the identity, and the identity is the key.
@@ -295,9 +351,19 @@ function identityStep({ list }: StartTeamworkInput): StartTeamworkStep {
   }
 }
 
-function keyStep({ list }: StartTeamworkInput): StartTeamworkStep {
+function keyStep({ list, failedReads }: StartTeamworkInput): StartTeamworkStep {
   const title = 'Your key is in this repository'
-  if (list === undefined) return { id: 'key', title, mark: 'todo', summary: 'Waiting for the roster.' }
+  if (list === undefined) {
+    if (failedReads?.list !== undefined) {
+      return {
+        id: 'key',
+        title,
+        mark: 'blocked',
+        summary: `${readFailure('The roster', failedReads.list)} Until it can be, nothing here can say whether your key is in it.`
+      }
+    }
+    return { id: 'key', title, mark: 'todo', summary: 'Waiting for the roster.' }
+  }
   if (list.enrolled) {
     const file = selfFileOf(list) ?? list.selfFile
     return {
@@ -315,9 +381,17 @@ function keyStep({ list }: StartTeamworkInput): StartTeamworkStep {
   }
 }
 
-function relayStep({ relay }: StartTeamworkInput): StartTeamworkStep {
+function relayStep({ relay, failedReads }: StartTeamworkInput): StartTeamworkStep {
   const title = 'The team’s relay'
   if (relay === undefined) {
+    if (failedReads?.relay !== undefined) {
+      return {
+        id: 'relay',
+        title,
+        mark: 'blocked',
+        summary: readFailure('Where this project’s relay is recorded', failedReads.relay)
+      }
+    }
     return { id: 'relay', title, mark: 'todo', summary: 'Reading where this project’s relay is recorded…' }
   }
   if (relay.committed.url !== null) {
@@ -329,10 +403,14 @@ function relayStep({ relay }: StartTeamworkInput): StartTeamworkStep {
     }
   }
   if (relay.source === 'environment' && relay.url !== null) {
+    // Done for this run, and never done: the override is what the tunnel option
+    // above tells people to use, and a step that stays unfinished while the
+    // recommended path is working is the panel disagreeing with itself. The
+    // caveat that it is not committed setup is the summary rather than the mark.
     return {
       id: 'relay',
       title,
-      mark: 'todo',
+      mark: 'this-run',
       summary:
         `${relay.override.name} is pointing this run at ${relay.url}, and nothing is in ${relay.file}. ` +
         'The override is per-machine and dies with this process, so a teammate reads nothing — which is right for ' +
@@ -368,6 +446,14 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
   const title = 'Connected'
   const { status } = input
   if (status === undefined) {
+    if (input.failedReads?.status !== undefined) {
+      return {
+        id: 'connected',
+        title,
+        mark: 'blocked',
+        summary: readFailure('Whether teamwork is running here', input.failedReads.status)
+      }
+    }
     return { id: 'connected', title, mark: 'todo', summary: 'Reading whether teamwork is running here…' }
   }
 
@@ -388,7 +474,40 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
   if (!status.origin.ok) {
     return { id: 'connected', title, mark: 'blocked', summary: originBlocker(status.origin.reason) }
   }
+  // Ahead of every phase that is a sentence about somebody else's machine, for
+  // the reason the sidebar header checks it there: a key that is not on this
+  // roster means no teammate reading the repository can address this machine,
+  // so the links sit at `waiting` and each phrase below blames the one machine
+  // doing nothing wrong. It is not ahead of `connected` above, because a link
+  // that is up is a fact about both machines and outranks what any roster says.
+  if (!status.enrolled) {
+    return {
+      id: 'connected',
+      title,
+      mark: 'blocked',
+      summary:
+        'Your own key is not in .teamree/members in this checkout, so no teammate can reach this machine: their ' +
+        'machines have nothing to address, and every link here is waiting on a rendezvous they cannot compute. ' +
+        'Step 2 writes the file and step 4 is what puts it where they will read it.'
+    }
+  }
   if (status.links.length === 0) {
+    // The roster is read from disk the moment it is asked for; the links are
+    // replaced at the end of a reconcile, and can be missing because one threw.
+    // Saying "nobody but you" directly above the roster that lists them was the
+    // panel preferring the later of two answers it already had.
+    const others = input.list?.members.filter((member) => !member.isSelf) ?? []
+    if (others.length > 0) {
+      return {
+        id: 'connected',
+        title,
+        mark: 'todo',
+        summary:
+          `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} on this project’s roster and no link to ` +
+          `${others.length === 1 ? 'them' : 'any of them'} is open yet. teamree opens one per teammate as it reads ` +
+          'the roster; if this does not change in a moment, the reason it stopped is in this run’s log.'
+      }
+    }
     const ready = input.list?.enrolled === true && input.relay?.url != null
     return {
       id: 'connected',
@@ -457,6 +576,21 @@ function relayLabel(status: TeamworkStatus): string {
 
 function namesOf(links: PeerLink[]): string {
   return listOf(links.map((link) => link.handle))
+}
+
+function namesOfMembers(members: Member[]): string {
+  return listOf(members.map((member) => member.handle))
+}
+
+/**
+ * A read that threw, with the runtime's own message kept whole.
+ *
+ * The alternative the panel had was "Reading…" for ever, which is the same
+ * sentence as "this is still loading" and the one thing certainly untrue after
+ * a throw.
+ */
+function readFailure(what: string, error: string): string {
+  return `${what} could not be read: ${sentence(error)}`
 }
 
 function listOf(items: string[]): string {

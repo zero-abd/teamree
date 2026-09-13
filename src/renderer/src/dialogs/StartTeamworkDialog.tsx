@@ -27,18 +27,28 @@
 // the same panels, under the steps that say why each one matters.
 
 import { useEffect, useState } from 'react'
-import type { Member, MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
+import {
+  UNWATCHED_TEAMREE_LAG,
+  type Member,
+  type MemberList,
+  type PeerLink,
+  type RelaySetting,
+  type TeamworkStatus
+} from '@shared/entities'
 import { Modal } from './Modal'
 import {
   ADD_KEY_BUTTON,
   checkRelayDraft,
   KEY_GRANT_WARNING,
+  memberFilePreview,
   pushPlan,
   RELAY_LEAD,
   RELAY_OPTIONS,
   shortKey,
   startTeamworkFlow,
   type RelayDraftCheck,
+  type StartTeamworkRead,
+  type StartTeamworkReadErrors,
   type StartTeamworkStep,
   type StepMark
 } from './startTeamwork'
@@ -49,6 +59,7 @@ export function StartTeamworkDialog({ projectId }: { projectId: string }): React
   const list = useWorkspaceStore((state) => state.members[projectId])
   const relay = useWorkspaceStore((state) => state.relays[projectId])
   const status = useWorkspaceStore((state) => state.teamwork[projectId])
+  const readErrors = useWorkspaceStore((state) => state.teamworkReadErrors[projectId])
   const membersPending = useWorkspaceStore((state) => state.membersPending)
   const membersError = useWorkspaceStore((state) => state.membersError)
   const relayPending = useWorkspaceStore((state) => state.relayPending)
@@ -85,9 +96,15 @@ export function StartTeamworkDialog({ projectId }: { projectId: string }): React
           membersError={membersError}
           relayPending={relayPending}
           relayError={relayError}
+          readErrors={readErrors ?? {}}
           onJoin={(handle) => void joinProject(projectId, handle)}
           onClearMembersError={clearMembersError}
           onSetRelay={(url) => void setRelay(projectId, url)}
+          onRetry={(read) => {
+            if (read === 'list') void loadMembers(projectId)
+            else if (read === 'relay') void loadRelay(projectId)
+            else void loadTeamwork(projectId)
+          }}
         />
         <div className="form__actions">
           <button type="button" className="button" onClick={closeDialog}>
@@ -108,17 +125,24 @@ export type TeamworkStepsProps = {
   membersError: string | null
   relayPending: boolean
   relayError: string | null
+  /** Why each of the three reads behind this panel failed, for the ones that did. */
+  readErrors: StartTeamworkReadErrors
   onJoin: (handle?: string) => void
   /** Called on the keystroke that answers a refusal, so it stops being shown. */
   onClearMembersError: () => void
   onSetRelay: (url: string) => void
+  /** Asks for one of the three reads again, from the step that reported it. */
+  onRetry: (read: StartTeamworkRead) => void
 }
 
 /** A glyph for the eye; `MARK_WORDS` is what is actually read out. */
-const MARK_GLYPHS: Record<StepMark, string> = { done: '✓', todo: '○', unchecked: '—', blocked: '!' }
+const MARK_GLYPHS: Record<StepMark, string> = { done: '✓', 'this-run': '✓', todo: '○', unchecked: '—', blocked: '!' }
 
 const MARK_WORDS: Record<StepMark, string> = {
   done: 'done',
+  // A tick with a caveat rather than a cross: the override is what the panel's
+  // own tunnel option tells people to use, and it is genuinely not committed.
+  'this-run': 'done for this run',
   todo: 'not done yet',
   // Never a tick and never a cross: teamree cannot see a commit, and both
   // marks would be it claiming it can.
@@ -131,7 +155,12 @@ const MARK_WORDS: Record<StepMark, string> = {
  * whole of what this says in each state can be rendered in a test.
  */
 export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
-  const flow = startTeamworkFlow({ list: props.list, relay: props.relay, status: props.status })
+  const flow = startTeamworkFlow({
+    list: props.list,
+    relay: props.relay,
+    status: props.status,
+    failedReads: props.readErrors
+  })
   return (
     <div className="steps">
       {flow.blocker === null ? null : (
@@ -163,8 +192,13 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
 function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamworkStep }): React.JSX.Element | null {
   switch (step.id) {
     case 'identity':
-      return props.list === undefined ? null : <IdentityBody list={props.list} />
+      if (props.list === undefined) {
+        return props.readErrors.list === undefined ? null : <ReadFailure onRetry={() => props.onRetry('list')} />
+      }
+      return <IdentityBody list={props.list} />
     case 'key':
+      // No retry here even when the roster read failed: it is the same read as
+      // step 1's, and two buttons for one question are two answers to it.
       return step.mark === 'done' || props.list === undefined ? null : (
         <JoinBody
           list={props.list}
@@ -175,10 +209,15 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
         />
       )
     case 'relay':
-      return props.relay === undefined ? null : (
+      if (props.relay === undefined) {
+        return props.readErrors.relay === undefined ? null : <ReadFailure onRetry={() => props.onRetry('relay')} />
+      }
+      return (
         <RelayBody
           relay={props.relay}
-          done={step.mark === 'done'}
+          // The four options are a decision, and the override is that decision
+          // taken: showing them again is a wall of choices about a chosen thing.
+          options={step.mark !== 'done' && step.mark !== 'this-run'}
           pending={props.relayPending}
           error={props.relayError}
           onSet={props.onSetRelay}
@@ -187,8 +226,28 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
     case 'push':
       return <PushBody list={props.list} relay={props.relay} />
     case 'connected':
+      if (props.status === undefined && props.readErrors.status !== undefined) {
+        return <ReadFailure onRetry={() => props.onRetry('status')} />
+      }
       return <ConnectedBody list={props.list} status={props.status} />
   }
+}
+
+/**
+ * The way out of a read that threw.
+ *
+ * What failed is already the step's summary, so this is only the button. The
+ * panel used to have neither: three steps said "Reading…" for the life of the
+ * window and the whole of the explanation was in a toast that had gone.
+ */
+function ReadFailure({ onRetry }: { onRetry: () => void }): React.JSX.Element {
+  return (
+    <div className="step__body">
+      <button type="button" className="button" onClick={onRetry}>
+        Try again
+      </button>
+    </div>
+  )
 }
 
 /** The identity itself: a name on a file, and the key that is the real one. */
@@ -227,6 +286,9 @@ function JoinBody({
 }): React.JSX.Element {
   const [handle, setHandle] = useState('')
   const chosen = handle.trim() || list.self.handle
+  // The name the runtime will file this under, which is not what was typed:
+  // `Ada Lovelace` is written as `ada-lovelace.pub`.
+  const file = memberFilePreview(list, handle)
 
   const submit = (event: React.FormEvent): void => {
     event.preventDefault()
@@ -263,13 +325,7 @@ function JoinBody({
             autoComplete="off"
             spellCheck={false}
           />
-          <span className="field__hint">
-            {list.self.handle === null
-              ? 'git has no user.email here, so there is no name to use — choose one. Lowercase, and [a-z0-9._-].'
-              : `Defaults to the local part of your git email. Writes ${
-                  chosen === null ? '' : `.teamree/members/${chosen}.pub`
-                }.`}
-          </span>
+          <span className="field__hint">{hintFor(list, handle, file)}</span>
         </label>
         {/* Under the field, never in a corner: every refusal the runtime raises
             here ends in "choose another handle", and that is an instruction
@@ -284,19 +340,32 @@ function JoinBody({
   )
 }
 
+/** What the field says it will do, for each of the three things it can be told. */
+function hintFor(list: MemberList, typed: string, file: string | null): string {
+  if (file !== null) {
+    return list.self.handle === null
+      ? `Writes ${file}.`
+      : `Defaults to the local part of your git email. Writes ${file}.`
+  }
+  return typed.trim() === ''
+    ? 'git has no user.email here, so there is no name to use — choose one. Lowercase, and [a-z0-9._-].'
+    : 'Nothing in that name survives as a filename. Lowercase, and [a-z0-9._-].'
+}
+
 /**
  * The relay: what is in effect, what the environment said, the four ways to
  * get one when there is none, and the field that writes the file.
  */
 function RelayBody({
   relay,
-  done,
+  options,
   pending,
   error,
   onSet
 }: {
   relay: RelaySetting
-  done: boolean
+  /** Whether the four ways to get a relay are still a decision to make. */
+  options: boolean
   pending: boolean
   error: string | null
   onSet: (url: string) => void
@@ -320,11 +389,11 @@ function RelayBody({
         </p>
       )}
       <Override relay={relay} />
-      {done ? null : <RelayOptions />}
+      {options ? <RelayOptions /> : null}
       <form className="members__relay" onSubmit={submit}>
         <label className="field">
           <span className="field__label">
-            {done ? 'Change the relay for this project' : 'Set the relay for this project'}
+            {relay.committed.url === null ? 'Set the relay for this project' : 'Change the relay for this project'}
           </span>
           <input
             className="field__input field__input--mono"
@@ -602,8 +671,7 @@ function Freshness({ list }: { list: MemberList }): React.JSX.Element | null {
   if (list.watched) return null
   return (
     <p className="members__stale">
-      teamree could not watch this project’s files, so this list is only as fresh as this read. Open this dialog again
-      after a pull to see what it brought in.
+      teamree could not watch this project’s files, so this list is only as fresh as this read. {UNWATCHED_TEAMREE_LAG}
     </p>
   )
 }
