@@ -5,6 +5,8 @@
 
 import type {
   CliStatus,
+  ConsentGrant,
+  ConsentRequest,
   Layout,
   Member,
   MemberList,
@@ -156,6 +158,22 @@ export function createSeededRuntimeClient(): RuntimeClient {
   const seededMutes = new Set<string>()
   /** One remote write, so the record's shape is visible without a teammate. */
   const seededWrites: RemoteWrite[] = []
+  /**
+   * Standing permissions given in the demo. Local like a mute, so this one is
+   * not a pretence either: granting one here really does remove the row.
+   */
+  const seededGrants = new Map<string, ConsentGrant>()
+  /**
+   * One teammate's keystrokes, held at a pane of this machine.
+   *
+   * Seeded because the prompt is the part of teamwork a demo cannot otherwise
+   * show — it needs a teammate on the far end of a relay to happen at all — and
+   * because what it puts on screen is bytes somebody else chose. The preview
+   * carries a carriage return and an escape sequence rendered as the runtime
+   * renders them, so the demo shows the safe form rather than a tidy sentence
+   * that would never occur.
+   */
+  const seededRequests: ConsentRequest[] = []
 
   let connection: ConnectionState = { phase: 'connecting', detail: 'Starting runtime' }
   const connectionListeners = new Set<(state: ConnectionState) => void>()
@@ -306,6 +324,25 @@ export function createSeededRuntimeClient(): RuntimeClient {
     `${warn('!')} 2 conflicted paths after rebase`,
     dim('db/schema.sql, db/migrations/0042_accounts.sql')
   ])
+
+  // Priya has typed a command at the agent pane and has not been allowed yet.
+  // The preview is the runtime's own safe rendering: the return that would
+  // submit it is shown as a mark, so the demo shows the question as it really
+  // arrives rather than as tidy prose.
+  seededRequests.push({
+    id: 'ask_1',
+    projectId: search.projectId,
+    terminalId: searchAgent.id,
+    handle: 'priya',
+    publicKey: SEEDED_PEER_KEY,
+    since: Date.now() - 4_000,
+    at: Date.now() - 3_000,
+    expiresAt: Date.now() + 56_000,
+    writes: 14,
+    bytes: 14,
+    preview: 'npm run build⏎',
+    clipped: false
+  })
 
   layouts.set(search.id, {
     worktreeId: search.id,
@@ -893,6 +930,40 @@ export function createSeededRuntimeClient(): RuntimeClient {
       else seededMutes.delete(terminalId)
       announce({ type: 'teammates' })
       return handlers['teamwork.watchers']({ projectId })
+    },
+    // What is waiting on the owner, and what they have already settled. The
+    // request is seeded against the first pane so the question is on screen
+    // without a relay; answering it is real, and the row goes.
+    'teamwork.requests': ({ projectId }) => ({
+      projectId,
+      requests: seededRequests.filter((request) => request.projectId === projectId),
+      standing: [...seededGrants.values()],
+      readAt: Date.now()
+    }),
+    'teamwork.decide': ({ requestId, decision }) => {
+      const index = seededRequests.findIndex((request) => request.id === requestId)
+      const request = seededRequests[index]
+      if (request === undefined) throw new Error(`no keystrokes are waiting under id ${requestId}`)
+      seededRequests.splice(index, 1)
+      if (decision === 'session' || decision === 'always') {
+        seededGrants.set(`${request.terminalId} ${request.publicKey}`, {
+          terminalId: request.terminalId,
+          handle: request.handle,
+          publicKey: request.publicKey,
+          scope: decision,
+          since: Date.now()
+        })
+      }
+      announce({ type: 'teammates' })
+      return handlers['teamwork.requests']({ projectId: request.projectId })
+    },
+    'teamwork.revoke': ({ terminalId, publicKey }) => {
+      const worktreeId = terminals.get(terminalId)?.record.worktreeId
+      const projectId = worktreeId === undefined ? undefined : worktrees.get(worktreeId)?.projectId
+      if (projectId === undefined) throw new Error(`no pane of this machine with id ${terminalId}`)
+      seededGrants.delete(`${terminalId} ${publicKey}`)
+      announce({ type: 'teammates' })
+      return handlers['teamwork.requests']({ projectId })
     },
     // Seeded with one entry so the shape of the record is visible: who, when,
     // which pane, how much — and, deliberately, not a byte of what was typed.

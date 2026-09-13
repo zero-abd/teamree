@@ -6,9 +6,11 @@ import { create } from 'zustand'
 import type {
   CliInstall,
   CliStatus,
+  ConsentDecision,
   InstalledAgent,
   Layout,
   MemberList,
+  PaneConsent,
   PaneNode,
   PaneWatchers,
   Project,
@@ -240,6 +242,16 @@ type WorkspaceState = {
    */
   watchers: Record<string, PaneWatchers>
   /**
+   * Whose keystrokes are waiting on this machine's owner, by project id, and
+   * which teammates they have already settled.
+   *
+   * Read on the same invalidation the rest of teamwork is, because a question
+   * appearing is exactly the kind of change that event is for — and because a
+   * prompt the window learned about by polling would be a prompt that appeared
+   * a second after the keystroke that raised it.
+   */
+  consent: Record<string, PaneConsent>
+  /**
    * Where this app's CLI is and what is at the path it would be linked to.
    *
    * Probed once at startup beside the agents, and for the same reason: it is
@@ -400,6 +412,22 @@ type WorkspaceState = {
    * would be pressed twice.
    */
   mutePane: (terminalId: string, muted: boolean) => Promise<void>
+  /**
+   * Answers one held burst: run it once, let this teammate type here for the
+   * session or for good, or refuse it.
+   *
+   * `through` is how many keystrokes the window actually drew, and it is passed
+   * rather than left out because a burst grows while the prompt is up: the
+   * owner is answering the screen in front of them, and whatever arrived after
+   * it has to be asked about rather than carried in on the same click.
+   *
+   * The answer is applied here rather than waited for from the change stream,
+   * for the reason the mute is: a prompt that stayed on screen for a round trip
+   * after it was answered would be answered twice.
+   */
+  decideConsent: (requestId: string, decision: ConsentDecision, through: number) => Promise<void>
+  /** Takes back a standing permission. Instant and local, exactly like a mute. */
+  revokeConsent: (terminalId: string, publicKey: string) => Promise<void>
 
   toggleProject: (projectId: string) => void
   toggleDashboard: () => void
@@ -754,7 +782,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         Promise.all([
           runtimeClient.call('teamwork.status', { projectId }).catch(() => null),
           runtimeClient.call('teamwork.presence', { projectId }).catch(() => null),
-          runtimeClient.call('teamwork.watchers', { projectId }).catch(() => null)
+          runtimeClient.call('teamwork.watchers', { projectId }).catch(() => null),
+          runtimeClient.call('teamwork.requests', { projectId }).catch(() => null)
         ])
       )
     )
@@ -762,12 +791,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const teamwork = { ...state.teamwork }
       const teammates = { ...state.teammates }
       const watchers = { ...state.watchers }
-      for (const [status, presence, reading] of answers) {
+      const consent = { ...state.consent }
+      for (const [status, presence, reading, waiting] of answers) {
         if (status) teamwork[status.projectId] = status
         if (presence) teammates[presence.projectId] = presence
         if (reading) watchers[reading.projectId] = reading
+        if (waiting) consent[waiting.projectId] = waiting
       }
-      return { teamwork, teammates, watchers }
+      return { teamwork, teammates, watchers, consent }
     })
   }
 
@@ -868,6 +899,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     teamwork: {},
     teammates: {},
     watchers: {},
+    consent: {},
     changesOpen: false,
     changes: {},
     logs: {},
@@ -1585,6 +1617,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         set({ diffPending: false })
         failed('Could not read the patch')(error)
       })
+    },
+
+    async decideConsent(requestId, decision, through) {
+      try {
+        const answer = await runtimeClient.call('teamwork.decide', { requestId, decision, through })
+        set((state) => ({ consent: { ...state.consent, [answer.projectId]: answer } }))
+      } catch (error) {
+        // Named rather than swallowed: a prompt that failed to be answered and
+        // said nothing would leave the owner believing they had decided.
+        failed('Could not answer that request')(error)
+      }
+    },
+
+    async revokeConsent(terminalId, publicKey) {
+      try {
+        const answer = await runtimeClient.call('teamwork.revoke', { terminalId, publicKey })
+        set((state) => ({ consent: { ...state.consent, [answer.projectId]: answer } }))
+      } catch (error) {
+        failed('Could not lift that permission')(error)
+      }
     },
 
     async mutePane(terminalId, muted) {

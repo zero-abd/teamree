@@ -120,16 +120,24 @@ never resized.
 
 **3b. ana's pane says it is being watched, and by whom.**
 
-Half of what makes "anyone can type" survivable. Not a nicety, and not optional.
+Half of what makes "anyone may type here" survivable — the other half being that
+their first keystroke waits for ana to allow it. Not a nicety, and not optional.
 
 *Assert:* ana's pane reports a watcher, named as bo.
 
 *Runs today.*
 
-**4. bo types the answer, and the agent takes the task.**
+**4. bo types the answer, ana is asked, and the agent takes the task.**
 
-*Assert:* the bytes reach ana's PTY and the program acts on them — the same
-assertion as 4a, with a relay in the middle.
+Nothing runs until ana says so. bo's keystroke crosses the relay, reaches her
+machine and stops there: her runtime holds the bytes and shows her who is
+asking, which pane, and exactly what was sent, with every control character
+drawn rather than obeyed. The agent is still waiting while she reads it.
+
+*Assert:* the request is waiting on ana, named as bo and naming her own pane,
+with the preview of what he sent; her PTY has not moved. Then she allows it, and
+only then do the bytes reach the PTY and the program act on them — the same
+assertion as 4a, with a relay and a decision in the middle.
 
 *Runs today.*
 

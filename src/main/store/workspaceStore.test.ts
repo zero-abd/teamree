@@ -301,4 +301,75 @@ describe('workspace store', () => {
       expect((await WorkspaceStore.open(path)).listMutedTerminals()).toEqual(['t1'])
     })
   })
+
+  describe('standing permission to type', () => {
+    const terminal = (id: string): TerminalRecord => ({
+      id,
+      worktreeId: 'w1',
+      cwd: '/repos/teamree',
+      shell: '/bin/bash',
+      cols: 80,
+      rows: 24,
+      createdAt: 1700000000000
+    })
+    const ANA = 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='
+    const BO = 'Qp2WdTn6Ys4aRk0uEbV8cMxJfZ1gLh3XoIvNtAj5BrM='
+
+    it('allows nobody on a fresh installation', async () => {
+      expect((await WorkspaceStore.open(filePath)).listStandingConsent()).toEqual([])
+    })
+
+    it('keeps a permission across a restart, because the pane comes back under its id', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(terminal('t1'))
+      store.setStandingConsent('t1', ANA, 1700000000000)
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(filePath)
+      expect(reopened.listStandingConsent()).toEqual([{ terminalId: 't1', publicKey: ANA, since: 1700000000000 }])
+    })
+
+    it('is per person as well as per pane, so allowing one is not allowing everyone', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.setStandingConsent('t1', ANA, 1)
+      store.setStandingConsent('t1', BO, 2)
+      store.setStandingConsent('t1', ANA, null)
+      await store.flush()
+
+      expect((await WorkspaceStore.open(filePath)).listStandingConsent()).toEqual([
+        { terminalId: 't1', publicKey: BO, since: 2 }
+      ])
+    })
+
+    it('drops the permission with the record it was about, so nothing has to be swept', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(terminal('t1'))
+      store.setStandingConsent('t1', ANA, 1)
+      store.removeTerminal('t1')
+      await store.flush()
+
+      expect((await WorkspaceStore.open(filePath)).listStandingConsent()).toEqual([])
+    })
+
+    it('survives a file that has never heard of permissions, and one that has them wrong', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(path, JSON.stringify({ version: 1, projects: [project] }), 'utf8')
+      expect((await WorkspaceStore.open(path)).listStandingConsent()).toEqual([])
+
+      // Salvaged row by row, like everything else here: a permission nobody can
+      // read is not a permission, and refusing the whole file over one would
+      // lose the ones that are still good.
+      await writeFile(
+        path,
+        JSON.stringify({
+          version: 1,
+          standingConsent: [{ terminalId: 't1', publicKey: ANA, since: 1 }, { terminalId: 't2' }, null, 7]
+        }),
+        'utf8'
+      )
+      expect((await WorkspaceStore.open(path)).listStandingConsent()).toEqual([
+        { terminalId: 't1', publicKey: ANA, since: 1 }
+      ])
+    })
+  })
 })

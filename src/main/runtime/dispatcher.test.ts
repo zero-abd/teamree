@@ -134,8 +134,10 @@ describe('dispatcher', () => {
       'project.list',
       'project.remove',
       'status.get',
-      // Local, not peer-reachable, and the owner's own: a mute needs nobody's
-      // agreement and the write log never leaves this machine.
+      // Local, not peer-reachable, and the owner's own: answering a held
+      // keystroke, lifting a permission and muting a pane all need nobody's
+      // agreement, and the write log never leaves this machine.
+      'teamwork.decide',
       'teamwork.mute',
       'teamwork.presence',
       // Local, and emphatically not peer-reachable: these three write to the
@@ -144,6 +146,8 @@ describe('dispatcher', () => {
       'teamwork.publish',
       'teamwork.publishPlan',
       'teamwork.relay',
+      'teamwork.requests',
+      'teamwork.revoke',
       'teamwork.setOrigin',
       'teamwork.setRelay',
       'teamwork.status',

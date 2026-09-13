@@ -34,9 +34,21 @@
 // makes a mute instant: a mute can only be applied in some later task, and the
 // keystroke after it is refused.
 //
+// **And the verdict may be a person's.** A teammate typing at a pane they have
+// no standing permission on is neither allowed nor refused: the owner's machine
+// holds the bytes and asks the owner, and answers `held` — a promise, not a
+// verdict. Nothing is dispatched while that promise is unsettled, so a held
+// keystroke has not happened to the pane in any sense; when it settles, an
+// allowed one goes through the same one-task check-and-dispatch as any other,
+// because consent is permission to run and not a way round the rest of the
+// judgment. The teammate's own request stays open across the wait, which is why
+// `terminal.write` alone carries a longer deadline than everything else here.
+//
 // Refusals are answered rather than dropped. A keystroke that went nowhere and
 // said nothing would leave the person who typed it believing they had typed
-// into somebody's shell, which is its own kind of lie.
+// into somebody's shell, which is its own kind of lie. That is true of a held
+// one too: it ends as an answer — allowed, denied, or expired — in every case,
+// including the link going away underneath it.
 //
 // **The wire has a budget and a pane can outrun it.** `relay/README.md` gives a
 // connection 200 frames and 4 MiB a second, and an agent that prints a build log
@@ -55,6 +67,7 @@
 // would be shown that output twice. So a read flushes its pane first, and the
 // answer leaves after everything it describes.
 
+import { CONSENT_WINDOW_MS } from '../../shared/entities'
 import {
   MAX_REMOTE_WRITE_BYTES,
   MAX_TERMINAL_ID_CHARS,
@@ -141,6 +154,25 @@ export const PEER_METHODS: Readonly<Partial<Record<MethodName, PeerScope>>> = {
 export const PEER_CALL_TIMEOUT_MS = 30_000
 
 /**
+ * The same, for the one method whose answer may be a person's.
+ *
+ * `terminal.write` stopped being answered out of memory the day the owner began
+ * being asked about it: a held keystroke waits for somebody to look at their
+ * screen, and `CONSENT_WINDOW_MS` is how long the owner's machine gives them.
+ * So the deadline here is that window plus the ordinary allowance for the round
+ * trip, and it is derived from the window rather than chosen beside it — the
+ * one ordering that must never break is that the machine doing the typing is
+ * more patient than the machine doing the deciding. The other way round, a
+ * teammate would be told their colleague never answered at the very moment
+ * their colleague was answering, and the owner's "yes" would land on a request
+ * that had already been given up on.
+ *
+ * A link that has genuinely gone does not wait this out: the transport fails
+ * every call in flight the moment it is released.
+ */
+export const PEER_WRITE_TIMEOUT_MS = CONSENT_WINDOW_MS + PEER_CALL_TIMEOUT_MS
+
+/**
  * How long output for one pane is gathered before it is sent.
  *
  * Fifty flushes a second per watched pane, against the relay's 200 frames, and
@@ -185,7 +217,24 @@ export type RemoteWriteRequest = {
  * thing that tells somebody two thousand miles away why their typing went
  * nowhere.
  */
-export type RemoteWriteVerdict = { ok: true } | { ok: false; code: ErrorCode; message: string }
+export type RemoteWriteDecision = { ok: true } | { ok: false; code: ErrorCode; message: string }
+
+/**
+ * A decision, or the promise of one.
+ *
+ * `held` is what the owner's machine says when the answer is a person's and not
+ * a rule's: this keystroke is not refused and it is not running, the bytes are
+ * sitting in the owner's memory, and somebody is being asked. The request stays
+ * open across the wait — nothing is answered and nothing is dropped — so what
+ * the teammate finally gets is the owner's answer rather than a timeout, and
+ * they get one either way.
+ *
+ * The promise settling is the ONLY thing that can put a held keystroke in front
+ * of the dispatcher, which is what keeps the guarantee in this file true: bytes
+ * reach a pty from exactly one place, and that place is a verdict of `ok: true`
+ * returned into the task that dispatches them.
+ */
+export type RemoteWriteVerdict = RemoteWriteDecision | { held: Promise<RemoteWriteDecision> }
 
 /**
  * What the owner's machine decided about one read.
@@ -825,6 +874,59 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       reserved -= 1
     }
 
+    /**
+     * The request, once everything in front of it has let it past.
+     *
+     * A function rather than the tail of this one, because a held keystroke
+     * runs it from a later task: the owner's answer arrives long after the
+     * frame that carried the write was read, and what has to happen then is
+     * exactly what would have happened then — the same bookkeeping, the same
+     * dispatcher, the same answer written back.
+     */
+    const run = (): void => {
+      // Noted before the call and answered after it: the subscription id only
+      // exists once the handler has minted one, and it is the id the pane is
+      // remembered under for as long as the teammate holds it.
+      if (method === 'terminal.subscribe') {
+        const terminalId = terminalIdOf(value)
+        if (terminalId !== undefined) asked.set(idOf(value), terminalId)
+      }
+      // Only for a subscription this link actually holds. The id arrives from
+      // the wire, so remembering it on the caller's say-so was a set the far
+      // end chose the size and the contents of — an id naming nothing was kept
+      // for the life of the link, and an id naming a subscription that did not
+      // exist *yet* was believed when it did, which swallowed the owner's "I
+      // closed this pane". Both stop being possible when the only ids that are
+      // remembered are the ids the hub minted here.
+      if (method === 'unsubscribe') {
+        const subscription = subscriptionOf(value)
+        if (subscription !== undefined && ours.has(subscription)) releasing.add(subscription)
+      }
+      // The pane whose scrollback is about to be answered, so its own output
+      // can be got out of the pacer first. Read here rather than in the
+      // continuation because that is where the method is still known.
+      const reading = method === 'terminal.read' ? terminalIdOf(value) : undefined
+      void options.dispatch(value, { connectionId: options.connectionId }).then(
+        (response) => {
+          if (subscribes) settleReservation(response)
+          recordWatch(response)
+          if (reading !== undefined) flushPane(reading)
+          write(response)
+        },
+        (error: unknown) => {
+          releaseReservation()
+          // Defensive, and only that: the dispatcher this runtime builds turns
+          // every throw into an error response, so nothing reaches here today.
+          // The note taken above is keyed and valued by two strings the far end
+          // chose the length of, and it is only ever removed by an answer coming
+          // back — so a dispatcher that ever did reject would leave one behind
+          // per call, for the life of the link.
+          asked.delete(idOf(value))
+          options.onError?.(error)
+        }
+      )
+    }
+
     if (scope === 'write-pane') {
       // The keystroke's own budget, spent on top of the request's. A person
       // types ten a second; nothing legitimate is refused here, and a flood is
@@ -842,6 +944,37 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         return
       }
       const verdict = judgeWrite(value)
+      // The owner is being asked. Nothing is answered, nothing is dispatched,
+      // and the bytes are in their memory rather than in this request — so what
+      // happens next happens in a later task, and `live` is re-checked there
+      // because the link may be gone by then.
+      if ('held' in verdict) {
+        void verdict.held.then(
+          (decision) => {
+            if (!live) return
+            if (!decision.ok) {
+              write({ id: idOf(value), ok: false, error: { code: decision.code, message: decision.message } })
+              return
+            }
+            run()
+          },
+          (error: unknown) => {
+            // Defensive: the service settles every held write it takes, and
+            // settles them with a decision rather than a rejection. A promise
+            // that broke anyway must still end as an answer, because a
+            // keystroke nobody is ever told the fate of is the one outcome
+            // this path exists to make impossible.
+            options.onError?.(error)
+            if (!live) return
+            write({
+              id: idOf(value),
+              ok: false,
+              error: { code: ErrorCode.Internal, message: 'this keystroke was never decided, so it was not run' }
+            })
+          }
+        )
+        return
+      }
       if (!verdict.ok) {
         write({ id: idOf(value), ok: false, error: { code: verdict.code, message: verdict.message } })
         return
@@ -861,47 +994,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         return
       }
     }
-    // Noted before the call and answered after it: the subscription id only
-    // exists once the handler has minted one, and it is the id the pane is
-    // remembered under for as long as the teammate holds it.
-    if (method === 'terminal.subscribe') {
-      const terminalId = terminalIdOf(value)
-      if (terminalId !== undefined) asked.set(idOf(value), terminalId)
-    }
-    // Only for a subscription this link actually holds. The id arrives from the
-    // wire, so remembering it on the caller's say-so was a set the far end
-    // chose the size and the contents of — an id naming nothing was kept for
-    // the life of the link, and an id naming a subscription that did not exist
-    // *yet* was believed when it did, which swallowed the owner's "I closed
-    // this pane". Both stop being possible when the only ids that are
-    // remembered are the ids the hub minted here.
-    if (method === 'unsubscribe') {
-      const subscription = subscriptionOf(value)
-      if (subscription !== undefined && ours.has(subscription)) releasing.add(subscription)
-    }
-    // The pane whose scrollback is about to be answered, so its own output can
-    // be got out of the pacer first. Read here rather than in the continuation
-    // because that is where the method is still known.
-    const reading = method === 'terminal.read' ? terminalIdOf(value) : undefined
-    void options.dispatch(value, { connectionId: options.connectionId }).then(
-      (response) => {
-        if (subscribes) settleReservation(response)
-        recordWatch(response)
-        if (reading !== undefined) flushPane(reading)
-        write(response)
-      },
-      (error: unknown) => {
-        releaseReservation()
-        // Defensive, and only that: the dispatcher this runtime builds turns
-        // every throw into an error response, so nothing reaches here today.
-        // The note taken above is keyed and valued by two strings the far end
-        // chose the length of, and it is only ever removed by an answer coming
-        // back — so a dispatcher that ever did reject would leave one behind
-        // per call, for the life of the link.
-        asked.delete(idOf(value))
-        options.onError?.(error)
-      }
-    )
+    run()
   }
 
   /**
@@ -1045,11 +1138,16 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     if (!live) return Promise.reject(new Error('the peer link is closed'))
     nextId += 1
     const id = `peer_${nextId}`
+    // A write may be waiting on a person rather than on a machine, so it is
+    // given the owner's whole consent window on top of the ordinary allowance.
+    // Everything else is answered out of memory, where thirty seconds is not a
+    // slow answer but no answer at all.
+    const deadlineMs = method === 'terminal.write' ? PEER_WRITE_TIMEOUT_MS : PEER_CALL_TIMEOUT_MS
     return new Promise<Answered<M>>((resolve, reject) => {
       // Armed before the frame is written, because `write` can fail the whole
       // transport in place and the cleanup that does must find this waiter
       // already holding its own cancel.
-      const window = startTimedWindow(scheduler, PEER_CALL_TIMEOUT_MS)
+      const window = startTimedWindow(scheduler, deadlineMs)
       const cancel = scheduler.setTimer(() => {
         if (!pending.delete(id)) return
         // A deadline this side slept through gave the teammate no thirty
@@ -1063,10 +1161,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         // Named, and named as silence rather than as a refusal: the far end has
         // not said no, it has said nothing, and the person who typed is owed
         // the difference.
-        reject(
-          new Error(`your teammate’s machine did not answer ${method} within ${PEER_CALL_TIMEOUT_MS / 1000} seconds`)
-        )
-      }, PEER_CALL_TIMEOUT_MS)
+        reject(new Error(`your teammate’s machine did not answer ${method} within ${deadlineMs / 1000} seconds`))
+      }, deadlineMs)
       pending.set(id, { resolve: resolve as (answer: never) => void, reject, cancel })
       write({ id, method, params } as unknown as Frame)
     })

@@ -137,7 +137,8 @@ draws, so both stay in step.
 ## Working with other people
 
 Two people on two Macs can see each other's worktrees in the same sidebar, read
-what a teammate's pane is doing, and answer a prompt in it. Identity is the git
+what a teammate's pane is doing, and — with that teammate's say-so — answer a
+prompt in it. Identity is the git
 remote: a teammate is somebody whose key is committed to the repository.
 
 Machines behind two routers cannot reach each other, so both dial out to a small
@@ -147,9 +148,18 @@ carries it — so standing one up needs no clone of this repository. There is no
 default relay and nobody hosts one for you.
 
 Be clear about what this is: a teammate whose key is in the repository can run
-commands as you. The safeguards are visibility and reversibility — you can see
-who is reading and typing in your panes, there is a durable log of every remote
-keystroke, and muting a pane is immediate — not a permission model.
+commands as you — once you let them. Their keystrokes are held on your machine
+until you have been shown who is asking, which pane, and the bytes themselves,
+and have answered: allow once, allow for this session, allow them in that pane
+from now on, or refuse. Anything nobody answers expires, and they are told that
+it did. Around that sit the older safeguards, which have not gone anywhere: you
+can see who is reading and typing in your panes, there is a durable log of every
+remote keystroke your machine decided about, and muting a pane is immediate and
+answers the question before it is asked.
+
+The prompt is for accidents, which is what nearly every bad keystroke is. It is
+not a wall against somebody you should not have added: once you allow them they
+can run anything.
 
 All of it has been driven end to end, but between two runtimes on one machine.
 Two Macs in two places is the thing nobody has tried yet.

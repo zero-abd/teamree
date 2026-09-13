@@ -3,11 +3,14 @@
 Everything below is decided. It is written down because the decisions constrain
 each other — the identity scheme is what makes the relay untrusted, and the
 relay being untrusted is what makes "anyone can type" survivable — and a
-later change to one of them is a change to the others.
+later change to one of them is a change to the others. One of them has since
+been changed, deliberately, and that is written down where it lives: typing into
+a teammate's pane now waits for that teammate to allow it.
 
 The milestones at the bottom are the order it was built in, and each one is
-useful on its own. All five have landed: identity, the peer crypto, the relay
-and the transport, watching a pane, typing into one, and the stale cache.
+useful on its own. All six have landed: identity, the peer crypto, the relay
+and the transport, watching a pane, typing into one, the stale cache, and the
+owner's consent in front of every keystroke.
 
 ## The shape of it
 
@@ -162,24 +165,75 @@ kind of project gets its one unrecoverable bug.
 What the relay does still learn is **who talks to whom, and when**. A team that
 cares runs it themselves, which they are doing anyway.
 
-### Everyone sees everything; anyone can type
+### Everyone sees everything; anyone may ask to type
 
-Within a project, all panes are visible to all members, and **any member can
-type into any pane**.
+Within a project, all panes are visible to all members, and **any member may
+type into any pane — once its owner allows it**.
 
 This is remote code execution, by design and by request. It is the feature: a
 teammate who can see your agent stuck on a question can answer it. But it is
 worth being exact about what it means — a member of the project can run
 arbitrary commands on your machine, as you.
 
-What makes that survivable is not a permission model, which would be a lie at
-this granularity, but **being unable to do it invisibly**:
+**This is the one decision here that has been reversed.** For a long time a
+teammate's keystroke landed immediately, carrying attribution, and the owner's
+only recourse was a mute after the fact. The argument was that a permission
+model would be a lie at this granularity: everyone who can push can already run
+anything, so a prompt would be theatre. That argument is about what a *hostile*
+member could do, and it is still true. It is the wrong argument for the ordinary
+case, which is not hostility but surprise — a colleague answering what they
+think is a prompt in a pane that has moved on, an agent driven by somebody who
+cannot see what yours is doing this second, a paste into the wrong window. Those
+are not attacks and they still run as you. So:
+
+**A keystroke from a teammate is held, not applied, until the owner says.**
+
+- The write does not reach the pty. The bytes sit in the owner's runtime,
+  the teammate's request stays open, and nothing has happened to the pane.
+- The owner is shown **who** is asking, **which pane**, and **what** they are
+  about to send — the actual bytes, rendered so that every control character is
+  visible and none of them can act. An escape sequence is printed rather than
+  obeyed, a return is drawn as a mark, and the characters that make text read
+  backwards or disappear are named. The person being asked about does not get to
+  paint the question.
+- The answers are **allow once**, **allow for this session**, **always allow
+  this teammate in this pane**, and **refuse**. "This session" means that
+  teammate in that pane until the runtime stops or their link drops. "Always"
+  survives a restart, filed beside the mute against the pane's own record, and
+  goes when the pane does.
+- **Allow once means what the owner was shown.** A burst grows while the prompt
+  is up, so the answer carries the number of keystrokes on the screen that was
+  read; anything that arrived after it stays held and asks again.
+- **A burst is one question.** Somebody typing `npm test` sends nine keystrokes,
+  and nine prompts would be a prompt nobody reads — which is worse than no
+  prompt, because it trains people to click through. Keystrokes from one
+  teammate at one pane join the question already open, and the preview grows
+  underneath.
+- **Nothing waits forever.** A request nobody answers expires after a minute and
+  the teammate is told that it expired, which is a different sentence from being
+  refused. The person who typed always learns what became of it: allowed,
+  refused, expired, or the link went.
+- **Mute still wins, and still answers instantly.** A muted pane refuses without
+  a prompt, because a mute is that question already answered; muting also
+  cancels anything waiting on that pane and lifts every permission on it.
+
+None of this replaces the older half of the bargain, which is still the reason
+any of it is survivable — **nothing can be done invisibly**:
 
 - A pane being watched says so, and by whom.
 - Typing is attributed live — the pane shows who is typing while they type.
 - Every remote write is recorded locally, with who and when, in a log the owner
-  can read after the fact.
+  can read after the fact. That includes the ones that were refused and the ones
+  that expired, because somebody repeatedly asking is itself worth knowing.
 - **Mute is instant and per-pane**, and it is the owner's, not a negotiation.
+- A standing permission is listed wherever the mute is, because a permission the
+  owner cannot see is one they cannot lift.
+
+Be clear about what the prompt is and is not. It is not a security boundary
+against a member who means harm: they can be allowed once, legitimately, and
+type anything. It is a boundary against *accident and inattention*, which is
+what almost every bad keystroke actually is — and it is the one point at which
+the owner gets to read what is about to run as them.
 
 ### Metadata flows by default, bytes flow on demand
 
@@ -239,8 +293,18 @@ it is an accelerator and never the mechanism.
 
 Recorded now, so none of them is a surprise later.
 
-- **RCE is the feature.** Mitigated by attribution and instant mute, not by
-  permissions. Anyone deploying this should know it about their team.
+- **RCE is the feature.** Held for the owner's consent, attributed, recorded,
+  and stoppable with a mute — but a member who is allowed can run anything, and
+  allowing is one click. The prompt catches accidents; it does not make a
+  teammate you should not have added safe. Anyone deploying this should know it
+  about their team.
+- **A prompt people are shown too often is a prompt they stop reading.** The
+  reason bursts are gathered, the reason "allow for this session" exists, and
+  the reason "always allow" is offered at all: a question asked once per
+  keystroke would be answered by reflex, which is worse than not asking. The
+  cost of that choice is real — "always" is a standing grant to run anything in
+  that pane, and it survives restarts — and it is why it is listed beside the
+  mute where the owner can see and lift it.
 - **Revocation is eventually-consistent**, bounded by fetch interval.
 - **The relay sees the social graph** even though it sees no content.
 - **Terminal dimensions belong to the owner.** A watcher with a smaller window
@@ -249,10 +313,12 @@ Recorded now, so none of them is a surprise later.
 - **A muted pane still exists.** Mute stops the bytes; it does not hide that the
   worktree is there. Hiding it would make mute a way to work unobserved on a
   shared project, which is a different feature and probably a worse one.
-- **Membership is one level.** There is no read-only member and nowhere to put
-  one: the allow-list a teammate reaches carries `terminal.write` beside
-  `terminal.read`, and the only degree of freedom is the owner's per-pane mute,
-  which gates writes and deliberately does not gate reads.
+- **Membership is one level, and reading is not gated at all.** There is no
+  read-only member: the allow-list a teammate reaches carries `terminal.write`
+  beside `terminal.read`. What the owner controls is writing — the prompt, the
+  standing permissions and the mute all gate keystrokes and deliberately gate
+  nothing about who may look. A member of the project can read every pane in it
+  and always could.
 - **The private key is a file, and everything on this machine runs as you.**
   `identity.key` is mode 0600 in the app's data directory, which keeps it out of
   a repository and away from other accounts on the machine. It is not protected
@@ -336,3 +402,23 @@ it is the one that hands somebody else a shell.
 
 The local cache, the stale marking with its age, and reconnection that
 reconciles rather than re-fetching the world.
+
+### F — The owner's consent
+
+The reversal. A teammate's keystroke is held on the owner's machine until the
+owner has been shown it and has answered: `terminal.write` gets a verdict that
+is neither yes nor no but *held*, and nothing reaches the dispatcher — and
+therefore nothing reaches the pty — until that promise settles.
+
+What it added: `teamwork.requests`, `teamwork.decide` and `teamwork.revoke` for
+the owner, in the window and on the CLI; a preview that renders a teammate's
+bytes so that every control character is visible and none of them can act; one
+question per burst rather than one per keystroke; an expiry so nothing waits
+forever and nobody is left wondering; and standing permissions, per teammate per
+pane, the durable half of which is filed beside the mute so it comes back with
+the pane it is about and goes when that pane does.
+
+What it deliberately did not change: reading is not gated, attribution is still
+live, the log still records everything the owner's machine decided — now
+including what was refused and what expired — and the mute is still instant,
+still the owner's alone, and still the answer that outranks all of this.

@@ -198,7 +198,10 @@ describe('whose pane this is', () => {
   it('says whose machine a keystroke runs on, at all times and in words', async () => {
     const watch = armWatch()
     mount()
-    const promise = 'what you type runs on priya’s machine, as priya, with your name on it'
+    // Including the half of it that changed when consent did: it runs there,
+    // as them, once they allow it, with your name on it. Leaving out "once they
+    // allow it" would promise something this no longer does.
+    const promise = 'what you type runs on priya’s machine, as priya, once they allow it, with your name on it'
     expect(screen.getByText(promise)).toBeTruthy()
     await watch.resolve()
     expect(screen.getByText(promise)).toBeTruthy()
@@ -322,6 +325,67 @@ describe('typing is a request', () => {
       fakeTerms[0]?.data?.('a')
     })
     expect(paneText().match(/not typed: this pane is muted/g)).toHaveLength(2)
+  })
+
+  // A keystroke the owner has not answered has not run, and a window that said
+  // nothing about it would be a window in which typing simply stopped working.
+  it('says nothing has run while the owner’s machine has not answered', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    vi.useFakeTimers()
+    let allow: (() => void) | undefined
+    call.mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          allow = () => resolve(undefined)
+        })
+    )
+
+    await act(async () => {
+      for (const key of 'npm test') fakeTerms[0]?.data?.(key)
+    })
+    // Nothing yet: a round trip that is merely a round trip is not news.
+    expect(paneText()).not.toContain('waiting')
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_100)
+    })
+    expect(paneText()).toContain('[waiting: nothing you have typed has run')
+    expect(screen.getByText('waiting for priya’s machine — nothing you have typed has run')).toBeTruthy()
+
+    // Said once for the burst, not once per key: eight keystrokes held
+    // together are one wait.
+    expect(paneText().match(/waiting: nothing you have typed has run/g)).toHaveLength(1)
+  })
+
+  it('says when the waiting ended, because an allowed keystroke may echo nothing', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    vi.useFakeTimers()
+    let allow: (() => void) | undefined
+    call.mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          allow = () => resolve(undefined)
+        })
+    )
+    await act(async () => {
+      fakeTerms[0]?.data?.('x')
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(1_100)
+    })
+    expect(paneText()).toContain('[waiting: nothing you have typed has run')
+
+    await act(async () => {
+      allow?.()
+    })
+    // A pane at a password prompt echoes nothing, so being allowed and being
+    // ignored would look identical without this.
+    expect(paneText()).toContain('[no longer held: what you typed has run]')
+    expect(screen.getByText(/what you type runs on priya’s machine/)).toBeTruthy()
   })
 
   it('stops saying typing is refused the moment one is accepted', async () => {

@@ -26,7 +26,7 @@ import { unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { PaneTypist, RemoteWriteLog } from '../../../shared/entities'
+import type { ConsentDecision, PaneTypist, RemoteWriteLog } from '../../../shared/entities'
 import { Params } from '../../../shared/methods'
 import type { Response, StreamEvent } from '../../../shared/protocol'
 import { ErrorCode } from '../../../shared/protocol'
@@ -199,6 +199,29 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
       { id: `type_${typed}`, method: 'teamwork.type', params: { projectId: 'p_alice', paneId: id, data } },
       { connectionId: 'window_typing' }
     )
+  }
+
+  /**
+   * Bob, answering the question his own machine puts up the first time somebody
+   * types at one of his panes.
+   *
+   * Driven through the real thing rather than around it — the request is read
+   * out of `teamwork.requests` and answered through `teamwork.decide` — because
+   * these are the tests that prove the feature across a relay, and a fixture
+   * that granted permission by reaching into the service would prove the
+   * feature with the prompt taken out of it.
+   *
+   * `always` by default, so a test about typing is not a test about being asked
+   * once per keystroke. The tests that are about the asking say so.
+   */
+  const bobAllows = async (handle: string, decision: ConsentDecision = 'always'): Promise<void> => {
+    await until(
+      () => bob.service.requests({ projectId: 'p_bob' }).requests.some((row) => row.handle === handle),
+      `Bob to be asked about ${handle}`
+    )
+    for (const row of bob.service.requests({ projectId: 'p_bob' }).requests) {
+      if (row.handle === handle) bob.service.decide({ requestId: row.id, decision })
+    }
   }
 
   /** Bob's own hand on his own pane. Local, instant, and nobody else's call. */
@@ -596,8 +619,11 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
       'Bob to see the reader'
     )
 
-    const answer = await aliceType(paneId, 'a-keystroke-from-alice\n')
-    expect(answer).toMatchObject({ ok: true, result: { written: true } })
+    // Nothing has run yet: the keystroke is on Bob's machine, held, and his
+    // machine is asking him. The answer to Alice comes back only once he says.
+    const answer = aliceType(paneId, 'a-keystroke-from-alice\n')
+    await bobAllows('alice')
+    expect(await answer).toMatchObject({ ok: true, result: { written: true } })
 
     // Through a real pty and back out again, which is the only proof that the
     // bytes reached a process rather than a promise.
@@ -626,22 +652,33 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     // a teammate's terminal chose not to echo.
     expect(JSON.stringify(log)).not.toContain('a-keystroke-from-alice')
 
+    // And the permission he gave stands: the next keystroke is not a question.
+    expect((await aliceType(paneId, 'a-second-keystroke\n')).ok).toBe(true)
+    expect(bob.service.requests({ projectId: 'p_bob' }).requests).toEqual([])
+
     await aliceRelease(opened.subscription, 'window_type_1')
   })
 
   it('does not take the next keystroke into a muted pane, whoever sent it', async () => {
     const window = openWindow(alice, 'window_mute')
     const opened = await aliceWatch(paneId, 'window_mute')
+    // No question this time: Bob settled Alice on this pane above, and that is
+    // what a standing permission is for.
     expect((await aliceType(paneId, 'before-the-mute\n')).ok).toBe(true)
     await until(() => window.outputOn(opened.subscription).includes('before-the-mute'), 'the keystroke before the mute')
 
     await bobMute(terminalId, true)
 
-    // Both of them, because a mute is of a pane and not of a person.
+    // Both of them, because a mute is of a pane and not of a person — and both
+    // of them without a prompt, which is the point: a mute answers the question
+    // before it is asked. Alice had a standing permission a moment ago and
+    // Carol has never had one, and the mute makes no distinction between them.
     expect(errorOf(await aliceType(paneId, 'after-the-mute\n')).code).toBe(ErrorCode.Conflict)
     await expect(carol.call('terminal.write', { terminalId, data: 'carol-after-the-mute\n' })).rejects.toMatchObject({
       code: ErrorCode.Conflict
     })
+    // And nothing is waiting on Bob: neither keystroke became a question.
+    expect(bob.service.requests({ projectId: 'p_bob' }).requests).toEqual([])
 
     // Long enough that a keystroke on its way would have arrived.
     await new Promise((resolve) => setTimeout(resolve, 300))
@@ -654,7 +691,12 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     expect(bobTypists(terminalId).every((typist) => typist.refused > 0)).toBe(true)
 
     await bobMute(terminalId, false)
-    expect((await aliceType(paneId, 'after-the-unmute\n')).ok).toBe(true)
+    // The mute took the standing permission with it — a permission that
+    // outlived a mute would make the mute last exactly as long as the next
+    // unmute — so Bob is asked again, and says yes again.
+    const after = aliceType(paneId, 'after-the-unmute\n')
+    await bobAllows('alice')
+    expect((await after).ok).toBe(true)
     await until(() => window.outputOn(opened.subscription).includes('after-the-unmute'), 'typing to work again')
     await aliceRelease(opened.subscription, 'window_mute')
   })
@@ -689,6 +731,12 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     // that merged two people into one would get wrong.
     const both = aliceType(paneId, 'alices-line\n')
     carol.call('terminal.write', { terminalId, data: 'carols-line\n' }).catch(() => {})
+    // Two people, two questions. A request is one teammate at one pane, so
+    // these are two of them and never one — which is exactly the case an
+    // attribution, or a permission, that merged them would get wrong. Alice is
+    // asked again because the mute two tests above took her permission with it.
+    await bobAllows('alice')
+    await bobAllows('carol')
     expect((await both).ok).toBe(true)
 
     await until(() => window.outputOn(opened.subscription).includes('alices-line'), 'Alice’s line')

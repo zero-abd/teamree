@@ -99,8 +99,34 @@ export type WorkspaceDocument = {
    * sweeping is least reliable.
    */
   mutedTerminals: string[]
+  /**
+   * Teammates the owner has told this machine may always type in a pane,
+   * without being asked again.
+   *
+   * The mirror image of the list above, and here for the same two reasons. It
+   * is durable because a permission that lapsed at the next restart would be
+   * the owner's decision quietly discarded — they would find out by being asked
+   * again for something they had already settled, which trains people to click
+   * through the question this whole feature exists to make them read. And it is
+   * kept beside the terminal records because a permission is about one pane, so
+   * `removeTerminal` drops it and there is nothing to sweep.
+   *
+   * The key is committed to the repository and is the identity the handshake
+   * authenticates, so this survives a teammate changing their handle and does
+   * not survive them changing their machine — which is the right way round.
+   */
+  standingConsent: StandingConsentRecord[]
   asked: AskedQuestions
 }
+
+/** One pane, one teammate, and when the owner said so. */
+export type StandingConsentRecord = { terminalId: string; publicKey: string; since: number }
+
+const StandingConsentSchema = z.object({
+  terminalId: z.string().min(1),
+  publicKey: z.string().min(1),
+  since: z.number()
+})
 
 export function emptyWorkspaceDocument(): WorkspaceDocument {
   return {
@@ -110,6 +136,7 @@ export function emptyWorkspaceDocument(): WorkspaceDocument {
     layouts: [],
     terminals: [],
     mutedTerminals: [],
+    standingConsent: [],
     asked: {}
   }
 }
@@ -129,6 +156,7 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     layouts: salvage(record.layouts, LayoutSchema),
     terminals: salvage(record.terminals, TerminalRecordSchema) as TerminalRecord[],
     mutedTerminals: salvage(record.mutedTerminals, z.string().min(1)),
+    standingConsent: salvage(record.standingConsent, StandingConsentSchema),
     // Salvaged like everything else: a date somebody hand-edited into a string
     // means the question has not been asked, never that the file is unusable.
     asked: AskedSchema.safeParse(record.asked).data ?? {}

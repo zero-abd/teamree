@@ -20,7 +20,14 @@
 // program in it. The only thing the harness fakes is the distance.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { PaneWatchers, TeammatePresence, Terminal, WatchedPane } from '../../src/shared/entities'
+import type {
+  ConsentDecision,
+  PaneConsent,
+  PaneWatchers,
+  TeammatePresence,
+  Terminal,
+  WatchedPane
+} from '../../src/shared/entities'
 import { TYPING_WINDOW_MS } from '../../src/shared/entities'
 import type { WatchedPaneEvent } from '../../src/shared/methods'
 import { ErrorCode } from '../../src/shared/protocol'
@@ -241,6 +248,24 @@ describe.skipIf(!RELAY_BUILT)('act II — across the relay', () => {
   const boTypes = (data: string): Promise<{ written: true }> =>
     peers.joiner.call('teamwork.type', { projectId: peers.joiner.projectId, paneId: bosPaneId, data })
 
+  /** What ana's machine is holding for her to answer, on her own machine. */
+  const anasQuestions = (): Promise<PaneConsent> =>
+    peers.leader.call('teamwork.requests', { projectId: peers.leader.projectId })
+
+  /**
+   * Ana, answering the question her machine puts up the first time bo types.
+   *
+   * Through the real methods rather than around them: the question is read out
+   * of `teamwork.requests` and answered through `teamwork.decide`, which is
+   * what the button in her window does.
+   */
+  const anaAllows = async (decision: ConsentDecision): Promise<void> => {
+    await until(async () => (await anasQuestions()).requests.length > 0, 'ana to be asked about bo')
+    const [question] = (await anasQuestions()).requests
+    if (question === undefined) throw new Error('ana was asked and then was not')
+    await peers.leader.call('teamwork.decide', { requestId: question.id, decision })
+  }
+
   beforeAll(async () => {
     // The relay, the two outbound sockets, and the Noise IK handshake against
     // the keys the two clones carry. Nothing is subscribed to here.
@@ -356,7 +381,26 @@ describe.skipIf(!RELAY_BUILT)('act II — across the relay', () => {
     // through.
     await until(async () => (await anasBookFor())?.watchers.length === 1, 'ana to see bo reading before he types')
 
-    expect(await boTypes('1\r')).toEqual({ written: true })
+    // NOTHING RUNS UNTIL ANA SAYS SO. The keystroke crosses the relay, reaches
+    // her machine, and stops there: her runtime holds the bytes and asks her,
+    // and bo's own call stays open across the wait rather than being answered
+    // with a guess.
+    const answering = boTypes('1\r')
+    await until(async () => (await anasQuestions()).requests.length > 0, 'ana to be asked about bo')
+    const [question] = (await anasQuestions()).requests
+    expect(question).toMatchObject({ handle: 'bo', terminalId: anasPane.id, writes: 1 })
+    // What she is shown is what he sent, with the return that would submit it
+    // drawn rather than obeyed — the preview is rendered so that bytes chosen
+    // by somebody else cannot paint the question being asked about them.
+    expect(question?.preview).toBe('1⏎')
+    // And the agent has not moved: it is still asking, because nothing has
+    // reached the pty.
+    expect(await anasScrollback()).not.toMatch(/taking task 1/)
+
+    // She allows it — for this pane and this teammate, until her runtime or
+    // the link ends — and only now does anything happen.
+    await anaAllows('session')
+    expect(await answering).toEqual({ written: true })
 
     // Through a real pty on ana's machine and back out of the program that was
     // blocked reading it. A promise that resolved would prove nothing; this is

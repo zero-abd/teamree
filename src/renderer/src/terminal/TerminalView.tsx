@@ -7,13 +7,16 @@
 // a remount would attach a second stream and every byte would appear twice.
 //
 // THE BAR ACROSS THE TOP IS NOT DECORATION. A teammate can type into this pane,
-// and their keystrokes run as this machine's user. `docs/teamwork.md` says what
-// makes that survivable is not a permission model but being unable to do it
-// invisibly, so the bar appears the moment somebody else's bytes land here,
-// names them while they are typing, and carries the mute — which is instant,
-// local, and needs nobody's agreement. It stays after they stop, because a pane
-// a teammate typed into an hour ago is not a pane whose history is the owner's
-// alone, and it should not have to be remembered to be known.
+// and their keystrokes run as this machine's user — once the owner has allowed
+// them. The prompt that asks is a modal and is over in a moment; this bar is
+// what is left afterwards, and `docs/teamwork.md` rests on it just as much:
+// being asked once is not the same as knowing whose keystrokes are in your pane
+// now. So the bar appears the moment somebody else's bytes land here, names them
+// while they are typing, and carries the mute — which is instant, local, needs
+// nobody's agreement, and lifts every permission on the pane with it. It stays
+// after they stop, because a pane a teammate typed into an hour ago is not a
+// pane whose history is the owner's alone, and it should not have to be
+// remembered to be known.
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { FitAddon } from '@xterm/addon-fit'

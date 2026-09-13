@@ -1,12 +1,13 @@
 // Attribution is the whole mitigation.
 //
 // `docs/teamwork.md` grants every member the ability to run arbitrary commands
-// on every other member's machine, and says plainly that what makes that
-// survivable is not a permission model but being unable to do it invisibly: the
-// pane says who is watching, typing is attributed live, and every remote write
-// is logged with who and when. All three of those name a person by their
-// handle, and a handle comes from exactly one place — the name of a file in
-// `.teamree/members`.
+// on every other member's machine, once that member allows it — and everything
+// that makes that survivable names a person. The prompt asks about a handle;
+// the pane says who is watching; typing is attributed live; every remote write
+// is logged with who and when. All four of those name a person by their handle,
+// and a handle comes from exactly one place — the name of a file in
+// `.teamree/members`. A prompt that named the wrong person would be worse than
+// no prompt, because it would be answered.
 //
 // So "one handle names one key, and one key names one person" is not a tidiness
 // property of the roster reader. It is the load-bearing part of the only
