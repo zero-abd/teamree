@@ -424,11 +424,19 @@
   background: var(--bg-window);
 }
 
+/* A patch scrolls sideways rather than wrapping, and deliberately: its meaning
+   is in the columns. A wrapped line turns one change into several rows and
+   pushes the +/- gutter out of line, which is the one edge a diff is read down.
+   Sized to its widest line so that a line's highlight runs the whole width of
+   the patch — without this the green and red stop at the panel edge and scrolling
+   right leaves changed text with no colour on it at all. */
 .patch {
   margin: 0;
   padding: var(--s2) 0;
   display: flex;
   flex-direction: column;
+  width: max-content;
+  min-width: 100%;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.55;

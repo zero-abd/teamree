@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Terminal } from '@shared/entities'
-import { activityOf, agentRows, sinceLabel, worktreeActivity, type AgentRow } from './agentRows'
+import { activityOf, agentRows, paneLabel, sinceLabel, worktreeActivity, type AgentRow } from './agentRows'
 
 function terminal(overrides: Partial<Terminal> & { id: string }): Terminal {
   return {
@@ -23,6 +23,7 @@ const row = (overrides: Partial<AgentRow> = {}): AgentRow => ({
   label: 'bash',
   activity: 'quiet',
   quietFor: 0,
+  evidence: null,
   ...overrides
 })
 
@@ -82,6 +83,45 @@ describe('agentRows', () => {
 
   it('never reports a negative silence when the clocks disagree', () => {
     expect(agentRows([terminal({ id: 'a', lastOutputAt: 5000 })], 'wt1', 1000)[0]?.quietFor).toBe(0)
+  })
+
+  it('carries the evidence known for a pane and nothing for the rest', () => {
+    const rows = agentRows([terminal({ id: 'a' }), terminal({ id: 'b' })], 'wt1', 0, { a: '766 tests passed' })
+    expect(rows.map((entry) => entry.evidence)).toEqual(['766 tests passed', null])
+  })
+
+  it('has no evidence at all when none has been read yet', () => {
+    expect(agentRows([terminal({ id: 'a' })], 'wt1', 0)[0]?.evidence).toBeNull()
+  })
+})
+
+describe('paneLabel', () => {
+  it('keeps a title a program set for itself', () => {
+    expect(paneLabel(terminal({ id: 't', title: 'npm run build' }))).toBe('npm run build')
+  })
+
+  // The one title that says nothing: it repeats the worktree the row is already
+  // under, and it changes every time the shell changes directory.
+  it('replaces the default shell title, which is user, host and path', () => {
+    expect(paneLabel(terminal({ id: 't', title: 'root@8f2c1d: /work/rank-results' }))).toBe('bash')
+    expect(paneLabel(terminal({ id: 't', title: 'ada@laptop:~', shell: '/usr/bin/zsh' }))).toBe('zsh')
+  })
+
+  it('keeps a title that only looks like the default one', () => {
+    expect(paneLabel(terminal({ id: 't', title: 'deploy@staging: pushing 3 of 8' }))).toBe(
+      'deploy@staging: pushing 3 of 8'
+    )
+  })
+
+  it('reduces a title that is only a path to its last segment', () => {
+    expect(paneLabel(terminal({ id: 't', title: '/home/ada/code/teamree/src' }))).toBe('src')
+    expect(paneLabel(terminal({ id: 't', title: '~/code/teamree' }))).toBe('teamree')
+    expect(paneLabel(terminal({ id: 't', title: 'C:\\Users\\ada\\code' }))).toBe('code')
+  })
+
+  it('falls back to the shell when there is no title at all', () => {
+    expect(paneLabel(terminal({ id: 't', title: '   ', shell: '/bin/fish' }))).toBe('fish')
+    expect(paneLabel(terminal({ id: 't', title: '', shell: 'C:\\Windows\\System32\\cmd.exe' }))).toBe('cmd')
   })
 })
 

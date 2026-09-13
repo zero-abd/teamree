@@ -191,8 +191,18 @@
   cursor: default;
 }
 
+.worktree__title,
+.worktree__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  min-width: 0;
+}
+
 .worktree__name {
-  max-width: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -200,13 +210,22 @@
   font-size: var(--text-base);
 }
 
+/* Pushed to the row's right edge rather than sitting against the name, so the
+   dots line up into a column that can be read down. */
+.worktree__title .activity {
+  margin-left: auto;
+}
+
 .worktree--creating .worktree__name,
 .worktree--failed .worktree__name {
   color: var(--fg-secondary);
 }
 
+/* Takes the slack on its line, which pushes the chips and the merge badge to
+   the right edge and lets the branch itself be the part that gives way. */
 .worktree__branch {
-  max-width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -357,9 +376,11 @@
    absence of an answer. */
 .worktree__merge {
   padding: 0 var(--s1);
-  /* Shrinks before the name does, and is clipped rather than wrapped: whatever
-     is left of it still reads, and the tooltip has the whole sentence. */
-  flex: 0 1 auto;
+  /* It shares its line with the branch now, not with the name, so the branch is
+     what gives way: "no commits" clipped to "no…" says nothing, while a
+     shortened branch is still recognisable. Clipped rather than wrapped if it
+     ever does have to shrink, with the whole sentence in the tooltip. */
+  flex: none;
   min-width: 0;
   overflow: hidden;
   border-radius: var(--r1);
@@ -448,8 +469,8 @@
   width: 100%;
   padding: 1px var(--s2);
   display: flex;
-  align-items: center;
-  gap: var(--s2);
+  flex-direction: column;
+  align-items: stretch;
   border: 0;
   border-radius: var(--r1);
   background: none;
@@ -457,6 +478,13 @@
   font-size: var(--text-xs);
   text-align: left;
   cursor: pointer;
+}
+
+.pane-row__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
 }
 
 .pane-row:hover {
@@ -475,4 +503,20 @@
 .pane-row__since {
   flex: none;
   font-variant-numeric: tabular-nums;
+}
+
+/* The last line the pane printed, in the terminal's own typeface: it is a
+   quotation, not a status this app worked out. Indented under the label so the
+   activity dot keeps its own column. */
+.pane-row__evidence {
+  overflow: hidden;
+  padding-left: 15px;
+  /* A step brighter than the label above it: the quoted line is what the row
+     exists to show, and the pane's name is only there to say whose it is. */
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
