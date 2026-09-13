@@ -4,45 +4,78 @@
 // by hand, in an order a real link reaches on its own but never on demand. The
 // relay test proves the whole thing works end to end; this proves it works when
 // the pane is talking *during* the round trip, which is when it would go wrong.
+//
+// And the hardest moment in that round trip is not a moment at all. A socket
+// read decodes many frames and the transport routes them in one synchronous
+// loop, so an answer and the output written behind it land here in the same
+// turn, before any promise continuation runs. The peer here counts frames the
+// way the transport does so that both sides of that boundary can be tested on
+// purpose rather than raced for under load.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { MethodName, ParamsOf, ResultOf } from '../../../shared/methods'
+import type { Answered } from '../../runtime/peerTransport'
 import type { SubscriptionChannel } from '../../runtime/subscriptionHub'
 import { watchPane, type WatchTarget } from './paneWatch'
 import { parsePeerPaneId } from './peerService'
 
-/** A teammate whose two answers are resolved by the test, one at a time. */
+/**
+ * A teammate whose two answers are resolved by the test, one at a time.
+ *
+ * It counts frames the way the peer transport does, because the numbers are
+ * what the join is made of: every answer and every stream event gets the next
+ * one, and a test can therefore put an event on either side of an answer and
+ * say which it meant.
+ */
 function scriptedPeer(): {
   target: WatchTarget
   /** Pushes a stream event the way the far side's pane would. */
   say: (event: unknown) => void
   answerSubscribe: (subscription: string) => Promise<void>
   answerRead: (data: string) => Promise<void>
+  /**
+   * One socket read: the read's answer, and then frames decoded behind it.
+   *
+   * This is the transport's own loop — a batch of frames routed synchronously,
+   * one after another — and the reason it is worth a helper is that the
+   * promise the answer resolves does not run its continuation until the whole
+   * batch has been routed. Anything joined by that continuation's clock sees
+   * these events as having arrived "during" the read. They did not: they are
+   * behind the answer on the wire, so no scrollback holds them.
+   */
+  answerReadThenSay: (data: string, ...behind: readonly unknown[]) => Promise<void>
   failRead: (reason: string) => Promise<void>
   calls: { method: string; params: unknown }[]
 } {
   const calls: { method: string; params: unknown }[] = []
-  let routed: ((event: unknown) => void) | undefined
-  let settleSubscribe: ((value: unknown) => void) | undefined
-  let settleRead: ((value: unknown) => void) | undefined
+  let routed: ((event: unknown, sequence: number) => void) | undefined
+  let settleSubscribe: ((answer: unknown) => void) | undefined
+  let settleRead: ((answer: unknown) => void) | undefined
   let rejectRead: ((error: Error) => void) | undefined
+  /** Frames read off the session, exactly as the transport counts them. */
+  let received = 0
+
+  const ask = (<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<Answered<M>> => {
+    calls.push({ method, params })
+    if (method === 'terminal.subscribe') {
+      return new Promise((resolve) => {
+        settleSubscribe = resolve as (answer: unknown) => void
+      })
+    }
+    if (method === 'terminal.read') {
+      return new Promise((resolve, reject) => {
+        settleRead = resolve as (answer: unknown) => void
+        rejectRead = reject
+      })
+    }
+    received += 1
+    return Promise.resolve({ result: { unsubscribed: true } as ResultOf<M>, sequence: received })
+  }) as WatchTarget['callInOrder']
 
   const target: WatchTarget = {
-    call: (<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> => {
-      calls.push({ method, params })
-      if (method === 'terminal.subscribe') {
-        return new Promise((resolve) => {
-          settleSubscribe = resolve as (value: unknown) => void
-        })
-      }
-      if (method === 'terminal.read') {
-        return new Promise((resolve, reject) => {
-          settleRead = resolve as (value: unknown) => void
-          rejectRead = reject
-        })
-      }
-      return Promise.resolve({ unsubscribed: true } as ResultOf<M>)
-    }) as WatchTarget['call'],
+    call: (<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> =>
+      ask(method, params).then((answer) => answer.result)) as WatchTarget['call'],
+    callInOrder: ask,
     route: (_subscription, onEvent) => {
       routed = onEvent
       return () => {
@@ -55,16 +88,32 @@ function scriptedPeer(): {
     for (let turn = 0; turn < 16; turn += 1) await Promise.resolve()
   }
 
+  const say = (event: unknown): void => {
+    received += 1
+    routed?.(event, received)
+  }
+
+  const answer = (data: string): void => {
+    received += 1
+    settleRead?.({ result: { data }, sequence: received })
+  }
+
   return {
     target,
     calls,
-    say: (event) => routed?.(event),
+    say,
     answerSubscribe: async (subscription) => {
-      settleSubscribe?.({ subscription })
+      received += 1
+      settleSubscribe?.({ result: { subscription }, sequence: received })
       await settle()
     },
     answerRead: async (data) => {
-      settleRead?.({ data })
+      answer(data)
+      await settle()
+    },
+    answerReadThenSay: async (data, ...behind) => {
+      answer(data)
+      for (const event of behind) say(event)
       await settle()
     },
     failRead: async (reason) => {
@@ -122,6 +171,41 @@ describe('joining a pane that is already running', () => {
     peer.say({ type: 'data', data: 'five\r\n' })
 
     expect(output(sink.events)).toBe('one\r\ntwo\r\nthree\r\nfour\r\nfive\r\n')
+  })
+
+  it('keeps output decoded behind the answer in the same batch of frames', async () => {
+    const peer = scriptedPeer()
+    const sink = recorder()
+    watchPane({ target: peer.target, terminalId: 't1', channel: sink.channel })
+    await peer.answerSubscribe('sub_1')
+
+    peer.say({ type: 'data', data: 'during\r\n' })
+    // One socket read carrying the answer and then two more frames. The owner
+    // wrote those after the scrollback was taken, so they are in no snapshot —
+    // and they reach this side before the answer's continuation runs, which is
+    // what makes "everything held when the promise settled" the wrong rule.
+    await peer.answerReadThenSay(
+      'before\r\nduring\r\n',
+      { type: 'data', data: 'behind-the-answer\r\n' },
+      { type: 'data', data: 'and-after-that\r\n' }
+    )
+
+    expect(output(sink.events)).toBe('before\r\nduring\r\nbehind-the-answer\r\nand-after-that\r\n')
+  })
+
+  it('drops output decoded ahead of the answer in that same batch, which the snapshot has', async () => {
+    const peer = scriptedPeer()
+    const sink = recorder()
+    watchPane({ target: peer.target, terminalId: 't1', channel: sink.channel })
+    await peer.answerSubscribe('sub_1')
+
+    // The other edge of the same boundary: this one the owner wrote *before*
+    // the answer, so the scrollback carries it and the stream's copy is the
+    // duplicate. Reading by frame order has to drop one and keep the other.
+    peer.say({ type: 'data', data: 'during\r\n' })
+    await peer.answerReadThenSay('before\r\nduring\r\n')
+
+    expect(output(sink.events)).toBe('before\r\nduring\r\n')
   })
 
   it('keeps an exit that arrived during the read, because a scrollback cannot hold one', async () => {

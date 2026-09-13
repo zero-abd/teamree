@@ -42,6 +42,7 @@ import type { MethodName, ParamsOf, ResultOf } from '../../../shared/methods'
 import { createInitiatorSession, createResponderSession, isPeerError, type PeerSession } from '../../../shared/peer'
 import {
   createPeerTransport,
+  type Answered,
   type PeerTransport,
   type RemoteWriteRequest,
   type RemoteWriteVerdict
@@ -51,6 +52,9 @@ import type { SubscriptionHub } from '../../runtime/subscriptionHub'
 import { openRelayConnection, reconnectPolicyFor, type RelayClosure, type RelayConnection } from './relayConnection'
 import type { RelayDialer } from './relaySocket'
 import { epochAt, epochEndsAt, rendezvousToken, rendezvousUrl, sessionPrologue, sharedSecret } from './rendezvous'
+
+/** One of the teammate's stream events, and where it sat in the received order. */
+type HeldEvent = { event: unknown; sequence: number }
 
 /** A quiet pair still has to say something, or the relay's idle deadline ends it. */
 export const KEEPALIVE_MS = 120_000
@@ -213,13 +217,23 @@ export type PeerLink = {
    */
   call: <M extends MethodName>(method: M, params: ParamsOf<M>) => Promise<ResultOf<M>>
   /**
+   * The same, and where the teammate's answer sat among the frames that arrived
+   * with it.
+   *
+   * What `paneWatch.ts` joins a scrollback to a live stream by. The numbers
+   * here and the ones `route` reports come from one counter, so they are
+   * comparable and nothing else about them means anything.
+   */
+  callInOrder: <M extends MethodName>(method: M, params: ParamsOf<M>) => Promise<Answered<M>>
+  /**
    * Directs one of the teammate's streams somewhere. Returns the undo.
    *
    * Presence has a route of its own from the moment the link confirms; this is
    * how a watched pane gets one, and why a stream frame is never guessed at by
-   * its shape.
+   * its shape. Each event comes with its position in the received frame order,
+   * for the caller that has to know whether it preceded an answer.
    */
-  route: (subscription: string, onEvent: (event: unknown) => void) => () => void
+  route: (subscription: string, onEvent: (event: unknown, sequence: number) => void) => () => void
 }
 
 type HandshakeOutcome =
@@ -253,9 +267,9 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   /** When that happened, so a session can be asked how long it lasted. */
   let confirmedAt: number | undefined
   /** Streams this side opened on the teammate, by subscription id. */
-  const routes = new Map<string, (event: unknown) => void>()
-  /** Events for a subscription whose answer has not landed yet. */
-  const unrouted = new Map<string, unknown[]>()
+  const routes = new Map<string, (event: unknown, sequence: number) => void>()
+  /** Events for a subscription whose answer has not landed yet, in order. */
+  const unrouted = new Map<string, HeldEvent[]>()
   let cancelPresenceRoute: (() => void) | undefined
   let connection: RelayConnection | undefined
   let session: PeerSession | undefined
@@ -452,10 +466,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
    * arrived: a pane's output and a presence snapshot are both just objects, and
    * a link that guessed could be made to guess wrong.
    */
-  const deliver = (stream: string, event: unknown): void => {
+  const deliver = (stream: string, event: unknown, sequence: number): void => {
     const route = routes.get(stream)
     if (route) {
-      route(event)
+      route(event, sequence)
       return
     }
     let held = unrouted.get(stream)
@@ -465,17 +479,28 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       unrouted.set(stream, held)
     }
     if (held.length >= MAX_UNROUTED_EVENTS) held.shift()
-    held.push(event)
+    held.push({ event, sequence })
   }
 
-  const route = (subscription: string, onEvent: (event: unknown) => void): (() => void) => {
+  /** Both public call shapes, and the one refusal they share. */
+  const ask = <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<Answered<M>> => {
+    const active = transport
+    if (!confirmed || !active) {
+      return Promise.reject(new Error('this teammate’s session is not confirmed'))
+    }
+    return active.callInOrder(method, params)
+  }
+
+  const route = (subscription: string, onEvent: (event: unknown, sequence: number) => void): (() => void) => {
     routes.set(subscription, onEvent)
-    // Whatever came in before the answer did, in the order it came in. This is
-    // the join a watcher depends on: the first bytes of a live pane must not be
-    // the ones lost to the round trip that asked for them.
+    // Whatever came in before the answer did, in the order it came in, each
+    // still carrying where it came in. This is the join a watcher depends on:
+    // the first bytes of a live pane must not be the ones lost to the round
+    // trip that asked for them, and arriving late here must not make a frame
+    // look later than it was.
     const held = unrouted.get(subscription)
     unrouted.delete(subscription)
-    for (const event of held ?? []) onEvent(event)
+    for (const { event, sequence } of held ?? []) onEvent(event, sequence)
     return () => {
       routes.delete(subscription)
     }
@@ -543,12 +568,12 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       // somebody holding the private key is actually on the other end. Until
       // then the handshake has only been parsed.
       onConfirmed: confirm,
-      onStreamEvent: (stream, event) => {
+      onStreamEvent: (stream, event, sequence) => {
         // Cannot arrive before confirmation — it had to be decrypted to get
         // here — but the ordering is asserted rather than assumed, because a
         // forged snapshot is exactly what a replayer would want.
         if (!confirmed) return
-        deliver(stream, event)
+        deliver(stream, event, sequence)
       },
       onWatchChange: options.onWatchersChange,
       ...(options.onRemoteWrite ? { onRemoteWrite: options.onRemoteWrite } : {}),
@@ -647,13 +672,9 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       running = false
       teardown('teamwork stopped')
     },
-    call: <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> => {
-      const active = transport
-      if (!confirmed || !active) {
-        return Promise.reject(new Error('this teammate’s session is not confirmed'))
-      }
-      return active.call(method, params)
-    },
+    call: <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> =>
+      ask(method, params).then((answer) => answer.result),
+    callInOrder: ask,
     route
   }
 }

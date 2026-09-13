@@ -48,6 +48,12 @@
 // produced, so it is the one case where the watcher is told: an `elided` event
 // carries the byte count, in the stream, where the hole is. Dropping output
 // silently would make the whole feature a lie.
+//
+// Pacing holds output back, so it can also reorder it against something that is
+// not paced: a `terminal.read` answer would otherwise overtake output its own
+// scrollback already carries, and a watcher joining the two by frame order
+// would be shown that output twice. So a read flushes its pane first, and the
+// answer leaves after everything it describes.
 
 import { MAX_REMOTE_WRITE_BYTES, type MethodName, type ParamsOf, type ResultOf } from '../../shared/methods'
 import type { PeerSession } from '../../shared/peer'
@@ -167,8 +173,15 @@ export type PeerTransportOptions = {
   connectionId: string
   /** Defaults to `PEER_METHODS`; a test narrows it to prove the gate is real. */
   allowedMethods?: readonly MethodName[]
-  /** Stream frames the *peer* pushed to us, for a subscription we opened there. */
-  onStreamEvent?: (stream: string, event: unknown) => void
+  /**
+   * Stream frames the *peer* pushed to us, for a subscription we opened there.
+   *
+   * `sequence` is where the frame sat in the received order, which is what a
+   * reader joining a stream to a snapshot compares against the answer that
+   * carried the snapshot. See `received` below for why the clock has to be this
+   * one.
+   */
+  onStreamEvent?: (stream: string, event: unknown, sequence: number) => void
   /**
    * Which of this machine's panes the teammate currently has open, whenever
    * that changes.
@@ -229,9 +242,21 @@ export type TransportScheduler = {
   setTimer: (run: () => void, delayMs: number) => () => void
 }
 
+/** An answer from the peer, and the position of the frame that carried it. */
+export type Answered<M extends MethodName> = { result: ResultOf<M>; sequence: number }
+
 export type PeerTransport = {
   /** A request to the peer, typed from the same catalogue. */
   call: <M extends MethodName>(method: M, params: ParamsOf<M>) => Promise<ResultOf<M>>
+  /**
+   * The same request, and where the peer's answer sat in the received order.
+   *
+   * For the one caller that has to place an answer among the stream frames
+   * around it. A promise cannot carry that by itself: it settles in a later
+   * task than the one that read its frame, and by then any frames decoded
+   * behind it in the same socket read have already been routed.
+   */
+  callInOrder: <M extends MethodName>(method: M, params: ParamsOf<M>) => Promise<Answered<M>>
   /** One Noise transport message, exactly as the peer framed it. */
   receive: (message: Uint8Array) => void
   /**
@@ -251,7 +276,7 @@ export type PeerTransport = {
 export function createPeerTransport(options: PeerTransportOptions): PeerTransport {
   const allowed = new Set<string>(options.allowedMethods ?? PEER_METHODS)
   const subscribing = new Set<string>(SUBSCRIBING_METHODS)
-  const pending = new Map<string, { resolve: (value: never) => void; reject: (error: Error) => void }>()
+  const pending = new Map<string, { resolve: (answer: never) => void; reject: (error: Error) => void }>()
   const reader = createLineReader(options.session)
   const scheduler = options.scheduler ?? realScheduler
   /** Request id to the pane it asked to watch, until its answer comes back. */
@@ -265,6 +290,17 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   let budget = STREAM_BYTES_PER_SECOND
   let budgetAt = scheduler.now()
   let nextId = 0
+  /**
+   * Frames read off this session, counted.
+   *
+   * The clock that says which of two frames came first, and the only one that
+   * can. One socket read decodes a batch and `receive` routes the batch in a
+   * synchronous loop, so a stream frame decoded *after* an answer still reaches
+   * its route before that answer's promise continuation runs. Anything joining
+   * a stream to a snapshot has to compare positions in this count rather than
+   * the order in which its own callbacks happened to be scheduled.
+   */
+  let received = 0
   let live = true
   let confirmed = false
 
@@ -303,7 +339,18 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     if (earned > 0) budget = Math.min(STREAM_BYTES_PER_SECOND, budget + earned)
   }
 
-  const flush = (streamId: string, stream: PacedStream): void => {
+  /**
+   * One stream's waiting output, onto the wire.
+   *
+   * `force` spends past the byte budget instead of leaving the remainder for
+   * the next flush. Only the answer to a `terminal.read` asks for it, and only
+   * because a remainder left behind would be output the answer's own scrollback
+   * already contains, arriving after it — see `flushPane`. The debit still
+   * happens, so the budget repays itself at the next flushes rather than the
+   * spend going unrecorded, and the most one read can push out early is the one
+   * buffer `STREAM_BUFFER_BYTES` bounds.
+   */
+  const flush = (streamId: string, stream: PacedStream, force = false): void => {
     if (!live) return
     const now = scheduler.now()
     refill(now)
@@ -324,7 +371,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         write({ stream: streamId, event: item.event })
         continue
       }
-      if (item.bytes > budget) break
+      if (!force && item.bytes > budget) break
       stream.items.shift()
       stream.bytes -= item.bytes
       budget -= item.bytes
@@ -337,6 +384,34 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     // when the subscription is.
     if (stream.items.length === 0 && stream.lost === 0) return
     arm(streamId, stream)
+  }
+
+  /**
+   * Everything one pane has waiting, out before the answer that describes it.
+   *
+   * The pacer is the only thing on this machine that can put a pane's output on
+   * the wire *after* a scrollback that already contains it: the scrollback is
+   * taken the moment the read is handled, while output from a twentieth of a
+   * second ago may still be sitting here waiting for its timer. A reader joining
+   * a stream to a snapshot decides what to drop by frame order, so output that
+   * overtook its own answer would be shown twice — the one thing this seam
+   * exists to prevent.
+   *
+   * Called between the handler taking the scrollback and the answer being
+   * written, which is inside a single turn of the loop: everything from the
+   * dispatcher to here is microtasks, and a pty's output arrives in a task of
+   * its own. So this flushes exactly what the answer carries and never anything
+   * later than it.
+   */
+  const flushPane = (terminalId: string): void => {
+    for (const [subscriptionId, watched] of watching) {
+      if (watched !== terminalId) continue
+      const stream = paced.get(subscriptionId)
+      if (!stream) continue
+      stream.cancel?.()
+      stream.cancel = undefined
+      flush(subscriptionId, stream, true)
+    }
   }
 
   const arm = (streamId: string, stream: PacedStream): void => {
@@ -437,11 +512,11 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     if (!asked) write({ stream: subscriptionId, event: { type: 'lost', reason: 'the owner closed this pane' } })
   })
 
-  const handleResponse = (response: Response): void => {
+  const handleResponse = (response: Response, sequence: number): void => {
     const waiter = pending.get(response.id)
     if (!waiter) return
     pending.delete(response.id)
-    if (response.ok) waiter.resolve(response.result as never)
+    if (response.ok) waiter.resolve({ result: response.result, sequence } as never)
     else waiter.reject(new PeerCallError(response.error.code, response.error.message))
   }
 
@@ -494,9 +569,14 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       const subscription = subscriptionOf(value)
       if (subscription !== undefined) releasing.add(subscription)
     }
+    // The pane whose scrollback is about to be answered, so its own output can
+    // be got out of the pacer first. Read here rather than in the continuation
+    // because that is where the method is still known.
+    const reading = method === 'terminal.read' ? terminalIdOf(value) : undefined
     void options.dispatch(value, { connectionId: options.connectionId }).then(
       (response) => {
         recordWatch(response)
+        if (reading !== undefined) flushPane(reading)
         write(response)
       },
       (error: unknown) => {
@@ -559,16 +639,21 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     announceWatches()
   }
 
+  const ask = <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<Answered<M>> => {
+    if (!live) return Promise.reject(new Error('the peer link is closed'))
+    nextId += 1
+    const id = `peer_${nextId}`
+    return new Promise<Answered<M>>((resolve, reject) => {
+      pending.set(id, { resolve: resolve as (answer: never) => void, reject })
+      write({ id, method, params } as unknown as Frame)
+    })
+  }
+
   return {
-    call: <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> => {
-      if (!live) return Promise.reject(new Error('the peer link is closed'))
-      nextId += 1
-      const id = `peer_${nextId}`
-      return new Promise<ResultOf<M>>((resolve, reject) => {
-        pending.set(id, { resolve: resolve as (value: never) => void, reject })
-        write({ id, method, params } as unknown as Frame)
-      })
-    },
+    call: <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> =>
+      ask(method, params).then((answer) => answer.result),
+
+    callInOrder: ask,
 
     receive: (message) => {
       if (!live) return
@@ -596,8 +681,9 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         // session this machine has just refused, and a keystroke in it must not
         // be run merely because the loop had already started.
         if (!live) return
-        if (isResponse(value)) handleResponse(value)
-        else if (isStreamFrame(value)) options.onStreamEvent?.(value.stream, value.event)
+        received += 1
+        if (isResponse(value)) handleResponse(value, received)
+        else if (isStreamFrame(value)) options.onStreamEvent?.(value.stream, value.event, received)
         else handleRequest(value)
       }
     },
