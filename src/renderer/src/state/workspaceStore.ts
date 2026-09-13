@@ -35,7 +35,7 @@ import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type Re
 
 export type DialogState =
   | { kind: 'add-project' }
-  | { kind: 'members'; projectId: string }
+  | { kind: 'start-teamwork'; projectId: string }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
   /** Raised only when the runtime has already refused: there is something here to lose. */
@@ -113,6 +113,17 @@ type WorkspaceState = {
   members: Record<string, MemberList>
   /** True while a roster is being read or written, so the dialog can say so. */
   membersPending: boolean
+  /**
+   * Why the last attempt to add this machine's key was refused, or null.
+   *
+   * Kept here rather than raised as a notice, for the reason `relayError` is:
+   * every one of these refusals is an instruction about the handle box — "that
+   * name is already somebody else's key; choose another" — and an instruction
+   * about a field is only useful beside the field. It was worse than that
+   * before the notice layer was raised above the modal scrim, because the
+   * sentence was painted underneath the dialog and the user saw nothing at all.
+   */
+  membersError: string | null
   /**
    * Each project's relay, for the ones somebody has looked at. Read beside the
    * roster because the two are the same fact about a team: who is on it, and
@@ -213,8 +224,18 @@ type WorkspaceState = {
 
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
+  /** Drops the last join refusal, for the keystroke that answers it. */
+  clearMembersError: () => void
   /** Reads where one project's relay is recorded, and what each place said. */
   loadRelay: (projectId: string) => Promise<void>
+  /**
+   * Re-reads whether teamwork is running for one project.
+   *
+   * The setup panel shows the links themselves, so it asks on open rather than
+   * waiting for the next change event: a panel whose last step is "connected"
+   * and whose answer is a minute old is a panel people press Close and reopen.
+   */
+  loadTeamwork: (projectId: string) => Promise<void>
   /**
    * Writes the relay into the repository. Like joining, it writes the file and
    * stops: pushing it is what makes it the team's.
@@ -601,6 +622,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     mergePreviews: {},
     members: {},
     membersPending: false,
+    membersError: null,
     relays: {},
     relayPending: false,
     relayError: null,
@@ -1008,7 +1030,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async loadMembers(projectId) {
-      set({ membersPending: true })
+      // A refusal is about one attempt at one project, so re-opening the panel
+      // must not show somebody else's.
+      set({ membersPending: true, membersError: null })
       try {
         const list = await runtimeClient.call('members.list', { projectId })
         set((state) => ({ members: { ...state.members, [projectId]: list } }))
@@ -1033,6 +1057,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    async loadTeamwork(projectId) {
+      try {
+        const status = await runtimeClient.call('teamwork.status', { projectId })
+        set((state) => ({ teamwork: { ...state.teamwork, [status.projectId]: status } }))
+      } catch (error) {
+        failed('Could not read whether teamwork is running here')(error)
+      }
+    },
+
     async setRelay(projectId, url) {
       set({ relayPending: true, relayError: null })
       try {
@@ -1051,7 +1084,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async joinProject(projectId, handle) {
-      set({ membersPending: true })
+      set({ membersPending: true, membersError: null })
       try {
         const list = await runtimeClient.call('members.join', handle ? { projectId, handle } : { projectId })
         set((state) => ({ members: { ...state.members, [projectId]: list } }))
@@ -1060,10 +1093,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // committed and pushed, nobody else can see it.
         if (list.selfFile) notify(`Wrote ${list.selfFile}. Commit and push it to join.`, 'info')
       } catch (error) {
-        failed('Could not add you to this project')(error)
+        // Kept in the panel rather than raised as a notice, exactly as a
+        // refused relay URL is: the runtime's refusals here all end in "choose
+        // another handle", which is an instruction about the box the cursor is
+        // in and belongs under it.
+        set({ membersError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ membersPending: false })
       }
+    },
+
+    clearMembersError() {
+      if (get().membersError !== null) set({ membersError: null })
     },
 
     async pushActiveWorktree() {

@@ -8,7 +8,7 @@ import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModi
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
-import { MembersDialog } from './dialogs/MembersDialog'
+import { StartTeamworkDialog } from './dialogs/StartTeamworkDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { SidebarResizer } from './shell/SidebarResizer'
@@ -83,7 +83,7 @@ export function App(): React.JSX.Element {
         <ConfirmRemoveDialog worktreeId={dialog.worktreeId} reason={dialog.reason} />
       ) : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
-      {dialog?.kind === 'members' ? <MembersDialog projectId={dialog.projectId} /> : null}
+      {dialog?.kind === 'start-teamwork' ? <StartTeamworkDialog projectId={dialog.projectId} /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
     </div>
   )

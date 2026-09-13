@@ -1,0 +1,608 @@
+// Setting teamwork up, as five steps instead of a document.
+//
+// Every piece of this already worked and every piece already had a method
+// behind it. What did not exist was one place that says where you are and what
+// the next thing is, so doing it meant following `docs/trying-teamwork.md` with
+// a terminal in the other hand. The steps here are that runbook's 3, 4 and 5.
+//
+// Three things the panel refuses to do, each of them a decision rather than an
+// omission:
+//
+// **It does not commit or push.** It writes files and stops. Being able to push
+// that file is the entire definition of membership, and an app that pushed on
+// somebody's behalf would be making a claim they never made.
+//
+// **It does not run a relay.** It accepts a URL. Standing a relay up is a
+// decision about somebody's Cloudflare account or somebody's box, taken in a
+// terminal, and an app that started a container would be taking it for them.
+//
+// **It does not pick a relay for you either.** A bare URL field assumes the
+// person already knows what to paste, and the one thing certainly true of
+// somebody opening this for the first time is that they do not. So the four
+// real ways to get one are listed with what each costs — and, because that is
+// the half teamree actually cares about, whether the address it produces is
+// stable enough to commit or belongs in the environment override.
+//
+// The roster, the relay panel and the push commands were already here; they are
+// the same panels, under the steps that say why each one matters.
+
+import { useEffect, useState } from 'react'
+import type { Member, MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
+import { Modal } from './Modal'
+import {
+  checkRelayDraft,
+  KEY_GRANT_WARNING,
+  pushPlan,
+  RELAY_LEAD,
+  RELAY_OPTIONS,
+  shortKey,
+  startTeamworkFlow,
+  type RelayDraftCheck,
+  type StartTeamworkStep,
+  type StepMark
+} from './startTeamwork'
+import { useWorkspaceStore } from '../state/workspaceStore'
+
+export function StartTeamworkDialog({ projectId }: { projectId: string }): React.JSX.Element {
+  const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === projectId))
+  const list = useWorkspaceStore((state) => state.members[projectId])
+  const relay = useWorkspaceStore((state) => state.relays[projectId])
+  const status = useWorkspaceStore((state) => state.teamwork[projectId])
+  const membersPending = useWorkspaceStore((state) => state.membersPending)
+  const membersError = useWorkspaceStore((state) => state.membersError)
+  const relayPending = useWorkspaceStore((state) => state.relayPending)
+  const relayError = useWorkspaceStore((state) => state.relayError)
+  const loadMembers = useWorkspaceStore((state) => state.loadMembers)
+  const loadRelay = useWorkspaceStore((state) => state.loadRelay)
+  const loadTeamwork = useWorkspaceStore((state) => state.loadTeamwork)
+  const setRelay = useWorkspaceStore((state) => state.setRelay)
+  const joinProject = useWorkspaceStore((state) => state.joinProject)
+  const clearMembersError = useWorkspaceStore((state) => state.clearMembersError)
+  const closeDialog = useWorkspaceStore((state) => state.closeDialog)
+
+  // All three read on open. The runtime watches `.teamree` and says when it
+  // moves, so this is belt and braces rather than the only way any of them is
+  // refreshed — and it is what covers a project whose watch could not be set up.
+  useEffect(() => {
+    void loadMembers(projectId)
+    void loadRelay(projectId)
+    void loadTeamwork(projectId)
+  }, [loadMembers, loadRelay, loadTeamwork, projectId])
+
+  return (
+    <Modal
+      title="Start teamwork"
+      description={`Everyone who can push to ${project?.name ?? 'this repository'} is on the team. Their keys are in it.`}
+      onClose={closeDialog}
+    >
+      <div className="teamwork-setup">
+        <TeamworkSteps
+          list={list}
+          relay={relay}
+          status={status}
+          membersPending={membersPending}
+          membersError={membersError}
+          relayPending={relayPending}
+          relayError={relayError}
+          onJoin={(handle) => void joinProject(projectId, handle)}
+          onClearMembersError={clearMembersError}
+          onSetRelay={(url) => void setRelay(projectId, url)}
+        />
+        <div className="form__actions">
+          <button type="button" className="button" onClick={closeDialog}>
+            Close
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+export type TeamworkStepsProps = {
+  list: MemberList | undefined
+  relay: RelaySetting | undefined
+  status: TeamworkStatus | undefined
+  membersPending: boolean
+  /** Why the last attempt to add this machine's key was refused, or null. */
+  membersError: string | null
+  relayPending: boolean
+  relayError: string | null
+  onJoin: (handle?: string) => void
+  /** Called on the keystroke that answers a refusal, so it stops being shown. */
+  onClearMembersError: () => void
+  onSetRelay: (url: string) => void
+}
+
+/** A glyph for the eye; `MARK_WORDS` is what is actually read out. */
+const MARK_GLYPHS: Record<StepMark, string> = { done: '✓', todo: '○', unchecked: '—', blocked: '!' }
+
+const MARK_WORDS: Record<StepMark, string> = {
+  done: 'done',
+  todo: 'not done yet',
+  // Never a tick and never a cross: teamree cannot see a commit, and both
+  // marks would be it claiming it can.
+  unchecked: 'yours to do — teamree does not check this',
+  blocked: 'blocked'
+}
+
+/**
+ * The steps, separately from the dialog that wires them to the store, so the
+ * whole of what this says in each state can be rendered in a test.
+ */
+export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
+  const flow = startTeamworkFlow({ list: props.list, relay: props.relay, status: props.status })
+  return (
+    <div className="steps">
+      {flow.blocker === null ? null : (
+        <p className="steps__blocker">
+          <strong>This checkout cannot take part yet.</strong> {flow.blocker}
+        </p>
+      )}
+      <ol className="steps__list">
+        {flow.steps.map((step, index) => (
+          <li key={step.id} className={`step step--${step.mark}${step.id === flow.currentId ? ' step--current' : ''}`}>
+            <div className="step__head">
+              <span className="step__mark" aria-hidden="true">
+                {MARK_GLYPHS[step.mark]}
+              </span>
+              <h3 className="step__title">
+                {index + 1}. {step.title}
+              </h3>
+              <span className="step__state">{MARK_WORDS[step.mark]}</span>
+            </div>
+            <p className="step__summary">{step.summary}</p>
+            <StepBody step={step} {...props} />
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamworkStep }): React.JSX.Element | null {
+  switch (step.id) {
+    case 'identity':
+      return props.list === undefined ? null : <IdentityBody list={props.list} />
+    case 'key':
+      return step.mark === 'done' || props.list === undefined ? null : (
+        <JoinBody
+          list={props.list}
+          pending={props.membersPending}
+          error={props.membersError}
+          onJoin={props.onJoin}
+          onClearError={props.onClearMembersError}
+        />
+      )
+    case 'relay':
+      return props.relay === undefined ? null : (
+        <RelayBody
+          relay={props.relay}
+          done={step.mark === 'done'}
+          pending={props.relayPending}
+          error={props.relayError}
+          onSet={props.onSetRelay}
+        />
+      )
+    case 'push':
+      return <PushBody list={props.list} relay={props.relay} />
+    case 'connected':
+      return <ConnectedBody list={props.list} status={props.status} />
+  }
+}
+
+/** The identity itself: a name on a file, and the key that is the real one. */
+function IdentityBody({ list }: { list: MemberList }): React.JSX.Element {
+  return (
+    <p className="step__identity">
+      <span className="step__identity-handle">{list.self.handle ?? 'no handle yet'}</span>
+      <code className="member__key" title={list.self.publicKey}>
+        {shortKey(list.self.publicKey)}
+      </code>
+    </p>
+  )
+}
+
+/**
+ * What a key grants, and then the button that grants it. In that order, and
+ * not collapsed behind anything.
+ *
+ * `docs/teamwork.md` says this outright — "this is remote code execution, by
+ * design and by request" — and a setup flow that let somebody add a colleague
+ * without reading it would be the one place that sentence never reached the
+ * person it is about.
+ */
+function JoinBody({
+  list,
+  pending,
+  error,
+  onJoin,
+  onClearError
+}: {
+  list: MemberList
+  pending: boolean
+  error: string | null
+  onJoin: (handle?: string) => void
+  onClearError: () => void
+}): React.JSX.Element {
+  const [handle, setHandle] = useState('')
+  const chosen = handle.trim() || list.self.handle
+
+  const submit = (event: React.FormEvent): void => {
+    event.preventDefault()
+    onJoin(handle.trim() || undefined)
+  }
+
+  return (
+    <div className="step__body">
+      <div className="grant">
+        <p className="grant__head">{KEY_GRANT_WARNING.head}</p>
+        <p className="grant__body">{KEY_GRANT_WARNING.body}</p>
+        <p className="grant__body">What makes that survivable is that none of it can be done invisibly:</p>
+        <ul className="grant__mitigations">
+          {KEY_GRANT_WARNING.mitigations.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+        <p className="grant__close">{KEY_GRANT_WARNING.close}</p>
+      </div>
+      <form className="members__self members__self--join" onSubmit={submit}>
+        <label className="field">
+          <span className="field__label">Handle</span>
+          <input
+            className="field__input field__input--mono"
+            value={handle}
+            onChange={(event) => {
+              setHandle(event.target.value)
+              // The refusal named this box. Answering it is the keystroke that
+              // makes it stale, so it goes then rather than on the next submit.
+              onClearError()
+            }}
+            placeholder={list.self.handle ?? 'pick a name'}
+            aria-invalid={error !== null}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <span className="field__hint">
+            {list.self.handle === null
+              ? 'git has no user.email here, so there is no name to use — choose one. Lowercase, and [a-z0-9._-].'
+              : `Defaults to the local part of your git email. Writes ${
+                  chosen === null ? '' : `.teamree/members/${chosen}.pub`
+                }.`}
+          </span>
+        </label>
+        {/* Under the field, never in a corner: every refusal the runtime raises
+            here ends in "choose another handle", and that is an instruction
+            about this box. */}
+        {error === null ? null : <p className="field__error">{error}</p>}
+        <button type="submit" className="button button--primary" disabled={pending || chosen === null}>
+          {pending ? 'Writing…' : 'Add my key'}
+        </button>
+        <p className="members__caveat">This writes the file and stops. Step 4 is the part that means something.</p>
+      </form>
+    </div>
+  )
+}
+
+/**
+ * The relay: what is in effect, what the environment said, the four ways to
+ * get one when there is none, and the field that writes the file.
+ */
+function RelayBody({
+  relay,
+  done,
+  pending,
+  error,
+  onSet
+}: {
+  relay: RelaySetting
+  done: boolean
+  pending: boolean
+  error: string | null
+  onSet: (url: string) => void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState('')
+  const check = checkRelayDraft(draft)
+
+  const submit = (event: React.FormEvent): void => {
+    event.preventDefault()
+    if (check.state === 'ok') onSet(check.url)
+  }
+
+  return (
+    <div className="step__body">
+      {relay.url === null ? null : (
+        <p className="members__relay-current">
+          <code>{relay.url}</code>
+          <span className="members__relay-source">
+            {relay.source === 'environment' ? `from ${relay.override.name}` : `from ${relay.file}`}
+          </span>
+        </p>
+      )}
+      <Override relay={relay} />
+      {done ? null : <RelayOptions />}
+      <form className="members__relay" onSubmit={submit}>
+        <label className="field">
+          <span className="field__label">
+            {done ? 'Change the relay for this project' : 'Set the relay for this project'}
+          </span>
+          <input
+            className="field__input field__input--mono"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="wss://your-relay.example/v1/relay"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <span className="field__hint">
+            Whoever stood the relay up pastes its URL here once. Everybody else gets it from the repository.{' '}
+            {relay.committed.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>, and stops there.
+          </span>
+        </label>
+        {check.state === 'bad' ? <RelayRefusal check={check} onUse={setDraft} /> : null}
+        {error === null ? null : <p className="members__relay-error">{error}</p>}
+        <button type="submit" className="button" disabled={pending || check.state !== 'ok'}>
+          {pending ? 'Writing…' : 'Write relay file'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+/**
+ * Why the typed address was refused, and the corrected one to use instead.
+ *
+ * Offered as a button rather than substituted quietly: `https://host` is what a
+ * deploy prints and the relay is that host with a path on it, which is a guess
+ * that is right often enough to be trusted and wrong on the one deployment
+ * whose relay is not at the root.
+ */
+function RelayRefusal({
+  check,
+  onUse
+}: {
+  check: Extract<RelayDraftCheck, { state: 'bad' }>
+  onUse: (url: string) => void
+}): React.JSX.Element {
+  const { suggestion } = check
+  return (
+    <p className="members__relay-error">
+      {check.reason}
+      {suggestion === null ? null : (
+        <button type="button" className="button button--ghost" onClick={() => onUse(suggestion)}>
+          Use {suggestion}
+        </button>
+      )}
+    </p>
+  )
+}
+
+/**
+ * The four ways a team actually gets a relay, with their costs.
+ *
+ * Shown only to somebody who has none, because a joiner has no decision to
+ * make: their relay arrives in the repository, and this is a wall of choices
+ * about a thing already chosen.
+ */
+function RelayOptions(): React.JSX.Element {
+  return (
+    <div className="relay-options">
+      <p className="relay-options__lead">{RELAY_LEAD}</p>
+      <ul className="relay-options__list">
+        {RELAY_OPTIONS.map((option) => (
+          <li key={option.id} className="relay-option">
+            <p className="relay-option__name">{option.name}</p>
+            <p className="relay-option__what">{option.what}</p>
+            <pre className="relay-option__commands">{option.commands}</pre>
+            <dl className="relay-option__costs">
+              <div>
+                <dt>Effort</dt>
+                <dd>{option.effort}</dd>
+              </div>
+              <div>
+                <dt>Money</dt>
+                <dd>{option.money}</dd>
+              </div>
+              <div>
+                <dt>Address</dt>
+                <dd>{option.address}</dd>
+              </div>
+            </dl>
+            <p className={`relay-option__keep relay-option__keep--${option.keep}`}>
+              {option.keep === 'commit'
+                ? 'Stable enough to commit: paste it below and push .teamree/relay.'
+                : 'Too short-lived to commit: use TEAMREE_RELAY_URL instead, and leave .teamree/relay alone.'}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * What the environment said, including when it said nothing.
+ *
+ * "I set TEAMREE_RELAY_URL and nothing happened" is a predictable question on
+ * macOS, where an app opened from Finder or the dock inherits none of a
+ * shell's environment. The app cannot fix that — it is how the platform starts
+ * programs — but it can say whether it saw an override at all, which is the one
+ * thing nobody outside the process can check.
+ */
+function Override({ relay }: { relay: RelaySetting }): React.JSX.Element {
+  if (relay.override.value === null) {
+    return (
+      <p className="members__relay-note">
+        No <code>{relay.override.name}</code> in this app’s environment. An app opened from Finder or the dock does not
+        inherit your shell’s, so that override only applies when teamree is started from a terminal that has it set.
+      </p>
+    )
+  }
+  return (
+    <p className="members__relay-note">
+      <code>{relay.override.name}</code> is set to <code>{relay.override.value}</code> in this app’s environment. It is
+      per-machine and lasts as long as this process: commit the real relay when you are done testing.
+      {relay.committed.url === null ? null : (
+        <>
+          {' '}
+          <code>{relay.file}</code> says <code>{relay.committed.url}</code>, and the environment is beating it for this
+          run.
+        </>
+      )}
+    </p>
+  )
+}
+
+/** The exact files that were written, and the one commit that carries them. */
+function PushBody({
+  list,
+  relay
+}: {
+  list: MemberList | undefined
+  relay: RelaySetting | undefined
+}): React.JSX.Element | null {
+  const plan = pushPlan(list, relay)
+  if (plan === null) return null
+  return (
+    <div className="step__body">
+      <ul className="push__files">
+        {plan.files.map((file) => (
+          <li key={file}>
+            <code>{file}</code>
+          </li>
+        ))}
+      </ul>
+      <pre className="members__push-commands">{plan.commands}</pre>
+      <p className="members__caveat">
+        If your teammate pushes at the same moment, the second push is rejected with “fetch first”. That is not a merge
+        conflict — you added different files and git merges them without an opinion — so the answer is{' '}
+        <code>git pull --rebase &amp;&amp; git push</code>, never a force.
+      </p>
+    </div>
+  )
+}
+
+/** Who is on the roster, which links are up, and what is checkable when one is not. */
+function ConnectedBody({
+  list,
+  status
+}: {
+  list: MemberList | undefined
+  status: TeamworkStatus | undefined
+}): React.JSX.Element | null {
+  if (list === undefined && status === undefined) return null
+  return (
+    <div className="step__body">
+      {list === undefined ? null : (
+        <>
+          <MemberRoster list={list} />
+          <Problems list={list} />
+          <Freshness list={list} />
+        </>
+      )}
+      {status === undefined || status.links.length === 0 ? null : (
+        <ul className="links">
+          {status.links.map((link) => (
+            <LinkRow key={link.publicKey} link={link} />
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/**
+ * One teammate, and how this machine is getting on with reaching them.
+ *
+ * The detail is the runtime's own and is the point of the row: a link that has
+ * waited across two hourly rendezvous rotations says so, and names the two
+ * things checkable from this side — that both machines agree about the time,
+ * and that `.teamree/relay` names the same relay on both.
+ */
+function LinkRow({ link }: { link: PeerLink }): React.JSX.Element {
+  return (
+    <li className={`link link--${link.phase}`}>
+      <span className="link__handle">{link.handle}</span>
+      <span className="link__phase">{PHASE_WORDS[link.phase]}</span>
+      {link.detail === undefined ? null : <span className="link__detail">{link.detail}</span>}
+    </li>
+  )
+}
+
+const PHASE_WORDS: Record<PeerLink['phase'], string> = {
+  connecting: 'reaching the relay',
+  waiting: 'not connected',
+  connected: 'connected',
+  refused: 'refused',
+  unreachable: 'relay unreachable',
+  stopped: 'stopped'
+}
+
+function MemberRoster({ list }: { list: MemberList }): React.JSX.Element {
+  if (list.members.length === 0) {
+    return <p className="members__empty">No keys committed yet. Whoever adds the first one starts the roster.</p>
+  }
+  return (
+    <ul className="members__list">
+      {list.members.map((member) => (
+        <MemberRow key={member.file} member={member} />
+      ))}
+    </ul>
+  )
+}
+
+function MemberRow({ member }: { member: Member }): React.JSX.Element {
+  return (
+    <li className={`member${member.isSelf ? ' member--self' : ''}`}>
+      <div className="member__line">
+        <span className="member__handle">{member.handle}</span>
+        {member.isSelf ? <span className="member__you">you</span> : null}
+        <span className="member__added">added {member.addedAt}</span>
+      </div>
+      {/* Shown short: a key is read to compare two of them, never to be typed. */}
+      <code className="member__key" title={member.publicKey}>
+        {shortKey(member.publicKey)}
+      </code>
+    </li>
+  )
+}
+
+/**
+ * Files that are in the directory and are not members. Named rather than
+ * counted: a skipped file is somebody's key that is not working, and the only
+ * useful version of that message is the one with the path in it.
+ */
+function Problems({ list }: { list: MemberList }): React.JSX.Element | null {
+  if (list.problems.length === 0) return null
+  return (
+    <div className="members__problems">
+      <p className="members__problems-head">
+        {list.problems.length} file{list.problems.length === 1 ? '' : 's'} skipped
+      </p>
+      <ul>
+        {list.problems.map((problem) => (
+          <li key={problem.file}>
+            <code>{problem.file}</code> — {problem.reason}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * Whether this list will stay true on its own.
+ *
+ * Said only when it will not. A roster that follows the file needs no
+ * reassurance; one that nothing is watching is a list that was true when it was
+ * read, and somebody about to believe it deserves to know which of the two they
+ * are looking at.
+ */
+function Freshness({ list }: { list: MemberList }): React.JSX.Element | null {
+  if (list.watched) return null
+  return (
+    <p className="members__stale">
+      teamree could not watch this project’s files, so this list is only as fresh as this read. Open this dialog again
+      after a pull to see what it brought in.
+    </p>
+  )
+}

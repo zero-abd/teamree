@@ -12,6 +12,7 @@ function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
     projectId: 'p1',
     relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
     disabledReason: null,
+    origin: { ok: true },
     enrolled: true,
     links: [],
     readAt: 0,
@@ -74,7 +75,11 @@ describe('what the project header says about teamwork', () => {
       status({
         links: [
           link({ handle: 'priya' }),
-          link({ handle: 'marcus', phase: 'refused', detail: 'the peer static key is not on the roster' })
+          link({
+            handle: 'marcus',
+            phase: 'refused',
+            detail: 'the peer static key is not on the roster'
+          })
         ]
       })
     )
@@ -109,7 +114,10 @@ describe('what the project header says about teamwork', () => {
   })
 
   it('says an empty roster is an empty roster, not a connection problem', () => {
-    expect(teamworkSummary(status({ links: [] }))).toMatchObject({ tone: 'off', label: 'No teammates' })
+    expect(teamworkSummary(status({ links: [] }))).toMatchObject({
+      tone: 'off',
+      label: 'No teammates'
+    })
   })
 
   it('names where the relay came from, because a surprising URL needs a source', () => {

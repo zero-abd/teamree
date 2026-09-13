@@ -199,12 +199,18 @@ the first, which is the thing the identity design spends its whole argument
 avoiding. One person deploys a relay, pushes a one-line file, and the team is
 connected, visibly, in a diff.
 
-**Whoever set the relay up** does it in the app, in the same **Members** dialog
-step 4 uses: paste the URL into **Set the relay for this project** and press
+**Whoever set the relay up** does it in the app, in the same **Start teamwork**
+panel step 4 uses — the **Teamwork** button in the project header opens it, and
+step 3 of it is the relay. If you have not stood one up yet, that step lists the
+four ways to get one with what each costs, and says which of them produce an
+address stable enough to commit and which belong in the environment override
+instead. Paste the URL into **Set the relay for this project** and press
 **Write relay file**. That writes `.teamree/relay` — the same file, with the
 same comment header — and stops there, exactly as adding your key does. The
-dialog then names both files it has written and the one commit that covers them,
+panel then names both files it has written and the one commit that covers them,
 which is step 4's commit: you can do this step and the next one and push once.
+The panel accepts any `ws://` or `wss://` URL — a deployed Worker, a tunnel, a
+Tailscale address, a box on the LAN — and it never starts a relay itself.
 
 Blank lines and `#` comments are skipped, the same way the member files' are;
 the first line that is neither is the URL. It must be `ws://` or `wss://`, and
@@ -225,7 +231,7 @@ launched from Finder or Spotlight does not inherit your shell's environment, so
 the override only applies if you start teamree from the terminal that has the
 variable set; and because it is per-machine it is exactly the second list this
 design avoids, so use it to test a relay and then commit the real one. The
-Members dialog says which of the two it is looking at — including *"No
+**Start teamwork** panel says which of the two it is looking at — including *"No
 `TEAMREE_RELAY_URL` in this app's environment"*, which is the answer to "I set
 the variable and nothing happened".
 
@@ -236,8 +242,10 @@ private half never leaves it, and the public half goes in the repository at
 `.teamree/members/<handle>.pub`. There is no account to make and nobody to ask:
 if you can push that file, you are on the team.
 
-In the app, open the project's **Members** dialog — the button is in the project
-header in the sidebar — and press **Add my key**.
+In the app, open the project's **Start teamwork** panel — the **Teamwork**
+button is in the project header in the sidebar — and press **Add my key** in
+step 2. What that grants is written above the button rather than under it: a key
+in `.teamree/members/` lets that person run commands on your machine, as you.
 
 Your handle defaults to the local part of `git config user.email` as configured
 *in that repository*, lowercased and reduced to `[a-z0-9._-]`, at most 48
@@ -328,13 +336,13 @@ opened and settling to once every thirty seconds while nothing is happening. A
 pull the watch misses is picked up by that instead. Half a minute late is the
 worst this costs you; never noticing it at all is what it removes.
 
-Opening the Members dialog re-reads both files as well, which is the
+Opening the **Start teamwork** panel re-reads both files as well, which is the
 belt-and-braces half of the same thing — and if the watch could not be set up at
-all, that is the dialog that says so rather than letting a list nothing is
+all, that is the panel that says so rather than letting a list nothing is
 following look as live as one that is.
 
-Open the Members dialog on both machines. You should each see two entries, one
-of them marked as you. That part reads the directory and needs no network at
+Open the **Start teamwork** panel on both machines. Its last step should list
+two entries, one of them marked as you. That part reads the directory and needs no network at
 all, so it is a clean check on step 4 before you blame anything on the relay.
 
 Then look at the project header in the sidebar, which says in one phrase what
@@ -498,13 +506,13 @@ cd ~/teamree-example && git pull && ls .teamree/members/
 ```
 
 Both handles, or you are not done. The app follows that directory, so what is
-in it is what the Members dialog shows within a moment of the pull finishing —
-and opening the dialog re-reads it in any case. If the dialog shows two people
+in it is what the **Start teamwork** panel shows within a moment of the pull
+finishing — and opening it re-reads the directory in any case. If the panel shows two people
 and the header still says **No teammates**, that is worth reporting: it is the
 one shape of this failure the app is supposed to have stopped being able to
 have.
 
-If a key is in the directory and not in the dialog, the dialog will name the
+If a key is in the directory and not in the panel, the panel will name the
 file and say why it was skipped — a name that is not exactly `<handle>.pub`, a
 file whose contents name somebody other than its filename, two files with one
 key. One bad file costs one member and never the list.
@@ -526,7 +534,7 @@ cd ~/teamree-example && git pull && cat .teamree/relay
 ```
 
 Both of you, and compare the strings exactly, scheme included — or open the
-Members dialog on each machine, which shows the URL in effect and which of the
+**Start teamwork** panel on each machine, which shows the URL in effect and which of the
 two places it came from. If one of you has the file and the other does not,
 somebody did not push. If it says the scheme is `https`, not ws or wss, or that
 it has no path, you pasted the address the deploy printed rather than the
