@@ -90,9 +90,11 @@ function render(overrides: Partial<TeamworkStepsProps> = {}): string {
     relay: noRelay(),
     status: status(),
     membersPending: false,
+    membersError: null,
     relayPending: false,
     relayError: null,
     onJoin: () => {},
+    onClearMembersError: () => {},
     onSetRelay: () => {},
     ...overrides
   }
@@ -135,6 +137,38 @@ describe('what a key grants, and where it is said', () => {
     const markup = render({ list: enrolled() })
     expect(markup).not.toContain(JOIN_BUTTON)
     expect(markup).not.toContain('can run commands on this machine')
+  })
+})
+
+describe('a refused handle', () => {
+  const taken = '.teamree/members/ana.pub is already somebody else\u2019s key; choose another handle'
+
+  // It used to be raised only as a notice, and the modal's own scrim was
+  // painted over it: the dialog stayed open, the button came back to life, and
+  // the sentence that named the remedy was never seen. Notices sit above the
+  // scrim now, but a corner of the screen is still the wrong place for an
+  // instruction about the box the cursor is in.
+  it('is shown under the handle field, not only somewhere else', () => {
+    const markup = render({ membersError: taken })
+    const field = markup.indexOf('field__input')
+    const refusal = markup.indexOf('choose another handle')
+    expect(refusal).toBeGreaterThan(-1)
+    expect(refusal).toBeGreaterThan(field)
+    expect(refusal).toBeLessThan(markup.indexOf(JOIN_BUTTON))
+    expect(markup).toContain('class="field__error"')
+  })
+
+  it('marks the field itself as the thing that was refused', () => {
+    expect(render({ membersError: taken })).toContain('aria-invalid="true"')
+    expect(render()).not.toContain('aria-invalid="true"')
+  })
+
+  it('carries the runtime\u2019s own sentence, which names the file and the remedy', () => {
+    expect(text(render({ membersError: taken }))).toContain(taken)
+  })
+
+  it('says nothing when nothing has been refused', () => {
+    expect(render()).not.toContain('field__error')
   })
 })
 

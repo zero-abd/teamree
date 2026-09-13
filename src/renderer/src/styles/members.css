@@ -393,6 +393,15 @@
 
 /* What a key grants, in the place it cannot be skipped: above the button that
    grants it. */
+/* A refusal that names the box it is about, under the box it is about.
+   These used to arrive only as a notice, which the modal's own scrim painted
+   over — so pressing the button with a taken handle showed nothing at all. */
+.field__error {
+  color: var(--warning);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
 .grant {
   display: flex;
   flex-direction: column;

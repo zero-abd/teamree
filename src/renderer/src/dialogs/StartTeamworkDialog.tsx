@@ -49,6 +49,7 @@ export function StartTeamworkDialog({ projectId }: { projectId: string }): React
   const relay = useWorkspaceStore((state) => state.relays[projectId])
   const status = useWorkspaceStore((state) => state.teamwork[projectId])
   const membersPending = useWorkspaceStore((state) => state.membersPending)
+  const membersError = useWorkspaceStore((state) => state.membersError)
   const relayPending = useWorkspaceStore((state) => state.relayPending)
   const relayError = useWorkspaceStore((state) => state.relayError)
   const loadMembers = useWorkspaceStore((state) => state.loadMembers)
@@ -56,6 +57,7 @@ export function StartTeamworkDialog({ projectId }: { projectId: string }): React
   const loadTeamwork = useWorkspaceStore((state) => state.loadTeamwork)
   const setRelay = useWorkspaceStore((state) => state.setRelay)
   const joinProject = useWorkspaceStore((state) => state.joinProject)
+  const clearMembersError = useWorkspaceStore((state) => state.clearMembersError)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   // All three read on open. The runtime watches `.teamree` and says when it
@@ -79,9 +81,11 @@ export function StartTeamworkDialog({ projectId }: { projectId: string }): React
           relay={relay}
           status={status}
           membersPending={membersPending}
+          membersError={membersError}
           relayPending={relayPending}
           relayError={relayError}
           onJoin={(handle) => void joinProject(projectId, handle)}
+          onClearMembersError={clearMembersError}
           onSetRelay={(url) => void setRelay(projectId, url)}
         />
         <div className="form__actions">
@@ -99,9 +103,13 @@ export type TeamworkStepsProps = {
   relay: RelaySetting | undefined
   status: TeamworkStatus | undefined
   membersPending: boolean
+  /** Why the last attempt to add this machine's key was refused, or null. */
+  membersError: string | null
   relayPending: boolean
   relayError: string | null
   onJoin: (handle?: string) => void
+  /** Called on the keystroke that answers a refusal, so it stops being shown. */
+  onClearMembersError: () => void
   onSetRelay: (url: string) => void
 }
 
@@ -157,7 +165,13 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
       return props.list === undefined ? null : <IdentityBody list={props.list} />
     case 'key':
       return step.mark === 'done' || props.list === undefined ? null : (
-        <JoinBody list={props.list} pending={props.membersPending} onJoin={props.onJoin} />
+        <JoinBody
+          list={props.list}
+          pending={props.membersPending}
+          error={props.membersError}
+          onJoin={props.onJoin}
+          onClearError={props.onClearMembersError}
+        />
       )
     case 'relay':
       return props.relay === undefined ? null : (
@@ -200,11 +214,15 @@ function IdentityBody({ list }: { list: MemberList }): React.JSX.Element {
 function JoinBody({
   list,
   pending,
-  onJoin
+  error,
+  onJoin,
+  onClearError
 }: {
   list: MemberList
   pending: boolean
+  error: string | null
   onJoin: (handle?: string) => void
+  onClearError: () => void
 }): React.JSX.Element {
   const [handle, setHandle] = useState('')
   const chosen = handle.trim() || list.self.handle
@@ -233,8 +251,14 @@ function JoinBody({
           <input
             className="field__input field__input--mono"
             value={handle}
-            onChange={(event) => setHandle(event.target.value)}
+            onChange={(event) => {
+              setHandle(event.target.value)
+              // The refusal named this box. Answering it is the keystroke that
+              // makes it stale, so it goes then rather than on the next submit.
+              onClearError()
+            }}
             placeholder={list.self.handle ?? 'pick a name'}
+            aria-invalid={error !== null}
             autoComplete="off"
             spellCheck={false}
           />
@@ -246,6 +270,10 @@ function JoinBody({
                 }.`}
           </span>
         </label>
+        {/* Under the field, never in a corner: every refusal the runtime raises
+            here ends in "choose another handle", and that is an instruction
+            about this box. */}
+        {error === null ? null : <p className="field__error">{error}</p>}
         <button type="submit" className="button button--primary" disabled={pending || chosen === null}>
           {pending ? 'Writing…' : 'Add my key'}
         </button>

@@ -119,3 +119,44 @@ it('re-reads the relay on the same change that re-reads the roster', async () =>
     stop()
   }
 })
+
+it('keeps a refused join in the panel rather than in a notice', async () => {
+  // Every refusal the runtime raises here ends in "choose another handle",
+  // which is an instruction about a field. It also used to be unreadable: the
+  // notice layer sat under the modal's own scrim, so pressing the button with a
+  // taken handle showed the user nothing whatsoever.
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const [, outsider] = useWorkspaceStore.getState().projects
+  await store.loadMembers(outsider!.id)
+
+  const taken = '.teamree/members/ana.pub is already somebody else’s key; choose another handle'
+  const call = vi.spyOn(runtimeClient, 'call').mockRejectedValueOnce(new Error(taken))
+  await store.joinProject(outsider!.id, 'ana')
+  expect(call).toHaveBeenCalledWith('members.join', { projectId: outsider!.id, handle: 'ana' })
+  call.mockRestore()
+
+  const after = useWorkspaceStore.getState()
+  expect(after.membersError).toBe(taken)
+  expect(after.membersPending).toBe(false)
+  // Not duplicated into the corner of the window: one sentence, in one place,
+  // and that place is under the box it is about.
+  expect(after.notices.map((notice) => notice.text)).not.toContain(taken)
+})
+
+it('drops the refusal on the keystroke that answers it', () => {
+  useWorkspaceStore.setState({ membersError: 'choose another handle' })
+  useWorkspaceStore.getState().clearMembersError()
+  expect(useWorkspaceStore.getState().membersError).toBeNull()
+})
+
+it('does not carry one project’s refusal into another’s panel', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const [joined] = useWorkspaceStore.getState().projects
+
+  useWorkspaceStore.setState({ membersError: 'choose another handle' })
+  await store.loadMembers(joined!.id)
+
+  expect(useWorkspaceStore.getState().membersError).toBeNull()
+})

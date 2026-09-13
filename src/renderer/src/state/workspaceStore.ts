@@ -114,6 +114,17 @@ type WorkspaceState = {
   /** True while a roster is being read or written, so the dialog can say so. */
   membersPending: boolean
   /**
+   * Why the last attempt to add this machine's key was refused, or null.
+   *
+   * Kept here rather than raised as a notice, for the reason `relayError` is:
+   * every one of these refusals is an instruction about the handle box — "that
+   * name is already somebody else's key; choose another" — and an instruction
+   * about a field is only useful beside the field. It was worse than that
+   * before the notice layer was raised above the modal scrim, because the
+   * sentence was painted underneath the dialog and the user saw nothing at all.
+   */
+  membersError: string | null
+  /**
    * Each project's relay, for the ones somebody has looked at. Read beside the
    * roster because the two are the same fact about a team: who is on it, and
    * where they meet.
@@ -213,6 +224,8 @@ type WorkspaceState = {
 
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
+  /** Drops the last join refusal, for the keystroke that answers it. */
+  clearMembersError: () => void
   /** Reads where one project's relay is recorded, and what each place said. */
   loadRelay: (projectId: string) => Promise<void>
   /**
@@ -609,6 +622,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     mergePreviews: {},
     members: {},
     membersPending: false,
+    membersError: null,
     relays: {},
     relayPending: false,
     relayError: null,
@@ -1016,7 +1030,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async loadMembers(projectId) {
-      set({ membersPending: true })
+      // A refusal is about one attempt at one project, so re-opening the panel
+      // must not show somebody else's.
+      set({ membersPending: true, membersError: null })
       try {
         const list = await runtimeClient.call('members.list', { projectId })
         set((state) => ({ members: { ...state.members, [projectId]: list } }))
@@ -1068,7 +1084,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async joinProject(projectId, handle) {
-      set({ membersPending: true })
+      set({ membersPending: true, membersError: null })
       try {
         const list = await runtimeClient.call('members.join', handle ? { projectId, handle } : { projectId })
         set((state) => ({ members: { ...state.members, [projectId]: list } }))
@@ -1077,10 +1093,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // committed and pushed, nobody else can see it.
         if (list.selfFile) notify(`Wrote ${list.selfFile}. Commit and push it to join.`, 'info')
       } catch (error) {
-        failed('Could not add you to this project')(error)
+        // Kept in the panel rather than raised as a notice, exactly as a
+        // refused relay URL is: the runtime's refusals here all end in "choose
+        // another handle", which is an instruction about the box the cursor is
+        // in and belongs under it.
+        set({ membersError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ membersPending: false })
       }
+    },
+
+    clearMembersError() {
+      if (get().membersError !== null) set({ membersError: null })
     },
 
     async pushActiveWorktree() {
