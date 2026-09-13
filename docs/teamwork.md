@@ -5,9 +5,9 @@ each other — the identity scheme is what makes the relay untrusted, and the
 relay being untrusted is what makes "anyone can type" survivable — and a
 later change to one of them is a change to the others.
 
-The milestones at the bottom are the order to build it in, and each one is
-useful on its own. Identity, the peer crypto, the relay and the transport are
-built; watching a pane, typing into one, and the stale cache are not.
+The milestones at the bottom are the order it was built in, and each one is
+useful on its own. All five have landed: identity, the peer crypto, the relay
+and the transport, watching a pane, typing into one, and the stale cache.
 
 ## The shape of it
 
