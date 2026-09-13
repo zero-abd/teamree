@@ -38,7 +38,7 @@ import type {
   TeamworkPublishProgress
 } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
-import { checkOriginUrl } from '../../shared/originUrl'
+import { checkOrigin } from '../../shared/origin'
 import { createGitRunner, type GitRunner } from '../git/gitProcess'
 import { ErrorCode } from '../../shared/protocol'
 import { notFound } from '../runtime/runtimeError'
@@ -241,13 +241,18 @@ export class TeamworkService {
   }
 
   /**
-   * Points this checkout's `origin` at the URL everybody cloned.
+   * Points this checkout's `origin` at the remote everybody shares — the URL
+   * you both cloned, or the path the repository is mounted at on both Macs.
    *
    * The panel used to print `git remote add origin <url>` and leave. That is
    * one command in a directory the app knows and the user has to find, and it
    * is the first thing in the flow that cannot be done from the window — so it
    * is here, refusing exactly what the project key would refuse, in the same
    * sentence.
+   *
+   * A path is stored in its normalised spelling rather than as it was typed, so
+   * that `git remote -v` and the string being hashed are the same characters —
+   * which matters because those characters are what a teammate has to be given.
    *
    * A remote that is already there is replaced rather than refused. The whole
    * reason somebody reaches this is a checkout whose origin teamree cannot
@@ -257,7 +262,7 @@ export class TeamworkService {
    */
   async setOrigin(params: ParamsOf<'teamwork.setOrigin'>): Promise<TeamworkOrigin> {
     const project = this.#project(params.projectId)
-    const checked = checkOriginUrl(params.url)
+    const checked = checkOrigin(params.url)
     if (!checked.ok) throw badOriginUrl(`that is not an origin teamree can use: ${checked.reason}`)
 
     const existing = await this.#runner.tryRun({
@@ -267,7 +272,7 @@ export class TeamworkService {
     })
     const replaced = existing.exitCode === 0
     const result = await this.#runner.tryRun({
-      args: ['remote', replaced ? 'set-url' : 'add', 'origin', checked.url],
+      args: ['remote', replaced ? 'set-url' : 'add', 'origin', checked.remote],
       cwd: project.path
     })
     if (result.exitCode !== 0) {
@@ -279,7 +284,7 @@ export class TeamworkService {
     // The status is cached against a stamp of git's config file, and this just
     // moved it; saying so is what makes the step go green without a restart.
     this.#onRosterChange?.()
-    return { projectId: project.id, remote: 'origin', url: checked.url, replaced }
+    return { projectId: project.id, remote: 'origin', url: checked.remote, replaced }
   }
 
   /** What `publish` would do, so the button can say it before it does it. */

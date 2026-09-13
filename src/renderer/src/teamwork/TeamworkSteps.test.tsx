@@ -360,8 +360,11 @@ describe('a checkout with no origin', () => {
     const shown = text(render({ status: noOrigin }))
     expect(shown).toContain('This checkout cannot take part yet.')
     expect(shown).toMatch(/no origin remote/)
-    expect(shown).toContain('Origin URL')
+    expect(shown).toContain('Origin')
     expect(shown).toContain('Add origin')
+    // Both kinds of answer are offered, because a team whose repository is a
+    // directory on a shared volume used to be told only what they could not do.
+    expect(shown).toMatch(/the absolute path it is mounted at on every Mac/)
   })
 
   it('marks the connected step blocked, in a word', () => {

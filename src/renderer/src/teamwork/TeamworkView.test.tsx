@@ -311,26 +311,39 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
 })
 
 describe('the origin remote, as a field rather than a command to go and run', () => {
-  it('refuses a path on this disk before git is ever asked', () => {
+  it('refuses a path no two machines could agree on, before git is ever asked', () => {
     seed({ teamwork: { p1: noOrigin() } })
     mount()
-    fireEvent.change(screen.getByRole('textbox', { name: 'Origin URL' }), {
-      target: { value: '/Users/ada/code/pager' }
+    fireEvent.change(screen.getByRole('textbox', { name: 'Origin' }), {
+      target: { value: '~/code/pager' }
     })
-    // The blocker sentence at the top says "not a path on this disk" too; this
-    // is the field's own refusal, which is a different sentence.
-    expect(screen.getByText(/a path is not a URL your teammates could clone/)).toBeTruthy()
+    expect(screen.getByText(/~ is a different directory for every account/)).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Add origin' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('sets it when what is typed is a URL with a host', () => {
     seed({ teamwork: { p1: noOrigin() } })
     mount()
-    fireEvent.change(screen.getByRole('textbox', { name: 'Origin URL' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Origin' }), {
       target: { value: 'https://github.com/ada/pager.git' }
     })
     fireEvent.click(screen.getByRole('button', { name: 'Add origin' }))
     expect(setOrigin).toHaveBeenCalledWith('p1', 'https://github.com/ada/pager.git')
+  })
+
+  // The whole of what a team sharing a repository over a volume used to get was
+  // a refusal. They get the remote set, and the one condition it comes with —
+  // while the string it is about is still on the screen in front of them.
+  it('takes the path a shared volume is mounted at, saying what the other Mac must match', () => {
+    seed({ teamwork: { p1: noOrigin() } })
+    mount()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Origin' }), {
+      target: { value: '/Volumes/team/pager.git/' }
+    })
+    expect(screen.getByText(/\/Volumes\/team\/pager\.git, character for character/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Add origin' }))
+    // Normalised, because those are the characters both machines hash.
+    expect(setOrigin).toHaveBeenCalledWith('p1', '/Volumes/team/pager.git')
   })
 
   it('shows what the runtime said when git refused, beside the field', () => {
@@ -341,7 +354,7 @@ describe('the origin remote, as a field rather than a command to go and run', ()
 
   it('is not there at all for a checkout whose origin is fine', () => {
     mount()
-    expect(screen.queryByRole('textbox', { name: 'Origin URL' })).toBeNull()
+    expect(screen.queryByRole('textbox', { name: 'Origin' })).toBeNull()
   })
 })
 

@@ -437,13 +437,31 @@ recorded so none of them is discovered by surprise later.
   window it names: the reconcile still happens after the event rather than inside
   `project.add`, so the answer is unread for as long as that takes, and the window
   and the CLI both say so rather than waiting.
-- **A repository shared over a filesystem path cannot take part.** What makes
-  two checkouts the same project is a hash of the normalised `origin` remote,
-  and a path is not a URL — `file://localhost/...` loses its host to the URL
-  parser. The message now names the path it read and says that a repository
-  shared over one cannot take part, at the top of **Start teamwork** rather than
-  at the end of the flow, so a team whose remote is a shared directory learns it
-  before they spend an afternoon — but learning it is still as far as they get.
+- **A repository shared over a filesystem path takes part only if both Macs
+  mount it at the same path.** It used to not take part at all. It does now: a
+  path origin is normalised into its own namespace — a normalised URL is
+  `host/path` and never begins with a slash, a normalised path always does, so
+  no path can collide with a URL's key and no existing team's key moved — and
+  hashed like any other identity. What cannot be done is prove that
+  `/Volumes/team/app.git` on one Mac and `/Users/x/mnt/team/app.git` on another
+  are one directory: there is no server to name and no third party to ask, and a
+  volume UUID or an inode is a fact about a mount rather than about the
+  repository. So the promise is the narrow one that can be kept — same absolute
+  path, spelled the same way, is the same project — and almost nothing is folded
+  away, because folding case or a trailing `.git` would merge two directories
+  that are genuinely different on a case-sensitive or network volume, and
+  merging two teams is worse than failing to join them.
+
+  The residual limit is that a *mismatch is not detectable*. Two machines that
+  hash different keys do not fail to connect; they never look for each other,
+  and both read "nobody is here yet". Nothing local can notice this, so the
+  product says the condition instead: the origin field prints the exact string
+  it will hash and what the other person must match, the invitation names the
+  path to mount at, and the **Connected** step says which path it is matching on
+  while it waits. Making a mismatch impossible rather than legible would mean a
+  committed identity — a file in `.teamree` that both checkouts pull, the way
+  the relay URL already works — which is a larger decision than this one and has
+  not been taken.
 - **A restarted shell is a fresh shell.** Panes and their directories come back, and
   an agent pane comes back with its conversation (see M10), but an ordinary pane's
   scrollback and whatever it was running are gone: the PTY died with the app. A
