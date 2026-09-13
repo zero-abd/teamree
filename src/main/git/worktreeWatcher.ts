@@ -35,6 +35,21 @@ export const DEFAULT_SETTLE_MS = 250
 export const DEFAULT_MIN_INTERVAL_MS = 1_000
 
 /**
+ * How soon after a working-tree watch is lost the first retry is made, and how
+ * far apart the retries get once they keep failing.
+ *
+ * Degraded is a state to recover from, not a verdict. The usual cause is the
+ * machine running out of inotify instances — a handful of editors, watchers and
+ * test runners reach the 128 ceiling between them — and that passes as soon as
+ * one of them exits. Without a retry the worktree stayed uncovered for the life
+ * of the process, still showing numbers it had stopped being able to move.
+ */
+export const DEFAULT_RETRY_FROM_MS = 2_000
+export const DEFAULT_RETRY_UNTIL_MS = 60_000
+
+const RETRY_BACKOFF = 4
+
+/**
  * Directory names never worth a status read. Kept deliberately short: anything
  * on this list is invisible to the watcher, so a name that only *usually*
  * carries ignored files — `dist`, `build`, `target` — does not belong on it.
@@ -145,6 +160,13 @@ export type WorktreeWatcherOptions = {
   onDegraded?: (event: WatchDegraded) => void
   now?: () => number
   schedule?: (run: () => void, delayMs: number) => () => void
+  /**
+   * The retry timer, kept apart from `schedule` so a test can drive the
+   * debounce and the recovery sweep independently.
+   */
+  retry?: (run: () => void, delayMs: number) => () => void
+  retryFromMs?: number
+  retryUntilMs?: number
   /** Overridable so a test need not lay down a real `.git` file. */
   resolveGitDir?: (checkoutPath: string) => string | undefined
 }
@@ -195,7 +217,17 @@ export class WorktreeWatcher {
   readonly #now: () => number
   readonly #schedule: (run: () => void, delayMs: number) => () => void
   readonly #resolveGitDir: (checkoutPath: string) => string | undefined
+  readonly #retry: (run: () => void, delayMs: number) => () => void
+  readonly #retryFromMs: number
+  readonly #retryUntilMs: number
+  /**
+   * Worktrees already reported degraded. The report is worth making once; the
+   * retries behind it are not worth a line each.
+   */
+  readonly #reported = new Set<string>()
 
+  #cancelRetry: (() => void) | undefined
+  #retryDelayMs: number
   #cancelPending: (() => void) | undefined
   /** Undefined until the first report, so the very first change is not held. */
   #lastReportAt: number | undefined
@@ -211,6 +243,10 @@ export class WorktreeWatcher {
     this.#now = options.now ?? Date.now
     this.#schedule = options.schedule ?? scheduleWithTimeout
     this.#resolveGitDir = options.resolveGitDir ?? resolveGitDir
+    this.#retry = options.retry ?? scheduleWithTimeout
+    this.#retryFromMs = options.retryFromMs ?? DEFAULT_RETRY_FROM_MS
+    this.#retryUntilMs = options.retryUntilMs ?? DEFAULT_RETRY_UNTIL_MS
+    this.#retryDelayMs = this.#retryFromMs
   }
 
   /** Worktree ids currently covered, for tests and for the status line. */
@@ -246,10 +282,23 @@ export class WorktreeWatcher {
       this.#stopWatching(id)
     }
 
-    for (const [id, worktree] of wanted) {
-      if (this.#watched.has(id)) continue
-      this.#startWatching(id, worktree.path)
+    for (const id of this.#reported) {
+      if (!wanted.has(id)) this.#reported.delete(id)
     }
+
+    for (const [id, worktree] of wanted) {
+      const watched = this.#watched.get(id)
+      if (watched === undefined) {
+        this.#startWatching(id, worktree.path)
+        continue
+      }
+      // `continue` on any entry at all was the bug: a worktree whose recursive
+      // watch was refused once was recorded as watched, and so was never looked
+      // at again — for the life of the process, long after the inotify
+      // instances it was waiting on came back.
+      if (!watched.watchesWorkingTree) this.#attachWorkingTree(id, watched)
+    }
+    this.#armRetry(false)
   }
 
   /** Drops every watch and any pending report. */
@@ -258,40 +307,19 @@ export class WorktreeWatcher {
     for (const id of [...this.#watched.keys()]) this.#stopWatching(id)
     this.#cancelPending?.()
     this.#cancelPending = undefined
+    this.#cancelRetry?.()
+    this.#cancelRetry = undefined
+    this.#reported.clear()
   }
 
   #startWatching(id: string, checkoutPath: string): void {
-    const handles: WatchHandle[] = []
-    let watchesWorkingTree = false
-
-    try {
-      handles.push(
-        this.#watch({
-          target: checkoutPath,
-          recursive: true,
-          onChange: (relative) => {
-            if (!ignoresCheckoutChange(relative)) this.#report()
-          },
-          // A recursive watch can fail well after it was set up — inotify runs
-          // out of instances while the app is running — so this is not only a
-          // setup path.
-          onError: (error) => this.#degrade(id, error)
-        })
-      )
-      watchesWorkingTree = true
-    } catch (error) {
-      // Recursive watching is unavailable on some platforms and some
-      // filesystems, and can simply be exhausted on any of them. The git
-      // directory alone still catches every staged change, every commit and
-      // every branch switch, which is most of what the chips show, so it is
-      // worth carrying on without — as long as somebody is told.
-      this.#onDegraded({ worktreeId: id, checkoutPath, error })
-    }
+    const watched: WatchedWorktree = { path: checkoutPath, handles: [], watchesWorkingTree: false }
+    this.#attachWorkingTree(id, watched)
 
     const gitDir = this.#resolveGitDir(checkoutPath)
     if (gitDir !== undefined) {
       try {
-        handles.push(
+        watched.handles.push(
           this.#watch({
             target: gitDir,
             recursive: true,
@@ -308,8 +336,47 @@ export class WorktreeWatcher {
 
     // Nothing could be watched at all: record nothing, so a later sync retries
     // rather than believing this worktree is covered.
-    if (handles.length === 0) return
-    this.#watched.set(id, { path: checkoutPath, handles, watchesWorkingTree })
+    if (watched.handles.length === 0) return
+    this.#watched.set(id, watched)
+  }
+
+  /**
+   * Asks for the recursive working-tree watch, and adds it to what is already
+   * covered if it is given one.
+   *
+   * Additive on purpose. This runs on the retry path as well as the first
+   * attempt, and a retry that tore the entry down first would drop the git
+   * directory watch — the one thing still working — every time it failed.
+   */
+  #attachWorkingTree(id: string, watched: WatchedWorktree): void {
+    try {
+      watched.handles.push(
+        this.#watch({
+          target: watched.path,
+          recursive: true,
+          onChange: (relative) => {
+            if (!ignoresCheckoutChange(relative)) this.#report()
+          },
+          // A recursive watch can fail well after it was set up — inotify runs
+          // out of instances while the app is running — so this is not only a
+          // setup path.
+          onError: (error) => this.#degrade(id, error)
+        })
+      )
+      watched.watchesWorkingTree = true
+      // Coming back from degraded is itself news: the chips stopped following
+      // edits while it was down, so whatever is on screen is as old as the
+      // outage. One report puts that right.
+      if (this.#reported.delete(id)) this.#report()
+    } catch (error) {
+      // Recursive watching is unavailable on some platforms and some
+      // filesystems, and can simply be exhausted on any of them. The git
+      // directory alone still catches every staged change, every commit and
+      // every branch switch, which is most of what the chips show, so it is
+      // worth carrying on without — as long as somebody is told, and as long
+      // as something keeps asking again.
+      this.#reportDegraded({ worktreeId: id, checkoutPath: watched.path, error })
+    }
   }
 
   #stopWatching(id: string): void {
@@ -332,7 +399,59 @@ export class WorktreeWatcher {
     // already stopped covering edits after the first one.
     if (!watched || !watched.watchesWorkingTree) return
     watched.watchesWorkingTree = false
-    this.#onDegraded({ worktreeId: id, checkoutPath: watched.path, error })
+    this.#reportDegraded({ worktreeId: id, checkoutPath: watched.path, error })
+    // A watch that has just died is the moment a retry is most worth making,
+    // and nothing else will call `sync` to arm one: the watch set moves on git
+    // events, and a machine under watch pressure is not one creating worktrees.
+    this.#armRetry(true)
+  }
+
+  /** Said once per worktree, however many times the retry behind it fails. */
+  #reportDegraded(event: WatchDegraded): void {
+    if (this.#reported.has(event.worktreeId)) return
+    this.#reported.add(event.worktreeId)
+    this.#onDegraded(event)
+  }
+
+  /**
+   * Puts the next recovery attempt on the clock, while there is anything to
+   * recover. `fromStart` is for the moments the degraded set has just changed,
+   * where a retry is most likely to succeed; everything else lets the backoff
+   * carry on, so a machine that is genuinely out of watches is not asked every
+   * two seconds forever.
+   */
+  #armRetry(fromStart: boolean): void {
+    if (this.#closed) return
+    if (this.degradedIds.length === 0) {
+      this.#cancelRetry?.()
+      this.#cancelRetry = undefined
+      this.#retryDelayMs = this.#retryFromMs
+      return
+    }
+    if (fromStart) this.#retryDelayMs = this.#retryFromMs
+    else if (this.#cancelRetry) return
+    this.#cancelRetry?.()
+    this.#cancelRetry = this.#retry(
+      () => {
+        this.#cancelRetry = undefined
+        this.#retryNow()
+      },
+      this.#retryDelayMs
+    )
+  }
+
+  /**
+   * Asks again for every working-tree watch that is missing. Costs nothing
+   * when nothing is degraded, because it is not armed at all then.
+   */
+  #retryNow(): void {
+    if (this.#closed) return
+    this.#retryDelayMs = Math.min(this.#retryDelayMs * RETRY_BACKOFF, this.#retryUntilMs)
+    for (const [id, watched] of this.#watched) {
+      if (watched.watchesWorkingTree) continue
+      this.#attachWorkingTree(id, watched)
+    }
+    this.#armRetry(false)
   }
 
   /**
