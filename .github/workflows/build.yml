@@ -69,10 +69,17 @@ jobs:
       # Node 22 rather than the newest release: it is the major Electron 38
       # embeds, so the CLI bundle, the test suite and the code that actually
       # ships all run on one runtime.
+      #
+      # `relay/` is a second npm package with its own lockfile, so both are named
+      # here: keyed on the root lockfile alone, a change to the relay's
+      # dependencies would be served a cache that predates it.
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            relay/package-lock.json
 
       # Electron draws into an X display even with the window hidden, so the
       # smoke test and the packaged-app check both need one. xvfb-run needs
@@ -88,6 +95,15 @@ jobs:
       # as an install failure rather than as a terminal that never opens.
       - name: Install
         run: npm ci
+
+      # The relay is a separate package with its own dependencies and its own
+      # gitignored build, and the suite below spawns the built thing as a child
+      # process to drive real WebSockets through it. Nothing in the root install
+      # produces it, which is why those tests skipped here on every run before
+      # this step existed.
+      - name: Install the relay
+        run: npm ci
+        working-directory: relay
 
       # Electron's sandbox helper has to be setuid root, and npm cannot make it
       # so — it unpacks as the runner's own user. Electron then aborts rather
@@ -117,8 +133,26 @@ jobs:
       - name: Build the CLI the acceptance suite drives
         run: npm run build:cli
 
+      # Produces `relay/dist/node/index.js`, which is the exact path the peer
+      # tests stat before deciding whether to run. It has to exist before the
+      # suite starts, not merely before the relay is dialled.
+      - name: Build the relay the peer tests drive
+        run: npm run build
+        working-directory: relay
+
+      # The relay's own suite, which had never run here either. It drives real
+      # sockets against the splice, the rendezvous and the rate limits, and it
+      # is seconds rather than minutes.
+      - name: Test the relay
+        run: npm test
+        working-directory: relay
+
       # Includes the acceptance pass, which drives a real runtime over the real
       # socket — a unix socket here, a named pipe on Windows.
+      #
+      # `pretest` refuses to start this if the relay build above did not land:
+      # the peer tests skip on a missing `relay/dist`, and a skip that only
+      # prints a warning into a green log is indistinguishable from a pass.
       - name: Test
         run: npm test
 

@@ -324,12 +324,43 @@ recorded so none of them is discovered by surprise later.
   never been built nor the app started there. The platform-specific code and the
   Windows-conditional workflow steps are all still present, so putting a platform back
   is adding a block to the matrix rather than a rewrite.
-- **CI runs, and macOS is green.** It runs typecheck, lint, format, the full suite,
-  the build, the headless smoke test, the package and the packaged-app check — the one
-  that launches the artifact and drives it — and macOS passes all of it and uploads a
-  build. Its first four runs all failed, each for a real reason that a developer
-  machine had been hiding: a stale CLI build, a configured git identity, LF line
-  endings, and a sandbox helper that only needs its permissions fixed on a runner.
+- **CI runs, and macOS is green.** It runs typecheck, lint, format, the relay's own
+  suite, the full suite, the build, the headless smoke test, the package and the
+  packaged-app check — the one that launches the artifact and drives it — and macOS
+  passes all of it and uploads a build. Its first four runs all failed, each for a real
+  reason that a developer machine had been hiding: a stale CLI build, a configured git
+  identity, LF line endings, and a sandbox helper that only needs its permissions fixed
+  on a runner.
+
+  For most of that time the suite it ran was quietly smaller than the one a developer
+  runs. `relay/` is a separate package with its own dependencies and its own gitignored
+  build; nothing in the workflow produced it, and the tests that spawn the built relay
+  as a child process and drive real WebSockets through it — the only ones that prove
+  teamwork end to end rather than against a fake — skip when it is absent. So they
+  skipped on every run, in a warning nobody reads, and the run stayed green: fifteen
+  tests reported skipped and an exit code of zero, which is indistinguishable at a
+  glance from fifteen tests that passed. The workflow now installs and builds the relay
+  before testing and runs the relay's own 71 tests, which had never run here either;
+  and `pretest` refuses to start the suite at all when `relay/dist` is missing and `CI`
+  is set, so that absence fails the run loudly instead of silently shrinking it. The
+  same condition still only warns on a developer's machine, where another package's
+  missing build is not a broken peer transport. Checked here by running the workflow's
+  sequence in order on a checkout with no `node_modules`: the relay's suite passes 71,
+  and the two relay-backed files report 15 tests run where hiding `relay/dist` makes
+  the same command report 15 skipped and still exit zero. That the steps do this on a
+  runner is reasoned, not observed.
+
+  Turning them on turned up the reason to watch them. `relayWatch.test.ts` is the most
+  timing-exposed file in the suite — a real relay, real PTYs and real wall-clock waits —
+  and on a four-core machine busy with other work it failed in two full-suite runs of
+  three: once on an assertion that a frame had arrived without having waited for one,
+  and once on two `until`s running out of patience, with the file taking forty seconds
+  where it usually takes under two. Run on its own it passed eleven of eleven, five
+  times over. Nothing about the transport was wrong either time. A runner that
+  is not sharing its cores may never see it; the honest position is that this file has
+  never before run unattended, and if CI goes intermittently red this is the first place
+  to look.
+
   The action versions have since been checked against the upstream tags
   and all resolve, so the first run will not fail on those; they are two to three
   majors behind current, which is a maintenance note rather than a fault. Those steps
