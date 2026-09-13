@@ -28,6 +28,7 @@ import {
   createPeerLink,
   HANDSHAKE_TIMEOUT_MS,
   KEEPALIVE_MS,
+  MAX_UNROUTED_EVENTS,
   SILENCE_TIMEOUT_MS,
   SILENT_PEER_DETAIL,
   WAITING_DETAIL,
@@ -41,7 +42,7 @@ import { createDispatcher } from '../../runtime/dispatcher'
 import { MethodRegistry } from '../../runtime/methodRegistry'
 import { createRuntimeContext } from '../../runtime/runtimeContext'
 import { SubscriptionHub, type SubscriptionChannel } from '../../runtime/subscriptionHub'
-import { MAX_PEER_SUBSCRIPTIONS } from '../../runtime/peerTransport'
+import { MAX_PEER_SUBSCRIPTIONS, STREAM_FLUSH_MS } from '../../runtime/peerTransport'
 import { MAX_CACHED_PANES, MAX_CACHED_TEXT, MAX_CACHED_WORKTREES } from '../../store/teammateCache'
 import { loadStaticPrivateKey } from '../identity'
 import { epochAt, rendezvousId, rendezvousToken, sharedSecret } from './rendezvous'
@@ -1095,6 +1096,58 @@ describe('what a teammate may hold open', () => {
     await pair.scheduler.advance(1_000)
     expect(events).toHaveLength(delivered)
     stop()
+    alice.link.stop()
+  })
+})
+
+describe('what a stream costs before anybody has claimed it', () => {
+  it('says what it threw away when a stream outruns the hold buffer', async () => {
+    const pair = await pairOfRuntimes()
+    await pair.bob.service.start()
+    await pair.scheduler.advance(0)
+    const alice = await rawLink({
+      relay: pair.relay,
+      scheduler: pair.scheduler,
+      dataDir: pair.alice.dataDir,
+      remotePublicKey: pair.bobKey,
+      handle: 'alice'
+    })
+    expect(alice.phase()).toBe('connected')
+
+    // One of Bob's streams that Alice has not routed, which is the window every
+    // subscription opens with: the far side attaches the stream inside the
+    // handler and starts writing, and the answer that names it is still on the
+    // wire. Held open by hand here, because a relay that stalls and then hands
+    // over the backlog reaches the same state in one synchronous run of frames.
+    const connection = linkIdFor(pair.aliceKey, projectKeyFor(normaliseRemote(ORIGIN)!))
+    let channel: SubscriptionChannel | undefined
+    const subscription = pair.bob.subscriptions.subscribe(connection, (opened) => {
+      channel = opened
+      return () => {}
+    })
+
+    const chunk = 'x'.repeat(64)
+    const over = 4
+    for (let frame = 0; frame < MAX_UNROUTED_EVENTS + over; frame += 1) {
+      channel?.emit({ type: 'data', data: chunk })
+      // A flush apart, so each chunk is its own frame rather than merged into
+      // the one in front of it by Bob's pacer.
+      await pair.scheduler.advance(STREAM_FLUSH_MS)
+    }
+
+    const events: unknown[] = []
+    const stop = alice.link.route(subscription, (event) => events.push(event))
+
+    // Bounded, and said. The four frames that did not fit are 256 bytes of a
+    // teammate's output that nothing will ever send again, and a reader shown
+    // the rest with no mark where they were would be reading a transcript that
+    // never happened.
+    expect(events[0]).toEqual({ type: 'elided', bytes: over * 64 })
+    expect(events).toHaveLength(MAX_UNROUTED_EVENTS + 1)
+    expect(events.slice(1)).toEqual(Array.from({ length: MAX_UNROUTED_EVENTS }, () => ({ type: 'data', data: chunk })))
+
+    stop()
+    pair.bob.subscriptions.unsubscribe(connection, subscription)
     alice.link.stop()
   })
 })
