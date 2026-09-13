@@ -9,6 +9,7 @@ import type { IDisposable, IPty } from 'node-pty'
 import type { Terminal } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
 import { killProcessTree } from './process-tree'
+import { recoverTailOnTeardown } from './pty-tail'
 import { ScrollbackBuffer } from './scrollback'
 import { buildShellCommand, buildTerminalEnv, TERMINAL_TYPE, shellName } from './shell-environment'
 import { terminalFailed, TerminalServiceError } from './service-error'
@@ -28,11 +29,11 @@ const CLOSE_TIMEOUT_MS = 5_000
  * data goes quiet is what makes "exited" mean "and everything it printed is
  * readable" — the invariant `terminal run` hands to an agent.
  *
- * What this does not do is recover output the layer below has already thrown
- * away. node-pty destroys the pty socket 200ms after the child is reaped, and
- * anything unread at that moment is gone before this file ever sees it; a
- * chatty command on a loaded machine can lose its tail that way. That limit is
- * recorded in ROADMAP.md rather than papered over here.
+ * On POSIX the completeness itself is not this window's doing: `pty-tail.ts`
+ * reads the pty to its real end before the fd is closed, which happens before
+ * node-pty reports the exit, so nothing is outstanding by the time `finish`
+ * runs. The window still earns its place on Windows, where output arrives over
+ * a pipe node-pty owns and this is the only thing holding exit back.
  */
 const EXIT_DRAIN_QUIET_MS = 50
 
@@ -132,7 +133,8 @@ export class PtySession {
 
     this.subscriptions.push(
       handle.onData((chunk) => this.receive(chunk)),
-      handle.onExit(({ exitCode, signal }) => this.finish(exitCode, signal))
+      handle.onExit(({ exitCode, signal }) => this.finish(exitCode, signal)),
+      recoverTailOnTeardown(handle, platform, (chunk) => this.receive(chunk))
     )
   }
 
