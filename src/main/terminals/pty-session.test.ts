@@ -12,7 +12,12 @@ import { SHELL_UNRUNNABLE } from './shell-environment'
 
 // Real PTYs, no mocks: the interesting failures here are all in the native layer
 // and in how a shell reacts to signals, and a fake would reproduce neither.
-const describePty = canSpawnPty() ? describe : describe.skip
+// POSIX only, deliberately. Every command below is POSIX shell — `$(seq 1 200)`,
+// `exit 5`, `;` as a separator — and the behaviour under test is what a pty does
+// with them. A Windows equivalent would be a different test rather than a
+// translation of this one, so this skips there instead of failing there, and the
+// Windows-relevant parts of the session live in tests that do run on it.
+const describePty = process.platform !== 'win32' && canSpawnPty() ? describe : describe.skip
 const TEST_TIMEOUT_MS = 20_000
 
 const started: PtySession[] = []
