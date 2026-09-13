@@ -57,6 +57,33 @@ const noRelay = (): RelaySetting => ({
   readAt: 0
 })
 
+const relayOnDisk = (): RelaySetting => ({
+  ...noRelay(),
+  url: 'wss://relay.example/v1/relay',
+  source: 'repository',
+  problem: null,
+  onDisk: { url: 'wss://relay.example/v1/relay', problem: null }
+})
+
+const enrolledRoster = (): MemberList => ({
+  ...roster(),
+  enrolled: true,
+  members: [
+    { handle: 'ada', publicKey: SELF_KEY, addedAt: '2026-03-01', file: '.teamree/members/ada.pub', isSelf: true }
+  ]
+})
+
+/** A checkout with an origin teamree can match teammates on, and nobody on it yet. */
+const working = (): TeamworkStatus => ({
+  projectId: 'p1',
+  relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
+  disabledReason: null,
+  origin: { ok: true, url: 'https://example.com/ada/pager.git' },
+  enrolled: true,
+  links: [],
+  readAt: 0
+})
+
 const noOrigin = (): TeamworkStatus => ({
   projectId: 'p1',
   relay: null,
@@ -89,6 +116,8 @@ const setOrigin = vi.fn()
 const startRelayDeploy = vi.fn()
 const closeRelayDeploy = vi.fn()
 const publishTeamwork = vi.fn()
+const loadPublishProgress = vi.fn()
+const cancelPublish = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
@@ -106,14 +135,33 @@ function seed(overrides: Record<string, unknown> = {}): void {
       startRelayDeploy,
       closeRelayDeploy,
       publishTeamwork,
+      loadPublishProgress,
+      cancelPublish,
       ...overrides
     },
     true
   )
 }
 
-const mount = (): void => {
+/** The panel as somebody sees it before they have answered anything. */
+const open = (): void => {
   render(<TeamworkView projectId="p1" />)
+}
+
+/**
+ * The panel with the first question answered, which is where every assertion
+ * about the steps themselves belongs.
+ *
+ * The question is new and is the point of it: the five steps mean two different
+ * things depending on which end of this you are, and the page used to have to
+ * write every sentence for both at once.
+ */
+const mount = (path: 'start' | 'join' = 'start'): void => {
+  open()
+  const label = path === 'start' ? 'Start a team here' : 'Join a team I was invited to'
+  const chooser = screen.queryByRole('button', { name: label })
+  // Absent for a project where this already works, which is asked nothing.
+  if (chooser !== null) fireEvent.click(chooser)
 }
 
 beforeEach(() => {
@@ -126,6 +174,8 @@ beforeEach(() => {
   startRelayDeploy.mockReset()
   closeRelayDeploy.mockReset()
   publishTeamwork.mockReset()
+  loadPublishProgress.mockReset()
+  cancelPublish.mockReset()
   seed()
 })
 
@@ -205,17 +255,7 @@ describe('how many ways to get a relay are put in front of somebody', () => {
   // Somebody joining a team that already has a relay has no decision to make:
   // theirs arrives in the repository.
   it('offers none of it to somebody whose team already has one', () => {
-    seed({
-      relays: {
-        p1: {
-          ...noRelay(),
-          url: 'wss://relay.example/v1/relay',
-          source: 'repository',
-          problem: null,
-          onDisk: { url: 'wss://relay.example/v1/relay', problem: null }
-        }
-      }
-    })
+    seed({ relays: { p1: relayOnDisk() } })
     mount()
     expect(screen.queryByRole('button', { name: 'Deploy a relay' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Other ways to get a relay' })).toBeNull()
@@ -311,26 +351,10 @@ const pushStep = (): HTMLElement => {
 }
 
 describe('committing and pushing, which is the one that leaves the machine', () => {
-  const enrolledRoster = (): MemberList => ({
-    ...roster(),
-    enrolled: true,
-    members: [
-      { handle: 'ada', publicKey: SELF_KEY, addedAt: '2026-03-01', file: '.teamree/members/ada.pub', isSelf: true }
-    ]
-  })
-
   const ready = (overrides: Record<string, unknown> = {}): void =>
     seed({
       members: { p1: enrolledRoster() },
-      relays: {
-        p1: {
-          ...noRelay(),
-          url: 'wss://relay.example/v1/relay',
-          source: 'repository',
-          problem: null,
-          onDisk: { url: 'wss://relay.example/v1/relay', problem: null }
-        }
-      },
+      relays: { p1: relayOnDisk() },
       publishPlans: { p1: plan() },
       ...overrides
     })
@@ -395,8 +419,110 @@ describe('committing and pushing, which is the one that leaves the machine', () 
       }
     })
     mount()
-    expect(screen.getByText(/Committed abc1234/)).toBeTruthy()
-    expect(screen.getByText(/Pull or rebase onto origin\/main/)).toBeTruthy()
-    expect(screen.getByText(/failed to push some refs/)).toBeTruthy()
+    // Scoped to step 4: the same advice is repeated at the bottom of the page,
+    // in the summary of which halves worked, and both places should say it.
+    const step = within(pushStep())
+    expect(step.getByText(/Committed abc1234/)).toBeTruthy()
+    expect(step.getByText(/Pull or rebase onto origin\/main/)).toBeTruthy()
+    expect(step.getByText(/failed to push some refs/)).toBeTruthy()
+  })
+})
+
+describe('the question the panel asks before anything else', () => {
+  // One entry point, two honest paths. The five steps describe two different
+  // jobs and the page used to have to write every sentence for both at once.
+  it('offers both, takes neither, and shows no steps until one is chosen', () => {
+    open()
+    expect(screen.getByRole('button', { name: 'Start a team here' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Join a team I was invited to' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '4. Commit and push' })).toBeNull()
+  })
+
+  it('shows the steps once it has been answered, in the words of the job chosen', () => {
+    mount('join')
+    expect(screen.getByRole('heading', { name: '4. Commit and push' })).toBeTruthy()
+    expect(screen.getByText(/teamree on their machine says “No teammates”/)).toBeTruthy()
+  })
+
+  // People pick the wrong one, and a choice that cannot be unmade is a trap.
+  it('lets somebody take the answer back', () => {
+    mount('join')
+    fireEvent.click(screen.getByRole('button', { name: 'Not that' }))
+    expect(screen.getByRole('button', { name: 'Start a team here' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '4. Commit and push' })).toBeNull()
+  })
+})
+
+describe('a push while it is running', () => {
+  const pushing = (overrides: Record<string, unknown> = {}): void =>
+    seed({
+      members: { p1: enrolledRoster() },
+      relays: { p1: relayOnDisk() },
+      publishPlans: { p1: plan() },
+      publishPending: true,
+      ...overrides
+    })
+
+  // `teamwork.publish` does not answer until the push is over, so without a
+  // second question there is nothing to show for the minutes in between. This
+  // is the fix for "it gets stuck at git push" on the window's side of the
+  // wire.
+  it('asks what it is doing, and only while one is running', () => {
+    pushing()
+    mount()
+    expect(loadPublishProgress).toHaveBeenCalledWith('p1')
+
+    loadPublishProgress.mockReset()
+    seed({ members: { p1: enrolledRoster() }, relays: { p1: relayOnDisk() }, publishPlans: { p1: plan() } })
+    mount()
+    expect(loadPublishProgress).not.toHaveBeenCalled()
+  })
+
+  it('shows what git last printed, and how long it has been going', () => {
+    const startedAt = Date.now() - 12_000
+    pushing({
+      publishProgress: {
+        p1: {
+          projectId: 'p1',
+          phase: 'pushing',
+          startedAt,
+          lastOutputAt: Date.now() - 1_000,
+          finishedAt: null,
+          output: ['Writing objects:  60% (6/10)'],
+          cancelling: false,
+          readAt: Date.now()
+        }
+      }
+    })
+    mount()
+    const step = within(pushStep())
+    expect(step.getByText('Pushing to the remote')).toBeTruthy()
+    expect(step.getByText(/Writing objects:\s+60% \(6\/10\)/)).toBeTruthy()
+    expect(step.getByText(/^1[123]s$/)).toBeTruthy()
+  })
+
+  // A way out of a call that can wait ten minutes on something nobody can
+  // answer is not a refinement.
+  it('has a Stop that stops it', () => {
+    pushing()
+    mount()
+    fireEvent.click(within(pushStep()).getByRole('button', { name: 'Stop' }))
+    expect(cancelPublish).toHaveBeenCalledWith('p1')
+  })
+})
+
+describe('the message to send a teammate', () => {
+  it('is copied by the button that says it will be', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    seed({ members: { p1: enrolledRoster() }, relays: { p1: relayOnDisk() }, teamwork: { p1: working() } })
+    mount()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy the invitation' }))
+
+    expect(writeText).toHaveBeenCalledOnce()
+    const sent = writeText.mock.calls[0]?.[0] as string
+    expect(sent).toContain('git clone https://example.com/ada/pager.git')
+    expect(sent).toContain('wss://relay.example/v1/relay')
   })
 })

@@ -7,19 +7,35 @@
 
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import type { MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
+import type {
+  MemberList,
+  PeerLink,
+  RelaySetting,
+  TeamworkPublish,
+  TeamworkPublishProgress,
+  TeamworkStatus
+} from '@shared/entities'
 import {
   checkOriginDraft,
   checkRelayDraft,
+  formatElapsed,
+  inviteText,
   memberFilePreview,
   MORE_RELAYS_LEAD,
   ORIGIN_DETAIL,
+  PUBLISH_QUIET_MS,
+  publishActivity,
   pushPlan,
   RELAY_DEPLOY,
   RELAY_LEAD,
   RELAY_OPTIONS,
   relayUrlFromOutput,
+  retryHint,
+  setupOutcome,
   startTeamworkFlow,
+  suggestedPath,
+  TEAMWORK_PATHS,
+  type SetupOutcome,
   type StartTeamworkInput,
   type StepId
 } from './startTeamwork'
@@ -80,7 +96,7 @@ function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
     projectId: 'p1',
     relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
     disabledReason: null,
-    origin: { ok: true },
+    origin: { ok: true, url: 'https://example.com/ada/pager.git' },
     enrolled: true,
     links: [],
     readAt: 0,
@@ -620,5 +636,328 @@ describe('step 3 when the recommended tunnel path was followed', () => {
   it('does not park the flow on step 3 for the whole session', () => {
     expect(startTeamworkFlow(overridden).currentId).not.toBe('relay')
     expect(startTeamworkFlow(overridden).currentId).toBe('push')
+  })
+})
+
+describe('which of the two jobs this is', () => {
+  // Reading the repository is far better evidence than asking somebody who has
+  // never done this before. It is still evidence about intent, so it is offered
+  // rather than applied: the one thing this panel must not do is take a
+  // decision quietly and then describe the result as though it were the
+  // reader's.
+  it('reads the repository and says which it looks like, with the fact behind it', () => {
+    expect(suggestedPath(list(), relay())).toEqual({
+      id: 'start',
+      because: 'There is no relay and nobody’s key in this checkout, so nothing has been set up.'
+    })
+    expect(suggestedPath(list(), relayOnDisk())?.id).toBe('join')
+    expect(suggestedPath(list(), relayOnDisk())?.because).toContain('.teamree/relay')
+  })
+
+  it('reads a colleague’s key as somebody having gone first, relay or no relay', () => {
+    const withPriya = list({
+      members: [
+        {
+          handle: 'priya',
+          publicKey: 'peerkey',
+          addedAt: '2026-03-01',
+          file: '.teamree/members/priya.pub',
+          isSelf: false
+        }
+      ]
+    })
+    expect(suggestedPath(withPriya, relay())).toEqual({
+      id: 'join',
+      because: 'priya is already on this project’s roster.'
+    })
+  })
+
+  it('suggests nothing at all until both reads have landed', () => {
+    expect(suggestedPath(undefined, relay())).toBeNull()
+    expect(suggestedPath(list(), undefined)).toBeNull()
+  })
+
+  // The two ends do different things, and half of what anybody needs to know is
+  // what the other one is waiting for. Both options say both halves.
+  it('describes what the other person does, in both options', () => {
+    expect(TEAMWORK_PATHS.map((option) => option.id)).toEqual(['start', 'join'])
+    for (const option of TEAMWORK_PATHS) {
+      expect(option.what).not.toBe('')
+      expect(option.them).not.toBe('')
+    }
+    expect(TEAMWORK_PATHS[1]?.what).toMatch(/push access is what membership means/)
+  })
+})
+
+describe('what each step says about the other machine', () => {
+  // The sentence that stops two people each waiting for the other, which is the
+  // way this goes wrong when it goes wrong.
+  it('tells a joiner that their teammate is waiting for exactly this file', () => {
+    const joining = step({ ...fresh, path: 'join' }, 'key')
+    expect(joining.otherSide).toMatch(/waiting for/)
+    expect(joining.otherSide).toMatch(/No teammates/)
+  })
+
+  it('tells somebody starting a team that nothing announces them either', () => {
+    const starting = step({ ...fresh, path: 'start' }, 'key')
+    expect(starting.otherSide).toMatch(/no announcement/i)
+  })
+
+  // A joiner who chooses a relay of their own is the failure that looks like
+  // nothing being wrong on either machine.
+  it('warns a joiner off choosing a relay, and tells a starter theirs is the team’s', () => {
+    expect(step({ ...fresh, path: 'join' }, 'relay').why).toMatch(/everybody has to name the same relay/)
+    expect(step({ ...fresh, path: 'join' }, 'relay').otherSide).toMatch(/Nobody connected/)
+    expect(step({ ...fresh, path: 'start' }, 'relay').why).toMatch(/Your team runs it and teamree runs none/)
+  })
+
+  it('says why every step is there, whichever job it is', () => {
+    for (const path of ['start', 'join'] as const) {
+      for (const entry of startTeamworkFlow({ ...fresh, path }).steps) {
+        expect(entry.why, `${entry.id} on the ${path} path`).not.toBe('')
+      }
+    }
+  })
+
+  // Both people hit this at the same moment on the same base, and the instinct
+  // it provokes — forcing — is the wrong one.
+  it('warns a joiner about the rejection two people pushing at once get', () => {
+    expect(step({ ...fresh, path: 'join' }, 'push').otherSide).toMatch(/pull with rebase/i)
+  })
+})
+
+describe('a push while it is running', () => {
+  const progress = (overrides: Partial<TeamworkPublishProgress> = {}): TeamworkPublishProgress => ({
+    projectId: 'p1',
+    phase: 'pushing',
+    startedAt: 1_000,
+    lastOutputAt: 1_000,
+    finishedAt: null,
+    output: [],
+    cancelling: false,
+    readAt: 1_000,
+    ...overrides
+  })
+
+  it('says what it is doing and for how long, in words rather than a phase name', () => {
+    const activity = publishActivity(progress({ output: ['Writing objects:  60% (6/10)'] }), 6_500)
+    expect(activity?.doing).toBe('Pushing to the remote')
+    expect(activity?.elapsedMs).toBe(5_500)
+    expect(formatElapsed(activity?.elapsedMs ?? 0)).toBe('6s')
+    expect(activity?.lastLine).toBe('Writing objects:  60% (6/10)')
+    expect(activity?.running).toBe(true)
+  })
+
+  // The sentence that turns "it appears stuck" into something to act on. A push
+  // that is working talks; one waiting for a credential nothing can supply
+  // never says a word.
+  it('says nothing about silence until it is longer than a working push’s', () => {
+    expect(publishActivity(progress(), 1_000 + PUBLISH_QUIET_MS - 1)?.quiet).toBeNull()
+    const stalled = publishActivity(progress(), 1_000 + 45_000)
+    expect(stalled?.quiet).toMatch(/git has printed nothing for 45s/)
+    expect(stalled?.quiet).toMatch(/waiting for a credential/)
+    expect(stalled?.quiet).toMatch(/run the same push once in Terminal/)
+  })
+
+  // Staging and committing are local and fast; blaming a credential for a
+  // silence during them would be the panel guessing.
+  it('blames nothing while it is still doing the local half', () => {
+    expect(publishActivity(progress({ phase: 'staging' }), 1_000 + 120_000)?.quiet).toBeNull()
+    expect(publishActivity(progress({ phase: 'staging' }), 1_000)?.doing).toBe('Staging the files')
+  })
+
+  it('says it is stopping rather than pushing once Stop has been pressed', () => {
+    const activity = publishActivity(progress({ cancelling: true }), 1_000 + 60_000)
+    expect(activity?.doing).toBe('Stopping')
+    expect(activity?.quiet).toBeNull()
+    expect(activity?.cancelling).toBe(true)
+  })
+
+  // How long it took is the answer to "was that normal?", which is the question
+  // somebody has after sitting through a slow one.
+  it('reports the whole duration once it is over, and stops counting', () => {
+    const activity = publishActivity(progress({ finishedAt: 9_000, phase: 'finished' }), 500_000)
+    expect(activity?.running).toBe(false)
+    expect(activity?.elapsedMs).toBe(8_000)
+    expect(formatElapsed(8_000)).toBe('8s')
+  })
+
+  it('has nothing to say when no publish has ever run', () => {
+    expect(publishActivity(undefined, 1_000)).toBeNull()
+  })
+})
+
+describe('how long something took, for somebody watching a clock', () => {
+  it('counts in seconds below a minute and in minutes above one, never in decimals', () => {
+    expect(formatElapsed(0)).toBe('0s')
+    expect(formatElapsed(1_400)).toBe('1s')
+    expect(formatElapsed(59_400)).toBe('59s')
+    expect(formatElapsed(60_000)).toBe('1m 00s')
+    expect(formatElapsed(754_000)).toBe('12m 34s')
+  })
+})
+
+describe('what to do about a push that did not land', () => {
+  // A rejection is the one failure trying again fixes, and only after a pull.
+  it('says to pull first after a rejection, and never to force', () => {
+    expect(retryHint('rejected')).toMatch(/git pull --rebase/)
+    expect(retryHint('rejected')).not.toMatch(/force/i)
+  })
+
+  it('says a credential is not something this window changes', () => {
+    expect(retryHint('auth')).toMatch(/nothing in this window changes it/)
+    expect(retryHint('host-key')).toMatch(/nothing in this window changes it/)
+  })
+
+  it('reassures somebody who stopped one that nothing was sent', () => {
+    expect(retryHint('cancelled')).toMatch(/Nothing was sent/)
+  })
+
+  it('has no opinion about a refusal it does not recognise', () => {
+    expect(retryHint('other')).toBeNull()
+  })
+})
+
+describe('the relay field, taking whatever form the URL arrives in', () => {
+  // What people send each other is a sentence with a URL in it, not a bare
+  // address — so a field that only accepts the bare address refuses the exact
+  // input everybody has, with a message about schemes.
+  it('takes the URL out of a message somebody pasted whole', () => {
+    const pasted =
+      'hey — the relay is wss://relay.example/v1/relay, clone https://example.com/ada/pager.git and add your key'
+    expect(checkRelayDraft(pasted)).toEqual({ state: 'ok', url: 'wss://relay.example/v1/relay' })
+  })
+
+  it('drops the full stop a URL at the end of a sentence arrives with', () => {
+    expect(checkRelayDraft('the relay is wss://relay.example/v1/relay.')).toEqual({
+      state: 'ok',
+      url: 'wss://relay.example/v1/relay'
+    })
+  })
+
+  // The repository URL is only a URL by accident of being in the same
+  // paragraph, and the WebSocket one is the answer to the question being asked.
+  it('prefers the WebSocket URL to whatever else is in the message', () => {
+    expect(checkRelayDraft('clone https://example.com/ada/pager.git — relay wss://r.example/v1/relay')).toEqual({
+      state: 'ok',
+      url: 'wss://r.example/v1/relay'
+    })
+  })
+
+  // The grammar is unchanged: what is found goes through the same parser and is
+  // refused on the same terms, with the same correction offered.
+  it('still refuses an https address, and still offers the corrected one', () => {
+    const check = checkRelayDraft('it is at https://ada.workers.dev')
+    expect(check.state).toBe('bad')
+    if (check.state === 'bad') expect(check.suggestion).toBe('wss://ada.workers.dev/v1/relay')
+  })
+
+  it('is empty rather than wrong when nothing has been typed', () => {
+    expect(checkRelayDraft('   ')).toEqual({ state: 'empty' })
+  })
+})
+
+describe('the message to send a teammate', () => {
+  const invite = (overrides: Parameters<typeof inviteText>[0] | null = null): string | null =>
+    inviteText(
+      overrides ?? {
+        originUrl: 'https://example.com/ada/pager.git',
+        relayUrl: 'wss://relay.example/v1/relay',
+        projectName: 'pager',
+        handle: 'ada'
+      }
+    )
+
+  // There is no invitation in this protocol, which is exactly why the person
+  // doing this has to write one: they have to explain a system with no
+  // invitations to somebody who is expecting one.
+  it('names the repository, every step, and the one that people forget', () => {
+    const text = invite() ?? ''
+    expect(text).toContain('git clone https://example.com/ada/pager.git')
+    expect(text).toContain('Add my key')
+    expect(text).toContain('Commit and push')
+    expect(text).toMatch(/That is what puts you on the team/)
+    expect(text).toContain('wss://relay.example/v1/relay')
+  })
+
+  // The person being invited is the one taking on the grant, so the invitation
+  // is where they find out about it — not the app, afterwards.
+  it('says what a key in the roster grants, and what stops it being invisible', () => {
+    const text = invite() ?? ''
+    expect(text).toMatch(/running commands as you/)
+    expect(text).toMatch(/attributed live/)
+    expect(text).toMatch(/mute is/)
+  })
+
+  it('says the relay is still coming when it is not in the repository yet', () => {
+    const text =
+      invite({ originUrl: 'https://example.com/ada/pager.git', relayUrl: null, projectName: 'pager', handle: null }) ??
+      ''
+    expect(text).toMatch(/not in the repository yet/)
+  })
+
+  // An invitation that cannot say where the repository is is worse than no
+  // button at all.
+  it('is nothing when there is no repository URL to send', () => {
+    expect(invite({ originUrl: null, relayUrl: null, projectName: 'pager', handle: 'ada' })).toBeNull()
+  })
+})
+
+describe('where this ended up', () => {
+  const pushed = (overrides?: TeamworkPublish['push']): TeamworkPublish => ({
+    projectId: 'p1',
+    files: ['.teamree/members/ada.pub'],
+    commit: { sha: 'abc1234def', shortSha: 'abc1234', message: 'Add my key to the team' },
+    remote: 'origin',
+    branch: 'main',
+    push: overrides ?? { ok: true, upstream: 'origin/main', setUpstream: false, alreadyUpToDate: false },
+    at: 0
+  })
+
+  const outcome = (input: Partial<StartTeamworkInput> & { publish?: TeamworkPublish } = {}): SetupOutcome | null =>
+    setupOutcome({ list: enrolled(), relay: relayOnDisk(), status: status(), ...input })
+
+  // Four verdicts rather than one, because half-working is the normal outcome
+  // here and a single tick would have to be wrong about one of the halves.
+  it('answers whether it worked as four separate facts', () => {
+    const result = outcome({ publish: pushed(), status: status({ links: [link({ phase: 'connected' })] }) })
+    expect(result?.done).toBe(true)
+    expect(result?.head).toBe('Teamwork is working in this repository.')
+    expect(result?.facts.map((fact) => fact.label)).toEqual(['Your key', 'The relay', 'Pushed', 'Connected'])
+    expect(result?.facts.every((fact) => fact.state === 'yes')).toBe(true)
+    expect(result?.next).toBeNull()
+  })
+
+  it('names which half when the commit landed and the push did not', () => {
+    const result = outcome({
+      publish: pushed({
+        ok: false,
+        kind: 'rejected',
+        error: '! [rejected] main -> main (fetch first)',
+        advice: 'origin has commits that main does not. Pull or rebase onto origin/main and push again.'
+      })
+    })
+    expect(result?.head).toMatch(/the commit was made here and the push did not land/)
+    const push = result?.facts.find((fact) => fact.label === 'Pushed')
+    expect(push?.state).toBe('no')
+    expect(push?.detail).toMatch(/Pull or rebase onto origin\/main/)
+  })
+
+  // teamree cannot see a commit somebody made in a terminal, and either a tick
+  // or a cross there would be it claiming that it can.
+  it('refuses to guess at a push it did not make', () => {
+    const push = outcome()?.facts.find((fact) => fact.label === 'Pushed')
+    expect(push?.state).toBe('unknown')
+    expect(push?.detail).toMatch(/git status/)
+  })
+
+  it('says what is left, and that waiting for somebody is not a fault', () => {
+    expect(outcome({ publish: pushed() })?.head).toMatch(/What is left is somebody else opening teamree/)
+    expect(outcome({ list: list() })?.next).toContain('Add my key')
+    expect(outcome({ relay: relay() })?.next).toMatch(/Step 3/)
+  })
+
+  it('has nothing to say before the reads have landed', () => {
+    expect(setupOutcome({ list: undefined, relay: undefined, status: undefined })).toBeNull()
   })
 })

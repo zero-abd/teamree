@@ -25,7 +25,8 @@ import { normaliseRemote } from '../../../shared/originUrl'
 const KEY_PREFIX = 'teamree/project/v1\n'
 
 export type ProjectKeyResult =
-  | { ok: true; key: string }
+  /** `url` is `origin` exactly as git has it, for anything that has to name it. */
+  | { ok: true; key: string; url: string }
   /** Why this project cannot be matched to a teammate's, for the user to read. */
   | { ok: false; reason: string }
 
@@ -65,9 +66,37 @@ export async function readProjectKey(runner: GitRunner, projectPath: string): Pr
 
   const normalised = normaliseRemote(remote)
   if (normalised === undefined) {
-    return { ok: false, reason: 'the origin remote is not a URL teamree can compare with a teammate’s' }
+    // Named as its own case rather than left inside "not a URL", because it is
+    // the one shape of origin somebody arrives with on purpose: a repository on
+    // a file server or a shared volume is a perfectly good git remote, is how
+    // plenty of teams already work, and cannot take part here whatever else
+    // they do. Telling them that in the sentence that names their own path is
+    // the difference between a known limitation and an afternoon.
+    return {
+      ok: false,
+      reason: looksLikeAPath(remote)
+        ? `origin is ${remote}, which is a filesystem path rather than a URL — and a project's identity here is a ` +
+          'hash of its origin URL, so a repository shared over a path cannot take part'
+        : `origin is ${remote}, which is not a URL teamree can compare with a teammate’s`
+    }
   }
-  return { ok: true, key: projectKeyFor(normalised) }
+  return { ok: true, key: projectKeyFor(normalised), url: remote }
+}
+
+/**
+ * Whether this remote is somewhere on a disk rather than somewhere on a network.
+ *
+ * Deliberately broader than `checkOriginUrl`'s test of the same name: this one
+ * reads what git already has rather than what somebody is typing, so a bare
+ * relative path, a `file://` URL and an absolute one all have to land here.
+ */
+function looksLikeAPath(remote: string): boolean {
+  if (/^(?:file:\/\/|~|\.{0,2}\/)/.test(remote)) return true
+  // git reads a remote with no scheme and no scp-style host as a path, and so
+  // does this — but only when there is a separator in it. A bare word is
+  // something nobody meant as either, and calling it a filesystem path would
+  // answer a question this person did not ask.
+  return !remote.includes('://') && !remote.includes(':') && remote.includes('/')
 }
 
 /**

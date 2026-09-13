@@ -179,7 +179,7 @@ type ProjectFacts = {
    * project can be missing both a relay and an origin and only one of those
    * gets named as the first thing to fix.
    */
-  origin: { ok: true } | { ok: false; reason: string }
+  origin: TeamworkStatus['origin']
 }
 
 type LinkRecord = {
@@ -1568,7 +1568,7 @@ export class PeerService {
       relay: relay.configured ? relay.location : null,
       enrolled: roster.entries.some((entry) => entry.publicKey === identityKey),
       disabledReason: null,
-      origin: key.ok ? { ok: true } : { ok: false, reason: key.reason },
+      origin: key.ok ? { ok: true, url: key.url } : { ok: false, reason: key.reason },
       handles
     }
 

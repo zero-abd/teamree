@@ -484,9 +484,56 @@ export type TeamworkPublish = {
   branch: string
   push:
     | { ok: true; upstream: string; setUpstream: boolean; alreadyUpToDate: boolean }
-    /** `error` is git's own words, whole; `advice` is the one thing to do next. */
-    | { ok: false; error: string; advice: string }
+    /**
+     * `error` is git's own words, whole; `advice` is the one thing to do next;
+     * `kind` is the shape of the refusal, for a panel that has to decide
+     * whether offering "try again" would be help or an invitation to sit
+     * through the same failure twice.
+     */
+    | { ok: false; kind: PushFailureKind; error: string; advice: string }
   at: number
+}
+
+/**
+ * Why a push did not land, as a thing to branch on rather than to read.
+ *
+ * `rejected` is a teammate having pushed first, which is the ordinary one and
+ * the one retrying fixes once you have pulled. `auth` and `host-key` are this
+ * machine not being allowed or not being willing, and no amount of retrying
+ * touches either. `cancelled` and `timeout` are not git's verdicts at all —
+ * they are teamree's, and a person who pressed Stop must not be told the remote
+ * refused them.
+ */
+export type PushFailureKind = 'rejected' | 'auth' | 'host-key' | 'cancelled' | 'timeout' | 'other'
+
+/** What a publish is doing right now. `finished` covers success and failure alike. */
+export type TeamworkPublishPhase = 'staging' | 'committing' | 'pushing' | 'finished'
+
+/**
+ * A publish while it is happening, which is the half this flow used not to have.
+ *
+ * The button said "Pushing…" and then nothing moved, for up to ten minutes, and
+ * from the outside a push waiting on a credential, a push copying objects and a
+ * push that will never return look exactly alike. Everything here exists to
+ * tell those three apart from the window: the phase says which of the three
+ * commands is running, `output` is what git has actually printed, `startedAt`
+ * makes the wait measurable rather than felt, and `lastOutputAt` is what lets a
+ * panel say "nothing for forty seconds" — which is the sentence that means
+ * "this is probably waiting for something it cannot ask you for".
+ */
+export type TeamworkPublishProgress = {
+  projectId: string
+  phase: TeamworkPublishPhase
+  startedAt: number
+  /** When git last printed anything. Equal to `startedAt` until it has. */
+  lastOutputAt: number
+  /** Null while it is still running. */
+  finishedAt: number | null
+  /** The last lines git printed, oldest first. Progress meters included. */
+  output: string[]
+  /** True once somebody has asked for this to stop and it has not stopped yet. */
+  cancelling: boolean
+  readAt: number
 }
 
 /** What adding the `origin` remote did, as it actually went. */
@@ -672,7 +719,12 @@ export type TeamworkStatus = {
    * a setup flow reading only that would offer a relay field for a checkout
    * where no relay can ever help, and never say why.
    */
-  origin: { ok: true } | { ok: false; reason: string }
+  origin: /**
+   * `url` is `origin` as git has it, so anything that has to *name* the
+   * repository — an invitation to send a teammate, most of all — can say the
+   * URL they are being asked to clone rather than describing it.
+   */
+  { ok: true; url: string } | { ok: false; reason: string }
   /**
    * Whether this machine's own key is on the roster this checkout holds.
    *

@@ -14,7 +14,7 @@
 // still editing is ordinary, and refusing would be wrong — but what lands is
 // then not what the user is looking at, and that is worth saying out loud.
 
-import type { WorktreePush } from '../../shared/entities'
+import type { PushFailureKind, WorktreePush } from '../../shared/entities'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
 import { ErrorCode } from '../../shared/protocol'
@@ -140,6 +140,35 @@ export function parsePushStatus(stdout: string, refspec: string): PushRefStatus 
 }
 
 /**
+ * What kind of thing went wrong, for a caller that has to do more than print it.
+ *
+ * A string of git's is the right thing to *show*; it is the wrong thing to
+ * branch on, and a panel that wants to offer "pull and try again" on one
+ * failure and "this is not something retrying will fix" on another needs the
+ * shape of the refusal rather than its prose.
+ *
+ * `PushFailureKind` is declared in `shared/entities` because it crosses the
+ * wire. Two of its cases are missing from what this function can decide —
+ * `cancelled` and `timeout` — because neither of them is something git said.
+ */
+export function pushFailureKind(stderr: string, reported?: PushRefStatus | null): PushFailureKind {
+  const text = stderr.trim()
+  if (reported?.flag === '!' && /non-fast-forward|fetch first|stale info/i.test(reported.summary)) return 'rejected'
+  if (/non-fast-forward|fetch first|rejected/i.test(text)) return 'rejected'
+  if (/host key verification failed|host key for .* has changed|remote host identification/i.test(text)) {
+    return 'host-key'
+  }
+  if (
+    /could not read|terminal prompts disabled|authentication|permission denied|access rights|403|repository not found/i.test(
+      text
+    )
+  ) {
+    return 'auth'
+  }
+  return 'other'
+}
+
+/**
  * Turns git's refusal into something worth reading.
  *
  * The rejection that matters is a non-fast-forward: the remote has commits this
@@ -150,19 +179,54 @@ export function parsePushStatus(stdout: string, refspec: string): PushRefStatus 
  * first, because it says the same thing in a form that survives a translated
  * git; the prose on stderr is what is left when git refused before it ever got
  * as far as a ref.
+ *
+ * The authentication cases used to end in "check that this machine can write to
+ * it", which is a diagnosis wearing the clothes of a remedy. They are the
+ * failures a person is least able to work out for themselves — this app runs
+ * git with no terminal to prompt on, so a machine that would have asked for a
+ * password simply refuses — so each one now names the command that fixes it.
  */
 export function pushRefusal(stderr: string, remote: string, branch: string, reported?: PushRefStatus | null): string {
   const text = stderr.trim()
-  if (reported?.flag === '!' && /non-fast-forward|fetch first|stale info/i.test(reported.summary)) {
-    return `${remote} has commits that ${branch} does not. Pull or rebase onto ${remote}/${branch} and push again.`
+  switch (pushFailureKind(text, reported)) {
+    case 'rejected':
+      return `${remote} has commits that ${branch} does not. Pull or rebase onto ${remote}/${branch} and push again.`
+    case 'host-key':
+      return (
+        `ssh has never accepted the host key for ${remote} and will not guess at one. Run ssh against that host ` +
+        'once in Terminal, accept the key, and push again.'
+      )
+    case 'auth':
+      return `${remote} refused the push: ${firstLine(text)}. ${authRemedy(text)}`
+    default:
+      return firstLine(text) || `could not push ${branch} to ${remote}`
   }
-  if (/non-fast-forward|fetch first|rejected/i.test(text)) {
-    return `${remote} has commits that ${branch} does not. Pull or rebase onto ${remote}/${branch} and push again.`
+}
+
+/**
+ * The one thing to do about a push that was not allowed, on this platform.
+ *
+ * teamree is macOS-only, so these are allowed to be specific: the keychain
+ * helper is the one that ships, and `--apple-use-keychain` is the flag that
+ * makes an added key survive a reboot. Which of the two applies is read out of
+ * what git said rather than out of the remote's URL, because it is git that
+ * knows which transport it actually tried — and the general sentence is kept
+ * for everything else, rather than a guess dressed as an instruction.
+ */
+function authRemedy(stderr: string): string {
+  if (/could not read (username|password)|terminal prompts disabled/i.test(stderr)) {
+    return (
+      'git wanted a username and password, and teamree runs git with no terminal to ask on. Store them once with ' +
+      'git config --global credential.helper osxkeychain and push from Terminal, or point origin at an ssh URL.'
+    )
   }
-  if (/could not read|authentication|permission denied|access rights/i.test(text)) {
-    return `${remote} refused the push: ${firstLine(text)}. Check that this machine can write to it.`
+  if (/permission denied \(publickey|publickey,|no supported authentication/i.test(stderr)) {
+    return (
+      'ssh offered no key the remote accepts. Add yours with ssh-add --apple-use-keychain, and check that this ' +
+      'account has push access to the repository.'
+    )
   }
-  return firstLine(text) || `could not push ${branch} to ${remote}`
+  return 'Check that this account has push access to the repository, and that this machine holds a credential for it.'
 }
 
 function firstLine(text: string): string {

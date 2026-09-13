@@ -715,6 +715,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'teamwork.publish': () => {
       throw new Error('the seeded runtime has no repository to commit to')
     },
+    // Null rather than a fabricated run: the demo has no push to be partway
+    // through, and a progress record here would put a moving percentage on a
+    // thing that is not happening.
+    'teamwork.publishProgress': () => null,
+    'teamwork.cancelPublish': () => ({ cancelled: false }),
     'teamwork.setRelay': ({ projectId, url }) => {
       relays.set(projectId, url)
       announce({ type: 'members' })
@@ -745,7 +750,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       projectId,
       relay: { url: 'wss://relay.example/v1/relay', source: 'repository' as const },
       disabledReason: null,
-      origin: { ok: true as const },
+      origin: { ok: true as const, url: 'https://example.com/team/pager.git' },
       enrolled: true,
       links: [
         {

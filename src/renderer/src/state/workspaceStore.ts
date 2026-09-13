@@ -16,6 +16,7 @@ import type {
   TeammatePresence,
   TeamworkPublish,
   TeamworkPublishPlan,
+  TeamworkPublishProgress,
   TeamworkStatus,
   Terminal,
   Worktree,
@@ -213,6 +214,16 @@ type WorkspaceState = {
   /** What the last attempt did, by project id — including a push that failed. */
   publishResults: Record<string, TeamworkPublish>
   /**
+   * What the publish that is running is doing, by project id.
+   *
+   * The reason this exists at all: `teamwork.publish` does not answer until the
+   * push is over, so between the button and the result there was nothing in the
+   * store for the panel to show, and it showed "Pushing…" for as long as it
+   * took. This is read on a timer while one is running — the same shape as the
+   * relay deploy's pane, which is polled for the same reason.
+   */
+  publishProgress: Record<string, TeamworkPublishProgress>
+  /**
    * Whether teamwork is running for each project, by project id.
    *
    * Absent means "not asked yet", which is deliberately not the same as "off":
@@ -384,6 +395,10 @@ type WorkspaceState = {
   loadPublishPlan: (projectId: string) => Promise<void>
   /** Stages the two files, commits them, and pushes. Never more than those files. */
   publishTeamwork: (projectId: string) => Promise<void>
+  /** Reads what the running publish is doing, so the panel can say it. */
+  loadPublishProgress: (projectId: string) => Promise<void>
+  /** Stops the running publish. Whatever was committed stays committed. */
+  cancelPublish: (projectId: string) => Promise<void>
   /**
    * Writes this installation's key into the project. It does not commit and
    * does not push, and the dialog says so: doing either for somebody would hide
@@ -865,6 +880,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     publishPending: false,
     publishError: null,
     publishResults: {},
+    publishProgress: {},
     teamwork: {},
     teammates: {},
     watchers: {},
@@ -1519,9 +1535,36 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    async loadPublishProgress(projectId) {
+      try {
+        const progress = await runtimeClient.call('teamwork.publishProgress', { projectId })
+        if (progress === null) return
+        set((state) => ({ publishProgress: { ...state.publishProgress, [projectId]: progress } }))
+      } catch {
+        // Deliberately silent. This is a poll running beside a call that is
+        // already going to report its own failure, and a notice for each read
+        // that did not land would bury the one that matters under thirty of
+        // its own.
+      }
+    },
+
+    async cancelPublish(projectId) {
+      await runtimeClient.call('teamwork.cancelPublish', { projectId }).catch(() => undefined)
+      // Read straight back rather than waiting for the next poll: a Stop that
+      // takes a beat to land must still change something on screen at once, or
+      // it reads as a button that did nothing.
+      await get().loadPublishProgress(projectId)
+    },
+
     async publishTeamwork(projectId) {
       if (get().publishPending) return
-      set({ publishPending: true, publishError: null })
+      // The previous run's record would otherwise be read as this one's for as
+      // long as the first poll takes, which is a stopwatch starting at the last
+      // push's duration.
+      set((state) => {
+        const { [projectId]: _previous, ...rest } = state.publishProgress
+        return { publishPending: true, publishError: null, publishProgress: rest }
+      })
       try {
         const result = await runtimeClient.call('teamwork.publish', { projectId })
         set((state) => ({ publishResults: { ...state.publishResults, [projectId]: result } }))
@@ -1532,15 +1575,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             ? result.push.alreadyUpToDate
               ? `${result.remote} already had ${result.branch}.`
               : `Pushed ${result.branch} to ${result.remote}. Your team can reach this machine now.`
-            : `${
-                result.commit === null ? 'Nothing to commit, and the' : 'Committed, but the'
-              } push was refused: ${result.push.advice}`,
+            : // "Refused" is the remote's verdict and is wrong for the two
+              // outcomes that are not the remote's at all: a push somebody
+              // stopped, and one that never finished.
+              `${result.commit === null ? 'Nothing to commit, and the' : 'Committed, but the'} push ${
+                result.push.kind === 'cancelled'
+                  ? 'was stopped'
+                  : result.push.kind === 'timeout'
+                    ? 'never finished'
+                    : 'was refused'
+              }: ${result.push.advice}`,
           result.push.ok ? 'info' : 'error'
         )
       } catch (error) {
         set({ publishError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ publishPending: false })
+        // One last read, so the panel can report how long it took rather than
+        // losing the whole measurement at the moment it becomes a fact.
+        await get().loadPublishProgress(projectId)
         await get().loadPublishPlan(projectId)
         await get().loadMembers(projectId)
       }
