@@ -33,9 +33,9 @@ export function ConfirmRemoveDialog({ worktreeId, reason }: { worktreeId: string
         ) : null}
         {ignored > 0 ? (
           <p className="confirm__detail">
-            {ignored} ignored file{ignored === 1 ? '' : 's'} or folder{ignored === 1 ? '' : 's'} will go too. Git leaves
-            those out of every warning it gives, and this app cannot tell a node_modules it could rebuild from the only
-            copy of a .env — read the names above before you decide.
+            {ignored} ignored file{ignored === 1 ? '' : 's'} or folder{ignored === 1 ? '' : 's'} will go too. teamree
+            cannot tell a node_modules it could rebuild from the only copy of a .env — read the names above before you
+            decide.
           </p>
         ) : null}
         {worktree ? <p className="confirm__path">{worktree.path}</p> : null}

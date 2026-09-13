@@ -14,7 +14,7 @@ export const statusCommands: readonly CommandSpec[] = [
   {
     path: ['status'],
     summary: 'Show the running runtime: version, pid, endpoint.',
-    details: 'Fails with exit code 3 when no runtime is reachable, which is the cheapest liveness probe.',
+    details: 'Fails with exit code 3 when no runtime is reachable, so it doubles as a liveness probe.',
     examples: ['teamree status --json'],
     run: async (context) => {
       const status = await context.client.call('status.get', {})

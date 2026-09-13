@@ -303,7 +303,7 @@ function JoinBody({
       <div className="grant">
         <p className="grant__head">{KEY_GRANT_WARNING.head}</p>
         <p className="grant__body">{KEY_GRANT_WARNING.body}</p>
-        <p className="grant__body">What makes that survivable is that none of it can be done invisibly:</p>
+        <p className="grant__body">None of it can be done invisibly:</p>
         <ul className="grant__mitigations">
           {KEY_GRANT_WARNING.mitigations.map((line) => (
             <li key={line}>{line}</li>
@@ -337,7 +337,7 @@ function JoinBody({
         <button type="submit" className="button button--primary" disabled={pending || chosen === null}>
           {pending ? 'Writing…' : ADD_KEY_BUTTON}
         </button>
-        <p className="members__caveat">This writes the file and stops. Step 4 is the part that means something.</p>
+        <p className="members__caveat">This writes the file and stops. Step 4 is what sends it.</p>
       </form>
     </div>
   )

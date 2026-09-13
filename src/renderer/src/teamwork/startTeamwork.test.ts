@@ -343,7 +343,6 @@ describe('step 4, commit and push', () => {
     const owed = step(written, 'push')
     expect(owed.mark).toBe('unchecked')
     expect(owed.summary).toMatch(/cannot see whether you have done that/)
-    expect(owed.summary).toMatch(/says what it will commit and where it will send it/)
   })
 
   it('names both files and one commit that carries them', () => {
@@ -408,7 +407,7 @@ describe('step 5, connected', () => {
   it('separates a relay this machine cannot reach from a teammate who is away', () => {
     const unreachable = step({ ...written, status: status({ links: [link({ phase: 'unreachable' })] }) }, 'connected')
     expect(unreachable.summary).toMatch(/cannot reach wss:\/\/relay\.example\/v1\/relay/)
-    expect(unreachable.summary).toMatch(/may be perfectly fine/)
+    expect(unreachable.summary).toMatch(/teammates may be fine/)
   })
 
   it('leads with a failed handshake, without saying whose end failed', () => {
@@ -417,7 +416,9 @@ describe('step 5, connected', () => {
     // This end raising an error before a byte is sent reaches the same phase,
     // so the panel must not accuse the teammate of answering wrongly.
     expect(refused.summary).not.toMatch(/did not authenticate/)
-    expect(refused.summary).toMatch(/not established/)
+    expect(refused.summary).toMatch(/Either roster could be the stale one/)
+    // And it still says what to do about it, on both ends.
+    expect(refused.summary).toMatch(/pull, and ask them to pull/)
   })
 })
 
@@ -445,7 +446,7 @@ describe('a checkout with no origin', () => {
     expect(flow.blocker).toMatch(/Add the URL you and your teammates both cloned/)
     expect(flow.blocker).toMatch(/not a path on this disk/)
     expect(flow.blocker).not.toMatch(/normalised/)
-    expect(ORIGIN_DETAIL).toMatch(/normalised origin/)
+    expect(ORIGIN_DETAIL).toMatch(/normalised/)
   })
 
   it('blocks the connected step rather than showing it as merely not done', () => {

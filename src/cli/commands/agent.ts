@@ -7,7 +7,7 @@ export const agentCommands: readonly CommandSpec[] = [
     summary: 'List the coding agents this machine can run.',
     details:
       'Probed from PATH rather than configured, so installing one is enough to make it appear. Only agents ' +
-      'teamree knows how to resume are listed — a pane running one comes back with its session after a restart.',
+      'teamree can resume are listed: a pane running one comes back with its session after a restart.',
     examples: ['teamree agent list', 'teamree agent list --json'],
     run: async (context) => {
       const agents = await context.client.call('agent.list', {})

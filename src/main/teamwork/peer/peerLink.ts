@@ -261,9 +261,9 @@ export const WAITING_DETAIL = 'nobody has answered on this rendezvous yet'
  */
 export const WAITING_TOO_LONG_DETAIL =
   'nobody has answered on this rendezvous across two hourly rotations, which is longer than a teammate ' +
-  'who is simply away. The relay cannot tell either of us why: it only ever sees opaque tokens. Two things ' +
-  'can be checked from here — that both machines agree about the time, because the rendezvous changes on ' +
-  'the hour and teamree will not pair across two of them, and that .teamree/relay names the same relay on both.'
+  'who stepped out. Two things can be checked from here: that both machines agree about the time, because ' +
+  'the rendezvous changes on the hour and teamree will not pair across two of them, and that .teamree/relay ' +
+  'names the same relay on both.'
 
 /**
  * How much of a stream is held while its own subscribe answer is still in

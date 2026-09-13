@@ -27,6 +27,16 @@ export type CliPanel = {
   pathWarning: string | null
 }
 
+/**
+ * What the CLI is for, in one sentence.
+ *
+ * A constant because two surfaces say it — the first-run card and the dialog it
+ * opens — and they had already drifted into two wordings of the same claim,
+ * which is how a reader comes to wonder whether they are two different claims.
+ */
+export const CLI_PURPOSE =
+  'teamree ships its own CLI, and everything this window can do it can do — it is how a coding agent drives teamree.'
+
 /** Shown while the first read is in flight, so the panel is never blank. */
 export const CLI_PANEL_READING: CliPanel = {
   headline: 'Looking for the teamree CLI…',
@@ -45,9 +55,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     return {
       ...CLI_PANEL_READING,
       headline: 'teamree can only put its CLI on PATH for you on macOS.',
-      detail:
-        `This is ${status.platform}, where the app has no way to ask for the password the link needs. ` +
-        'The command below does exactly what the button would.',
+      detail: `This is ${status.platform}. The command below does what the button would.`,
       manual: `sudo ln -sf ${status.source ?? '<the app>/resources/cli/teamree'} ${status.destination}`,
       pathWarning: pathWarning(status)
     }
@@ -57,9 +65,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     return {
       ...CLI_PANEL_READING,
       headline: 'This build of teamree has no CLI inside it.',
-      detail:
-        'There is nothing to link, so there is nothing to put on PATH. A packaged app carries its CLI in ' +
-        'Contents/Resources/cli.'
+      detail: 'A packaged app carries its CLI in Contents/Resources/cli.'
     }
   }
 
@@ -76,10 +82,8 @@ export function cliPanel(status: CliStatus | null): CliPanel {
           : 'macOS is running teamree from a temporary copy of itself.',
       detail:
         (status.impermanent === 'volume'
-          ? `It is at ${status.source}, which is where a disk image opens. A link to it would be made, and it ` +
-            'would stop leading anywhere the moment you ejected. '
-          : `The copy is at ${status.source}. macOS makes one for an app opened from a disk image or a download, ` +
-            'and it is gone by the next launch — taking a link into it with it. ') +
+          ? `It is at ${status.source}. A link there would stop leading anywhere the moment you ejected. `
+          : `The copy is at ${status.source}, and it is gone by the next launch, taking any link into it with it. `) +
         'Drag teamree to your Applications folder, open it from there, and this can link the copy that stays.'
     }
   }
@@ -93,8 +97,8 @@ export function cliPanel(status: CliStatus | null): CliPanel {
       ...CLI_PANEL_READING,
       headline: 'The teamree CLI has not been built yet.',
       detail:
-        `${status.source} is the launcher; the bundle it runs is not there, because npm run dev builds the app ` +
-        'and not the CLI. Linking it would put a teamree on your PATH that cannot start.',
+        `${status.source} is the launcher; the bundle it runs is not there. Linking it would put a teamree on ` +
+        'your PATH that cannot start.',
       manual: 'npm run build:cli'
     }
   }
@@ -103,7 +107,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     return {
       ...CLI_PANEL_READING,
       headline: 'teamree is on your PATH.',
-      detail: `${status.destination} leads to this app’s CLI. There is nothing to do.`,
+      detail: `${status.destination} leads to this app’s CLI.`,
       pathWarning: pathWarning(status)
     }
   }
@@ -113,9 +117,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     return {
       ...CLI_PANEL_READING,
       headline: `There is ${what} at ${status.destination}.`,
-      detail:
-        `teamree will not delete it — it is somebody’s program, and quite possibly yours. Move it aside and ` +
-        'open this again.',
+      detail: 'teamree will not delete it; it is somebody’s program. Move it aside and open this again.',
       pathWarning: pathWarning(status)
     }
   }
@@ -135,8 +137,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
       // other is a link whose app has been deleted or ejected, where the shell
       // does not run anything at all and says so.
       detail: status.dangling
-        ? `It leads to ${status.resolved}, and nothing is at that path — the copy it was made for was moved, ` +
-          'deleted, or ejected with the disk it was on. Typing teamree in a terminal runs nothing.'
+        ? `It leads to ${status.resolved}, and nothing is there. Typing teamree in a terminal runs nothing.`
         : `It leads to ${status.resolved}. Typing teamree in a terminal drives that copy — which is why work ` +
           'done there never shows up here.',
       promise: `Points ${status.destination} at this app’s CLI instead: ${status.source}.`,
@@ -154,10 +155,9 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     // make one. Saying "ships inside this app" of a checkout is the kind of
     // sentence that makes the panel's other sentences worth less.
     detail: status.packaged
-      ? `It ships inside this app, at ${status.source}. Everything the window can do it can do, which is how a ` +
-        'coding agent drives teamree.'
-      : `It is in the checkout you are running from, at ${status.source}. Everything the window can do it can ` +
-        'do — but the link is to that path, so it breaks if you move the checkout.',
+      ? `It ships inside this app, at ${status.source}.`
+      : `It is in the checkout you are running from, at ${status.source}. The link is to that path, so it breaks ` +
+        'if you move the checkout.',
     promise: `Links ${status.destination} to it.`,
     password,
     action: 'Put teamree on my PATH',
@@ -230,14 +230,12 @@ export function cliOffer(status: CliStatus | null): CliOffer | null {
           ? 'The teamree command on your PATH leads to nothing.'
           : 'The teamree command on your PATH is a different copy.'
         : 'Put the teamree command on your PATH?',
-    detail:
-      'teamree ships its own CLI, and everything this window can do it can do — it is how a coding agent drives ' +
-      'teamree.',
+    detail: CLI_PURPOSE,
     promise: panel.promise,
     password: panel.password,
     accept: panel.action,
     decline: 'No thanks',
-    once: 'Asked once. The sidebar and the command palette both have it if you change your mind.'
+    once: 'Asked once. The sidebar and the command palette both have it.'
   }
 }
 

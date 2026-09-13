@@ -163,7 +163,9 @@ export class CliService {
     }
     const source = before.source
     if (source === null) {
-      throw notFound('This build of teamree has no CLI in it to link, so there is nothing to put on PATH.')
+      throw notFound(
+        'This build of teamree has no CLI in it to link. A packaged app carries one in Contents/Resources/cli.'
+      )
     }
     // Ahead of everything else, including the link that may already be right:
     // where the app itself is outranks what is at the destination. A link made
@@ -172,10 +174,10 @@ export class CliService {
     if (before.impermanent !== null) {
       throw conflict(
         (before.impermanent === 'volume'
-          ? `teamree is running from ${source}, which is on a mounted volume — a disk image opens as one. A link ` +
-            'into it stops leading anywhere the moment the volume is ejected. '
-          : `macOS is running teamree from ${source}, a read-only copy it makes of an app opened from a disk ` +
-            'image or a download. That copy is gone by the next launch, and a link into it with it. ') +
+          ? `teamree is running from ${source}, on a mounted volume. A link into it stops leading anywhere the ` +
+            'moment the volume is ejected. '
+          : `macOS is running teamree from ${source}, a temporary copy of itself. That copy is gone by the next ` +
+            'launch, and a link into it with it. ') +
           'Drag teamree to your Applications folder, open it from there, and press this again.'
       )
     }

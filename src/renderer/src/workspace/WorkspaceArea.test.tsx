@@ -163,6 +163,23 @@ describe('when there is nothing open', () => {
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'add-project' })
   })
 
+  // Caught by reading this state in the running app: with a project added and
+  // no worktree in it, the sidebar beside this said "No worktrees yet" while
+  // this line told somebody to pick one from it. The button under it already
+  // knew better.
+  it('does not send somebody to the sidebar when there is no worktree in it', () => {
+    seed({ projects: [project] })
+    mount()
+    expect(screen.queryByText('Pick a worktree on the left, or start here.')).toBeNull()
+    expect(screen.getByText('Nothing to open yet. Start here.')).toBeTruthy()
+  })
+
+  it('sends somebody to the sidebar once there is a worktree to pick', () => {
+    seed({ projects: [project], worktrees: [worktree()] })
+    mount()
+    expect(screen.getByText('Pick a worktree on the left, or start here.')).toBeTruthy()
+  })
+
   it('names the chords once there is a project for them to act on', () => {
     seed({ projects: [project] })
     mount()

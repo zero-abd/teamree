@@ -298,7 +298,7 @@ describe('a link to a teamree that is not there any more', () => {
     const panel = cliPanel(missing)
     expect(panel.detail).toContain(gone)
     expect(panel.detail).not.toContain('drives that copy')
-    expect(panel.detail).toContain('nothing is at that path')
+    expect(panel.detail).toContain('nothing is there')
     // Still the same thing to press: pointing it here is exactly the repair.
     expect(panel.action).toBe('Point it at this app')
     expect(panel.promise).toContain(APP_CLI)

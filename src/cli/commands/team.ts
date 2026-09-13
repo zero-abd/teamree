@@ -329,14 +329,11 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'status'],
     summary: 'Say whether teamwork is on for a project, and who is there.',
     details:
-      'The one command to reach for first. It answers four separate questions and keeps them separate: ' +
-      'whether teamwork is configured at all, where the relay is, whether this machine is on the roster, and ' +
-      'how each link to a teammate is going.\n\n' +
       'A project with no relay is not offline, it is not configured, and this says so rather than showing it ' +
       "as a network problem. `enrolled: no` is the one cause of silence that is entirely this end's: every " +
       'link waits forever for a teammate who has no key to answer with.\n\n' +
-      'Exit stays 0 whatever the answer, including "teamwork is off": the codes say whether the command ran. ' +
-      "Branch on `status.disabledReason` and on each link's `phase` under --json.",
+      'Exit stays 0 whatever the answer, including "teamwork is off". Branch on `status.disabledReason` and ' +
+      "on each link's `phase` under --json.",
     args: [PROJECT_ARG],
     examples: ['teamree team status api', 'teamree team status api --json'],
     run: async (context) => {
@@ -427,8 +424,7 @@ export const teamCommands: readonly CommandSpec[] = [
     summary: "Write this machine's public key into a project's roster.",
     details:
       'It writes the file and stops there: it does not stage, commit or push. Getting the file into the ' +
-      'repository is yours to do, and it has to be, because being able to push it is the whole of what ' +
-      'membership means.\n\n' +
+      'repository is yours to do — being able to push it is what membership means.\n\n' +
       'The private half never leaves this machine and is never written inside the repository.',
     args: [PROJECT_ARG],
     flags: [
@@ -461,9 +457,9 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'relay', 'show'],
     summary: "Show where a project's relay is recorded, and what each place says.",
     details:
-      'Both halves are reported whichever is in effect, because the two questions worth asking are "which URL ' +
-      'is teamree using" and "why is it not the one I set". The per-machine override is named even when it is ' +
-      'not set at all, since an app launched from a desktop inherits no shell environment.',
+      'The committed file and the per-machine override are both reported, whichever is in effect. The ' +
+      'override is named even when it is not set at all, since an app launched from a desktop inherits no ' +
+      'shell environment.',
     args: [PROJECT_ARG],
     examples: ['teamree team relay show api --json'],
     run: async (context) => {
@@ -486,11 +482,8 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'relay', 'set'],
     summary: 'Write a relay URL into the project, at .teamree/relay.',
     details:
-      "Like joining, it writes the file and stops: the relay is a team-wide fact and it becomes the team's " +
-      'when somebody pushes it.\n\n' +
-      "The URL is checked by the runtime, by the same code the window's relay field goes through, so the CLI " +
-      'and the GUI cannot come to different conclusions about what a relay URL is. A URL that is not a ' +
-      'WebSocket one is refused with what to type instead, and that refusal is exit code 1.',
+      "Like joining, it writes the file and stops: the relay becomes the team's when somebody pushes it.\n\n" +
+      'A URL that is not a WebSocket one is refused with what to type instead, and that refusal is exit code 1.',
     args: [
       PROJECT_ARG,
       { name: 'url', description: 'WebSocket URL, e.g. wss://relay.example/v1/relay.', required: true }
@@ -518,16 +511,12 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'watch'],
     summary: "Read a teammate's pane.",
     details:
-      'A bounded snapshot by default, because a CLI command that never returns is not a thing a script can ' +
-      'call. The watch delivers the pane’s scrollback and then its live tail on one subscription, so the ' +
-      'snapshot is: open it, let the scrollback land, stop when the pane has been quiet for --quiet-ms, and ' +
-      'release the subscription. Output flows only while somebody has the pane open, so nothing is left ' +
-      'running on the teammate’s machine afterwards.\n\n' +
+      'A bounded snapshot by default: it takes the pane’s scrollback and then its live tail, and stops once ' +
+      'the pane has been quiet for --quiet-ms.\n\n' +
       'With --follow it streams until you interrupt it, until the pane’s process exits, or until the link ' +
-      'to that machine goes away — a watcher whose teammate shut their laptop must not be left looking at a ' +
-      'frozen pane that appears live.\n\n' +
-      '--follow and --json are refused together, on purpose: --json promises exactly one JSON document on ' +
-      'stdout and a stream is not one. Use the snapshot with --json, or --follow without it.\n\n' +
+      'to that machine goes away.\n\n' +
+      '--follow and --json are refused together: --json promises exactly one JSON document on stdout and a ' +
+      'stream is not one. Use the snapshot with --json, or --follow without it.\n\n' +
       'Reading is visible to the owner while it happens; there is no quiet way to watch somebody.',
     args: [PROJECT_ARG, TEAMMATE_ARG],
     flags: [
@@ -621,16 +610,13 @@ export const teamCommands: readonly CommandSpec[] = [
     details:
       'Keystrokes, as if they were typed on their keyboard: what crosses the wire is a terminal write, ' +
       'answered by their machine and running as them.\n\n' +
-      'This is a real capability and a real foot-gun, and it is here because every guard that makes it ' +
-      'survivable lives at the owner’s end and is unchanged by the caller being a script. Their machine ' +
-      'refuses unless your key is on the roster and the session is confirmed; it refuses outright when the ' +
-      'owner has muted the pane; it caps one write at 64 KiB; and it records every write — who, which pane, ' +
-      'how many bytes, what happened — in a log that survives a restart. The owner sees "you are typing" ' +
-      'while it happens, exactly as they do when the window sends it. Withholding it from the CLI would not ' +
-      'remove the capability from the product, only from the caller whose commands can be read back.\n\n' +
-      'What the CLI adds is that nothing is submitted by accident: the text is sent verbatim and --enter is ' +
-      'the only thing that appends a carriage return. A refusal comes back with the code the owner gave it — ' +
-      '"muted" and "that pane is gone" are different answers — and is exit code 1, never swallowed.\n\n' +
+      'Every guard lives at the owner’s end. Their machine refuses unless your key is on the roster and the ' +
+      'session is confirmed; it refuses outright when the owner has muted the pane; it caps one write at ' +
+      '64 KiB; and it records every write — who, which pane, how many bytes, what happened — in a log that ' +
+      'survives a restart. The owner sees "you are typing" while it happens.\n\n' +
+      'Nothing is submitted by accident: the text is sent verbatim and --enter is the only thing that ' +
+      'appends a carriage return. A refusal comes back with the code the owner gave it — "muted" and "that ' +
+      'pane is gone" are different answers — and is exit code 1.\n\n' +
       'Type only into a pane you have looked at. `teamree team watch` is the looking.',
     args: [PROJECT_ARG, TEAMMATE_ARG],
     flags: [
@@ -650,7 +636,7 @@ export const teamCommands: readonly CommandSpec[] = [
       if (bytes > MAX_REMOTE_WRITE_BYTES) {
         throw new UsageError(
           `--text is ${bytes} bytes; one remote write may carry at most ${MAX_REMOTE_WRITE_BYTES}.`,
-          'Past that it is not typing: carrying it would cost the pane the live output it is being typed into.'
+          'Send it as several smaller writes, or put the text in a file the pane can read.'
         )
       }
 
@@ -677,9 +663,9 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'panes'],
     summary: 'List the teammate panes this machine can see in one project.',
     details:
-      'What `team watch` and `team type` address, and where their pane ids come from. A pane on a row that ' +
-      'is not live is a true picture of what that teammate was showing when their machine was last ' +
-      'reachable, and not a statement about what it is showing now — nothing can be done to it.',
+      'Where the pane ids for `team watch` and `team type` come from. A row that is not live shows what that ' +
+      'teammate was showing when their machine was last reachable, not what is there now; nothing can be ' +
+      'done to it.',
     args: [PROJECT_ARG],
     flags: [
       {
@@ -725,9 +711,7 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'watchers'],
     summary: "Show who is reading and typing into this machine's panes.",
     details:
-      'The owner’s half of the bargain that makes "anyone can type" survivable: nothing can be done to ' +
-      'your panes invisibly. It is live rather than a log — for the record of what was actually typed, use ' +
-      '`teamree team write-log`.\n\n' +
+      'Live rather than a log — for the record of what was typed, use `teamree team write-log`.\n\n' +
       'Only panes with something to say appear: a reader, a typist, or a mute. An empty list means nobody is ' +
       'reading, nobody has typed, and nothing is muted.',
     args: [PROJECT_ARG],
@@ -756,10 +740,9 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'mute'],
     summary: 'Stop remote keystrokes reaching one of this machine’s panes.',
     details:
-      'The owner’s alone: no project and no handle, because a mute is of a pane rather than of a person ' +
-      'and there is nobody to agree with. A muted pane keeps streaming and keeps appearing in everyone’s ' +
-      'sidebar — mute stops the bytes, it does not hide the worktree. Attempts to type into it are still ' +
-      'recorded, and still refused.',
+      'A mute is of a pane rather than of a person, so it takes no project and no handle. A muted pane keeps ' +
+      'streaming and keeps appearing in everyone’s sidebar — mute stops the keystrokes, it does not hide the ' +
+      'worktree. Attempts to type into it are still recorded, and still refused.',
     args: [{ name: 'terminal', description: 'Terminal id from `teamree terminal list`.', required: true }],
     examples: ['teamree team mute t_12'],
     run: async (context) => muteCommand(context, true)
@@ -775,11 +758,10 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'write-log'],
     summary: 'Print this machine’s record of every remote keystroke.',
     details:
-      'Local, on this machine, and readable after the fact — including after a restart, which is what makes ' +
-      'it a record rather than a display. Oldest first.\n\n' +
-      'It deliberately does not hold the bytes. A remote write carries input, and input includes what a ' +
-      'terminal does not echo, so keeping it would turn an audit trail into a plaintext store of teammates’ ' +
-      'passphrases. How much was sent is here; what it was is not, anywhere.',
+      'Local to this machine, and readable after a restart. Oldest first.\n\n' +
+      'It does not hold the bytes: input includes what a terminal does not echo, so keeping it would turn an ' +
+      'audit trail into a plaintext store of teammates’ passphrases. How much was sent is here; what it was ' +
+      'is not, anywhere.',
     flags: [
       {
         name: 'limit',

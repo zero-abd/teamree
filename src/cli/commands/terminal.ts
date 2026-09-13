@@ -108,7 +108,7 @@ export const terminalCommands: readonly CommandSpec[] = [
   {
     path: ['terminal', 'read'],
     summary: "Print a terminal's scrollback snapshot.",
-    details: 'Text mode writes the raw buffer to stdout so it can be read directly; --json wraps it instead.',
+    details: 'Text mode writes the raw buffer to stdout; --json wraps it instead.',
     args: [TERMINAL_ARG],
     flags: [
       { name: 'tail-bytes', kind: 'number', placeholder: '<n>', description: 'Return only the trailing N bytes.' }
@@ -127,8 +127,7 @@ export const terminalCommands: readonly CommandSpec[] = [
   {
     path: ['terminal', 'send'],
     summary: 'Write text to a terminal.',
-    details:
-      'The text is sent verbatim; --enter appends a carriage return, which is what a PTY expects for a keypress.',
+    details: 'The text is sent verbatim; --enter is the only thing that appends a carriage return.',
     args: [TERMINAL_ARG],
     flags: [
       { name: 'text', kind: 'string', placeholder: '<text>', description: 'Exact bytes to write.', required: true },
@@ -203,14 +202,13 @@ export const terminalCommands: readonly CommandSpec[] = [
     summary: 'Block until a terminal goes quiet or exits.',
     details:
       'Quiet means no output for --quiet-ms; exit means the process ended.\n\n' +
-      'Quiet is a heuristic and it can lie: a command that pauses longer than the quiet window, such as a ' +
-      'slow test run or a sleep, looks finished while it is still going. Use it only for interactive shells, ' +
-      'and raise --quiet-ms when the command is slow.\n\n' +
-      'For running a command and knowing for certain when it finished, use `teamree terminal run`, which ' +
+      'Quiet can lie: a command that pauses longer than the quiet window, such as a slow test run or a sleep, ' +
+      'looks finished while it is still going. Use it only for interactive shells, and raise --quiet-ms when ' +
+      'the command is slow. To know for certain when a command finished, use `teamree terminal run`, which ' +
       'waits on the real process exit and returns its exit code.\n\n' +
-      'If this machine sleeps mid-wait, the gap counts for nothing: the quiet window restarts on wake and the ' +
-      'timeout is charged only for time actually spent watching. The result then carries interrupted: true, ' +
-      'because far more wall-clock time passed than the wait was asked for.',
+      'If this machine sleeps mid-wait, the quiet window restarts on wake and the timeout is charged only ' +
+      'for time spent watching. The result then carries interrupted: true, because far more wall-clock time ' +
+      'passed than the wait was asked for.',
     args: [TERMINAL_ARG],
     flags: [
       {
@@ -264,10 +262,10 @@ export const terminalCommands: readonly CommandSpec[] = [
     summary: 'Run a command in a worktree and wait for it to finish.',
     details:
       'The command gets its own process, so completion is the real process exit rather than a guess from ' +
-      'silence. Returns the exit code and everything the command printed. This is the command an agent ' +
-      'should reach for; `terminal send` plus `terminal wait` is for driving an interactive shell.\n\n' +
-      "The CLI's own exit code still follows the documented scheme: it reports whether teamree ran the " +
-      'command, not whether the command succeeded. Read exitCode from the payload for that.',
+      'silence. Returns the exit code and everything the command printed. `terminal send` plus ' +
+      '`terminal wait` is for driving an interactive shell instead.\n\n' +
+      "The CLI's own exit code reports whether teamree ran the command, not whether the command succeeded. " +
+      'Read exitCode from the payload for that.',
     flags: [
       {
         name: 'worktree',

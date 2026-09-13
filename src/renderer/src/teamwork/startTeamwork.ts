@@ -127,9 +127,9 @@ export const ADD_KEY_BUTTON = 'Add my key'
 export const KEY_GRANT_WARNING = {
   head: 'A key in .teamree/members/ can run commands on this machine, as you.',
   body:
-    'That is deliberate and it is the feature: a teammate who can see your agent stuck on a question can type ' +
-    'the answer into it. But be exact about what it means — anyone on this roster can type into any pane here, ' +
-    'and typing into a pane is running arbitrary commands as you.',
+    'That is the feature: a teammate who can see your agent stuck on a question can type the answer into it. ' +
+    'Anyone on this roster can type into any pane here, and typing into a pane is running arbitrary commands ' +
+    'as you.',
   mitigations: [
     'A pane that is being watched says so, and by whom.',
     'Typing is attributed live: the pane names who is typing while they type.',
@@ -182,9 +182,8 @@ export const MORE_RELAYS_BUTTON = 'Other ways to get a relay'
 
 /** Said once, above the folded options, so opening it is an informed choice. */
 export const MORE_RELAYS_LEAD =
-  'None of these is better than the button above for a team that has no relay yet. They are here for a team that ' +
-  'already has the network, the server, or a reason not to add a Cloudflare account. Each needs a clone of the ' +
-  'teamree repository, because the Dockerfile is in one.'
+  'These are for a team that already has the network, the server, or a reason not to add a Cloudflare account. ' +
+  'Each needs a clone of the teamree repository, because the Dockerfile is in one.'
 
 /**
  * Where the resulting URL belongs, which is the part of this decision that is
@@ -431,9 +430,8 @@ export function checkOriginDraft(raw: string): OriginDraftCheck {
  * "why did it refuse my directory?" — so it is where a question is asked.
  */
 export const ORIGIN_DETAIL =
-  'Two checkouts are the same project when the hash of their normalised origin matches, and a path on this disk ' +
-  'is not something your teammates can clone. ssh against https, a port and a trailing .git are all normalised ' +
-  'away, so you need not match each other exactly. docs/teamwork.md has the rest.'
+  'A path on this disk is not something your teammates can clone. Your URLs need not match each other exactly: ' +
+  'ssh against https, a port and a trailing .git are all normalised away. docs/teamwork.md has the rest.'
 
 export function startTeamworkFlow(input: StartTeamworkInput): StartTeamworkFlow {
   const steps = [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)]
@@ -594,8 +592,7 @@ function pushStep(input: StartTeamworkInput): StartTeamworkStep {
     mark: 'unchecked',
     summary:
       `${listOf(plan.files)} ${plan.files.length === 1 ? 'is' : 'are'} in this checkout and mean nothing to anybody ` +
-      'else until they are pushed. teamree cannot see whether you have done that, so this step never ticks itself: ' +
-      'the button below says what it will commit and where it will send it before it does either.'
+      'else until they are pushed. teamree cannot see whether you have done that, so this step never ticks itself.'
   }
 }
 
@@ -643,8 +640,7 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
       title,
       mark: 'blocked',
       summary:
-        'Your own key is not in .teamree/members in this checkout, so no teammate can reach this machine: their ' +
-        'machines have nothing to address, and every link here is waiting on a rendezvous they cannot compute. ' +
+        'Your own key is not in .teamree/members in this checkout, so no teammate can reach this machine. ' +
         'Step 2 writes the file and step 4 is what puts it where they will read it.'
     }
   }
@@ -661,8 +657,8 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
         mark: 'todo',
         summary:
           `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} on this project’s roster and no link to ` +
-          `${others.length === 1 ? 'them' : 'any of them'} is open yet. teamree opens one per teammate as it reads ` +
-          'the roster; if this does not change in a moment, the reason it stopped is in this run’s log.'
+          `${others.length === 1 ? 'them' : 'any of them'} is open yet. If this does not change in a moment, the ` +
+          'reason it stopped is in this run’s log.'
       }
     }
     const ready = input.list?.enrolled === true && input.relay?.url != null
@@ -672,7 +668,7 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
       mark: 'todo',
       summary: ready
         ? 'This project’s roster has nobody in it but you. A teammate appears here once they push their key and ' +
-          'you pull it — nothing on this machine can know they meant to.'
+          'you pull it.'
         : 'Nothing to connect to yet. Finish the steps above, then commit and push.'
     }
   }
@@ -684,10 +680,8 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
       title,
       mark: 'todo',
       summary:
-        `The handshake with ${namesOf(refused)} did not complete. Which end it failed on is not established ` +
-        'here: either roster could be the stale one, and a failure raised inside this machine before anything ' +
-        'was sent looks the same from this side. The reason under that link is this machine’s own, not a ' +
-        'report from theirs.'
+        `The handshake with ${namesOf(refused)} did not complete. Either roster could be the stale one, so pull, ` +
+        'and ask them to pull. The reason under that link is this machine’s own, not a report from theirs.'
     }
   }
   const unreachable = status.links.filter((link) => link.phase === 'unreachable')
@@ -696,7 +690,7 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
       id: 'connected',
       title,
       mark: 'todo',
-      summary: `This machine cannot reach ${relayLabel(status)}. Your teammates may be perfectly fine.`
+      summary: `This machine cannot reach ${relayLabel(status)}. Your teammates may be fine.`
     }
   }
   return {

@@ -115,8 +115,7 @@ export function WorkspaceArea({
           <div className="placeholder">
             <h1 className="placeholder__title">The runtime is not running</h1>
             <p className="placeholder__body">
-              Git, worktrees and terminals all live in a process this window talks to, and it is not answering. Nothing
-              here will respond until it is back — quitting and reopening teamree starts a new one.
+              Nothing here will respond until it is back. Quit and reopen teamree to start a new one.
             </p>
             {connection.detail ? <p className="placeholder__body">{connection.detail}</p> : null}
           </div>
@@ -136,7 +135,7 @@ export function WorkspaceArea({
             <h1 className="placeholder__title">Add a repository to start</h1>
             <p className="placeholder__body">
               teamree works in git worktrees of a repository you already have: one checkout per task, so several agents
-              can work at once without seeing each other&rsquo;s files. Point it at a clone to begin.
+              can work at once without seeing each other&rsquo;s files.
             </p>
             <div className="placeholder__actions">
               <button
@@ -161,9 +160,10 @@ export function WorkspaceArea({
       <main className="workspace workspace--empty">
         <div className="placeholder">
           <h1 className="placeholder__title">Nothing open</h1>
+          {/* `target` is null when there is no worktree to pick, and pointing
+              somebody at an empty list is the one thing this line must not do. */}
           <p className="placeholder__body">
-            Pick a worktree on the left, or start here. Every terminal teamree opens lives in a worktree, so there is
-            always one repository and one branch behind what you are looking at.
+            {target === null ? 'Nothing to open yet. Start here.' : 'Pick a worktree on the left, or start here.'}
           </p>
 
           <div className="starters">
