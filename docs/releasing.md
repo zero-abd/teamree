@@ -5,35 +5,26 @@ install it, [`install.md`](install.md) is the one to read.
 
 ## Why this is a script and not a workflow
 
-`.github/workflows/release.yml` was written to turn a `v*` tag into a download,
-and it has never run.
+Releases are cut from a maintainer's Mac, by one command, rather than by hosted
+CI. Two reasons, and neither is temporary.
 
-`build.yml` did, earlier on 13 September 2026. Of the 161 Actions runs this
-repository has, 11 finished green, and the last of those — run `34740171822`, at
-05:23 UTC — executed every step: typecheck, lint, format, the suite, the build,
-the smoke test, `package:mac`, the packaged-app check, and `npm run
-install:verify`. So the instructions in [`install.md`](install.md) have been
-machine-checked on a real runner, which is what that document claims.
+The artifact is a universal macOS `.dmg`, and the check that matters is that the
+packaged app opens a real terminal — `node-pty` has to survive packaging, with
+its native binary outside the asar and an executable `spawn-helper` beside it.
+Proving that means launching the app, which means the platform it was built for.
+A release that has not been launched is not a release.
 
-Nothing has run since. Every run after that ends in six or seven seconds, with
-no steps, no logs, and one annotation:
+And the gate is the same either way. `scripts/release.mjs` runs typecheck, lint,
+format, the relay build, the full suite, the build, the smoke test, the package,
+and then the packaged app twice — unpacked, and the copy inside the mounted
+`.dmg` — in one command, refusing at the first one that fails. Putting that
+sequence somewhere else would not make it stricter; it would only make it
+somebody else's machine.
 
-> The job was not started because recent account payments have failed or your
-> spending limit needs to be increased. Please check the 'Billing & plans'
-> section in your settings
-
-No runner is provisioned now, so a red cross next to a recent commit means
-"GitHub declined to start a machine" rather than a failure.
-
-So the tag trigger has been removed from `release.yml`: a tag pushed while it
-was there produced nothing and hung a red cross off the release, which reads as
-a failed build rather than as a build that never started. The workflow is kept,
-still callable by hand, and its comment says exactly what to add back on the day
-a runner can be provisioned.
-
-Releases are therefore cut from a maintainer's Mac. The checks did not move
-anywhere: `scripts/release.mjs` runs the same sequence `build.yml` describes,
-in one command, and refuses at the first one that fails.
+That sequence has been run on a hosted runner, once, on 13 September 2026: every
+step of it, including `npm run install:verify`. So the instructions in
+[`install.md`](install.md) have been machine-checked rather than only written
+down, which is what that document claims.
 
 ## The command
 

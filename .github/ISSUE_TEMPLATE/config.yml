@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Installing, and the first-launch warning
+    url: https://github.com/zero-abd/teamree/blob/main/docs/install.md
+    about: What macOS says about an unsigned build, and the way past it.
+  - name: Known gaps
+    url: https://github.com/zero-abd/teamree/blob/main/ROADMAP.md
+    about: What is built and what is not, before you file something already recorded.
