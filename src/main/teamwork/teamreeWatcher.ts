@@ -31,6 +31,40 @@
 // non-recursive watch that cannot be set up fails loudly with EMFILE, which is
 // what makes the degraded report below trustworthy.
 //
+// AND WHY A SWEEP AS WELL. An event is the fast path, not the guarantee.
+//
+// This file's tests fail on the macOS runner and have never failed on Linux,
+// always as silence — `nothing was reported` — and landing on whichever of the
+// real-filesystem tests the timing catches. Three fixes before this one were
+// guesses at what macOS puts in an event's `filename`; the filter stopped
+// reading that string two commits ago and the silence outlived it, so the
+// remaining explanation is that the event does not arrive, or arrives far too
+// late.
+//
+// What libuv's `fs.watch` does on darwin makes that easy to believe. There is
+// no non-recursive directory watch on that platform, so every handle is a path
+// added to one process-wide FSEvents stream — and adding or removing any handle
+// tears that stream down and builds a new one, subscribed from *now*. The work
+// happens on libuv's CoreFoundation thread, after `fs.watch` has already
+// returned. So a watch is not listening when it is created, it is listening
+// some unmeasured time later, and every other watch in the process goes deaf
+// for the same window each time a new one is attached. Anything that happens in
+// that window is not delivered late; it is never delivered. `sync` attaches
+// three watches back to back and the test writes immediately afterwards, which
+// is precisely that window.
+//
+// That reading is from libuv's source, not from a machine anyone here can run,
+// which is why the fix does not depend on it being right. The sweep below is
+// the floor under every explanation: the same three `stat`s the checkout-root
+// filter already does, on a timer that starts short after a watch is attached —
+// the moment the platform is most likely blind — and backs off to once every
+// thirty seconds while nothing is happening. Not a poll standing in for the
+// watch: on Linux the event arrives in single-digit milliseconds and the sweep
+// never has anything to say. What it changes is the worst case. A dropped event
+// used to mean a roster that had quietly stopped following its file for the life
+// of the process, which is the exact failure this whole area exists to prevent.
+// Now it means noticing late.
+//
 // What comes out is the same coarse invalidation every other producer emits.
 // The value here is entirely in the timing.
 
@@ -41,6 +75,22 @@ import { RELAY_FILE_SEGMENTS } from './peer/relayUrl'
 
 /** Long enough to swallow a checkout writing several files, short enough to feel live. */
 export const DEFAULT_SETTLE_MS = 200
+
+/**
+ * How soon after a watch is attached the set is checked by hand anyway.
+ *
+ * Short, because attaching is when the platform is least likely to be
+ * listening — see the note above on what darwin does with a new handle — and
+ * because a report this late is still twenty-five times inside the budget the
+ * tests give a `git pull`.
+ */
+export const DEFAULT_SWEEP_FROM_MS = 200
+
+/** And the longest the sweep ever waits, once nothing has happened for a while. */
+export const DEFAULT_SWEEP_UNTIL_MS = 30_000
+
+/** Steep, so the cost decays in four steps rather than fifty. */
+const SWEEP_BACKOFF = 4
 
 /** The directory both team-wide facts live in, under the checkout root. */
 const TEAMREE_DIR = MEMBERS_DIR_SEGMENTS[0]
@@ -119,7 +169,8 @@ export function degradedTeamreeWatchReport(event: TeamreeWatchDegraded): string 
       : `the filesystem refused a watch${code ? ` (${code})` : ''}`
   return (
     `${event.path} is not being watched: ${cause}. ` +
-    'A teammate’s key or a relay arriving by git pull will not be noticed until something else re-reads it.'
+    'A teammate’s key or a relay arriving by git pull will be noticed by the periodic check rather than at once, ' +
+    'so the roster can be up to half a minute behind the last pull.'
   )
 }
 
@@ -137,6 +188,13 @@ export type TeamreeWatcherOptions = {
    */
   onDegraded?: (event: TeamreeWatchDegraded) => void
   schedule?: (run: () => void, delayMs: number) => () => void
+  /**
+   * The sweep's timer, kept apart from `schedule` so a test driving the debounce
+   * by hand is not also driving the safety net, and the other way about.
+   */
+  sweep?: (run: () => void, delayMs: number) => () => void
+  sweepFromMs?: number
+  sweepUntilMs?: number
 }
 
 type WatchedTeamree = {
@@ -162,8 +220,13 @@ export class TeamreeWatcher {
   readonly #settleMs: number
   readonly #onDegraded: (event: TeamreeWatchDegraded) => void
   readonly #schedule: (run: () => void, delayMs: number) => () => void
+  readonly #sweep: (run: () => void, delayMs: number) => () => void
+  readonly #sweepFromMs: number
+  readonly #sweepUntilMs: number
 
   #cancelPending: (() => void) | undefined
+  #cancelSweep: (() => void) | undefined
+  #sweepDelayMs: number
   #closed = false
 
   constructor(options: TeamreeWatcherOptions) {
@@ -172,6 +235,10 @@ export class TeamreeWatcher {
     this.#settleMs = options.settleMs ?? DEFAULT_SETTLE_MS
     this.#onDegraded = options.onDegraded ?? ((event) => console.warn('[teamwork]', degradedTeamreeWatchReport(event)))
     this.#schedule = options.schedule ?? scheduleWithTimeout
+    this.#sweep = options.sweep ?? scheduleWithTimeout
+    this.#sweepFromMs = options.sweepFromMs ?? DEFAULT_SWEEP_FROM_MS
+    this.#sweepUntilMs = options.sweepUntilMs ?? DEFAULT_SWEEP_UNTIL_MS
+    this.#sweepDelayMs = this.#sweepFromMs
   }
 
   /** Project ids with at least one watch, for tests and for the dialog. */
@@ -201,6 +268,10 @@ export class TeamreeWatcher {
     }
 
     for (const [id, project] of wanted) this.#attach(id, project.path)
+    // `#attach` has already asked for a soon one if it attached anything. This
+    // is for the project it could not attach a single watch to, which is the
+    // one that needs the floor most.
+    this.#armSweep(false)
   }
 
   close(): void {
@@ -208,6 +279,8 @@ export class TeamreeWatcher {
     for (const id of [...this.#watched.keys()]) this.#stopWatching(id)
     this.#cancelPending?.()
     this.#cancelPending = undefined
+    this.#cancelSweep?.()
+    this.#cancelSweep = undefined
   }
 
   /**
@@ -229,6 +302,7 @@ export class TeamreeWatcher {
 
     const teamreeDir = join(projectPath, TEAMREE_DIR)
     const membersDir = join(projectPath, ...MEMBERS_DIR_SEGMENTS)
+    const had = watched.handles.size
 
     // The root is watched for one entry only. A checkout is where a build
     // writes and an agent works, and a report per file written there would cost
@@ -238,19 +312,20 @@ export class TeamreeWatcher {
       //
       // This used to compare the reported name against `.teamree`, which is a
       // statement about how a platform spells its events and not about what
-      // happened. Linux's inotify names the direct child; macOS has no
-      // non-recursive watch to offer, so `fs.watch` is FSEvents underneath and
-      // reports a path relative to the watched directory — and when the watched
-      // path and the path the event arrives on differ, as they do under a
-      // symlinked temporary directory, the spelling differs again. Two CI
-      // failures on the only platform this ships to, and each fix was another
-      // guess at the same string.
+      // happened. Three fixes were spent guessing at that string, and two of the
+      // guesses came with a story about macOS that libuv's `src/unix/fsevents.c`
+      // does not support: it resolves the watched path with `realpath` before
+      // matching, so a symlinked checkout is not spelled differently, and it
+      // drops any event whose path has a `/` left in it after the watched
+      // prefix, so a non-recursive watch there hears about its direct children
+      // and nothing below them — the same shape inotify gives on Linux.
       //
-      // So the string is no longer load-bearing. Any event on the checkout root
-      // costs one `stat` of `.teamree`, and only a real change to it — appearing,
-      // going, or being written — reports. That is cheaper than the roster read
-      // this filter exists to avoid, and it is the same answer on every platform
-      // because it is not an opinion about the platform.
+      // So the string is no longer load-bearing, and neither is the story. Any
+      // event on the checkout root costs one `stat` of `.teamree`, and only a
+      // real change to it — appearing, going, or being written — reports. That
+      // is cheaper than the roster read this filter exists to avoid, and it is
+      // the same answer on every platform because it is not an opinion about
+      // the platform.
       interesting: () => this.#teamreeChanged(projectId, projectPath),
       // The checkout itself is the one directory that has to be there: it is
       // what notices `.teamree` appearing, so a project whose path has gone is
@@ -280,6 +355,12 @@ export class TeamreeWatcher {
       // there and has no watch is the case this flag exists for.
       (!existsSync(teamreeDir) || watched.handles.has(teamreeDir)) &&
       (!existsSync(membersDir) || watched.handles.has(membersDir))
+
+    // A handle appearing is the moment the set is least trustworthy: on darwin
+    // it rebuilds the stream every other watch in this process is listening on,
+    // and until the new one is listening this project has nothing following it
+    // at all. Sweep soon, then back off again.
+    if (watched.handles.size > had) this.#armSweep(true)
   }
 
   #attachOne(
@@ -354,6 +435,47 @@ export class TeamreeWatcher {
     const changed = !sameMark(this.#marks.get(projectId), mark)
     this.#marks.set(projectId, mark)
     return changed
+  }
+
+  /**
+   * Puts the next sweep on the clock.
+   *
+   * `fromStart` is for the moments a watch has just been attached or the
+   * project list has just been set, which are the moments an event is most
+   * likely to be lost; everything else lets the backoff carry on.
+   */
+  #armSweep(fromStart: boolean): void {
+    if (this.#closed || this.#watched.size === 0) return
+    if (fromStart) this.#sweepDelayMs = this.#sweepFromMs
+    else if (this.#cancelSweep) return
+    this.#cancelSweep?.()
+    this.#cancelSweep = this.#sweep(
+      () => {
+        this.#cancelSweep = undefined
+        this.#sweepNow()
+      },
+      this.#sweepDelayMs
+    )
+  }
+
+  /**
+   * Three `stat`s per project, and a report if any of them moved without an
+   * event to say so.
+   *
+   * The same comparison the checkout-root filter makes, which is what keeps this
+   * honest: a sweep that finds nothing costs three `stat`s and says nothing, and
+   * one that finds something is indistinguishable from the event that should
+   * have arrived.
+   */
+  #sweepNow(): void {
+    if (this.#closed) return
+    let changed = false
+    for (const [id, watched] of this.#watched) {
+      if (this.#teamreeChanged(id, watched.path)) changed = true
+    }
+    this.#sweepDelayMs = Math.min(this.#sweepDelayMs * SWEEP_BACKOFF, this.#sweepUntilMs)
+    this.#armSweep(false)
+    if (changed) this.#report()
   }
 
   #report(): void {

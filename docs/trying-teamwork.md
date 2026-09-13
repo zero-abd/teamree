@@ -318,10 +318,20 @@ you would add any repository.
 There is nothing to restart. teamree watches `.teamree` in each project's
 primary checkout, so a pull that brings in your teammate's key or the relay file
 reaches the app by itself: the roster is re-read, the links are rebuilt against
-it, and the project header moves. Opening the Members dialog re-reads both
-files as well, which is the belt-and-braces half of the same thing — and if the
-watch could not be set up at all, that is the dialog that says so rather than
-letting a list nothing is following look as live as one that is.
+it, and the project header moves. Almost always that is immediate.
+
+If it is not immediate, give it half a minute before you touch anything. A
+filesystem watch is the fast path, not a promise — this project's own tests have
+caught macOS starting a watch and then never saying a word on it — so underneath
+the watch teamree re-checks `.teamree` on a timer, fast just after a project is
+opened and settling to once every thirty seconds while nothing is happening. A
+pull the watch misses is picked up by that instead. Half a minute late is the
+worst this costs you; never noticing it at all is what it removes.
+
+Opening the Members dialog re-reads both files as well, which is the
+belt-and-braces half of the same thing — and if the watch could not be set up at
+all, that is the dialog that says so rather than letting a list nothing is
+following look as live as one that is.
 
 Open the Members dialog on both machines. You should each see two entries, one
 of them marked as you. That part reads the directory and needs no network at
