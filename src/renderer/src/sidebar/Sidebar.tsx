@@ -12,6 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { usePaneEvidence } from './usePaneEvidence'
 import { WorktreeRow } from './WorktreeRow'
 
 export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React.JSX.Element {
@@ -49,6 +50,15 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
       (worktree) => worktree.name.toLowerCase().includes(needle) || worktree.branch.toLowerCase().includes(needle)
     )
   }, [filter, worktrees])
+
+  // Only the panes of worktrees actually rendered are read: a collapsed project
+  // costs nothing, and neither does a row the filter left out.
+  const onScreen = useMemo(() => {
+    const shown = new Set(matching.filter((worktree) => !collapsed[worktree.projectId]).map((worktree) => worktree.id))
+    return paneList.filter((terminal) => shown.has(terminal.worktreeId))
+  }, [collapsed, matching, paneList])
+
+  const evidence = usePaneEvidence(onScreen, terminals)
 
   return (
     <nav className="sidebar" aria-label="Projects and worktrees">
@@ -120,6 +130,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                       status={statuses[worktree.id]}
                       mergePreview={mergePreviews[worktree.id]}
                       terminals={paneList}
+                      evidence={evidence}
                       now={now}
                       onFocusTerminal={(terminalId) => {
                         void openWorktree(worktree.id).then(() => focusPane(terminalId))

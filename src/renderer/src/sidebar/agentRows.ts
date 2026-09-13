@@ -32,6 +32,12 @@ export type AgentRow = {
   activity: AgentActivity
   /** Milliseconds since output last arrived. */
   quietFor: number
+  /**
+   * The last line the pane printed that is worth showing, or null when there is
+   * none. It is a quotation, not a reading: "running tests" on a row means the
+   * pane printed those words, not that teamree knows tests are running.
+   */
+  evidence: string | null
 }
 
 export function activityOf(terminal: Terminal): AgentActivity {
@@ -46,16 +52,57 @@ export function activityOf(terminal: Terminal): AgentActivity {
  * much a thing that might want attention as an agent is, and hiding it would
  * make the count on the row disagree with what is actually open.
  */
-export function agentRows(terminals: readonly Terminal[], worktreeId: string, now: number): AgentRow[] {
+export function agentRows(
+  terminals: readonly Terminal[],
+  worktreeId: string,
+  now: number,
+  evidence: Readonly<Record<string, string | null>> = {}
+): AgentRow[] {
   return terminals
     .filter((terminal) => terminal.worktreeId === worktreeId)
     .map((terminal) => ({
       terminalId: terminal.id,
       agent: terminal.agent,
-      label: terminal.agent ?? terminal.title,
+      label: terminal.agent ?? paneLabel(terminal),
       activity: activityOf(terminal),
-      quietFor: Math.max(0, now - terminal.lastOutputAt)
+      quietFor: Math.max(0, now - terminal.lastOutputAt),
+      evidence: evidence[terminal.id] ?? null
     }))
+}
+
+/**
+ * What to call a pane with no agent in it.
+ *
+ * A program's own title is the best name it will ever have, except for the one
+ * a plain shell sets: bash's default is the user, the host and the path, which
+ * is long, changes as you cd, and repeats what the worktree row above already
+ * says. The shell's own name is shorter and no less informative.
+ */
+export function paneLabel(terminal: Terminal): string {
+  const title = terminal.title.trim()
+  if (title.length === 0 || isDefaultShellTitle(title)) return shellName(terminal.shell)
+  // A title that is only a path carries its information at the end — exactly
+  // the end a one-line row ellipsises away.
+  return isPathOnly(title) ? basename(title) : title
+}
+
+/** The `\u@\h: \w` title bash and dash write by default. */
+function isDefaultShellTitle(title: string): boolean {
+  return /^[^\s:@]+@[^\s:@]+:\s*\S*$/.test(title)
+}
+
+function isPathOnly(title: string): boolean {
+  return /^(?:~|\.{1,2})?[/\\]\S*$/.test(title) || /^[A-Za-z]:\\\S*$/.test(title)
+}
+
+function basename(path: string): string {
+  const parts = path.split(/[/\\]/).filter(Boolean)
+  return parts[parts.length - 1] ?? path
+}
+
+/** `/bin/zsh` and `C:\Windows\System32\cmd.exe` are both just the shell. */
+function shellName(shell: string): string {
+  return basename(shell.trim()).replace(/\.exe$/i, '') || 'shell'
 }
 
 /**
