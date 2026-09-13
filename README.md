@@ -35,13 +35,11 @@ window reflects all of it live.
 
 [**Download the `.dmg`**](https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg),
 open it, and drag teamree to Applications. One universal build: Apple Silicon and
-Intel both, nothing to choose between. No GitHub account needed. Check it against
-the published checksum first:
+Intel both, nothing to choose between. No GitHub account needed. Check it first
+against the `SHA256SUMS.txt` on the [release](https://github.com/zero-abd/teamree/releases/latest):
 
 ```sh
-cd ~/Downloads
-curl -LO https://github.com/zero-abd/teamree/releases/latest/download/SHA256SUMS.txt
-shasum -a 256 -c SHA256SUMS.txt
+shasum -a 256 ~/Downloads/teamree-mac-universal.dmg
 ```
 
 **Read this before you open it.** The build is ad-hoc signed but has no Apple
