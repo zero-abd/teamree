@@ -674,7 +674,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
           publicKey: SEEDED_AWAY_KEY,
           handle: 'marcus',
           phase: 'waiting' as const,
-          detail: 'your teammate’s machine is not connected',
+          // A shut lid, which is the case the link's own silence deadline
+          // names: the socket was never closed, this side gave up waiting.
+          detail: 'your teammate’s machine stopped answering',
           since: Date.now() - 300_000,
           attempts: 3
         }

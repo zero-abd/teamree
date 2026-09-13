@@ -162,6 +162,22 @@ Rows vanishing when a laptop closes would make the sidebar a liveness display
 rather than a picture of the project, and "it disappeared" reads as "it was
 deleted" — which, for a worktree, is the one thing it must never wrongly say.
 
+A peer **drops when this machine stops hearing from them**, not when a socket
+closes. A suspended laptop leaves its connection open on both hosts, and neither
+relay host will end it for us: the Worker host cannot send a protocol ping from
+a Durable Object, and its idle timer is defeated by the surviving peer, whose
+keepalive refreshes the sleeping peer's idle clock. So the link carries a
+deadline of its own — nothing successfully decrypted for two and a half
+keepalive intervals, five minutes, and the link is over — and everything
+downstream follows from the phase changing: the stale badge, the calls in
+flight, and any pane being watched over it.
+
+The cost is that a shut lid reads as present for up to those five minutes. The
+alternative is worse in the direction that matters: a screen saying a colleague
+is there when they are not is the same error as a vanishing row, pointed the
+reassuring way, on the feature whose whole safety argument is that nothing can
+happen invisibly.
+
 ## Risks
 
 Recorded now, so none of them is a surprise later.

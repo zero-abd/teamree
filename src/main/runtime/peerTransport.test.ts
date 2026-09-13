@@ -19,6 +19,7 @@ import { MethodRegistry } from './methodRegistry'
 import {
   createPeerTransport,
   MAX_PEER_SUBSCRIPTIONS,
+  PEER_CALL_TIMEOUT_MS,
   PEER_METHODS,
   STREAM_BUFFER_BYTES,
   STREAM_FLUSH_MS,
@@ -32,7 +33,7 @@ import { createRuntimeContext } from './runtimeContext'
 import { SubscriptionHub } from './subscriptionHub'
 
 /** A clock a test moves by hand, so pacing is asserted rather than waited out. */
-function manualClock(): TransportScheduler & { advance: (ms: number) => void } {
+function manualClock(): TransportScheduler & { advance: (ms: number) => void; pending: () => number } {
   let now = 1_000
   const timers = new Map<number, { at: number; run: () => void }>()
   let sequence = 0
@@ -57,7 +58,8 @@ function manualClock(): TransportScheduler & { advance: (ms: number) => void } {
         next[1].run()
       }
       now = target
-    }
+    },
+    pending: () => timers.size
   }
 }
 
@@ -110,6 +112,13 @@ type RigOptions = {
   bareRead?: boolean
   /** Run when the answering side first decrypts anything, as key confirmation is. */
   onConfirmed?: (transport: PeerTransport) => void
+  /**
+   * A clock for the *calling* side, which otherwise runs on the real one.
+   *
+   * Only a test about what the caller does while it waits needs this; the
+   * pacing everything else here asserts happens on the answering side.
+   */
+  callerScheduler?: TransportScheduler
 }
 
 /**
@@ -171,6 +180,7 @@ function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0]
     subscriptions: new SubscriptionHub(),
     connectionId: 'peer_caller',
     onStreamEvent: (stream, event) => received.push({ stream, event }),
+    ...(options?.callerScheduler ? { scheduler: options.callerScheduler } : {}),
     onFatal: () => {}
   })
   answerer = createPeerTransport({
@@ -661,5 +671,68 @@ describe('what the owner is told about who is reading', () => {
     })
 
     expect(watched()).toEqual([])
+  })
+})
+
+describe('a call the teammate never answers', () => {
+  /**
+   * One transport shouting into a socket nobody is reading.
+   *
+   * Exactly the shape a shut laptop leaves: the session is fine, the frames go
+   * out, and no answer will ever come back. Nothing is delivered to it, so
+   * there is no second transport here at all.
+   */
+  function intoTheVoid(): { transport: PeerTransport; clock: ReturnType<typeof manualClock>; sent: number } {
+    const [session] = handshakenPair()
+    const clock = manualClock()
+    const state = { sent: 0 }
+    const transport = createPeerTransport({
+      session,
+      send: () => {
+        state.sent += 1
+      },
+      dispatch: createDispatcher(
+        new MethodRegistry(
+          createRuntimeContext({ version: 't', store: {} as never, subscriptions: new SubscriptionHub() })
+        )
+      ),
+      subscriptions: new SubscriptionHub(),
+      connectionId: 'peer_void',
+      scheduler: clock,
+      onFatal: () => {}
+    })
+    return {
+      transport,
+      clock,
+      get sent() {
+        return state.sent
+      }
+    }
+  }
+
+  it('rejects with a reason a person can be shown rather than waiting for ever', async () => {
+    const { transport, clock } = intoTheVoid()
+    const answer = transport.call('peer.presence', {}).then(
+      () => 'answered',
+      (error: unknown) => (error instanceof Error ? error.message : String(error))
+    )
+
+    // Up to the deadline it is still an outstanding call, because a slow link
+    // is not a dead one and a call refused early is a keystroke refused early.
+    clock.advance(PEER_CALL_TIMEOUT_MS - 1)
+    expect(await Promise.race([answer, Promise.resolve('waiting')])).toBe('waiting')
+
+    clock.advance(1)
+    await expect(answer).resolves.toMatch(/did not answer/)
+  })
+
+  it('lets go of the deadline the moment the answer lands', async () => {
+    const clock = manualClock()
+    const { caller } = rig(undefined, { callerScheduler: clock })
+    await expect(caller.call('peer.presence', {})).resolves.toMatchObject({ revision: 1 })
+
+    // A call that is over holds nothing. Otherwise a link carrying a watched
+    // pane would accumulate one live timer per frame it ever asked for.
+    expect(clock.pending()).toBe(0)
   })
 })

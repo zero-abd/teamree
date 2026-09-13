@@ -60,6 +60,34 @@ type HeldEvent = { event: unknown; sequence: number }
 /** A quiet pair still has to say something, or the relay's idle deadline ends it. */
 export const KEEPALIVE_MS = 120_000
 
+/**
+ * How long a confirmed link may hear nothing at all before it is over.
+ *
+ * Two and a half keepalives. A healthy peer's frames arrive one keepalive
+ * apart, so a single lost keepalive leaves a two-interval gap and must not end
+ * anything; two lost in a row leaves three, and a link losing two in a row is
+ * not a link. The half is the margin between those two numbers, and it is the
+ * whole reason this is not simply twice: a deadline sitting exactly on the
+ * one-loss gap would tear down healthy links on ordinary scheduling jitter.
+ *
+ * This is the only liveness deadline teamree has of its own, and it has to be,
+ * because neither relay supplies one on the path `relay/README.md` recommends.
+ * The Worker host cannot send a protocol ping from a Durable Object, and its
+ * idle timer is defeated by this very keepalive: the surviving peer's frames
+ * refresh the sleeping peer's idle clock. So `phase === 'connected'` means
+ * "something from them decrypted recently" or it means nothing at all.
+ */
+export const SILENCE_TIMEOUT_MS = KEEPALIVE_MS * 2.5
+
+/**
+ * What a link can honestly say when it has heard nothing for that long.
+ *
+ * Never "they closed the connection": the socket is still open, which is
+ * exactly the case this deadline exists for. What is known is that this side
+ * went on sending and nothing came back.
+ */
+export const SILENT_PEER_DETAIL = 'your teammate’s machine stopped answering'
+
 /** Past this a paired connection that has not finished handshaking is not going to. */
 export const HANDSHAKE_TIMEOUT_MS = 15_000
 
@@ -99,8 +127,17 @@ export const HEALTHY_SESSION_MS = KEEPALIVE_MS
  */
 export const WAITING_EPOCHS_BEFORE_DIAGNOSIS = 2
 
-/** What waiting means before anything is odd about it. */
-export const WAITING_DETAIL = 'your teammate’s machine is not connected'
+/**
+ * What waiting means before anything is odd about it.
+ *
+ * Only what this side can see. Two people who committed different relay URLs,
+ * or whose clocks are more than an hour apart, each wait here while the other
+ * machine is perfectly connected — to somewhere else — so a line asserting
+ * their machine is not connected is a diagnosis this client cannot make. The
+ * long form below names the two things that are checkable; the short form says
+ * the one thing that is known.
+ */
+export const WAITING_DETAIL = 'nobody has answered on this rendezvous yet'
 
 /**
  * What the client can honestly say when nobody has arrived for that long.
@@ -258,12 +295,24 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   /** Scoped to one attempt: why this socket is about to end, when we ended it. */
   let refusedThisAttempt = false
   let rolledOverThisAttempt = false
+  /** Scoped to one attempt: did this side end it because nothing was coming back? */
+  let silentThisAttempt = false
   /**
    * Rotations waited through since anybody was last on the other end. Not per
    * attempt: it is the whole point that it survives the reconnect each rollover
    * causes, and it is cleared by somebody arriving rather than by time passing.
    */
   let rolloversWaiting = 0
+  /**
+   * Whether the last session this link had ended in silence rather than a close.
+   *
+   * Not per attempt, for the same reason `rolloversWaiting` is not: what it
+   * changes is what the *wait* means afterwards. A rendezvous nobody has ever
+   * answered and a rendezvous a teammate answered an hour ago and then went
+   * quiet on are two different sentences, and only the second one has already
+   * ruled out the clock and the relay file. Cleared by somebody arriving.
+   */
+  let heardThenSilent = false
   /** Scoped to one session: has anything from the far end ever decrypted? */
   let confirmed = false
   /** When that happened, so a session can be asked how long it lasted. */
@@ -278,6 +327,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   let transport: PeerTransport | undefined
   let cancelTimer: (() => void) | undefined
   let cancelKeepalive: (() => void) | undefined
+  let cancelSilenceDeadline: (() => void) | undefined
   let cancelHandshakeDeadline: (() => void) | undefined
   let cancelEpochWatch: (() => void) | undefined
 
@@ -301,13 +351,28 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     options.onStatusChange(snapshot())
   }
 
+  /**
+   * What this link can say for itself while nobody is on the other end.
+   *
+   * A teammate who was here and stopped is not a rendezvous nobody has found,
+   * so that reading wins over the two-rotation diagnosis: the clock and the
+   * relay file are exactly what `WAITING_TOO_LONG_DETAIL` sends somebody to
+   * check, and a session that ran on this rendezvous has already proved both.
+   */
+  const waitingDetail = (): string => {
+    if (heardThenSilent) return SILENT_PEER_DETAIL
+    return rolloversWaiting >= WAITING_EPOCHS_BEFORE_DIAGNOSIS ? WAITING_TOO_LONG_DETAIL : WAITING_DETAIL
+  }
+
   const clearTimers = (): void => {
     cancelTimer?.()
     cancelKeepalive?.()
+    cancelSilenceDeadline?.()
     cancelHandshakeDeadline?.()
     cancelEpochWatch?.()
     cancelTimer = undefined
     cancelKeepalive = undefined
+    cancelSilenceDeadline = undefined
     cancelHandshakeDeadline = undefined
     cancelEpochWatch = undefined
   }
@@ -358,6 +423,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     const wasConnected = confirmed
     const wasRefused = refusedThisAttempt
     const wasRollover = rolledOverThisAttempt
+    const wasSilent = silentThisAttempt
     // A session that worked earns the reset; one that confirmed and went inside
     // a keepalive does not, because that is the shape a peer can repeat at will.
     const lasted = confirmedAt !== undefined && options.scheduler.now() - confirmedAt >= HEALTHY_SESSION_MS
@@ -389,7 +455,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // A link that got all the way up and then dropped is a teammate whose
     // machine went away, not a relay that cannot be reached: saying
     // "unreachable" there would send somebody to check their own network.
-    if (wasConnected || closure.paired) moveTo('waiting', 'your teammate’s machine dropped the connection')
+    // And a machine that stopped answering did not drop anything: its socket is
+    // still open, which is the whole reason this side had to notice for itself.
+    if (wasSilent) moveTo('waiting', SILENT_PEER_DETAIL)
+    else if (wasConnected || closure.paired) moveTo('waiting', 'your teammate’s machine dropped the connection')
     else moveTo('unreachable', closure.reason || 'the relay could not be reached')
     // A session that confirmed and then went straight away is not the "your
     // partner left, come back now" case the relay's table is written for,
@@ -438,6 +507,38 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
         rejectHandshake(localReason(error))
       }
     }
+  }
+
+  /**
+   * The deadline, armed once and re-armed only if it fires early.
+   *
+   * A one-shot that reads the timestamp and re-arms for whatever is left of the
+   * window beats both obvious alternatives. Re-arming on every decrypted frame
+   * would churn a timer per frame of a pane printing a build log. Folding the
+   * check into the keepalive's own repeating tick — which is what a single
+   * timer would mean — would put the moment of detection anywhere in a
+   * two-minute window *after* the deadline had already passed, and the whole
+   * point of the deadline is that it is a number somebody can reason about.
+   */
+  const armSilenceDeadline = (delayMs: number): void => {
+    cancelSilenceDeadline = options.scheduler.setTimer(
+      () => {
+        cancelSilenceDeadline = undefined
+        const active = transport
+        if (!active) return
+        const quietFor = options.scheduler.now() - active.lastDecryptedAt
+        if (quietFor < SILENCE_TIMEOUT_MS) {
+          armSilenceDeadline(SILENCE_TIMEOUT_MS - quietFor)
+          return
+        }
+        silentThisAttempt = true
+        heardThenSilent = true
+        // The same silence a rejection gets, and for a plainer reason: there is
+        // nobody on the far end to tell.
+        connection?.close(1000, '')
+      },
+      Math.max(1, delayMs)
+    )
   }
 
   const rejectHandshake = (local: string): void => {
@@ -593,6 +694,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // user reads: from where they sit this is still connecting, because nothing
     // has yet shown that anyone is there.
     cancelKeepalive = repeat(options.scheduler, KEEPALIVE_MS, () => transport?.keepalive())
+    // The other half of that keepalive, and the half neither relay host
+    // supplies: sending one costs nothing and proves nothing, so this is what
+    // requires one to come back.
+    armSilenceDeadline(SILENCE_TIMEOUT_MS)
     // The round trip that confirms the keys, made of a frame the relay's idle
     // deadline wanted anyway. The peer's own keepalive confirms us to them.
     transport.keepalive()
@@ -603,6 +708,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     attempts += 1
     refusedThisAttempt = false
     rolledOverThisAttempt = false
+    silentThisAttempt = false
     confirmed = false
     confirmedAt = undefined
     moveTo('connecting')
@@ -616,10 +722,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       dial: options.dial,
       events: {
         onWaiting: () => {
-          moveTo(
-            'waiting',
-            rolloversWaiting >= WAITING_EPOCHS_BEFORE_DIAGNOSIS ? WAITING_TOO_LONG_DETAIL : WAITING_DETAIL
-          )
+          moveTo('waiting', waitingDetail())
           // A peer still parked when the hour turns re-registers under the new
           // token, which is what `relay/README.md` says a client does. Two
           // machines whose clocks straddle the boundary do not meet until the
@@ -644,6 +747,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
           cancelEpochWatch = undefined
           // Somebody answered here, so whatever the wait was, it was not this.
           rolloversWaiting = 0
+          heardThenSilent = false
           runHandshake(initiator, token)
         },
         onBinary: (payload) => {

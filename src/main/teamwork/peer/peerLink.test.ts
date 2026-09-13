@@ -27,6 +27,9 @@ import { normaliseRemote, projectKeyFor } from './projectKey'
 import {
   createPeerLink,
   HANDSHAKE_TIMEOUT_MS,
+  KEEPALIVE_MS,
+  SILENCE_TIMEOUT_MS,
+  SILENT_PEER_DETAIL,
   WAITING_DETAIL,
   WAITING_TOO_LONG_DETAIL,
   type PeerLink
@@ -199,6 +202,71 @@ function muteAfterHandshake(dial: RelayDialer): RelayDialer {
       close: (code, reason) => socket.close(code, reason)
     }
   }
+}
+
+/**
+ * A machine that keeps its socket and stops using it.
+ *
+ * A closed laptop lid, which is not a process exiting. Nothing is sent, nothing
+ * is delivered, and no close frame is ever written, so the relay and the far
+ * end both go on seeing a perfectly open connection. Every other failure in
+ * this file ends a socket, and a socket ending is the case that already worked:
+ * a test written that way passes whether or not this client has a deadline of
+ * its own, which is how the absence of one survived.
+ */
+function sleepingLid(): { wrap: (dial: RelayDialer) => RelayDialer; sleep: () => void } {
+  let asleep = false
+  return {
+    sleep: () => {
+      asleep = true
+    },
+    wrap: (dial) => (url, handlers) => {
+      const socket = dial(url, {
+        onOpen: () => {
+          if (!asleep) handlers.onOpen()
+        },
+        onText: (text) => {
+          if (!asleep) handlers.onText(text)
+        },
+        onBinary: (payload) => {
+          if (!asleep) handlers.onBinary(payload)
+        },
+        onClosed: (code, reason) => {
+          if (!asleep) handlers.onClosed(code, reason)
+        }
+      })
+      return {
+        sendText: (text) => {
+          if (!asleep) socket.sendText(text)
+        },
+        sendBinary: (payload) => {
+          if (!asleep) socket.sendBinary(payload)
+        },
+        close: (code, reason) => {
+          if (!asleep) socket.close(code, reason)
+        }
+      }
+    }
+  }
+}
+
+/** A subscription channel that keeps whatever it was given, in order. */
+function recorder(): { channel: SubscriptionChannel; events: unknown[] } {
+  const events: unknown[] = []
+  return {
+    events,
+    channel: {
+      emit: (event) => events.push(event),
+      close: () => {}
+    }
+  }
+}
+
+/** Bob’s pane as Alice’s side names it, which is what a watcher is handed. */
+function bobsPaneId(runtime: PeerRuntime): string {
+  const pane = runtime.service.presence({ projectId: 'p_alice' }).worktrees[0]?.panes[0]
+  if (!pane) throw new Error('Bob’s pane is not in Alice’s presence')
+  return pane.id
 }
 
 /**
@@ -1040,5 +1108,110 @@ describe('the name a link is kept under', () => {
     // Two keys that agree for as far as the id used to reach are still two.
     const neighbour = `${key.slice(0, 40)}zz=`
     expect(linkIdFor(neighbour, projectKey)).not.toBe(linkIdFor(key, projectKey))
+  })
+})
+
+describe('a teammate whose machine stopped answering', () => {
+  it('stops saying connected once nothing has decrypted for the deadline', async () => {
+    const lid = sleepingLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+
+    lid.sleep()
+
+    // One keepalive interval of silence is what an ordinary healthy link spends
+    // between frames. Nothing may be concluded from it, and nothing is.
+    await pair.scheduler.advance(KEEPALIVE_MS)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+
+    // Past the deadline the socket is still open on both hosts and the relay
+    // still has the session. The only thing that knows is this side.
+    await pair.scheduler.advance(SILENCE_TIMEOUT_MS)
+    const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(link?.phase).not.toBe('connected')
+    // And it goes on saying it through the reconnect and the park that follow,
+    // because a teammate who was here and stopped is not the same wait as a
+    // rendezvous nobody has ever answered.
+    expect(link?.detail).toBe(SILENT_PEER_DETAIL)
+    await pair.scheduler.advance(3_600_000)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBe(SILENT_PEER_DETAIL)
+  })
+
+  it('says nothing about a machine it has never heard from, because it cannot know', async () => {
+    // Two people on different relays, or with clocks an hour apart, each wait
+    // here while the other machine is perfectly connected somewhere else. What
+    // is known is that nobody has answered, and that is all this says.
+    const pair = await pairOfRuntimes()
+    await pair.alice.service.start()
+    await pair.scheduler.advance(0)
+
+    const detail = linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail
+    expect(detail).toBe(WAITING_DETAIL)
+    expect(detail).not.toMatch(/machine/)
+  })
+
+  it('marks the rows it was showing stale and dated, and keeps every one of them', async () => {
+    const lid = sleepingLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+    const before = bobsRows(pair.alice)
+    expect(before.map((row) => row.live)).toEqual([true])
+
+    lid.sleep()
+    await pair.scheduler.advance(SILENCE_TIMEOUT_MS + KEEPALIVE_MS)
+
+    const after = bobsRows(pair.alice)
+    // Not one row fewer, and not a heardAt moved on: a row that vanished reads
+    // as a worktree deleted, and a row still marked live is the same error
+    // pointed the reassuring way, which is the worse of the two.
+    expect(after.map((row) => row.name)).toEqual(before.map((row) => row.name))
+    expect(after.map((row) => row.heardAt)).toEqual(before.map((row) => row.heardAt))
+    // `live` is the whole of what `teammateStaleness` reads, so this is the
+    // badge and the date, asserted where they are decided.
+    expect(after.every((row) => row.live)).toBe(false)
+  })
+
+  it('settles a keystroke that was in flight rather than holding it for ever', async () => {
+    const lid = sleepingLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+    const paneId = bobsPaneId(pair.alice)
+
+    lid.sleep()
+    // Typed at a pane the screen still says is there, because until the
+    // deadline it still says so. This is the keystroke `WatchedPaneView` cannot
+    // report on: it prints a refusal from a rejection handler, and a promise
+    // that never settles prints nothing at all.
+    const outcome = pair.alice.service.type({ projectId: 'p_alice', paneId, data: 'yes\r' }).then(
+      () => 'answered',
+      (error: unknown) => (error instanceof Error ? error.message : String(error))
+    )
+
+    await pair.scheduler.advance(SILENCE_TIMEOUT_MS + KEEPALIVE_MS)
+    const said = await outcome
+    expect(said).not.toBe('answered')
+    expect(said).toMatch(/did not answer/)
+  })
+
+  it('tells an open watch it has ended instead of leaving a window that stopped moving', async () => {
+    const lid = sleepingLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+    const paneId = bobsPaneId(pair.alice)
+
+    lid.sleep()
+    const opened = pair.alice.service.openWatch({ projectId: 'p_alice', paneId })
+    const sink = recorder()
+    const stop = opened.start(sink.channel)
+
+    // Nothing at all, which is the shape of the bug: the subscribe went out and
+    // there is nobody to answer it, so the viewer sits on "Opening bob's pane".
+    await pair.scheduler.advance(0)
+    expect(sink.events).toEqual([])
+
+    await pair.scheduler.advance(SILENCE_TIMEOUT_MS + KEEPALIVE_MS)
+    expect(sink.events.map((event) => (event as { type?: unknown }).type)).toContain('lost')
+    stop()
   })
 })
