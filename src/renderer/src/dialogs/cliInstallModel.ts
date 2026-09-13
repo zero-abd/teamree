@@ -63,6 +63,21 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     }
   }
 
+  if (status.bundle === null) {
+    // A packaged app ships the bundle beside the launcher, so only a source
+    // checkout reaches this — and `npm run dev` is exactly what puts it here.
+    // No button: linking a launcher with nothing behind it produces a `teamree`
+    // that exits on its first line, and on macOS it costs a password to do.
+    return {
+      ...CLI_PANEL_READING,
+      headline: 'The teamree CLI has not been built yet.',
+      detail:
+        `${status.source} is the launcher; the bundle it runs is not there, because npm run dev builds the app ` +
+        'and not the CLI. Linking it would put a teamree on your PATH that cannot start.',
+      manual: 'npm run build:cli'
+    }
+  }
+
   if (status.state === 'linked') {
     return {
       ...CLI_PANEL_READING,
@@ -106,9 +121,15 @@ export function cliPanel(status: CliStatus | null): CliPanel {
 
   return {
     headline: 'The teamree CLI is not on your PATH yet.',
-    detail:
-      `It ships inside this app, at ${status.source}. Everything the window can do it can do, which is how a ` +
-      'coding agent drives teamree.',
+    // A packaged app ships its CLI; a checkout is a directory somebody can move
+    // out from under the link, which is the one thing they need told before they
+    // make one. Saying "ships inside this app" of a checkout is the kind of
+    // sentence that makes the panel's other sentences worth less.
+    detail: status.packaged
+      ? `It ships inside this app, at ${status.source}. Everything the window can do it can do, which is how a ` +
+        'coding agent drives teamree.'
+      : `It is in the checkout you are running from, at ${status.source}. Everything the window can do it can ` +
+        'do — but the link is to that path, so it breaks if you move the checkout.',
     promise: `Links ${status.destination} to it.`,
     password,
     action: 'Put teamree on my PATH',
@@ -120,13 +141,21 @@ export function cliPanel(status: CliStatus | null): CliPanel {
 /**
  * Whether the sidebar should offer this at all.
  *
- * Only while there is something to do about it. A CLI that is already linked
- * needs no button, and a platform or a build this app cannot serve needs an
- * explanation rather than an affordance — the palette still reaches the panel
- * for anybody who wants to check.
+ * Only while there is something to do about it, and only while doing it would
+ * leave a command that runs. A CLI that is already linked needs no button; a
+ * platform or a build this app cannot serve needs an explanation rather than an
+ * affordance; and a launcher whose bundle has not been built needs one build
+ * command, not a privileged operation that ends in a broken link. The palette
+ * still reaches the panel, which says which of those it is.
  */
 export function offerCliInstall(status: CliStatus | null): boolean {
-  return status !== null && status.installable && status.source !== null && status.state !== 'linked'
+  return (
+    status !== null &&
+    status.installable &&
+    status.source !== null &&
+    status.bundle !== null &&
+    status.state !== 'linked'
+  )
 }
 
 /**

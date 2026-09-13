@@ -315,3 +315,28 @@ it('removes a clean worktree without stopping to ask', async () => {
   expect(useWorkspaceStore.getState().dialog).toBeNull()
   expect(useWorkspaceStore.getState().worktrees.some((entry) => entry.id === clean.id)).toBe(false)
 })
+
+// The CLI panel re-reads on open, so the read is where a stale refusal has to
+// go: a password not given to an attempt that was abandoned is not a fact about
+// the next time the panel is opened.
+it('does not repeat a CLI refusal to somebody who reopens the panel', async () => {
+  useWorkspaceStore.setState({ cliError: 'The administrator password was not given, so nothing was changed.' })
+
+  await useWorkspaceStore.getState().loadCli()
+
+  expect(useWorkspaceStore.getState().cliError).toBeNull()
+  expect(useWorkspaceStore.getState().cli).not.toBeNull()
+})
+
+// The other half of the same line: a refusal that did happen is re-read past,
+// because installCli re-reads the destination before it shows what refused it.
+it('keeps the refusal of an install that was refused, across the re-read it does', async () => {
+  const refused = 'The administrator password was not given, so nothing was changed.'
+  const call = vi.spyOn(runtimeClient, 'call').mockRejectedValueOnce(new Error(refused))
+
+  await useWorkspaceStore.getState().installCli()
+  call.mockRestore()
+
+  expect(useWorkspaceStore.getState().cliError).toBe(refused)
+  expect(useWorkspaceStore.getState().cliPending).toBe(false)
+})

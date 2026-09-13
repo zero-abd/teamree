@@ -31,6 +31,8 @@ async function wire(): Promise<{
   const source = path.join(root, 'app', 'Contents', 'Resources', 'cli', 'teamree')
   await mkdir(path.dirname(source), { recursive: true })
   await writeFile(source, '#!/bin/sh\n', { mode: 0o755 })
+  // The launcher and the bundle it runs, which is what a packaged app ships.
+  await writeFile(path.join(path.dirname(source), 'teamree.mjs'), 'process.exit(0)\n')
   const directory = path.join(root, 'bin')
   await mkdir(directory)
 

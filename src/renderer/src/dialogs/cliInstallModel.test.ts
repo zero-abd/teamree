@@ -3,6 +3,8 @@ import type { CliInstall, CliStatus } from '@shared/entities'
 import { cliOffer, cliOutcome, cliPanel, offerCliInstall } from './cliInstallModel'
 
 const APP_CLI = '/Applications/teamree.app/Contents/Resources/cli/teamree'
+const APP_BUNDLE = '/Applications/teamree.app/Contents/Resources/cli/teamree.mjs'
+const CHECKOUT_CLI = '/Users/ann/src/teamree/resources/cli/teamree'
 
 function status(extra: Partial<CliStatus> = {}): CliStatus {
   return {
@@ -10,6 +12,7 @@ function status(extra: Partial<CliStatus> = {}): CliStatus {
     platform: 'darwin',
     source: APP_CLI,
     packaged: true,
+    bundle: APP_BUNDLE,
     destination: '/usr/local/bin/teamree',
     directory: '/usr/local/bin',
     state: 'absent',
@@ -28,6 +31,15 @@ describe('before anything is pressed', () => {
     expect(panel.action).toBe('Put teamree on my PATH')
     expect(panel.promise).toContain('/usr/local/bin/teamree')
     expect(panel.detail).toContain(APP_CLI)
+  })
+
+  it('does not tell a checkout that its CLI ships inside the app, and says what a link there costs', () => {
+    const panel = cliPanel(status({ packaged: false, source: CHECKOUT_CLI, bundle: `${CHECKOUT_CLI}.mjs` }))
+    expect(panel.action).toBe('Put teamree on my PATH')
+    expect(panel.detail).toContain(CHECKOUT_CLI)
+    expect(panel.detail).not.toContain('ships inside this app')
+    // The reason the first-run offer stays quiet here, said where the button is.
+    expect(panel.detail).toContain('move')
   })
 
   it('says a password is coming, and why, before it is asked for', () => {
@@ -85,6 +97,32 @@ describe('something in the way', () => {
 
   it('says the same of a directory', () => {
     expect(cliPanel(status({ state: 'directory' })).headline).toContain('a directory at')
+  })
+})
+
+describe('a CLI nothing has built yet', () => {
+  /** `npm run dev` builds the app and not the CLI, so this is every fresh checkout. */
+  function unbuilt(extra: Partial<CliStatus> = {}): CliStatus {
+    return status({ packaged: false, source: CHECKOUT_CLI, bundle: null, ...extra })
+  }
+
+  it('names the command that builds it rather than offering to link it', () => {
+    const panel = cliPanel(unbuilt())
+    expect(panel.headline).toBe('The teamree CLI has not been built yet.')
+    expect(panel.detail).toContain(CHECKOUT_CLI)
+    expect(panel.manual).toBe('npm run build:cli')
+    expect(panel.action).toBeNull()
+    expect(panel.password).toBeNull()
+  })
+
+  it('does not call a link to it being on your PATH', () => {
+    const panel = cliPanel(unbuilt({ state: 'linked', resolved: CHECKOUT_CLI }))
+    expect(panel.headline).not.toContain('on your PATH')
+    expect(panel.manual).toBe('npm run build:cli')
+  })
+
+  it('keeps it off the sidebar, which would be a password spent on a broken command', () => {
+    expect(offerCliInstall(unbuilt())).toBe(false)
   })
 })
 

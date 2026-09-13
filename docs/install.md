@@ -219,8 +219,18 @@ Three things it will not do, each of them said rather than hidden:
 
 Running from a source checkout, nothing offers itself: a link into a checkout
 breaks the moment that checkout moves, and a question asked on every `npm run
-dev` is a question nobody reads. The sidebar button and the palette still work
-there, and so does the command below.
+dev` is a question nobody reads. The button and the command below do work
+there — but only once the CLI has been built:
+
+```sh
+npm run build:cli
+```
+
+`resources/cli/teamree` is a launcher, and what it launches is
+`out/cli/index.js`, which `npm run dev` does not build. Until that file exists
+the panel says so and offers no button: linking the launcher would leave a
+`teamree` on your PATH that exits with `Cannot find module`, and it would have
+spent an administrator password to do it.
 
 The same two things from a terminal, with the app running:
 
