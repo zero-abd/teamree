@@ -37,7 +37,7 @@
 // injected timer, so the tests for reconnection, backoff and the hourly epoch
 // boundary assert behaviour rather than wait for it.
 
-import type { PeerLink as PeerLinkStatus, PeerLinkPhase, PeerPresence } from '../../../shared/entities'
+import type { PeerLink as PeerLinkStatus, PeerLinkPhase } from '../../../shared/entities'
 import type { MethodName, ParamsOf, ResultOf } from '../../../shared/methods'
 import { createInitiatorSession, createResponderSession, isPeerError, type PeerSession } from '../../../shared/peer'
 import { createPeerTransport, type PeerTransport } from '../../runtime/peerTransport'
@@ -55,6 +55,27 @@ export const HANDSHAKE_TIMEOUT_MS = 15_000
 
 export const BACKOFF_START_MS = 1_000
 export const BACKOFF_CEILING_MS = 60_000
+
+/**
+ * The shortest wait between one attempt ending and the next one dialling.
+ *
+ * `relay/README.md` says to come straight back after a `4001`, and for a
+ * teammate whose machine really did drop that is right. Taken literally it is
+ * also a way for the far end to choose how often this machine spends a
+ * Diffie-Hellman and a socket: confirm, drop, repeat, and none of it costs the
+ * side doing it anything. "Straight back" therefore has a floor.
+ */
+export const RECONNECT_FLOOR_MS = 1_000
+
+/**
+ * How long a confirmed session has to last before its backoff is forgiven.
+ *
+ * One keepalive interval, because a session that carried one of those was a
+ * session that worked. A session that confirmed and went inside it proves
+ * nothing about the link, so it pays the growing backoff like any other
+ * failure rather than resetting it.
+ */
+export const HEALTHY_SESSION_MS = KEEPALIVE_MS
 
 /**
  * How much of a stream is held while its own subscribe answer is still in
@@ -113,8 +134,13 @@ export type PeerLinkOptions = {
   scheduler: LinkScheduler
   /** Called whenever the phase or its detail changes, never on a repeat. */
   onStatusChange: (status: PeerLinkStatus) => void
-  /** A snapshot this teammate pushed. Dropped by the caller if it is behind. */
-  onPresence: (presence: PeerPresence) => void
+  /**
+   * A snapshot this teammate pushed, exactly as it decrypted.
+   *
+   * `unknown`, because it is: the far end authenticated, which says who wrote
+   * these bytes and nothing whatever about their shape. The caller validates.
+   */
+  onPresence: (presence: unknown) => void
   /**
    * Which of *this* machine's panes the teammate has open, whenever it changes.
    *
@@ -172,6 +198,8 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   let rolledOverThisAttempt = false
   /** Scoped to one session: has anything from the far end ever decrypted? */
   let confirmed = false
+  /** When that happened, so a session can be asked how long it lasted. */
+  let confirmedAt: number | undefined
   /** Streams this side opened on the teammate, by subscription id. */
   const routes = new Map<string, (event: unknown) => void>()
   /** Events for a subscription whose answer has not landed yet. */
@@ -247,10 +275,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     if (!running) return
     const delay =
       kind === 'immediate'
-        ? 0
+        ? RECONNECT_FLOOR_MS
         : // Full jitter: the whole window rather than a fixed fraction of it, so
           // a relay coming back does not get every link on the team at once.
-          Math.round(backoffMs * random())
+          Math.max(RECONNECT_FLOOR_MS, Math.round(backoffMs * random()))
     if (kind === 'backoff') backoffMs = Math.min(backoffMs * 2, BACKOFF_CEILING_MS)
     cancelTimer = options.scheduler.setTimer(() => {
       cancelTimer = undefined
@@ -262,6 +290,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     const wasConnected = confirmed
     const wasRefused = refusedThisAttempt
     const wasRollover = rolledOverThisAttempt
+    // A session that worked earns the reset; one that confirmed and went inside
+    // a keepalive does not, because that is the shape a peer can repeat at will.
+    const lasted = confirmedAt !== undefined && options.scheduler.now() - confirmedAt >= HEALTHY_SESSION_MS
+    if (lasted) backoffMs = BACKOFF_START_MS
     teardown('the peer link ended')
     if (!running) return
 
@@ -291,7 +323,12 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // "unreachable" there would send somebody to check their own network.
     if (wasConnected || closure.paired) moveTo('waiting', 'your teammate’s machine dropped the connection')
     else moveTo('unreachable', closure.reason || 'the relay could not be reached')
-    scheduleRetry(policy.kind)
+    // A session that confirmed and then went straight away is not the "your
+    // partner left, come back now" case the relay's table is written for,
+    // whatever code ended it: repeated, it is somebody else choosing how often
+    // this machine dials. It backs off like a failure, because that is what it
+    // is until one of these sessions lasts.
+    scheduleRetry(wasConnected && !lasted ? 'backoff' : policy.kind)
   }
 
   const runHandshake = (initiator: boolean, token: string): void => {
@@ -416,7 +453,11 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     }
 
     confirmed = true
-    backoffMs = BACKOFF_START_MS
+    confirmedAt = options.scheduler.now()
+    // Now, and not at `establish`: the deadline's job is the unconfirmed window,
+    // and this is the moment that window closes.
+    cancelHandshakeDeadline?.()
+    cancelHandshakeDeadline = undefined
     moveTo('connected')
     // One subscription for the life of the link. It answers immediately, so
     // there is no separate first read to race with the stream.
@@ -424,7 +465,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       .call('peer.subscribe', {})
       .then(({ subscription }) => {
         cancelPresenceRoute?.()
-        cancelPresenceRoute = route(subscription, (event) => options.onPresence(event as PeerPresence))
+        cancelPresenceRoute = route(subscription, (event) => options.onPresence(event))
       })
       .catch((error: unknown) => {
         options.onError?.(error)
@@ -435,8 +476,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   const establish = (): void => {
     const active = session
     if (!active) return
-    cancelHandshakeDeadline?.()
-    cancelHandshakeDeadline = undefined
+    // The deadline is deliberately left running. It exists for the window this
+    // function opens — the handshake has parsed and nobody has yet shown they
+    // hold a key — and cancelling it here would leave a replayed session
+    // holding a rendezvous, kept alive by this side's own keepalive, forever.
 
     transport = createPeerTransport({
       session: active,
@@ -480,6 +523,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     refusedThisAttempt = false
     rolledOverThisAttempt = false
     confirmed = false
+    confirmedAt = undefined
     moveTo('connecting')
 
     const epoch = epochAt(options.scheduler.now())

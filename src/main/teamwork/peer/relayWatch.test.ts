@@ -383,9 +383,13 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
 
     expect(pane?.watchers[0]?.since).toBeGreaterThan(0)
 
+    // Waited for rather than assumed: this says the row above was a real watch
+    // and not a name Bob filed against a stream that never carried anything,
+    // and frames arrive over a socket rather than in the turn that asked.
+    await until(() => window.frames.length > 0, 'the watch to deliver something')
+
     await aliceRelease(opened.subscription, 'window_named')
     await until(() => bob.service.watchers({ projectId: 'p_bob' }).panes.length === 0, 'Bob to see Alice leave')
-    expect(window.frames.length).toBeGreaterThan(0)
   })
 
   it('names both of them when two teammates read one pane, and the right one when one leaves', async () => {
@@ -456,7 +460,13 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
 
     const window = openWindow(alice, 'window_exit')
     const opened = await aliceWatch(mortal.paneId, 'window_exit')
-    await until(() => window.outputOn(opened.subscription).length >= 0, 'the watch to open')
+    // Bob's own books are the only honest evidence the watch is live: this pane
+    // has said nothing yet, so waiting on its output would be waiting on a
+    // condition that is already true and therefore on nothing at all.
+    await until(
+      () => bob.service.watchers({ projectId: 'p_bob' }).panes.some((row) => row.terminalId === mortal.terminalId),
+      'Bob to see the reader'
+    )
 
     bob.terminals?.manager.write(mortal.terminalId, '\u0004')
     await until(

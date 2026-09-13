@@ -99,6 +99,27 @@ export const STREAM_BYTES_PER_SECOND = 1_048_576
  */
 export const STREAM_BUFFER_BYTES = 262_144
 
+/**
+ * How many streams one teammate may hold open on this runtime at once.
+ *
+ * A watcher needs one for presence and one for each pane they are reading, and
+ * nobody reads thirty panes. Every record past that is a pacing buffer this
+ * machine keeps on somebody else's say-so, and `peer.subscribe` answers with a
+ * full snapshot each time it is called — so an unbounded count is a way to
+ * spend this process's memory from the other end of a relay.
+ */
+export const MAX_PEER_SUBSCRIPTIONS = 32
+
+/**
+ * The methods on the allow-list that leave a subscription behind.
+ *
+ * Spelled out for the same reason `PEER_METHODS` is: which calls cost this
+ * machine something that outlives the call is a fact about the catalogue, and
+ * guessing at it from a method's name would be a rule that quietly stopped
+ * covering the next one.
+ */
+const SUBSCRIBING_METHODS: readonly MethodName[] = ['peer.subscribe', 'terminal.subscribe'] as const
+
 export type PeerTransportOptions = {
   session: PeerSession
   /** Hands one Noise transport message to whatever is carrying them. */
@@ -176,6 +197,7 @@ export type PeerTransport = {
 
 export function createPeerTransport(options: PeerTransportOptions): PeerTransport {
   const allowed = new Set<string>(options.allowedMethods ?? PEER_METHODS)
+  const subscribing = new Set<string>(SUBSCRIBING_METHODS)
   const pending = new Map<string, { resolve: (value: never) => void; reject: (error: Error) => void }>()
   const reader = createLineReader(options.session)
   const scheduler = options.scheduler ?? realScheduler
@@ -379,6 +401,24 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         id: idOf(value),
         ok: false,
         error: { code: ErrorCode.UnknownMethod, message: `${method} is not a method a teammate can call` }
+      })
+      return
+    }
+    if (
+      method !== undefined &&
+      subscribing.has(method) &&
+      options.subscriptions.countFor(options.connectionId) >= MAX_PEER_SUBSCRIPTIONS
+    ) {
+      // Answered rather than dropped, and answered with the reason: a teammate
+      // that has genuinely opened too many panes can close some, and one that
+      // is not going to learns nothing from this it did not already know.
+      write({
+        id: idOf(value),
+        ok: false,
+        error: {
+          code: ErrorCode.Conflict,
+          message: `this link already holds ${MAX_PEER_SUBSCRIPTIONS} streams; release one before opening another`
+        }
       })
       return
     }

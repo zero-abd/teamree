@@ -22,10 +22,19 @@ import {
   type ManualScheduler,
   type PeerRuntime
 } from './peerTestSupport'
-import { isNewerPresence, linkIdFor } from './peerService'
+import { isNewerPresence, linkIdFor, parsePeerPresence } from './peerService'
 import { normaliseRemote, projectKeyFor } from './projectKey'
-import { HANDSHAKE_TIMEOUT_MS } from './peerLink'
+import { createPeerLink, HANDSHAKE_TIMEOUT_MS, type PeerLink } from './peerLink'
 import { RelayCloseCode } from './relayConnection'
+import type { RelayDialer } from './relaySocket'
+import { Params } from '../../../shared/methods'
+import { createDispatcher } from '../../runtime/dispatcher'
+import { MethodRegistry } from '../../runtime/methodRegistry'
+import { createRuntimeContext } from '../../runtime/runtimeContext'
+import { SubscriptionHub, type SubscriptionChannel } from '../../runtime/subscriptionHub'
+import { MAX_PEER_SUBSCRIPTIONS } from '../../runtime/peerTransport'
+import { MAX_CACHED_PANES, MAX_CACHED_TEXT, MAX_CACHED_WORKTREES } from '../../store/teammateCache'
+import { loadStaticPrivateKey } from '../identity'
 import { epochAt, rendezvousId, rendezvousToken, sharedSecret } from './rendezvous'
 
 const RELAY_URL = 'ws://relay.invalid/v1/relay'
@@ -52,7 +61,13 @@ type Pair = {
  * stubbed answer to it would not be testing anything.
  */
 async function pairOfRuntimes(
-  options: { relay?: FakeRelay; aliceSeesBob?: boolean; aliceCache?: TeammateCache } = {}
+  options: {
+    relay?: FakeRelay
+    aliceSeesBob?: boolean
+    aliceCache?: TeammateCache
+    /** Wraps Bob's socket, for a test about what one end does and the other does not. */
+    bobDial?: (dial: RelayDialer) => RelayDialer
+  } = {}
 ): Promise<Pair> {
   const relay = options.relay ?? createFakeRelay()
   const scheduler = createManualScheduler()
@@ -94,6 +109,7 @@ async function pairOfRuntimes(
   })
   const bob = await createPeerRuntime({
     ...shared,
+    ...(options.bobDial ? { dial: options.bobDial(relay.dial) } : {}),
     dataDir: bobData,
     workspace: {
       projects: [project('p_bob', bobProject)],
@@ -155,6 +171,79 @@ async function connect(pair: Pair): Promise<void> {
 
 function linkTo(runtime: PeerRuntime, projectId: string, publicKey: string) {
   return runtime.service.status({ projectId }).links.find((link) => link.publicKey === publicKey)
+}
+
+/**
+ * A socket that sends its first content frame and then nothing.
+ *
+ * Message 1 of the handshake gets through, so the far end really does complete
+ * an `IK` and reach the unconfirmed window; nothing after it does, which is
+ * what a replayer holding a recording and no private key can manage.
+ */
+function muteAfterHandshake(dial: RelayDialer): RelayDialer {
+  return (url, handlers) => {
+    const socket = dial(url, handlers)
+    let sent = 0
+    return {
+      sendText: (text) => socket.sendText(text),
+      sendBinary: (payload) => {
+        sent += 1
+        if (sent === 1) socket.sendBinary(payload)
+      },
+      close: (code, reason) => socket.close(code, reason)
+    }
+  }
+}
+
+/**
+ * One link with nothing behind it: a teammate who asks for things.
+ *
+ * The runtime pair is the right harness for what two apps do to each other;
+ * this is the right one for what one of them may ask, because a test that made
+ * its calls through the other runtime could only ever ask what that runtime
+ * happens to ask.
+ */
+async function rawLink(options: {
+  relay: FakeRelay
+  scheduler: ManualScheduler
+  dataDir: string
+  remotePublicKey: string
+  handle: string
+}): Promise<{ link: PeerLink; phase: () => string }> {
+  const hub = new SubscriptionHub()
+  const registry = new MethodRegistry(createRuntimeContext({ version: 'test', store: {} as never, subscriptions: hub }))
+  // Answered because the teammate's own link subscribes the moment it confirms
+  // and would tear the session down if nobody were home.
+  registry.register('peer.presence', Params.peerPresence, () => ({ revision: 1, handle: options.handle, projects: [] }))
+  registry.register('peer.subscribe', Params.peerSubscribe, (_params, call) => ({
+    subscription: hub.subscribe(call.connectionId, () => () => {})
+  }))
+
+  let phase = 'connecting'
+  const link = createPeerLink({
+    remotePublicKey: options.remotePublicKey,
+    handle: options.handle,
+    projectKey: projectKeyFor(normaliseRemote(ORIGIN)!),
+    staticPrivateKey: await loadStaticPrivateKey(options.dataDir),
+    relayUrl: RELAY_URL,
+    connectionId: `${options.handle}_link`,
+    dial: options.relay.dial,
+    dispatch: createDispatcher(registry),
+    subscriptions: hub,
+    scheduler: options.scheduler,
+    onStatusChange: (status) => {
+      phase = status.phase
+    },
+    onPresence: () => {}
+  })
+  link.start()
+  await options.scheduler.advance(0)
+  return { link, phase: () => phase }
+}
+
+/** Makes a runtime answer every peer with `snapshot`, whatever it actually holds. */
+function answerPresenceWith(runtime: PeerRuntime, snapshot: unknown): void {
+  ;(runtime.service as unknown as { peerPresence: (connectionId: string) => unknown }).peerPresence = () => snapshot
 }
 
 describe('two peers over a relay', () => {
@@ -457,17 +546,33 @@ describe('the failure paths', () => {
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
   })
 
-  it('gives up on a handshake that completed and then said nothing', async () => {
-    const pair = await pairOfRuntimes()
-    pair.relay.holdContent()
-    await pair.alice.service.start()
+  it('gives up on a peer that completed a handshake it cannot follow through', async () => {
+    // The shape a replayer leaves a responder in, and the only shape that
+    // matters: message 1 arrives and is real, so the handshake completes and
+    // the unconfirmed window opens — and then nothing is ever said again,
+    // because whatever sent it holds no key it could say anything with.
+    const pair = await pairOfRuntimes({ bobDial: muteAfterHandshake })
+    // Bob parks first, so he is the initiator and Alice is the responder: the
+    // side that reaches `established` on a message it only wrote.
     await pair.bob.service.start()
     await pair.scheduler.advance(0)
-    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
+    await pair.alice.service.start()
+    await pair.scheduler.advance(0)
 
-    // A session nobody can speak on must not hold its slot for ever. The
-    // handshake deadline covers the unconfirmed window for exactly this.
-    await pair.scheduler.advance(HANDSHAKE_TIMEOUT_MS + 1_000)
+    // The handshake really did complete on Alice's side, which is what makes
+    // this the window the deadline is for and not merely a peer that never
+    // arrived: both are paired on the relay and her side has stopped waiting.
+    expect(pair.relay.connections()).toBe(2)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
+    const dialled = pair.relay.greetings().length
+
+    // A session nobody can speak on must not hold its slot — or the rendezvous
+    // — for ever, and this side's own keepalive would otherwise defeat the
+    // relay's idle deadline on its behalf.
+    await pair.scheduler.advance(HANDSHAKE_TIMEOUT_MS + 5_000)
+    // Dialled again, which is the whole of it: the wedged socket was let go of
+    // and this link is trying rather than holding.
+    expect(pair.relay.greetings().length).toBeGreaterThan(dialled)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
   })
 
@@ -645,5 +750,253 @@ describe('the rendezvous derivation', () => {
   it('agrees with the relay’s URL shape', () => {
     const token = 'a'.repeat(64)
     expect(rendezvousId(token)).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+describe('a snapshot from a teammate is somebody else’s bytes', () => {
+  it('refuses one that is not a snapshot, and says so rather than freezing the sidebar', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    expect(bobsRows(pair.alice).map((row) => row.name)).toEqual(['flaky test'])
+
+    // Passes a check of the two outer fields and blows up at the first lookup
+    // inside them. Believed, it poisons what is held for this link: every later
+    // read of the project throws, the link goes on reporting itself connected,
+    // and the sidebar sits on yesterday's picture with nothing saying why.
+    answerPresenceWith(pair.bob, { revision: 9_999, projects: [null] })
+    pair.bob.changed()
+    await pair.scheduler.advance(1_000)
+
+    expect(() => pair.alice.service.presence({ projectId: 'p_alice' })).not.toThrow()
+    expect(bobsRows(pair.alice).map((row) => row.name)).toEqual(['flaky test'])
+    expect(pair.alice.errors().map(String).join()).toContain('was not a snapshot')
+
+    // And still refused ten minutes later: a refusal that wore off would be a
+    // wedge with a delay on it.
+    await pair.scheduler.advance(600_000)
+    expect(() => pair.alice.service.presence({ projectId: 'p_alice' })).not.toThrow()
+  })
+
+  it('keeps a teammate’s snapshot inside this machine’s own bounds', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+
+    // Large, and deliberately inside the 4 MiB a peer frame may be: this is a
+    // snapshot that really does cross the wire, not one too big to send.
+    const long = 'w'.repeat(2_000)
+    const longish = 'p'.repeat(300)
+    answerPresenceWith(pair.bob, {
+      revision: 5,
+      handle: 'bob',
+      projects: [
+        {
+          projectKey: projectKeyFor(normaliseRemote(ORIGIN)!),
+          worktrees: Array.from({ length: 60 }, (_unused, index) => ({
+            id: `wt_${index}`,
+            name: long,
+            branch: long,
+            state: 'ready',
+            panes: Array.from({ length: 50 }, (_ignored, pane) => ({
+              id: `t_${index}_${pane}`,
+              title: longish,
+              shell: longish,
+              running: true,
+              busy: false,
+              quietForMs: 0
+            }))
+          }))
+        }
+      ]
+    })
+    pair.bob.changed()
+    await pair.scheduler.advance(1_000)
+
+    const rows = pair.alice.service.presence({ projectId: 'p_alice' }).worktrees
+    // The cache's numbers rather than a second set: what is held in memory and
+    // the copy written to disk being bounded differently would mean one of the
+    // two numbers is wrong.
+    expect(rows).toHaveLength(MAX_CACHED_WORKTREES)
+    expect(rows[0]?.panes).toHaveLength(MAX_CACHED_PANES)
+    expect(Math.max(...rows.map((row) => row.name.length))).toBe(MAX_CACHED_TEXT)
+    expect(Math.max(...rows.flatMap((row) => row.panes.map((pane) => pane.title.length)))).toBe(MAX_CACHED_TEXT)
+  })
+
+  it('refuses a worktree list with a hole in it rather than the elements it can read', () => {
+    const projectKey = 'k'.repeat(64)
+    const worktrees = [{ id: 'wt_1', name: 'one', branch: 'main', state: 'ready', panes: [] }, null]
+    expect(parsePeerPresence({ revision: 1, handle: 'bob', projects: [{ projectKey, worktrees }] }, projectKey)).toBe(
+      undefined
+    )
+    // A worktree missing its panes is the other half of the same bug: the loop
+    // that read it threw where the lookup above did.
+    expect(
+      parsePeerPresence(
+        { revision: 1, handle: 'bob', projects: [{ projectKey, worktrees: [{ id: 'wt_1', name: 'one' }] }] },
+        projectKey
+      )
+    ).toBe(undefined)
+  })
+
+  it('keeps only the repository the session is for, however many a snapshot names', () => {
+    const ours = 'a'.repeat(64)
+    const theirs = 'b'.repeat(64)
+    const snapshot = {
+      revision: 2,
+      handle: 'bob',
+      projects: [
+        { projectKey: theirs, worktrees: [] },
+        { projectKey: ours, worktrees: [] }
+      ]
+    }
+    expect(parsePeerPresence(snapshot, ours)?.projects.map((one) => one.projectKey)).toEqual([ours])
+    expect(parsePeerPresence(snapshot, 'c'.repeat(64))?.projects).toEqual([])
+  })
+})
+
+describe('what a dropped session costs the side it dropped on', () => {
+  it('makes a teammate who confirms and drops in a loop pay for the loop', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+
+    // Sixty full dial-handshake-confirm-drop cycles, driven entirely from Bob's
+    // end. Each one costs Alice a Diffie-Hellman and a socket, so none of them
+    // may be free: the clock does not move, and Alice must not dial on it.
+    const startedAt = pair.scheduler.now()
+    const before = pair.relay.greetings().length
+    for (let cycle = 0; cycle < 60; cycle += 1) {
+      pair.bob.service.stop()
+      await pair.bob.service.start()
+      await pair.scheduler.advance(0)
+    }
+
+    expect(pair.scheduler.now()).toBe(startedAt)
+    // Bob's own sixty hellos, and not one of Alice's.
+    expect(pair.relay.greetings().length - before).toBe(60)
+
+    // And she is not stopped either: the wait grows, it does not become never.
+    await pair.scheduler.advance(600_000)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+  })
+
+  it('forgives the backoff of a session that lasted, so an ordinary drop comes back at once', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    // A working afternoon, and then the teammate's laptop closes.
+    await pair.scheduler.advance(600_000)
+    pair.relay.closeAll(RelayCloseCode.PartnerGone, 'partner disconnected')
+
+    await pair.scheduler.advance(2_000)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+  })
+})
+
+describe('what a teammate may hold open', () => {
+  it('replaces a teammate’s presence stream when they subscribe again, rather than stranding the first', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    const connection = linkIdFor(pair.aliceKey, projectKeyFor(normaliseRemote(ORIGIN)!))
+    expect(pair.bob.subscriptions.countFor(connection)).toBe(1)
+
+    // The subscriber map is keyed by the connection, so a second subscribe used
+    // to overwrite the first's entry while leaving it registered in the hub:
+    // unreachable, impossible to tear down, and alive until the link dropped.
+    const first: unknown[] = []
+    const second: unknown[] = []
+    const watch =
+      (into: unknown[]) =>
+      (channel: SubscriptionChannel): (() => void) =>
+        pair.bob.service.peerSubscribe(connection, {
+          emit: (event) => {
+            into.push(event)
+            channel.emit(event)
+          },
+          close: () => channel.close()
+        })
+
+    pair.bob.subscriptions.subscribe(connection, watch(first))
+    pair.bob.subscriptions.subscribe(connection, watch(second))
+    expect(pair.bob.subscriptions.countFor(connection)).toBe(1)
+
+    const opened = [first.length, second.length]
+    pair.bob.changed()
+    await pair.scheduler.advance(1_000)
+    expect(first.length - opened[0]!).toBe(0)
+    expect(second.length - opened[1]!).toBe(1)
+  })
+
+  it('refuses a teammate a new stream once they hold too many, however many times they ask', async () => {
+    const pair = await pairOfRuntimes()
+    await pair.bob.service.start()
+    await pair.scheduler.advance(0)
+    const alice = await rawLink({
+      relay: pair.relay,
+      scheduler: pair.scheduler,
+      dataDir: pair.alice.dataDir,
+      remotePublicKey: pair.bobKey,
+      handle: 'alice'
+    })
+    expect(alice.phase()).toBe('connected')
+
+    const connection = linkIdFor(pair.aliceKey, projectKeyFor(normaliseRemote(ORIGIN)!))
+    for (let call = 0; call < MAX_PEER_SUBSCRIPTIONS * 4; call += 1) {
+      await alice.link.call('peer.subscribe', {})
+    }
+    await pair.scheduler.advance(0)
+
+    // One, because a repeat replaces — and never past the cap whatever the
+    // method, because every record is a buffer this machine keeps on somebody
+    // else's say-so and each of these answers is a whole snapshot.
+    expect(pair.bob.subscriptions.countFor(connection)).toBe(1)
+    expect(pair.bob.subscriptions.countFor(connection)).toBeLessThanOrEqual(MAX_PEER_SUBSCRIPTIONS)
+    alice.link.stop()
+  })
+
+  it('ends a stream a teammate asked to end, and stops sending on it', async () => {
+    const pair = await pairOfRuntimes()
+    await pair.bob.service.start()
+    await pair.scheduler.advance(0)
+    const alice = await rawLink({
+      relay: pair.relay,
+      scheduler: pair.scheduler,
+      dataDir: pair.alice.dataDir,
+      remotePublicKey: pair.bobKey,
+      handle: 'alice'
+    })
+    expect(alice.phase()).toBe('connected')
+
+    const events: unknown[] = []
+    const { subscription } = await alice.link.call('peer.subscribe', {})
+    const stop = alice.link.route(subscription, (event) => events.push(event))
+    const connection = linkIdFor(pair.aliceKey, projectKeyFor(normaliseRemote(ORIGIN)!))
+    expect(pair.bob.subscriptions.countFor(connection)).toBe(1)
+
+    pair.bob.changed()
+    await pair.scheduler.advance(1_000)
+    const delivered = events.length
+    expect(delivered).toBeGreaterThan(0)
+
+    // The third method on a teammate's allow-list, used the way a teammate uses
+    // it: their own id, over their own link, releasing their own stream.
+    await expect(alice.link.call('unsubscribe', { subscription })).resolves.toEqual({ unsubscribed: true })
+    expect(pair.bob.subscriptions.countFor(connection)).toBe(0)
+
+    pair.bob.changed()
+    await pair.scheduler.advance(1_000)
+    expect(events).toHaveLength(delivered)
+    stop()
+    alice.link.stop()
+  })
+})
+
+describe('the name a link is kept under', () => {
+  it('carries both keys whole, so two teammates cannot be filed as one', () => {
+    const key = `${'A'.repeat(43)}=`
+    const projectKey = 'b'.repeat(64)
+    expect(linkIdFor(key, projectKey)).toContain(key)
+    expect(linkIdFor(key, projectKey)).toContain(projectKey)
+    // Two keys that agree for as far as the id used to reach are still two.
+    const neighbour = `${key.slice(0, 40)}zz=`
+    expect(linkIdFor(neighbour, projectKey)).not.toBe(linkIdFor(key, projectKey))
   })
 })
