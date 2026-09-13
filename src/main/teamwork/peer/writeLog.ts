@@ -53,6 +53,34 @@ export const WRITE_LOG_PREVIOUS_FILE = 'remote-writes.1.log'
 export const WRITE_LOG_MAX_BYTES = 1_048_576
 
 /**
+ * The most one entry may be.
+ *
+ * The cap above is a bound on the file and was not a bound on a line, and a
+ * line is written from what a teammate sent: the pane id they named goes in
+ * here verbatim, and a refused write is recorded exactly like a landed one. So
+ * two entries used to be able to be a megabyte each, rotate this file twice,
+ * and take every earlier entry with them — the whole of the owner's evidence,
+ * erased by the person it was evidence about, from the other end of a relay.
+ *
+ * Two kilobytes is ten times the largest entry anything here writes, and five
+ * hundred of them to a rotation. Everything past it is truncated rather than
+ * dropped: an entry that says *somebody typed, and their pane id was too long
+ * to keep* is still the record of a write, and a write nothing recorded is not.
+ */
+export const WRITE_LOG_MAX_ENTRY_BYTES = 2_048
+
+/**
+ * The most of any one string in an entry that is kept.
+ *
+ * A handle, a key, a project, a pane id and a refusal are all short by
+ * construction. This is the ceiling on the ones that arrive from a teammate.
+ */
+export const WRITE_LOG_MAX_FIELD_CHARS = 200
+
+/** What a truncated field ends with, so a reader can see it was cut. */
+export const WRITE_LOG_TRUNCATION_MARK = '…'
+
+/**
  * Owner read/write. The same reasoning as the private key's mode: this holds no
  * secret, but it holds who reached this machine and when, which is nobody
  * else's business on a shared box.
@@ -104,8 +132,8 @@ export function createRemoteWriteLog(options: RemoteWriteLogOptions): RemoteWrit
   const drain = async (): Promise<void> => {
     const batch = pending.splice(0)
     if (batch.length === 0) return
-    const text = `${batch.map((write) => JSON.stringify(write)).join('\n')}\n`
-    const bytes = Buffer.byteLength(text, 'utf8')
+    let text = `${batch.map((write) => JSON.stringify(write)).join('\n')}\n`
+    let bytes = Buffer.byteLength(text, 'utf8')
     try {
       await mkdir(directory, { recursive: true })
       onDisk ??= await sizeOf(current)
@@ -114,6 +142,13 @@ export function createRemoteWriteLog(options: RemoteWriteLogOptions): RemoteWrit
       if (onDisk > 0 && onDisk + bytes > maxBytes) {
         await rename(current, previous)
         onDisk = 0
+        // A rotation that pushes out the generation before it discards history,
+        // and an audit trail that lost some of itself in silence is worse than
+        // one that says so: `read` turns this line into the owner's `problem`,
+        // and it survives a restart because it is on the disk rather than in
+        // this process. Written at the head of the new file, where the hole is.
+        text = `${JSON.stringify(rotationMarker(now()))}\n${text}`
+        bytes = Buffer.byteLength(text, 'utf8')
       }
       await appendFile(current, text, { encoding: 'utf8', mode: WRITE_LOG_MODE })
       onDisk += bytes
@@ -129,7 +164,10 @@ export function createRemoteWriteLog(options: RemoteWriteLogOptions): RemoteWrit
 
   return {
     record: (write) => {
-      pending.push(write)
+      // Bounded here rather than trusted from the caller. Everything upstream
+      // of this is a string somebody else chose the length of, and a line this
+      // file cannot bound is a file the cap above cannot bound either.
+      pending.push(boundedEntry(write))
       // Chained rather than raced: two appends in flight at once can interleave
       // their lines, and a record of who typed what in which order is the one
       // thing this file exists to be.
@@ -143,8 +181,16 @@ export function createRemoteWriteLog(options: RemoteWriteLogOptions): RemoteWrit
       const [older, newer] = await Promise.all([readIfPresent(previous), readIfPresent(current)])
       const writes: RemoteWrite[] = []
       let unreadable = 0
+      let discardedAt: number | undefined
       for (const line of `${older}${newer}`.split('\n')) {
         if (line.trim() === '') continue
+        const rotated = rotationAt(line)
+        if (rotated !== undefined) {
+          // The oldest marker still retained is the edge of what is missing:
+          // everything before it went with the generation this one replaced.
+          discardedAt ??= rotated
+          continue
+        }
         const parsed = parseWrite(line)
         if (parsed === undefined) unreadable += 1
         else writes.push(parsed)
@@ -152,14 +198,88 @@ export function createRemoteWriteLog(options: RemoteWriteLogOptions): RemoteWrit
       // A half-written last line after a crash is the ordinary way this
       // happens, and it is said rather than hidden: a record with a hole in it
       // that claimed to be complete would be the worst of both.
-      const detail = unreadable > 0 ? `${unreadable} entr${unreadable === 1 ? 'y' : 'ies'} could not be read` : null
+      const unread = unreadable > 0 ? `${unreadable} entr${unreadable === 1 ? 'y' : 'ies'} could not be read` : null
+      // The same argument for the rotation: a log that silently began at the
+      // point somebody filled it is a log that cannot be told from a log
+      // nothing happened in.
+      const rotatedNote =
+        discardedAt === undefined
+          ? null
+          : `entries before ${new Date(discardedAt).toISOString()} were discarded when this log reached its size cap`
+      const detail = [rotatedNote, unread].filter((part) => part !== null).join('; ')
       return {
         writes: limit === undefined ? writes : writes.slice(-limit),
-        problem: problem ?? detail,
+        problem: problem ?? (detail === '' ? null : detail),
         readAt: now()
       }
     }
   }
+}
+
+/**
+ * The line that stands where discarded history was.
+ *
+ * Deliberately not shaped like an entry — `parseWrite` refuses it, and `read`
+ * recognises it before trying — because an audit trail must never be able to
+ * turn a note about itself into something that reads as somebody's keystroke.
+ */
+function rotationMarker(at: number): { rotatedAt: number; discarded: string } {
+  return { rotatedAt: at, discarded: 'entries older than this were discarded when the log reached its size cap' }
+}
+
+/** When a line says a rotation happened, or undefined for anything else. */
+function rotationAt(line: string): number | undefined {
+  let value: unknown
+  try {
+    value = JSON.parse(line)
+  } catch {
+    return undefined
+  }
+  if (typeof value !== 'object' || value === null) return undefined
+  const at = (value as { rotatedAt?: unknown }).rotatedAt
+  return typeof at === 'number' && Number.isFinite(at) ? at : undefined
+}
+
+/**
+ * One entry, cut down to something this file can hold a bound on.
+ *
+ * Fields first, because a field is the thing that is long; then the whole line,
+ * because JSON escaping can make a short string a long one — a hundred control
+ * characters is six hundred bytes of `\u00xx` — and a bound that only held for
+ * well-behaved input would be no bound at all against somebody choosing it.
+ */
+function boundedEntry(write: RemoteWrite): RemoteWrite {
+  const bounded: RemoteWrite = {
+    ...write,
+    handle: clampField(write.handle),
+    publicKey: clampField(write.publicKey),
+    projectId: clampField(write.projectId),
+    terminalId: clampField(write.terminalId)
+  }
+  if (write.reason !== undefined) bounded.reason = clampField(write.reason)
+  if (entryBytes(bounded) <= WRITE_LOG_MAX_ENTRY_BYTES) return bounded
+  // Escaping got there anyway. Given up in the order the owner can most afford
+  // to lose: the words the teammate was given, then the id they named, then
+  // everything else this machine knows about them.
+  if (bounded.reason !== undefined) {
+    bounded.reason = WRITE_LOG_TRUNCATION_MARK
+    if (entryBytes(bounded) <= WRITE_LOG_MAX_ENTRY_BYTES) return bounded
+  }
+  bounded.terminalId = WRITE_LOG_TRUNCATION_MARK
+  if (entryBytes(bounded) <= WRITE_LOG_MAX_ENTRY_BYTES) return bounded
+  bounded.handle = WRITE_LOG_TRUNCATION_MARK
+  bounded.publicKey = WRITE_LOG_TRUNCATION_MARK
+  bounded.projectId = WRITE_LOG_TRUNCATION_MARK
+  return bounded
+}
+
+function clampField(text: string): string {
+  if (text.length <= WRITE_LOG_MAX_FIELD_CHARS) return text
+  return `${text.slice(0, WRITE_LOG_MAX_FIELD_CHARS)}${WRITE_LOG_TRUNCATION_MARK}`
+}
+
+function entryBytes(write: RemoteWrite): number {
+  return Buffer.byteLength(JSON.stringify(write), 'utf8')
 }
 
 /** How many submissions a write carried, which is what makes it a command. */

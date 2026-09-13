@@ -733,7 +733,9 @@ cd ~/teamree-example && git remote get-url origin
 ```
 
 It catches the leader most often, because `init-example-repo.mjs` makes a
-repository with no remote and step 2 is where one gets added. A remote under any
+repository with no remote and step 2 is where one gets added. Adding one is the
+whole fix: the next time the panel reads its status it asks git again, so there
+is nothing to restart and nothing to wait for. A remote under any
 other name does not count — teamree does not guess at which of several remotes
 you meant, because two peers guessing differently would show each other nothing
 and say nothing about why.

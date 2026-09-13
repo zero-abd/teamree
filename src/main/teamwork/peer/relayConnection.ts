@@ -178,7 +178,15 @@ export type ReconnectPolicy =
   | { kind: 'immediate' }
   /** Come back after a backoff, which grows while the cause persists. */
   | { kind: 'backoff' }
-  /** Do not come back. Something is wrong that reconnecting cannot fix. */
+  /**
+   * Stop dialling and say why: something is wrong that reconnecting cannot fix.
+   *
+   * Not "never again". Every condition that lands here is about the relay, and
+   * a relay is restarted, rolled back and upgraded without this app hearing
+   * about it, so the link looks once more after a long wait. See
+   * `STOPPED_RETRY_MS` in `peerLink.ts`, which is where that wait lives because
+   * that is where the timer is.
+   */
   | { kind: 'stop'; reason: string }
 
 /**
@@ -207,7 +215,16 @@ export function reconnectPolicyFor(closure: RelayClosure): ReconnectPolicy {
     case RelayCloseCode.BadHello:
       return { kind: 'stop', reason: 'the relay refused this client’s greeting; it may speak a newer protocol' }
     case RelayCloseCode.Protocol:
-      return { kind: 'stop', reason: 'the relay refused a frame this client sent' }
+      // Both halves, because this end cannot tell them apart. The relay sends
+      // 4008 for a frame it would not accept, and also when it cannot find the
+      // other socket in its own pairing table — which is a condition inside the
+      // relay that this client had no part in. Naming only the first would put
+      // an operator to work looking for a bug on the wrong machine.
+      return {
+        kind: 'stop',
+        reason:
+          'the relay refused this connection; that is either a frame this client sent or its own record of the pairing'
+      }
     case RelayCloseCode.TooLarge:
       return { kind: 'stop', reason: 'the relay refused a frame as too large' }
     case NO_CLOSE_CODE:

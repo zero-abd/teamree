@@ -27,6 +27,7 @@
 // member of — the key is a hash of a remote, and somebody who knows the
 // repository exists can compute one.
 
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { z } from 'zod'
 import {
@@ -80,7 +81,7 @@ import { readRoster } from '../roster'
 import { watchPane } from './paneWatch'
 import { createPeerLink, type LinkScheduler, type PeerLink } from './peerLink'
 import { presenceFor, type PresenceProject, type PresenceSource } from './presence'
-import { readProjectKey } from './projectKey'
+import { originMark, readProjectKey } from './projectKey'
 import { readRelayConfig, type RelayLocation } from './relayUrl'
 import { watchForWake, type WakeWatch } from './wakeWatch'
 import { webSocketDialer, type RelayDialer } from './relaySocket'
@@ -124,7 +125,16 @@ export type PeerServiceOptions = {
 
 type ProjectFacts = {
   projectId: string
+  /** The checkout, kept so a read can ask whether `origin` has moved since. */
+  path: string
   projectKey: string | undefined
+  /**
+   * What git's config looked like when `projectKey` was read from it.
+   *
+   * Everything else here comes out of `.teamree`, which is watched. `origin`
+   * does not, so this is how a read tells a cached key from a stale one.
+   */
+  originMark: string | undefined
   rosterKeys: string[]
   /** Public key to the handle the roster files it under, for display. */
   handles: Map<string, string>
@@ -206,6 +216,16 @@ export class PeerService {
    * look like one.
    */
   readonly #typists = new Map<string, Map<string, PaneTypist>>()
+  /**
+   * When each teammate was last heard typing anywhere, by their key.
+   *
+   * The clock the window's throttle is decided against. It is per person rather
+   * than per pane because the pane is named by the caller and the person is
+   * named by their handshake: a burst is one burst however many pane ids it
+   * mentions, and only the second of those two facts is one the far end gets a
+   * vote on.
+   */
+  readonly #lastTypedAt = new Map<string, number>()
   /**
    * Panes the owner has muted, by this machine's own terminal id.
    *
@@ -397,7 +417,15 @@ export class PeerService {
     this.#options.onChange()
   }
 
-  /** Everything a window needs to say whether teamwork is running here. */
+  /**
+   * Everything a window needs to say whether teamwork is running here: a
+   * synchronous read of what the last reconcile found.
+   *
+   * Staying synchronous is the point, because the window asks this for every
+   * project on every refresh. The one fact behind it that nothing invalidates
+   * is therefore checked by the handler, which awaits `refreshIfOriginMoved`
+   * before asking.
+   */
   status(params: ParamsOf<'teamwork.status'>): TeamworkStatus {
     const facts = this.#projects.get(params.projectId)
     if (!facts) throw notFound(`no project with id ${params.projectId}`)
@@ -418,6 +446,31 @@ export class PeerService {
       links,
       readAt: this.#scheduler.now()
     }
+  }
+
+  /**
+   * Re-reads a project if `origin` has moved since the last reconcile.
+   *
+   * Every other fact behind `status` lives in `.teamree`, which is watched and
+   * swept, so a change there reconciles on its own. The origin is git's own
+   * config, nothing here watches it, and "no origin" is the state the runbook
+   * says catches the person setting teamwork up for everybody else — the
+   * example repository is created without a remote and adding one is step two.
+   * So the read that reports it is the read that checks it.
+   *
+   * The check is a `stat`, which is why it can sit in front of a method the
+   * window calls on every refresh; git is asked again only when that `stat`
+   * says the answer could have changed.
+   *
+   * A whole reconcile rather than a re-read of the one project, because an
+   * origin that has become usable gives the project a key, and the key is what
+   * the links are made from: correcting the sentence on screen and leaving
+   * nothing dialled would be a second way to be wrong.
+   */
+  async refreshIfOriginMoved(projectId: string): Promise<void> {
+    const facts = this.#projects.get(projectId)
+    if (!facts || originMark(facts.path) === facts.originMark) return
+    await this.reconcile()
   }
 
   /**
@@ -707,7 +760,14 @@ export class PeerService {
       // Nothing to attribute it to, which is itself the reason to refuse: this
       // is a connection the peer service never opened.
       return this.#refuse(
-        { at, handle: 'unknown', publicKey: '', projectId: '', terminalId: write.terminalId },
+        {
+          at,
+          handle: 'unknown',
+          publicKey: '',
+          projectId: '',
+          terminalId: strangePaneId(write.terminalId),
+          known: false
+        },
         write,
         'not-a-member',
         'this connection is not a peer link'
@@ -715,12 +775,15 @@ export class PeerService {
     }
 
     const handle = this.#handleFor(peer.publicKey) ?? peer.publicKey.slice(0, 8)
-    const stamp = {
+    const stamp: WriteStamp = {
       at,
       handle,
       publicKey: peer.publicKey,
       projectId: '',
-      terminalId: write.terminalId
+      // Until a pane of this machine answers to it, the id is a string the
+      // caller chose and is filed as one — see `strangePaneId`.
+      terminalId: strangePaneId(write.terminalId),
+      known: false
     }
 
     const project = this.#projectForPeer(peer)
@@ -734,8 +797,15 @@ export class PeerService {
     // the same scoping `teamwork.watch` puts on reading.
     const pane = this.#paneOf(project.projectId, write.terminalId)
     if (!pane) {
-      return this.#refuse(stamp, write, 'no-pane', `there is no pane ${write.terminalId} in this project`)
+      // Worded without the id the caller named, for two reasons: the reason is
+      // recorded on the owner's disk, and a refusal that quotes its input is a
+      // way to put whatever you like there. It stays the same answer a pane in
+      // another project gets, which is the point of saying it this way.
+      return this.#refuse(stamp, write, 'no-pane', 'there is no such pane in this project')
     }
+    // This machine's own id for it, from this machine's own list.
+    stamp.terminalId = pane.id
+    stamp.known = true
     if (!pane.running) {
       return this.#refuse(stamp, write, 'no-pane', 'that pane’s process has exited')
     }
@@ -1006,14 +1076,25 @@ export class PeerService {
     }
     if (reason !== undefined) entry.reason = reason
     this.#log.record(entry)
-    this.#attribute(entry)
+    // Attributed only for a pane this machine has. "Who is typing here" is a
+    // statement about the owner's own panes — nothing reads the map under an id
+    // that is not one — so filing a made-up id there was a map the far end
+    // chose the keys of, and a window woken once per made-up id was a refetch
+    // of three collections per keystroke that could never be shown.
+    if (stamp.known) this.#attribute(entry)
   }
 
   /** Who is typing in which pane, kept live so the owner is never in doubt. */
   #attribute(entry: RemoteWrite): void {
     const held = this.#typists.get(entry.terminalId) ?? new Map<string, PaneTypist>()
     const existing = held.get(entry.publicKey)
-    const fresh = existing === undefined || entry.at - existing.at > TYPING_WINDOW_MS
+    // Fresh is about the *person*, not the pane. Per pane, somebody naming a
+    // different one each time was fresh every time, and "fresh" is what skips
+    // the pulse the window is otherwise refetched on — so the throttle could be
+    // turned off from the other end of a relay by varying an id.
+    const lastHeard = this.#lastTypedAt.get(entry.publicKey)
+    const fresh = lastHeard === undefined || entry.at - lastHeard > TYPING_WINDOW_MS
+    this.#noteTypedAt(entry.publicKey, entry.at)
     const typist: PaneTypist = existing ?? {
       handle: entry.handle,
       publicKey: entry.publicKey,
@@ -1043,6 +1124,22 @@ export class PeerService {
     }
 
     this.#tellWindowAboutTyping(entry.at, fresh)
+  }
+
+  /**
+   * Remembers when somebody last typed, and forgets whoever has stopped.
+   *
+   * Bounded by the same argument as `#typists`: a key is a string from a
+   * handshake, and a machine left running for a month must not accumulate one
+   * of these per person it has ever met. Anything older than the typing window
+   * is no longer the answer to any question this map is asked.
+   */
+  #noteTypedAt(publicKey: string, at: number): void {
+    this.#lastTypedAt.set(publicKey, at)
+    if (this.#lastTypedAt.size <= MAX_TYPED_PANES) return
+    for (const [key, last] of this.#lastTypedAt) {
+      if (at - last > TYPING_WINDOW_MS) this.#lastTypedAt.delete(key)
+    }
   }
 
   /**
@@ -1125,6 +1222,10 @@ export class PeerService {
   }
 
   async #readProject(project: Project, identityKey: string): Promise<ProjectFacts> {
+    // Stamped before git is asked, never after: a remote added while the
+    // subprocess was running then leaves a mark the next read disagrees with,
+    // which costs one re-read rather than losing the change.
+    const mark = originMark(project.path)
     const [roster, relay, key] = await Promise.all([
       readRoster(project.path).catch(() => ({ entries: [], problems: [] })),
       readRelayConfig(project.path, this.#options.env),
@@ -1134,7 +1235,9 @@ export class PeerService {
     const handles = new Map(roster.entries.map((entry) => [entry.publicKey, entry.handle]))
     const facts: ProjectFacts = {
       projectId: project.id,
+      path: project.path,
       projectKey: key.ok ? key.key : undefined,
+      originMark: mark,
       rosterKeys: roster.entries.map((entry) => entry.publicKey),
       relay: relay.configured ? relay.location : null,
       enrolled: roster.entries.some((entry) => entry.publicKey === identityKey),
@@ -1191,6 +1294,12 @@ type WriteStamp = {
   publicKey: string
   projectId: string
   terminalId: string
+  /**
+   * Whether `terminalId` is a pane of this machine rather than a string the
+   * caller made up. The record keeps both; only the first is attributed, because
+   * the owner's "who is typing here" is about panes this machine has.
+   */
+  known: boolean
 }
 
 /** What `openWatch` resolved, and the start the subscription hub drives. */
@@ -1284,6 +1393,23 @@ type HeardPresence = {
  */
 export function isNewerPresence(held: PeerPresence | undefined, incoming: PeerPresence): boolean {
   return held === undefined || incoming.revision > held.revision
+}
+
+/**
+ * How a pane id that is not this machine's is written down.
+ *
+ * Never the caller's own string. An id that names nothing here is a value from
+ * the wire, and the record it goes into is the owner's evidence, kept on the
+ * owner's disk, rotated at a size — so a verbatim copy of it is somebody else
+ * choosing what that file contains and how much of it fits. A digest is a fixed
+ * twenty-two characters, says nothing the caller did not already know, and
+ * still tells the owner that the same made-up id came back a hundred times.
+ *
+ * Short on purpose: this is a label for a thing that does not exist, not a
+ * cryptographic commitment to anything.
+ */
+export function strangePaneId(terminalId: string): string {
+  return `unknown:${createHash('sha256').update(terminalId, 'utf8').digest('hex').slice(0, 12)}`
 }
 
 /** The most recent keystroke in one pane, whoever sent it. */

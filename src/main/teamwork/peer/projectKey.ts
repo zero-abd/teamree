@@ -16,6 +16,8 @@
 // disagree about which rule applied and silently show each other nothing.
 
 import { createHash } from 'node:crypto'
+import { readFileSync, statSync } from 'node:fs'
+import { isAbsolute, join, resolve } from 'node:path'
 import type { GitRunner } from '../../git/gitProcess'
 
 /** Domain separation, so this hash can never be mistaken for another one. */
@@ -91,6 +93,55 @@ export async function readProjectKey(runner: GitRunner, projectPath: string): Pr
     return { ok: false, reason: 'the origin remote is not a URL teamree can compare with a teammate’s' }
   }
   return { ok: true, key: projectKeyFor(normalised) }
+}
+
+/**
+ * A stamp of the file `origin` is configured in, or `undefined` when there is
+ * no repository there to read.
+ *
+ * `readProjectKey` costs a git subprocess, so nothing can afford to call it on
+ * every read of the status. This costs a `stat`, and changes exactly when
+ * asking git again could say something new — which is what lets a cached key
+ * be trusted until it cannot.
+ */
+export function originMark(projectPath: string): string | undefined {
+  const path = gitConfigPath(projectPath)
+  if (path === undefined) return undefined
+  try {
+    const stats = statSync(path)
+    // The inode as well as the clock: git rewrites its config by renaming a
+    // lock file over it, so the file's identity moves even within one
+    // millisecond, and a filesystem with a coarse mtime would otherwise hide a
+    // `git remote add` made immediately after a read.
+    return `${path}\u0000${stats.ino}\u0000${stats.mtimeMs}\u0000${stats.size}`
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Where git keeps the remotes for a checkout.
+ *
+ * A linked worktree's `.git` is a file pointing at a directory of its own, and
+ * that directory borrows the repository's config rather than holding one, so
+ * the answer is never simply `<checkout>/.git/config`.
+ */
+function gitConfigPath(projectPath: string): string | undefined {
+  const dotGit = join(projectPath, '.git')
+  try {
+    if (statSync(dotGit).isDirectory()) return join(dotGit, 'config')
+    const pointer = /^gitdir:\s*(.+)$/.exec(readFileSync(dotGit, 'utf8').trim())?.[1]?.trim()
+    if (pointer === undefined) return undefined
+    const gitDir = isAbsolute(pointer) ? pointer : resolve(projectPath, pointer)
+    try {
+      const common = readFileSync(join(gitDir, 'commondir'), 'utf8').trim()
+      return join(resolve(gitDir, common), 'config')
+    } catch {
+      return join(gitDir, 'config')
+    }
+  } catch {
+    return undefined
+  }
 }
 
 function messageOf(error: unknown): string {

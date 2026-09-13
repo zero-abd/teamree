@@ -4,6 +4,13 @@
 // spawn helper is unusable, every PTY test would otherwise hang on a promise
 // that never settles. The probe answers "can this environment fork a pty at
 // all" once, cheaply, so those suites can skip instead.
+//
+// Skipping is not on its own an acceptable answer, though — seven suites, sixty
+// tests, vanishing out of a green run. `scripts/require-test-environment.mjs`
+// asks this same question before the suite starts and refuses to run without a
+// pty unless TEAMREE_SKIP_PTY_TESTS=1 says so deliberately, and
+// `scripts/vitest-skip-allowlist.mjs` fails the run if these suites skip
+// without it. What is left here is the skip itself, and saying why.
 
 import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -36,7 +43,15 @@ export function canSpawnPty(): boolean {
       // Already exited; the fork itself is what was being proved.
     }
     return true
-  } catch {
+  } catch (error) {
+    // Said out loud. A bare `false` was the whole of this branch once, and it
+    // was the only trace a broken node-pty left anywhere in a run: the reason
+    // the suites did not run was known here and thrown away here.
+    console.warn(
+      `canSpawnPty: no pty could be forked, so the PTY suites will skip — ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
     return false
   }
 }

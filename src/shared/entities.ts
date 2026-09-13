@@ -407,8 +407,8 @@ export type RelaySetting = {
   source: 'repository' | 'environment' | null
   /** Why there is no URL in effect, in words to act on. Null when there is one. */
   problem: string | null
-  /** What the committed file says, read even when the environment is winning. */
-  committed: { url: string | null; problem: string | null }
+  /** What the file in this checkout says, read even when the environment is winning. */
+  onDisk: { url: string | null; problem: string | null }
   /** The per-machine override, as this process sees it. */
   override: {
     /** The variable's name, so a message can say it rather than imply it. */
@@ -524,11 +524,18 @@ export type PeerLinkPhase =
   | 'waiting'
   /** Handshake complete against a key from this project's roster. */
   | 'connected'
-  /** Somebody was there and the handshake did not authenticate them. */
+  /** A handshake that did not complete. Which end it failed on is not established. */
   | 'refused'
   /** The relay could not be reached at all. */
   | 'unreachable'
-  /** Given up: something reconnecting cannot fix, and `detail` says what. */
+  /**
+   * Stopped dialling: something reconnecting cannot fix, and `detail` says what.
+   *
+   * Not "never again". Everything that lands here is a fact about the relay,
+   * and a relay is restarted, rolled back and upgraded without this app hearing
+   * about it, so the link looks once more after a long wait — see
+   * `STOPPED_RETRY_MS`. What it is not is a link that keeps trying.
+   */
   | 'stopped'
 
 /** One teammate, and how this machine is getting on with reaching them. */
@@ -542,6 +549,23 @@ export type PeerLink = {
   detail?: string
   /** When the phase last changed, by this machine's clock. */
   since: number
+  /**
+   * When something from them last decrypted, by this machine's clock — and
+   * only once that was long enough ago to mean anything.
+   *
+   * `since` cannot answer this. It is when the *phase* moved, so a link
+   * established three hours ago and silent for four minutes carries the same
+   * `since` as one that is fine, and `connected` on its own asserts health for
+   * the whole of the window before the silence deadline ends it.
+   *
+   * Absent while the link is talking, and absent while it is down. A healthy
+   * link gives the window nothing new to say; a link that is not up has a
+   * `detail` that already says what happened to it, and an age beside that
+   * would be a second, competing account of the same silence. The link decides
+   * when the number is worth carrying, so there is one threshold rather than
+   * one here and another wherever it is drawn.
+   */
+  lastHeardAt?: number
   /** How many times this link has been built, so a flapping one is visible. */
   attempts: number
 }
@@ -587,7 +611,14 @@ export type TeamworkStatus = {
 export type TeammateWorktree = PeerWorktree & {
   handle: string
   publicKey: string
-  /** When this was last heard, by this machine's clock. */
+  /**
+   * When the snapshot this row came out of arrived, by this machine's clock.
+   *
+   * The age of the picture, and deliberately not the age of the silence. Every
+   * pane's quiet time on this row is the owner's own measurement plus whatever
+   * has elapsed since, so a stamp that moved on contact rather than on content
+   * would make an hour-old pane claim to have gone quiet seconds ago.
+   */
   heardAt: number
   /**
    * Whether the link this came over is confirmed and connected right now.
@@ -612,7 +643,19 @@ export type TeammateStanding = {
   publicKey: string
   /** Their link is connected and has confirmed key possession. */
   connected: boolean
-  /** When anything was last heard from them, or null if it never has been. */
+  /**
+   * When their picture was last taken, by this machine's clock, or null if one
+   * never has been.
+   *
+   * The age of the snapshot, not of the contact: it moves when a *changed*
+   * snapshot arrives, so a teammate whose worktrees have been static for an
+   * hour has an hour-old one while their machine is connected and fine. Null
+   * versus a number is the fact this carries — a colleague whose app has never
+   * been up while yours was is not a colleague with no worktrees — and the
+   * number itself is the age of what is shown. How long since anything at all
+   * was heard is the link's business, and `PeerLink.lastHeardAt` is where it
+   * is kept.
+   */
   heardAt: number | null
 }
 
