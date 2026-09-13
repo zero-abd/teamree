@@ -1,6 +1,7 @@
 // The right-hand side: which worktree is open, what it is doing, and its panes.
 
 import { useCallback } from 'react'
+import { Dashboard } from '../dashboard/Dashboard'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { PaneTree } from '../panes/PaneTree'
@@ -35,6 +36,8 @@ export function WorkspaceArea({
   const agents = useWorkspaceStore((state) => state.agents)
   const startAgent = useWorkspaceStore((state) => state.startAgent)
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
+  const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
+  const toggleDashboard = useWorkspaceStore((state) => state.toggleDashboard)
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -43,6 +46,10 @@ export function WorkspaceArea({
     [activeWorktreeId, applySplitSizes]
   )
   const onClose = useCallback((terminalId: string) => void closeTerminal(terminalId), [closeTerminal])
+
+  // Before the empty state, not after it: which pane needs you is a question
+  // about every worktree, and it is worth asking with none of them open.
+  if (dashboardOpen) return <Dashboard modifier={modifier} />
 
   if (!worktree || !activeWorktreeId) {
     return (
@@ -73,6 +80,10 @@ export function WorkspaceArea({
               <dt>{shortcutHint('open-palette', modifier)}</dt>
               <dd>go to anything</dd>
             </div>
+            <div>
+              <dt>{shortcutHint('open-dashboard', modifier)}</dt>
+              <dd>every pane</dd>
+            </div>
           </dl>
         </div>
       </main>
@@ -89,6 +100,14 @@ export function WorkspaceArea({
           <p className="workspace__path">{worktree.path}</p>
         </div>
         <div className="workspace__tools">
+          <button
+            type="button"
+            className="button button--ghost button--small"
+            title={`Every pane in every worktree, by what needs you · ${shortcutHint('open-dashboard', modifier)}`}
+            onClick={toggleDashboard}
+          >
+            All panes
+          </button>
           <button
             type="button"
             className={`button button--ghost button--small${changesOpen ? ' button--on' : ''}`}

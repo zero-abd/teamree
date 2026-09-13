@@ -1,0 +1,221 @@
+/* The all-panes view: one row per pane, ordered by what needs a person. It
+   borrows `.activity` from the sidebar, because it is the same reading of the
+   same terminal and a second dot would be a second vocabulary. */
+
+.board {
+  overflow-y: auto;
+}
+
+.board__head {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s4) var(--s4) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.board__identity {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.board__title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.board__lede {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.board__counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  flex: none;
+  list-style: none;
+}
+
+.board-count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: var(--s1) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+}
+
+/* Kept in place at zero rather than removed: the row of counts is read at a
+   glance, and one that reflows as panes change state is read twice. */
+.board-count--zero {
+  border-color: transparent;
+  background: none;
+  color: var(--fg-muted);
+  opacity: 0.6;
+}
+
+.board-count .activity {
+  align-self: center;
+}
+
+.board-count__number {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.board-count--zero .board-count__number {
+  color: inherit;
+  font-weight: 400;
+}
+
+.board__close {
+  padding: var(--s1);
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.board__close:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.board__close svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.board__list {
+  margin: 0;
+  padding: var(--s2) 0 var(--s5);
+  list-style: none;
+}
+
+/* One grid for every row, so the columns line up down the whole list: what it
+   is, what it is doing, where it lives, and how long it has been quiet. */
+.board-row {
+  width: 100%;
+  display: grid;
+  /* The name is capped rather than elastic: on a wide window a stretching name
+     column pushes the worktree it belongs to an inch away from it. */
+  grid-template-columns: auto minmax(8ch, 24ch) auto minmax(12ch, 1fr) minmax(0, 20ch) auto;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: var(--s2) var(--s4);
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.board-row:hover {
+  background: var(--bg-hover);
+}
+
+.board-row .activity {
+  align-self: center;
+}
+
+/* Only a failure earns a marker in the margin. Everything else is ordered
+   already, and a stripe on every row would rank nothing. */
+.board-row--failed {
+  border-left-color: var(--danger);
+}
+
+/* The tag rides inside the name's cell rather than taking a column of its own:
+   only some rows carry one, and a column that is empty on half the list would
+   knock the others out of alignment. */
+.board-row__what {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.board-row__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.board-row__kind {
+  flex: none;
+  padding: 0 var(--s1);
+  border-radius: var(--r1);
+  background: var(--bg-press);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.board-row__state {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.board-row__where {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.board-row__worktree {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-secondary);
+}
+
+.board-row__branch,
+.board-row__project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.board-row__since {
+  justify-self: end;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The columns that say where a pane lives are the first to go: on a narrow
+   window the name and the silence are what the row is for. */
+@media (width <= 900px) {
+  .board-row {
+    grid-template-columns: auto minmax(8ch, 1fr) auto minmax(8ch, 1fr) auto;
+  }
+
+  .board-row__project {
+    display: none;
+  }
+}

@@ -221,6 +221,38 @@ it('never fires two pushes at once', async () => {
   call.mockRestore()
 })
 
+it('opens the worktree a pane lives in, focuses that pane, and leaves the dashboard', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+
+  const panes = await runtimeClient.call('terminal.list', {})
+  // A worktree with more than one pane, so focusing the right one is a claim
+  // that can actually fail.
+  const worktreeId = panes
+    .map((pane) => pane.worktreeId)
+    .find((id, _, all) => all.filter((entry) => entry === id).length > 1)!
+  const elsewhere = useWorkspaceStore
+    .getState()
+    .worktrees.find((entry) => entry.state === 'ready' && entry.id !== worktreeId)!
+
+  await store.openWorktree(elsewhere.id)
+  store.toggleDashboard()
+  expect(useWorkspaceStore.getState().dashboardOpen).toBe(true)
+
+  // Deliberately not the pane that already has the focus there, so the
+  // assertion below is about this call rather than about the stored layout.
+  const seeded = await runtimeClient.call('layout.get', { worktreeId })
+  const target = panes.find((pane) => pane.worktreeId === worktreeId && pane.id !== seeded.focusedTerminalId)!
+
+  await useWorkspaceStore.getState().revealPane(worktreeId, target.id)
+
+  expect(useWorkspaceStore.getState().activeWorktreeId).toBe(worktreeId)
+  expect(useWorkspaceStore.getState().layouts[worktreeId]?.focusedTerminalId).toBe(target.id)
+  // Picking a row is the answer the view was opened to get, so it gets out of
+  // the way rather than leaving the pane it just focused hidden behind it.
+  expect(useWorkspaceStore.getState().dashboardOpen).toBe(false)
+})
+
 it('never forces a worktree removal without asking first', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()

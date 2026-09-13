@@ -34,6 +34,28 @@ export type AgentRow = {
   quietFor: number
 }
 
+/**
+ * One phrase per state, wherever a state is spelled out to a reader.
+ *
+ * Here rather than in a component because the sidebar and the dashboard both
+ * say these words, and two files describing the same four states is how an app
+ * ends up calling one of them two different things.
+ */
+export const ACTIVITY_LABEL: Record<AgentActivity, string> = {
+  working: 'working',
+  quiet: 'waiting — no output',
+  done: 'finished',
+  failed: 'exited with an error'
+}
+
+/** The one-word form, for counts and column headings. */
+export const ACTIVITY_NOUN: Record<AgentActivity, string> = {
+  working: 'working',
+  quiet: 'waiting',
+  done: 'finished',
+  failed: 'failed'
+}
+
 export function activityOf(terminal: Terminal): AgentActivity {
   if (!terminal.running) return terminal.exitCode === 0 ? 'done' : 'failed'
   return terminal.busy ? 'working' : 'quiet'

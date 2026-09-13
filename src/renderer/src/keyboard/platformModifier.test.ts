@@ -95,6 +95,7 @@ describe('workspace shortcuts', () => {
     expect(commandForEvent(event({ key: 'd', metaKey: true, shiftKey: true }), mac)).toBe('split-down')
     expect(commandForEvent(event({ key: 'w', metaKey: true }), mac)).toBe('close-pane')
     expect(commandForEvent(event({ key: 'd', ctrlKey: true }), pc)).toBe('split-right')
+    expect(commandForEvent(event({ key: 'e', metaKey: true }), mac)).toBe('open-dashboard')
   })
 
   it('claims nothing without the modifier', () => {

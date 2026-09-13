@@ -14,7 +14,8 @@ const ACTION_SHORTCUTS: Partial<Record<PaletteAction, WorkspaceCommand>> = {
   'new-terminal': 'new-terminal',
   'split-right': 'split-right',
   'split-down': 'split-down',
-  'toggle-sidebar': 'toggle-sidebar'
+  'toggle-sidebar': 'toggle-sidebar',
+  'open-dashboard': 'open-dashboard'
 }
 
 export function CommandPalette({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
@@ -72,6 +73,9 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         break
       case 'toggle-changes':
         store.toggleChanges()
+        break
+      case 'open-dashboard':
+        store.toggleDashboard()
         break
       case 'toggle-sidebar':
         store.toggleSidebar()
