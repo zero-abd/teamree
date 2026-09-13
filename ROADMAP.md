@@ -306,6 +306,17 @@ The sidebar said a pane was working. It did not say what it was working on.
 Milestone 1 is complete and verified. These are the honest limits of what it does,
 recorded so none of them is discovered by surprise later.
 
+- **A watch can lose the first thing a teammate's pane says, and does so under
+  load.** Reproduced and measured rather than suspected: `paneWatch.ts` holds
+  streamed frames until the scrollback answer arrives and then discards the
+  held output as already-in-the-snapshot, but it clears the flag in a promise
+  continuation while the transport routes a whole decoded batch synchronously —
+  so frames that arrived *after* the answer, and are therefore in no snapshot,
+  are thrown away. Instrumenting the discard under four saturated cores prints
+  the exact lines the tests then time out waiting for. It is silent, and it is
+  in the one display whose whole job is to show a colleague's work truthfully.
+  Being fixed; recorded because it was found by hammering a test that had been
+  called flaky, and "flaky" is where this would have stayed.
 - **A restarted shell is a fresh shell.** Panes and their directories come back, and
   an agent pane comes back with its conversation (see M10), but an ordinary pane's
   scrollback and whatever it was running are gone: the PTY died with the app. A
