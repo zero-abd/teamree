@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { TerminalEvent } from '../../shared/methods'
 import { ErrorCode } from '../../shared/protocol'
 import { isProcessAlive } from './process-tree'
-import { PtySession } from './pty-session'
+import { EXITED_RETENTION_BYTES, PtySession } from './pty-session'
 import type { PtySessionInit } from './pty-session'
 import { canSpawnPty, waitUntil } from './pty-test-support'
 import { isTerminalServiceError } from './service-error'
@@ -169,6 +169,30 @@ describePty('PtySession', () => {
       // line arrived is node-pty's question, not this buffer's, and the test
       // above answers it at a volume that always drains in time.
       expect(session.read()).not.toContain('chatty line 1 ')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    "lets go of most of an exited pane's scrollback and keeps the tail",
+    async () => {
+      // A finished pane appends nothing more, so whatever it is holding is
+      // held purely against the next read. The readers are real and all of
+      // them read the tail, so the tail is what survives.
+      const session = start({ command: 'seq 1 200000; sleep 1' })
+      const events = collect(session)
+
+      await waitUntil(
+        () => session.retainedBytes > EXITED_RETENTION_BYTES,
+        'the running pane to outgrow what an exited one keeps'
+      )
+      await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
+
+      expect(session.retainedBytes).toBeLessThanOrEqual(EXITED_RETENTION_BYTES)
+      // Trimmed, not dropped: `terminal.read` on an exited pane is what the
+      // renderer repaints from and what `teamree terminal read` answers with.
+      expect(session.retainedBytes).toBeGreaterThan(0)
+      expect(session.read().length).toBeGreaterThan(0)
     },
     TEST_TIMEOUT_MS
   )

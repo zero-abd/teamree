@@ -138,8 +138,11 @@ work. `ROADMAP.md` keeps the honest account of what has and has not been run.
 
 Nothing publishes these packages today either, and the same applies: the
 section describes the configured packaging, and building from source is the way
-to run teamree on Linux now. Unlike Windows, this packaging has been built and
-launched for real in CI.
+to run teamree on Linux now. Unlike Windows, this packaging was built and
+launched for real in CI before the matrix was narrowed to macOS — which is
+something, but it is a past tense: nothing builds it on any schedule now, and
+the version numbers below are what the configuration would name rather than
+files anyone can point at.
 
 Nothing warns you about anything here; neither of the mechanisms above exists.
 
@@ -174,10 +177,11 @@ entirely:
 
 ## Putting the `teamree` CLI on PATH
 
-The app ships its own CLI, under `resources/cli/`, and everything the window can
-do the CLI can do — which is how a coding agent drives teamree. It runs under
-the app's own Electron binary in plain-Node mode, so an installed app needs no
-separate Node runtime.
+The app ships its own CLI, under `resources/cli/`. It drives the same runtime
+the window does — projects, worktrees, terminals and the agents on your PATH,
+which is the surface a coding agent needs — while teamwork stays the window's
+alone. It runs under the app's own Electron binary in plain-Node mode, so an
+installed app needs no separate Node runtime.
 
 **On macOS it is a button.** The first time you open an installed build whose
 `teamree` command is not this app's — absent, or a link to another copy — the app

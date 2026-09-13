@@ -167,10 +167,11 @@ describe('the sweep under the watch', () => {
   // The failure this whole file is about, made deterministic: the platform
   // delivers nothing at all, and the roster still has to stop being stale.
   //
-  // On the macOS runner this is not hypothetical — the three tests above fail
-  // there as silence and have never failed on Linux. The fake below simply
-  // never calls anybody back, which is that platform's behaviour with the
-  // timing taken out of it.
+  // The fake below never calls anybody back, which is not a pessimistic
+  // hypothetical but the measured common case. Running the three tests above on
+  // a mac with every raw `fs.watch` callback logged: in three runs out of eight
+  // no handle spoke at all, and under parallel load more than nine in ten went
+  // that way. Each of those was reported by the sweep and by nothing else.
   it('notices a key that no watch ever mentioned', async () => {
     const root = await checkout()
     await writeMemberFile(root, 'ana')
@@ -238,14 +239,22 @@ describe('the sweep under the watch', () => {
   })
 
   it('backs off, so a project nothing is happening to is not being polled', () => {
-    // The cost of the floor, stated: four steps from the short delay after an
-    // attach to half a minute, and no further.
+    // The cost of the floor, stated: a run of close sweeps over the window a
+    // fresh handle is deaf for, then four steps to half a minute, and no
+    // further. The close run is the part that is not negotiable — a single
+    // sample after an attach can land before the change does, and on darwin the
+    // event that would have covered the difference is the one that was lost.
     const fake = fakeWatches()
     const clock = fakeClock()
     const watcher = new TeamreeWatcher({ onChange: () => {}, watch: fake.watch, sweep: clock.sweep })
     watcher.sync([{ id: 'p1', path: '/repo' }])
-    for (let sweeps = 0; sweeps < 6; sweeps += 1) clock.tick()
+    for (let sweeps = 0; sweeps < 11; sweeps += 1) clock.tick()
     expect(clock.delays).toEqual([
+      DEFAULT_SWEEP_FROM_MS,
+      DEFAULT_SWEEP_FROM_MS,
+      DEFAULT_SWEEP_FROM_MS,
+      DEFAULT_SWEEP_FROM_MS,
+      DEFAULT_SWEEP_FROM_MS,
       DEFAULT_SWEEP_FROM_MS,
       800,
       3_200,
@@ -254,6 +263,101 @@ describe('the sweep under the watch', () => {
       DEFAULT_SWEEP_UNTIL_MS,
       DEFAULT_SWEEP_UNTIL_MS
     ])
+    watcher.close()
+  })
+
+  it('does not back off while it is still the thing finding the changes', async () => {
+    // The old shape answered "the watch missed that" by looking less often, so
+    // every miss bought the next miss a longer silence. A sweep that finds
+    // something no watch mentioned is evidence about the watch, and the answer
+    // to it is to stay close until things go quiet.
+    const root = await checkout()
+    const fake = fakeWatches()
+    const clock = fakeClock()
+    let run: (() => void) | undefined
+    const watcher = new TeamreeWatcher({
+      onChange: () => {},
+      watch: fake.watch,
+      sweep: clock.sweep,
+      schedule: (task) => {
+        run = task
+        return () => {
+          run = undefined
+        }
+      }
+    })
+    watcher.sync([{ id: 'p1', path: root }])
+    // Nothing happens for long enough that the backoff has been spent.
+    for (let sweeps = 0; sweeps < 8; sweeps += 1) clock.tick()
+    expect(clock.delays.at(-1)).toBe(12_800)
+
+    // Then the pull lands, and not one watch says so.
+    await writeMemberFile(root, 'ana')
+    clock.tick()
+    run?.()
+    expect(clock.delays.at(-1)).toBe(DEFAULT_SWEEP_FROM_MS)
+    watcher.close()
+  })
+
+  it('sweeps closely again when a watch dies, because that is when nothing is listening', () => {
+    // A branch switch that removes `.teamree` kills two watches, and what has
+    // to notice the directory coming back is a watch on the same stream the
+    // loss just rebuilt. Leaving the backoff where it was left the project up
+    // to half a minute behind its own checkout — and marked unwatched — waiting
+    // for the report that would have re-attached it.
+    const fake = fakeWatches()
+    const clock = fakeClock()
+    const watcher = new TeamreeWatcher({ onChange: () => {}, watch: fake.watch, sweep: clock.sweep })
+    watcher.sync([{ id: 'p1', path: '/repo' }])
+    for (let sweeps = 0; sweeps < 8; sweeps += 1) clock.tick()
+    expect(clock.delays.at(-1)).toBe(12_800)
+
+    fake.fail(join('/repo', '.teamree'), Object.assign(new Error('gone'), { code: 'ENOENT' }))
+    expect(clock.delays.at(-1)).toBe(DEFAULT_SWEEP_FROM_MS)
+
+    // And a watch that dies noisily cannot keep pushing the sweep out ahead of
+    // itself: the handle is already gone the second time.
+    const armed = clock.delays.length
+    fake.fail(join('/repo', '.teamree'), new Error('and again'))
+    expect(clock.delays.length).toBe(armed)
+    watcher.close()
+  })
+
+  it('finds a key that landed after the first sweep had already looked', async () => {
+    // The failing case on macOS, with the timing taken out of it: the watch
+    // delivers nothing, and the one sweep that was scheduled for just after the
+    // attach runs a moment too early. What used to happen next was 800ms of
+    // silence, then 3.2s, then 12.8s — past every budget anyone gives a pull.
+    const root = await checkout()
+    const fake = fakeWatches()
+    const clock = fakeClock()
+    let reports = 0
+    let run: (() => void) | undefined
+    const watcher = new TeamreeWatcher({
+      onChange: () => {
+        reports += 1
+      },
+      watch: fake.watch,
+      sweep: clock.sweep,
+      schedule: (task) => {
+        run = task
+        return () => {
+          run = undefined
+        }
+      }
+    })
+    watcher.sync([{ id: 'p1', path: root }])
+
+    // The sweep looks before the pull has landed, and finds the checkout as it
+    // was. It must not treat that as a reason to look less often.
+    clock.tick()
+    expect(reports).toBe(0)
+    expect(clock.delays.at(-1)).toBe(DEFAULT_SWEEP_FROM_MS)
+
+    await writeMemberFile(root, 'ana')
+    clock.tick()
+    run?.()
+    expect(reports).toBe(1)
     watcher.close()
   })
 
@@ -276,9 +380,8 @@ describe('the sweep under the watch', () => {
       }
     })
     watcher.sync([{ id: 'p1', path: '/repo' }])
-    clock.tick()
-    clock.tick()
-    expect(clock.delays.at(-1)).toBe(3_200)
+    for (let sweeps = 0; sweeps < 8; sweeps += 1) clock.tick()
+    expect(clock.delays.at(-1)).toBe(12_800)
 
     // `.teamree` has appeared, so the next `sync` attaches a watch on it.
     fake.allow(join('/repo', '.teamree'))

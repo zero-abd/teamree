@@ -1,22 +1,69 @@
-/* Window frame: sidebar, a draggable seam, the workspace, and the status rail
-   pinned across the bottom. */
+/* Window frame: the title strip, then the sidebar, a draggable seam, the
+   workspace, and the status rail pinned across the bottom. */
 
 .shell {
   display: grid;
   grid-template-columns: min(var(--sidebar-width, 272px), 45%) 1px minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: var(--titlebar-h, 38px) minmax(0, 1fr) auto;
   grid-template-areas:
+    'titlebar titlebar titlebar'
     'sidebar seam workspace'
     'status status status';
   height: 100%;
   background: var(--bg-window);
 }
 
+/* Hiding the sidebar drops its column and its seam. The strip spans whatever
+   columns remain, so it has to be respelled here too. */
 .shell--collapsed {
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
+    'titlebar'
     'workspace'
     'status';
+}
+
+/* The window's drag region. Without this the macOS window cannot be moved at
+   all, because `titleBarStyle: 'hiddenInset'` takes the native bar away. */
+.titlebar {
+  grid-area: titlebar;
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+/* macOS keeps drawing the window buttons over the top-left of our content, so
+   the strip starts past them. The inset comes from the same constant that
+   places the buttons; see src/shared/windowChrome.ts. */
+.titlebar--mac {
+  padding-left: var(--titlebar-inset, 84px);
+}
+
+/* A drag region swallows clicks on anything inside it, so anything interactive
+   added here has to opt back out. */
+.titlebar button,
+.titlebar a,
+.titlebar input {
+  -webkit-app-region: no-drag;
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: var(--text-lg);
+  font-weight: 620;
+  letter-spacing: -0.015em;
+  color: var(--fg);
+}
+
+.wordmark__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .sidebar {
