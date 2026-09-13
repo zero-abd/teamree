@@ -152,8 +152,10 @@ ask for your password or Touch ID.
 Being exact about that last paragraph, because the rest of this document is
 written from observation and it would be wrong to let one paragraph pass for the
 same thing: the `xattr` command above was run against this build and watched to
-work, and the dialog is quoted off the screen. The System Settings route was not
-clicked through. `Open Anyway` is the button macOS ships for this case — it is
+work, the dialog is quoted off the screen, and **Done** was pressed on it and
+dismissed it. The System Settings route was not clicked through — an attempt was
+made and defeated by a shared display rather than by anything wrong with the
+route. `Open Anyway` is the button macOS ships for this case — it is
 in `CodeEvaluation.loctable` next to the strings that produce the dialog — but
 nobody here has confirmed how that pane looks on macOS 26 with teamree in it. If
 you take that route and it does not match, the command is the one that was
