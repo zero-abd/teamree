@@ -530,6 +530,9 @@ describe('WorktreeWatcher', () => {
       throw error
     } finally {
       watcher.close()
+      // Claimed even on a path that never awaited it, so a rejection cannot
+      // outlive the test as the unhandled one this test used to leave behind.
+      void reported.catch(() => {})
     }
   })
 })
