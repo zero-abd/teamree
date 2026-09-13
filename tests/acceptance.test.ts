@@ -41,6 +41,13 @@ beforeAll(async () => {
   env = { ...process.env, TEAMREE_USER_DATA_DIR: userDataDir }
 
   execFileSync('git', ['init', '-b', 'main', repoPath])
+  // On the repository itself, not just on this file's own git calls: the
+  // commits that matter here are made by the app, through its own CLI, and it
+  // uses whatever identity the machine has. A fresh CI runner has none, so a
+  // fixture that configured only its own commands passed locally and failed
+  // there with "Author identity unknown".
+  git(['config', 'user.email', 'test@teamree.local'], repoPath)
+  git(['config', 'user.name', 'teamree test'], repoPath)
   writeFileSync(join(repoPath, 'README.md'), '# demo\n')
   git(['add', '.'], repoPath)
   git(['commit', '-m', 'initial'], repoPath)
