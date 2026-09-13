@@ -285,7 +285,9 @@ function StartPointStatus({
 
   return (
     <>
-      <code>{branchName}</code> from <code>{summaryRef}</code>
+      {/* Before the task is typed there is no branch name to show, and an empty
+          <code> reads as a missing value rather than as one not yet decided. */}
+      {branchName ? <code>{branchName}</code> : 'The new branch'} from <code>{summaryRef}</code>
       {summaryOption ? (
         <>
           {' '}

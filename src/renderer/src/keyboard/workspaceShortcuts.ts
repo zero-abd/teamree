@@ -27,7 +27,7 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'split-down', chord: { key: 'd', shift: true }, title: 'Split pane down' },
   { command: 'close-pane', chord: { key: 'w' }, title: 'Close pane' },
   { command: 'new-terminal', chord: { key: 't' }, title: 'New terminal' },
-  { command: 'new-worktree', chord: { key: 'n' }, title: 'New worktree' },
+  { command: 'new-worktree', chord: { key: 'n' }, title: 'New task' },
   { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Toggle sidebar' },
   { command: 'focus-next-pane', chord: { key: ']' }, title: 'Focus next pane' },
   { command: 'open-palette', chord: { key: 'k' }, title: 'Go to worktree or command' },

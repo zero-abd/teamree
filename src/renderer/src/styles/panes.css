@@ -239,6 +239,10 @@
 }
 
 .pane__restored--agent {
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
 /* Find bar ---------------------------------------------------------------- */
 
 .pane-search {

@@ -50,7 +50,10 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const chosenKind = agentKind ?? defaultAgentKind(agents)
   const agent = agentByKind(agents, chosenKind)
 
-  const branchName = branchNameFromTask(task)
+  // Empty until there is something to slugify: the rule's fallback is the word
+  // "worktree", and showing it before a key is pressed promises a branch name
+  // that has nothing to do with the task about to be typed.
+  const branchName = task.trim() ? branchNameFromTask(task) : ''
   const startedFrom = startPoint.text.trim()
   const canSubmit = task.trim().length > 0 && startedFrom.length > 0
 
@@ -87,7 +90,12 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
             spellCheck={true}
           />
           <span className="field__hint">
-            branch <code>{branchName}</code> · Shift+Enter for a new line
+            {branchName ? (
+              <>
+                branch <code>{branchName}</code> ·{' '}
+              </>
+            ) : null}
+            Shift+Enter for a new line
           </span>
         </label>
 

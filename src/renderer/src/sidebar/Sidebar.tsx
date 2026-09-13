@@ -94,8 +94,8 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                 <button
                   type="button"
                   className="button button--ghost button--icon"
-                  title={`New worktree in ${project.name} · ${newWorktreeHint}`}
-                  aria-label={`New worktree in ${project.name}`}
+                  title={`New task in ${project.name} · ${newWorktreeHint}`}
+                  aria-label={`New task in ${project.name}`}
                   onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
                 >
                   <svg viewBox="0 0 14 14" aria-hidden="true">

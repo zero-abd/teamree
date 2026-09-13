@@ -305,6 +305,15 @@ select.field__input {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* Padded like a form body, so the input lines up with the title above it
+     rather than running flush to the panel's edge. */
+  padding: 0 var(--s5) var(--s5);
+}
+
+/* A palette is a list to scan, not fields to fill, so it wants more width than
+   a form does. The panel follows the content — declaring the width on the
+   content alone left it overflowing a 440px panel by 120px. */
+.modal:has(.palette) {
   width: min(560px, 86vw);
 }
 

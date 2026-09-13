@@ -67,7 +67,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
 }
 
 const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[] = [
-  { id: 'new-worktree', label: 'New worktree', keywords: 'create task branch start' },
+  { id: 'new-worktree', label: 'New task', keywords: 'create worktree branch start agent' },
   { id: 'new-terminal', label: 'New terminal', keywords: 'shell pane open' },
   { id: 'split-right', label: 'Split right', keywords: 'pane vertical column' },
   { id: 'split-down', label: 'Split down', keywords: 'pane horizontal row' },

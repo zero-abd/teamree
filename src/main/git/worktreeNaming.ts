@@ -15,7 +15,6 @@ import { slugifyBranchName } from '../../shared/branchName'
  */
 export const slugify = slugifyBranchName
 
-
 /**
  * Windows refuses to create a file or directory whose name is a DOS device,
  * whatever the extension. That kills both halves of a worktree at once: the
