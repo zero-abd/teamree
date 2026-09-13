@@ -15,8 +15,10 @@
 //
 // The panes underneath it are the one exception, and only in one direction. A
 // pane can be opened for *reading*, so it is a real button and says "watch" —
-// and what it opens is a viewer that cannot be typed into, rather than a pane
-// of your own that happens to be somebody else's.
+// and what it opens is a pane in the workspace that says whose machine it is on
+// every line of its chrome, rather than a pane of your own that happens to be
+// somebody else's. Pressing a row that is already open closes it again, which
+// is what keeps stopping reachable for somebody whose eye is on this list.
 //
 // **Whether this is a live view or a remembered one.** A row whose teammate is
 // away stays exactly where it was — a worktree disappearing reads as a worktree
@@ -28,12 +30,15 @@ import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } fr
 
 type TeammateWorktreeRowProps = {
   row: TeammateWorktreeRowModel
-  /** The pane this window currently has open for reading, if any. */
-  watchingPaneId: string | null
+  /**
+   * The panes of this project the window has open, which can be more than one:
+   * they take slots in the workspace now rather than a single floating card.
+   */
+  watchingPaneIds: readonly string[]
   onWatch: (pane: TeammatePaneRow) => void
 }
 
-export function TeammateWorktreeRow({ row, watchingPaneId, onWatch }: TeammateWorktreeRowProps): React.JSX.Element {
+export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateWorktreeRowProps): React.JSX.Element {
   return (
     <li className={`worktree worktree--teammate worktree--${row.state}${row.staleness ? ' worktree--stale' : ''}`}>
       <div className="worktree__row worktree__row--teammate" title={teammateTitle(row)}>
@@ -71,28 +76,33 @@ export function TeammateWorktreeRow({ row, watchingPaneId, onWatch }: TeammateWo
 
       {row.panes.length > 0 ? (
         <ul className="panes panes--teammate">
-          {row.panes.map((pane) => (
-            <li key={pane.terminalId}>
-              <button
-                type="button"
-                className={`pane-row pane-row--teammate pane-row--watchable${
-                  pane.terminalId === watchingPaneId ? ' pane-row--watching' : ''
-                }`}
-                title={`Watch ${row.handle}’s ${pane.label} · ${ACTIVITY_LABEL[pane.activity]} · reading only`}
-                aria-pressed={pane.terminalId === watchingPaneId}
-                onClick={() => onWatch(pane)}
-              >
-                <span className="pane-row__head">
-                  <span className={`activity activity--${pane.activity}`} aria-hidden="true" />
-                  <span className="pane-row__label">{pane.label}</span>
-                  <span className="pane-row__since">{sinceLabel(pane.quietFor)}</span>
-                </span>
-                {/* Only ever a line the pane actually printed while somebody had
+          {row.panes.map((pane) => {
+            const watching = watchingPaneIds.includes(pane.terminalId)
+            return (
+              <li key={pane.terminalId}>
+                <button
+                  type="button"
+                  className={`pane-row pane-row--teammate pane-row--watchable${watching ? ' pane-row--watching' : ''}`}
+                  title={
+                    watching
+                      ? `Stop watching ${row.handle}’s ${pane.label}`
+                      : `Watch ${row.handle}’s ${pane.label} · ${ACTIVITY_LABEL[pane.activity]} · reading only`
+                  }
+                  aria-pressed={watching}
+                  onClick={() => onWatch(pane)}
+                >
+                  <span className="pane-row__head">
+                    <span className={`activity activity--${pane.activity}`} aria-hidden="true" />
+                    <span className="pane-row__label">{pane.label}</span>
+                    <span className="pane-row__since">{sinceLabel(pane.quietFor)}</span>
+                  </span>
+                  {/* Only ever a line the pane actually printed while somebody had
                     it open, which is why it is absent on every other row. */}
-                {pane.evidence ? <span className="pane-row__evidence">{pane.evidence}</span> : null}
-              </button>
-            </li>
-          ))}
+                  {pane.evidence ? <span className="pane-row__evidence">{pane.evidence}</span> : null}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       ) : null}
     </li>

@@ -2,74 +2,84 @@
    Watching a teammate's pane.
 
    A window onto somebody else's machine, and it is built to be impossible to
-   mistake for one of your own panes. It floats over the window rather than
-   taking a slot in the pane tree, it says whose it is and that it is read-only
-   in words, and the terminal inside it is the owner's size rather than yours.
+   mistake for one of your own panes — while being, in every other respect,
+   exactly one of your own panes. It used to float over the window at a fixed
+   size in a fixed corner, which made the one surface showing another person's
+   terminal the one surface that could not be moved, resized or closed the way
+   everything else here is. So it takes a slot beside the workspace now, with
+   the pane chrome, the pane close button and the pane gutters, and everything
+   below is only what has to be *different* about it: an accent border that no
+   local pane wears, the owner's handle first on the bar, and the sentence about
+   whose machine a keystroke lands on.
 
    The letterboxing is the part that matters and it is not cosmetic:
-   `docs/teamwork.md` says a watcher with a smaller window is letterboxed
-   rather than resizing somebody else's pty under a program that is only being
-   read. So the emulator is built at their columns and rows, and the whole
-   picture is scaled to fit — a CSS transform, which touches nothing on their
-   machine — with the frame's own ground showing where it does not reach.
+   `docs/teamwork.md` says a watcher with a smaller window is letterboxed rather
+   than resizing somebody else's pty under a program that is only being read. So
+   the emulator is built at their columns and rows, and the whole picture is
+   scaled to fit — a CSS transform, which touches nothing on their machine —
+   with the frame's own ground showing where it does not reach. Dragging the
+   gutter beside this pane therefore changes the scale and nothing else; their
+   pty never hears about it.
    --------------------------------------------------------------------------- */
 
-.watch {
-  position: fixed;
-  inset: auto var(--s4) var(--s4) auto;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  width: min(880px, 70vw);
-  height: min(560px, 70vh);
-  overflow: hidden;
-  border: 1px solid var(--accent-line);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-pop);
+/* The accent is the whole of what says "not yours" at a glance. It is on the
+   border rather than the background so the terminal inside still reads as a
+   terminal, and it is a step stronger than the focused border a local pane
+   gets, which this pane also gets when it is focused. */
+.pane--watched {
+  border-color: var(--accent-line);
+  /* The workspace beside it pads its own pane area; this pane is a direct
+     child of the window's split and has to keep itself off the edges. The
+     gutter supplies the gap on the left, so there is none here. */
+  margin: var(--s3) var(--s3) var(--s3) 0;
 }
 
-.watch__head {
-  display: flex;
-  flex: none;
-  gap: var(--s2);
-  align-items: center;
-  padding: var(--s2) var(--s3);
-  border-bottom: 1px solid var(--line);
+.pane--watched.pane--focused {
+  border-color: var(--accent);
 }
 
-.watch__title {
-  display: flex;
-  min-width: 0;
-  gap: var(--s2);
-  align-items: baseline;
+/* The bar is a pane bar with one more thing to say than a pane bar has room
+   for, so it is allowed to be taller than the 24px row of a local one rather
+   than dropping the sentence. */
+.pane__bar--watched {
+  height: auto;
+  min-height: 24px;
+  padding: 3px var(--s2) 3px var(--s3);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-raised);
 }
 
+/* First on the bar, ahead of the pane's own name, because it is the fact that
+   changes what every other fact on the bar means. */
 .watch__owner {
+  flex: none;
   color: var(--accent);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
-.watch__label {
-  overflow: hidden;
-  color: var(--fg-secondary);
-  font-size: var(--text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Spelled out, always, never an icon. A symbol is a thing a reader has to
-   already know the meaning of; this says whose machine their keyboard is on
-   and it is worth the room. */
+   already know the meaning of; this says whose machine their keyboard is on and
+   it is worth the room. It ellipsises in a narrow slot rather than wrapping the
+   bar to two lines, and the whole sentence stays on the bar's own title. */
 .watch__typing {
+  min-width: 0;
   margin-left: auto;
+  overflow: hidden;
   padding: 1px var(--s2);
   border: 1px solid var(--line);
   border-radius: var(--r1);
   color: var(--fg-muted);
   font-size: var(--text-xs);
   letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The sentence takes whatever room is left over, so the size must not claim it
+   too: two automatic margins on one row share the free space between them and
+   would leave the sentence stranded in the middle of the bar. */
+.pane__bar--watched .pane__meta {
+  margin-left: 0;
 }
 
 /* A refusal replaces the promise rather than sitting beside it: the sentence
@@ -77,18 +87,6 @@
 .watch__typing--refused {
   border-color: var(--warning);
   color: var(--warning);
-}
-
-.watch__size {
-  flex: none;
-  color: var(--fg-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-}
-
-.watch__close {
-  flex: none;
 }
 
 /* The bars. Whatever is left over around the owner's picture is this ground,

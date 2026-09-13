@@ -2,6 +2,9 @@
 
 .workspace {
   display: flex;
+  /* It fills its cell of `.workspace-split`, which is what holds the grid area
+     now that a teammate's pane can take a slot beside it. */
+  flex: 1;
   flex-direction: column;
   min-width: 0;
   min-height: 0;

@@ -11,8 +11,15 @@
 //
 // The toolbar is here too, for the one claim on it that is a promise about
 // somebody's repository rather than a label: that Push never forces.
+//
+// And the slot a teammate's pane takes beside all of it. That pane used to
+// float over the window; the thing to prove now is that it is laid out as an
+// ordinary sibling of the workspace — a cell with a gutter, which is what makes
+// it draggable — and that it stays put through the navigations that replace
+// everything else in this area, because unmounting it would close and reopen a
+// stream nobody stopped watching.
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Layout, Project, TeamworkStatus, Worktree, WorktreeStatus } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
@@ -31,6 +38,13 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 // Each has its own coverage; none of them decides which placeholder is right.
 vi.mock('../panes/PaneTree', () => ({ PaneTree: () => <div data-testid="panes" /> }))
+// Standing in for the whole viewer, which is exercised in its own file: what
+// this one decides is which panes exist and where they sit, not what is in them.
+vi.mock('../terminal/WatchedPaneView', () => ({
+  WatchedPaneView: ({ handle, paneId }: { handle: string; paneId: string }) => (
+    <div data-testid={`watched-${handle}-${paneId}`} />
+  )
+}))
 vi.mock('./ChangesPanel', () => ({ ChangesPanel: () => null }))
 vi.mock('../dashboard/Dashboard', () => ({ Dashboard: () => <div data-testid="dashboard" /> }))
 vi.mock('./WorktreeTabs', () => ({ WorktreeTabs: () => null }))
@@ -387,6 +401,93 @@ describe('the toolbar and the agents on this machine', () => {
     expect(within(tools).queryByRole('button', { name: 'codex' })).toBeNull()
     for (const button of within(tools).getAllByRole('button')) fireEvent.click(button)
     expect(startAgent).not.toHaveBeenCalled()
+  })
+})
+
+describe('a teammate’s pane beside your own', () => {
+  const watch = (handle: string, paneId: string) => ({
+    id: `watch:p1:${paneId}`,
+    projectId: 'p1',
+    paneId,
+    label: 'claude',
+    handle
+  })
+
+  const openWorktreeWith = (watches: ReturnType<typeof watch>[]): void => {
+    seed({
+      projects: [project],
+      worktrees: [worktree()],
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout() },
+      watches
+    })
+    mount()
+  }
+
+  // No gutter and no second cell: a window nobody is watching from must look
+  // exactly as it did before any of this existed.
+  it('takes no room at all while nobody is being watched', () => {
+    openWorktreeWith([])
+    expect(document.querySelectorAll('.workspace-split > .split__cell')).toHaveLength(1)
+    expect(screen.queryByRole('separator')).toBeNull()
+  })
+
+  it('takes a cell of its own, with a gutter to drag between it and the workspace', () => {
+    openWorktreeWith([watch('priya', 'priya:t7')])
+    expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
+    expect(document.querySelectorAll('.workspace-split > .split__cell')).toHaveLength(2)
+    expect(screen.getAllByRole('separator')).toHaveLength(1)
+  })
+
+  it('gives every watched pane a cell, and a gutter between each pair', () => {
+    openWorktreeWith([watch('priya', 'priya:t7'), watch('ana', 'ana:t2')])
+    expect(document.querySelectorAll('.workspace-split > .split__cell')).toHaveLength(3)
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
+  })
+
+  // The claim the whole change rests on: it is resized by the same handle, the
+  // same arithmetic and the same arrow keys as two of your own panes, because
+  // it is literally the same component doing it.
+  it('is resized by the gutter, and the width is the window’s to keep', () => {
+    const setWatchSizes = vi.fn()
+    seed({
+      projects: [project],
+      worktrees: [worktree()],
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout() },
+      watches: [watch('priya', 'priya:t7')],
+      setWatchSizes
+    })
+    mount()
+    // jsdom has no layout, so the axis a drag divides has to be stated.
+    const split = document.querySelector('.workspace-split') as HTMLElement
+    Object.defineProperty(split, 'clientWidth', { get: () => 1000 })
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowLeft' })
+    const [sizes] = setWatchSizes.mock.calls[0] as [number[]]
+    expect(sizes).toHaveLength(2)
+    expect(sizes[0] ?? 1).toBeLessThan(0.5)
+    expect((sizes[0] ?? 0) + (sizes[1] ?? 0)).toBeCloseTo(1)
+  })
+
+  // Every navigation in this area replaces what is under it. A watched pane
+  // that went with it would close its subscription and reopen it on the way
+  // back, which is the relay budget paid twice for a pane nobody closed.
+  it('stays where it is when the pane board takes the area', () => {
+    openWorktreeWith([watch('priya', 'priya:t7')])
+    act(() => {
+      useWorkspaceStore.setState({ dashboardOpen: true })
+    })
+    expect(screen.getByTestId('dashboard')).toBeTruthy()
+    expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
+  })
+
+  // The window somebody is most likely to be watching a teammate from is the
+  // one with nothing of their own open.
+  it('stays where it is with no worktree open at all', () => {
+    seed({ projects: [project], watches: [watch('priya', 'priya:t7')] })
+    mount()
+    expect(screen.getByRole('heading', { name: 'Nothing open' })).toBeTruthy()
+    expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
   })
 })
 
