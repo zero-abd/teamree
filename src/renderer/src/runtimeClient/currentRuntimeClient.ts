@@ -9,9 +9,9 @@
 // with no Electron, no git, and no PTYs.
 
 import type { RuntimeClient } from './RuntimeClientContract'
-import { createSeededRuntimeClient } from './seededRuntimeClient'
+import { createRuntimeClient } from '../runtime'
 
-export const runtimeClient: RuntimeClient = createSeededRuntimeClient()
+export const runtimeClient: RuntimeClient = createRuntimeClient()
 
 /** True while the UI is driven by seeded data; the status bar says so. */
-export const RUNTIME_IS_SEEDED = true
+export const RUNTIME_IS_SEEDED = false
