@@ -73,6 +73,11 @@ async function openClient(endpoint: string, name: string): Promise<Client> {
   }
 }
 
+/** The same wait, for a condition that has no value to hand back. */
+function waitForTrue(predicate: () => boolean, description: string): Promise<true> {
+  return waitUntil(() => (predicate() ? true : undefined), description)
+}
+
 async function waitUntil<T>(read: () => T | undefined, description: string, timeoutMs = 5_000): Promise<T> {
   const deadline = Date.now() + timeoutMs
   for (;;) {
@@ -86,6 +91,13 @@ async function waitUntil<T>(read: () => T | undefined, description: string, time
 let userDataDir: string
 let runtime: Runtime
 let repo: TempRepo
+/**
+ * What the workspace bus carries with nobody subscribed. The runtime keeps a
+ * listener of its own — teamwork feeds off the same bus — so the counts below
+ * are read against this rather than against zero, and stay honest if the app
+ * grows another one.
+ */
+let restingListeners: number
 
 beforeAll(async () => {
   userDataDir = await mkdtemp(join(tmpdir(), 'teamree-stream-e2e-'))
@@ -99,6 +111,7 @@ beforeAll(async () => {
     onError: () => undefined
   })
   expect(runtime.endpoint).not.toBe('')
+  restingListeners = runtime.context.workspaceEvents.listenerCount
 }, 30_000)
 
 afterAll(async () => {
@@ -135,22 +148,47 @@ describe('workspace stream across connections', () => {
 
     watcher.close()
     mutator.close()
+    // Waited for rather than assumed: the case below counts subscriptions on
+    // this same runtime and must not be racing this one's teardown.
+    await waitForTrue(
+      () =>
+        runtime.context.subscriptions.size === 0 && runtime.context.workspaceEvents.listenerCount === restingListeners,
+      "this case's clients to be forgotten"
+    )
   }, 30_000)
 
-  it('stops streaming to a client that has gone away', async () => {
+  it("drops a subscription when its client's socket dies", async () => {
+    // Asserted on the runtime, not on the dead client's frame list. A client
+    // whose socket has been destroyed cannot receive a frame whatever the
+    // server does, so "no events arrived here" is true of a correct runtime and
+    // equally true of one streaming into the void forever — it is not evidence
+    // of anything. What the socket dying has to cause is server-side: the
+    // subscription gone, and the workspace bus listener that backed it gone
+    // with it, because a runtime that leaks one listener per client that ever
+    // connected degrades over a day of use.
+    //
+    // This is the only place the whole chain runs for real. socketServer.test
+    // drops a real socket but against a stand-in handler and a hand-built hub;
+    // workspaceSubscription.test asserts the listener count but reaches in and
+    // calls closeConnection itself, so neither of them would notice the socket
+    // 'close' event failing to reach the hub.
+    const hub = runtime.context.subscriptions
+    const bus = runtime.context.workspaceEvents
+
     const watcher = await openClient(runtime.endpoint, 'doomed')
     const mutator = await openClient(runtime.endpoint, 'survivor')
-    const { subscription } = await watcher.call<{ subscription: string }>('workspace.subscribe')
+    await watcher.call<{ subscription: string }>('workspace.subscribe')
+    expect(hub.size).toBe(1)
+    expect(bus.listenerCount).toBe(restingListeners + 1)
 
     watcher.close()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await waitForTrue(() => hub.size === 0, "the runtime to drop the dead connection's subscription")
+    expect(bus.listenerCount).toBe(restingListeners)
 
     const projects = await mutator.call<Project[]>('project.list')
     // Removing the project the first case added is a real mutation with nobody
     // left to hear it; the runtime must survive it and keep serving.
     for (const project of projects) await mutator.call('project.remove', { projectId: project.id })
-
-    expect(watcher.streamEvents(subscription)).toEqual([])
     expect(await mutator.call<Project[]>('project.list')).toEqual([])
     mutator.close()
   }, 30_000)
