@@ -398,7 +398,64 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(24)
+    expect(data.commands.length).toBe(26)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
+  })
+})
+
+describe('the CLI on the subject of itself', () => {
+  const CLI_STATUS = {
+    installable: true,
+    platform: 'darwin',
+    source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+    destination: '/usr/local/bin/teamree',
+    directory: '/usr/local/bin',
+    state: 'elsewhere',
+    resolved: '/Users/ann/Downloads/teamree.app/Contents/Resources/cli/teamree',
+    needsAdministrator: true,
+    onPath: 'login',
+    readAt: 1700000000000
+  }
+
+  const handler: StubHandler = (method) => {
+    if (method === 'cli.status') return CLI_STATUS
+    if (method === 'cli.install') {
+      return {
+        outcome: 'replaced',
+        replaced: CLI_STATUS.resolved,
+        administrator: true,
+        status: { ...CLI_STATUS, state: 'linked', resolved: CLI_STATUS.source, needsAdministrator: true }
+      }
+    }
+    return defaultHandler(method, undefined, { id: 'x', emit: () => {}, respond: () => {} })
+  }
+
+  it('names the other copy a link leads to, which is the confusing one', async () => {
+    const cli = await harness(handler)
+    const result = await cli.run(['cli', 'status'])
+    expect(result.code).toBe(ExitCode.Success)
+    expect(result.out).toContain('/usr/local/bin/teamree')
+    expect(result.out).toContain('/Users/ann/Downloads/teamree.app/Contents/Resources/cli/teamree')
+    expect(result.out).toContain('which is not this app')
+    expect(result.out).toContain('needed to write /usr/local/bin')
+  })
+
+  it('says what installing actually did, password included', async () => {
+    const cli = await harness(handler)
+    const result = await cli.run(['cli', 'install'])
+    expect(result.code).toBe(ExitCode.Success)
+    expect(result.out).toContain('now points at /Applications/teamree.app/Contents/Resources/cli/teamree')
+    expect(result.out).toContain('used to point at /Users/ann/Downloads')
+    expect(result.out).toContain('An administrator password was asked for.')
+  })
+
+  it('passes a refusal on as a failure rather than swallowing it', async () => {
+    const cli = await harness((method) => {
+      if (method === 'cli.install') throw new StubError('conflict', 'There is a regular file at /usr/local/bin/teamree')
+      return handler(method, undefined, { id: 'x', emit: () => {}, respond: () => {} })
+    })
+    const result = await cli.run(['cli', 'install'])
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(result.err).toContain('regular file')
   })
 })

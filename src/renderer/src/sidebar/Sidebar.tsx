@@ -12,6 +12,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import type { PaneWatchers } from '@shared/entities'
+import { offerCliInstall } from '../dialogs/cliInstallModel'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import type { PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
@@ -55,6 +56,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const teamwork = useWorkspaceStore((state) => state.teamwork)
   const teammates = useWorkspaceStore((state) => state.teammates)
+  const cli = useWorkspaceStore((state) => state.cli)
 
   // No box sets this any more; the palette does the finding. Kept as the one
   // place the empty-state wording asks "is this filtered or simply empty".
@@ -253,6 +255,22 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
           )
         })}
       </div>
+
+      {/* The one piece of chrome in this app that argues for itself: it is here
+          only while the CLI is not linked to this build, and it goes as soon as
+          it is. The palette reaches the same panel at any time. */}
+      {offerCliInstall(cli) ? (
+        <div className="sidebar__foot">
+          <button
+            type="button"
+            className="sidebar__cli"
+            title={`Link ${cli?.destination ?? 'the teamree CLI'} to this app`}
+            onClick={() => openDialog({ kind: 'install-cli' })}
+          >
+            Put teamree on my PATH
+          </button>
+        </div>
+      ) : null}
 
       {/* Over the window rather than in the pane tree, because it is not one of
           your panes: it is a window onto somebody else's machine, and it goes

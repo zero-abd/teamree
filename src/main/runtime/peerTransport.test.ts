@@ -249,6 +249,11 @@ describe('what a teammate can reach', () => {
     ])
     expect(PEER_METHODS).not.toContain('terminal.resize')
     expect(PEER_METHODS).not.toContain('terminal.close')
+    // A teammate does not get to write a symlink into /usr/local/bin here, and
+    // does not get to ask for a password dialog on somebody else's screen.
+    expect(PEER_METHODS).not.toContain('cli.install')
+    expect(PEER_METHODS).not.toContain('cli.status')
+    expect(PEER_METHODS).not.toContain('cli.dismissPrompt')
   })
 
   it('refuses a keystroke when nothing is there to attribute it to', async () => {

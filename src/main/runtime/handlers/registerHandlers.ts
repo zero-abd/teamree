@@ -23,6 +23,7 @@
 
 import { dirname } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
+import { CliService, createAdministratorRunner, findShippedCli, registerCliHandlers } from '../../cli'
 import { GitService, registerGitHandlers } from '../../git'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
@@ -131,6 +132,27 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
       // Writing a member file or a relay is this app's own change to `.teamree`,
       // and the watch above can be degraded, so the service says so itself.
       onRosterChange: () => workspaceEvents.emit({ type: 'members' })
+    })
+  )
+
+  // Nothing to tear down and nothing to watch: putting the CLI on PATH is two
+  // reads and, at most, one symlink. The privileged runner is handed over here
+  // rather than defaulted inside the service, so that the only code that can
+  // reach osascript is code that asked for it.
+  const shippedCli = findShippedCli({ resourcesPath: process.resourcesPath })
+  registerCliHandlers(
+    registry,
+    new CliService({
+      source: shippedCli?.path ?? null,
+      packaged: shippedCli?.packaged ?? false,
+      administrator: createAdministratorRunner(),
+      // The offer made on first run is asked once and never again, so the
+      // answer goes where the rest of this installation's state already
+      // lives. Nothing new on disk: the workspace file gains one field.
+      prompt: {
+        askedAt: () => registry.context.store.askedAt('installCli'),
+        markAsked: (at) => registry.context.store.markAsked('installCli', at)
+      }
     })
   )
 

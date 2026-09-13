@@ -4,6 +4,7 @@
 // deliberately the only place in the renderer that fabricates data.
 
 import type {
+  CliStatus,
   Layout,
   Member,
   MemberList,
@@ -422,6 +423,28 @@ export function createSeededRuntimeClient(): RuntimeClient {
   }
 
   // --- method dispatch ------------------------------------------------------
+
+  /**
+   * Seeded: a packaged app, not linked, nobody asked yet, and a destination
+   * only root can write — which is the one state where the demo has both the
+   * first-run offer and the password sentence to show.
+   */
+  let cliLinked = false
+  let cliAskedAt: number | null = null
+  const cliStatus = (): CliStatus => ({
+    installable: true,
+    platform: 'darwin',
+    source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+    packaged: true,
+    destination: '/usr/local/bin/teamree',
+    directory: '/usr/local/bin',
+    state: cliLinked ? 'linked' : 'absent',
+    resolved: cliLinked ? '/Applications/teamree.app/Contents/Resources/cli/teamree' : null,
+    needsAdministrator: !cliLinked,
+    onPath: 'login',
+    askedAt: cliAskedAt,
+    readAt: Date.now()
+  })
 
   const handlers: { [M in MethodName]: (params: ParamsOf<M>) => ResultOf<M> } = {
     'status.get': () => ({
@@ -864,6 +887,22 @@ export function createSeededRuntimeClient(): RuntimeClient {
       { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
       { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex' }
     ],
+
+    // The demo's CLI is not linked yet and its destination needs a password,
+    // because that is the state the panel has something to say in — and the
+    // button moves it, so pressing it demonstrates the outcome rather than a
+    // spinner that ends where it started.
+    'cli.status': () => cliStatus(),
+    'cli.install': () => {
+      const before = cliStatus()
+      cliLinked = true
+      cliAskedAt ??= Date.now()
+      return { outcome: 'linked', replaced: null, administrator: before.needsAdministrator, status: cliStatus() }
+    },
+    'cli.dismissPrompt': () => {
+      cliAskedAt ??= Date.now()
+      return cliStatus()
+    },
     'terminal.list': ({ worktreeId }) =>
       [...terminals.values()]
         .map((terminal) => terminal.record)

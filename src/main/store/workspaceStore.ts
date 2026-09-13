@@ -8,7 +8,13 @@ import type { Layout, Project, Worktree } from '../../shared/entities'
 import type { TerminalRecord } from '../terminals/session-restore'
 import { samePath } from '../git/pathIdentity'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
-import { emptyWorkspaceDocument, parseWorkspaceDocument, type WorkspaceDocument } from './workspaceDocument'
+import {
+  emptyWorkspaceDocument,
+  parseWorkspaceDocument,
+  type AskedQuestion,
+  type AskedQuestions,
+  type WorkspaceDocument
+} from './workspaceDocument'
 
 export type WorkspaceSnapshot = {
   projects: Project[]
@@ -65,6 +71,7 @@ export class WorkspaceStore {
   private readonly worktrees = new Map<string, Worktree>()
   private readonly layouts = new Map<string, Layout>()
   private readonly terminals = new Map<string, TerminalRecord>()
+  private asked: AskedQuestions = {}
 
   private queue: Promise<void> = Promise.resolve()
   private queued = false
@@ -86,6 +93,7 @@ export class WorkspaceStore {
     for (const worktree of document.worktrees) this.worktrees.set(worktree.id, worktree)
     for (const layout of document.layouts) this.layouts.set(layout.worktreeId, layout)
     for (const terminal of document.terminals) this.terminals.set(terminal.id, terminal)
+    this.asked = document.asked
   }
 
   /**
@@ -202,6 +210,25 @@ export class WorkspaceStore {
     return removed
   }
 
+  /**
+   * When this installation was asked a one-time question, or undefined if it
+   * never was. Deliberately not part of `snapshot()`: it is a fact about the
+   * installation rather than a thing in the workspace.
+   */
+  askedAt(question: AskedQuestion): number | undefined {
+    return this.asked[question]
+  }
+
+  /**
+   * Records that the question has now been put. The first answer stands: a
+   * date that moved on every launch would make "asked once" unprovable.
+   */
+  markAsked(question: AskedQuestion, at: number = this.now()): void {
+    if (this.asked[question] !== undefined) return
+    this.asked = { ...this.asked, [question]: at }
+    this.persist()
+  }
+
   snapshot(): WorkspaceSnapshot {
     return {
       projects: this.listProjects(),
@@ -273,7 +300,7 @@ export class WorkspaceStore {
   }
 
   private document(): WorkspaceDocument {
-    return { ...emptyWorkspaceDocument(), ...this.snapshot() }
+    return { ...emptyWorkspaceDocument(), ...this.snapshot(), asked: this.asked }
   }
 }
 

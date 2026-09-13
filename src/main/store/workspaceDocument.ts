@@ -64,16 +64,31 @@ const TerminalRecordSchema = z.object({
   createdAt: z.number()
 })
 
+/**
+ * Questions this installation only ever asks once, and when it asked them.
+ *
+ * A closed set rather than a free-form bag, so the file cannot silently
+ * accumulate keys nobody remembers writing. A timestamp rather than a flag
+ * because it costs the same and answers "when did it stop asking me".
+ */
+const AskedSchema = z.object({ installCli: z.number().optional() })
+
+export type AskedQuestions = z.infer<typeof AskedSchema>
+
+/** The questions there are. Adding one is adding a field above. */
+export type AskedQuestion = keyof AskedQuestions
+
 export type WorkspaceDocument = {
   version: number
   projects: Project[]
   worktrees: Worktree[]
   layouts: Layout[]
   terminals: TerminalRecord[]
+  asked: AskedQuestions
 }
 
 export function emptyWorkspaceDocument(): WorkspaceDocument {
-  return { version: WORKSPACE_DOCUMENT_VERSION, projects: [], worktrees: [], layouts: [], terminals: [] }
+  return { version: WORKSPACE_DOCUMENT_VERSION, projects: [], worktrees: [], layouts: [], terminals: [], asked: {} }
 }
 
 /**
@@ -89,7 +104,10 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     projects: salvage(record.projects, ProjectSchema),
     worktrees: salvage(record.worktrees, WorktreeSchema),
     layouts: salvage(record.layouts, LayoutSchema),
-    terminals: salvage(record.terminals, TerminalRecordSchema) as TerminalRecord[]
+    terminals: salvage(record.terminals, TerminalRecordSchema) as TerminalRecord[],
+    // Salvaged like everything else: a date somebody hand-edited into a string
+    // means the question has not been asked, never that the file is unusable.
+    asked: AskedSchema.safeParse(record.asked).data ?? {}
   }
 }
 
