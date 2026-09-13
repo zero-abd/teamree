@@ -354,6 +354,14 @@ recorded so none of them is discovered by surprise later.
   operating system can tell them. The macOS instructions in that document are written
   from Apple's behaviour and the ad-hoc signing the build already does; they have not
   been walked through on a Mac at this commit.
+- **A path is stored two ways.** A project's path is canonical — resolved, with its
+  separators normalised — and a worktree's is joined the host's way, so on Windows the
+  same location is spelled `C:/x/y` in one record and `C:\x\y` in another. Nothing is
+  known to break: every comparison goes through `pathKey`/`samePath`, which normalises
+  first, and git prints forward slashes on every platform regardless. It is recorded
+  because two spellings of one thing in one data model is how a later comparison gets
+  written without them, and because it was found by a test asserting equality rather
+  than by anything going wrong.
 - **Windows behaviour is reasoned, not observed.** Narrower than it was, and not
   closed. Command-line encoding is now checked exhaustively rather than by example:
   every argument up to four characters over the alphabet that drives the rules, and

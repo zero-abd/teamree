@@ -6,6 +6,7 @@ import type { Worktree } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { createGitRunner } from './gitProcess'
+import { canonicalPath } from './pathIdentity'
 import { GitService, type GitEvent, type GitServiceOptions } from './gitService'
 import { createGitHandlers } from './handlers'
 import { createDelayedRunner, createTempRepo, type TempRepo, type TempRepoOptions } from './testRepository'
@@ -55,7 +56,9 @@ describe('projects', () => {
     const project = await service.addProject({ path: repo.repoPath })
 
     expect(project.name).toBe('repo')
-    expect(project.path).toBe(repo.repoPath)
+    // Canonically: a project's path is stored resolved and with its separators
+    // normalised, which on Windows is not the string that was handed in.
+    expect(project.path).toBe(canonicalPath(repo.repoPath))
     expect(project.baseRef).toBe('origin/main')
     expect(service.listProjects()).toEqual([project])
   })
@@ -131,7 +134,10 @@ describe('worktree.create', () => {
     const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
     expect(branches.split('\n')).toContain('fix-the-login-page')
     const listed = await repo.git(['worktree', 'list', '--porcelain'])
-    expect(listed).toContain(ready.path)
+    // git prints forward slashes on every platform, and a worktree's recorded
+    // path is joined the host's way — so on Windows these are the same place
+    // spelled two ways, and only the canonical form compares.
+    expect(listed).toContain(canonicalPath(ready.path))
 
     expect(seen.map((event) => event.type)).toEqual(['worktree.created', 'worktree.updated'])
     const last = seen.at(-1)
