@@ -60,8 +60,15 @@ export type LineReader = {
  * The decoder is the protocol's own, so a peer and a CLI client are parsed by
  * one implementation and cannot disagree about what a frame is.
  */
+/**
+ * A tighter ceiling than the protocol's own, because this is the one reader fed
+ * by a machine that is not ours. A teammate's runtime has no reason to send a
+ * frame anywhere near this, and one that does is broken rather than busy.
+ */
+export const MAX_PEER_FRAME_CHARS = 4 * 1024 * 1024
+
 export function createLineReader(session: PeerSession): LineReader {
-  const decode = createFrameDecoder()
+  const decode = createFrameDecoder(MAX_PEER_FRAME_CHARS)
   const text = new TextDecoder()
   return {
     push: (message) => {
