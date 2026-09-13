@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import type { MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
 import {
   checkRelayDraft,
+  memberFilePreview,
   pushPlan,
   RELAY_OPTIONS,
   startTeamworkFlow,
@@ -152,8 +153,9 @@ describe('step 3, the team’s relay', () => {
 
   // The override is for the ephemeral tunnel URL, which is per-machine and dies
   // with the process. Treating it as the team's relay would tell somebody they
-  // were set up when no teammate can read a thing.
-  it('is not done when only the environment names a relay, and says why that is not enough', () => {
+  // were set up when no teammate can read a thing — so it is done for this run
+  // and never simply done.
+  it('is done only for this run when the environment names a relay, and says why that is not enough', () => {
     const overridden = step(
       {
         ...fresh,
@@ -166,7 +168,7 @@ describe('step 3, the team’s relay', () => {
       },
       'relay'
     )
-    expect(overridden.mark).toBe('todo')
+    expect(overridden.mark).toBe('this-run')
     expect(overridden.summary).toMatch(/per-machine and dies with this process/)
   })
 
@@ -378,5 +380,124 @@ describe('every step, in every state', () => {
         expect(entry.summary.trim()).toBe(entry.summary)
       }
     }
+  })
+})
+
+describe('step 5 when this machine’s own key is not on the roster', () => {
+  // The sidebar header has checked this before any phase since the day it was
+  // written, for the reason its comment gives: every phase below it is a
+  // sentence about somebody else's machine. The panel is the surface the
+  // runbook sends people to, and it was saying the teammate was absent.
+  it('blames this checkout rather than the teammate, and names the two steps that fix it', () => {
+    const mine = step({ ...written, status: status({ enrolled: false, links: [link()] }) }, 'connected')
+    expect(mine.mark).toBe('blocked')
+    expect(mine.summary).toMatch(/step 2/i)
+    expect(mine.summary).toMatch(/step 4/i)
+    expect(mine.summary).not.toMatch(/no teammate’s machine is on it yet/)
+  })
+
+  // The rendezvous is derived from the two keys and this checkout's roster is
+  // not one of them, so a teammate who still has the key can be connected while
+  // this checkout has lost it. A link that is up outranks what a file says.
+  it('does not deny a link that is up, whatever this checkout’s roster says', () => {
+    const live = step(
+      { ...written, status: status({ enrolled: false, links: [link({ phase: 'connected' })] }) },
+      'connected'
+    )
+    expect(live.mark).toBe('done')
+  })
+})
+
+describe('step 5 while the links are still being opened', () => {
+  const withTeammate = (): MemberList =>
+    list({
+      enrolled: true,
+      members: [
+        { handle: 'ada', publicKey: SELF_KEY, addedAt: '2026-03-01', file: '.teamree/members/ada.pub', isSelf: true },
+        {
+          handle: 'priya',
+          publicKey: 'peerkey',
+          addedAt: '2026-03-02',
+          file: '.teamree/members/priya.pub',
+          isSelf: false
+        }
+      ]
+    })
+
+  // For the length of one reconcile the roster is on disk and the links are
+  // not, and the roster this panel renders three lines below says so.
+  it('does not call a roster of several a roster of one', () => {
+    const coming = step({ ...written, list: withTeammate(), status: status({ links: [] }) }, 'connected')
+    expect(coming.summary).not.toMatch(/nobody in it but you/)
+    expect(coming.summary).toMatch(/priya/)
+  })
+
+  it('still says a roster of one is a roster of one', () => {
+    expect(step(written, 'connected').summary).toMatch(/nobody in it but you/)
+  })
+})
+
+describe('the file the handle field promises', () => {
+  it('is the name the runtime will write, not the one that was typed', () => {
+    expect(memberFilePreview(enrolled(), 'Ada Lovelace')).toBe('.teamree/members/ada-lovelace.pub')
+  })
+
+  it('is the name git already gives this machine when nothing has been typed', () => {
+    expect(memberFilePreview(enrolled(), '   ')).toBe('.teamree/members/ada.pub')
+  })
+
+  // Nothing survives sanitising, so there is no filename to promise and the
+  // field must not invent one.
+  it('is nothing at all when the typed name has nothing usable in it', () => {
+    expect(memberFilePreview(enrolled(), '???')).toBeNull()
+  })
+})
+
+describe('a read that failed', () => {
+  const nothingRead: StartTeamworkInput = {
+    list: undefined,
+    relay: undefined,
+    status: undefined,
+    failedReads: { list: 'EISDIR: illegal operation on a directory, read', status: 'identity.key is empty' }
+  }
+
+  // "Reading…" for ever is the same sentence as "this is still loading", and
+  // the one thing certainly true after a throw is that it is not.
+  it('says what failed rather than claiming it is still reading', () => {
+    const identity = step(nothingRead, 'identity')
+    expect(identity.mark).toBe('blocked')
+    expect(identity.summary).toContain('EISDIR')
+    expect(identity.summary).not.toMatch(/Reading/)
+    expect(step(nothingRead, 'key').summary).toContain('EISDIR')
+    // Clause-shaped runtime reasons are capitalised into sentences here, the
+    // way every other reason this panel repeats is.
+    expect(step(nothingRead, 'connected').summary).toMatch(/identity\.key is empty/i)
+    expect(step(nothingRead, 'connected').mark).toBe('blocked')
+  })
+
+  it('still says it is reading while a read is merely in flight', () => {
+    const pending = step({ list: undefined, relay: undefined, status: undefined }, 'identity')
+    expect(pending.mark).toBe('todo')
+    expect(pending.summary).toMatch(/Reading/)
+  })
+})
+
+describe('step 3 when the recommended tunnel path was followed', () => {
+  const overridden: StartTeamworkInput = {
+    ...written,
+    relay: relay({
+      url: 'wss://tunnel.example/v1/relay',
+      source: 'environment',
+      problem: null,
+      override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' }
+    })
+  }
+
+  // RELAY_OPTIONS' tunnel entry says to set the override and leave the file
+  // alone. Marking that todo parks the flow on step 3 for the whole session and
+  // keeps the wall of four options on screen while a teammate is connected.
+  it('does not park the flow on step 3 for the whole session', () => {
+    expect(startTeamworkFlow(overridden).currentId).not.toBe('relay')
+    expect(startTeamworkFlow(overridden).currentId).toBe('push')
   })
 })

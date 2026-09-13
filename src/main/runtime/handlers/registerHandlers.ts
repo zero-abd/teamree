@@ -185,7 +185,13 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
     if (event.type === 'teammates') return
     // A project added or removed changes which checkouts are watched.
     if (event.type === 'projects') teamworkWatcher.sync(registry.context.store.listProjects())
-    if (event.type === 'projects' || event.type === 'members') void peers.reconcile().catch(() => {})
+    // The same line the service's own failures get. A reconcile that throws
+    // after the project facts are in place leaves full rosters with no links,
+    // and the panel then has to describe that state without ever being told
+    // what happened — which was silence in the log and a lie on screen.
+    if (event.type === 'projects' || event.type === 'members') {
+      void peers.reconcile().catch((error: unknown) => console.error('[teamwork]', error))
+    }
     peers.notifyWorkspaceChanged()
   })
 
