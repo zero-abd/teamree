@@ -163,6 +163,26 @@ body{
   width:800px; height:600px; max-width:150vw; pointer-events:none; z-index:0;
   background:radial-gradient(ellipse, rgb(99 102 241 / 12%) 0%, rgb(99 102 241 / 4%) 40%, transparent 70%);
 }
+/* On a phone the hero is twice as tall as it is wide, and the ellipse tuned at
+   1440 then reaches past the bottom edge: every vertical line was still at
+   about 60% where the hero ends, so the grid did not dissolve, it was cut off
+   along the section's border. A flatter ellipse sitting higher is gone 120px
+   clear of that edge. The lines also drop from 10% to 6% — at 375 there are
+   under five columns and at 10% they stop being texture behind the headline
+   and become rules through it. */
+@media (max-width:700px){
+  .grid-bg{
+    background-image:
+      linear-gradient(rgb(255 255 255 / 6%) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 6%) 1px, transparent 1px);
+    mask-image:radial-gradient(ellipse 88% 58% at 50% 26%, #000 26%, transparent 100%);
+    -webkit-mask-image:radial-gradient(ellipse 88% 58% at 50% 26%, #000 26%, transparent 100%);
+  }
+  /* The bloom is 800 wide against a 375 page. Left at 150vw it is a wall of
+     violet rather than light arriving from off the top; narrower and pulled
+     further up, only the lobe shows, which is what it does at 1440. */
+  .hero-glow{ top:-26%; width:620px; height:520px; max-width:125vw; }
+}
 .hero-section > .wrap{ position:relative; z-index:1; }
 main, footer{ position:relative; z-index:1; }
 
@@ -246,25 +266,94 @@ code,kbd{ font-family:var(--font-mono); }
 }
 .nav .ghlink:hover{ border-color:rgb(99 102 241 / 50%); background:var(--accent-soft); color:#fff; }
 .nav .ghlink svg{ width:15px; height:15px; fill:currentColor; flex:none; }
-/* Below 820px — which is also 200% zoom on an ordinary laptop — the pill becomes
-   a rounded rectangle and takes a second row rather than dropping half of
-   itself. Hiding the section links left a reader at that zoom with no way to
-   reach three of the four destinations, and nothing offered in their place. */
+/* The disclosure that opens the phone menu. Absent above 820px, where the links
+   are already in the row. */
+.nav-toggle{ display:none; }
+
+/* Below 820px — which is also 200% zoom on an ordinary laptop — the pill keeps
+   one row and the links move into a panel behind a disclosure.
+
+   Spreading all four across a second row, which is what this did before, cost
+   107px of a 667px screen permanently, ran the GitHub chip off the right edge
+   at 320, and still left every link short of a 44px target. One row is 62px,
+   and the panel can then give each destination a full-width 48px row. Nothing
+   is dropped: the same four links are in the panel, in the same order.
+
+   No link is hidden from a reader without JavaScript either. The panel is a
+   region with an id and the toggle is an ordinary link to it, so `:target`
+   opens it with no script at all; the script only upgrades that to a
+   disclosure that does not touch the URL.
+
+   `left`/`right` rather than a `100vw` width: vw includes a classic scrollbar,
+   which would push the pill's right edge under it at 200% zoom on a desktop. */
 @media (max-width:820px){
-  :root{ --nav-top:16px; }
-  .site-header{ width:calc(100vw - 32px); max-width:calc(100vw - 32px); border-radius:var(--r5); }
-  .header-row{ flex-wrap:wrap; gap:var(--s2) var(--s5); min-height:0; padding:var(--s3) var(--s5); }
-  .nav{ width:100%; justify-content:space-between; gap:var(--s4); font-size:var(--text-xs); }
-  .nav a{ min-height:36px; }
+  :root{ --nav-top:12px; --nav-h:60px; }
+  .site-header{
+    left:var(--s3); right:var(--s3); transform:none; width:auto; max-width:none;
+    border-radius:var(--r5);
+  }
+  .header-row{
+    flex-wrap:wrap; gap:var(--s3); justify-content:space-between;
+    min-height:var(--nav-h); padding:0 var(--s4);
+  }
+  /* The lockup is a link, so it is a touch target like any other. */
+  .brand{ min-height:44px; }
+
+  .nav-toggle{
+    display:inline-flex; align-items:center; gap:8px;
+    min-height:44px; min-width:44px; padding:0 var(--s3);
+    border:1px solid rgb(255 255 255 / 15%); border-radius:var(--r-pill);
+    color:var(--fg-secondary); background:var(--wash-2);
+    font-size:var(--text-xs); font-weight:600; white-space:nowrap;
+    transition:color var(--motion) var(--ease), border-color var(--motion) var(--ease), background var(--motion) var(--ease);
+  }
+  .nav-toggle:hover{ color:#fff; border-color:var(--hairline-hover); background:var(--accent-soft); text-decoration:none; }
+  .nav-toggle svg{ width:13px; height:13px; fill:currentColor; flex:none; transition:transform var(--motion) var(--ease); }
+  .site-header[data-nav="open"] .nav-toggle{ color:#fff; border-color:var(--hairline-hover); background:var(--accent-soft); }
+  .site-header[data-nav="open"] .nav-toggle svg{ transform:rotate(180deg); }
+  /* Glass at 50% is right for a 62px pill sitting on mostly-black. Opened, the
+     same 50% is a 291px panel laid over the headline, and the headline reads
+     straight through the blur. The open state is a surface, not a veil.
+     Two rules, not one selector list: a browser without `:has()` drops the
+     whole list, and that would take the state that does the work with it. */
+  .site-header[data-nav="open"]{ background:rgb(0 0 0 / 94%); }
+  .site-header:has(.nav:target){ background:rgb(0 0 0 / 94%); }
+
+  /* The panel. Closed by default in CSS, so it is closed on the first paint and
+     not after a frame of script. */
+  .nav{
+    display:none; order:3; width:100%;
+    flex-direction:column; align-items:stretch; justify-content:flex-start;
+    gap:var(--s1); font-size:var(--text-sm);
+    margin:0 0 var(--s3); padding-top:var(--s3);
+    border-top:1px solid var(--hairline);
+  }
+  .site-header[data-nav="open"] .nav, .nav:target{ display:flex; }
+  .nav a{
+    min-height:48px; width:100%; justify-content:flex-start;
+    padding:0 var(--s3); border-radius:var(--r2);
+  }
+  .nav a:hover{ background:var(--wash-2); }
+  .nav .ghlink{ margin-top:var(--s1); min-height:48px; padding:0 var(--s3); border-radius:var(--r2); font-size:var(--text-sm); }
 }
 @media (max-width:420px){
-  .header-row{ padding:var(--s3) var(--s4); }
-  .nav{ gap:var(--s2); }
+  .header-row{ padding:0 var(--s3); }
+  .nav-toggle{ padding:0 var(--s2); }
 }
 
 /* ------------------------------------------------------------------- hero -- */
 .hero{ padding-block:calc(var(--nav-top) + var(--nav-h) + var(--s10)) var(--s10); text-align:center; }
-@media (max-width:820px){ .hero{ padding-block:calc(var(--nav-top) + var(--nav-h) + var(--s9) + var(--s6)) var(--s9); } }
+/* The reservation is the pill's own two numbers plus a gap, so it cannot drift
+   away from the pill: --nav-h is redefined alongside --nav-top in the same
+   breakpoint that resizes the header, and this, and the scroll-padding that
+   stops an anchor landing underneath, both follow it. */
+@media (max-width:820px){
+  /* The section rule adds another 64px on top of the reservation, which put the
+     headline 110px below a pill it was supposed to clear by 46. The hero owns
+     its own top spacing here so the calc above is the whole of it. */
+  .hero-section{ padding-top:0; }
+  .hero{ padding-block:calc(var(--nav-top) + var(--nav-h) + var(--s8)) var(--s9); }
+}
 .hero h1{ margin-inline:auto; max-width:17ch; }
 .hero .lede{ margin-inline:auto; max-width:54ch; }
 .hero .cta{ justify-content:center; }
@@ -381,8 +470,13 @@ pre[tabindex]{ scrollbar-gutter:stable; }
    drops below the command instead, and gets a full touch target while it is there. */
 @media (max-width:560px){
   .cmd.has-copy{ padding-right:var(--s5); padding-left:var(--s5); padding-bottom:64px; }
-  .cmd-copy{ top:auto; bottom:10px; right:10px; min-height:44px; padding:10px 16px; }
+  .cmd-copy{ top:auto; bottom:10px; right:10px; padding:10px 16px; }
 }
+/* Between 560 and 820 the chip stays in its gutter, but a tablet is touched
+   rather than pointed at, so it still owes a 44px target. 44 plus the 10px
+   inset is 54, and the block it sits in is 64.8 tall, so it gains the height
+   inside the gutter — without growing the block or reaching the command. */
+@media (max-width:820px){ .cmd-copy{ min-height:44px; } }
 .cmd-copy:hover{ color:#fff; border-color:var(--hairline-hover); background:var(--accent-soft); }
 .cmd-copy[data-copied="yes"]{ color:var(--success); border-color:rgb(74 222 128 / 45%); }
 .tok-c{ color:rgb(255 255 255 / 52%); }
@@ -434,6 +528,9 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 /* ----------------------------------------------------------------- footer -- */
 .site-footer{ border-top:1px solid var(--hairline); padding:var(--s9) 0 var(--s8); color:var(--fg-muted); font-size:var(--text-sm); }
 .footer-row{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--s5); }
+/* The footer lockup is a link home, and it was the one target on the page left
+   at the height of its 34px tile. */
+.site-footer .brand{ min-height:44px; }
 .footer-links{ display:flex; flex-wrap:wrap; gap:0 var(--s7); }
 .footer-links a{ color:var(--fg-secondary); display:inline-flex; align-items:center; min-height:44px; }
 .footer-links a:hover{ color:#fff; text-decoration:none; }
@@ -643,6 +740,9 @@ pre[tabindex]{ scrollbar-gutter:stable; }
     <path d="M43.5 23.5 H58.6 A3.4 3.4 0 0 1 62 26.9 V35.1 A3.4 3.4 0 0 1 58.6 38.5 H43.5 A3.4 3.4 0 0 1 40.1 35.1 V26.9 A3.4 3.4 0 0 1 43.5 23.5 Z"/>
   </g>
     </symbol>
+    <symbol id="chev" viewBox="0 0 16 16">
+      <path d="M8 10.6 2.7 5.3l1.3-1.3L8 8l4-4 1.3 1.3z"/>
+    </symbol>
     <symbol id="gh" viewBox="0 0 16 16">
       <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
     </symbol>
@@ -655,7 +755,8 @@ pre[tabindex]{ scrollbar-gutter:stable; }
       <span class="tile" aria-hidden="true"><svg class="mark" viewBox="0 0 64 64" focusable="false"><use href="#mark-sm"/></svg></span>
       <span class="word">teamree<i class="dot" aria-hidden="true"></i></span>
     </a>
-    <nav class="nav" aria-label="Primary">
+    <a class="nav-toggle" href="#site-nav" aria-controls="site-nav">Menu<svg aria-hidden="true" focusable="false"><use href="#chev"/></svg></a>
+    <nav class="nav" id="site-nav" aria-label="Primary">
       <a class="nav-link" href="#what">What it does</a>
       <a class="nav-link" href="#teamwork">Teamwork</a>
       <a class="nav-link" href="#start">Install</a>
@@ -1118,6 +1219,46 @@ demo:video:parked -->
 </footer>
 
 <script>
+// The phone menu. Without this the toggle is still a working link to the panel
+// and `:target` opens it, so the four destinations are reachable either way —
+// this only upgrades it to a disclosure that leaves the address bar alone, and
+// adds the three ways out that `:target` has no answer for: Escape, a tap
+// outside, and choosing something.
+(function () {
+  var header = document.querySelector('.site-header');
+  var toggle = header && header.querySelector('.nav-toggle');
+  var panel = document.getElementById('site-nav');
+  if (!header || !toggle || !panel) return;
+
+  // A link arriving as /#site-nav would leave the panel held open by :target
+  // while this thinks it is shut. Take the fragment back before anything reads it.
+  if (location.hash === '#site-nav') {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+
+  function setOpen(open) {
+    header.dataset.nav = open ? 'open' : 'closed';
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  setOpen(false);
+
+  toggle.addEventListener('click', function (event) {
+    event.preventDefault();
+    setOpen(header.dataset.nav !== 'open');
+  });
+  // Choosing a destination closes it: the panel covers the top of what you
+  // just asked to be taken to.
+  panel.addEventListener('click', function (event) {
+    if (event.target.closest('a')) setOpen(false);
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && header.dataset.nav === 'open') { setOpen(false); toggle.focus(); }
+  });
+  document.addEventListener('click', function (event) {
+    if (header.dataset.nav === 'open' && !header.contains(event.target)) setOpen(false);
+  });
+})();
+
 // Progressive only: the commands are selectable text with or without this.
 document.querySelectorAll('.cmd-copy').forEach(function (button) {
   button.addEventListener('click', function () {
