@@ -40,6 +40,7 @@
   -->
 
   <!-- the reduced mark, exactly as brand/mark-small.svg -->
+  <!-- the reduced mark, exactly as brand/mark-small.svg -->
   <g>
     <!-- the root -->
       <path d="M14 58.8 Q32 45.6 50 58.8 Q32 54.2 14 58.8 Z"/>
@@ -49,8 +50,8 @@
 
       <!-- the branches -->
       <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
-        <path d="M14.9 37 C17.1 44.2 32.9 47.6 30 54"/>
-        <path d="M49.1 37 C46.9 44.2 31.1 47.6 34 54"/>
+        <path d="M14.9 37 C14.9 43.8 32 45.8 29.2 54.4"/>
+        <path d="M49.1 37 C49.1 43.8 32 45.8 34.8 54.4"/>
       </g>
 
       <!-- the chevron where the branches meet the trunk -->

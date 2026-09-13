@@ -446,7 +446,85 @@ function checkIco(relativePath) {
   }
 }
 
+// ----------------------------------------------------- the inlined copies --
+
+/**
+ * Three files paste the brand vectors in rather than fetching them, for good
+ * reasons — the page wants the mark in its first paint, and the OG card is
+ * rasterised offline. The cost is that they drift, and drift here means the
+ * site, the social card and the app icon are visibly different logos.
+ *
+ * They have drifted twice. Once silently, when the vectors were corrected and
+ * the page kept the old branch and chevron; and once loudly, when a resync
+ * script split the wordmark on its first `-->` to strip a header comment, the
+ * file turned out to have several comments, and the card shipped with no mark
+ * at all. Nothing caught either, because every file still existed and still
+ * parsed.
+ *
+ * So: extract the geometry from both sides, normalise whitespace, and insist
+ * they are the same string.
+ */
+const INLINED = [
+  { source: 'brand/mark.svg', host: 'site/public/index.html', open: '<symbol id="mark" viewBox="0 0 64 64" fill="currentColor">', close: '</symbol>' },
+  { source: 'brand/mark-small.svg', host: 'site/public/index.html', open: '<symbol id="mark-sm" viewBox="0 0 64 64" fill="currentColor">', close: '</symbol>' },
+  { source: 'brand/wordmark.svg', host: 'site/og/card.html', open: '<svg class="lockup" viewBox="0 0 274 64" fill="currentColor" role="img" aria-label="teamree">', close: '</svg>' }
+]
+
+/** An SVG file's drawable content: everything after its header comment, before the closing tag. */
+function vectorBody(text) {
+  const start = text.indexOf('-->')
+  const end = text.lastIndexOf('</svg>')
+  if (start < 0 || end < 0 || end <= start) return null
+  return text.slice(start + 3, end)
+}
+
+const squash = (text) => text.replace(/<!--[\s\S]*?-->/g, ' ').replace(/\s+/g, ' ').trim()
+
+function checkInlined({ source, host, open, close }) {
+  const vector = read(source)
+  const page = read(host)
+  if (!vector || !page) return
+
+  const body = vectorBody(vector.toString('utf8'))
+  if (!body) {
+    fail(source, 'has no header comment or no closing </svg>, so its geometry cannot be extracted.')
+    return
+  }
+  const wanted = squash(body)
+  // A sanity floor on the extraction itself. The failure that shipped was a
+  // three-line paste that looked like a successful one.
+  if (wanted.length < 400) {
+    fail(source, `extracted to only ${wanted.length} characters of geometry, which cannot be the whole mark.`)
+    return
+  }
+
+  const text = page.toString('utf8')
+  const at = text.indexOf(open)
+  if (at < 0) {
+    fail(host, `does not contain \`${open.slice(0, 40)}…\`, so the inlined copy of ${source} could not be found.`)
+    return
+  }
+  const to = text.indexOf(close, at + open.length)
+  if (to < 0) {
+    fail(host, `has an unterminated block where ${source} is inlined.`)
+    return
+  }
+  const found = squash(text.slice(at + open.length, to))
+  if (found !== wanted) {
+    fail(
+      host,
+      `its inlined copy of ${source} has drifted — ` +
+        (found.length === wanted.length
+          ? `same length (${found.length} characters), different geometry.`
+          : `${found.length} characters against the vector's ${wanted.length}.`) +
+        ' Re-paste everything between the vector\'s header comment and its closing tag.'
+    )
+  }
+}
+
 // ---------------------------------------------------------------- run them --
+
+for (const entry of INLINED) checkInlined(entry)
 
 checkPng('build/icon.png', 1024, 1024)
 checkIco('build/icon.ico')
