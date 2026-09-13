@@ -42,6 +42,20 @@ const EXPECTED = [
   'terminal close',
   'terminal wait',
   'terminal run',
+  'worktree start-points',
+  'worktree layout',
+  'team status',
+  'team members',
+  'team join',
+  'team relay show',
+  'team relay set',
+  'team watch',
+  'team type',
+  'team panes',
+  'team watchers',
+  'team mute',
+  'team unmute',
+  'team write-log',
   'agent list',
   'cli status',
   'cli install'
@@ -53,7 +67,7 @@ describe('the command table', () => {
   })
 
   it('groups the nouns', () => {
-    expect(commandGroups()).toEqual(['project', 'worktree', 'terminal', 'agent', 'cli'])
+    expect(commandGroups()).toEqual(['project', 'worktree', 'terminal', 'team', 'agent', 'cli'])
   })
 
   it('resolves every command from its own words', () => {

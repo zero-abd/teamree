@@ -104,20 +104,38 @@ describe('watchWorkspace', () => {
   })
 
   it('stops retrying once closed', async () => {
-    let attempts = 0
-    const watch = watchWorkspace(() => {}, {
-      open: () => {
-        attempts += 1
-        return Promise.reject(new Error('offline'))
-      },
-      onError: () => {},
-      retryBaseMs: 1
-    })
+    // Two identical watches against a runtime that never answers. One is closed;
+    // the other is not, and it is what makes the observation afterwards mean
+    // something.
+    //
+    // The delay has to be pinned by a ceiling, not just a base. Backoff doubles,
+    // so with only `retryBaseMs: 1` the pending delay by the time the first wait
+    // releases is already tens of milliseconds and still growing — a fixed sleep
+    // after `close()` is then a race against that delay rather than a look at
+    // whether anything was cancelled, and it is won or lost by which poll of
+    // `vi.waitFor` happened to release. A ceiling of 2ms keeps every pending
+    // retry two milliseconds away for as long as the watch is retrying.
+    const offline = (count: () => void) => (): Promise<never> => {
+      count()
+      return Promise.reject(new Error('offline'))
+    }
+    let closedAttempts = 0
+    let liveAttempts = 0
+    const retry = { onError: () => {}, retryBaseMs: 1, retryCeilingMs: 2 }
 
-    await vi.waitFor(() => expect(attempts).toBeGreaterThan(1))
+    const watch = watchWorkspace(() => {}, { ...retry, open: offline(() => (closedAttempts += 1)) })
+    const control = watchWorkspace(() => {}, { ...retry, open: offline(() => (liveAttempts += 1)) })
+
+    await vi.waitFor(() => expect(closedAttempts).toBeGreaterThan(1))
     await watch.close()
-    const settled = attempts
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(attempts).toBe(settled)
+    const settled = closedAttempts
+    const controlAtClose = liveAttempts
+
+    // The window is measured in the control's retries rather than in
+    // milliseconds: whatever this machine's speed, ten more attempts on a watch
+    // that is still open is ten chances the closed one had to retry too.
+    await vi.waitFor(() => expect(liveAttempts).toBeGreaterThan(controlAtClose + 10))
+    expect(closedAttempts).toBe(settled)
+    await control.close()
   })
 })

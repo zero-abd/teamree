@@ -1,3 +1,4 @@
+import type { PaneNode } from '../../shared/entities.js'
 import type { CommandSpec } from '../command-spec.js'
 import { readBoolean, readNumber, readString, requireString } from '../argv.js'
 import { formatFields, formatTable } from '../output.js'
@@ -414,5 +415,78 @@ export const worktreeCommands: readonly CommandSpec[] = [
         ])
       }
     }
+  },
+  {
+    path: ['worktree', 'start-points'],
+    summary: 'List everything a new worktree in a project could branch from.',
+    details:
+      'The same list the window offers in its create dialog: local branches, remote branches, tags and the ' +
+      'current head, newest first. Pass any `ref` back to `worktree create --from`.\n\n' +
+      'A repository with thousands of refs is capped rather than dumped; `truncated` says when a tail was ' +
+      'dropped and `total` says how many there were.',
+    args: [{ name: 'project', description: 'Project id, name, or path.', required: true }],
+    flags: [{ name: 'limit', kind: 'number', placeholder: '<count>', description: 'Refs before the list is capped.' }],
+    examples: ['teamree worktree start-points api', 'teamree worktree start-points api --limit 10 --json'],
+    run: async (context) => {
+      const project = await resolveProject(context.client, context.args[0] as string)
+      const limit = readNumber(context.flags, 'limit')
+      const list = await context.client.call('worktree.startPoints', {
+        projectId: project.id,
+        ...(limit === undefined ? {} : { limit })
+      })
+
+      const table = formatTable(
+        ['REF', 'KIND', 'SHA', 'MARK', 'UPDATED'],
+        list.options.map((option) => [
+          option.ref,
+          option.kind,
+          option.shortSha,
+          [option.isBase ? 'base' : '', option.isCurrent ? 'current' : ''].filter((mark) => mark !== '').join(','),
+          new Date(option.updatedAt).toISOString().slice(0, 10)
+        ]),
+        'No refs to branch from.'
+      )
+      const footer = list.truncated ? `\n\nShowing ${list.limit} of ${list.total}. Base ref is ${list.baseRef}.` : ''
+      return { data: list, text: `${table}${footer}` }
+    }
+  },
+  {
+    path: ['worktree', 'layout'],
+    summary: "Show how a worktree's panes are arranged and which one has focus.",
+    details:
+      '`terminal list` says which panes exist; this says where they are and which one the window would type ' +
+      'into. Read-only on purpose: the arrangement is changed by operations that mean something — ' +
+      '`terminal split`, `terminal close` — rather than by handing a pane tree back.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    examples: ['teamree worktree layout fix-login --json'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const layout = await context.client.call('layout.get', { worktreeId: worktree.id })
+      const tree = layout.root === null ? '  (no panes)' : renderPane(layout.root, '  ', layout.focusedTerminalId)
+      return {
+        data: layout,
+        text: [
+          formatFields([
+            ['worktree', `${worktree.name} (${layout.worktreeId})`],
+            ['focused', layout.focusedTerminalId ?? '-']
+          ]),
+          '',
+          'Panes:',
+          tree
+        ].join('\n')
+      }
+    }
   }
 ]
+
+/** One line per node, indented by depth; a split names its axis and its shares. */
+function renderPane(node: PaneNode, indent: string, focused: string | null): string {
+  if (node.kind === 'leaf') {
+    return `${indent}${node.terminalId}${node.terminalId === focused ? '  <- focused' : ''}`
+  }
+  const shares = node.sizes.map((size) => `${Math.round(size * 100)}%`).join('/')
+  return [
+    `${indent}${node.direction} split (${shares})`,
+    ...node.children.map((child) => renderPane(child, `${indent}  `, focused))
+  ].join('\n')
+}

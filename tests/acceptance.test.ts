@@ -185,8 +185,27 @@ describe('milestone 1 acceptance', () => {
       'echo TEAMREE_MARKER_OK; git rev-parse --abbrev-ref HEAD',
       '--enter'
     ])
-    await sleep(3000)
-    const { data } = cli<{ data: string }>(['terminal', 'read', terminal.id])
+
+    // Polled, like every other wait in this file, rather than slept against.
+    // A shell is not on a schedule: a fixed sleep makes the deadline part of
+    // the assertion, so a loaded machine — and this repository runs its suite
+    // alongside packaging builds — reports a pane that was merely slow as a
+    // product defect, and prints a missing marker instead of "it never came".
+    // Polling makes the deadline the failure mode and costs nothing when the
+    // shell answers in the usual few hundred milliseconds.
+    //
+    // The budget is wall-clock rather than a count of turns, because each turn
+    // spawns the CLI: a fixed 80 turns costs 20s of sleeping plus however long
+    // 80 process launches take, which overran the case's own timeout and
+    // reported "test timed out" instead of showing what the pane did hold.
+    let data = ''
+    const ready = (): boolean => data.includes('TEAMREE_MARKER_OK') && data.includes(worktree.branch)
+    const deadline = Date.now() + 20_000
+    while (!ready() && Date.now() < deadline) {
+      await sleep(250)
+      data = cli<{ data: string }>(['terminal', 'read', terminal.id]).data
+    }
+
     expect(data).toContain('TEAMREE_MARKER_OK')
     // Proves the pane really is inside this worktree, not the primary checkout.
     expect(data).toContain(worktree.branch)
@@ -233,4 +252,22 @@ describe('milestone 1 acceptance', () => {
     const remaining = cli<Worktree[]>(['worktree', 'list'])
     expect(remaining.find((row) => row.id === worktree.id)).toBeUndefined()
   })
+
+  it("takes the removed worktree's terminals with it, rather than leaving them running", async () => {
+    // The panes opened above were still running when the row went. Nothing
+    // else closes them: the sidebar only walks worktrees and the dashboard
+    // drops panes whose worktree is gone, so a pane left alive here is an
+    // agent still working in a directory that no longer exists, reachable
+    // only by id and still counted in the status bar.
+    //
+    // Polled rather than asserted at once: the close is started off the
+    // worktree.removed event, so it is in flight while the remove is
+    // answering.
+    let stranded = cli<Terminal[]>(['terminal', 'list']).filter((row) => row.worktreeId === worktree.id)
+    for (let attempt = 0; attempt < 20 && stranded.length > 0; attempt += 1) {
+      await sleep(250)
+      stranded = cli<Terminal[]>(['terminal', 'list']).filter((row) => row.worktreeId === worktree.id)
+    }
+    expect(stranded).toEqual([])
+  }, 30_000)
 })

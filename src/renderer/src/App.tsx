@@ -2,6 +2,7 @@
 // live above all of them, the key map and the modal layer.
 
 import { useEffect, useMemo } from 'react'
+import { MAC_CONTENT_INSET_PX, TITLEBAR_HEIGHT_PX } from '@shared/windowChrome'
 import { AddProjectDialog } from './dialogs/AddProjectDialog'
 import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
@@ -15,17 +16,16 @@ import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
+import { TitleBar } from './shell/TitleBar'
 import { useWorkspaceStore } from './state/workspaceStore'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
 
 export function App(): React.JSX.Element {
-  const modifier = useMemo(
-    () =>
-      resolvePlatformModifier(
-        detectPlatform(window.teamree?.platform, typeof navigator === 'undefined' ? undefined : navigator.userAgent)
-      ),
+  const platform = useMemo(
+    () => detectPlatform(window.teamree?.platform, typeof navigator === 'undefined' ? undefined : navigator.userAgent),
     []
   )
+  const modifier = useMemo(() => resolvePlatformModifier(platform), [platform])
   const isAppChord = useWorkspaceShortcuts(modifier)
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
@@ -47,8 +47,16 @@ export function App(): React.JSX.Element {
   return (
     <div
       className={`shell${sidebarVisible ? '' : ' shell--collapsed'}`}
-      style={{ ['--sidebar-width' as string]: `${sidebarWidth}px` }}
+      style={{
+        ['--sidebar-width' as string]: `${sidebarWidth}px`,
+        // Both come from src/shared/windowChrome.ts, which the main process also
+        // reads to place the macOS window buttons.
+        ['--titlebar-h' as string]: `${TITLEBAR_HEIGHT_PX}px`,
+        ['--titlebar-inset' as string]: `${MAC_CONTENT_INSET_PX}px`
+      }}
     >
+      <TitleBar platform={platform} />
+
       {sidebarVisible ? (
         <>
           <Sidebar newWorktreeHint={shortcutHint('new-worktree', modifier)} />

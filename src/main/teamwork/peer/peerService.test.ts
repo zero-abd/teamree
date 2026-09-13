@@ -205,11 +205,13 @@ describe('the same repository checked out twice is one team and two projects', (
     })
     expect(invented).toEqual({ ...theirs, message: 'there is no pane t_no_such_pane in this project' })
 
+    // The write path says it without the id, because that reason is also what
+    // goes on the owner's disk — so the two writes are identical outright.
     const write = runtime.service.remoteWrite(linkId, { terminalId: 't_secret', data: 'x', bytes: 1 })
     expect(write).toEqual({
       ok: false,
       code: ErrorCode.NotFound,
-      message: 'there is no pane t_secret in this project'
+      message: 'there is no such pane in this project'
     })
   })
 })

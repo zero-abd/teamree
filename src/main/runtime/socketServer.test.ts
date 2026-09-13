@@ -50,7 +50,6 @@ function openClient(endpoint: string): Promise<Client> {
   })
 }
 
-// Unix domain sockets only; the Windows named-pipe path is exercised by the app.
 async function waitUntil(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (!predicate()) {
@@ -59,7 +58,22 @@ async function waitUntil(predicate: () => boolean, timeoutMs = 2000): Promise<vo
   }
 }
 
-// Unix domain sockets only; the Windows named-pipe path is exercised by the app.
+// Unix domain sockets only, and skipped rather than adapted on win32.
+//
+// These cases are the whole test of this transport, so the named-pipe path has
+// none. What is covered of it is only the naming: `resolveEndpoint` is shown to
+// spell a pipe for win32 and `isPipeEndpoint` to recognise one, in
+// tests/platform/socket-endpoint.test.ts, and the CLI's end of the same in
+// src/cli/discovery.test.ts. Nothing has ever bound a pipe, accepted a
+// connection on one, or run the branch in `listenWithStaleRecovery` that
+// refuses to unlink one — the whole reason that branch exists.
+//
+// Recorded rather than closed, deliberately. A named pipe needs a Windows
+// kernel; there is no shim that would make one appear here, so the test could
+// only be written to be skipped on every machine this project runs on, which
+// buys a green block and no evidence. Windows was dropped on purpose — see the
+// matrix comment in .github/workflows/build.yml — and the app ships macOS-only.
+// If Windows ever comes back, this is the first gap that needs filling.
 describe.skipIf(process.platform === 'win32')('socket server', () => {
   let directory: string
   let endpoint: string

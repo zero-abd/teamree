@@ -21,10 +21,39 @@
 // This module deliberately does not offer cipher agility. A single hard-coded
 // suite means there is no negotiation to downgrade, and the protocol name that
 // binds the suite into the transcript can be a constant.
+//
+// WHERE THE CIPHER COMES FROM, which is the part that bit us:
+//
+// The AEAD is `@noble/ciphers` rather than `node:crypto`. This is not a
+// preference. Node links OpenSSL; Electron links BoringSSL; BoringSSL does not
+// expose ChaCha20-Poly1305 through the EVP names `createCipheriv` accepts.
+// Under Electron 38 `getCiphers()` returns 28 names and none of them is
+// `chacha20-poly1305`, so `createCipheriv('chacha20-poly1305', …)` throws
+// "Unknown cipher" — and it did, on the first handshake of every shipped build,
+// while the whole suite stayed green because vitest runs under Node.
+//
+// The two honest ways out were AES-GCM, which BoringSSL does have, and a
+// software ChaCha. AES-GCM would have meant a different protocol name, a
+// different wire, a flipped nonce endianness, and — the part that decided it —
+// throwing away `noiseVectors.json`: thirty-eight published cross-implementation
+// vectors for exactly this suite, which are the only evidence in this repository
+// that our bytes match anybody else's. Keeping the suite keeps that corpus, and
+// the corpus then validates the replacement implementation on its first run.
+//
+// The cost is a dependency and software speed. Measured on this machine, the
+// software implementation is *faster* than OpenSSL's for the frames this
+// actually carries — 5.5µs against 12.4µs for 256 bytes, where the native call's
+// per-invocation setup dominates — and slower only for large ones: 178 MB/s
+// against 1064 MB/s at Noise's 64 KiB maximum, which is 352µs for the biggest
+// message the protocol allows. For a desktop app sharing a terminal with a
+// teammate, that is not a number anybody can perceive.
+//
+// One implementation, both runtimes. No native path to be preferred where it
+// happens to exist, because "works in one runtime and not the other" is the
+// entire defect this replaced.
 
+import { chacha20poly1305 } from '@noble/ciphers/chacha.js'
 import {
-  createCipheriv,
-  createDecipheriv,
   createHash,
   createHmac,
   createPrivateKey,
@@ -45,8 +74,6 @@ export const TAG_LEN = 16
 export const MAX_MESSAGE_LEN = 65535
 /** The largest nonce Noise permits. Reaching it is an error, never a wrap. */
 export const MAX_NONCE = 2n ** 64n - 1n
-
-const CIPHER = 'chacha20-poly1305'
 
 /**
  * Randomness, injected so tests can pin ephemerals to the specification's test
@@ -159,10 +186,10 @@ export function hkdf(chainingKey: Uint8Array, inputKeyMaterial: Uint8Array): [Ui
  * the same suite fail to talk to each other, which is why the test vectors
  * matter more here than anywhere else in the library.
  */
-function nonceBytes(nonce: bigint): Buffer {
+function nonceBytes(nonce: bigint): Uint8Array {
   const iv = Buffer.alloc(12)
   iv.writeBigUInt64LE(nonce, 4)
-  return iv
+  return new Uint8Array(iv.buffer, iv.byteOffset, iv.length)
 }
 
 export function aeadEncrypt(
@@ -172,13 +199,9 @@ export function aeadEncrypt(
   plaintext: Uint8Array
 ): Uint8Array {
   requireLength(key, HASH_LEN)
-  const cipher = createCipheriv(CIPHER, key, nonceBytes(nonce), { authTagLength: TAG_LEN })
-  // `plaintextLength` is required by the CCM-shaped signature Node gives every
-  // `authTagLength` cipher. ChaCha20-Poly1305 does not need it declared up
-  // front, but stating it truthfully costs nothing.
-  cipher.setAAD(associatedData, { plaintextLength: plaintext.length })
-  const body = Buffer.concat([cipher.update(plaintext), cipher.final()])
-  return new Uint8Array(Buffer.concat([body, cipher.getAuthTag()]))
+  // Appends the 16-byte tag, which is what Noise's ENCRYPT() means by
+  // "ciphertext" and what the published vectors spell out.
+  return chacha20poly1305(key, nonceBytes(nonce), associatedData).encrypt(plaintext)
 }
 
 export function aeadDecrypt(
@@ -189,13 +212,8 @@ export function aeadDecrypt(
 ): Uint8Array {
   requireLength(key, HASH_LEN)
   if (ciphertext.length < TAG_LEN) throw peerError(PeerErrorCode.DecryptionFailed)
-  const body = ciphertext.subarray(0, ciphertext.length - TAG_LEN)
-  const tag = ciphertext.subarray(ciphertext.length - TAG_LEN)
-  const decipher = createDecipheriv(CIPHER, key, nonceBytes(nonce), { authTagLength: TAG_LEN })
-  decipher.setAAD(associatedData, { plaintextLength: body.length })
-  decipher.setAuthTag(tag)
   try {
-    return new Uint8Array(Buffer.concat([decipher.update(body), decipher.final()]))
+    return chacha20poly1305(key, nonceBytes(nonce), associatedData).decrypt(ciphertext)
   } catch {
     // Every decryption failure looks identical from outside: a forgery, a
     // replay and a truncation must not be distinguishable by error or by which
