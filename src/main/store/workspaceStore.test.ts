@@ -432,4 +432,76 @@ describe('workspace store', () => {
       ])
     })
   })
+
+  /**
+   * Three features landed on the same day, each adding a field to this file and
+   * each written on a branch where it was the only new one. On disk they are
+   * now neighbours, so the property that matters is the one none of them could
+   * assert alone: each is salvaged on its own terms, and a field somebody — or
+   * a half-written flush — has mangled costs that field and nothing else.
+   */
+  describe('three fields that arrived separately, in one file', () => {
+    const ANA = 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='
+
+    it('loses only the one that is broken', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(
+        path,
+        JSON.stringify({
+          version: 1,
+          projects: [project],
+          appearance: 'this is not a theme',
+          updates: { automatic: false, lastSeenVersion: '0.2.0' },
+          standingConsent: [{ terminalId: 't1', publicKey: ANA, since: 1 }]
+        }),
+        'utf8'
+      )
+
+      const store = await WorkspaceStore.open(path)
+      expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
+      expect(store.updateSettings().automatic).toBe(false)
+      expect(store.updateSettings().lastSeenVersion).toBe('0.2.0')
+      expect(store.listStandingConsent()).toEqual([{ terminalId: 't1', publicKey: ANA, since: 1 }])
+      expect(store.snapshot().projects).toEqual([project])
+    })
+
+    it('loses only the one that is broken, whichever one that is', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(
+        path,
+        JSON.stringify({
+          version: 1,
+          projects: [project],
+          appearance: { themeId: 'graphite', ground: null, accent: null, overrides: {} },
+          updates: { automatic: 'no thank you' },
+          standingConsent: { terminalId: 't1' }
+        }),
+        'utf8'
+      )
+
+      const store = await WorkspaceStore.open(path)
+      expect(store.getAppearance().themeId).toBe('graphite')
+      // Absent rather than false: a preference nobody can read has not been
+      // expressed, and the app goes on checking.
+      expect(store.updateSettings().automatic).toBe(true)
+      expect(store.listStandingConsent()).toEqual([])
+      expect(store.snapshot().projects).toEqual([project])
+    })
+
+    // The other direction of the same day: a file this build wrote, opened by a
+    // build from before any of the three existed, and then written back. Each
+    // field is read where it is missing as "not chosen", which is what makes
+    // that survivable in one direction — and the round trip through an older
+    // build drops all three, which is a fact about the format worth having
+    // stated rather than discovered.
+    it('reads a file from before any of the three, as though nothing had been chosen', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(path, JSON.stringify({ version: 1, projects: [project], worktrees: [] }), 'utf8')
+
+      const store = await WorkspaceStore.open(path)
+      expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
+      expect(store.updateSettings()).toEqual({ automatic: true, lastCheckedAt: null, lastSeenVersion: null })
+      expect(store.listStandingConsent()).toEqual([])
+    })
+  })
 })

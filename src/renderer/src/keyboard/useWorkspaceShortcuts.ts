@@ -3,6 +3,7 @@
 // terminals so they decline the same set.
 
 import { useCallback, useEffect } from 'react'
+import { firstQuestion } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { ModifierState, PlatformModifier } from './platformModifier'
 import { commandForEvent } from './workspaceShortcuts'
@@ -19,6 +20,16 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
       if (!command) return
 
       const store = useWorkspaceStore.getState()
+      // A question about a teammate's keystrokes owns the keyboard outright,
+      // and without the palette's exception. It is a modal the same as any
+      // other, but it is not in `dialog` — nobody in this window opened it —
+      // and it is the one modal here that refuses to be dismissed. So a chord
+      // that still fired under it would act on a window the owner cannot see
+      // and cannot get back to without answering: Cmd-, put the colour editor
+      // underneath the scrim and took the focus with it, and Cmd-W stopped a
+      // watch while the prompt about it was still on screen.
+      if (firstQuestion(store.consent) !== null) return
+
       // A modal owns the keyboard while it is up — except the palette's own
       // chord, which closes it again the way every palette does.
       if (store.dialog) {

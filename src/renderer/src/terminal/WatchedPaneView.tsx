@@ -159,6 +159,7 @@ export function WatchedPaneView({
   // the watch stream carries a resize, so this is the only way this side is
   // ever told that their pane is a different shape than it was.
   const presence = useWorkspaceStore((store) => store.teammates[projectId])
+  const appearance = useWorkspaceStore((store) => store.appearance)
   const size = useMemo(() => watchedPaneSize(presence, paneId), [presence, paneId])
   const sizeRef = useRef(size)
   sizeRef.current = size
@@ -471,6 +472,31 @@ export function WatchedPaneView({
     refitRef.current?.()
     setState((current) => (current.phase === 'watching' ? { phase: 'watching', ...next } : current))
   }, [size])
+
+  /**
+   * Repaints the emulator when the palette moves under it.
+   *
+   * The same three lines `TerminalView` has, for the same reason and with the
+   * same argument behind them: xterm cannot read CSS, so it is handed literals
+   * once when it is built, and without this a pane keeps the colours it opened
+   * in forever. That was invisible while the palette could not change; it
+   * became a window where choosing a theme repainted the chrome, the rail and
+   * every pane of your own, and left a teammate's pane in the old one.
+   *
+   * It is worse here than on a local pane, too. Closing and reopening is how
+   * somebody would otherwise bring a pane over, and for this pane that means
+   * dropping a subscription and paying the relay for it again.
+   *
+   * Read back off the document rather than derived from the appearance here, so
+   * that one derivation stands behind both the chrome and the panes — and it
+   * runs after `App` has written it, because that effect is above this one in
+   * the tree.
+   */
+  useEffect(() => {
+    const term = termRef.current
+    if (!term) return
+    term.options.theme = readTerminalTheme(document.documentElement)
+  }, [appearance])
 
   /**
    * Keeps the keyboard where the window says the focus is.

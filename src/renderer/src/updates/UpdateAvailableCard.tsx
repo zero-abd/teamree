@@ -22,12 +22,19 @@
 import { useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { cliOffer } from '../dialogs/cliInstallModel'
+import { modalOnScreen } from '../dialogs/modalLayer'
 import { INSTALL_DOCUMENT, updateNotice } from './updateNotice'
 
 export function UpdateAvailableCard(): React.JSX.Element | null {
   const update = useWorkspaceStore((state) => state.update)
   const cli = useWorkspaceStore((state) => state.cli)
   const dialog = useWorkspaceStore((state) => state.dialog)
+  // The other half of what can be on top of the window, and the half this card
+  // was written before: a question about a teammate's keystrokes. It is not in
+  // `dialog` because nobody in this window opened it, but it is a modal with a
+  // scrim all the same — and it is the one that refuses to be dismissed, so a
+  // card drawn under it stays under it until somebody answers.
+  const consent = useWorkspaceStore((state) => state.consent)
   const downloadUpdate = useWorkspaceStore((state) => state.downloadUpdate)
   const setAutomaticUpdates = useWorkspaceStore((state) => state.setAutomaticUpdates)
 
@@ -43,7 +50,7 @@ export function UpdateAvailableCard(): React.JSX.Element | null {
   // corner, and the question that was asked first is the one that gets an
   // answer — an update notice will keep until the next launch, which is more
   // than can be said for a first run.
-  if (notice === null || dialog !== null || cliOffer(cli) !== null) return null
+  if (notice === null || modalOnScreen({ dialog, consent }) || cliOffer(cli) !== null) return null
   if (dismissed !== null && dismissed === update?.checkedAt) return null
 
   return (

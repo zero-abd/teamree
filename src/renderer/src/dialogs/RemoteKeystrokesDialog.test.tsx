@@ -21,7 +21,7 @@ vi.mock('../state/workspaceStore', () => ({
   useWorkspaceStore: (select: (state: unknown) => unknown) => select({ decideConsent })
 }))
 
-const { firstQuestion, RemoteKeystrokesDialog } = await import('./RemoteKeystrokesDialog')
+const { RemoteKeystrokesDialog } = await import('./RemoteKeystrokesDialog')
 
 function request(overrides: Partial<ConsentRequest> = {}): ConsentRequest {
   return {
@@ -95,17 +95,5 @@ describe('the question the owner is asked', () => {
   it('says when it is holding more than it is showing', () => {
     render(<RemoteKeystrokesDialog request={request({ clipped: true })} />)
     expect(screen.getByText(/More is being held than fits here/)).toBeTruthy()
-  })
-})
-
-describe('which question goes on screen', () => {
-  it('puts up the oldest, one at a time', () => {
-    const first = request({ id: 'ask_1', since: 100 })
-    const second = request({ id: 'ask_2', since: 200 })
-    expect(firstQuestion({ p1: { requests: [second, first] } })?.id).toBe('ask_1')
-  })
-
-  it('puts up nothing when nobody is waiting', () => {
-    expect(firstQuestion({ p1: { requests: [] } })).toBeNull()
   })
 })

@@ -242,8 +242,13 @@
   white-space: nowrap;
 }
 
+/* `--fg`, and it was `--fg-primary` — a property no stylesheet has ever
+   declared. A `var()` with nothing behind it makes the declaration invalid at
+   computed-value time, so the colour simply inherited and the one row in this
+   app that says somebody is typing right now stayed the same grey as the rows
+   that say nobody is. */
 .pane-hands--typing .pane-hands__who {
-  color: var(--fg-primary);
+  color: var(--fg);
 }
 
 /* A mute that is on says so in the word on the button, never only in a colour:
