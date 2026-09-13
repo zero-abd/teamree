@@ -2,7 +2,7 @@
 // all read this one declaration, so they cannot drift apart.
 
 import type { FlagSpec, ParsedFlags } from './argv.js'
-import type { CommandOutput } from './output.js'
+import type { CommandOutput, Streams } from './output.js'
 import type { RuntimeClient } from './transport.js'
 
 export type ArgSpec = {
@@ -26,6 +26,18 @@ export type CommandContext = {
   cwd: string
   /** Where the endpoint came from; `status` reports it. */
   endpointSource: string
+  /**
+   * For the one command that streams. `teamree team watch --follow` writes a
+   * teammate's pane out as it arrives rather than at the end, and there is no
+   * way to do that through a returned `CommandOutput`.
+   *
+   * Every other command must leave this alone and return its output, because
+   * `--json` promises exactly one JSON document on stdout and a command writing
+   * around the emitter is how that promise gets broken. `team watch` refuses
+   * --follow together with --json for exactly that reason, which makes the
+   * guarantee structural rather than a rule somebody has to remember.
+   */
+  streams: Streams
 }
 
 export type CommandSpec = {
