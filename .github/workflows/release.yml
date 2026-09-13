@@ -84,15 +84,15 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           {
-            echo "teamree \`$TAG\`, for macOS, Windows and Linux."
+            echo "teamree \`$TAG\`, for macOS."
             echo
             echo "## Nothing here is signed"
             echo
-            echo "There is no Apple Developer certificate behind this build and no Windows"
-            echo "code-signing certificate. Both systems will say so, in wording that sounds"
-            echo "worse than what it means: the complaint is that nobody has paid a vendor to"
-            echo "vouch for the file, not that anything was found wrong with it. Neither"
-            echo "system has inspected the app; neither is telling you it is harmful."
+            echo "There is no Apple Developer certificate behind this build, and there is not"
+            echo "going to be one. macOS will say so, in wording that sounds worse than what it"
+            echo "means: the complaint is that nobody has paid a vendor to vouch for the file,"
+            echo "not that anything was found wrong with it. It has not inspected the app, and"
+            echo "it is not telling you the app is harmful."
             echo
             echo "What a signature would have told you, a checksum tells you too. Compare the"
             echo "file you downloaded against \`SHA256SUMS.txt\` below and you know it is the"
@@ -105,12 +105,6 @@ jobs:
             echo '```sh'
             echo 'xattr -d com.apple.quarantine /Applications/teamree.app'
             echo '```'
-            echo
-            echo "**Windows** will show a blue SmartScreen panel. Choose **More info**, then"
-            echo "**Run anyway**. There is no other way past it for an unsigned installer."
-            echo
-            echo "**Linux** warns about none of this. Mark the AppImage executable, or install"
-            echo "the \`.deb\` with \`sudo apt install ./teamree_*_amd64.deb\`."
             echo
             echo "The full story — why each warning appears, what it does and does not mean,"
             echo "how to put the \`teamree\` CLI on PATH, and how to uninstall — is in"
