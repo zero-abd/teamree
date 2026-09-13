@@ -119,6 +119,12 @@ type ProjectFacts = {
   relay: RelayLocation | null
   /** Why teamwork is not running for this project, or null when it is. */
   disabledReason: string | null
+  /**
+   * Whether `origin` gave a key, kept apart from `disabledReason` because a
+   * project can be missing both a relay and an origin and only one of those
+   * gets named as the first thing to fix.
+   */
+  origin: { ok: true } | { ok: false; reason: string }
 }
 
 type LinkRecord = {
@@ -368,6 +374,7 @@ export class PeerService {
       projectId: facts.projectId,
       relay: facts.relay,
       disabledReason: facts.disabledReason,
+      origin: facts.origin,
       links,
       readAt: this.#scheduler.now()
     }
@@ -1026,6 +1033,7 @@ export class PeerService {
       rosterKeys: roster.entries.map((entry) => entry.publicKey),
       relay: relay.configured ? relay.location : null,
       disabledReason: null,
+      origin: key.ok ? { ok: true } : { ok: false, reason: key.reason },
       handles
     }
 

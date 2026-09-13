@@ -35,7 +35,7 @@ import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type Re
 
 export type DialogState =
   | { kind: 'add-project' }
-  | { kind: 'members'; projectId: string }
+  | { kind: 'start-teamwork'; projectId: string }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
   /** Raised only when the runtime has already refused: there is something here to lose. */
@@ -215,6 +215,14 @@ type WorkspaceState = {
   loadMembers: (projectId: string) => Promise<void>
   /** Reads where one project's relay is recorded, and what each place said. */
   loadRelay: (projectId: string) => Promise<void>
+  /**
+   * Re-reads whether teamwork is running for one project.
+   *
+   * The setup panel shows the links themselves, so it asks on open rather than
+   * waiting for the next change event: a panel whose last step is "connected"
+   * and whose answer is a minute old is a panel people press Close and reopen.
+   */
+  loadTeamwork: (projectId: string) => Promise<void>
   /**
    * Writes the relay into the repository. Like joining, it writes the file and
    * stops: pushing it is what makes it the team's.
@@ -1030,6 +1038,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         failed('Could not read where this project’s relay is')(error)
       } finally {
         set({ relayPending: false })
+      }
+    },
+
+    async loadTeamwork(projectId) {
+      try {
+        const status = await runtimeClient.call('teamwork.status', { projectId })
+        set((state) => ({ teamwork: { ...state.teamwork, [status.projectId]: status } }))
+      } catch (error) {
+        failed('Could not read whether teamwork is running here')(error)
       }
     },
 

@@ -190,10 +190,10 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                 <button
                   type="button"
                   className="project__members"
-                  title={`Members of ${project.name}`}
-                  onClick={() => openDialog({ kind: 'members', projectId: project.id })}
+                  title={`Set up teamwork in ${project.name}, and see who is on it`}
+                  onClick={() => openDialog({ kind: 'start-teamwork', projectId: project.id })}
                 >
-                  Members
+                  Teamwork
                 </button>
               </div>
 

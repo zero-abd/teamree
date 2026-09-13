@@ -545,6 +545,17 @@ export type TeamworkStatus = {
   relay: { url: string; source: 'repository' | 'environment' } | null
   /** Why teamwork is not running here, or null when it is. */
   disabledReason: string | null
+  /**
+   * Whether this checkout has an `origin` teamree can match against a
+   * teammate's, and why not when it has not.
+   *
+   * Reported beside `disabledReason` rather than folded into it because the two
+   * answer different questions. `disabledReason` names the first thing to fix,
+   * and for a project with neither a relay nor an origin that is the relay — so
+   * a setup flow reading only that would offer a relay field for a checkout
+   * where no relay can ever help, and never say why.
+   */
+  origin: { ok: true } | { ok: false; reason: string }
   links: PeerLink[]
   readAt: number
 }

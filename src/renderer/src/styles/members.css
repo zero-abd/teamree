@@ -261,3 +261,321 @@
   color: var(--warning);
   font-size: var(--text-xs);
 }
+
+/* ---------------------------------------------------------- the setup flow */
+
+/* Wider than the other dialogs, because this one is the only place a person is
+   asked to make a decision — which relay — rather than to confirm one. */
+.modal:has(.steps) {
+  width: min(640px, calc(100vw - 48px));
+}
+
+.teamwork-setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  padding: 0 var(--s5) var(--s5);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  max-height: min(62vh, 640px);
+  overflow-y: auto;
+}
+
+/* Above the steps rather than inside one: a person who works through four of
+   them and only then learns the fifth was impossible has been wasted. */
+.steps__blocker {
+  padding: var(--s3);
+  border: 1px solid var(--warning);
+  border-radius: var(--r2);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.steps__blocker strong {
+  color: var(--warning);
+}
+
+.steps__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+}
+
+/* The one to act on, and the only one the eye should land on first. */
+.step--current {
+  border-color: var(--accent-line);
+  background: var(--bg-raised);
+}
+
+.step__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+}
+
+.step__mark {
+  flex: none;
+  width: 14px;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+.step--done .step__mark {
+  color: var(--success);
+}
+
+.step--blocked .step__mark {
+  color: var(--warning);
+}
+
+.step__title {
+  flex: 1;
+  min-width: 0;
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.step__state {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.step--done .step__state {
+  color: var(--success);
+}
+
+.step--blocked .step__state {
+  color: var(--warning);
+}
+
+.step__summary {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.step__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding-top: var(--s1);
+}
+
+.step__identity {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+}
+
+.step__identity-handle {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* What a key grants, in the place it cannot be skipped: above the button that
+   grants it. */
+.grant {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--warning);
+  border-radius: var(--r2);
+}
+
+.grant__head {
+  color: var(--warning);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.grant__body,
+.grant__close {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+
+.grant__close {
+  color: var(--fg);
+}
+
+.grant__mitigations {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding-left: var(--s4);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  list-style: disc;
+}
+
+.relay-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.relay-options__lead {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+
+.relay-options__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  list-style: none;
+}
+
+.relay-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+
+.relay-option__name {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.relay-option__what {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+
+.relay-option__commands {
+  padding: var(--s2);
+  overflow-x: auto;
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.relay-option__costs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.relay-option__costs div {
+  display: flex;
+  gap: var(--s2);
+}
+
+.relay-option__costs dt {
+  flex: none;
+  width: 52px;
+  color: var(--fg-muted);
+}
+
+.relay-option__costs dd {
+  color: var(--fg-secondary);
+}
+
+/* The half of the choice that is teamree's business: whether the address it
+   produces is a fact about the team or a thing that dies tonight. */
+.relay-option__keep {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.relay-option__keep--commit {
+  color: var(--success);
+}
+
+.relay-option__keep--override {
+  color: var(--warning);
+}
+
+.push__files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding-left: var(--s4);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  list-style: disc;
+}
+
+.push__files code {
+  color: var(--fg);
+}
+
+.links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  list-style: none;
+}
+
+.link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: var(--s2);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  font-size: var(--text-xs);
+}
+
+.link__handle {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.link__phase {
+  color: var(--fg-muted);
+}
+
+.link--connected .link__phase {
+  color: var(--success);
+}
+
+.link--refused .link__phase,
+.link--stopped .link__phase,
+.link--unreachable .link__phase {
+  color: var(--warning);
+}
+
+/* The runtime's own words, and the only place the clock and the relay file get
+   named when nobody has answered for two rotations. */
+.link__detail {
+  flex-basis: 100%;
+  color: var(--fg-secondary);
+  line-height: 1.55;
+}
