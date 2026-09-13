@@ -12,6 +12,15 @@
     opened from 1.4 units to 4 so the windows stay three at 16px, and the trunk
     and branches go from 3.6 units to 5.6 and 5 so they survive a single device
     pixel. The root is deepened for the same reason.
+
+    16px is the floor of this artwork, not a target. At 16 it reads as three
+    windows, but not reliably as three windows ON a trunk WITH a root: the root
+    is the first thing to go, rendering at roughly a third to a half ink, and
+    the upper trunk comes out lighter than the windows so the top one can look
+    detached. 20px is the first size where all three parts are solid. That was
+    measured, and no amount of further thickening fixes it without making the
+    mark something other than the owner's — so it is recorded here rather than
+    re-litigated.
   -->
 
   <!-- the root -->
@@ -22,8 +31,8 @@
 
   <!-- the branches -->
   <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
-    <path d="M14.9 37 C17.1 44.2 32.9 47.6 30 54"/>
-    <path d="M49.1 37 C46.9 44.2 31.1 47.6 34 54"/>
+    <path d="M14.9 37 C14.9 43.8 32 45.8 29.2 54.4"/>
+    <path d="M49.1 37 C49.1 43.8 32 45.8 34.8 54.4"/>
   </g>
 
   <!-- the chevron where the branches meet the trunk -->

@@ -12,21 +12,29 @@
   -->
 
   <!-- the root: a wide shallow crescent the trunk flares into -->
-  <path d="M16.28 58.44 Q32 49.19 47.72 58.44 Q32 55.69 16.28 58.44 Z"/>
+  <path d="M15.90 58.66 Q32 49.00 48.10 58.66 Q32 55.50 15.90 58.66 Z"/>
 
   <!-- the trunk, descending from the top window into the root -->
-  <path d="M30.13 21.63 H33.88 V57.06 H30.13 Z"/>
+  <path d="M30.09 21.63 H33.91 V57.06 H30.09 Z"/>
 
   <!-- the two branches, sweeping down and inward from the lower windows -->
-  <g fill="none" stroke="currentColor" stroke-width="3.63" stroke-linecap="round">
-    <path d="M15.81 39.13 C17.91 45.69 32.91 48.50 30.16 54.75"/>
-    <path d="M48.19 39.13 C46.09 45.69 31.09 48.50 33.84 54.75"/>
+  <g fill="none" stroke="currentColor" stroke-width="3.55" stroke-linecap="round">
+    <path d="M15.81 39.00 C15.81 45.00 32.00 47.00 28.85 55.00"/>
+    <path d="M48.19 39.00 C48.19 45.00 32.00 47.00 35.15 55.00"/>
   </g>
 
-  <!-- the chevron where the branches meet the trunk -->
-  <g fill="none" stroke="currentColor" stroke-width="3.13" stroke-linecap="round">
-    <path d="M27.09 39.25 L32 46.75"/>
-    <path d="M36.91 39.25 L32 46.75"/>
+  <!--
+    The chevron where the branches meet the trunk. Each arm is a tapered wedge,
+    not a stroke: in the artwork it comes to a point at the top, widens as it
+    descends, and its outer edge then sweeps back in and flares into the trunk.
+    A constant-width round-capped stroke gets the tip 2 units too fat and the
+    foot 1.5 units too wide, which is the difference between an arrowhead and a
+    pair of sticks. The right edge runs to 30.60 rather than to the trunk's own
+    30.09 so the two shapes overlap instead of sharing an antialiased seam.
+  -->
+  <g>
+    <path d="M27.05 37.60 L25.09 40.02 C26.94 42.22 29.25 44.10 30.13 46.30 L30.60 46.30 L30.60 40.77 Z"/>
+    <path d="M36.95 37.60 L38.91 40.02 C37.06 42.22 34.75 44.10 33.87 46.30 L33.40 46.30 L33.40 40.77 Z"/>
   </g>
 
   <!--

@@ -46,8 +46,8 @@ function BrandMark(): React.JSX.Element {
 
       {/* the branches */}
       <g fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round">
-        <path d="M14.9 37 C17.1 44.2 32.9 47.6 30 54" />
-        <path d="M49.1 37 C46.9 44.2 31.1 47.6 34 54" />
+        <path d="M14.9 37 C14.9 43.8 32 45.8 29.2 54.4" />
+        <path d="M49.1 37 C49.1 43.8 32 45.8 34.8 54.4" />
       </g>
 
       {/* the chevron where the branches meet the trunk */}

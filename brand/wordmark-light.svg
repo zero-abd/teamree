@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 274 64" fill="#0B0D12" role="img" aria-label="teamree">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 274 64" color="#0B0D12" style="color:#0B0D12" fill="#0B0D12" role="img" aria-label="teamree">
   <!--
     brand/wordmark.svg with every currentColor replaced by the literal #0B0D12,
     for a light ground. GENERATED — edit brand/wordmark.svg, not this file.
@@ -22,13 +22,24 @@
     mark's own 5.5..58.44 — that is the optical alignment, and it deliberately
     ignores the t's ascender, as lowercase logotypes do.
 
-    Spacing is optical, not metric: stem-to-stem pairs (a-m, m-r) carry 6 units
-    of air and round-to-round pairs (e-a, e-e) carry 4, because equal gaps look
-    unequal between those shapes. The mark and the word are 14 apart.
+    Spacing is optical, not metric, and it is set by the width of the fully
+    empty column between two letters rather than by a metric advance: t-e 3.5,
+    e-a 3.2, a-m 5.9, m-r 5.9, r-e 2.8, e-e 3.2. Stem-to-stem pairs need the
+    most air and a letter that opens to the right needs the least, because the
+    white under an r's arm already reads as space. The r's shoulder uses the
+    same radius 9 as the m's for that reason: at 7.5 it was an undersized letter
+    that did not reach, and the hole after it was the biggest in the word.
+    The mark and the word are 14 apart.
 
     Padding is built in only as bleed: the mark's glyph starts at x=2, the word
-    ends at x=269 in a 274 box. There is no clear-space margin baked in — a host
+    ends at x=271 in a 274 box. There is no clear-space margin baked in — a host
     that wants air adds it outside this box.
+
+    MINIMUM SIZE: 48px tall. That is the full mark's floor, not the word's —
+    below 48 the window contents close up while the word is still perfectly
+    legible. Use brand/wordmark-small.svg between 22px and 48px. Below 22px do
+    not use a lockup at all: the e apertures fill and the word stops reading.
+    Show brand/mark-small.svg on its own instead.
   -->
 
   <g>
@@ -71,23 +82,23 @@
     <path d="M84 12 V37.5 A6 6 0 0 0 90 43.5"/>
     <path d="M79 20 H90"/>
     <!-- e -->
-    <path d="M116 32 A9 9 0 1 0 112.16 39.37"/>
-    <path d="M116 32 H98"/>
+    <path d="M118.2 32 A9 9 0 1 0 114.36 39.37"/>
+    <path d="M118.2 32 H100.2"/>
     <!-- a -->
-    <path d="M144 32 A9 9 0 1 1 144 31.99"/>
-    <path d="M144 20 V44"/>
+    <path d="M145.4 32 A9 9 0 1 1 145.4 31.99"/>
+    <path d="M145.4 20 V44"/>
     <!-- m -->
-    <path d="M156 20 V44"/>
-    <path d="M156 29 A9 9 0 0 1 174 29 V44"/>
-    <path d="M174 29 A9 9 0 0 1 192 29 V44"/>
+    <path d="M157.3 20 V44"/>
+    <path d="M157.3 29 A9 9 0 0 1 175.3 29 V44"/>
+    <path d="M175.3 29 A9 9 0 0 1 193.3 29 V44"/>
     <!-- r -->
-    <path d="M204 20 V44"/>
-    <path d="M204 27.5 A7.5 7.5 0 0 1 211.5 20"/>
+    <path d="M205.2 20 V44"/>
+    <path d="M205.2 29 A9 9 0 0 1 214.2 20"/>
     <!-- e -->
-    <path d="M238 32 A9 9 0 1 0 234.16 39.37"/>
-    <path d="M238 32 H220"/>
+    <path d="M241 32 A9 9 0 1 0 237.16 39.37"/>
+    <path d="M241 32 H223"/>
     <!-- e -->
-    <path d="M266 32 A9 9 0 1 0 262.16 39.37"/>
-    <path d="M266 32 H248"/>
+    <path d="M268 32 A9 9 0 1 0 264.16 39.37"/>
+    <path d="M268 32 H250"/>
   </g>
 </svg>

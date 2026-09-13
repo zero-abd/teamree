@@ -107,7 +107,12 @@ const SITE_PNGS = [
   { path: 'site/public/icon-32.png', width: 32, height: 32, required: true },
   { path: 'site/public/icon-256.png', width: 256, height: 256, required: true },
   { path: 'site/public/og.png', width: 1200, height: 630, required: true },
-  { path: 'site/public/screenshot.png', width: 1400, height: 873, required: true },
+  // The screenshot is the one entry here that is a 2x asset: the page reserves a
+  // 1400x900 slot for it (`width`/`height` on the <img>), and the file is the
+  // device-pixel version of that slot. Checking the 1x number would fail a
+  // correct retina image, and checking nothing would let a mismatched aspect
+  // through and shift the layout while it loads.
+  { path: 'site/public/screenshot.png', width: 2800, height: 1800, required: true },
   { path: 'site/public/apple-touch-icon.png', width: 180, height: 180, required: true },
   { path: 'site/public/icon-192.png', width: 192, height: 192, required: true },
   { path: 'site/public/icon-512.png', width: 512, height: 512, required: true }
