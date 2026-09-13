@@ -40,6 +40,9 @@ export function WorkspaceArea({
   const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
   const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
   const toggleDashboard = useWorkspaceStore((state) => state.toggleDashboard)
+  const projects = useWorkspaceStore((state) => state.projects)
+  const connection = useWorkspaceStore((state) => state.connection)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -54,6 +57,53 @@ export function WorkspaceArea({
   if (dashboardOpen) return <Dashboard modifier={modifier} />
 
   if (!worktree || !activeWorktreeId) {
+    // A runtime that never came up leaves a window that looks ordinary and
+    // answers nothing. The status bar says so in three words at the bottom of
+    // the screen; this is the surface somebody is actually looking at, and
+    // every shortcut the empty state would otherwise offer is inert.
+    if (connection.phase === 'offline') {
+      return (
+        <main className="workspace workspace--empty">
+          <div className="placeholder">
+            <h1 className="placeholder__title">The runtime is not running</h1>
+            <p className="placeholder__body">
+              Git, worktrees and terminals all live in a process this window talks to, and it is not answering. Nothing
+              here will respond until it is back — quitting and reopening teamree starts a new one.
+            </p>
+            {connection.detail ? <p className="placeholder__body">{connection.detail}</p> : null}
+          </div>
+        </main>
+      )
+    }
+
+    // The genuine first run. Every shortcut in the legend below acts on a pane,
+    // and the one that makes a worktree needs a project to make it in — with
+    // none added it does nothing at all when pressed. Naming a chord here would
+    // be telling somebody to press a key that cannot answer, so this state
+    // offers the only action that can.
+    if (projects.length === 0) {
+      return (
+        <main className="workspace workspace--empty">
+          <div className="placeholder">
+            <h1 className="placeholder__title">Add a repository to start</h1>
+            <p className="placeholder__body">
+              teamree works in git worktrees of a repository you already have: one checkout per task, so several agents
+              can work at once without seeing each other&rsquo;s files. Point it at a clone to begin.
+            </p>
+            <div className="placeholder__actions">
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={() => openDialog({ kind: 'add-project' })}
+              >
+                Add a repository
+              </button>
+            </div>
+          </div>
+        </main>
+      )
+    }
+
     return (
       <main className="workspace workspace--empty">
         <div className="placeholder">

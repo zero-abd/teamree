@@ -326,7 +326,33 @@ recorded so none of them is discovered by surprise later.
   and passes. The macOS and Windows jobs are reasoned from the same scripts and have
   not been run. The action versions have since been checked against the upstream tags
   and all resolve, so the first run will not fail on those; they are two to three
-  majors behind current, which is a maintenance note rather than a fault.
+  majors behind current, which is a maintenance note rather than a fault. Those steps
+  now live in `build.yml`, which `ci.yml` and `release.yml` both call rather than
+  restate, so there is one sequence to be wrong rather than two. All three files are
+  checked by actionlint with shellcheck behind it and are clean, which means the first
+  run will not die on a syntax error, an unknown action input or a shell mistake in a
+  `run:` block — it does not mean the jobs pass.
+- **No release has ever been published.** `release.yml` builds on a `v*` tag through
+  the same workflow CI uses, collects the three runners' installers, writes
+  `SHA256SUMS.txt` and attaches the lot to a GitHub release. It has never been fired.
+  The parts that can be checked without GitHub have been: the workflow parses and
+  lints, and the note-writing and checksum steps were run here against stand-in files
+  and produce what they claim to. What has not been checked is everything that needs
+  the platform — whether the artifact upload and download hand the files between jobs
+  as expected, and whether `gh release create` behaves as read. Until a tag is pushed,
+  this is a pipeline that has been reasoned through, not one that has run.
+- **Nothing is signed, and that is what a new user meets first.** There is no Apple
+  Developer certificate and no Windows code-signing certificate, so macOS refuses the
+  app as being from an unverified developer and Windows shows a SmartScreen panel.
+  Neither is avoidable without buying into the respective programme; both are now
+  documented rather than left to be discovered, in `docs/install.md` and in the notes
+  every release carries, with what each warning does and does not mean and the exact
+  way past it. A published checksum is the substitute for the integrity half of a
+  signature. There is no substitute for the identity half: a colleague's confidence
+  that the file is teamree rests on where they got the link, not on anything the
+  operating system can tell them. The macOS instructions in that document are written
+  from Apple's behaviour and the ad-hoc signing the build already does; they have not
+  been walked through on a Mac at this commit.
 - **Windows behaviour is reasoned, not observed.** Narrower than it was, and not
   closed. Command-line encoding is now checked exhaustively rather than by example:
   every argument up to four characters over the alphabet that drives the rules, and
