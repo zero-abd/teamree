@@ -765,6 +765,16 @@ export type CliStatus = {
   platform: NodeJS.Platform
   /** The CLI inside this app, or null when this build has none to link. */
   source: string | null
+  /**
+   * Whether that CLI is the one inside a packaged app rather than one found in
+   * a source checkout.
+   *
+   * The difference matters to exactly one caller: the offer made unprompted on
+   * first run. A checkout's CLI is a fine thing to link by hand and a bad thing
+   * to be asked about on every `npm run dev`, and a link into a checkout breaks
+   * the moment that checkout moves.
+   */
+  packaged: boolean
   /** The link itself. */
   destination: string
   /** The directory holding it — the thing that has to be writable. */
@@ -776,6 +786,15 @@ export type CliStatus = {
   needsAdministrator: boolean
   /** Null when nothing this app can read says the directory is on PATH. */
   onPath: CliPathSource | null
+  /**
+   * When this installation was asked whether to do this, or null if it never
+   * has been.
+   *
+   * The record of a question, not of an outcome: declining is an answer and it
+   * has to stick, or "asked once" becomes "asked once a launch" — which is how
+   * a prompt teaches people to dismiss it unread.
+   */
+  askedAt: number | null
   readAt: number
 }
 

@@ -240,6 +240,13 @@ type WorkspaceState = {
    * only if that directory cannot be written without one.
    */
   installCli: () => Promise<void>
+  /**
+   * Records that this installation has been asked, so the offer teamree makes
+   * by itself on first run is made once. Both buttons on that card come here:
+   * declining is an answer, and accepting is an answer that also opens the
+   * panel.
+   */
+  dismissCliPrompt: () => Promise<void>
 
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
@@ -1072,6 +1079,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         await get().loadCli()
       } finally {
         set({ cliPending: false })
+      }
+    },
+
+    async dismissCliPrompt() {
+      // Optimistic, because the card must go the instant it is answered: a
+      // question that lingers while a round trip completes is a question the
+      // user answers twice. The runtime's reply replaces the guess.
+      const current = get().cli
+      if (current && current.askedAt === null) set({ cli: { ...current, askedAt: Date.now() } })
+      try {
+        set({ cli: await runtimeClient.call('cli.dismissPrompt', {}) })
+      } catch (error) {
+        // Worth a notice rather than a shrug: an answer that was not written
+        // down is an answer that will be asked for again on the next launch.
+        failed('Could not record that teamree asked about putting its CLI on your PATH')(error)
       }
     },
 

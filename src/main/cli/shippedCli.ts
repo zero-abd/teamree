@@ -25,15 +25,26 @@ export type ShippedCliOptions = {
   exists?: (candidate: string) => boolean
 }
 
+/**
+ * The CLI, and which of the two it turned out to be.
+ *
+ * `packaged` is carried rather than inferred later because only this module
+ * knows which candidate answered, and one caller — the offer made unprompted on
+ * first run — has to tell an installed app from a checkout.
+ */
+export type ShippedCli = { path: string; packaged: boolean }
+
 /** Both places, packaged first, in the order they are tried. */
-export function shippedCliCandidates(options: ShippedCliOptions = {}): string[] {
-  const candidates: string[] = []
-  if (options.resourcesPath) candidates.push(join(options.resourcesPath, 'cli', CLI_COMMAND_NAME))
-  candidates.push(join(options.cwd ?? process.cwd(), 'resources', 'cli', CLI_COMMAND_NAME))
+export function shippedCliCandidates(options: ShippedCliOptions = {}): ShippedCli[] {
+  const candidates: ShippedCli[] = []
+  if (options.resourcesPath) {
+    candidates.push({ path: join(options.resourcesPath, 'cli', CLI_COMMAND_NAME), packaged: true })
+  }
+  candidates.push({ path: join(options.cwd ?? process.cwd(), 'resources', 'cli', CLI_COMMAND_NAME), packaged: false })
   return candidates
 }
 
-export function findShippedCli(options: ShippedCliOptions = {}): string | null {
+export function findShippedCli(options: ShippedCliOptions = {}): ShippedCli | null {
   const exists = options.exists ?? existsSync
-  return shippedCliCandidates(options).find((candidate) => exists(candidate)) ?? null
+  return shippedCliCandidates(options).find((candidate) => exists(candidate.path)) ?? null
 }

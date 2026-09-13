@@ -41,9 +41,29 @@ export const CLI_COMMAND_NAME = 'teamree'
  */
 export const LOGIN_PATHS_FILE = '/etc/paths'
 
+/**
+ * Where the answer to "shall I put this on your PATH?" is kept.
+ *
+ * A seam rather than a store, because the service has no business knowing what
+ * a workspace file is — and because a test has to be able to watch what was
+ * written down without one.
+ */
+export type CliPromptRecord = {
+  askedAt: () => number | undefined
+  markAsked: (at: number) => void
+}
+
 export type CliServiceOptions = {
   /** The CLI inside this app. Null when this build has none to link. */
   source: string | null
+  /** Whether that CLI is a packaged app's rather than a source checkout's. */
+  packaged?: boolean
+  /**
+   * Where the one-time question's answer is remembered. Defaults to this
+   * process, which is the most a runtime with nowhere to write can honestly
+   * promise — and is what the acceptance harness gets.
+   */
+  prompt?: CliPromptRecord
   /** Injected so a test never goes near the real one. */
   directory?: string
   platform?: NodeJS.Platform
@@ -60,6 +80,8 @@ export type CliServiceOptions = {
 
 export class CliService {
   readonly #source: string | null
+  readonly #packaged: boolean
+  readonly #prompt: CliPromptRecord
   readonly #directory: string
   readonly #platform: NodeJS.Platform
   readonly #env: NodeJS.ProcessEnv
@@ -70,6 +92,8 @@ export class CliService {
 
   constructor(options: CliServiceOptions) {
     this.#source = options.source
+    this.#packaged = options.packaged ?? false
+    this.#prompt = options.prompt ?? inMemoryPrompt()
     this.#directory = options.directory ?? CLI_DESTINATION_DIRECTORY
     this.#platform = options.platform ?? process.platform
     this.#env = options.env ?? process.env
@@ -86,12 +110,14 @@ export class CliService {
       installable: this.#platform === 'darwin',
       platform: this.#platform,
       source: this.#source,
+      packaged: this.#packaged,
       destination,
       directory: this.#directory,
       state,
       resolved,
       needsAdministrator: !(await this.#writable(this.#directory)),
       onPath: await this.#onPath(),
+      askedAt: this.#prompt.askedAt() ?? null,
       readAt: this.#now()
     }
   }
@@ -110,7 +136,7 @@ export class CliService {
       throw notFound('This build of teamree has no CLI in it to link, so there is nothing to put on PATH.')
     }
     if (before.state === 'linked') {
-      return { outcome: 'already-linked', replaced: null, administrator: false, status: before }
+      return { outcome: 'already-linked', replaced: null, administrator: false, status: await this.#answered(before) }
     }
     if (before.state === 'file' || before.state === 'directory') {
       const what = before.state === 'file' ? 'a regular file' : 'a directory'
@@ -137,8 +163,27 @@ export class CliService {
       outcome: before.state === 'elsewhere' ? 'replaced' : 'linked',
       replaced: before.resolved,
       administrator,
-      status: after
+      status: await this.#answered(after)
     }
+  }
+
+  /**
+   * Records that the question has been put and answered, without asking it.
+   *
+   * Called when somebody declines the offer — and, from `install`, when they
+   * accept it, because pressing the button is as complete an answer as saying
+   * no. A refusal is not an answer and does not get here: there was nothing
+   * for the user to decide.
+   */
+  async dismissPrompt(): Promise<CliStatus> {
+    return this.#answered(await this.status())
+  }
+
+  async #answered(status: CliStatus): Promise<CliStatus> {
+    if (status.askedAt !== null) return status
+    const at = this.#now()
+    this.#prompt.markAsked(at)
+    return { ...status, askedAt: this.#prompt.askedAt() ?? at }
   }
 
   async #escalate(source: string, destination: string): Promise<void> {
@@ -177,6 +222,17 @@ export class CliService {
     if (this.#platform !== 'darwin') return null
     const login = await this.#loginPaths().catch(() => [])
     return login.map(withoutTrailingSlash).includes(wanted) ? 'login' : null
+  }
+}
+
+/** What a service built without anywhere to remember gets: this process. */
+function inMemoryPrompt(): CliPromptRecord {
+  let at: number | undefined
+  return {
+    askedAt: () => at,
+    markAsked: (when) => {
+      at ??= when
+    }
   }
 }
 

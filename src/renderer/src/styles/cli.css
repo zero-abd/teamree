@@ -96,3 +96,64 @@
   line-height: 1.5;
   white-space: pre;
 }
+
+/* The offer teamree makes by itself, once, on a machine where the command is
+   not linked yet. Bottom left, over the sidebar's foot, which is where the
+   quiet version of the same affordance lives afterwards — and the opposite
+   corner from the notices, so neither can cover the other. */
+.cli-offer {
+  position: fixed;
+  bottom: 34px;
+  left: var(--s4);
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  width: 320px;
+  max-width: calc(100vw - var(--s6));
+  padding: var(--s4);
+  border: 1px solid var(--line-strong);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  animation: notice-in var(--motion-base) var(--ease);
+}
+
+.cli-offer__headline {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 560;
+}
+
+.cli-offer__detail {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.cli-offer__promise {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+/* The sentence the whole card exists to show before either button is pressed. */
+.cli-offer__password {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.cli-offer__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
+  padding-top: var(--s1);
+}
+
+.cli-offer__once {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}

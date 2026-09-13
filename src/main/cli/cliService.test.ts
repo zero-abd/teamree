@@ -318,3 +318,79 @@ describe('a build with no CLI in it', () => {
     await expect(service.install()).rejects.toMatchObject({ code: ErrorCode.NotFound })
   })
 })
+
+describe('the question this installation asks once', () => {
+  /** Stands in for the workspace store: the same contract, in memory. */
+  function record(): { askedAt: () => number | undefined; markAsked: (at: number) => void; seen: number[] } {
+    const seen: number[] = []
+    return {
+      seen,
+      askedAt: () => seen[0],
+      markAsked: (at) => {
+        if (seen.length === 0) seen.push(at)
+      }
+    }
+  }
+
+  it('has not been asked on a fresh installation', async () => {
+    const { source, bin } = await scratchApp()
+    const { service } = harness({ source, directory: bin, prompt: record() })
+    expect((await service.status()).askedAt).toBeNull()
+  })
+
+  it('remembers being declined, and says when', async () => {
+    const { source, bin } = await scratchApp()
+    const prompt = record()
+    const { service } = harness({ source, directory: bin, prompt, now: () => 1700000000000 })
+
+    const after = await service.dismissPrompt()
+    expect(after.askedAt).toBe(1700000000000)
+    expect(prompt.seen).toEqual([1700000000000])
+    expect((await service.status()).askedAt).toBe(1700000000000)
+  })
+
+  it('keeps the first answer rather than moving it every time it is declined', async () => {
+    const { source, bin } = await scratchApp()
+    const prompt = record()
+    let clock = 1700000000000
+    const { service } = harness({ source, directory: bin, prompt, now: () => clock })
+
+    await service.dismissPrompt()
+    clock = 1800000000000
+    expect((await service.dismissPrompt()).askedAt).toBe(1700000000000)
+  })
+
+  it('counts installing as the answer, so nothing asks again afterwards', async () => {
+    const { source, bin } = await scratchApp()
+    const prompt = record()
+    const { service } = harness({ source, directory: bin, prompt, now: () => 1700000000000 })
+
+    const result = await service.install()
+    expect(result.status.askedAt).toBe(1700000000000)
+    expect(prompt.seen).toEqual([1700000000000])
+  })
+
+  it('does not count a refusal as an answer: there was nothing to answer with', async () => {
+    const { source, bin } = await scratchApp()
+    const prompt = record()
+    await writeFile(join(bin, 'teamree'), 'somebody else’s binary')
+    const { service } = harness({ source, directory: bin, prompt })
+
+    await expect(service.install()).rejects.toThrow(/regular file/i)
+    expect(prompt.seen).toEqual([])
+  })
+
+  it('says whether the CLI it found is inside a packaged app', async () => {
+    const { source, bin } = await scratchApp()
+    expect((await harness({ source, directory: bin }).service.status()).packaged).toBe(false)
+    expect((await harness({ source, directory: bin, packaged: true }).service.status()).packaged).toBe(true)
+  })
+
+  it('remembers for this process alone when there is nowhere to write it down', async () => {
+    const { source, bin } = await scratchApp()
+    const { service } = harness({ source, directory: bin, now: () => 1700000000000 })
+
+    expect((await service.status()).askedAt).toBeNull()
+    expect((await service.dismissPrompt()).askedAt).toBe(1700000000000)
+  })
+})

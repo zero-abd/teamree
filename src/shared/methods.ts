@@ -135,6 +135,11 @@ export const Params = {
    * no way for a caller to aim the link somewhere else.
    */
   cliInstall: z.object({}),
+  /**
+   * Records that this installation has now been asked, so the offer made on
+   * first run is made once and never again. Declining is an answer.
+   */
+  cliDismissPrompt: z.object({}),
 
   /**
    * Everyone whose public key is committed to the project, and who this
@@ -317,6 +322,7 @@ export type MethodContract = {
 
   'cli.status': { params: z.infer<typeof Params.cliStatus>; result: CliStatus }
   'cli.install': { params: z.infer<typeof Params.cliInstall>; result: CliInstall }
+  'cli.dismissPrompt': { params: z.infer<typeof Params.cliDismissPrompt>; result: CliStatus }
 
   'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
   'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }

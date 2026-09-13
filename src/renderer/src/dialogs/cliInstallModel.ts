@@ -129,6 +129,59 @@ export function offerCliInstall(status: CliStatus | null): boolean {
   return status !== null && status.installable && status.source !== null && status.state !== 'linked'
 }
 
+/**
+ * The offer made once, unprompted, to somebody who has just installed the app.
+ *
+ * Null when there is nothing to offer, which is most of the time. The two
+ * sentences that matter — where the link goes and whether a password is coming
+ * — are taken from the panel rather than written again, so the offer and the
+ * thing it opens cannot come to say different things.
+ */
+export type CliOffer = {
+  headline: string
+  detail: string
+  promise: string
+  password: string
+  /** Opens the panel, where the link is actually made. */
+  accept: string
+  decline: string
+  /** That this is asked once, and where it lives afterwards. */
+  once: string
+}
+
+/**
+ * Whether to put the question at all, and in what words.
+ *
+ * Four reasons to stay quiet, and each of them is a case where asking would be
+ * either useless or a lie: the question has been answered already; there is
+ * nothing to do or no way to do it (`offerCliInstall`); this is a source
+ * checkout, where the answer would be asked again on every `npm run dev` and
+ * where the link would break the moment the checkout moved; or something is in
+ * the way at the destination, which is a problem to explain rather than an
+ * offer to make — the sidebar still carries it to the panel that explains it.
+ */
+export function cliOffer(status: CliStatus | null): CliOffer | null {
+  if (status === null || status.askedAt !== null || !status.packaged) return null
+  if (!offerCliInstall(status)) return null
+  const panel = cliPanel(status)
+  if (panel.action === null || panel.promise === null || panel.password === null) return null
+
+  return {
+    headline:
+      status.state === 'elsewhere'
+        ? 'The teamree command on your PATH is a different copy.'
+        : 'Put the teamree command on your PATH?',
+    detail:
+      'teamree ships its own CLI, and everything this window can do it can do — it is how a coding agent drives ' +
+      'teamree.',
+    promise: panel.promise,
+    password: panel.password,
+    accept: panel.action,
+    decline: 'No thanks',
+    once: 'Asked once. The sidebar and the command palette both have it if you change your mind.'
+  }
+}
+
 /** What just happened, said precisely enough that nobody has to guess. */
 export function cliOutcome(install: CliInstall): string {
   const { status } = install

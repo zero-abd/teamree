@@ -241,6 +241,7 @@ describe('what a teammate can reach', () => {
     // does not get to ask for a password dialog on somebody else's screen.
     expect(PEER_METHODS).not.toContain('cli.install')
     expect(PEER_METHODS).not.toContain('cli.status')
+    expect(PEER_METHODS).not.toContain('cli.dismissPrompt')
   })
 
   it('refuses a keystroke when nothing is there to attribute it to', async () => {

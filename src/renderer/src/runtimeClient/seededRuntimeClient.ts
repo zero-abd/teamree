@@ -396,18 +396,25 @@ export function createSeededRuntimeClient(): RuntimeClient {
 
   // --- method dispatch ------------------------------------------------------
 
-  /** Seeded: not linked, and the destination is one only root can write. */
+  /**
+   * Seeded: a packaged app, not linked, nobody asked yet, and a destination
+   * only root can write — which is the one state where the demo has both the
+   * first-run offer and the password sentence to show.
+   */
   let cliLinked = false
+  let cliAskedAt: number | null = null
   const cliStatus = (): CliStatus => ({
     installable: true,
     platform: 'darwin',
     source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+    packaged: true,
     destination: '/usr/local/bin/teamree',
     directory: '/usr/local/bin',
     state: cliLinked ? 'linked' : 'absent',
     resolved: cliLinked ? '/Applications/teamree.app/Contents/Resources/cli/teamree' : null,
     needsAdministrator: !cliLinked,
     onPath: 'login',
+    askedAt: cliAskedAt,
     readAt: Date.now()
   })
 
@@ -842,7 +849,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'cli.install': () => {
       const before = cliStatus()
       cliLinked = true
+      cliAskedAt ??= Date.now()
       return { outcome: 'linked', replaced: null, administrator: before.needsAdministrator, status: cliStatus() }
+    },
+    'cli.dismissPrompt': () => {
+      cliAskedAt ??= Date.now()
+      return cliStatus()
     },
     'terminal.list': ({ worktreeId }) =>
       [...terminals.values()]

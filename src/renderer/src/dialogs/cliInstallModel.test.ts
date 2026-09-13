@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CliInstall, CliStatus } from '@shared/entities'
-import { cliOutcome, cliPanel, offerCliInstall } from './cliInstallModel'
+import { cliOffer, cliOutcome, cliPanel, offerCliInstall } from './cliInstallModel'
 
 const APP_CLI = '/Applications/teamree.app/Contents/Resources/cli/teamree'
 
@@ -9,12 +9,14 @@ function status(extra: Partial<CliStatus> = {}): CliStatus {
     installable: true,
     platform: 'darwin',
     source: APP_CLI,
+    packaged: true,
     destination: '/usr/local/bin/teamree',
     directory: '/usr/local/bin',
     state: 'absent',
     resolved: null,
     needsAdministrator: false,
     onPath: 'login',
+    askedAt: null,
     readAt: 0,
     ...extra
   }
@@ -155,5 +157,55 @@ describe('whether the sidebar offers it', () => {
     expect(offerCliInstall(status({ installable: false, platform: 'linux' }))).toBe(false)
     expect(offerCliInstall(status({ source: null }))).toBe(false)
     expect(offerCliInstall(null)).toBe(false)
+  })
+})
+
+describe('the offer made once, unprompted, on first run', () => {
+  it('says where the link goes and that a password is coming, before anything is pressed', () => {
+    const offer = cliOffer(status({ needsAdministrator: true }))
+    expect(offer).not.toBeNull()
+    expect(offer?.promise).toContain('/usr/local/bin/teamree')
+    expect(offer?.password).toContain('administrator password')
+    // The same sentences the panel uses, so the two cannot drift apart.
+    expect(offer?.promise).toBe(cliPanel(status({ needsAdministrator: true })).promise)
+    expect(offer?.password).toBe(cliPanel(status({ needsAdministrator: true })).password)
+    expect(offer?.accept).toBe('Put teamree on my PATH')
+    expect(offer?.decline).toBe('No thanks')
+    expect(offer?.once).toContain('once')
+  })
+
+  it('says the other thing when the link exists and leads to another copy', () => {
+    const older = '/Users/ann/Downloads/teamree.app/Contents/Resources/cli/teamree'
+    const offer = cliOffer(status({ state: 'elsewhere', resolved: older }))
+    expect(offer?.headline).toContain('different copy')
+    expect(offer?.accept).toBe('Point it at this app')
+  })
+
+  it('is not made again once this installation has been asked', () => {
+    expect(cliOffer(status({ askedAt: 1700000000000 }))).toBeNull()
+  })
+
+  it('is not made when the link is already right', () => {
+    expect(cliOffer(status({ state: 'linked', resolved: APP_CLI }))).toBeNull()
+  })
+
+  it('is not made for a source checkout, which would ask on every npm run dev', () => {
+    expect(cliOffer(status({ packaged: false }))).toBeNull()
+    // The sidebar still offers it: running from source is a fine reason to
+    // want the command, just not a reason to be asked unprompted.
+    expect(offerCliInstall(status({ packaged: false }))).toBe(true)
+  })
+
+  it('is not made where the app could not do it, or has nothing to link', () => {
+    expect(cliOffer(status({ installable: false, platform: 'linux' }))).toBeNull()
+    expect(cliOffer(status({ source: null }))).toBeNull()
+    expect(cliOffer(null)).toBeNull()
+  })
+
+  it('is not made when something is in the way: that is a problem, not an offer', () => {
+    expect(cliOffer(status({ state: 'file' }))).toBeNull()
+    expect(cliOffer(status({ state: 'directory' }))).toBeNull()
+    // Still on the sidebar, where the panel can explain what is there.
+    expect(offerCliInstall(status({ state: 'file' }))).toBe(true)
   })
 })

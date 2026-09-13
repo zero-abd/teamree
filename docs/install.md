@@ -179,9 +179,15 @@ do the CLI can do — which is how a coding agent drives teamree. It runs under
 the app's own Electron binary in plain-Node mode, so an installed app needs no
 separate Node runtime.
 
-**On macOS it is a button.** The sidebar offers **Put teamree on my PATH**
+**On macOS it is a button.** The first time you open an installed build that
+has no `teamree` on PATH, the app offers this by itself — once, in a card in the
+corner that takes no focus and blocks nothing. Answering it either way is the
+end of it: teamree does not ask again, and declining is a real answer rather
+than a postponement. After that the sidebar offers **Put teamree on my PATH**
 while the command is not linked to this build, and the command palette finds it
-by name at any time. It says what it will do before you press it: link
+by name at any time.
+
+It says what it will do before you press anything: link
 `/usr/local/bin/teamree` to the CLI inside this app. That is where a Mac
 developer expects a command to be and it is already on the PATH every login
 shell is built with, so there is nothing to choose.
@@ -204,6 +210,11 @@ Three things it will not do, each of them said rather than hidden:
   here instead and leaves that copy alone.
 - A link that already points at this app is success, not an error. The button is
   safe to press twice, and says so rather than inventing work.
+
+Running from a source checkout, nothing offers itself: a link into a checkout
+breaks the moment that checkout moves, and a question asked on every `npm run
+dev` is a question nobody reads. The sidebar button and the palette still work
+there, and so does the command below.
 
 The same two things from a terminal, with the app running:
 

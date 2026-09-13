@@ -8,6 +8,7 @@ import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModi
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
+import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
 import { InstallCliDialog } from './dialogs/InstallCliDialog'
 import { MembersDialog } from './dialogs/MembersDialog'
 import { CommandPalette } from './palette/CommandPalette'
@@ -78,6 +79,10 @@ export function App(): React.JSX.Element {
           ))}
         </div>
       ) : null}
+
+      {/* Nothing is focused and nothing is blocked: the window is usable
+          whether or not anybody answers this. */}
+      <FirstRunCliOffer />
 
       {dialog?.kind === 'palette' ? <CommandPalette modifier={modifier} /> : null}
       {dialog?.kind === 'confirm-remove' ? (

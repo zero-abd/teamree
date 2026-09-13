@@ -16,7 +16,8 @@ export {
   CLI_DESTINATION_DIRECTORY,
   CliService,
   LOGIN_PATHS_FILE,
+  type CliPromptRecord,
   type CliServiceOptions
 } from './cliService'
 export { CLI_METHODS, createCliHandlers, registerCliHandlers, type CliHandlers, type CliMethodName } from './handlers'
-export { findShippedCli, shippedCliCandidates, type ShippedCliOptions } from './shippedCli'
+export { findShippedCli, shippedCliCandidates, type ShippedCli, type ShippedCliOptions } from './shippedCli'
