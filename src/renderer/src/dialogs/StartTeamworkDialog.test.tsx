@@ -16,7 +16,8 @@ import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
 import { TeamworkSteps, type TeamworkStepsProps } from './StartTeamworkDialog'
-import { KEY_GRANT_WARNING } from './startTeamwork'
+import { ADD_KEY_BUTTON, KEY_GRANT_WARNING } from './startTeamwork'
+import { teamworkSummary } from '../sidebar/teamworkSummary'
 
 const SELF_KEY = 'c2VsZmtleXNlbGZrZXlzZWxma2V5c2VsZmtleXNlbGZrZXk='
 
@@ -299,6 +300,20 @@ describe('a checkout with no origin', () => {
 
   it('says none of that when origin is fine', () => {
     expect(text(render())).not.toContain('This checkout cannot take part yet.')
+  })
+})
+
+describe('the button the project header sends people to', () => {
+  // The header's "Your key is not here" tooltip is the one sentence somebody
+  // reads when nothing is working, and it tells them which button to press. It
+  // went on naming a Members dialog for as long as this panel has existed,
+  // because this panel is what replaced it. Rendering the two together is what
+  // keeps them from drifting apart again.
+  it('is on this panel, under the name the tooltip gives it', () => {
+    const summary = teamworkSummary(status({ enrolled: false }))
+    expect(summary?.label).toBe('Your key is not here')
+    expect(summary?.detail).toContain(ADD_KEY_BUTTON)
+    expect(text(render())).toContain(ADD_KEY_BUTTON)
   })
 })
 

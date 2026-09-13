@@ -144,8 +144,14 @@ export function buildShellCommand(
  * Windows hears it from node-pty as "File not found"; POSIX is asked the
  * question below because node-pty never raises it there. A user reading the
  * pane cannot tell those two apart and should not have to.
+ *
+ * It names the two places the shell can have come from, because teamree has no
+ * setting for it: a pane opened in the window always gets `resolveLoginShell`
+ * above, and the only way to ask for another one is `teamree terminal create
+ * --shell`.
  */
-export const SHELL_UNRUNNABLE = 'not found, or not executable — check the shell setting and PATH'
+export const SHELL_UNRUNNABLE =
+  'not found, or not executable — check your login shell, or the --shell this pane was created with, and PATH'
 
 /**
  * Whether this program cannot be exec'd, answered the way execvp answers it:

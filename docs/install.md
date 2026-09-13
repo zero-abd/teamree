@@ -147,7 +147,7 @@ On Debian and Ubuntu, install the `.deb` through `apt` rather than `dpkg`, so
 that its dependencies come with it:
 
 ```sh
-sudo apt install ./teamree_0.0.1_amd64.deb
+sudo apt install ./teamree_0.1.0_amd64.deb
 ```
 
 It lands in `/opt/teamree` and adds a desktop entry, so it appears in the
@@ -158,8 +158,8 @@ The AppImage is the option for everything else. It is a single file that needs
 no installation and no root:
 
 ```sh
-chmod +x teamree-0.0.1-x86_64.AppImage
-./teamree-0.0.1-x86_64.AppImage
+chmod +x teamree-0.1.0-x86_64.AppImage
+./teamree-0.1.0-x86_64.AppImage
 ```
 
 If it exits immediately complaining about `libfuse.so.2`, that is the one
@@ -169,7 +169,7 @@ default. Either install it — `sudo apt install libfuse2` — or skip the mount
 entirely:
 
 ```sh
-./teamree-0.0.1-x86_64.AppImage --appimage-extract-and-run
+./teamree-0.1.0-x86_64.AppImage --appimage-extract-and-run
 ```
 
 ## Putting the `teamree` CLI on PATH
@@ -198,9 +198,12 @@ It says what it will do before you press anything: link
 developer expects a command to be and it is already on the PATH every login
 shell is built with, so there is nothing to choose.
 
-macOS asks for your administrator password only if `/usr/local/bin` cannot be
-written without one — on a Mac with Homebrew it usually can, and then nothing
-asks you anything. When it does ask, the dialog is the system's own: the
+macOS asks for your administrator password if `/usr/local/bin` cannot be
+written without one, and on a Mac bought in the last few years it cannot.
+Homebrew took ownership of `/usr/local` on Intel Macs, which is where the
+opposite idea comes from; on Apple Silicon it installs to `/opt/homebrew` and
+leaves `/usr/local/bin` as `root:wheel`, so being asked is the ordinary case
+rather than the exception. When it asks, the dialog is the system's own: the
 password goes to macOS and never to teamree. The panel says which of the two is
 about to happen before the button is pressed, and says what actually happened
 afterwards, having resolved the link to check.
@@ -307,6 +310,15 @@ agent inside it if you have one installed. teamree looks for agents on your
 and makes the worktree on its own, which is still useful, and you can open a
 terminal in it and type.
 
+All of that is teamree on its own. The other half — the reason it exists — is
+teamwork: a teammate's worktrees and panes in your sidebar, theirs to watch live
+and to type into, over a relay your team stands up itself.
+**[`docs/trying-teamwork.md`](trying-teamwork.md)** is the walkthrough, and it is
+honest about the price of entry: two Macs, a relay somebody on the team hosts
+(there is no default and nobody hosts one for you), and each person's public key
+committed to a repository you can all push to — which is what lets them run
+commands on your machine, deliberately.
+
 ## Uninstalling
 
 Removing the app never removes your data, which is deliberate — a worktree is
@@ -323,3 +335,16 @@ whatever directory you chose and are untouched by any of this.
 That settings directory holds the list of projects, the worktrees teamree knows
 about and your pane layouts. Deleting it makes the next launch look like a first
 one; it does not touch a repository.
+
+One thing no column above covers, because it is not the app and it is not the
+app's settings: if you ever put the `teamree` command on your PATH — the card on
+first run, the sidebar button, or the `ln -s` above typed by hand — that is a
+symlink, and deleting the app leaves it behind pointing at nothing. Nothing
+removes it for you:
+
+```sh
+sudo rm /usr/local/bin/teamree
+```
+
+If you never took that offer there is no such file and nothing to do.
+`ls -l /usr/local/bin/teamree` says which of the two you are in.
