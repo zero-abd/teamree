@@ -1,6 +1,6 @@
 {
   "name": "teamree",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An ADE built for teamwork",
   "author": "teamree contributors",
   "license": "MIT",
@@ -24,7 +24,8 @@
     "postinstall": "node scripts/fix-pty-permissions.mjs",
     "test:watch": "vitest",
     "build:cli": "node scripts/build-cli.mjs",
-    "icons": "node scripts/make-icons.mjs",
+    "icons": "node scripts/make-icons.mjs && npm run icons:verify",
+    "icons:verify": "node scripts/verify-icons.mjs",
     "package": "npm run build && electron-builder --publish never",
     "package:mac": "npm run build && node scripts/package-mac.mjs",
     "package:win": "npm run build && electron-builder --win --publish never",
