@@ -366,9 +366,39 @@ onto the method catalogue that already exists, not a new protocol.
 
 - [ ] **A — Identity, with no network at all.** Keypair, `.teamree/members/`,
       members shown in the app. The whole trust model, testable offline.
-- [ ] **B — The relay, and presence.** Outbound connections, the Noise `IK`
+- [x] **B — The relay, and presence.** Outbound connections, the Noise `IK`
       handshake against keys from the roster, teammates' worktrees in the
       sidebar. No terminal output yet.
+  - [x] The relay URL is committed to the repository at `.teamree/relay`,
+        beside the member keys, because a relay is a team-wide fact and a
+        second place to keep it is a second place for it to go stale.
+        `TEAMREE_RELAY_URL` overrides it for one run, for a tunnel nobody
+        should commit. There is deliberately no default
+  - [x] A pairwise rendezvous per teammate, derived from the static-static
+        Diffie-Hellman and rotated hourly, with the token in the first frame
+        and only its hash in the URL
+  - [x] Noise `IK` over the splice, against the one key this link dialled.
+        Every way the handshake can fail ends the connection identically, so
+        "not a member" and "wrong machine" are one answer on the wire and two
+        in this machine's own log
+  - [x] A teammate is a fourth transport onto the existing catalogue, speaking
+        the same newline-delimited JSON the CLI socket does — so the dispatcher,
+        the subscription hub and every handler are unchanged. What a teammate
+        may call is one explicit list, and it is presence and nothing else
+  - [x] Worktrees, branches and per-pane activity cross as metadata. Silence
+        crosses as a duration rather than an instant, because two machines do
+        not agree about what time it is
+  - [x] A project is matched across machines by a hash of its origin remote, so
+        a teammate on one repository learns nothing about the others a pairwise
+        link happens to span. The roster is filtered on both sides
+  - [x] Teammates' worktrees under the same project in the sidebar, visibly
+        theirs, with nothing on them to act on
+  - [x] Connecting, connected, refused, relay-unreachable and "nobody is
+        connected" are five separate things the header says separately —
+        "not set up here" loudest of all, because it is the ordinary one
+  - [x] Tested against the relay itself: the built container host, as a child
+        process, on a real port, over real WebSockets, between two runtimes with
+        their own data directories and their own identities
 - [ ] **C — Watching a pane.** `terminal.subscribe` over the peer transport,
       read-only, letterboxed to the owner's dimensions, and the pane says it is
       being watched.

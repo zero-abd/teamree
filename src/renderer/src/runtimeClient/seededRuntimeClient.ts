@@ -56,6 +56,9 @@ const SEEDED_PATHS = [
 
 /** The demo's own identity. Invented, like everything else in this file. */
 const SEEDED_HANDLE = 'you'
+/** Two invented teammates: one connected, one whose machine is not. */
+const SEEDED_PEER_KEY = 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='
+const SEEDED_AWAY_KEY = 'Qw8ErTyUiOpAsDfGhJkLzXcVbNm1234567890QwErTy='
 const SEEDED_PUBLIC_KEY = 'EA3VNMgROVtL/oUJhTmpENptwwkAWhc1HD2SIqJTHE4='
 
 function seededMember(handle: string, publicKey: string, addedAt: string): Member {
@@ -586,6 +589,77 @@ export function createSeededRuntimeClient(): RuntimeClient {
         announce({ type: 'members' })
       }
       return memberList(projectId)
+    },
+
+    // Teamwork, as the demo can honestly show it: a relay named, one teammate
+    // connected and one whose machine is not. Inventing a refused link would be
+    // inventing a security event, so the seeded data has none.
+    'teamwork.status': ({ projectId }) => ({
+      projectId,
+      relay: { url: 'wss://relay.example/v1/relay', source: 'repository' as const },
+      disabledReason: null,
+      links: [
+        {
+          publicKey: SEEDED_PEER_KEY,
+          handle: 'priya',
+          phase: 'connected' as const,
+          since: Date.now() - 900_000,
+          attempts: 1
+        },
+        {
+          publicKey: SEEDED_AWAY_KEY,
+          handle: 'marcus',
+          phase: 'waiting' as const,
+          detail: 'your teammate’s machine is not connected',
+          since: Date.now() - 300_000,
+          attempts: 3
+        }
+      ],
+      readAt: Date.now()
+    }),
+    'teamwork.presence': ({ projectId }) => ({
+      projectId,
+      worktrees: [
+        {
+          id: `peer:${SEEDED_PEER_KEY.slice(0, 12)}:wt_remote_1`,
+          handle: 'priya',
+          publicKey: SEEDED_PEER_KEY,
+          name: 'index compaction',
+          branch: 'perf/compaction',
+          state: 'ready' as const,
+          heardAt: Date.now() - 4_000,
+          panes: [
+            {
+              id: `peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_1`,
+              title: 'claude',
+              shell: '/bin/zsh',
+              agent: 'claude' as const,
+              running: true,
+              busy: true,
+              quietForMs: 0
+            },
+            {
+              id: `peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_2`,
+              title: 'pytest',
+              shell: '/bin/zsh',
+              running: true,
+              busy: false,
+              quietForMs: 260_000
+            }
+          ]
+        }
+      ],
+      readAt: Date.now()
+    }),
+
+    // PEER-ONLY, and refused here rather than seeded. These are what a teammate
+    // calls over the peer transport; a window asking for one is a bug, and
+    // answering it with invented data would hide that.
+    'peer.presence': () => {
+      throw new Error('peer.presence is a teammate’s call, not a window’s')
+    },
+    'peer.subscribe': () => {
+      throw new Error('peer.subscribe is a teammate’s call, not a window’s')
     },
 
     'agent.list': () => [

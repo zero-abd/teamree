@@ -118,10 +118,18 @@ describe('dispatcher', () => {
       'layout.set',
       'members.join',
       'members.list',
+      // Reachable over the peer transport and nowhere else. They are in the one
+      // registry because a teammate is another transport onto the catalogue
+      // rather than a catalogue of its own; `PEER_METHODS` in peerTransport.ts
+      // is what makes the two audiences different.
+      'peer.presence',
+      'peer.subscribe',
       'project.add',
       'project.list',
       'project.remove',
       'status.get',
+      'teamwork.presence',
+      'teamwork.status',
       'terminal.close',
       'terminal.create',
       'terminal.list',

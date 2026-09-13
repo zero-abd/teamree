@@ -22,6 +22,11 @@ export type RuntimeOptions = {
   serveCli?: boolean
   /** Off when there is no Electron around, e.g. the headless acceptance suite. */
   serveRenderer?: boolean
+  /**
+   * Off for a harness that has no business dialling a relay. On, it costs
+   * nothing until a project actually names one: no relay, no connections.
+   */
+  serveTeamwork?: boolean
   onError?: (error: unknown) => void
 }
 
@@ -34,7 +39,7 @@ export type Runtime = {
 }
 
 export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
-  const { userDataDir, version, serveCli = true, serveRenderer = true, onError } = options
+  const { userDataDir, version, serveCli = true, serveRenderer = true, serveTeamwork = true, onError } = options
   const report = onError ?? ((error: unknown) => console.error('[runtime]', error))
 
   const store = await WorkspaceStore.open(join(userDataDir, WORKSPACE_FILE_NAME))
@@ -43,6 +48,14 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const registry = new MethodRegistry(context)
   const areas = registerHandlers(registry)
   const dispatch = createDispatcher(registry)
+
+  // After the dispatcher, and deliberately: a teammate reaching a registry that
+  // was still being filled would be told a method does not exist when it merely
+  // did not exist yet. Not awaited, because it reads rosters and asks git for a
+  // remote, and none of that is a reason for a window to open late — and never
+  // fatal, because an app that cannot reach a relay is still an app.
+  areas.peers.attach(dispatch)
+  if (serveTeamwork) void areas.peers.start().catch(report)
 
   let socketServer: RuntimeSocketServer | undefined
   const discoveryPath = discoveryFilePath(userDataDir)
@@ -82,6 +95,9 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     },
     stop: async () => {
       uninstallBridge()
+      // First: a relay connection outliving the process it reports on would
+      // have a teammate watching panes that are already being killed below.
+      areas.peers.stop()
       // Before the PTYs, because a shell dying rewrites files and there is no
       // point reporting changes nobody is left to read.
       areas.worktreeFiles.close()

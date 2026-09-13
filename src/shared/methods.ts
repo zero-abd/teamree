@@ -8,9 +8,12 @@ import type {
   Layout,
   MemberList,
   PaneNode,
+  PeerPresence,
   Project,
   RuntimeStatus,
   StartPointList,
+  TeammatePresence,
+  TeamworkStatus,
   Terminal,
   Worktree,
   WorktreeChanges,
@@ -115,6 +118,27 @@ export const Params = {
     handle: z.string().min(1).optional()
   }),
 
+  /**
+   * Whether teamwork is running for a project, and how each link is going.
+   *
+   * Answers "not configured" as readily as "connected", because a project with
+   * no relay is not offline and must not be shown as though it were.
+   */
+  teamworkStatus: z.object({ projectId: z.string().min(1) }),
+  /** A teammate's worktrees and panes in one project, as last heard. */
+  teamworkPresence: z.object({ projectId: z.string().min(1) }),
+
+  /**
+   * PEER-ONLY. Reachable over the peer transport and nowhere else.
+   *
+   * What this runtime is doing, for a teammate: worktrees, branches, panes and
+   * their activity. Metadata, and never a byte of terminal output — that is
+   * milestone C, and the seam for it is `PEER_METHODS` in peerTransport.ts.
+   */
+  peerPresence: z.object({}),
+  /** PEER-ONLY. Streams this runtime's presence: once now, and on every change. */
+  peerSubscribe: z.object({}),
+
   terminalList: z.object({ worktreeId: z.string().min(1).optional() }),
   terminalCreate: z.object({
     worktreeId: z.string().min(1),
@@ -190,6 +214,12 @@ export type MethodContract = {
   'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
   'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }
 
+  'teamwork.status': { params: z.infer<typeof Params.teamworkStatus>; result: TeamworkStatus }
+  'teamwork.presence': { params: z.infer<typeof Params.teamworkPresence>; result: TeammatePresence }
+
+  'peer.presence': { params: z.infer<typeof Params.peerPresence>; result: PeerPresence }
+  'peer.subscribe': { params: z.infer<typeof Params.peerSubscribe>; result: { subscription: string } }
+
   'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
   'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }
   'terminal.write': { params: z.infer<typeof Params.terminalWrite>; result: { written: true } }
@@ -228,6 +258,14 @@ export type WorkspaceEvent =
    * bookkeeping to narrow it.
    */
   | { type: 'members' }
+  /**
+   * A link to a teammate changed, or what one of them is showing did.
+   *
+   * Carries no project id for the same reason `members` does not: events are
+   * coalesced by their key, and both collections are cheap to re-read for the
+   * few projects a window has open.
+   */
+  | { type: 'teammates' }
   | { type: 'layout'; worktreeId: string }
   | { type: 'terminalExited'; terminalId: string; exitCode: number }
 

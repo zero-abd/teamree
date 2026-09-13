@@ -7,12 +7,17 @@
 // to keep them apart is for the private one never to be under a repository at
 // all.
 //
-// Nothing here returns the private key. `loadIdentity` hands back the public
-// half and the *path* of the private one, so a caller that genuinely needs to
-// sign — which is milestone B, not this one — has to ask for it deliberately.
-// That is not ceremony. A secret that is never in a value cannot be spread into
-// a result, an error message, or a log line by code that had no idea it was
+// `loadIdentity` returns the public half and the *path* of the private one, so
+// a caller that genuinely needs the secret has to ask for it deliberately. That
+// is not ceremony. A secret that is never in a value cannot be spread into a
+// result, an error message, or a log line by code that had no idea it was
 // carrying one.
+//
+// `loadStaticPrivateKey` is that deliberate ask, and it is the only way to get
+// the bytes. It exists because a Noise `IK` handshake and the rendezvous
+// derivation both need the raw scalar, which is the milestone B this module's
+// first draft was waiting for. Nothing it returns may reach a method result, a
+// `RuntimeError`, or a log line.
 
 import { createPrivateKey, createPublicKey, generateKeyPairSync } from 'node:crypto'
 import { chmod, mkdir, open, readFile } from 'node:fs/promises'
@@ -78,6 +83,19 @@ export async function loadIdentity(dataDir: string): Promise<Identity> {
 }
 
 /**
+ * The raw 32-byte X25519 scalar for this installation.
+ *
+ * Deliberately separate from `loadIdentity`, and deliberately named for what it
+ * hands over. Hold it for as long as one handshake needs and no longer; it is
+ * never a field on anything that gets serialised.
+ */
+export async function loadStaticPrivateKey(dataDir: string): Promise<Uint8Array> {
+  const identity = await loadIdentity(dataDir)
+  const pem = await readFile(identity.privateKeyPath, 'utf8')
+  return privateScalarFromPem(pem, identity.privateKeyPath)
+}
+
+/**
  * The public half of a stored private key.
  *
  * Exported for the test that proves the two halves belong together; everything
@@ -92,14 +110,35 @@ export function publicKeyFromPrivatePem(pem: string): string {
   return Buffer.from(der.subarray(der.length - 32)).toString('base64')
 }
 
+/**
+ * A PKCS#8 X25519 private key is a fixed 16-byte prologue and then the scalar,
+ * the same way its public counterpart is a fixed header and then the point.
+ */
+function privateScalarFromPem(pem: string, path: string): Uint8Array {
+  let der: Buffer
+  try {
+    der = createPrivateKey(pem).export({ type: 'pkcs8', format: 'der' })
+  } catch {
+    throw unusableIdentity(path)
+  }
+  if (der.length !== 48) throw unusableIdentity(path)
+  return new Uint8Array(der.subarray(der.length - 32))
+}
+
 function publicKeyOf(pem: string, path: string): string {
   try {
     return publicKeyFromPrivatePem(pem)
   } catch {
-    // Deliberately says nothing about the contents: the file is unreadable as a
-    // key, and quoting it back would be quoting a secret into a log.
-    throw internal(`${path} is not a usable teamree identity; move it aside and teamree will make a new one`)
+    throw unusableIdentity(path)
   }
+}
+
+/**
+ * Deliberately says nothing about the contents: the file is unreadable as a
+ * key, and quoting it back would be quoting a secret into a log.
+ */
+function unusableIdentity(path: string): Error {
+  return internal(`${path} is not a usable teamree identity; move it aside and teamree will make a new one`)
 }
 
 async function readIfPresent(path: string): Promise<string | undefined> {
