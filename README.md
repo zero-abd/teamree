@@ -7,22 +7,30 @@ git worktree, and keep track of all of them in one window.
 
 ## Status
 
-Single-user and working. Runs from source with `npm run dev`, and packages for
-macOS, Windows and Linux — though only macOS and Linux have actually been built
-and launched; the Windows installer has never been made. See the known gaps in
-`ROADMAP.md`, which are recorded rather than discovered. Team features come
-after this works.
+Working, and **macOS is the supported platform**. Runs from source with
+`npm run dev`. The Windows and Linux packaging is still configured and the
+commands below still describe what it produces, but CI builds macOS alone and
+nothing else is published: on Windows or Linux, run it from source. What has
+actually been built and launched on each, and what has only been reasoned
+about, is recorded in `ROADMAP.md` under "Known gaps" — along with everything
+else that is a limit rather than a bug, recorded rather than discovered.
+
+Teamwork is built: all five milestones in `docs/teamwork.md` have landed and
+are tested against a real relay. It has never been run between two machines in
+two places, which is the one claim to treat as untested;
+`docs/trying-teamwork.md` says exactly where that line is.
 
 ## Installing a build
 
-If somebody sent you a link rather than a checkout, the installers are on the
-releases page and **[`docs/install.md`](docs/install.md) is the thing to read
-first**. Not because installing is hard — it is a drag to Applications, an
-installer, or `apt install ./teamree_*.deb` — but because none of it is signed,
-and so macOS and Windows will both stop you with a warning the first time. That
-document explains what each warning is actually saying, what it is not saying,
-and the exact way past it on each platform. Every release carries the checksums
-that stand in for the signature.
+If somebody sent you a link rather than a checkout,
+**[`docs/install.md`](docs/install.md) is the thing to read first**. There is
+one download and it is macOS — a `teamree-<version>.dmg`, dragged to
+Applications. Not because installing is hard, but because none of it is signed,
+and so macOS will stop you with a warning the first time. That document
+explains what the warning is actually saying, what it is not saying, and the
+exact way past it. Every release carries the checksums that stand in for the
+signature — though no release has been published yet, which `ROADMAP.md`
+records along with what that leaves unchecked.
 
 ## What it does
 
@@ -61,10 +69,12 @@ and check whether the branch would merge into its base — answered in memory, s
 asking costs the repository nothing. Push when it is ready. There is no force
 push and no flag to ask for one.
 
-**Everything the GUI can do, the CLI can do.** `teamree` talks to the running
-app over a local socket, so an agent can create a worktree, open a terminal,
-run a command and read the output back — and the GUI reflects all of it live,
-because both ends meet at the same runtime rather than at a transport.
+**Projects, worktrees and terminals, from a shell.** `teamree` talks to the
+running app over a local socket, so an agent can create a worktree, open a
+terminal, run a command and read the output back — and the GUI reflects all of
+it live, because both ends meet at the same runtime rather than at a transport.
+Teamwork is the window's alone: there is no CLI command for joining a roster,
+setting the relay, watching a teammate's pane or muting one.
 
 ```sh
 teamree worktree create --project app --name "fix login"
@@ -87,9 +97,16 @@ npm run dev
 ```
 
 `npm test` runs the suite, including an acceptance pass that drives a real
-runtime over the real socket. `npm run typecheck`, `npm run lint` and
-`npm run format:check` are what CI checks, on all three platforms, alongside the
-build, the smoke test and the packaged artifact.
+runtime over the real socket. The tests that drive the real relay need
+`relay/dist`, and skip without it — 34 of them, in a run that still exits zero —
+so the suite checks for it before it starts, however it was started: a warning
+on a developer's machine, and a refusal to run at all on CI, where a missing
+build means the step that produces it did not happen. Building it is
+`cd relay && npm ci && npm run build`, which is what the check says too.
+
+`npm run typecheck`, `npm run lint` and `npm run format:check` are what CI
+checks, on macOS, alongside the relay's own suite, the build, the smoke test and
+the packaged artifact.
 
 ## Trying teamwork
 
@@ -112,6 +129,11 @@ two Macs in two places. `docs/teamwork.md` is why it is built this way, and
 
 Packaging is electron-builder, configured in `electron-builder.yml`. Every command
 rebuilds the app first, so a package is never made from stale output.
+
+Only the macOS command is built by CI and only its artifact is released. The
+other two are kept configured and are described here as what the configuration
+produces, not as something that has been seen to work lately — `ROADMAP.md` is
+exact about which of them has ever been launched.
 
 | Platform | Command | Artifacts in `dist/` |
 | --- | --- | --- |
@@ -138,9 +160,9 @@ pass `--no-sandbox` themselves, so a container needs no special invocation.
 Each platform's artifact must be built on that platform. `node-pty` publishes
 prebuilt binaries for macOS and Windows but none for Linux, where `npm install`
 compiles one — so a Linux package built anywhere else would contain no working
-terminal at all. `.github/workflows/build.yml` runs every check and all three
-builds on three runners for that reason, and both `ci.yml` and `release.yml`
-call it rather than restating it.
+terminal at all. `.github/workflows/build.yml` is a matrix of runners for that
+reason, though it has one entry today and that entry is macOS; both `ci.yml`
+and `release.yml` call it rather than restating it.
 
 The app icon is generated, not drawn by hand: `npm run icons` rewrites
 `build/icon.png`, `build/icon.icns`, `build/icon.ico` and `build/icons/`.
@@ -189,17 +211,21 @@ If the app is not running, the CLI says so and exits 3 rather than hanging.
 
 ## Releases
 
-`.github/workflows/release.yml` turns a `v*` tag into downloadable installers.
-It does not build them itself: it calls `.github/workflows/build.yml`, which is
+`.github/workflows/release.yml` turns a `v*` tag into a downloadable installer.
+It does not build it itself: it calls `.github/workflows/build.yml`, which is
 the same workflow `ci.yml` calls on every pull request, so what gets published
 has been through typecheck, lint, format, the full suite, the smoke test and the
-packaged-app check on all three platforms. A release pipeline of its own would
-be a second, shorter sequence that nobody reads the output of, and the check it
-would be tempting to leave out — launching the artifact and spawning a PTY in it
-— is the only one that can tell a package that built from a package that works.
+packaged-app check on macOS. A release pipeline of its own would be a second,
+shorter sequence that nobody reads the output of, and the check it would be
+tempting to leave out — launching the artifact and spawning a PTY in it — is the
+only one that can tell a package that built from a package that works.
 
-The job then attaches every installer to the release along with a
+The job then attaches the installer to the release along with a
 `SHA256SUMS.txt`, and writes notes that say plainly that nothing is signed and
-what each platform will do about that. Unsigned software that arrives without
-explaining itself gets clicked through or thrown away, and neither is what you
-want from somebody trying it for the first time.
+what macOS will do about that. Unsigned software that arrives without explaining
+itself gets clicked through or thrown away, and neither is what you want from
+somebody trying it for the first time.
+
+It has never been fired. Everything in it that can be checked without GitHub
+has been, and `ROADMAP.md` lists what that leaves: a pipeline reasoned through
+rather than one that has run.
