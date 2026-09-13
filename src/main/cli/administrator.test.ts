@@ -4,7 +4,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
-import { administratorScript, appleScriptString, linkCommand, shellQuote } from './administrator'
+import { ErrorCode } from '../../shared/protocol'
+import {
+  administratorScript,
+  appleScriptString,
+  createAdministratorRunner,
+  linkCommand,
+  shellQuote,
+  type ExecFile
+} from './administrator'
 
 const run = promisify(execFile)
 
@@ -117,5 +125,79 @@ describe('the link command', () => {
       script.slice('do shell script '.length, -' with administrator privileges'.length)
     )
     expect(command).toBe(`/bin/mkdir -p '/usr/local/bin' && /bin/ln -sfn '${source}' '/usr/local/bin/teamree'`)
+  })
+})
+
+describe('running it as an administrator', () => {
+  /** Records what would have been spawned, and answers as a finished process. */
+  function stub(answer: Parameters<Parameters<ExecFile>[2]>): {
+    exec: ExecFile
+    spawned: [string, readonly string[]][]
+  } {
+    const spawned: [string, readonly string[]][] = []
+    return {
+      spawned,
+      exec: (file, args, callback) => {
+        spawned.push([file, args])
+        callback(...answer)
+      }
+    }
+  }
+
+  /**
+   * The real child_process, with the file swapped for one this machine has.
+   * Nothing about the failure is invented: the Error, its exit status and the
+   * stderr all come from a process that genuinely ran and genuinely failed.
+   */
+  function failing(stderr: string, status = 1): ExecFile {
+    return (_file, _args, callback) => {
+      execFile('/bin/sh', ['-c', `printf %s ${shellQuote(stderr)} >&2; exit ${status}`], callback)
+    }
+  }
+
+  it('hands osascript one script as one argument, never through a shell', async () => {
+    const { exec, spawned } = stub([null, '', ''])
+    const command = linkCommand(
+      '/Volumes/my "teamree" copy.app/Contents/Resources/cli/teamree',
+      '/usr/local/bin/teamree'
+    )
+
+    await createAdministratorRunner(exec)(command)
+
+    expect(spawned).toHaveLength(1)
+    const [file, args] = spawned[0]!
+    expect(file).toBe('/usr/bin/osascript')
+    expect(args).toEqual(['-e', administratorScript(command)])
+    // The argument decoded back into the command it spells, so the proof is
+    // what osascript would read rather than what this file expected to see.
+    const literal = args[1]!.slice('do shell script '.length, -' with administrator privileges'.length)
+    expect(decodeAppleScriptString(literal)).toBe(command)
+  })
+
+  it('reads a cancelled password dialog as a decision rather than a fault', async () => {
+    // The reading of the failure, not the failure itself: that pressing Cancel
+    // is what makes osascript say -128 is the one thing here only a Mac can
+    // show, and nothing below claims to have shown it.
+    const runner = createAdministratorRunner(failing('execution error: User canceled. (-128)'))
+
+    await expect(runner('/bin/ln -sfn a b')).rejects.toThrow(
+      'The administrator password was not given, so nothing was changed.'
+    )
+    await expect(runner('/bin/ln -sfn a b')).rejects.toMatchObject({ code: ErrorCode.Conflict })
+  })
+
+  it('passes on any other refusal with what the system said', async () => {
+    const runner = createAdministratorRunner(failing('execution error: Not authorised. (-1743)'))
+
+    await expect(runner('/bin/ln -sfn a b')).rejects.toThrow(/macOS refused/)
+    await expect(runner('/bin/ln -sfn a b')).rejects.toThrow(/-1743/)
+  })
+
+  it('has the failure itself to report when the system said nothing', async () => {
+    const runner = createAdministratorRunner(failing('', 7))
+
+    // Whatever node says about a command that exited 7 — but never an empty
+    // sentence ending in a colon, which is what a bare stderr would leave.
+    await expect(runner('/bin/ln -sfn a b')).rejects.toThrow(/macOS refused to run the command as an administrator: \S/)
   })
 })

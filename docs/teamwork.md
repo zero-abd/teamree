@@ -28,8 +28,16 @@ that the caller is two thousand miles away.
 ### Identity is the git remote
 
 Each installation generates an **X25519 keypair** on first run. The private key
-never leaves the machine. The public key is committed to the repository at
+never leaves the machine: it is written to the app's own data directory —
+`~/Library/Application Support/teamree/identity.key` — and never under a
+repository. The public key is committed to the repository at
 `.teamree/members/<handle>.pub`.
+
+**The key is per machine, not per project.** That one file is this installation's
+identity in every project it takes part in, so what reads it is not a member of
+one repository but of all of them, and what a second machine needs is its own
+keypair rather than a copy of this one. Both consequences are drawn out below —
+the first in Risks, the second in the list that follows.
 
 That file is the entire membership list, and it needs no administration,
 because **push access already is membership**: if you can add your key to the
@@ -67,11 +75,28 @@ rejection at the exact moment two people are first trying to work together.
 The consequences are worth stating plainly:
 
 - **Revocation happens at git-fetch speed.** Deleting a key removes someone at
-  the next fetch, not instantly. For a stronger guarantee the peers would have
-  to agree on a revocation feed, which is a service, which is the thing this
-  design is avoiding.
+  the next fetch, not instantly, and it removes them from each peer separately
+  as that peer fetches. A teammate who has not pulled still opens a link to the
+  removed member and still accepts everything a member may do. For a stronger
+  guarantee the peers would have to agree on a revocation feed, which is a
+  service, which is the thing this design is avoiding.
 - **A repository you can push to is a repository whose members you can rewrite.**
-  That is already true of everything else in it.
+  That is already true of everything else in it. It is worth saying in the other
+  direction too: any member with push can add any key, including a key belonging
+  to somebody the rest of the team has never heard of, and nothing in the app
+  says a word about it — see Risks.
+- **One installation, one key.** Copying `identity.key` to a second machine does
+  not put a second machine on the team; it puts one identity on two machines,
+  both computing the same rendezvous and displacing each other on it. A second
+  machine generates its own key and joins under its own handle; two member files
+  for one person is the intended shape.
+- **A key that is gone leaves a member file that has to go with it.** A machine
+  that loses `identity.key` — a new laptop, a reinstall, a file that no longer
+  parses — starts again with a new keypair and no claim on its old entry, and
+  that entry is not inert: every teammate goes on opening a link to a key nobody
+  holds, which never connects and never can. Deleting it is part of re-joining.
+  `docs/trying-teamwork.md` has the steps, because the app's own advice at that
+  moment points the other way.
 
 ### The relay is a dumb pipe the team runs
 
@@ -103,22 +128,33 @@ boring, because:
 repository — and everything after the handshake is ciphertext the relay cannot
 read.
 
-A compromised relay cannot read, alter or forge content. Two things it can
-attempt, and an early version of this document wrongly said it could not. It can
+A compromised relay cannot read, alter or forge content. It **can** do two
+things, and an early version of this document wrongly said it could not. It can
 drop frames or refuse to pair, which is denial of service and was always
 conceded. And, because `IK`'s first message is inherently replayable and the
 relay holds both that frame and the rendezvous token, it can replay a recorded
-handshake to reach `established` carrying a real peer's static key. It still
-cannot send a second frame or read a byte.
+handshake — which, for as long as anything hung off the handshake having parsed,
+forged a peer's *presence*: a session the other side believed was established and
+authenticated to a colleague who was not there. It could never send a second
+frame or read a byte.
 
-**That second one is closed**, and the way it is closed is the rule
-`src/main/teamwork/peer/peerLink.ts` is written around: `established` means only
-that the handshake parsed. Nothing actionable is ever put in the message-1
-payload — the one this sends is empty — and a link says `connected`, subscribes,
-or believes a snapshot only after the first transport message from the far end
-that *decrypts*, which needs keys a recording cannot supply. It costs one round
-trip of a frame that was going to be sent anyway. So denial of service is what a
-compromised relay is left with.
+**That fix is in, and this is where the property lives.** A session tells
+`confirmed` apart from `established` and says so in its own API: `confirmed`
+means a transport frame decrypted under keys derived from the initiator's
+ephemeral *and* static private keys, which is exactly what a replayer of message
+one does not hold, and it is what gates the call that names the peer — the
+session will not tell anyone whose key it is talking to before then
+(`src/shared/peer/session.ts`). Message one is allowed no payload at all, so a
+replay carries nothing even in the window before it is thrown away. The link
+hangs everything on that moment rather than on the handshake parsing: no
+`connected` phase, no presence subscription and no snapshot until a frame
+decrypts, and the handshake deadline reaps a session that never confirms rather
+than leaving a replayer parked on a rendezvous
+(`src/main/teamwork/peer/peerLink.ts`). Remote keystrokes are refused outright
+while a session is unconfirmed (`src/main/runtime/peerTransport.ts`). A replay
+still reaches `established` on the responder — nothing can stop that, it is
+what "replayable" means — but `established` is no longer a state anything is
+shown or done on.
 
 Noise rather than a scheme of our own. A hand-rolled handshake is where this
 kind of project gets its one unrecoverable bug.
@@ -213,6 +249,28 @@ Recorded now, so none of them is a surprise later.
 - **A muted pane still exists.** Mute stops the bytes; it does not hide that the
   worktree is there. Hiding it would make mute a way to work unobserved on a
   shared project, which is a different feature and probably a worse one.
+- **Membership is one level.** There is no read-only member and nowhere to put
+  one: the allow-list a teammate reaches carries `terminal.write` beside
+  `terminal.read`, and the only degree of freedom is the owner's per-pane mute,
+  which gates writes and deliberately does not gate reads.
+- **The private key is a file, and everything on this machine runs as you.**
+  `identity.key` is mode 0600 in the app's data directory, which keeps it out of
+  a repository and away from other accounts on the machine. It is not protected
+  from anything already running as you — and this product exists to run coding
+  agents in ptys owned by that same account, and hands every teammate the
+  ability to type into them. So an agent, a command a teammate types, or an
+  `npm install` in a worktree can read that file and be that member from then
+  on, on every project that member is on rather than only the one it was read
+  from. Nothing distinguishes a copied key from the original, and there is no
+  revocation short of a roster commit. This is inherent rather than an
+  oversight: push access is the trust boundary, and everyone inside it can
+  already run commands as everyone else.
+- **A roster change is silent.** Nothing announces that somebody was added. A
+  new key becomes another teammate in the **Start teamwork** panel and another
+  link in the header's count, indistinguishable from a colleague who was always
+  there. The only control is somebody reading the diff, so a team that wants
+  this watched should watch `.teamree/members/` where it changes — in review, on
+  the branch the roster lives on.
 
 ## Milestones
 

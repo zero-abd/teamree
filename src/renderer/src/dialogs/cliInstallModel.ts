@@ -63,6 +63,27 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     }
   }
 
+  // Ahead of the bundle and of the link itself, because this is about the app
+  // rather than about either: from here every other sentence in this panel
+  // would be true when it was read and false by the time the volume was
+  // ejected. No button, which is also what keeps the first-run card quiet.
+  if (status.impermanent !== null) {
+    return {
+      ...CLI_PANEL_READING,
+      headline:
+        status.impermanent === 'volume'
+          ? 'teamree is running from a mounted volume.'
+          : 'macOS is running teamree from a temporary copy of itself.',
+      detail:
+        (status.impermanent === 'volume'
+          ? `It is at ${status.source}, which is where a disk image opens. A link to it would be made, and it ` +
+            'would stop leading anywhere the moment you ejected. '
+          : `The copy is at ${status.source}. macOS makes one for an app opened from a disk image or a download, ` +
+            'and it is gone by the next launch — taking a link into it with it. ') +
+        'Drag teamree to your Applications folder, open it from there, and this can link the copy that stays.'
+    }
+  }
+
   if (status.bundle === null) {
     // A packaged app ships the bundle beside the launcher, so only a source
     // checkout reaches this — and `npm run dev` is exactly what puts it here.
@@ -106,11 +127,18 @@ export function cliPanel(status: CliStatus | null): CliPanel {
 
   if (status.state === 'elsewhere') {
     return {
-      headline: `${status.destination} points at a different copy of teamree.`,
-      // The confusing one, named: the command works, and it drives the wrong app.
-      detail:
-        `It leads to ${status.resolved}. Typing teamree in a terminal drives that copy — which is why work ` +
-        'done there never shows up here.',
+      headline: status.dangling
+        ? `${status.destination} leads to a teamree that is not there.`
+        : `${status.destination} points at a different copy of teamree.`,
+      // Two failures under one state, and the sentences are opposites. The
+      // confusing one is the command that works and drives the wrong app; the
+      // other is a link whose app has been deleted or ejected, where the shell
+      // does not run anything at all and says so.
+      detail: status.dangling
+        ? `It leads to ${status.resolved}, and nothing is at that path — the copy it was made for was moved, ` +
+          'deleted, or ejected with the disk it was on. Typing teamree in a terminal runs nothing.'
+        : `It leads to ${status.resolved}. Typing teamree in a terminal drives that copy — which is why work ` +
+          'done there never shows up here.',
       promise: `Points ${status.destination} at this app’s CLI instead: ${status.source}.`,
       password,
       action: 'Point it at this app',
@@ -198,7 +226,9 @@ export function cliOffer(status: CliStatus | null): CliOffer | null {
   return {
     headline:
       status.state === 'elsewhere'
-        ? 'The teamree command on your PATH is a different copy.'
+        ? status.dangling
+          ? 'The teamree command on your PATH leads to nothing.'
+          : 'The teamree command on your PATH is a different copy.'
         : 'Put the teamree command on your PATH?',
     detail:
       'teamree ships its own CLI, and everything this window can do it can do — it is how a coding agent drives ' +
@@ -215,16 +245,41 @@ export function cliOffer(status: CliStatus | null): CliOffer | null {
 export function cliOutcome(install: CliInstall): string {
   const { status } = install
   const password = install.administrator ? ' An administrator password was given.' : ''
+  const basis = ` ${pathBasis(status)}`
   if (install.outcome === 'already-linked') {
-    return `${status.destination} already pointed at this app, so nothing was changed.`
+    return `${status.destination} already pointed at this app, so nothing was changed.${basis}`
   }
   if (install.outcome === 'replaced') {
     return (
       `${status.destination} now points at ${status.source}. It used to point at ${install.replaced}, ` +
-      `and that copy is untouched.${password}`
+      `and that copy is untouched.${password}${basis}`
     )
   }
-  return `${status.destination} now points at ${status.source}.${password}`
+  return `${status.destination} now points at ${status.source}.${password}${basis}`
+}
+
+/**
+ * What the sentence above it is standing on.
+ *
+ * The link was read back and resolved, which is a fact about a link and not
+ * about the command a terminal will find. Two things can be read from here —
+ * this process's own PATH and `/etc/paths` — and a shell profile is neither, so
+ * the one that answered is named rather than left to be heard as "it works".
+ * Somebody whose dotfiles assign PATH instead of extending it is told where to
+ * look on the same line that told them the link was made.
+ */
+function pathBasis(status: CliStatus): string {
+  const checked =
+    status.onPath === 'environment'
+      ? `Checked against this app’s own PATH, which has ${status.directory} on it.`
+      : status.onPath === 'login'
+        ? `Checked against /etc/paths, which every login shell’s PATH is built from, and ${status.directory} is ` +
+          'in it.'
+        : `Nothing teamree can read puts ${status.directory} on a PATH.`
+  return (
+    `${checked} teamree cannot read your shell profile, so if one sets PATH rather than adds to it, teamree may ` +
+    'still not be found in a terminal.'
+  )
 }
 
 /**

@@ -126,8 +126,17 @@ export function TerminalView({
     }
 
     term.attachCustomKeyEventHandler((event) => !chordRef.current(event))
+    // Said once. A pane that has exited does not un-exit, no further output can
+    // push the line out of sight, and a sentence per keystroke would bury the
+    // scrollback somebody is still reading.
+    let saidExited = false
     term.onData((data) => {
-      void runtimeClient.call('terminal.write', { terminalId, data }).catch(() => {})
+      void runtimeClient.call('terminal.write', { terminalId, data }).catch((error: unknown) => {
+        const notice = refusedWriteNotice(error)
+        if (notice === null || saidExited || !alive) return
+        saidExited = true
+        term.write(notice)
+      })
     })
     term.onResize(({ cols, rows }) => {
       void runtimeClient
@@ -325,4 +334,24 @@ function attributionTitle(attention: PaneAttention, typing: readonly PaneTypist[
   if (attention.watchers.length > 0) lines.push(watchedBy(attention.watchers))
   if (attention.muted) lines.push('muted: their keystrokes are refused, their reading is not')
   return lines.join('\n')
+}
+
+/**
+ * What a refused keystroke puts in the pane, or null when there is nothing a
+ * reader could do with the answer.
+ *
+ * The one refusal worth printing is the pane having exited: the cursor is still
+ * there, the box still takes typing, and the runtime has been saying no to
+ * every character since the process went. The exit line is already in the
+ * buffer a few rows up, so this matches its register rather than raising an
+ * alarm of its own — it is a reminder of a fact the pane has stated, not news.
+ *
+ * Branching on the code and never on the message, the way the transport asks:
+ * `conflict` is what the runtime answers for a terminal that has exited, and
+ * the sentence it carries is free to be reworded.
+ */
+export function refusedWriteNotice(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null | undefined)?.code
+  if (code !== 'conflict') return null
+  return '\r\n\u001b[38;5;244m[this pane has exited]\u001b[0m\r\n'
 }

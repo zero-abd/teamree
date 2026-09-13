@@ -28,7 +28,7 @@
 
 import { access, constants, lstat, mkdir, readFile, readlink, realpath, stat, symlink, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { CliInstall, CliPathSource, CliStatus } from '../../shared/entities'
+import type { CliImpermanence, CliInstall, CliPathSource, CliStatus } from '../../shared/entities'
 import { conflict, internal, notFound } from '../runtime/runtimeError'
 import { linkCommand, type AdministratorRunner } from './administrator'
 
@@ -37,6 +37,25 @@ export const CLI_DESTINATION_DIRECTORY = '/usr/local/bin'
 
 /** What it is called there, which is what the user will type. */
 export const CLI_COMMAND_NAME = 'teamree'
+
+/**
+ * Whether a link to this path would still lead somewhere tomorrow.
+ *
+ * Two places a Mac runs an app from before anybody has put it in /Applications,
+ * and a symlink survives neither. `/Volumes` is every mounted volume, and a
+ * disk image is one: the DMG window invites the double-click, the app inside
+ * runs perfectly, and the link it made dangles at the eject. App Translocation
+ * is the other — an app opened from a disk image or a download is run from a
+ * read-only copy under the per-boot temporary directory, which is why the
+ * translocated path is matched on both of its halves: `/var/folders` alone is
+ * an ordinary temporary directory and `AppTranslocation` alone is a name
+ * anybody is allowed to give a folder of their own.
+ */
+function impermanentSource(source: string): CliImpermanence | null {
+  if (source.startsWith('/Volumes/')) return 'volume'
+  const temporary = source.startsWith('/private/var/folders/') || source.startsWith('/var/folders/')
+  return temporary && source.split('/').includes('AppTranslocation') ? 'translocated' : null
+}
 
 /**
  * The file `path_helper` builds every login shell's PATH from.
@@ -113,17 +132,19 @@ export class CliService {
 
   async status(): Promise<CliStatus> {
     const destination = join(this.#directory, CLI_COMMAND_NAME)
-    const { state, resolved } = await this.#describeDestination(destination)
+    const { state, resolved, dangling } = await this.#describeDestination(destination)
     return {
       installable: this.#platform === 'darwin',
       platform: this.#platform,
       source: this.#source,
       packaged: this.#packaged,
       bundle: await this.#bundle(),
+      impermanent: this.#source === null ? null : impermanentSource(this.#source),
       destination,
       directory: this.#directory,
       state,
       resolved,
+      dangling,
       needsAdministrator: !(await this.#writable(this.#directory)),
       onPath: await this.#onPath(),
       askedAt: this.#prompt.askedAt() ?? null,
@@ -143,6 +164,20 @@ export class CliService {
     const source = before.source
     if (source === null) {
       throw notFound('This build of teamree has no CLI in it to link, so there is nothing to put on PATH.')
+    }
+    // Ahead of everything else, including the link that may already be right:
+    // where the app itself is outranks what is at the destination. A link made
+    // from here is written, read back, and reported as done, and it is the user
+    // who finds out at the eject.
+    if (before.impermanent !== null) {
+      throw conflict(
+        (before.impermanent === 'volume'
+          ? `teamree is running from ${source}, which is on a mounted volume — a disk image opens as one. A link ` +
+            'into it stops leading anywhere the moment the volume is ejected. '
+          : `macOS is running teamree from ${source}, a read-only copy it makes of an app opened from a disk ` +
+            'image or a download. That copy is gone by the next launch, and a link into it with it. ') +
+          'Drag teamree to your Applications folder, open it from there, and press this again.'
+      )
     }
     // Before the destination is even looked at, because this one is about the
     // thing being linked: a launcher with nothing behind it cannot become a
@@ -239,18 +274,21 @@ export class CliService {
     return null
   }
 
-  async #describeDestination(destination: string): Promise<Pick<CliStatus, 'state' | 'resolved'>> {
+  async #describeDestination(destination: string): Promise<Pick<CliStatus, 'state' | 'resolved' | 'dangling'>> {
     const entry = await lstat(destination).catch(() => null)
-    if (entry === null) return { state: 'absent', resolved: null }
+    if (entry === null) return { state: 'absent', resolved: null, dangling: false }
     if (entry.isSymbolicLink()) {
       // A link that leads nowhere still leads somewhere nameable, and naming it
       // is how "the app it pointed at has been deleted" reads as itself rather
-      // than as an empty destination.
-      const resolved = await realpath(destination).catch(() => readlink(destination))
+      // than as an empty destination. Which of the two it is is `realpath`
+      // failing, and that is worth carrying: the caller has one sentence for a
+      // command that drives another app and another for one that does not run.
+      const landed = await realpath(destination).catch(() => null)
+      const resolved = landed ?? (await readlink(destination))
       const target = this.#source === null ? null : await realpath(this.#source).catch(() => this.#source)
-      return { state: resolved === target ? 'linked' : 'elsewhere', resolved }
+      return { state: resolved === target ? 'linked' : 'elsewhere', resolved, dangling: landed === null }
     }
-    return { state: entry.isDirectory() ? 'directory' : 'file', resolved: destination }
+    return { state: entry.isDirectory() ? 'directory' : 'file', resolved: destination, dangling: false }
   }
 
   async #onPath(): Promise<CliPathSource | null> {

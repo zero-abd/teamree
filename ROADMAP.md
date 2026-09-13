@@ -343,7 +343,11 @@ recorded so none of them is discovered by surprise later.
   three times over: as the unpacked tree, as the AppImage's payload, and as a `.deb`
   installed with `dpkg`. It reached green in CI. Windows never did — it was still
   turning up a fresh POSIX assumption on every run — and the Windows installer has
-  never been built nor the app started there. The platform-specific code and the
+  never been built nor the app started there. `npm run package:win` cannot currently
+  succeed either: the Windows prebuilds are excluded at the top level of `files` in
+  `electron-builder.yml`, so they are excluded for Windows too, and `afterPack` throws
+  when it cannot find `pty.node`. That is the hook doing its job, and it is two
+  deleted lines away from building again. The platform-specific code and the
   Windows-conditional workflow steps are all still present, so putting a platform back
   is adding a block to the matrix rather than a rewrite.
 - **CI runs, and macOS is green.** It runs typecheck, lint, format, the relay's own
@@ -394,15 +398,29 @@ recorded so none of them is discovered by surprise later.
   run will not die on a syntax error, an unknown action input or a shell mistake in a
   `run:` block — it does not mean the jobs pass.
 - **No release has ever been published.** `release.yml` builds on a `v*` tag through
-  the same workflow CI uses, collects what the matrix produced — one runner and one
-  `.dmg` today — writes `SHA256SUMS.txt` and attaches the lot to a GitHub release, with
-  notes that say it is for macOS and nothing else. It has never been fired.
+  the same workflow CI uses, collects the one runner's `.dmg`, writes
+  `SHA256SUMS.txt` and attaches both to a GitHub release, with notes that say it
+  is for macOS and nothing else. It has never been fired.
   The parts that can be checked without GitHub have been: the workflow parses and
   lints, and the note-writing and checksum steps were run here against stand-in files
   and produce what they claim to. What has not been checked is everything that needs
   the platform — whether the artifact upload and download hand the files between jobs
-  as expected, and whether `gh release create` behaves as read. Until a tag is pushed,
-  this is a pipeline that has been reasoned through, not one that has run.
+  as expected, and whether `gh release create` behaves as read. One of those is worth
+  settling before a tag rather than after a three-quarter-hour build: publishing needs
+  `contents: write`, which the workflow asks for, and a repository whose Actions
+  workflow-permissions setting is read-only overrides it and fails the last step with
+  a 403. Until a tag is pushed, this is a pipeline that has been reasoned through, not
+  one that has run.
+- **The Intel half of the universal app has never been executed.** A universal `.dmg`
+  carries node-pty twice, once per architecture, and the packaged-app check runs the
+  app — so it exercises whichever architecture the runner is, which on `macos-latest`
+  is Apple Silicon. The `darwin-x64` binaries are now asserted statically: present,
+  executable, and Mach-O files for the architecture whose directory they sit in. That
+  is more than nothing and it is not the same as running them. If the merge or the
+  ad-hoc signature damaged the Intel slice, the release would go out green and every
+  Intel Mac would open no terminal, which for this app is the whole app. Closing this
+  needs an Intel Mac, or `arch -x86_64` on an Apple Silicon one with Rosetta
+  installed.
 - **Nothing is signed. That is a decision, not a task waiting to be done.** There is
   no Apple Developer certificate and no Windows code-signing certificate, and none is
   being bought, so macOS refuses the app as being from an unverified developer and
