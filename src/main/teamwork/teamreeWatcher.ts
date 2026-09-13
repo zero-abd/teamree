@@ -34,9 +34,10 @@
 // What comes out is the same coarse invalidation every other producer emits.
 // The value here is entirely in the timing.
 
-import { statSync, watch as fsWatch } from 'node:fs'
+import { existsSync, statSync, watch as fsWatch } from 'node:fs'
 import { join } from 'node:path'
 import { MEMBERS_DIR_SEGMENTS } from './memberFile'
+import { RELAY_FILE_SEGMENTS } from './peer/relayUrl'
 
 /** Long enough to swallow a checkout writing several files, short enough to feel live. */
 export const DEFAULT_SETTLE_MS = 200
@@ -73,25 +74,38 @@ export type TeamreeWatchDegraded = {
 }
 
 /**
- * What `.teamree` looked like last time an event made us check.
+ * What the two team-wide facts looked like last time an event made us check.
  *
- * `undefined` means it was not there at all, which is a state worth telling
- * apart from every other: a project nobody has set teamwork up on is the case
- * the checkout-root watch exists for.
+ * Three numbers, not one, and the third is why: a key arriving does not touch
+ * `.teamree`'s own mtime — it changes the mtime of `members/`, the directory it
+ * lands in — and the relay file changes neither, since editing a file leaves
+ * its parent alone. A mark of `.teamree` by itself answers "did teamwork
+ * appear or go", which is only one of the three things this watch is for.
+ *
+ * `undefined` for a path means it is not there at all, which is a state worth
+ * telling apart from every other: a project nobody has set teamwork up on is
+ * the case the checkout-root watch exists for.
  */
-type TeamreeMark = { mtimeMs: number } | undefined
+type TeamreeMark = readonly (number | undefined)[]
 
-function markOf(path: string): TeamreeMark {
+function mtimeOf(path: string): number | undefined {
   try {
-    return { mtimeMs: statSync(path).mtimeMs }
+    return statSync(path).mtimeMs
   } catch {
     return undefined
   }
 }
 
-function sameMark(a: TeamreeMark, b: TeamreeMark): boolean {
-  if (a === undefined || b === undefined) return a === b
-  return a.mtimeMs === b.mtimeMs
+function markOf(projectPath: string): TeamreeMark {
+  return [
+    mtimeOf(join(projectPath, TEAMREE_DIR)),
+    mtimeOf(join(projectPath, ...MEMBERS_DIR_SEGMENTS)),
+    mtimeOf(join(projectPath, ...RELAY_FILE_SEGMENTS))
+  ]
+}
+
+function sameMark(a: TeamreeMark | undefined, b: TeamreeMark): boolean {
+  return a !== undefined && a.length === b.length && a.every((each, index) => each === b[index])
 }
 
 /** What a lost watch means, in terms somebody could act on. */
@@ -211,7 +225,7 @@ export class TeamreeWatcher {
     // on the first event, so that a build writing into the checkout is still
     // free: without it the first write after attaching would always look like a
     // change, because nothing had been recorded to compare it against.
-    if (!this.#marks.has(projectId)) this.#marks.set(projectId, markOf(join(projectPath, TEAMREE_DIR)))
+    if (!this.#marks.has(projectId)) this.#marks.set(projectId, markOf(projectPath))
 
     const teamreeDir = join(projectPath, TEAMREE_DIR)
     const membersDir = join(projectPath, ...MEMBERS_DIR_SEGMENTS)
@@ -245,6 +259,27 @@ export class TeamreeWatcher {
     })
     this.#attachOne(watched, projectId, teamreeDir)
     this.#attachOne(watched, projectId, membersDir)
+
+    // Degraded is a state to recover from, not a verdict.
+    //
+    // `#lose` sets it when a watch dies, and a watch dying is exactly what a
+    // branch switch does: checking out a branch without `.teamree` takes the
+    // directory and its watches with it. Without this, the project stayed
+    // marked unwatched for the life of the process — including after the branch
+    // came back, the directory returned, and every watch was successfully
+    // re-attached a few lines above.
+    //
+    // That is the failure of this area pointed the other way. A roster that has
+    // silently stopped following its file is the thing worth warning about; a
+    // warning left standing over a roster that is being followed perfectly well
+    // is how somebody learns to ignore the warning.
+    watched.covered =
+      watched.handles.has(projectPath) &&
+      // A directory that is not there needs no watch — a project nobody has set
+      // teamwork up on is covered by the watch on its checkout. One that is
+      // there and has no watch is the case this flag exists for.
+      (!existsSync(teamreeDir) || watched.handles.has(teamreeDir)) &&
+      (!existsSync(membersDir) || watched.handles.has(membersDir))
   }
 
   #attachOne(
@@ -315,7 +350,7 @@ export class TeamreeWatcher {
    * a checkout is for — costs one `stat` and no report.
    */
   #teamreeChanged(projectId: string, projectPath: string): boolean {
-    const mark = markOf(join(projectPath, TEAMREE_DIR))
+    const mark = markOf(projectPath)
     const changed = !sameMark(this.#marks.get(projectId), mark)
     this.#marks.set(projectId, mark)
     return changed

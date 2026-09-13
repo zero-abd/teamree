@@ -211,6 +211,49 @@ describe('the watch set', () => {
     watcher.close()
   })
 
+  it('catches a key arriving when only the checkout-root watch fires', async () => {
+    // The macOS case, which cost two CI failures. FSEvents is recursive, so the
+    // watch on the checkout root receives nested changes — and the watches on
+    // `.teamree` and `members/` are the ones a Linux box relies on. If the root
+    // watch is the only one that speaks, it still has to be enough.
+    //
+    // It was not: a key landing in `members/` changes that directory's mtime and
+    // leaves `.teamree`'s alone, so a mark of `.teamree` by itself said nothing
+    // had happened. Only the root watch is fired here, deliberately.
+    const root = await checkout()
+    await writeMemberFile(root, 'ana')
+    const fake = fakeWatches()
+    let reports = 0
+    let run: (() => void) | undefined
+    const watcher = new TeamreeWatcher({
+      onChange: () => {
+        reports += 1
+      },
+      watch: fake.watch,
+      schedule: (task) => {
+        run = task
+        return () => {
+          run = undefined
+        }
+      }
+    })
+    watcher.sync([{ id: 'p1', path: root }])
+
+    await writeMemberFile(root, 'bo')
+    fake.fire(root, null)
+    run?.()
+    expect(reports).toBe(1)
+
+    // And the relay file, which changes neither directory's mtime: editing a
+    // file leaves its parent alone, so this is the third thing to mark.
+    await writeFile(join(root, '.teamree', 'relay'), 'wss://relay.example/v1/relay\n', 'utf8')
+    fake.fire(root, null)
+    run?.()
+    expect(reports).toBe(2)
+
+    watcher.close()
+  })
+
   it('does not cost a roster read for a build writing in the checkout', async () => {
     // The reason the checkout root is filtered at all. A checkout is where an
     // agent works and a build writes, and a report per file would mean reading
@@ -261,6 +304,41 @@ describe('the watch set', () => {
     expect(degraded[0]).toContain('no filesystem watches left')
     // What it costs, not what broke: nothing here has broken.
     expect(degraded[0]).toContain('git pull')
+  })
+
+  it('stops saying a project is unwatched once its watches are back', async () => {
+    // A branch switch that removes `.teamree` kills its watches, and a dying
+    // watch is what marks a project unwatched. The directory comes back on the
+    // way out of that branch and every watch re-attaches — so the warning has to
+    // go with it.
+    //
+    // Leaving it standing is this area's own failure pointed the other way: the
+    // thing worth warning about is a roster that has quietly stopped following
+    // its file, and a warning left over a roster that is being followed is how
+    // somebody learns to ignore it.
+    const root = await checkout()
+    await writeMemberFile(root, 'ana')
+    const fake = fakeWatches()
+    const watcher = new TeamreeWatcher({
+      onChange: () => {},
+      watch: fake.watch,
+      schedule: (task) => {
+        task()
+        return () => {}
+      }
+    })
+    watcher.sync([{ id: 'p1', path: root }])
+    expect(watcher.watches('p1')).toBe(true)
+
+    // The watch on `.teamree` dies the way a removed directory kills one.
+    fake.fail(join(root, '.teamree'), Object.assign(new Error('gone'), { code: 'ENOENT' }))
+    expect(watcher.watches('p1')).toBe(false)
+
+    // And the project comes back: the directory is there and re-attaching works.
+    watcher.sync([{ id: 'p1', path: root }])
+    expect(watcher.watches('p1')).toBe(true)
+
+    watcher.close()
   })
 
   it('treats a project with no .teamree yet as covered, because its parent is', () => {
