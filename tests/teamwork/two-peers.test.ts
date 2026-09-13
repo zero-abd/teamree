@@ -1,20 +1,22 @@
-// The two-peer harness, tested on the parts of teamwork that exist today.
+// The two-peer harness, tested on the harness rather than on teamwork.
 //
-// What is provable now is everything up to the wire: two runtimes that do not
-// share state, two identities that are actually different, a roster that a push
-// carries from one checkout to the other, and a teardown that leaves nothing
-// behind. That last one matters more than it sounds — every assertion in the
-// milestones to come will be made by a harness like this one, and a harness that
-// leaks a runtime poisons the run after it.
+// What it owes every suite built on it: two runtimes that do not share state,
+// two identities that are the runtimes' own, a roster that a push carries from
+// one checkout to the other, a relay the pair actually meet on, and a teardown
+// that leaves nothing behind. The last one matters more than it sounds — a
+// harness that leaks a runtime poisons the run after it rather than failing its
+// own.
 //
-// Everything past the wire is in scenario.test.ts, pending the relay.
+// The story the harness exists to tell is in scenario.test.ts.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { PeerTransportNotBuilt, startTwoPeers } from '../../scripts/teamwork/two-peers.mjs'
+import { relayIsBuilt, startTwoPeers } from '../../scripts/teamwork/two-peers.mjs'
 import { memberKeyPath } from '../../scripts/teamwork/identity.mjs'
+
+const RELAY_BUILT = relayIsBuilt()
 
 let peers: Awaited<ReturnType<typeof startTwoPeers>>
 
@@ -52,12 +54,22 @@ describe('two peers on one machine', () => {
     expect(await peers.joiner.call('project.list')).toHaveLength(0)
   })
 
-  it('gives each peer a different X25519 keypair', () => {
-    expect(peers.leader.identity.publicKey).not.toBe(peers.joiner.identity.publicKey)
-    expect(peers.leader.identity.privateKey).not.toBe(peers.joiner.identity.privateKey)
-    for (const peer of peers.peers) {
+  it('gives each peer the keypair its own runtime generated, and no copy of the secret', async () => {
+    // Asked of the runtime rather than minted here. A harness that made its own
+    // keys would fill the roster with keys the app has never heard of, and
+    // every handshake would then fail for a reason no assertion explains.
+    const [ana, bo] = [await peers.leader.whoAmI(), await peers.joiner.whoAmI()]
+    expect(ana.publicKey).not.toBe(bo.publicKey)
+    for (const identity of [ana, bo]) {
       // Base64 of the raw 32 bytes, which is what the member file carries.
-      expect(Buffer.from(peer.identity.publicKey, 'base64')).toHaveLength(32)
+      expect(Buffer.from(identity.publicKey, 'base64')).toHaveLength(32)
+    }
+
+    for (const peer of peers.peers) {
+      // The private half is in the app's own data directory and in no checkout,
+      // which is the one thing `docs/teamwork.md` promises about it.
+      expect(existsSync(join(peer.userDataDir, 'identity.key'))).toBe(true)
+      expect(existsSync(join(peer.repoPath, '.teamree', 'identity.key'))).toBe(false)
     }
   })
 
@@ -85,7 +97,7 @@ describe('two peers on one machine', () => {
 
     const roster = await peers.joiner.roster()
     expect(roster.map((member) => member.handle)).toEqual(['ana'])
-    expect(roster[0]?.publicKey).toBe(peers.leader.identity.publicKey)
+    expect(roster[0]?.publicKey).toBe((await peers.leader.whoAmI()).publicKey)
   }, 30_000)
 
   it('lets the second member add themselves on top of the first', async () => {
@@ -114,14 +126,33 @@ describe('two peers on one machine', () => {
     expect(suite).toMatch(/# fail 0/)
   }, 90_000)
 
-  it('refuses to pretend the peer transport exists', async () => {
-    await expect(peers.linkPeers()).rejects.toThrow(PeerTransportNotBuilt)
-  })
+  it.skipIf(!RELAY_BUILT)(
+    'puts the two of them on a real relay and waits until they have met',
+    async () => {
+      await peers.linkPeers()
+
+      // Both directions, because a link is two Noise sessions and either one
+      // could be the half that came up.
+      for (const peer of peers.peers) {
+        const [link] = await peer.links()
+        expect(link?.phase, JSON.stringify(link)).toBe('connected')
+      }
+      expect((await peers.leader.links())[0]?.handle).toBe('bo')
+      expect((await peers.joiner.links())[0]?.handle).toBe('ana')
+
+      // And the relay is the team's, in the repository, where a diff shows it —
+      // not a per-machine setting one of them typed.
+      const relay = await peers.joiner.call('teamwork.relay', { projectId: peers.joiner.projectId })
+      expect(relay.source).toBe('repository')
+      expect(relay.url).toBe(peers.relay.url)
+    },
+    90_000
+  )
 
   // Last on purpose: teardown can only be checked by doing it. Every assertion
-  // in milestones B through E will be made by a harness like this one, so a
-  // harness that leaked a runtime would poison the run after it rather than
-  // fail its own.
+  // in scenario.test.ts is made by a harness like this one — two runtimes, a
+  // relay and three clones — so a harness that leaked any of it would poison
+  // the run after it rather than fail its own.
   it('tears down completely, leaving no runtime, socket or directory behind', async () => {
     const endpoints = peers.peers.map((peer) => peer.discovery.endpoint)
 
