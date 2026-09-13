@@ -83,10 +83,16 @@ function seed(overrides: Record<string, unknown> = {}): void {
   )
 }
 
-/** Opens the dialog and waits for the refs listing that prefills the picker. */
+/** Opens the dialog and settles the refs listing that prefills the picker. */
 async function open(projectId = 'p1'): Promise<void> {
   render(<TaskComposerDialog projectId={projectId} />)
-  await waitFor(() => expect(startPoint().value.length).toBeGreaterThan(0))
+  // The stubbed listing is already resolved by the time the effect subscribes
+  // to it, so one act tick flushes both it and the effect that prefills the
+  // picker. Waiting on that rather than on a deadline keeps the helper honest
+  // on a cold machine: `waitFor`'s one-second default was close enough to the
+  // first assertion's warm-up cost that whichever test ran first lost the race.
+  await act(async () => {})
+  expect(startPoint().value.length).toBeGreaterThan(0)
 }
 
 // The label wraps its hint as well as its caption, so the accessible name is

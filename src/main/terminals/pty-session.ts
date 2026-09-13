@@ -64,6 +64,22 @@ const EXIT_DRAIN_MAX_MS = 500
  */
 export const QUIET_AFTER_MS = 4_000
 
+/**
+ * What a pane keeps once it has exited.
+ *
+ * A dead pty appends nothing more, so the whole of an exited pane's buffer is
+ * memory held against whoever reads it next — and those readers are real: the
+ * renderer repaints a pane from `terminal.read` every time its view remounts,
+ * the sidebar reads the last few KB once more after the exit, `teamree
+ * terminal read` answers out of it, and a teammate joining a watch takes its
+ * snapshot from it. So it is trimmed rather than freed. Every one of them wants
+ * the tail; the head of a finished command is what nobody comes back for.
+ *
+ * Sixteen times smaller than a live pane's cap, which is the difference between
+ * a day of command panes costing tens of megabytes and costing a few.
+ */
+export const EXITED_RETENTION_BYTES = 256 * 1024
+
 export type PtySessionInit = {
   id: string
   worktreeId: string
@@ -375,6 +391,10 @@ export class PtySession {
     this.emit({ type: 'exit', exitCode: this.exitCode })
     for (const waiter of this.exitWaiters) waiter()
     this.exitWaiters.clear()
+    // Last, so every subscriber has had the exit and whatever it read on the
+    // back of it out of the whole buffer. From here nothing is appended again,
+    // so what is kept is only what a later reader can ask for.
+    this.scrollback.restrictTo(EXITED_RETENTION_BYTES)
   }
 
   private emit(event: TerminalEvent): void {

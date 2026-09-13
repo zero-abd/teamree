@@ -192,10 +192,10 @@ sidebar offers **Put teamree on my PATH** while the command is not linked to thi
 build, and the command palette finds it by name at any time.
 
 It stays quiet where a question would be useless: a link that already points
-here, a build with no CLI in it, a source checkout, and a regular file or a
-directory sitting at the destination — that last one is a thing to explain rather
-than an offer to make, and the sidebar still carries you to the panel that
-explains it.
+here, a build with no CLI in it, a source checkout, a copy still running from the
+disk image it arrived in, and a regular file or a directory sitting at the
+destination — that last one is a thing to explain rather than an offer to make,
+and the sidebar still carries you to the panel that explains it.
 
 It says what it will do before you press anything: link
 `/usr/local/bin/teamree` to the CLI inside this app. That is where a Mac
@@ -210,9 +210,11 @@ leaves `/usr/local/bin` as `root:wheel`, so being asked is the ordinary case
 rather than the exception. When it asks, the dialog is the system's own: the
 password goes to macOS and never to teamree. The panel says which of the two is
 about to happen before the button is pressed, and says what actually happened
-afterwards, having resolved the link to check.
+afterwards, having resolved the link to check — including what "your shell will
+find it" was checked against, since this app can read `/etc/paths` and its own
+environment and neither of those is your shell profile.
 
-Three things it will not do, each of them said rather than hidden:
+Four things it will not do, each of them said rather than hidden:
 
 - A **regular file** at `/usr/local/bin/teamree` is left exactly where it is and
   named. It is somebody's program, quite possibly yours.
@@ -220,9 +222,17 @@ Three things it will not do, each of them said rather than hidden:
   `~/Downloads`, say — is named too, because it is the one failure nobody
   diagnoses unaided: `teamree` runs, and it drives the other app, so nothing you
   do in this window ever seems to reach it. Pressing the button points the link
-  here instead and leaves that copy alone.
+  here instead and leaves that copy alone. If that copy has since been deleted or
+  ejected the panel says the other thing, because it is a different failure: the
+  link leads nowhere and `teamree` runs nothing at all.
 - A link that already points at this app is success, not an error. The button is
   safe to press twice, and says so rather than inventing work.
+- A copy of teamree **running from the disk image**, or from the read-only copy
+  macOS runs instead when an app is opened outside `/Applications`, is not linked
+  at all — no password is asked for and nothing is written. Both of them work
+  perfectly until they do not: the link would be made, read back, and reported as
+  done, and it would lead nowhere the moment you ejected. Drag teamree to
+  Applications, open it from there, and press it again.
 
 Running from a source checkout, nothing offers itself: a link into a checkout
 breaks the moment that checkout moves, and a question asked on every `npm run

@@ -18,31 +18,48 @@ import type { Clock } from '../core/clock.js'
 import { configFromEnv, type RelayConfig } from '../core/config.js'
 import type { Logger } from '../core/log.js'
 import { PeerSession, type PeerSocket, type SessionHost, type SessionSnapshot } from '../core/peerSession.js'
-import { CloseCode, PING_FRAME, PONG_FRAME } from '../core/protocol.js'
+import { CloseCode, parseHello, PING_FRAME, PONG_FRAME } from '../core/protocol.js'
 import { randomHex } from '../core/random.js'
 import { Rendezvous } from '../core/rendezvous.js'
 import { createWorkersLogger } from './logging.js'
+import { rendezvousId } from './rendezvousId.js'
 
 const OPEN = 1
 
 /**
- * How many sockets one object will hold.
+ * How many sockets one object will hold, counted separately by what each one has
+ * proved, because the two kinds are not interchangeable.
  *
  * An object holds one pairing, and `Rendezvous` already refuses to run more than
  * one: a third peer that presents the token displaces the two that were there.
- * The socket count has to let that third one in — displacing is how a peer whose
- * laptop slept gets its session back — and nothing beyond it. So three, not two:
- * the pair, plus the one arriving to take it over.
+ * So three sockets may hold the pairing — the pair, plus the one arriving to
+ * take it over — and a socket holds one of those slots only once it has said a
+ * hello that names this object.
  *
- * A cap is needed at all because the object's name is a client-chosen hex string
- * with no token behind it and no proof of anything. Without one, a client is
- * free to point every socket it can open at a single object, and each frame that
- * object then handles costs work linear in how many are attached.
+ * A socket that has not said its hello yet has proved nothing at all. Counting
+ * those against the same three was a way to shut a named rendezvous: the object
+ * is addressed by a hash out of the URL, so three connections presenting no
+ * hello, no token and no proof of anything could take every slot and leave the
+ * teammate who owns the pairing refused at the door. They get their own budget
+ * instead, and when it is full the *oldest* of them is displaced rather than the
+ * newcomer refused — a socket that has been sitting silent is the one with
+ * nothing to lose, and the arriving peer gets its chance to speak.
+ *
+ * Both caps exist because each frame this object handles costs work linear in
+ * how many sockets are attached. Six is that bound.
  */
-const MAX_SOCKETS = 3
+const MAX_PAIRING_SOCKETS = 3
+const MAX_GREETING_SOCKETS = 3
 
 /** The slice of the Durable Object runtime this needs, named so it can be faked. */
 export type PairState = {
+  /**
+   * The object's own id. Its `name` is the rendezvous hash the Worker routed on,
+   * and it is what a hello is checked against. Optional because it is the
+   * runtime's to provide: a host that does not name its objects after the
+   * rendezvous has nothing to check, and a fake need not pretend to.
+   */
+  id?: { name?: string }
   acceptWebSocket: (socket: PairSocket, tags?: string[]) => void
   getWebSockets: (tag?: string) => PairSocket[]
   setWebSocketAutoResponse: (pair: unknown) => void
@@ -63,6 +80,9 @@ export type PairSocket = {
 }
 
 export type PairEnvironment = Record<string, string | undefined>
+
+/** A socket that is attached but has not said a hello this object accepted. */
+type Greeting = { socket: PairSocket; snapshot: SessionSnapshot }
 
 /**
  * The runtime owns this socket and may be part-way through taking it away. A
@@ -112,13 +132,17 @@ export class RendezvousPair {
    * and the caller must answer the upgrade rather than complete it.
    */
   accept(socket: PairSocket, origin: string): boolean {
-    if (this.occupied() >= MAX_SOCKETS) {
+    const held = this.census()
+    if (held.pairing >= MAX_PAIRING_SOCKETS) {
       this.log.warn('upgrade.refused', {
         reason: 'rendezvous already holds as many connections as a pairing can account for',
         addressRef: this.log.ref(origin)
       })
       return false
     }
+    // Room is made rather than refused: whoever is arriving may be the teammate
+    // this rendezvous belongs to, and the sockets in the way have said nothing.
+    if (held.greeting.length >= MAX_GREETING_SOCKETS) this.displaceOldestGreeting(held.greeting)
     this.state.acceptWebSocket(socket)
     const id = `peer_${randomHex(6)}`
     const session = this.build(socket, id, origin, undefined)
@@ -135,8 +159,20 @@ export class RendezvousPair {
       this.unknownSocket(socket, 'message')
       return
     }
-    if (typeof message === 'string') session.onText(message)
-    else session.onBinary(new Uint8Array(message))
+    if (typeof message === 'string') {
+      // A hello is what buys a socket one of this object's pairing slots, and
+      // this is where it is made to cost something: the token has to be the one
+      // this object is named after. Without the check, a hello carrying a token
+      // nobody has ever seen parks a socket here for the whole pairing budget —
+      // ten minutes by default, rather than the ten seconds a silent one gets —
+      // and three of those keep the pair that owns the rendezvous out of it.
+      if (session.currentState === 'greeting' && !(await this.namesThisObject(message))) {
+        session.close(CloseCode.BadHello, 'this hello is for a different rendezvous')
+        this.persist(live.sessions)
+        return
+      }
+      session.onText(message)
+    } else session.onBinary(new Uint8Array(message))
     this.persist(live.sessions)
     await this.armAlarm()
   }
@@ -223,22 +259,74 @@ export class RendezvousPair {
   }
 
   /**
-   * Sockets that still have a session on them: what the admission cap is spent
-   * against, and what the alarm asks before deciding it is still needed.
+   * Sockets that still have a session on them, split by whether they have said a
+   * hello this object accepted. The two caps are spent against the two halves.
    *
    * A peer that was just displaced stays attached for the moment between being
    * told and its close arriving, and it must not hold a slot against the
    * connection that displaced it. A socket whose attachment cannot be read is
-   * counted: the object cannot tell whether it is finished, and guessing in the
-   * other direction is what would let the cap be walked past and what would
-   * leave a live connection with nothing checking its deadlines.
+   * counted against the pairing slots and never displaced: the object cannot
+   * tell whether it is finished, and guessing in the other direction is what
+   * would let the cap be walked past and what would leave a live connection with
+   * nothing checking its deadlines.
    */
-  private occupied(): number {
-    let held = 0
+  private census(): { pairing: number; greeting: Greeting[] } {
+    let pairing = 0
+    const greeting: Greeting[] = []
     for (const socket of this.state.getWebSockets()) {
-      if (readSnapshot(socket)?.state !== 'closed') held += 1
+      const snapshot = readSnapshot(socket)
+      if (snapshot === null) {
+        pairing += 1
+        continue
+      }
+      if (snapshot.state === 'closed') continue
+      if (snapshot.state === 'greeting') greeting.push({ socket, snapshot })
+      else pairing += 1
     }
-    return held
+    return { pairing, greeting }
+  }
+
+  /** Everything still here, which is what the alarm asks before re-arming. */
+  private occupied(): number {
+    const held = this.census()
+    return held.pairing + held.greeting.length
+  }
+
+  /**
+   * Makes room for an arriving connection by ending the silent one that has been
+   * here longest. Told with the capacity code rather than a protocol complaint:
+   * a connection displaced in the moment before its own hello landed did nothing
+   * wrong, and backing off and returning is the right answer for it.
+   */
+  private displaceOldestGreeting(greeting: readonly Greeting[]): void {
+    let oldest = greeting[0]
+    if (oldest === undefined) return
+    for (const candidate of greeting) {
+      if (candidate.snapshot.openedAt < oldest.snapshot.openedAt) oldest = candidate
+    }
+    const session = this.build(oldest.socket, oldest.snapshot.id, oldest.snapshot.origin, oldest.snapshot)
+    session.close(CloseCode.Capacity, 'displaced by an arriving connection before saying anything')
+    this.log.info('greeting.displaced', { conn: oldest.snapshot.id })
+    try {
+      oldest.socket.serializeAttachment(session.snapshot())
+    } catch {
+      // Gone already, which is the outcome that was wanted.
+    }
+  }
+
+  /**
+   * Whether a hello is for the rendezvous this object is named after. The name
+   * is `SHA-256(token)` and the hello carries the token, so the object can check
+   * the two agree without the token ever having been in the URL.
+   */
+  private async namesThisObject(text: string): Promise<boolean> {
+    const expected = this.state.id?.name
+    if (expected === undefined) return true
+    const parsed = parseHello(text)
+    // Malformed, wrong version, not a token: core has better words for all of
+    // those and closes with them a line later.
+    if (!parsed.ok) return true
+    return (await rendezvousId(parsed.hello.rendezvous)) === expected
   }
 
   /**

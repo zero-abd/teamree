@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { MAX_REMOTE_WRITE_BYTES, Params } from '../../shared/methods'
+import { MAX_REMOTE_WRITE_BYTES, MAX_TERMINAL_ID_CHARS, Params } from '../../shared/methods'
 import { createInitiatorSession, createResponderSession, generateStaticKeyPair } from '../../shared/peer'
 import type { PeerSession } from '../../shared/peer'
 import { ErrorCode } from '../../shared/protocol'
@@ -27,6 +27,7 @@ import {
   type RemoteReadVerdict,
   type RemoteWriteRequest,
   type RemoteWriteVerdict,
+  type TransportFailure,
   type TransportScheduler
 } from './peerTransport'
 import { createRuntimeContext } from './runtimeContext'
@@ -273,7 +274,7 @@ describe('what a teammate can reach', () => {
     // reads a watcher needs; D added `terminal.write` and nothing besides. A
     // teammate's window is not this pane's window and their keyboard is not its
     // power switch, so resize and close stay off it.
-    expect([...PEER_METHODS]).toEqual([
+    expect(Object.keys(PEER_METHODS).sort()).toEqual([
       'peer.presence',
       'peer.subscribe',
       'terminal.read',
@@ -281,13 +282,68 @@ describe('what a teammate can reach', () => {
       'terminal.write',
       'unsubscribe'
     ])
-    expect(PEER_METHODS).not.toContain('terminal.resize')
-    expect(PEER_METHODS).not.toContain('terminal.close')
+    expect(PEER_METHODS).not.toHaveProperty('terminal.resize')
+    expect(PEER_METHODS).not.toHaveProperty('terminal.close')
     // A teammate does not get to write a symlink into /usr/local/bin here, and
     // does not get to ask for a password dialog on somebody else's screen.
-    expect(PEER_METHODS).not.toContain('cli.install')
-    expect(PEER_METHODS).not.toContain('cli.status')
-    expect(PEER_METHODS).not.toContain('cli.dismissPrompt')
+    expect(PEER_METHODS).not.toHaveProperty('cli.install')
+    expect(PEER_METHODS).not.toHaveProperty('cli.status')
+    expect(PEER_METHODS).not.toHaveProperty('cli.dismissPrompt')
+  })
+
+  it('says of every admitted method which project check it goes through', () => {
+    // Admission was an allow-list with a safe default; scoping was two `if`s
+    // further down the file, matching method names by hand. Nothing joined
+    // them, so a method added to the list — `terminal.resize`, a future
+    // `terminal.tail` — was admitted and dispatched carrying nothing but the id
+    // the remote caller named, with no project check at all and no test failing.
+    // That is exactly how `terminal.read` and `terminal.subscribe` shipped
+    // unscoped the first time.
+    //
+    // The list now *is* the table of scopes, so there is no way to add an entry
+    // without naming one, and the next omission is a type error rather than a
+    // hole. This asserts the assignments themselves: the type stops a method
+    // having no scope, and only a test stops it having the wrong one.
+    expect(PEER_METHODS).toEqual({
+      // Nothing to scope. These are about this link, and answer with what this
+      // link is already entitled to.
+      'peer.presence': 'link',
+      'peer.subscribe': 'link',
+      unsubscribe: 'link',
+      // Name a pane, and may only have it if the asker shares its project.
+      'terminal.read': 'read-pane',
+      'terminal.subscribe': 'read-pane',
+      // The one that runs code, judged separately from the ones that only look.
+      'terminal.write': 'write-pane'
+    })
+  })
+
+  it('will not let a pane method through without the owner having judged it', async () => {
+    // The property the table exists to hold, asserted through the transport
+    // rather than over the constant: every method scoped to a pane is refused
+    // when there is no judge to scope it with. A new entry that forgot its
+    // check would reach the dispatcher here instead.
+    for (const [method, scope] of Object.entries(PEER_METHODS)) {
+      if (scope === 'link') continue
+      const { caller } = rig([method as never], { bareRead: true })
+      await expect(caller.call(method as 'terminal.read', { terminalId: 't1' } as never)).rejects.toBeTruthy()
+    }
+  })
+
+  it('bounds the pane id a read names, not only the one a keystroke names', async () => {
+    // The id on a write was capped because it is copied into the owner's log.
+    // The id on a read is copied too — into the map that remembers which pane
+    // each of this link's subscriptions is streaming, and out of it again to
+    // whoever is told who is reading. Bounded in the same place and by the same
+    // number, because "which fields a remote caller chooses the size of" is not
+    // a question that should have two answers in one file.
+    const { caller } = rig()
+    await expect(
+      caller.call('terminal.read', { terminalId: 'x'.repeat(MAX_TERMINAL_ID_CHARS + 1) })
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams })
+    await expect(
+      caller.call('terminal.subscribe', { terminalId: 'x'.repeat(MAX_TERMINAL_ID_CHARS + 1) })
+    ).rejects.toMatchObject({ code: ErrorCode.InvalidParams })
   })
 
   it('refuses a keystroke when nothing is there to attribute it to', async () => {
@@ -407,6 +463,23 @@ describe('what a teammate can reach', () => {
     expect(written).toEqual([])
   })
 
+  it('measures a paste in the same unit at both ends of the link', async () => {
+    // `MAX_REMOTE_WRITE_BYTES` was enforced in characters by the schema the
+    // sender's own machine runs, and in bytes by the transport at the far end.
+    // A paste of that many non-ASCII characters therefore passed locally and
+    // came back refused as three times the size — a failure this machine could
+    // have named, arriving instead as something the teammate's machine said.
+    // The schema counts bytes now, so the two ends agree about what the number
+    // means and the refusal happens where the person typing is.
+    const threeBytesEach = '✓'.repeat(MAX_REMOTE_WRITE_BYTES)
+    expect(Params.teamworkType.safeParse({ projectId: 'p', paneId: 'x', data: threeBytesEach }).success).toBe(false)
+    expect(Params.terminalWrite.safeParse({ terminalId: 't', data: threeBytesEach }).success).toBe(false)
+    // And an ordinary paste of the same byte size is still fine.
+    const atTheLimit = 'x'.repeat(MAX_REMOTE_WRITE_BYTES)
+    expect(Params.teamworkType.safeParse({ projectId: 'p', paneId: 'x', data: atTheLimit }).success).toBe(true)
+    expect(Params.terminalWrite.safeParse({ terminalId: 't', data: atTheLimit }).success).toBe(true)
+  })
+
   it('widens by exactly the list it is given, which is how C plugs in', async () => {
     const { caller } = rig(['peer.presence', 'status.get'])
     await expect(caller.call('status.get', {})).resolves.toMatchObject({ version: 't' })
@@ -440,7 +513,7 @@ describe('framing', () => {
 
   it('ends the link when a message does not authenticate, rather than carrying on', () => {
     const [session] = handshakenPair()
-    let fatal: string | undefined
+    let fatal: TransportFailure | undefined
     const transport = createPeerTransport({
       session,
       send: () => {},
@@ -451,8 +524,8 @@ describe('framing', () => {
       ),
       subscriptions: new SubscriptionHub(),
       connectionId: 'peer_x',
-      onFatal: (reason) => {
-        fatal = reason
+      onFatal: (failure) => {
+        fatal = failure
       }
     })
 
@@ -461,6 +534,10 @@ describe('framing', () => {
     // the stream can no longer be trusted or resynchronised.
     transport.receive(new Uint8Array(64))
     expect(fatal).toBeTruthy()
+    // And named as what it is, because the caller puts a sentence on a screen
+    // and "a frame did not survive the trip" and "this side's own session gave
+    // up" are sentences about different machines.
+    expect(fatal?.kind).toBe('unauthenticated')
   })
 })
 
@@ -667,6 +744,39 @@ describe('what the owner is told about who is reading', () => {
 
     await caller.call('unsubscribe', { subscription })
     expect(watched()).toEqual([])
+  })
+
+  it('sends what the pane had already printed before saying the owner closed it', async () => {
+    // `session-manager.ts` calls `endStreamsFor(terminalId)` *before*
+    // `session.close()`, so the producer ends the channel while the pacer is
+    // still holding up to a flush interval of that pane's output — and, behind
+    // it, whatever exit or title was queued. All of it used to be deleted with
+    // the stream, and the watcher was handed `lost` and nothing else: the last
+    // thing the pane printed, and the code it exited with, gone with no
+    // `elided` to mark that anything had been.
+    //
+    // This file's own `evict` refuses to drop an exit or a title "because a
+    // watcher that lost one would be told the pane is still running when it is
+    // not", and its header says dropping output silently would make the whole
+    // feature a lie. This is that, on the one path where the stream ends.
+    const { caller, received, pane } = rig()
+    await caller.call('terminal.subscribe', { terminalId: 't1' })
+
+    // Out at once: the leading edge sends a pane that has been quiet.
+    pane('t1')?.emit({ type: 'data', data: 'FIRST' })
+    // Held: inside the flush interval, so this is armed rather than written.
+    pane('t1')?.emit({ type: 'data', data: 'HELD-BY-PACER' })
+    pane('t1')?.emit({ type: 'exit', exitCode: 3 })
+    pane('t1')?.close()
+
+    const events = received.map((frame) => frame.event)
+    expect(events).toContainEqual({ type: 'data', data: 'HELD-BY-PACER' })
+    expect(events).toContainEqual({ type: 'exit', exitCode: 3 })
+    // And in that order: the pane's last output, then the code it exited with,
+    // then the news that it is gone.
+    const types = events.map((event) => (event as { type: string }).type)
+    expect(types.indexOf('exit')).toBeGreaterThan(types.lastIndexOf('data'))
+    expect(types.lastIndexOf('lost')).toBeGreaterThan(types.indexOf('exit'))
   })
 
   it('forgets a pane whose stream the owner ended, and says so rather than going quiet', async () => {
