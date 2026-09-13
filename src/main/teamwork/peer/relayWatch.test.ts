@@ -43,6 +43,7 @@ import {
   fixedRemoteRunner,
   makeProjectDir,
   project,
+  presenceOf,
   statusOf,
   worktree,
   type PeerRuntime
@@ -260,9 +261,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     bob.changed()
     await until(
       () =>
-        alice.service
-          .presence({ projectId: 'p_alice' })
-          .worktrees.some((row) => row.panes.some((pane) => pane.id === namespaced)),
+        presenceOf(alice.service, 'p_alice').worktrees.some((row) => row.panes.some((pane) => pane.id === namespaced)),
       `the pane ${id} to reach Alice`
     )
     return { terminalId: id, paneId: namespaced }
@@ -366,7 +365,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
 
     await until(() => carolPhase === 'connected', 'Carol’s raw link to connect')
     await until(
-      () => alice.service.presence({ projectId: 'p_alice' }).worktrees.some((row) => row.panes.length > 0),
+      () => presenceOf(alice.service, 'p_alice').worktrees.some((row) => row.panes.length > 0),
       'Bob’s pane to reach Alice'
     )
   }, 60_000)
@@ -713,7 +712,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     await until(() => window.outputOn(opened.subscription).includes('a muted pane still talks'), 'output while muted')
 
     // And the worktree is still in Alice's sidebar with the pane under it.
-    const worktrees = alice.service.presence({ projectId: 'p_alice' }).worktrees
+    const worktrees = presenceOf(alice.service, 'p_alice').worktrees
     expect(worktrees.some((row) => row.panes.some((pane) => pane.id === paneId))).toBe(true)
 
     // The owner can see the mute, which is the only way they can lift it.
@@ -803,7 +802,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
       }
     }, 'the link to come back')
     await until(
-      () => alice.service.presence({ projectId: 'p_alice' }).worktrees.some((row) => row.panes.length > 0),
+      () => presenceOf(alice.service, 'p_alice').worktrees.some((row) => row.panes.length > 0),
       'Bob’s panes to reach Alice again'
     )
 

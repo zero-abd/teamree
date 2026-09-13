@@ -765,6 +765,12 @@ export type TeamworkRead = {
  * It is not an error either. A project that exists is not "no such project",
  * and answering that to a caller which handles its errors would have the caller
  * reporting a project gone while it sits in the sidebar.
+ *
+ * One type for every read that has this state to report, rather than one per
+ * method. `TeamworkStatus` and `TeammatePresence` are two questions about the
+ * same reconcile, so "nothing has been read about this project" is one fact,
+ * and spelling it twice would let the two drift into two different sentences
+ * about one moment.
  */
 export type TeamworkUnread = {
   state: 'unread'
@@ -929,7 +935,20 @@ export type WatchedPane = {
   muted: boolean
 }
 
-/** Every pane of this machine somebody is reading, has typed into, or muted. */
+/**
+ * Every pane of this machine somebody is reading, has typed into, or muted.
+ *
+ * One shape rather than the `read`/`unread` union `TeamworkStatus` and
+ * `TeammatePresence` carry, and deliberately so: every fact here is this
+ * machine's own, and none of it waits on a reconcile. A watcher and a typist
+ * both arrive over a link, and a link exists only for a project teamwork has
+ * already read — so for a project it has not, "nobody is reading and nobody has
+ * typed" is not an assumption, it is the only thing that can be true. The mutes
+ * are stronger still: they are restored from the owner's own decisions before
+ * the first reconcile runs, so this answers with them at a moment a roster read
+ * would have nothing to say. An empty list here is a finding, and it is one
+ * this machine is always in a position to have made.
+ */
 export type PaneWatchers = {
   projectId: string
   /**
@@ -1039,6 +1058,16 @@ export type ConsentGrant = {
  *
  * Both halves in one answer, for the reason the mute is reported beside the
  * watchers: a permission the owner cannot see is a permission they cannot lift.
+ *
+ * One shape rather than a union, on the same argument as `PaneWatchers` and
+ * with the same two halves behind it. A held burst is a teammate's keystroke,
+ * which arrives over a link, which a project teamwork has not read has none of
+ * — so an empty queue is the truth rather than a guess at it. The standing
+ * permissions are the owner's own, restored before the first reconcile, so they
+ * are reported from the first moment somebody can ask. The one thing a roster
+ * adds is the name to put beside a key, and a key the roster does not name is
+ * already shown as a key; a project whose roster has not been read yet is that
+ * same case arrived at a moment earlier.
  */
 export type PaneConsent = {
   projectId: string
@@ -1101,13 +1130,48 @@ export type RemoteWriteLog = {
 }
 
 /** Every teammate's worktrees in one project, as last heard. */
-export type TeammatePresence = {
+export type TeammatePresenceRead = {
+  /** The roster below was read from the repository, rather than assumed empty. */
+  state: 'read'
   projectId: string
   /** Sorted by handle then by worktree name, so two reads compare cleanly. */
   worktrees: TeammateWorktree[]
   /** Every teammate on this project's roster, those never heard from included. */
   teammates: TeammateStanding[]
   readAt: number
+}
+
+/**
+ * Who is on this project, or nothing at all while it has not been read.
+ *
+ * A union for the same reason `TeamworkStatus` is one, and the empty roster is
+ * exactly the `relay: null` of this method. `teammates: []` is a finding — it
+ * says the repository's roster was read and holds nobody but you, which sends
+ * somebody to `teamree team invite`. Answering it for a project whose
+ * `.teamree` has not been opened yet would tell a person their team is absent
+ * when the truth is that nobody has looked, and the sidebar would draw the one
+ * project with four colleagues in it as a project with none.
+ *
+ * `worktrees: []` would be the milder half of the same lie — "connected and
+ * showing nothing" rather than "not dialled" — and it is not separable from the
+ * roster anyway: the roster is what the links are made from, so the two are
+ * unread together or read together.
+ */
+export type TeammatePresence = TeammatePresenceRead | TeamworkUnread
+
+/**
+ * Who was heard from, or nothing at all while teamwork has not read this
+ * project.
+ *
+ * `teamworkFacts` for the roster, and it exists for the same readers: the
+ * sidebar's teammate rows, the "nothing heard from ana" line, the size a
+ * watched pane letterboxes to. Every one of them already says nothing for a
+ * project nobody has asked about yet, and "not read yet" is the same silence
+ * arrived at a different way. Anything with a sentence to write about the wait
+ * itself reads `state` instead.
+ */
+export function teammatesHeard(presence: TeammatePresence | undefined): TeammatePresenceRead | undefined {
+  return presence?.state === 'read' ? presence : undefined
 }
 
 /**

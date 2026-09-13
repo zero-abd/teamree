@@ -14,7 +14,7 @@
 // result is honest at the cost of being a little behind — which is the right
 // way round for a number whose job is to say something has been sitting there.
 
-import type { PeerPane, TeammatePresence, TeammateWorktree } from '@shared/entities'
+import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
 import { activityOf, paneLabel, worktreeActivity, type AgentActivity, type AgentRow } from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 
@@ -125,7 +125,12 @@ export function teammateTitle(row: TeammateWorktreeRowModel): string {
  * are on the roster and unheard is the whole of what is true.
  */
 export function unheardTeammates(presence: TeammatePresence | undefined): string[] {
-  return (presence?.teammates ?? []).filter((teammate) => teammate.heardAt === null).map((teammate) => teammate.handle)
+  // Nothing while the project is unread, on the same argument as the rest of
+  // the line: naming somebody as unheard from is a claim about a roster, and a
+  // roster nobody has opened yet supports no claim at all.
+  return (teammatesHeard(presence)?.teammates ?? [])
+    .filter((teammate) => teammate.heardAt === null)
+    .map((teammate) => teammate.handle)
 }
 
 /** The whole of it on hover, said as three facts rather than as a diagnosis. */
