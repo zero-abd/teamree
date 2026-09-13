@@ -477,6 +477,23 @@ recorded so none of them is discovered by surprise later.
   not exist. The one read that still refuses is resolving a *teammate's* pane, and
   it should: it is asked to act on somebody who cannot be found on a roster nobody
   has opened. It now says that, rather than that the project is missing.
+
+  And it used to be about reads only, leaving the two **writes** of the same
+  family out — one of them flagged at the time and one of them not.
+  `teamwork.mute`, which is also `teamree team unmute` and the button on every
+  pane, and `teamwork.revoke` resolved their project by walking the facts, so in
+  this window they refused a pane on screen with "no pane of this machine". That was the worse half, because
+  the reads beside them had already been fixed: the window drew a muted pane from
+  `watchers` and a standing permission from `requests` and then would not lift
+  either, which is not a lie on a screen but a control that visibly does nothing.
+  They do it now. Nothing in either wants a reconcile — the durable halves are
+  files keyed by this machine's own terminal ids, restored in `start()`; the
+  in-memory halves are this machine's own; and the project, the only thing that
+  was being looked up, is a fact the workspace holds. So the walk is over the
+  workspace, which is where the facts are built from at every reconcile and is
+  therefore the same walk one moment later. "No pane of this machine" now means
+  what it says, and neither method is on the peer allow-list or ever will be: a
+  mute a teammate could set or lift would not be a mute.
 - **A repository shared over a filesystem path takes part only if both Macs
   mount it at the same path.** It used to not take part at all. It does now: a
   path origin is normalised into its own namespace — a normalised URL is
