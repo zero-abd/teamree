@@ -306,6 +306,17 @@ The sidebar said a pane was working. It did not say what it was working on.
 Milestone 1 is complete and verified. These are the honest limits of what it does,
 recorded so none of them is discovered by surprise later.
 
+- **`teamwork.status` refuses a project the store plainly has**, for as long as
+  the peer service has not reconciled after `project.add`. The window swallows
+  the error and shows nothing for a moment rather than an error, so nobody sees
+  it today — but the method answers "no such project" about a project that
+  exists, which is the wrong sentence, and the next caller to handle the error
+  rather than ignore it will act on it.
+- **A repository shared over a filesystem path cannot take part.** What makes
+  two checkouts the same project is a hash of the normalised `origin` remote,
+  and a path is not a URL — `file://localhost/...` loses its host to the URL
+  parser. The app says so plainly rather than matching nothing quietly, but a
+  team whose remote is a shared directory will get no further than that message.
 - **A restarted shell is a fresh shell.** Panes and their directories come back, and
   an agent pane comes back with its conversation (see M10), but an ordinary pane's
   scrollback and whatever it was running are gone: the PTY died with the app. A

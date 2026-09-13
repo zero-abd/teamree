@@ -7,20 +7,40 @@
 //
 // It is split in two on purpose.
 //
-// Act I runs today, entirely on the leader's machine. Every move the joiner will
-// eventually make remotely is made here locally first, so it is already known to
-// work before distance is added: when the transport lands, the transport is the
-// only new variable. A scenario whose local half was never proved cannot tell a
-// broken relay from a broken pane.
+// Act I runs entirely on the leader's machine. Every move the joiner makes
+// remotely in act II is made here locally first, so when act II fails there is
+// only ever one new variable in it: a scenario whose local half was never
+// proved cannot tell a broken relay from a broken pane.
 //
-// Act II is the half that needs the relay. Those steps are `it.todo`, not
-// skipped assertions and not assertions against an invented API — milestones B
-// through D own those interfaces, and code written against a guess at them is
-// code somebody has to delete. Each one carries the assertion to write, in
-// words, above it.
+// Act II is the same story with two thousand miles in the middle, and nothing
+// in it is a stand-in. The relay is the relay's own build, running as a child
+// process on a real port. The crypto is real Noise between two identities the
+// two runtimes generated for themselves, authenticated against the keys their
+// two clones of one repository carry. The pane is a real pty with a real
+// program in it. The only thing the harness fakes is the distance.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { startTwoPeers } from '../../scripts/teamwork/two-peers.mjs'
+import type { PaneWatchers, TeammatePresence, Terminal, WatchedPane } from '../../src/shared/entities'
+import { TYPING_WINDOW_MS } from '../../src/shared/entities'
+import type { WatchedPaneEvent } from '../../src/shared/methods'
+import { ErrorCode } from '../../src/shared/protocol'
+import { relayIsBuilt, startTwoPeers } from '../../scripts/teamwork/two-peers.mjs'
+
+/**
+ * Act II needs the relay's own build, which is a separate package with its own
+ * `dist/`. Missing, it says so and skips: another package's absent build is not
+ * a broken peer transport. `scripts/require-relay-build.mjs` reads the same
+ * file and fails instead on CI, where a skip nobody sees is a test that does
+ * not exist.
+ */
+const RELAY_BUILT = relayIsBuilt()
+
+if (!RELAY_BUILT) {
+  console.warn(
+    '[scenario] act II is skipped: the relay is not built.\n' +
+      '[scenario] build it with:  cd relay && npm ci && npm run build'
+  )
+}
 
 /**
  * A stand-in for an agent that has stopped and wants an answer. It is the shape
@@ -31,7 +51,45 @@ import { startTwoPeers } from '../../scripts/teamwork/two-peers.mjs'
  */
 const STUCK_AGENT = 'printf "Which task should I take? "; read answer; printf "\\ntaking task %s\\n" "$answer"'
 
+/** What the pane says before anybody opens it, and must never leak by itself. */
+const UNWATCHED = 'reading TASKS.md, nobody is watching'
+
+/**
+ * The same agent, left running after it has answered.
+ *
+ * Act II needs a pane that is still there after the question is answered: the
+ * joiner types, the owner mutes, the joiner types again, and a program that
+ * exited on the first newline would make every step after step 4 a test about
+ * a pane that is not there. The echo is off, so what the scrollback holds is
+ * what the program printed and never what was typed at it — which is what lets
+ * step 6 assert that nothing arrived rather than that nothing was displayed.
+ */
+const ACT_TWO_AGENT = [
+  'stty -echo 2>/dev/null',
+  `printf '%s\\n' '${UNWATCHED}'`,
+  'printf "Which task should I take? "',
+  'read answer',
+  'printf "\\ntaking task %s\\n" "$answer"',
+  'while IFS= read -r line; do printf "heard %s\\n" "$line"; done'
+].join('; ')
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Polls a condition nothing here can be woken for.
+ *
+ * Two runtimes in two processes wake each other and not this test, so a
+ * teammate's snapshot arriving is learned by asking. The timeout is a failure
+ * mode rather than a delay: nothing waits for it when what it waits on happens.
+ */
+async function until(predicate: () => boolean | Promise<boolean>, what: string, timeoutMs = 30_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (await predicate()) return
+    if (Date.now() > deadline) throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`)
+    await sleep(50)
+  }
+}
 
 /** Polls a pane's scrollback until it says something, rather than sleeping blind. */
 async function readUntil(peer: { call: (m: string, p?: unknown) => Promise<any> }, terminalId: string, want: RegExp) {
@@ -53,8 +111,14 @@ beforeAll(async () => {
 
   // Both members exist in the repository before anything else happens. Under
   // `docs/teamwork.md` this is not setup, it is the trust model: the roster in
-  // git is what the Noise IK handshake will authenticate against, so a scenario
+  // git is what the Noise IK handshake authenticates against, so a scenario
   // that skipped it would be testing a pair who are not on a team.
+  //
+  // Each key is the runtime's own, asked of the runtime and written by it —
+  // `members.join` is the button in the Members dialog. A harness that minted
+  // its own keypairs would fill the roster with keys neither app has ever heard
+  // of, and every handshake in act II would fail for a reason no assertion here
+  // would explain.
   for (const peer of peers.peers) await peer.addSelfToRoster()
   await peers.leader.commit('Add ana to the team', ['.teamree'])
   await peers.leader.gitPush()
@@ -77,8 +141,10 @@ describe('act I — on the leader’s machine, today', () => {
   })
 
   it('1. the leader opens a worktree and starts an agent in it', async () => {
-    const project = await peers.leader.call('project.add', { path: peers.leader.repoPath })
-    const created = await peers.leader.call('worktree.create', { projectId: project.id, name: 'take a task' })
+    // The project is already tracked: adding a key to a repository is done
+    // through the project, so step 0 is what put it in the sidebar.
+    const projectId = await peers.leader.ensureProject()
+    const created = await peers.leader.call('worktree.create', { projectId, name: 'take a task' })
 
     worktree = created
     for (let attempt = 0; attempt < 120 && worktree.state === 'creating'; attempt += 1) {
@@ -121,7 +187,7 @@ describe('act I — on the leader’s machine, today', () => {
     // invalidation stream the GUI already runs on, and a teammate's worktrees
     // arriving is that same stream with a further source behind it.
     const seen: string[] = []
-    const unsubscribe = await peers.leader.subscribe('workspace.subscribe', {}, (event: { type: string }) => {
+    const stream = await peers.leader.subscribe('workspace.subscribe', {}, (event: { type: string }) => {
       seen.push(event.type)
     })
     try {
@@ -129,67 +195,329 @@ describe('act I — on the leader’s machine, today', () => {
       for (let attempt = 0; attempt < 50 && !seen.includes('terminals'); attempt += 1) await sleep(100)
       expect(seen).toContain('terminals')
     } finally {
-      await unsubscribe()
+      await stream.close()
     }
   }, 30_000)
 })
 
-describe('act II — across the relay', () => {
-  // Each of these is one step of docs/teamwork-scenario.md, and each says what
-  // it will assert. They stay `todo` until the milestone that owns them lands.
+describe.skipIf(!RELAY_BUILT)('act II — across the relay', () => {
+  // Everything here is the story in docs/teamwork-scenario.md, step for step,
+  // between two runtimes that share nothing but a git origin and a relay.
 
-  // Milestone B. The joiner's sidebar gains ana's worktree without the joiner
-  // asking for it: metadata flows by default. Assert that the joiner's view of
-  // the workspace contains a worktree whose owner is ana, with ana's branch name
-  // and its pane's state, and that the joiner never called subscribe to get it.
-  it.todo('2. the joiner sees the leader’s worktree appear, unasked')
+  /** The pane act II is about: a fresh agent, stopped on a question. */
+  let anasPane: Terminal
+  /** The same pane as bo can name it: `peer:<key prefix>:<ana's own id>`. */
+  let bosPaneId: string
+  /** Bo's open watch, and everything it has pushed him. */
+  let bosWatch: { cols: number; rows: number; handle: string; close: () => Promise<void> } | undefined
+  const pushed: WatchedPaneEvent[] = []
 
-  // Milestone B. Assert the negative, which is the one that protects the owner:
-  // before the joiner opens anything, no terminal bytes have crossed. Metadata
-  // is automatic; output is not.
-  it.todo('2c. no terminal output has crossed the wire yet')
+  /** Everything bo's watch has carried, as the pane's own bytes. */
+  const readThroughRelay = (): string =>
+    pushed
+      .filter((event): event is { type: 'data'; data: string } => event.type === 'data')
+      .map((event) => event.data)
+      .join('')
 
-  // Milestone C. The joiner opens ana's pane. Assert the joiner reads the same
-  // question act I proved is there — the scrollback, then the live stream — and
-  // that it is letterboxed to ana's dimensions rather than resizing her PTY.
-  it.todo('3. the joiner opens the pane and sees the agent’s question')
+  const bosView = (): Promise<TeammatePresence> =>
+    peers.joiner.call('teamwork.presence', { projectId: peers.joiner.projectId })
 
-  // Milestone C. Assert ana's pane says it is being watched, and by bo. This is
-  // half of what makes "anyone can type" survivable, so it is not optional and
-  // it is not a nicety.
-  it.todo('3b. the leader’s pane says it is being watched, and by whom')
+  /** Ana's row in bo's sidebar, with her panes under it. */
+  const anasRow = async (): Promise<TeammatePresence['worktrees'][number] | undefined> =>
+    (await bosView()).worktrees.find((row) => row.handle === 'ana')
 
-  // Milestone D. The joiner answers. Assert the bytes reach ana's PTY and the
-  // program acts on them — the same assertion as step 4a, with a relay in the
-  // middle.
-  it.todo('4. the joiner types the answer, and the agent takes the task')
+  /** Ana's own books: who is reading her panes and who has typed into them. */
+  const anasBooks = (): Promise<PaneWatchers> =>
+    peers.leader.call('teamwork.watchers', { projectId: peers.leader.projectId })
 
-  // Milestone D. Assert ana sees bo named as the author of that input while it
-  // is happening, and that it is recorded in her local audit log afterwards with
-  // who and when. Live attribution and the durable record are two different
-  // promises and need two assertions.
-  it.todo('5. the leader sees bo attributed, live and in the audit log')
+  const anasBookFor = async (): Promise<WatchedPane | undefined> =>
+    (await anasBooks()).panes.find((pane) => pane.terminalId === anasPane.id)
 
-  // Milestone D. Assert that after ana mutes the pane, a write from bo does not
-  // reach the PTY. Mute is the owner's and is not a negotiation, so the
-  // assertion is about ana's PTY, not about bo being told no.
-  it.todo('6. the leader mutes the pane, and the joiner’s typing stops arriving')
+  /** What ana's pty itself holds, which is the only thing a write really proves. */
+  const anasScrollback = async (): Promise<string> =>
+    (await peers.leader.call('terminal.read', { terminalId: anasPane.id })).data
 
-  // Milestone D. Assert the muted worktree is still in bo's sidebar. Mute stops
-  // the bytes; hiding the worktree would make mute a way to work unobserved on a
-  // shared project, which docs/teamwork.md rules out deliberately.
-  it.todo('6b. the muted pane is still visible, because mute is not hiding')
+  const boTypes = (data: string): Promise<{ written: true }> =>
+    peers.joiner.call('teamwork.type', { projectId: peers.joiner.projectId, paneId: bosPaneId, data })
 
-  // Milestone B, and the one that proves the trust model rather than the
-  // plumbing. Assert that a peer whose public key is not in
-  // `.teamree/members/` fails the Noise IK handshake and never reaches the
-  // method catalogue at all. Without this, every test above passes for a relay
-  // that pairs anybody.
-  it.todo('7. a peer whose key is not in the roster cannot complete the handshake')
+  beforeAll(async () => {
+    // The relay, the two outbound sockets, and the Noise IK handshake against
+    // the keys the two clones carry. Nothing is subscribed to here.
+    await peers.linkPeers()
 
-  // Milestone E. Assert that when ana's runtime stops, her worktree stays in
-  // bo's sidebar marked stale with the age of what is shown, rather than
-  // vanishing — a row disappearing reads as "it was deleted", which for a
-  // worktree is the one thing it must never wrongly say.
-  it.todo('8. the leader goes offline and her worktrees go stale, not absent')
+    // A fresh agent, because act I's has already been answered and has gone.
+    // Started after the link, so that what act II watches cross the wire
+    // actually crosses it rather than having been there all along.
+    anasPane = await peers.leader.call('terminal.create', { worktreeId: worktree.id, command: ACT_TWO_AGENT })
+    await readUntil(peers.leader, anasPane.id, /Which task should I take\?/)
+  }, 180_000)
+
+  afterAll(async () => {
+    await bosWatch?.close()
+  })
+
+  it('2. the joiner sees the leader’s worktree appear, unasked', async () => {
+    // Appearing, rather than being there: bo's sidebar fills itself, so this
+    // waits for a row nobody asked for instead of reading one that was already
+    // arranged.
+    await until(
+      async () => (await anasRow())?.panes.some((pane) => pane.id.endsWith(`:${anasPane.id}`)) === true,
+      'ana’s worktree to reach bo'
+    )
+
+    const row = await anasRow()
+    expect(row?.name).toBe(worktree.name)
+    expect(row?.branch).toBe(worktree.branch)
+    expect(row?.state).toBe('ready')
+    expect(row?.live).toBe(true)
+    expect(row?.publicKey).toBe((await peers.leader.whoAmI()).publicKey)
+
+    // Her pane's state, not just its name: the sidebar has to be able to draw
+    // a running agent differently from one that exited.
+    const pane = row?.panes.find((candidate) => candidate.id.endsWith(`:${anasPane.id}`))
+    expect(pane?.running).toBe(true)
+    expect(pane?.cols).toBe(anasPane.cols)
+    expect(pane?.rows).toBe(anasPane.rows)
+    expect(pane?.quietForMs).toBeGreaterThanOrEqual(0)
+    bosPaneId = pane?.id ?? ''
+
+    // And bo asked for none of it. Every method this end has sent is recorded,
+    // so "metadata flows by default" is a thing the test can show rather than
+    // a thing it has to be trusted about.
+    const subscribing = ['workspace.subscribe', 'terminal.subscribe', 'peer.subscribe', 'teamwork.watch']
+    expect(peers.joiner.called.filter((method: string) => subscribing.includes(method))).toEqual([])
+  }, 60_000)
+
+  it('2c. no terminal output has crossed the wire yet', async () => {
+    // The control: there is something to leak. Ana's pane really did say this,
+    // on ana's machine, while nobody was reading it.
+    expect(await anasScrollback()).toContain(UNWATCHED)
+
+    // And none of it is anywhere bo can see. His whole view of ana is the
+    // snapshot above, and a snapshot carries names, branches, pane states and
+    // silences — never bytes.
+    expect(JSON.stringify(await bosView())).not.toContain(UNWATCHED)
+    // Nor has anything been made a pane of his own.
+    expect(await peers.joiner.call('terminal.list')).toEqual([])
+
+    // Ana's side of the same fact, which is the half that protects her: nobody
+    // is reading any pane of hers, so nothing is being sent.
+    expect((await anasBooks()).panes).toEqual([])
+  })
+
+  it('3. the joiner opens the pane and sees the agent’s question', async () => {
+    const before = await peers.leader.call('terminal.list', { worktreeId: worktree.id })
+    const size = before.find((pane: Terminal) => pane.id === anasPane.id)
+
+    bosWatch = await peers.joiner.subscribe(
+      'teamwork.watch',
+      { projectId: peers.joiner.projectId, paneId: bosPaneId },
+      (event: WatchedPaneEvent) => pushed.push(event)
+    )
+
+    // Whose pane it is, said in the answer, so the view is never ambiguous.
+    expect(bosWatch?.handle).toBe('ana')
+
+    // The scrollback: what act I proved is there, read from the other machine.
+    await until(() => readThroughRelay().includes('Which task should I take?'), 'the question to reach bo')
+    // Including what it said before anybody opened it — which is the point of
+    // reading a scrollback at all, and the thing step 2c proved had not moved.
+    expect(readThroughRelay()).toContain(UNWATCHED)
+
+    // Letterboxed to ana's pty, not negotiated with bo's window.
+    expect(bosWatch?.cols).toBe(size?.cols)
+    expect(bosWatch?.rows).toBe(size?.rows)
+
+    // And her pty is the size it was. There is no method through which a
+    // reader could have changed it: `terminal.resize` is not on the list a
+    // teammate may call.
+    const after = await peers.leader.call('terminal.list', { worktreeId: worktree.id })
+    const now = after.find((pane: Terminal) => pane.id === anasPane.id)
+    expect(now?.cols).toBe(size?.cols)
+    expect(now?.rows).toBe(size?.rows)
+  }, 60_000)
+
+  it('3b. the leader’s pane says it is being watched, and by whom', async () => {
+    await until(async () => (await anasBookFor()) !== undefined, 'ana to see a reader on her pane')
+
+    const book = await anasBookFor()
+    expect(book?.watchers.map((watcher) => watcher.handle)).toEqual(['bo'])
+    // By the key the handshake authenticated, not by a name anybody claimed.
+    expect(book?.watchers[0]?.publicKey).toBe((await peers.joiner.whoAmI()).publicKey)
+    expect(book?.watchers[0]?.since).toBeGreaterThan(0)
+  }, 60_000)
+
+  it('4. the joiner types the answer, and the agent takes the task', async () => {
+    // Ana's books, and not bo's output: the pane has said nothing since the
+    // watch opened, so waiting for bytes at bo's end would be waiting on a
+    // condition that is already true and therefore on nothing at all — and the
+    // keystroke below would then race the watch it is meant to be seen
+    // through.
+    await until(async () => (await anasBookFor())?.watchers.length === 1, 'ana to see bo reading before he types')
+
+    expect(await boTypes('1\r')).toEqual({ written: true })
+
+    // Through a real pty on ana's machine and back out of the program that was
+    // blocked reading it. A promise that resolved would prove nothing; this is
+    // the agent acting on the answer.
+    expect(await readUntil(peers.leader, anasPane.id, /taking task 1/)).toMatch(/taking task 1/)
+
+    // And the live tail, which is the half of the watch step 3's scrollback
+    // could not show: the same bytes came back across the relay to bo.
+    await until(() => readThroughRelay().includes('taking task 1'), 'the answer to reach bo’s window')
+  }, 60_000)
+
+  it('5. the leader sees bo attributed, live and in the audit log', async () => {
+    const sentAt = Date.now()
+    // Half a line, deliberately. The program is blocked on a newline, so
+    // nothing has happened yet — which is what makes the attribution below a
+    // live answer about somebody at a keyboard rather than a record of a write
+    // that already finished.
+    await boTypes('bo-was-here')
+    await until(async () => ((await anasBookFor())?.typists.length ?? 0) > 0, 'ana to see somebody typing')
+
+    // One more keystroke, and then the read: "is typing" has to be true now,
+    // not whenever the poll above happened to succeed.
+    await boTypes('!')
+    const books = await anasBooks()
+    const typist = books.panes.find((pane) => pane.terminalId === anasPane.id)?.typists[0]
+    expect(typist?.handle).toBe('bo')
+    expect(typist?.publicKey).toBe((await peers.joiner.whoAmI()).publicKey)
+    expect(typist?.at).toBeGreaterThanOrEqual(sentAt)
+    expect(books.readAt - (typist?.at ?? 0)).toBeLessThan(TYPING_WINDOW_MS)
+
+    // The line lands when he finishes it, which is what says the half-typed
+    // attribution above was of a write still in progress.
+    await boTypes('\r')
+    expect(await readUntil(peers.leader, anasPane.id, /heard bo-was-here!/)).toMatch(/heard bo-was-here!/)
+
+    // The other promise, and a different one: a record ana can read afterwards,
+    // on her own machine, without asking anybody.
+    const log = await peers.leader.call('teamwork.writeLog', {})
+    const mine = log.writes.filter((write: { handle: string }) => write.handle === 'bo')
+    expect(mine.length).toBeGreaterThan(0)
+    expect(mine[mine.length - 1]).toMatchObject({
+      handle: 'bo',
+      terminalId: anasPane.id,
+      projectId: peers.leader.projectId,
+      outcome: 'written'
+    })
+    expect(mine.every((write: { at: number }) => write.at >= sentAt - 60_000 && write.at <= Date.now())).toBe(true)
+    // What it must never hold. The bytes are on ana's screen; keeping them here
+    // would make her audit trail a store of whatever a teammate's terminal
+    // chose not to echo.
+    expect(JSON.stringify(log)).not.toContain('bo-was-here')
+  }, 60_000)
+
+  it('6. the leader mutes the pane, and the joiner’s typing stops arriving', async () => {
+    await peers.leader.call('teamwork.mute', { terminalId: anasPane.id, muted: true })
+
+    await expect(boTypes('after-the-mute\r')).rejects.toMatchObject({ code: ErrorCode.Conflict })
+    // Long enough that a keystroke on its way would have arrived.
+    await sleep(500)
+
+    // The assertion is about ana's pty, not about bo being told no: what
+    // matters is that nothing arrived, whatever bo's end believes.
+    const scrollback = await anasScrollback()
+    expect(scrollback).not.toContain('after-the-mute')
+    expect(scrollback).not.toContain('heard after-the-mute')
+
+    // Refused is not the same as unrecorded. Somebody still typing at a pane
+    // she has muted is exactly what ana wants to know.
+    const log = await peers.leader.call('teamwork.writeLog', {})
+    const refused = log.writes.filter((write: { outcome: string }) => write.outcome === 'muted')
+    expect(refused.map((write: { handle: string }) => write.handle)).toContain('bo')
+    expect((await anasBookFor())?.typists[0]?.refused).toBeGreaterThan(0)
+  }, 60_000)
+
+  it('6b. the muted pane is still visible, because mute is not hiding', async () => {
+    // Still muted: this is the state step 6 left, and the point is what is
+    // visible while it holds.
+    expect((await anasBookFor())?.muted).toBe(true)
+
+    const row = await anasRow()
+    expect(row?.name).toBe(worktree.name)
+    expect(row?.panes.map((pane) => pane.id)).toContain(bosPaneId)
+    expect(row?.live).toBe(true)
+
+    // And it is still streaming. Mute is about what arrives, never about what
+    // leaves — so ana's own hand on her own pane still reaches bo's window.
+    await peers.leader.call('terminal.write', { terminalId: anasPane.id, data: 'still-talking\r' })
+    await until(() => readThroughRelay().includes('heard still-talking'), 'a muted pane’s output to reach bo')
+  }, 60_000)
+
+  it('7. a peer whose key is not in the roster cannot complete the handshake', async () => {
+    const stranger = await peers.addPeer('cass')
+    // She has both of their keys and the team's relay, because she cloned the
+    // same repository. What she does not have is a key in it.
+    expect((await stranger.roster()).map((member: { handle: string }) => member.handle)).toEqual(['ana', 'bo'])
+
+    // She dials: her own roster wants both of them, so both links exist and try.
+    await until(async () => (await stranger.links()).length === 2, 'cass to start dialling both members')
+
+    // The control, taken while she is failing: the relay is up and the two
+    // members on it are connected over it. Whatever stops her is not the relay.
+    expect((await peers.leader.links())[0]?.phase).toBe('connected')
+
+    // Long enough that a handshake that was going to complete would have.
+    await sleep(3_000)
+    const links = await stranger.links()
+    expect(links.map((link: { phase: string }) => link.phase)).not.toContain('connected')
+
+    // And she never reached the catalogue at all: no worktrees, and nothing
+    // ever heard from anybody. A rendezvous is derived from the two keys, so a
+    // peer who is not on the roster is not merely turned away at the door —
+    // there is no door at the address she can compute.
+    const view = await stranger.call('teamwork.presence', { projectId: stranger.projectId })
+    expect(view.worktrees).toEqual([])
+    expect(view.teammates).toEqual([
+      { handle: 'ana', publicKey: (await peers.leader.whoAmI()).publicKey, connected: false, heardAt: null },
+      { handle: 'bo', publicKey: (await peers.joiner.whoAmI()).publicKey, connected: false, heardAt: null }
+    ])
+
+    // The same runtime, the same relay, the same keys — and it connects the
+    // moment the repository says she is a member. Without this, everything
+    // above would pass equally for a harness that never plugged her in.
+    await stranger.addSelfToRoster()
+    await stranger.commit('Add cass to the team', ['.teamree'])
+    await stranger.gitPush()
+    for (const member of peers.peers) await member.gitPull()
+    await stranger.waitForLink({ timeoutMs: 60_000 })
+  }, 180_000)
+
+  it('8. the leader goes offline and her worktrees go stale, not absent', async () => {
+    const before = (await bosView()).worktrees.filter((row) => row.handle === 'ana')
+    expect(before.length).toBeGreaterThan(0)
+
+    // Her laptop closes. From bo's end that is the machine going away, which is
+    // the only thing it can be told apart from a teammate who is merely quiet.
+    await peers.leader.stop()
+
+    await until(async () => {
+      const view = await bosView()
+      return view.teammates.find((who) => who.handle === 'ana')?.connected === false
+    }, 'bo to notice ana has gone')
+
+    const away = await bosView()
+    const rows = away.worktrees.filter((row) => row.handle === 'ana')
+    // Not one row fewer. A row vanishing reads as "it was deleted", which for a
+    // worktree is the one thing this display must never wrongly say.
+    expect(rows.map((row) => row.name)).toEqual(before.map((row) => row.name))
+    expect(rows.map((row) => row.branch)).toEqual(before.map((row) => row.branch))
+    expect(rows.every((row) => row.live)).toBe(false)
+
+    // Stale, and dated: the age of what is being shown, by bo's own clock.
+    for (const row of rows) {
+      expect(row.heardAt).toBeGreaterThan(0)
+      expect(away.readAt - row.heardAt).toBeGreaterThanOrEqual(0)
+    }
+
+    // Heard, and heard a while ago — never the shape of a teammate never seen.
+    const ana = away.teammates.find((who) => who.handle === 'ana')
+    expect(ana?.connected).toBe(false)
+    expect(ana?.heardAt).not.toBeNull()
+
+    // And bo is not left on a pane that looks live and has stopped moving.
+    await until(() => pushed.some((event) => event.type === 'lost'), 'bo to be told the pane he was reading has gone')
+  }, 120_000)
 })

@@ -409,17 +409,23 @@ needs the relay built, and says so and skips if it is not:
 cd relay && npm install && npm run build
 ```
 
-There is also a harness that stands up two runtimes with two clones and two
-identities, and tears it all down afterwards:
+There is also a harness that stands up two runtimes with two clones, two
+identities and two home directories, puts them on a relay of its own, and tears
+all of it down afterwards:
 
 ```sh
 node scripts/teamwork/two-peers.mjs --keep
 ```
 
-Be aware of what it does not do: its `linkPeers()` is still a marked seam that
-refuses rather than pretending, so it gives you two peers who cannot see each
-other. It has not been rewired since milestone B landed. Use it for two runtimes
-side by side; use the test above for the wire.
+It runs the whole of step 4 and step 5 for you: each runtime generates its own
+keypair, joins the roster through the same `members.join` the **Add my key**
+button calls, and the pair meet over a relay child process on a port the OS
+picked. `--keep` leaves them up with the CLI commands to drive each one.
+
+`tests/teamwork/scenario.test.ts` is this document's step 6 through step 8
+driven through that harness, including the two that are not about the happy
+path. It is the closest thing to doing this by hand that does not need a second
+Mac.
 
 ---
 

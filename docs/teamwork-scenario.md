@@ -8,9 +8,9 @@ the person whose machine it is running on. Everything teamwork adds exists to
 make the next ninety seconds possible.
 
 `tests/teamwork/scenario.test.ts` is this document as a test, with the same step
-numbers. The steps that can run, run. The steps that cannot are `it.todo` with
-the assertion written above them in words — not skipped assertions, and not
-assertions against a guess at an interface that does not exist yet.
+numbers. All of it runs. Act II needs the relay built — `cd relay && npm ci &&
+npm run build` — and says so and skips when it is not, because another package's
+missing build is not a broken peer transport.
 
 ## The cast
 
@@ -75,6 +75,11 @@ literally the same call with a longer wire.
 
 ## Act II — across the relay
 
+Nothing here is a stand-in. The relay is the relay's own build, as a child
+process on a real port; the crypto is real Noise between two identities the two
+runtimes generated for themselves; the pane is a real pty. Only the distance is
+faked.
+
 **2. bo sees ana's worktree appear, unasked.**
 
 It arrives in bo's sidebar with ana's branch name and the state of her pane. bo
@@ -84,7 +89,7 @@ populate by hand is a sidebar nobody populates.
 *Assert:* bo's view of the workspace contains a worktree owned by ana, with her
 branch and her pane's state, and bo made no subscribing call to get it.
 
-*Pending — milestone B.*
+*Runs today.*
 
 **2c. No terminal output has crossed the wire yet.**
 
@@ -93,7 +98,7 @@ are not.
 
 *Assert:* no terminal data has reached bo for a pane nobody has opened.
 
-*Pending — milestone B.*
+*Runs today.*
 
 **3. bo opens the pane and sees the question.**
 
@@ -104,7 +109,7 @@ being read should not be reflowed under it by a spectator.
 *Assert:* bo reads the same question step 3a proved is there, and ana's PTY was
 never resized.
 
-*Pending — milestone C.*
+*Runs today.*
 
 **3b. ana's pane says it is being watched, and by whom.**
 
@@ -112,14 +117,14 @@ Half of what makes "anyone can type" survivable. Not a nicety, and not optional.
 
 *Assert:* ana's pane reports a watcher, named as bo.
 
-*Pending — milestone C.*
+*Runs today.*
 
 **4. bo types the answer, and the agent takes the task.**
 
 *Assert:* the bytes reach ana's PTY and the program acts on them — the same
 assertion as 4a, with a relay in the middle.
 
-*Pending — milestone D.*
+*Runs today.*
 
 **5. ana sees bo attributed, live and afterwards.**
 
@@ -131,7 +136,7 @@ anybody.
 *Assert:* the live attribution names bo during the write; the audit log contains
 the write, attributed to bo, with a timestamp.
 
-*Pending — milestone D.*
+*Runs today.*
 
 **6. ana mutes the pane, and bo's typing stops arriving.**
 
@@ -141,7 +146,7 @@ Instant, per-pane, and ana's. Not a negotiation and not a request.
 is about ana's PTY, not about bo being told no — what matters is that nothing
 arrives, whatever bo's end believes.
 
-*Pending — milestone D.*
+*Runs today.*
 
 **6b. The muted pane is still visible to bo.**
 
@@ -151,7 +156,7 @@ different feature and probably a worse one.
 
 *Assert:* ana's worktree is still in bo's sidebar after the mute.
 
-*Pending — milestone D.*
+*Runs today.*
 
 ## The two that are not about the happy path
 
@@ -160,10 +165,20 @@ different feature and probably a worse one.
 The one that proves the trust model rather than the plumbing. Without it, every
 step above passes for a relay that pairs anybody with anybody.
 
-*Assert:* a peer whose public key is absent from `.teamree/members/` fails the
-Noise `IK` handshake and never reaches the method catalogue at all.
+*Assert:* a peer whose public key is absent from `.teamree/members/` never
+reaches the method catalogue at all, on the same relay and in the same minute
+that the two members on it are connected — and the same runtime connects the
+moment somebody pushes her key, so what turned her away was the repository.
 
-*Pending — milestone B.*
+Writing it found that the refusal is earlier and harder than this document
+assumed. It does not come from the `IK` handshake failing: a rendezvous is
+derived from the static-static Diffie-Hellman between two keys, so a member
+registers only at addresses their teammates can compute, and a stranger is
+never spliced to anybody to be refused by. The handshake's own roster check is
+the second line, for a relay that splices the wrong two connections. Both are
+real; only the second is the one this step used to name.
+
+*Runs today.*
 
 **8. ana goes offline, and her worktrees go stale rather than absent.**
 
@@ -172,7 +187,7 @@ stale, showing the age of what is displayed. It does not disappear: a row
 vanishing when a laptop closes reads as "it was deleted", which for a worktree is
 the one thing it must never wrongly say.
 
-*Pending — milestone E.*
+*Runs today.*
 
 ## What "passing" means
 
