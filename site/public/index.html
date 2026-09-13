@@ -356,8 +356,6 @@ code,kbd{ font-family:var(--font-mono); }
 }
 .hero h1{ margin-inline:auto; max-width:17ch; }
 .hero .lede{ margin-inline:auto; max-width:54ch; }
-.hero .cta{ justify-content:center; }
-.hero .dl-note{ margin-inline:auto; }
 h1 em{
   font-style:normal;
   background:linear-gradient(135deg, #818cf8, #a5b4fc, #c7d2fe);
@@ -368,7 +366,7 @@ h1 em{
 .lede strong{ color:#fff; font-weight:600; }
 
 /* --------------------------------------------------------------- download -- */
-.cta{ margin-top:var(--s8); display:flex; flex-wrap:wrap; align-items:stretch; gap:var(--s4); }
+.cta{ margin-top:var(--s8); display:flex; flex-wrap:wrap; align-items:stretch; justify-content:center; gap:var(--s4); }
 .btn{
   display:inline-flex; align-items:center; gap:var(--s3);
   background:linear-gradient(to bottom right, var(--btn-a), var(--btn-b)); color:#fff;
@@ -391,17 +389,33 @@ h1 em{
 }
 .btn-ghost:hover{ border-color:var(--hairline-hover); background:var(--wash-3); text-decoration:none; transform:translateY(-2px); }
 .btn-ghost svg{ width:16px; height:16px; fill:currentColor; flex:none; }
-.dl-note{ margin-top:var(--s6); font-size:var(--text-sm); color:var(--fg-muted); max-width:60ch; }
+.dl-note{ margin-top:var(--s6); font-size:var(--text-sm); color:var(--fg-muted); max-width:60ch; margin-inline:auto; text-align:center; }
 
 /* --------------------------------------------------------------- sections -- */
 section{ padding:var(--s10) 0; }
 section + section{ border-top:1px solid var(--hairline); }
 @media (max-width:820px){ section{ padding:var(--s9) 0; } }
+/* One alignment rule for the whole page, so that nothing is centred or left by
+   accident:
+
+     A section header — its eyebrow, its heading, its lede — is CENTRED.
+     Everything below the header is set LEFT, and its block is centred in the
+     column, so its left edge is a decision rather than wherever the wrap ends.
+
+   Figure captions follow their header and centre; the download unit centres in
+   both the places it appears. Code, lists, tables and cards keep their left
+   edge in every case, because they are unreadable without it. */
+.sec-head{ text-align:center; margin-bottom:var(--s9); }
+.sec-head > *{ margin-inline:auto; }
+.sec-head + .cta{ margin-top:0; }
 .sec-label{ font-size:var(--text-xs); font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-bright); margin-bottom:var(--s3); }
 .sec-lede{ margin-top:var(--s4); color:var(--fg-secondary); max-width:60ch; font-size:var(--text-base); line-height:1.65; }
 
 /* ------------------------------------------------------------- gatekeeper -- */
-.gate{ background:var(--wash-2); border:1px solid var(--hairline); border-radius:var(--r4); padding:var(--s9); }
+/* The card is the block that gets centred; its contents keep one left edge
+   inside it. A full-wrap card with a 66ch column floating in the middle of it
+   reads as text that failed to fill its box. */
+.gate{ background:var(--wash-2); border:1px solid var(--hairline); border-radius:var(--r4); padding:var(--s9); max-width:820px; margin-inline:auto; }
 @media (max-width:700px){ .gate{ padding:var(--s7) var(--s5); } }
 .gate h3{ font-size:var(--text-xl); }
 .gate p{ margin-top:var(--s6); color:var(--fg-secondary); max-width:66ch; line-height:1.7; }
@@ -485,26 +499,39 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 .tok-f{ color:var(--warning); }
 .caption{ margin-top:var(--s5); font-size:var(--text-sm); color:var(--fg-muted); max-width:66ch; line-height:1.7; }
 
-/* ------------------------------------------------------------------ shot -- */
-/* The screenshot is of the application, so it is matted rather than dropped onto
-   the page: a wash frame, a hairline against the image, and rounding that
-   matches the cards. */
-.shot{
-  margin-top:var(--s9); border:1px solid var(--hairline); border-radius:var(--r4);
+/* ------------------------------------------------------------ the media -- */
+/* A media box, not an image slot. The still and the demo clip that will replace
+   it share one ratio — 1400x900, which is the still's own 2800x1800 halved — so
+   the frame reserves that ratio and both the <img> and the <video> fill it
+   absolutely. Swapping one for the other is then a content change: nothing
+   reflows, nothing resizes, and nothing on the page moves while the clip loads
+   or if it never loads at all.
+   The mat is the outer box (border, wash, rounding, shadow); the ratio is the
+   inner one, so the 8px mat is not inside the reserved area. */
+.shot{ margin:var(--s9) 0 0;
+  border:1px solid var(--hairline); border-radius:var(--r4);
   background:var(--wash-2); padding:8px;
   box-shadow:0 20px 60px rgb(0 0 0 / 50%), 0 0 90px -40px rgb(99 102 241 / 40%);
 }
-.shot img{ width:100%; border-radius:calc(var(--r4) - 8px); }
-@media (max-width:560px){ .shot{ padding:5px; } .shot img{ border-radius:calc(var(--r4) - 5px); } }
-/* The three capabilities that used to be their own card grid. They sit under the
-   caption because they describe the same window. */
-.shot-more{ margin-top:var(--s6); padding-left:0; list-style:none; max-width:66ch; }
-.shot-more li{ position:relative; padding-left:24px; margin-top:var(--s4); color:var(--fg-secondary); font-size:var(--text-sm); line-height:1.7; }
-.shot-more li::before{ content:""; position:absolute; left:2px; top:.66em; width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px rgb(99 102 241 / 60%); }
+.shot-frame{
+  position:relative; aspect-ratio:1400 / 900; overflow:hidden;
+  border-radius:calc(var(--r4) - 8px); background:var(--well-2);
+}
+.shot-frame > img, .shot-frame > video{
+  position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;
+}
+/* Transparent, so a clip that never paints shows its poster rather than a black
+   rectangle. */
+.shot-frame > video{ background:transparent; }
+.shot-cap{ margin-top:var(--s4); font-size:var(--text-sm); color:var(--fg-muted); text-align:center; }
+@media (max-width:560px){
+  .shot{ padding:5px; }
+  .shot-frame{ border-radius:calc(var(--r4) - 5px); }
+}
 
 /* -------------------------------------------------------------- the steps -- */
 /* Landing to running in three, ahead of the long account of why macOS asks. */
-.steps{ margin-top:var(--s9); display:grid; gap:var(--s5); grid-template-columns:repeat(3,minmax(0,1fr)); align-items:start; list-style:none; padding-left:0; counter-reset:none; }
+.steps{ display:grid; gap:var(--s5); grid-template-columns:repeat(3,minmax(0,1fr)); align-items:start; list-style:none; padding-left:0; counter-reset:none; }
 @media (max-width:900px){ .steps{ grid-template-columns:minmax(0,1fr); } }
 .step{ background:var(--wash-2); border:1px solid var(--hairline); border-radius:var(--r4); padding:var(--s7); transition:border-color var(--motion) var(--ease), background var(--motion) var(--ease); }
 .step:hover{ border-color:var(--hairline-hover); background:var(--wash-3); }
@@ -517,7 +544,7 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 .step p{ margin-top:var(--s3); color:var(--fg-secondary); font-size:var(--text-sm); line-height:1.7; }
 .step strong{ color:#fff; font-weight:650; }
 .step .cmd{ margin-top:var(--s4); }
-.steps-after{ margin-top:var(--s6); font-size:var(--text-sm); }
+.steps-after{ margin-top:var(--s6); font-size:var(--text-sm); text-align:center; }
 /* A step card is about a third of the content column, so the 104px gutter the
    copy button normally sits in would leave roughly 170px of a 56-character
    command visible. The button drops below the command here for the same reason
@@ -559,10 +586,11 @@ pre[tabindex]{ scrollbar-gutter:stable; }
   .demo, .demo.flip{ grid-template-columns:minmax(0,1fr); gap:var(--s7); }
 }
 .demo-step{ font-size:var(--text-xs); font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-bright); }
-.demo-body h2{ margin-top:var(--s3); max-width:20ch; }
-.demo-body p{ margin-top:var(--s5); color:var(--fg-secondary); max-width:54ch; line-height:1.7; }
+.demo-body{ max-width:58ch; }
+.demo-body > :first-child{ margin-top:0; }
+.demo-body p{ margin-top:var(--s5); color:var(--fg-secondary); line-height:1.7; }
 .demo-body ul{ margin-top:var(--s5); padding-left:0; list-style:none; }
-.demo-body ul li{ position:relative; padding-left:24px; margin-top:var(--s3); color:var(--fg-secondary); font-size:var(--text-sm); max-width:54ch; line-height:1.7; }
+.demo-body ul li{ position:relative; padding-left:24px; margin-top:var(--s3); color:var(--fg-secondary); font-size:var(--text-sm); line-height:1.7; }
 .demo-body ul li::before{ content:""; position:absolute; left:2px; top:.66em; width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px rgb(99 102 241 / 60%); }
 .demo-body p strong{ color:#fff; font-weight:650; }
 /* One treatment for inline code everywhere it appears in prose. */
@@ -609,11 +637,11 @@ pre[tabindex]{ scrollbar-gutter:stable; }
    only control over a clip that autoplays on scroll and loops forever, so for
    exactly as long as one was playing there was nothing to focus and nothing to
    press — the JS also takes the native `controls` off. Hover and focus bring it back. */
-.demo-frame[data-paused="no"] .demo-play{ opacity:.3; }
-.demo-frame[data-paused="no"] .demo-play:hover,
-.demo-frame[data-paused="no"] .demo-play:focus-visible,
-.demo-frame[data-paused="no"]:focus-within .demo-play{ opacity:1; }
-.demo-cap{ margin-top:var(--s4); font-size:var(--text-sm); color:var(--fg-muted); }
+[data-paused="no"] .demo-play{ opacity:.3; }
+[data-paused="no"] .demo-play:hover,
+[data-paused="no"] .demo-play:focus-visible,
+[data-paused="no"]:focus-within .demo-play{ opacity:1; }
+.demo-cap{ margin-top:var(--s4); font-size:var(--text-sm); color:var(--fg-muted); text-align:center; }
 /* The clips are parked inside HTML comments, so there is no <video> in the frame
    and the frame renders as a reserved empty box — 215px tall on a phone, ~540px at
    desktop — under a caption confidently describing a clip that is not there. While
@@ -625,7 +653,11 @@ pre[tabindex]{ scrollbar-gutter:stable; }
    the placeholder underneath becomes the picture. */
 .demo-figure:not(:has(video)):not(:has([data-failed])){ display:none; }
 .demo:not(:has(video)):not(:has([data-failed])),
-.demo.flip:not(:has(video)):not(:has([data-failed])){ grid-template-columns:minmax(0,1fr); }
+.demo.flip:not(:has(video)):not(:has([data-failed])){
+  grid-template-columns:minmax(0,1fr);
+  max-width:68ch; margin-inline:auto;
+}
+.demo:not(:has(video)):not(:has([data-failed])) .demo-body{ max-width:none; }
 </style>
 </head>
 <body>
@@ -795,23 +827,43 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 
 <section>
   <div class="wrap">
-    <p class="sec-label">The window</p>
-    <h2>Three worktrees, four panes, and no question about which one stopped.</h2>
-    <div class="shot">
-      <img src="/screenshot.png" width="1400" height="900" loading="lazy" decoding="async"
-           alt="The teamree window: a sidebar listing three worktrees, each with its panes and a coloured status dot, beside two split terminals — one running a coding agent, one showing a finished build.">
+    <div class="sec-head">
+      <p class="sec-label">The window</p>
+      <h2>Three worktrees, four panes, and no question about which one stopped.</h2>
+      <p class="sec-lede">
+        Every pane in every worktree carries what it is doing &mdash; working, waiting,
+        finished, failed &mdash; and how long since it last said anything. teamree watches a
+        PTY, not an agent&rsquo;s protocol, so &ldquo;waiting&rdquo; means the output stopped,
+        not that the agent asked you something.
+      </p>
     </div>
-    <p class="caption">
-      Every pane in every worktree carries what it is doing &mdash; working, waiting, finished,
-      failed &mdash; and how long since it last said anything. It is deliberately a narrow
-      reading: teamree watches a PTY, not an agent&rsquo;s protocol, so &ldquo;waiting&rdquo;
-      means the output stopped, not that the agent asked you something.
-    </p>
-    <ul class="shot-more">
-      <li>One view lists every pane in every worktree, ordered by what would make you look: failures first, then work in progress, then waiting, then finished &mdash; and within each, the one that has been silent longest. Counts per state sit above it, and a row takes you to that pane.</li>
-      <li>Status per worktree, updated by watching the checkout rather than by polling, so an edit made by an agent inside a ten-minute shell session moves the chips immediately. A panel shows the changed paths and the patch for any of them.</li>
-      <li>See what changed, tick what should go in, commit it, and check whether the branch would merge into its base, answered in memory. Push when it is ready. There is no force push and no flag to ask for one.</li>
-    </ul>
+    <figure class="shot">
+      <!-- The media slot. The frame reserves 1400x900 and both an <img> and a
+           <video> fill it absolutely, so landing the demo is one content edit:
+           delete the <img> below and un-comment the <video>. Nothing in the
+           stylesheet moves and nothing on the page reflows.
+           The clip is 1280x820 against a box reserved at 1400x900 — 0.3% apart,
+           which object-fit:cover absorbs by cropping about two pixels. The
+           reserved ratio stays the still's, so the box is the same box either
+           way.
+           The marker is `hero:video:parked`, deliberately NOT the
+           `demo:video:parked` that site/tools/sync-demos.mjs un-parks — that
+           tool reconciles the clip frames against demos/manifest.json, and this
+           frame is not one of them. -->
+      <div class="shot-frame" data-media="tour">
+        <img src="/screenshot.png" width="1400" height="900" decoding="async"
+             alt="The teamree window: a sidebar listing three worktrees, each with its panes and a coloured status dot, beside two split terminals — one running a coding agent, one showing a finished build.">
+        <!-- hero:video:parked
+<video width="1280" height="820" muted loop playsinline preload="metadata" controls
+               poster="/demos/showcase.jpg"
+               aria-label="Screen capture: a tour of teamree — three worktrees, their panes, and what each one is doing.">
+          <source src="/demos/showcase.webm" type="video/webm">
+          <source src="/demos/showcase.mp4" type="video/mp4">
+        </video>
+hero:video:parked -->
+      </div>
+      <figcaption class="shot-cap">teamree, with three worktrees open.</figcaption>
+    </figure>
   </div>
 </section>
 
@@ -827,10 +879,13 @@ pre[tabindex]{ scrollbar-gutter:stable; }
      the gap, and the width/height attributes mean the layout never waited on
      the metadata anyway. -->
 <section id="what">
-  <div class="wrap demo">
-    <div class="demo-body">
+  <div class="wrap">
+    <div class="sec-head">
       <p class="demo-step">01 &mdash; Worktrees</p>
       <h2>Start five things at once. Keep five checkouts apart.</h2>
+    </div>
+    <div class="demo">
+    <div class="demo-body">
       <p>
         Add a repository, then start a worktree from any point in its history. Each is its own
         checkout on its own branch: five attempts at the same task never see each other&rsquo;s
@@ -842,6 +897,16 @@ pre[tabindex]{ scrollbar-gutter:stable; }
         <li>Listed against real git state, not against what teamree last remembered</li>
         <li>Delete the worktree, and its branch with it if you say so</li>
       </ul>
+      <p>
+        Status per worktree comes from watching the checkout rather than polling it, so an edit
+        an agent makes inside a ten-minute shell session moves the chips immediately. A panel
+        shows the changed paths and the patch for any of them.
+      </p>
+      <p>
+        See what changed, tick what should go in, commit it, and check whether the branch would
+        merge into its base, answered in memory. Push when it is ready. There is no force push
+        and no flag to ask for one.
+      </p>
     </div>
     <figure class="demo-figure">
       <div class="demo-frame" data-demo="worktrees">
@@ -860,11 +925,17 @@ demo:video:parked -->
       </div>
       <figcaption class="demo-cap">Starting parallel tasks, each in its own git worktree.</figcaption>
     </figure>
+    </div>
   </div>
 </section>
 
 <section id="terminals">
-  <div class="wrap demo flip">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="demo-step">02 &mdash; Terminals</p>
+      <h2>Split the pane. Run the work side by side.</h2>
+    </div>
+    <div class="demo flip">
     <figure class="demo-figure">
       <div class="demo-frame" data-demo="terminals">
         <div class="demo-pending" aria-hidden="true">
@@ -883,8 +954,6 @@ demo:video:parked -->
       <figcaption class="demo-cap">Splitting terminals and running work side by side.</figcaption>
     </figure>
     <div class="demo-body">
-      <p class="demo-step">02 &mdash; Terminals</p>
-      <h2>Split the pane. Run the work side by side.</h2>
       <p>
         Arbitrarily nested, resizable panes per worktree, with a real PTY behind each one. At
         startup teamree looks on your PATH for the agents it knows how to resume &mdash;
@@ -893,30 +962,39 @@ demo:video:parked -->
         into a pane yourself.
       </p>
       <p>
-        Quitting kills every shell, because a PTY is a child process. A pane running a coding
-        agent returns with its conversation resumed, because the agent keeps that on disk and
-        teamree remembers which session was in which pane. An ordinary pane returns as a shell in the same directory, and its
-        command is deliberately never re-run.
+        One view lists every pane in every worktree, ordered by what would make you look:
+        failures first, then work in progress, then waiting, then finished &mdash; and within
+        each, the one that has been silent longest. Counts per state sit above it, and a row
+        takes you to that pane.
       </p>
+      <p>
+        Quitting kills every shell. A pane running a coding agent returns with its conversation
+        resumed; an ordinary pane returns as a shell in the same directory, and its command is
+        never re-run.
+      </p>
+    </div>
     </div>
   </div>
 </section>
 
 <section id="cli">
-  <div class="wrap demo">
-    <div class="demo-body">
+  <div class="wrap">
+    <div class="sec-head">
       <p class="demo-step">03 &mdash; The CLI</p>
-      <h2>A surface an agent can actually hold.</h2>
+      <h2>A surface an agent can hold.</h2>
+    </div>
+    <div class="demo">
+    <div class="demo-body">
       <p>
         <code>teamree</code> talks to the running app over a local socket, so an agent can
         create a worktree, open a terminal, run a command and read the output back. The window
-        reflects all of it live, because both ends meet at the same runtime.
+        reflects all of it live.
       </p>
       <p>
         Every command takes <code>--json</code> and emits exactly one JSON document on stdout,
-        with errors on stderr and exit codes that mean something: 0 success, 1 the command
-        failed, 2 you typed it wrong, 3 nothing is running to talk to. If the app is not
-        running the CLI says so and exits 3, rather than hanging.
+        with errors on stderr and exit codes: 0 success, 1 the command failed, 2 you typed it
+        wrong, 3 nothing is running to talk to. If the app is not running it says so and exits
+        3, rather than hanging.
       </p>
     </div>
     <figure class="demo-figure">
@@ -944,11 +1022,17 @@ demo:video:parked -->
 <span class="tok-p">teamree</span> worktree changes fix-login <span class="tok-f">--json</span></code></pre>
       </div>
     </div>
+    </div>
   </div>
 </section>
 
 <section id="teamwork">
-  <div class="wrap demo flip">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="demo-step">04 &mdash; Teamwork</p>
+      <h2>Watch a teammate's pane. Answer the prompt it is stuck on.</h2>
+    </div>
+    <div class="demo flip">
     <figure class="demo-figure">
       <div class="demo-frame" data-demo="teamwork">
         <div class="demo-pending" aria-hidden="true">
@@ -967,8 +1051,6 @@ demo:video:parked -->
       <figcaption class="demo-cap">Connecting two people and a shared session.</figcaption>
     </figure>
     <div class="demo-body">
-      <p class="demo-step">04 &mdash; Teamwork</p>
-      <h2>Watch a teammate's pane. Answer the prompt it is stuck on.</h2>
       <p>
         A teammate&rsquo;s worktrees appear in your sidebar. You can read what one of their
         panes is doing and type into it.
@@ -984,17 +1066,16 @@ demo:video:parked -->
         people you would hand an unlocked laptop to.
       </p>
       <p>
-        Every guard that makes typing into somebody else's terminal survivable sits at the
-        owner's end: their machine refuses unless your key is on the roster, refuses outright
-        when they have muted the pane, caps one write, and records who typed how much into
-        which pane in a log that survives a restart.
+        Every guard sits at the owner&rsquo;s end: their machine refuses unless your key is on
+        the roster, refuses outright when they have muted the pane, caps one write, and records
+        who typed how much into which pane in a log that survives a restart.
       </p>
       <p>
         <strong>Built, not weathered.</strong> All five stages have landed &mdash; identity, the
         relay and presence, watching a pane, typing into one, staleness. Two Macs in two places
         is the one thing still untested.
       </p>
-      <p><strong>What it takes to set up.</strong> None of this is inside the app alone:</p>
+      <p><strong>What it takes to set up.</strong> None of it is inside the app alone:</p>
       <ul>
         <li>A git repository you can both push to, cloned by each of you, with an <code>origin</code> remote — push access <em>is</em> membership</li>
         <li>A relay your team deploys, its <code>wss://</code> URL committed to <code>.teamree/relay</code></li>
@@ -1002,10 +1083,10 @@ demo:video:parked -->
         <li>Node 20 or newer, a Cloudflare account and one browser sign-in, on whichever machine deploys the relay</li>
       </ul>
       <p>
-        Two machines behind two routers cannot reach each other, so both dial out to a small
-        relay that splices their connections together and is never trusted with what crosses
-        it. A team runs its own, as a Cloudflare Worker; the installed app carries it, so
-        deploying is one command from any directory with no clone of the repository.
+        Both machines dial out to a small relay that splices their connections together and is
+        never trusted with what crosses it. A team runs its own, as a Cloudflare Worker; the
+        installed app carries it, so deploying is one command from any directory, with no clone
+        of the repository.
       </p>
       <p>
         <a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md" rel="noopener">Trying teamwork</a>
@@ -1026,18 +1107,21 @@ demo:video:parked -->
                 data-what="the relay deploy command" aria-label="Copy the relay deploy command">Copy</button>
       </div>
     </div>
+    </div>
   </div>
 </section>
 
 
 <section id="start">
   <div class="wrap">
-    <p class="sec-label">Getting started</p>
-    <h2>Download, clear one flag, open it.</h2>
-    <p class="sec-lede">
-      teamree is signed ad-hoc rather than with a Developer ID, so macOS asks you to confirm
-      the first launch.
-    </p>
+    <div class="sec-head">
+      <p class="sec-label">Getting started</p>
+      <h2>Download, clear one flag, open it.</h2>
+      <p class="sec-lede">
+        teamree is signed ad-hoc rather than with a Developer ID, so macOS asks you to confirm
+        the first launch.
+      </p>
+    </div>
     <ol class="steps">
       <li class="step">
         <span class="n">1</span>
@@ -1075,13 +1159,11 @@ demo:video:parked -->
 
 <section id="install">
   <div class="wrap">
-    <p class="sec-label">Installing</p>
-    <h2>First launch, and the one command it needs.</h2>
-    <p class="sec-lede">
-      teamree is not notarised, so macOS asks you to confirm the first launch. This is what it
-      says, what to press, and the command that settles it for good.
-    </p>
-    <div class="gate" style="margin-top:var(--s6)">
+    <div class="sec-head">
+      <p class="sec-label">Installing</p>
+      <h2>First launch, and the one command it needs.</h2>
+    </div>
+    <div class="gate">
       <h3>What macOS shows you, and what to do</h3>
       <p>
         teamree is signed ad-hoc, with no Developer ID behind it, so macOS has no way to tell
@@ -1100,13 +1182,13 @@ demo:video:parked -->
       </p>
       <p>
         Nothing has been found wrong with teamree. macOS has not examined it and detected
-        something; it is telling you the file arrived without a certificate naming who built
-        it, so Apple has never seen it and cannot vouch for it either way. What the missing
-        signature costs you is the guarantee that the file was not altered on its way here.
-        A checksum gives you that by another route, which is why every release publishes one.
+        something; it is telling you the file arrived without a certificate naming who built it.
+        What the missing signature costs you is the guarantee that the file was not altered on
+        its way here, and a checksum gives you that by another route &mdash; which is why every
+        release publishes one.
       </p>
       <ol>
-        <li><strong>Open the <code>.dmg</code> and drag teamree to Applications.</strong> There is an Applications shortcut in the window to drag onto, and no licence to agree to.</li>
+        <li><strong>Open the <code>.dmg</code> and drag teamree to Applications.</strong></li>
         <li><strong>Open it, get the dialog above, and press Done.</strong></li>
         <li>
           <strong>Clear the quarantine flag, once.</strong> Every file a browser downloads is marked
@@ -1125,13 +1207,13 @@ demo:video:parked -->
         <strong>There is no &ldquo;Open Anyway&rdquo; button in that dialog.</strong> Through macOS 14
         you could Control-click the app and choose Open; macOS 15 removed that, and on 15 and
         later — macOS 26 included — the dialog offers no way through at all. If you would
-        rather not type a command, the button does exist, just elsewhere: after pressing Done,
+        rather not type a command, the button does exist elsewhere: after pressing Done,
         go to <b>System Settings &rarr; Privacy &amp; Security</b> and scroll to the Security
         section, where a line naming teamree appears with <b>Open Anyway</b> beside it. Expect
         it to ask for your password or Touch ID.
       </p>
       <p class="caption">
-        Being exact about that last paragraph, because the rest of this is written from
+        Being exact about that last paragraph, because the rest of this was written from
         watching a real download install itself: the command above was run against this build
         and watched to work, the dialog is quoted off the screen, and <b>Done</b> was pressed
         on it and dismissed it. The System Settings route was not clicked through.
@@ -1180,8 +1262,10 @@ demo:video:parked -->
 
 <section id="get">
   <div class="wrap">
-    <p class="sec-label">Get it</p>
-    <h2>One file, one drag, one command.</h2>
+    <div class="sec-head">
+      <p class="sec-label">Get it</p>
+      <h2>One file, one drag, one command.</h2>
+    </div>
     <div class="cta">
       <a class="btn" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">
         <svg class="apple" viewBox="0 0 814 1000" aria-hidden="true" focusable="false"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z"/></svg>
@@ -1286,7 +1370,7 @@ document.querySelectorAll('.cmd-copy').forEach(function (button) {
 // never at all if the reader has asked for reduced motion — in which case they
 // get the poster and a play button, which is the same offer without the movement.
 (function () {
-  var frames = [].slice.call(document.querySelectorAll('.demo-frame'));
+  var frames = [].slice.call(document.querySelectorAll('.demo-frame, .shot-frame'));
   if (!frames.length) return;
 
   var stillness = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -1401,7 +1485,7 @@ document.querySelectorAll('.cmd-copy').forEach(function (button) {
   var calm = window.matchMedia('(prefers-reduced-motion: reduce)')
   if (calm.matches || !('IntersectionObserver' in window)) return
 
-  var targets = document.querySelectorAll('.hero h1, .hero .lede, .hero .cta, section > .wrap > h2, .demo')
+  var targets = document.querySelectorAll('.hero h1, .hero .lede, .hero .cta, .sec-head h2, .demo, .shot')
   if (!targets.length) return
   targets.forEach(function(el){ el.classList.add('reveal') })
 
