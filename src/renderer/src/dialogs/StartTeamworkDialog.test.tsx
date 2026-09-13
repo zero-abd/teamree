@@ -46,7 +46,7 @@ const noRelay = (): RelaySetting => ({
   url: null,
   source: null,
   problem: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on',
-  committed: {
+  onDisk: {
     url: null,
     problem: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
   },
@@ -54,12 +54,12 @@ const noRelay = (): RelaySetting => ({
   readAt: 0
 })
 
-const committedRelay = (): RelaySetting => ({
+const relayOnDisk = (): RelaySetting => ({
   ...noRelay(),
   url: 'wss://relay.example/v1/relay',
   source: 'repository',
   problem: null,
-  committed: { url: 'wss://relay.example/v1/relay', problem: null }
+  onDisk: { url: 'wss://relay.example/v1/relay', problem: null }
 })
 
 const status = (overrides: Partial<TeamworkStatus> = {}): TeamworkStatus => ({
@@ -85,8 +85,12 @@ const link = (overrides: Partial<PeerLink> = {}): PeerLink => ({
 /** The button itself: its words also appear in step 4's suggested commit message. */
 const JOIN_BUTTON = 'Add my key</button>'
 
+/** Where `.teamree` is: the primary checkout, which is not where a pane is. */
+const PROJECT_PATH = '/Users/ada/code/teamree'
+
 function render(overrides: Partial<TeamworkStepsProps> = {}): string {
   const props: TeamworkStepsProps = {
+    projectPath: PROJECT_PATH,
     list: roster(),
     relay: noRelay(),
     status: status(),
@@ -194,16 +198,25 @@ describe('each step says whether it is done', () => {
   })
 
   it('marks the key and relay steps done once both files are in the checkout', () => {
-    const markup = render({ list: enrolled(), relay: committedRelay() })
+    const markup = render({ list: enrolled(), relay: relayOnDisk() })
     expect(markup).toContain('.teamree/members/ada.pub')
     expect(markup).toContain('wss://relay.example/v1/relay')
     expect(text(markup)).toContain('git commit -m "Set up teamwork"')
   })
 
+  // teamree only ever opens a terminal in a worktree, and `.teamree` is in the
+  // primary checkout, so these commands run somewhere else than the pane a
+  // person has open. The cd is in the same block for that reason: whatever is
+  // selected to copy the commands takes it too.
+  it('puts the cd in the block the commands are copied from', () => {
+    const markup = render({ list: enrolled(), relay: relayOnDisk() })
+    expect(markup).toContain(`<pre class="members__push-commands">cd ${PROJECT_PATH}\ngit add .teamree\n`)
+  })
+
   // Never a tick and never a cross. teamree cannot see a commit, and either
   // mark would be it claiming that it can.
   it('never claims the push happened', () => {
-    const shown = text(render({ list: enrolled(), relay: committedRelay() }))
+    const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
     expect(shown).toContain('yours to do — teamree does not check this')
   })
 
@@ -212,7 +225,7 @@ describe('each step says whether it is done', () => {
     const shown = text(
       render({
         list: enrolled(),
-        relay: committedRelay(),
+        relay: relayOnDisk(),
         status: status({ links: [link({ detail: waited })] })
       })
     )
@@ -245,7 +258,7 @@ describe('choosing a relay', () => {
   // theirs arrives in the repository. A wall of options about a thing already
   // chosen is noise at the exact moment they want to know whether it worked.
   it('shows none of that to somebody whose team already has one', () => {
-    const shown = text(render({ list: enrolled(), relay: committedRelay() }))
+    const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
     expect(shown).not.toContain('A VPS you rent')
     expect(shown).not.toContain('npm run deploy')
     expect(shown).toContain('Change the relay for this project')
@@ -322,7 +335,7 @@ describe('a roster nothing is watching', () => {
   // rather than on an event. Telling somebody to reopen the dialog describes a
   // version of this app that no longer exists.
   it('says how far behind it can be, rather than telling somebody to reopen it', () => {
-    const shown = text(render({ list: roster({ watched: false }), relay: committedRelay() }))
+    const shown = text(render({ list: roster({ watched: false }), relay: relayOnDisk() }))
     expect(shown).toContain('half a minute behind the last pull')
     expect(shown).not.toMatch(/Open this dialog again after a pull/)
   })

@@ -88,6 +88,7 @@ export function StartTeamworkDialog({ projectId }: { projectId: string }): React
     >
       <div className="teamwork-setup">
         <TeamworkSteps
+          projectPath={project?.path}
           list={list}
           relay={relay}
           status={status}
@@ -116,6 +117,13 @@ export function StartTeamworkDialog({ projectId }: { projectId: string }): React
 }
 
 export type TeamworkStepsProps = {
+  /**
+   * Absolute path to the primary checkout, for the commands in step 4 to start
+   * with. `.teamree` is there and a pane is never there, so the commands
+   * without it run in the wrong directory. Undefined only while the project is
+   * not in the store, and then the `cd` is left off rather than guessed at.
+   */
+  projectPath: string | undefined
   list: MemberList | undefined
   relay: RelaySetting | undefined
   status: TeamworkStatus | undefined
@@ -223,7 +231,7 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
         />
       )
     case 'push':
-      return <PushBody list={props.list} relay={props.relay} />
+      return <PushBody list={props.list} relay={props.relay} projectPath={props.projectPath} />
     case 'connected':
       if (props.status === undefined && props.readErrors.status !== undefined) {
         return <ReadFailure onRetry={() => props.onRetry('status')} />
@@ -392,7 +400,7 @@ function RelayBody({
       <form className="members__relay" onSubmit={submit}>
         <label className="field">
           <span className="field__label">
-            {relay.committed.url === null ? 'Set the relay for this project' : 'Change the relay for this project'}
+            {relay.onDisk.url === null ? 'Set the relay for this project' : 'Change the relay for this project'}
           </span>
           <input
             className="field__input field__input--mono"
@@ -404,7 +412,7 @@ function RelayBody({
           />
           <span className="field__hint">
             Whoever stood the relay up pastes its URL here once. Everybody else gets it from the repository.{' '}
-            {relay.committed.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>, and stops there.
+            {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>, and stops there.
           </span>
         </label>
         {check.state === 'bad' ? <RelayRefusal check={check} onUse={setDraft} /> : null}
@@ -510,10 +518,10 @@ function Override({ relay }: { relay: RelaySetting }): React.JSX.Element {
     <p className="members__relay-note">
       <code>{relay.override.name}</code> is set to <code>{relay.override.value}</code> in this app’s environment. It is
       per-machine and lasts as long as this process: commit the real relay when you are done testing.
-      {relay.committed.url === null ? null : (
+      {relay.onDisk.url === null ? null : (
         <>
           {' '}
-          <code>{relay.file}</code> says <code>{relay.committed.url}</code>, and the environment is beating it for this
+          <code>{relay.file}</code> says <code>{relay.onDisk.url}</code>, and the environment is beating it for this
           run.
         </>
       )}
@@ -524,12 +532,14 @@ function Override({ relay }: { relay: RelaySetting }): React.JSX.Element {
 /** The exact files that were written, and the one commit that carries them. */
 function PushBody({
   list,
-  relay
+  relay,
+  projectPath
 }: {
   list: MemberList | undefined
   relay: RelaySetting | undefined
+  projectPath: string | undefined
 }): React.JSX.Element | null {
-  const plan = pushPlan(list, relay)
+  const plan = pushPlan(list, relay, projectPath)
   if (plan === null) return null
   return (
     <div className="step__body">
