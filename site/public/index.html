@@ -382,9 +382,13 @@ pre[tabindex]{ scrollbar-gutter:stable; }
    desktop — under a caption confidently describing a clip that is not there. While
    they are parked the figure is gone and the row is one column. Un-parking the video
    markup (`node site/tools/sync-demos.mjs`) puts a <video> back in the frame and
-   restores both, with nothing else to change. */
-.demo-figure:not(:has(video)){ display:none; }
-.demo:not(:has(video)), .demo.flip:not(:has(video)){ grid-template-columns:minmax(0,1fr); }
+   restores both, with nothing else to change.
+   A clip that loads and then fails is a different case: the script removes the
+   <video> and marks the frame, and that frame keeps its figure so the poster or
+   the placeholder underneath becomes the picture. */
+.demo-figure:not(:has(video)):not(:has([data-failed])){ display:none; }
+.demo:not(:has(video)):not(:has([data-failed])),
+.demo.flip:not(:has(video)):not(:has([data-failed])){ grid-template-columns:minmax(0,1fr); }
 </style>
 </head>
 <body>
