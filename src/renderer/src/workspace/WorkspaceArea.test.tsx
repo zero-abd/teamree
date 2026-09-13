@@ -481,6 +481,19 @@ describe('a teammate’s pane beside your own', () => {
     expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
   })
 
+  // The other navigation that takes the whole area, and the one most likely to
+  // be running for minutes at a time: a push streams its progress here while
+  // somebody watches a teammate work beside it. The setup panel is a cell of
+  // the same split for exactly that reason, rather than a layer over it.
+  it('stays where it is when teamwork setup takes the area', () => {
+    openWorktreeWith([watch('priya', 'priya:t7')])
+    act(() => {
+      useWorkspaceStore.setState({ teamworkProjectId: 'p1' })
+    })
+    expect(screen.getByRole('main', { name: 'Set up teamwork in pager' })).toBeTruthy()
+    expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
+  })
+
   // The window somebody is most likely to be watching a teammate from is the
   // one with nothing of their own open.
   it('stays where it is with no worktree open at all', () => {

@@ -10,6 +10,15 @@
 // able to answer it either way. The four buttons and the clock are the only
 // ways out, and the clock's answer is a refusal.
 //
+// Which is also why it has to own the keyboard outright while it is up, and why
+// that takes two pieces of work elsewhere rather than none. It is not in the
+// store's `dialog` — nobody in this window opened it — so `useWorkspaceShortcuts`
+// names it separately, and `Modal` keeps a stack so that a panel this one
+// rendered over goes inert rather than answering keys from underneath it. A
+// dialog that refuses to close is the worst possible thing to leave a live
+// chord under: whatever it did happened out of sight, on a window the person
+// cannot reach until they have answered this.
+//
 // **The bytes are text and never markup.** `preview` arrives already rendered
 // by `writePreview.ts` — control characters in caret notation, escape sequences
 // shown rather than obeyed, the characters that reverse or hide text named
@@ -117,25 +126,4 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
       </div>
     </Modal>
   )
-}
-
-/**
- * The one question to put on screen, out of everything waiting.
- *
- * Oldest first and one at a time. Several teammates typing at several panes is
- * several questions, and stacking them would be a wall of dialogs nobody reads
- * — which is the failure mode this whole feature has to avoid, because a prompt
- * people click through is worse than no prompt at all. Answering one reveals
- * the next.
- */
-export function firstQuestion(
-  byProject: Readonly<Record<string, { requests: ConsentRequest[] }>>
-): ConsentRequest | null {
-  let oldest: ConsentRequest | null = null
-  for (const answer of Object.values(byProject)) {
-    for (const request of answer.requests) {
-      if (oldest === null || request.since < oldest.since) oldest = request
-    }
-  }
-  return oldest
 }

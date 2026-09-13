@@ -119,6 +119,53 @@ describe('which dialog is on screen', () => {
   })
 })
 
+// Two modals can be on screen at once, and only since a question about a
+// teammate's keystrokes stopped being this window's own business. Everything
+// that makes that survivable — which one is painted on top, and which one owns
+// the keyboard — is decided by the order they are rendered in, and nothing
+// about it is visible in either component.
+describe('a question that arrives while something else is open', () => {
+  const question = {
+    id: 'ask_1',
+    projectId: 'p1',
+    terminalId: 't_7',
+    handle: 'priya',
+    publicKey: 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM=',
+    since: 1_000,
+    at: 1_500,
+    expiresAt: Date.now() + 60_000,
+    writes: 4,
+    bytes: 4,
+    preview: 'npm test',
+    clipped: false
+  }
+
+  const asking = { consent: { p1: { projectId: 'p1', requests: [question], standing: [], readAt: 1 } } }
+
+  it('is on screen even with a dialog of this window’s own open', () => {
+    seed({ ...asking, dialog: { kind: 'appearance' } })
+    render(<App />)
+    expect(screen.getByRole('dialog', { name: 'priya wants to type in t_7' })).toBeTruthy()
+    // And the colour editor is still open underneath, unanswered rather than
+    // closed: it is this person's own half-finished work, and they did not
+    // abandon it.
+    expect(screen.getByRole('dialog', { name: 'Appearance' })).toBeTruthy()
+  })
+
+  // Both layers carry the same z-index, so which is in front is decided by the
+  // order they are written in and by nothing else. A question about bytes that
+  // are about to run as this user outranks anything this user has half-finished.
+  it('is painted over it, rather than under it', () => {
+    seed({ ...asking, dialog: { kind: 'appearance' } })
+    const { container } = render(<App />)
+    const layers = [...container.querySelectorAll('.modal-layer')]
+    expect(layers).toHaveLength(2)
+    expect(layers.at(-1)?.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(
+      'priya wants to type in t_7'
+    )
+  })
+})
+
 describe('the shell itself', () => {
   // Started before the first read, because an event that arrives during
   // bootstrap must not be missed.

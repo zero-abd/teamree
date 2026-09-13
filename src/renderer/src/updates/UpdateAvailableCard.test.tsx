@@ -151,4 +151,38 @@ describe('when it stays out of the way', () => {
     const { container } = render(<UpdateAvailableCard />)
     expect(container.querySelector('.update-card')).toBeNull()
   })
+
+  // The modal this card was written before. A question about a teammate's
+  // keystrokes is not in `dialog` — nobody in this window opened it — so the
+  // check above let it through, and news about a release was drawn under the
+  // scrim of a prompt that will not dismiss until it is answered.
+  it('says nothing behind a question about a teammate’s keystrokes either', () => {
+    useWorkspaceStore.setState({
+      consent: {
+        p1: {
+          projectId: 'p1',
+          requests: [
+            {
+              id: 'ask_1',
+              projectId: 'p1',
+              terminalId: 't_7',
+              handle: 'priya',
+              publicKey: 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM=',
+              since: 1_000,
+              at: 1_500,
+              expiresAt: 2_000,
+              writes: 4,
+              bytes: 4,
+              preview: 'npm test',
+              clipped: false
+            }
+          ],
+          standing: [],
+          readAt: 1
+        }
+      }
+    })
+    const { container } = render(<UpdateAvailableCard />)
+    expect(container.querySelector('.update-card')).toBeNull()
+  })
 })

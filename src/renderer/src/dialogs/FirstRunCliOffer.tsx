@@ -16,17 +16,23 @@
 
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { cliOffer } from './cliInstallModel'
+import { modalOnScreen } from './modalLayer'
 
 export function FirstRunCliOffer(): React.JSX.Element | null {
   const status = useWorkspaceStore((state) => state.cli)
   const dialog = useWorkspaceStore((state) => state.dialog)
+  // The other half of what can be on top of the window, and the half this card
+  // was written before: a question about a teammate's keystrokes. It is not in
+  // `dialog` because nobody in this window opened it, but it is a modal with a
+  // scrim all the same, and this card was drawing itself underneath one.
+  const consent = useWorkspaceStore((state) => state.consent)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const dismissCliPrompt = useWorkspaceStore((state) => state.dismissCliPrompt)
 
   const offer = cliOffer(status)
   // Nothing to say, or something else is already on top of the window saying
   // something: a card behind a modal is a card being talked over.
-  if (offer === null || dialog !== null) return null
+  if (offer === null || modalOnScreen({ dialog, consent })) return null
 
   return (
     <aside className="cli-offer" aria-label="Put the teamree CLI on your PATH">

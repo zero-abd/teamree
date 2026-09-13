@@ -56,7 +56,24 @@ const PAIRS: readonly { ink: ThemeToken; on: ThemeToken; least: number; why: str
   { ink: 'term-blue', on: 'term-bg', least: 4.5, why: 'paths and links' },
   { ink: 'term-magenta', on: 'term-bg', least: 4.5, why: 'prompts and diff headers' },
   { ink: 'term-cyan', on: 'term-bg', least: 4.5, why: 'the other half of a diff header' },
-  { ink: 'term-white', on: 'term-bg', least: 4.5, why: 'output that asked for plain white' }
+  { ink: 'term-white', on: 'term-bg', least: 4.5, why: 'output that asked for plain white' },
+
+  // The surfaces that arrived with the update card, the teamwork setup flow and
+  // the consent prompt, none of which existed when the rows above were written.
+  // Every one of them is a panel or a well rather than a raised card, and on
+  // every built-in theme those sit *below* `bg-raised` rather than above it — so
+  // none of these was failing when it landed. They are here because this table
+  // is a claim about the stylesheets and not a list of the hard cases: an ink
+  // measured against one surface and painted on three is an ink the next edit
+  // can put somewhere nothing checks.
+  { ink: 'fg', on: 'bg-panel', least: 7, why: 'what a push ended up doing, and the heading over it' },
+  { ink: 'fg-secondary', on: 'bg-panel', least: 6, why: 'a release’s notes, and what each teamwork step is for' },
+  { ink: 'fg-muted', on: 'bg-panel', least: 4.5, why: 'the hints underneath them' },
+  { ink: 'success', on: 'bg-panel', least: 4.5, why: 'a teamwork step that is finished' },
+  { ink: 'warning', on: 'bg-panel', least: 4.5, why: 'one that is waiting on something else' },
+  { ink: 'fg', on: 'bg-input', least: 7, why: 'the keystrokes a teammate is asking to run' },
+  { ink: 'fg-secondary', on: 'bg-input', least: 6, why: 'git’s own words while a push streams' },
+  { ink: 'fg-muted', on: 'bg-input', least: 4.5, why: 'the seconds counting up beside them' }
 ]
 
 /** Surfaces that have to be told apart from the ground behind them. */

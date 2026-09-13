@@ -23,6 +23,7 @@
 import { act, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WatchedPaneEvent } from '@shared/methods'
+import { DEFAULT_APPEARANCE, resolvePalette } from '@shared/theme'
 
 /** What the fake emulator reports as its rendered size, for the letterbox. */
 const picture = { width: 800, height: 600 }
@@ -140,6 +141,8 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   RUNTIME_IS_SEEDED: false
 }))
 
+const { useWorkspaceStore } = await import('../state/workspaceStore')
+const { applyPalette } = await import('../theme/applyPalette')
 const { WatchedPaneView } = await import('./WatchedPaneView')
 
 /** One in-flight watch: the callback the view registered, and its answer. */
@@ -656,5 +659,36 @@ describe('closing', () => {
     await watch.resolve()
     expect(watch.closed()).toBe(1)
     expect(fakeTerms).toHaveLength(0)
+  })
+})
+
+// The window is one surface, and a teammate's pane is part of it.
+//
+// Both emulators in this app are handed literal colours once, when they are
+// built, because xterm cannot read CSS. A local pane has always re-read them
+// when the palette moved; this one was written while the palette could not
+// move, and kept the colours it opened in. The result was a window where
+// choosing a theme repainted everything except the pane on somebody else's
+// machine — the one pane a person cannot fix by closing and reopening without
+// paying for the watch twice.
+describe('the palette, after it changes under a running watch', () => {
+  it('repaints the emulator rather than leaving it in the theme it opened in', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    const term = fakeTerms.at(-1) as FakeTerm
+    const before = (term.options.theme as { background: string }).background
+
+    const midnight = { ...DEFAULT_APPEARANCE, themeId: 'midnight' }
+    act(() => {
+      // Exactly what `App` does when the stored appearance changes: resolve the
+      // palette onto the root, and let every pane read it back off the document.
+      applyPalette(document.documentElement, resolvePalette(midnight))
+      useWorkspaceStore.setState({ appearance: midnight })
+    })
+
+    const after = (term.options.theme as { background: string }).background
+    expect(after).not.toBe(before)
+    expect(after).toBe(resolvePalette(midnight)['term-bg'])
   })
 })

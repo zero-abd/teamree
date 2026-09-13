@@ -52,6 +52,43 @@ describe('stylesheets', () => {
     expect(zIndexOf('.notices')).toBeGreaterThan(zIndexOf('.modal-layer'))
   })
 
+  /**
+   * Custom properties the shell writes onto the element itself, which no
+   * stylesheet declares and none should: two of them come from
+   * `src/shared/windowChrome.ts` — the main process reads the same numbers to
+   * place the macOS window buttons — and one is a width somebody drags.
+   */
+  const SET_BY_THE_SHELL = new Set(['--sidebar-width', '--titlebar-h', '--titlebar-inset'])
+
+  // A `var()` naming a property nothing declares is the quietest failure CSS
+  // has. The declaration is thrown away at computed-value time, so the property
+  // falls back to its inherited value and the rule simply does nothing: text
+  // meant to brighten stays dim, a border meant to be drawn is not there, and
+  // every gate in this repo is green. It is also exactly the shape a merge
+  // leaves behind — a stylesheet written against a token another branch renamed
+  // or never added — which is why it is checked across the whole set at once
+  // rather than per file.
+  it('names no custom property that nothing declares', () => {
+    const declared = new Set<string>()
+    for (const name of sheets) {
+      postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls(/^--/, (decl) => {
+        declared.add(decl.prop)
+      })
+    }
+
+    const dangling: string[] = []
+    for (const name of sheets) {
+      postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls((decl) => {
+        for (const [, property] of decl.value.matchAll(/var\(\s*(--[\w-]+)/g)) {
+          if (property === undefined) continue
+          if (declared.has(property) || SET_BY_THE_SHELL.has(property)) continue
+          dangling.push(`${name}: ${decl.prop}: ${property}`)
+        }
+      })
+    }
+    expect(dangling).toEqual([])
+  })
+
   // The palette is written twice on purpose — once as literals here, so the
   // first frame is painted before any script runs, and once as a derivation in
   // src/shared/theme.ts, which is what a theme switch and the colour editor

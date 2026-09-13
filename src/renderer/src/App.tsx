@@ -13,7 +13,8 @@ import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
 import { InstallCliDialog } from './dialogs/InstallCliDialog'
-import { firstQuestion, RemoteKeystrokesDialog } from './dialogs/RemoteKeystrokesDialog'
+import { firstQuestion } from './dialogs/modalLayer'
+import { RemoteKeystrokesDialog } from './dialogs/RemoteKeystrokesDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { SidebarResizer } from './shell/SidebarResizer'
@@ -113,7 +114,9 @@ export function App(): React.JSX.Element {
       ) : null}
 
       {/* Nothing is focused and nothing is blocked: the window is usable
-          whether or not anybody answers this. */}
+          whether or not anybody answers this. Both cards stand aside for
+          anything modal, which now means a keystroke question as well as a
+          dialog — see `modalLayer.ts`. */}
       <FirstRunCliOffer />
 
       {/* The same corner and the same terms: nothing focused, nothing blocked,
