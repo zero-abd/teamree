@@ -70,6 +70,11 @@ export type TerminalSessionManagerOptions = {
   scrollbackCapBytes?: number
   /** Overridable so tests can assert on readable ids. */
   createId?: () => string
+  /**
+   * Called when a pane starts or stops producing output. Reported rather than
+   * published, so the manager stays unaware of the workspace stream.
+   */
+  onActivityChange?: (terminalId: string) => void
 }
 
 type AttachedStream = { channel: StreamChannel; detach: () => void }
@@ -341,6 +346,7 @@ export class TerminalSessionManager {
     // A restore arrives with its command already settled and must not be
     // rewritten again.
     const launch = restoring ? { command: params.command } : pinAgentSession(params.command)
+    const agent = restoring?.agent ?? launch.agent
 
     const session = PtySession.start({
       id: restoring?.id ?? `term_${this.nextId()}`,
@@ -351,6 +357,10 @@ export class TerminalSessionManager {
       cols: params.cols ?? DEFAULT_COLS,
       rows: params.rows ?? DEFAULT_ROWS,
       ...(restored === undefined ? {} : { restored }),
+      ...(agent === undefined ? {} : { agent }),
+      ...(this.options.onActivityChange === undefined
+        ? {}
+        : { onActivityChange: (session: PtySession) => this.options.onActivityChange?.(session.id) }),
       ...(this.options.scrollbackCapBytes === undefined ? {} : { scrollbackCapBytes: this.options.scrollbackCapBytes })
     })
 

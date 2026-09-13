@@ -3,7 +3,7 @@
 An ADE built for teamwork: run several coding agents at once, each in its own
 git worktree, and keep track of all of them in one window.
 
-![Two split terminals in a worktree, with the changed files and a patch beside them](docs/screenshot.png)
+![Three worktrees in the sidebar, each showing its panes and whether they are working, waiting or failed, beside two split terminals](docs/screenshot.png)
 
 ## Status
 
@@ -26,6 +26,13 @@ process — but a pane running a coding agent comes back with its conversation
 resumed, because the agent keeps that on disk and teamree remembers which
 session was in which pane. An ordinary pane comes back as a shell in the same
 directory, and its command is deliberately never re-run.
+
+**Which agent needs you.** Every pane in every worktree shows what it is doing
+— working, waiting, finished, failed — and how long since it last said
+anything. That is the question five parallel agents create and the one thing
+git status cannot answer. It is deliberately a narrow reading: teamree watches
+a PTY, not an agent's protocol, so "waiting" means the output stopped, not that
+the agent asked you something.
 
 **A live picture of the work.** Status per worktree, updated by watching the
 checkout rather than by polling, so an edit made by an agent inside a

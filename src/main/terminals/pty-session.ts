@@ -13,6 +13,7 @@ import { ScrollbackBuffer } from './scrollback'
 import { buildShellCommand, buildTerminalEnv, TERMINAL_TYPE, shellName } from './shell-environment'
 import { terminalFailed, TerminalServiceError } from './service-error'
 import { ErrorCode } from '../../shared/protocol'
+import type { AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
 
 /** How long close() waits for the tree to die before giving up on the exit event. */
@@ -42,6 +43,18 @@ const EXIT_DRAIN_QUIET_MS = 50
  */
 const EXIT_DRAIN_MAX_MS = 500
 
+/**
+ * How long output has to stop before a pane counts as quiet.
+ *
+ * This is the whole of what this app knows about whether an agent is working.
+ * Without a hook into the agent's own protocol there is no "thinking" signal
+ * and no "waiting for permission" signal — there is only whether bytes are
+ * still arriving. Long enough that a pause between two tool calls does not
+ * read as finished; short enough that a finished agent stops looking busy
+ * while you watch it.
+ */
+export const QUIET_AFTER_MS = 4_000
+
 export type PtySessionInit = {
   id: string
   worktreeId: string
@@ -56,6 +69,13 @@ export type PtySessionInit = {
   scrollbackCapBytes?: number
   /** Set when this session is a previous run's pane being brought back. */
   restored?: 'shell' | 'agent'
+  /** Which coding agent this pane runs, when it runs one. */
+  agent?: AgentKind
+  /** Called when the pane starts or stops producing output. */
+  onActivityChange?: (session: PtySession) => void
+  now?: () => number
+  /** Timer seam, so a test need not wait out the quiet window. */
+  schedule?: (run: () => void, delayMs: number) => () => void
 }
 
 export type TerminalEventListener = (event: TerminalEvent) => void
@@ -66,6 +86,7 @@ export class PtySession {
   readonly cwd: string
   readonly shell: string
   readonly command: string | undefined
+  readonly agent: AgentKind | undefined
   readonly pid: number
 
   private readonly pty: IPty
@@ -82,15 +103,23 @@ export class PtySession {
   private running = true
   private exitCode: number | undefined
   private restored: 'shell' | 'agent' | undefined
+  private busy = false
+  private lastOutputAt: number
+  private cancelQuietWatch: (() => void) | undefined
   /** Set when the child has been reaped but its output has not gone quiet. */
   private draining: { exitCode: number; cancelQuiet: () => void; cancelCeiling: () => void } | undefined
 
-  private constructor(init: PtySessionInit, handle: IPty, platform: NodeJS.Platform) {
+  private constructor(
+    private readonly init: PtySessionInit,
+    handle: IPty,
+    platform: NodeJS.Platform
+  ) {
     this.id = init.id
     this.worktreeId = init.worktreeId
     this.cwd = init.cwd
     this.shell = init.shell
     this.command = init.command
+    this.agent = init.agent
     this.cols = init.cols
     this.rows = init.rows
     this.platform = platform
@@ -99,6 +128,7 @@ export class PtySession {
     this.scrollback = new ScrollbackBuffer(init.scrollbackCapBytes)
     this.title = initialTitle(init, platform)
     this.restored = init.restored
+    this.lastOutputAt = (init.now ?? Date.now)()
 
     this.subscriptions.push(
       handle.onData((chunk) => this.receive(chunk)),
@@ -137,7 +167,10 @@ export class PtySession {
       rows: this.rows,
       running: this.running,
       ...(this.exitCode === undefined ? {} : { exitCode: this.exitCode }),
-      ...(this.restored === undefined ? {} : { restored: this.restored })
+      ...(this.restored === undefined ? {} : { restored: this.restored }),
+      ...(this.agent === undefined ? {} : { agent: this.agent }),
+      busy: this.busy,
+      lastOutputAt: this.lastOutputAt
     }
   }
 
@@ -200,6 +233,8 @@ export class PtySession {
       // Already reaped; the handle has nothing left to signal.
     }
 
+    this.cancelQuietWatch?.()
+    this.cancelQuietWatch = undefined
     for (const subscription of this.subscriptions) subscription.dispose()
     this.subscriptions.length = 0
     this.listeners.clear()
@@ -222,6 +257,7 @@ export class PtySession {
   }
 
   private receive(chunk: string): void {
+    this.noteActivity()
     this.scrollback.append(chunk)
     this.emit({ type: 'data', data: chunk })
     for (const title of this.titles.scan(chunk)) {
@@ -232,6 +268,37 @@ export class PtySession {
     // Output after the child was reaped is the whole reason exit is held: each
     // chunk pushes the quiet window out again, up to the ceiling.
     if (this.draining) this.restartQuietWindow()
+  }
+
+  /**
+   * Marks the pane busy and restarts the quiet countdown.
+   *
+   * Only the two edges are reported — busy going true, and going false again —
+   * because a notification per chunk of output would be a notification per
+   * frame of a build.
+   */
+  private noteActivity(): void {
+    this.lastOutputAt = this.clock()
+    this.cancelQuietWatch?.()
+    if (!this.busy) {
+      this.busy = true
+      this.init.onActivityChange?.(this)
+    }
+    const cancel = this.scheduler(() => {
+      this.cancelQuietWatch = undefined
+      if (!this.busy) return
+      this.busy = false
+      this.init.onActivityChange?.(this)
+    }, QUIET_AFTER_MS)
+    this.cancelQuietWatch = cancel
+  }
+
+  private get clock(): () => number {
+    return this.init.now ?? Date.now
+  }
+
+  private get scheduler(): (run: () => void, delayMs: number) => () => void {
+    return this.init.schedule ?? scheduleUnref
   }
 
   private finish(exitCode: number, signal: number | undefined): void {
@@ -270,6 +337,10 @@ export class PtySession {
     draining.cancelCeiling()
     this.draining = undefined
     this.running = false
+    // An exited pane is not busy, whatever it was doing a moment ago.
+    this.cancelQuietWatch?.()
+    this.cancelQuietWatch = undefined
+    this.busy = false
     this.exitCode = draining.exitCode
     this.emit({ type: 'exit', exitCode: this.exitCode })
     for (const waiter of this.exitWaiters) waiter()
@@ -298,4 +369,11 @@ function initialTitle(init: PtySessionInit, platform: NodeJS.Platform): string {
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/** A timer that is never the reason a process stays alive. */
+function scheduleUnref(run: () => void, delayMs: number): () => void {
+  const timer = setTimeout(run, delayMs)
+  timer.unref?.()
+  return () => clearTimeout(timer)
 }

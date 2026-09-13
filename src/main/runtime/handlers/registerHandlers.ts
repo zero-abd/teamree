@@ -57,7 +57,11 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
     // on where that is.
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
     layouts: registry.context.store,
-    sessions: registry.context.store
+    sessions: registry.context.store,
+    // A pane going busy or quiet is the only thing this app knows about what an
+    // agent is doing, and it is what the sidebar reads. Two events per burst of
+    // work, not one per chunk of output.
+    onActivityChange: () => workspaceEvents.emit({ type: 'terminals' })
   })
   // Terminals first: each recorded one comes back under the id its panes
   // already name, and an agent pane comes back with its conversation resumed.

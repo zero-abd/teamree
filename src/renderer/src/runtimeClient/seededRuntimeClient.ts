@@ -148,6 +148,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       shell: '/bin/zsh',
       cols: 80,
       rows: 24,
+      busy: false,
+      lastOutputAt: Date.now(),
       running: true
     }
     const terminal: FakeTerminal = { record, buffer: '', line: '', listeners: new Set() }

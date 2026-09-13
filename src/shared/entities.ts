@@ -197,6 +197,17 @@ export type Terminal = {
   /** False once the child process has exited; the pane stays until closed. */
   running: boolean
   exitCode?: number
+  /** Which coding agent this pane runs, when it runs one. */
+  agent?: AgentKind
+  /**
+   * True while output is still arriving. It is the only honest signal this app
+   * has about whether an agent is working: without a hook into the agent's own
+   * protocol, a quiet terminal is a terminal that has stopped saying things,
+   * which is what "waiting for you" looks like from the outside.
+   */
+  busy: boolean
+  /** When output last arrived, for "no update for 4m". */
+  lastOutputAt: number
   /**
    * How this terminal came back from a previous run, when it did. `agent` means
    * a conversation was resumed; `shell` means the pane and its directory came

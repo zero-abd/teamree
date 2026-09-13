@@ -223,6 +223,23 @@ happened.
 - [x] An empty changes list now distinguishes "everything here is committed"
       from "nothing changed here yet"
 
+## M17 — What each agent is doing
+
+The sidebar answered "what has changed in this worktree" and never "which of
+these five agents needs me", which is the question running agents in parallel
+creates.
+
+- [x] Each pane reports whether output is still arriving, and the runtime
+      announces only the two edges — busy, and quiet again — rather than one
+      event per chunk
+- [x] Worktree rows carry their panes underneath, each with a state dot and how
+      long since it last said anything
+- [x] Four states and no more: working, waiting, finished, failed. Teamree
+      watches a PTY, not an agent's protocol, so "waiting for permission" is not
+      knowable here and is not claimed
+- [x] The sidebar's filter box is gone; the palette already finds things by
+      name, branch and project from anywhere
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,

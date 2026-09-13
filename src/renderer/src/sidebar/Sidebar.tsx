@@ -1,7 +1,16 @@
-// Projects and their worktrees. The filter matches on task name and branch,
+// Projects and their worktrees, with each worktree's panes and what they are
+// doing underneath it.
+//
+// There is no filter box. A search field permanently occupying the top of the
+// sidebar earns its place only in a list too long to look at, and by then the
+// palette is faster than a field you have to reach for: it matches names,
+// branches and projects, and it is one chord away from anywhere. The sidebar's
+// job is to show what is happening, not to be searched.
+//
+// The filter matches on task name and branch,
 // which is how people actually look for a piece of work in flight.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { WorktreeRow } from './WorktreeRow'
 
@@ -10,6 +19,17 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const statuses = useWorkspaceStore((state) => state.statuses)
   const mergePreviews = useWorkspaceStore((state) => state.mergePreviews)
+  const terminals = useWorkspaceStore((state) => state.terminals)
+  const focusPane = useWorkspaceStore((state) => state.focusPane)
+  const paneList = useMemo(() => Object.values(terminals), [terminals])
+
+  // "no output for 4m" has to keep counting on its own: nothing arrives to say
+  // that more time has passed, which is the entire point of the number.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 5_000)
+    return () => clearInterval(timer)
+  }, [])
   const collapsed = useWorkspaceStore((state) => state.collapsedProjects)
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const toggleProject = useWorkspaceStore((state) => state.toggleProject)
@@ -18,7 +38,9 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
   const removeWorktree = useWorkspaceStore((state) => state.removeWorktree)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
 
-  const [filter, setFilter] = useState('')
+  // No box sets this any more; the palette does the finding. Kept as the one
+  // place the empty-state wording asks "is this filtered or simply empty".
+  const filter = ''
 
   const matching = useMemo(() => {
     const needle = filter.trim().toLowerCase()
@@ -46,16 +68,6 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
             <path d="M7 2.5 L7 11.5 M2.5 7 L11.5 7" />
           </svg>
         </button>
-      </div>
-
-      <div className="sidebar__filter">
-        <input
-          type="search"
-          value={filter}
-          placeholder="Filter worktrees"
-          aria-label="Filter worktrees"
-          onChange={(event) => setFilter(event.target.value)}
-        />
       </div>
 
       <div className="sidebar__scroll">
@@ -107,6 +119,11 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                       worktree={worktree}
                       status={statuses[worktree.id]}
                       mergePreview={mergePreviews[worktree.id]}
+                      terminals={paneList}
+                      now={now}
+                      onFocusTerminal={(terminalId) => {
+                        void openWorktree(worktree.id).then(() => focusPane(terminalId))
+                      }}
                       active={worktree.id === activeWorktreeId}
                       onOpen={() => void openWorktree(worktree.id)}
                       onRetry={() => retryWorktree(worktree.id)}
