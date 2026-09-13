@@ -9,14 +9,14 @@ you should see after each step.
 macOS is the only platform with a published build. Everything below assumes two
 Macs.
 
-> **Nothing here has been done across two real machines yet.** All five
+> **Nothing here has been done across two real machines yet.** All six
 > milestones are built and tested — identity, the relay and presence, watching a
-> pane, typing into one, and staleness — including two runtimes with separate
-> data directories and separate identities talking over the real relay process
-> on a real port. But that test is two peers on *one* computer, and so is every
-> other test behind this document: no step below has been exercised across a
-> network. If you are the first pair to do this properly, the parts that
-> surprise you are worth writing down.
+> pane, typing into one, staleness, and the owner's consent in front of every
+> keystroke — including two runtimes with separate data directories and separate
+> identities talking over the real relay process on a real port. But that test is
+> two peers on *one* computer, and so is every other test behind this document:
+> no step below has been exercised across a network. If you are the first pair to
+> do this properly, the parts that surprise you are worth writing down.
 
 ## What actually works today
 
@@ -26,9 +26,11 @@ roster grants has changed and the change is the whole point of reading this.
 **Working.** Your keypair and the roster. The relay. Outbound connections from
 both machines and the Noise `IK` handshake against the keys in the repository.
 A teammate's worktrees, branches and panes appearing in your sidebar without
-either of you subscribing to anything. Opening one of their panes and reading
-it live. Typing into it, attributed by name, recorded locally, and stoppable by
-the owner at any moment. A teammate whose machine goes away leaving their rows
+either of you subscribing to anything. Opening one of their panes — in a pane of
+your own, beside your work, as many at once as you like — and reading it live.
+Typing into it, held on their machine until they have been shown it and have
+allowed it, then attributed by name, recorded locally, and stoppable by the
+owner at any moment. A teammate whose machine goes away leaving their rows
 behind, marked stale and dated, rather than vanishing — after the link's own
 five-minute silence deadline, which step 8 explains.
 
@@ -564,10 +566,12 @@ elapsed since it heard.
 
 ## 7. The joiner reads the pane, and then answers it
 
-**Joiner**: open the leader's pane. The scrollback arrives first and the live
-tail follows it, each line exactly once, letterboxed to the leader's
-dimensions — your window does not resize a PTY under a program you are only
-reading.
+**Joiner**: open the leader's pane. It takes a cell of its own beside your
+worktree, moved and resized on the same gutter as your own panes and closed with
+the same chord, so several of them can be open at once. The scrollback arrives
+first and the live tail follows it, each line exactly once, letterboxed to the
+leader's dimensions — your window does not resize a PTY under a program you are
+only reading.
 
 **Leader**: your own pane now says it is being watched, and by whom, by the
 handle their key is filed under in `.teamree/members/`.
@@ -575,6 +579,23 @@ handle their key is filed under in `.teamree/members/`.
 Now the part the whole design is for. Wait for the agent to stop on the question
 task 1 puts in front of it, and have the **joiner type the answer into the
 leader's pane**.
+
+**Nothing runs until the leader says so**, and this is the step people are most
+likely to sit through wondering what broke. The joiner's keystrokes stop on the
+leader's machine and the leader is asked: who is typing, which pane, and the
+bytes themselves, drawn so every control character is visible and none of them
+can act. The leader answers **allow once**, **allow for this session**, **always
+allow this teammate in this pane**, or **refuse** — and only then does the pty
+move. A burst is one question rather than one per keystroke, a question nobody
+answers expires after a minute, and the joiner is told which of the four
+happened, including the expiry. Their own pane says, after a second of quiet,
+that what they typed has not run: at a password prompt a pane echoes nothing, so
+being held would otherwise look exactly like being ignored.
+
+If the leader's machine is one nobody is sitting at, the same answers are on the
+command line: `teamree team requests` lists what is waiting, and `teamree team
+allow` and `teamree team deny` settle it. A `teamree team revoke` lifts a
+standing permission afterwards.
 
 The question is marked **Ask first** in `TASKS.md`, and it is real: under
 `--json`, what happens to a ledger that does not parse — today's message on
@@ -589,7 +610,10 @@ it is the sample failing to produce the moment, not the feature failing.
 
 - The leader's pane names the joiner while they type, and goes on saying they
   typed there after they stop.
-- The keystrokes reach a real shell on the leader's machine, as the leader.
+- Once the leader has allowed them, the keystrokes reach a real shell on the
+  leader's machine, as the leader. A standing answer — this session, or always —
+  is listed beside the mute on that pane, because a permission the owner cannot
+  see is one they cannot lift.
 - The leader can **mute that pane** at any moment, and the next keystroke does
   not land: the joiner is told, in the leader's own words, in the pane where
   their typing would have gone. A muted pane keeps streaming and keeps its row.
@@ -601,7 +625,9 @@ it is the sample failing to produce the moment, not the feature failing.
   writing to disk.
 
 Try muting deliberately, while the joiner is mid-sentence. Watching a refusal
-arrive is the fastest way to believe the rest of it.
+arrive is the fastest way to believe the rest of it — and a mute is the one
+answer that needs no prompt, because it is that question already answered: it
+cancels whatever was waiting on that pane and lifts every permission on it.
 
 ## 8. Finish the work
 
@@ -971,11 +997,20 @@ time.
 
 ### Your typing does not reach the pane
 
-The owner muted it. That is not a failure and it does not need diagnosing: mute
-is theirs, it takes effect on the next keystroke, and the refusal you see in
-the pane is in their words. A muted pane deliberately keeps streaming and keeps
-its row, so it looks exactly like an unmuted one apart from refusing you.
+The likeliest answer is that it has not been refused at all: it is waiting for
+the owner. Their machine holds a teammate's keystrokes until they have been
+shown them and have answered, and nobody has answered yet. Your pane says so
+after a second of quiet, because a pane at a password prompt echoes nothing and
+being held would otherwise look exactly like being ignored. It settles either
+way within the minute: allowed, refused, or expired because nobody was at the
+screen — and you are told which.
 
-If there is no refusal at all and the keystrokes simply go nowhere, check the
-project header first — a link that has dropped is the commoner explanation, and
-it says so.
+The other answer is that the owner muted it. That is not a failure and it does
+not need diagnosing: mute is theirs, it takes effect on the next keystroke, and
+the refusal you see in the pane is in their words. A muted pane deliberately
+keeps streaming and keeps its row, so it looks exactly like an unmuted one apart
+from refusing you.
+
+If there is no sentence in the pane at all and the keystrokes simply go nowhere,
+check the project header first — a link that has dropped is the commoner
+explanation, and it says so.

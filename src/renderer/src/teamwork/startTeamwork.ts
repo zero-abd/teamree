@@ -32,16 +32,18 @@
 // done — and both of them read differently depending on which of the two
 // things you are doing.
 
-import type {
-  Member,
-  MemberList,
-  PeerLink,
-  PushFailureKind,
-  RelaySetting,
-  TeamworkPublish,
-  TeamworkPublishPlan,
-  TeamworkPublishProgress,
-  TeamworkStatus
+import {
+  teamworkFacts,
+  type Member,
+  type MemberList,
+  type PeerLink,
+  type PushFailureKind,
+  type RelaySetting,
+  type TeamworkPublish,
+  type TeamworkPublishPlan,
+  type TeamworkPublishProgress,
+  type TeamworkRead,
+  type TeamworkStatus
 } from '@shared/entities'
 import { sanitiseHandle } from '@shared/handle'
 import { checkOrigin, pathIdentityNote, type OriginKind } from '@shared/origin'
@@ -776,7 +778,9 @@ export function setupOutcome(
   if (list === undefined || relay === undefined) return null
 
   const others = list.members.filter((member) => !member.isSelf)
-  const connected = status?.links.filter((link) => link.phase === 'connected') ?? []
+  // A status teamwork has not read yet has no links to count, and counting none
+  // is right: this fact says who is connected, and nobody is known to be.
+  const connected = teamworkFacts(status)?.links.filter((link) => link.phase === 'connected') ?? []
   const pushed: SetupFact['state'] = publish === undefined ? 'unknown' : publish.push.ok ? 'yes' : 'no'
 
   const facts: SetupFact[] = [
@@ -1035,7 +1039,10 @@ export function startTeamworkFlow(input: StartTeamworkInput): StartTeamworkFlow 
   // `unchecked` is deliberately not settled: the push step never self-completes
   // and is the one to lead with for as long as anything is written.
   const current = steps.find((step) => step.mark !== 'done' && step.mark !== 'this-run')
-  const origin = input.status?.origin
+  // No blocker while the origin is unknown. The banner names a checkout that
+  // cannot take part, and a project teamwork has not read yet is not one — it
+  // is a project nothing has been established about.
+  const origin = teamworkFacts(input.status)?.origin
   return {
     steps,
     currentId: current?.id ?? null,
@@ -1208,6 +1215,24 @@ function connectedStep(input: StartTeamworkInput): StepCore {
     return { id: 'connected', title, mark: 'todo', summary: 'Reading whether teamwork is running here…' }
   }
 
+  // The runtime answered, and what it answered is that it has not read this
+  // project yet — a project added moments ago, or a window that opened before
+  // the peer service finished starting. Deliberately not the sentence above:
+  // that one is this panel waiting on a call, this one is the runtime saying
+  // the call has been made and the facts are not in. Nothing else in this step
+  // may be said either way, because every phrase below it names something that
+  // was found.
+  if (status.state === 'unread') {
+    return {
+      id: 'connected',
+      title,
+      mark: 'todo',
+      summary:
+        'teamree has not read this project’s relay, roster or origin yet. This step says what it finds in a ' +
+        'moment.'
+    }
+  }
+
   const connected = status.links.filter((link) => link.phase === 'connected')
   if (connected.length > 0) {
     const away = status.links.length - connected.length
@@ -1308,7 +1333,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
  * so it says the condition out loud in the place where the silence appears, and
  * only for the origins it can be true of.
  */
-function mountMismatchNote(status: TeamworkStatus): string {
+function mountMismatchNote(status: TeamworkRead): string {
   if (!status.origin.ok) return ''
   const origin = checkOrigin(status.origin.url)
   if (!origin.ok || origin.kind !== 'path') return ''
@@ -1339,7 +1364,7 @@ function originBlocker(reason: string): string {
   )
 }
 
-function relayLabel(status: TeamworkStatus): string {
+function relayLabel(status: TeamworkRead): string {
   if (!status.relay) return 'The relay'
   return status.relay.source === 'environment'
     ? `${status.relay.url} (from the environment)`

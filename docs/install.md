@@ -26,11 +26,10 @@ It is a universal build, so it runs on Apple Silicon and on Intel and there is
 nothing to choose between. If you have wondered which Mac you have, you do not
 need to find out.
 
-**Releases are macOS only.** That is a decision rather than a gap: the Windows
-and Linux packaging is still configured and the sections below still describe
-what it would produce, but nobody builds or publishes either. On Windows or
-Linux, run it from source — the README covers that in two commands, and it is
-the same application.
+**Releases are macOS only, and so is the support.** That is a decision rather
+than a gap: the Windows and Linux packaging is still configured and the sections
+below still describe what it would produce, but nobody builds or publishes
+either, and `ROADMAP.md` records how far each of them ever got.
 
 ## Nothing here is signed
 
@@ -200,7 +199,7 @@ Nothing publishes this installer today, and more than that: `npm run package:win
 **cannot succeed as configured**, so nobody can build one either. The section is
 kept because the packaging is kept, and describes what that configuration would
 produce if it were fixed. To run teamree on Windows now, build from source and
-run it from the checkout. README.md has the diagnosis under "Packaged builds".
+run it from the checkout. `ROADMAP.md` has the diagnosis, under "Known gaps".
 
 Run `teamree-<version>-setup-x64.exe`. It installs per-user, into
 `%LOCALAPPDATA%\Programs\teamree`, and asks no administrator password.

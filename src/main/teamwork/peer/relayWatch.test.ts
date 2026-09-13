@@ -43,6 +43,7 @@ import {
   fixedRemoteRunner,
   makeProjectDir,
   project,
+  statusOf,
   worktree,
   type PeerRuntime
 } from './peerTestSupport'
@@ -796,7 +797,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     bob.changed()
     await until(() => {
       try {
-        return alice.service.status({ projectId: 'p_alice' }).links[0]?.phase === 'connected'
+        return statusOf(alice.service, 'p_alice').links[0]?.phase === 'connected'
       } catch {
         return false
       }
@@ -835,7 +836,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     bob.changed()
     await until(() => {
       try {
-        return alice.service.status({ projectId: 'p_alice' }).links[0]?.phase === 'connected'
+        return statusOf(alice.service, 'p_alice').links[0]?.phase === 'connected'
       } catch {
         return false
       }

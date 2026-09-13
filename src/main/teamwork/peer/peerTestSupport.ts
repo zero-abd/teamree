@@ -14,7 +14,7 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Project, Terminal, Worktree } from '../../../shared/entities'
+import type { Project, TeamworkRead, Terminal, Worktree } from '../../../shared/entities'
 import type { GitRunner } from '../../git/gitProcess'
 import type { TeammateCache } from '../../store/teammateCache'
 import { formatMemberFile, MEMBER_FILE_SUFFIX, MEMBERS_DIR_SEGMENTS } from '../memberFile'
@@ -518,6 +518,23 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     changes: () => changes,
     errors: () => errors
   }
+}
+
+/**
+ * What teamwork has read about one project, for a test that has already made it
+ * read.
+ *
+ * `teamwork.status` answers a union: a project the workspace has and teamwork
+ * has not read yet is its own answer rather than an error. Every caller here
+ * has started the service and let it reconcile first, so the unread answer is
+ * not a case to narrow past — it is the service failing to have done what the
+ * test just did, and it is worth saying so where it happens rather than reading
+ * as an absent link three assertions later.
+ */
+export function statusOf(service: PeerService, projectId: string): TeamworkRead {
+  const status = service.status({ projectId })
+  if (status.state !== 'read') throw new Error(`teamwork has not read ${projectId} yet`)
+  return status
 }
 
 // ------------------------------------------------------------- tiny builders

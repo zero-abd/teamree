@@ -332,13 +332,31 @@ export const teamCommands: readonly CommandSpec[] = [
       'A project with no relay is not offline, it is not configured, and this says so rather than showing it ' +
       "as a network problem. `enrolled: no` is the one cause of silence that is entirely this end's: every " +
       'link waits forever for a teammate who has no key to answer with.\n\n' +
-      'Exit stays 0 whatever the answer, including "teamwork is off". Branch on `status.disabledReason` and ' +
-      "on each link's `phase` under --json.",
+      'A project added seconds ago answers `state: unread`: it exists, and teamree has not read its relay, ' +
+      'roster or origin yet. Nothing is asserted about it until it has — ask again in a moment.\n\n' +
+      'Exit stays 0 whatever the answer, including "teamwork is off" and "not read yet". Branch on ' +
+      "`status.state`, then on `status.disabledReason` and on each link's `phase` under --json.",
     args: [PROJECT_ARG],
     examples: ['teamree team status api', 'teamree team status api --json'],
     run: async (context) => {
       const project = await resolveProject(context.client, context.args[0] as string)
       const status = await context.client.call('teamwork.status', { projectId: project.id })
+      // Nothing has been read about this project, so there is no roster to lay
+      // a table out from and no relay to report — and asking the runtime for
+      // the presence beside it would only be asking a second question it cannot
+      // answer yet. One honest line instead, and still exit 0: a project this
+      // machine has just been given is not a failure of the command.
+      if (status.state === 'unread') {
+        const header = formatFields([
+          ['project', `${project.name} (${project.id})`],
+          ['teamwork', 'not read yet - teamree has not read this project’s relay, roster or origin'],
+          ['read at', new Date(status.readAt).toISOString()]
+        ])
+        return {
+          data: { project, status, presence: null },
+          text: `${header}\n\nAsk again in a moment.`
+        }
+      }
       const presence = await context.client.call('teamwork.presence', { projectId: project.id })
       const now = Date.now()
 

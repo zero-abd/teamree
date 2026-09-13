@@ -25,6 +25,7 @@ import {
   fixedRemoteRunner,
   makeProjectDir,
   project,
+  statusOf,
   terminal,
   worktree,
   type PeerRuntime
@@ -261,5 +262,5 @@ describe.skipIf(!RELAY_BUILT)('two peers over the real relay', () => {
 })
 
 function phase(runtime: PeerRuntime, projectId: string): string | undefined {
-  return runtime.service.status({ projectId }).links[0]?.phase
+  return statusOf(runtime.service, projectId).links[0]?.phase
 }

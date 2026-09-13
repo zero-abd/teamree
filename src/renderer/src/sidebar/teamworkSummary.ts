@@ -22,7 +22,7 @@
 // and this says it — `1 connected · last heard 4m ago` — while a link that is
 // talking carries nothing and this says nothing new about it.
 
-import type { PeerLink, TeamworkStatus } from '@shared/entities'
+import type { PeerLink, TeamworkRead, TeamworkStatus } from '@shared/entities'
 import { ADD_KEY_BUTTON } from '../teamwork/startTeamwork'
 import { sinceLabel } from './agentRows'
 
@@ -65,6 +65,22 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   // Not asked yet. An absent answer is not an answer, and rendering one as
   // "off" would be this app claiming something it has not established.
   if (!status) return null
+
+  // Asked, and answered "nothing has been read about this project yet" — the
+  // beat after a project is added, and the first moments of a restored session.
+  // A row, because a project that has just appeared in this sidebar with no
+  // line under it reads as a project teamwork has nothing to say about. But not
+  // "off" and not a fault: nothing has been found, so nothing may be named, and
+  // the tone is the one that means "in progress, and not yours to fix".
+  if (status.state === 'unread') {
+    return {
+      tone: 'pending',
+      label: 'Reading this project',
+      detail:
+        'teamree has not read this project’s relay, roster or origin yet. Whatever it finds is here in a ' +
+        'moment; nothing below has been established until then.'
+    }
+  }
 
   if (status.disabledReason !== null) {
     return { tone: 'off', label: 'Teamwork off', detail: status.disabledReason }
@@ -206,7 +222,7 @@ function linkLine(link: PeerLink, now: number): string {
 }
 
 /** Says where the relay came from, because a surprising URL needs a source. */
-function relayLabel(status: TeamworkStatus): string {
+function relayLabel(status: TeamworkRead): string {
   if (!status.relay) return 'The relay'
   return status.relay.source === 'environment'
     ? `${status.relay.url} (from the environment)`

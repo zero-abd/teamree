@@ -13,6 +13,7 @@
 // between two of your own.
 
 import { useCallback, useMemo } from 'react'
+import { teamworkFacts } from '@shared/entities'
 import { Dashboard } from '../dashboard/Dashboard'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
@@ -138,12 +139,12 @@ function WorkspaceMain({
    * project header said "1 connected" in the same window: the app told a
    * connected member to go and do what they had already done, on the empty
    * state they are most likely to be looking at while they wait for a
-   * teammate. An absent status is not an answer, so it keeps the old copy.
+   * teammate. An absent status is not an answer, so it keeps the old copy — and
+   * neither is one teamwork has not read yet, which `teamworkFacts` folds into
+   * the same absence for the same reason.
    */
-  const teamworkRunning =
-    teamworkProject !== undefined &&
-    teamwork[teamworkProject.id]?.disabledReason === null &&
-    teamwork[teamworkProject.id]?.enrolled === true
+  const teamworkFound = teamworkProject === undefined ? undefined : teamworkFacts(teamwork[teamworkProject.id])
+  const teamworkRunning = teamworkFound?.disabledReason === null && teamworkFound.enrolled
 
   // Open the tab first and put the pane in it second: the pane is the thing
   // asked for, and it has to appear somewhere the person is looking.

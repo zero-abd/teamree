@@ -12,7 +12,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import type { TeamworkStatus } from '../../../shared/entities'
+import type { TeamworkRead, TeamworkStatus } from '../../../shared/entities'
 import { createGitRunner } from '../../git/gitProcess'
 import { createTempRepo, type TempRepo } from '../../git/testRepository'
 import { createManualScheduler, createPeerRuntime, project, type PeerRuntime } from './peerTestSupport'
@@ -41,14 +41,24 @@ async function runtimeFor(repo: TempRepo): Promise<PeerRuntime> {
 
 let asked = 0
 
-async function status(runtime: PeerRuntime): Promise<TeamworkStatus> {
+/**
+ * Asked the way the panel asks, and insisting on a read.
+ *
+ * The method answers a union — a project teamwork has not read yet says so
+ * rather than throwing — and every test here starts the service first, so the
+ * unread answer would mean the reconcile behind `start()` did not happen and
+ * nothing below would be about the origin at all.
+ */
+async function status(runtime: PeerRuntime): Promise<TeamworkRead> {
   asked += 1
   const response = await runtime.dispatch(
     { id: `status_${asked}`, method: 'teamwork.status', params: { projectId: 'p_one' } },
     { connectionId: 'window' }
   )
   if (!('ok' in response) || response.ok !== true) throw new Error(JSON.stringify(response))
-  return response.result as TeamworkStatus
+  const result = response.result as TeamworkStatus
+  if (result.state !== 'read') throw new Error('teamwork has not read p_one yet')
+  return result
 }
 
 it('reports an origin set after the last reconcile, without an unrelated event', async () => {

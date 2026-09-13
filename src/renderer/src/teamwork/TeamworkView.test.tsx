@@ -75,6 +75,7 @@ const enrolledRoster = (): MemberList => ({
 
 /** A checkout with an origin teamree can match teammates on, and nobody on it yet. */
 const working = (): TeamworkStatus => ({
+  state: 'read',
   projectId: 'p1',
   relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
   disabledReason: null,
@@ -85,6 +86,7 @@ const working = (): TeamworkStatus => ({
 })
 
 const noOrigin = (): TeamworkStatus => ({
+  state: 'read',
   projectId: 'p1',
   relay: null,
   disabledReason: 'no .teamree/relay in this project',
