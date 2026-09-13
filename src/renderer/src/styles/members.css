@@ -469,6 +469,15 @@
   line-height: 1.55;
 }
 
+/* Not a refusal: the field has accepted this origin, and this is the condition
+   it is accepted on. It sits where the error would and reads quieter than one,
+   because a path that will work should not look like a path that will not. */
+.field__note {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
 .grant {
   display: flex;
   flex-direction: column;

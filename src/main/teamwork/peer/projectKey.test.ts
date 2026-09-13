@@ -55,6 +55,16 @@ describe('the key itself', () => {
     expect(key).not.toContain('repo')
     expect(key).not.toContain('github')
   })
+
+  // The keys in the field are URLs' keys, and a rule that moved one of them
+  // would be a team that stops meeting after an update with nothing on either
+  // machine to say why. The digests below are written out rather than computed,
+  // because a test that recomputed the rule could only agree with it.
+  it('has not moved for a URL now that a path can have one too', () => {
+    expect(projectKeyFor(normaliseRemote('git@github.com:team/repo.git')!)).toBe(
+      '24de3cb4cf47f1c5c2c4b6a1bbe9851f7b07d5b2c2a14789ed0d9879b188f350'
+    )
+  })
 })
 
 describe('reading it out of a checkout', () => {
@@ -70,25 +80,50 @@ describe('reading it out of a checkout', () => {
   })
 
   // A repository on a file server or a shared volume is a perfectly good git
-  // remote, is how plenty of teams already work, and can never take part here.
-  // "Not a URL teamree can compare" is true and tells that team nothing: the
-  // sentence has to name their own path and say why it is the wrong kind of
-  // thing, or they find out by spending an afternoon on the other four steps.
-  it('names a filesystem remote as the reason, rather than calling it an unreadable URL', async () => {
-    for (const remote of ['/Volumes/team/app.git', '~/shared/app.git', 'file:///Volumes/team/app.git', '../app.git']) {
+  // remote and is how plenty of teams already work. It takes part on the terms
+  // the path itself can support: the same absolute path on both Macs is the
+  // same project, and the key is the path rather than anything read off this
+  // machine's disk, so it is computable with the volume unmounted.
+  it('takes a shared volume as the project, at the path it is mounted at', async () => {
+    for (const remote of ['/Volumes/team/app.git', 'file:///Volumes/team/app.git', '/Volumes/team/app.git/']) {
       const result = await readProjectKey(fixedRemoteRunner(remote), '/anywhere')
-      expect(result.ok).toBe(false)
+      expect(result, remote).toEqual({
+        ok: true,
+        key: projectKeyFor('/Volumes/team/app.git'),
+        // Normalised, because this is the string a teammate has to be given.
+        url: '/Volumes/team/app.git'
+      })
+    }
+  })
+
+  it('keeps a path and a URL apart even when they read alike', () => {
+    expect(projectKeyFor(normaliseRemote('/github.com/team/repo.git')!)).not.toBe(
+      projectKeyFor(normaliseRemote('https://github.com/team/repo.git')!)
+    )
+  })
+
+  // The refusals that are left are the paths that cannot be an identity at all,
+  // and each of them names the origin git has before saying what is wrong with
+  // it: nobody typed this remote, so "a relative path" on its own would leave
+  // somebody working out which of their remotes was being talked about.
+  it('refuses a path no two machines could agree on, naming the origin it read', async () => {
+    for (const [remote, fault] of [
+      ['../app.git', /relative path/],
+      ['~/shared/app.git', /~ is a different directory/],
+      ['/Volumes/team/../team/app.git', /\.\. segment/]
+    ] as const) {
+      const result = await readProjectKey(fixedRemoteRunner(remote), '/anywhere')
+      expect(result.ok, remote).toBe(false)
       if (result.ok) continue
-      expect(result.reason, remote).toContain(remote)
-      expect(result.reason, remote).toContain('filesystem path')
-      expect(result.reason, remote).toContain('cannot take part')
+      expect(result.reason, remote).toContain(`origin is ${remote}`)
+      expect(result.reason, remote).toMatch(fault)
     }
   })
 
   it('still says only that it cannot compare a remote that is neither a path nor a URL', async () => {
     const result = await readProjectKey(fixedRemoteRunner('just-a-word'), '/anywhere')
     expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toContain('not a URL teamree can compare')
+    expect(result.ok === false && result.reason).toContain('neither a URL with a host in it')
   })
 
   it('says a project with no origin cannot be matched, rather than matching it to nothing', async () => {

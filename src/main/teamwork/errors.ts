@@ -31,8 +31,9 @@ export function badRelayUrl(message: string): TeamworkError {
 
 /**
  * What was typed is not an origin. Separate from the relay's refusal because
- * the mistake is a different one: a path on this disk is a perfectly good git
- * remote and a useless project identity, and the sentence has to say so.
+ * the mistake is a different one: this is usually a path, a path can be an
+ * identity only when it is one two machines could both name, and the sentence
+ * has to say which of those it fell short of.
  */
 export function badOriginUrl(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.InvalidParams, message)

@@ -351,18 +351,32 @@ describe('adding the origin remote', () => {
 
   // A path is a perfectly good git remote and a useless project identity,
   // because nobody else can clone it. Refused before git is ever run.
-  it('refuses a path on this disk, and touches nothing', async () => {
+  // A repository on a shared volume is a remote everybody really can reach, so
+  // the path is set — normalised, because those characters are the project's
+  // identity and a teammate has to be given them exactly.
+  it('sets the path a shared repository is mounted at, in its normalised spelling', async () => {
     const { service, project, repo } = await wire()
 
-    await expect(service.setOrigin({ projectId: project.id, url: '/Users/ada/code/pager' })).rejects.toThrow(
-      /path on this disk/
+    const result = await service.setOrigin({ projectId: project.id, url: '/Volumes/team/pager.git/' })
+    expect(result).toMatchObject({ url: '/Volumes/team/pager.git', replaced: false })
+    expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('/Volumes/team/pager.git')
+  })
+
+  it('refuses a path no two machines could agree on, and touches nothing', async () => {
+    const { service, project, repo } = await wire()
+
+    await expect(service.setOrigin({ projectId: project.id, url: '~/code/pager' })).rejects.toThrow(
+      /~ is a different directory/
     )
+    await expect(service.setOrigin({ projectId: project.id, url: '../pager' })).rejects.toThrow(/relative path/)
     expect(await repo.git(['remote'])).toBe('')
   })
 
-  it('refuses anything with no host in it', async () => {
+  it('refuses anything that is neither', async () => {
     const { service, project } = await wire()
-    await expect(service.setOrigin({ projectId: project.id, url: 'pager' })).rejects.toThrow(/not a URL with a host/)
+    await expect(service.setOrigin({ projectId: project.id, url: 'pager' })).rejects.toThrow(
+      /neither a URL with a host in it/
+    )
   })
 
   // The step goes green without a restart because the status is re-read, and it

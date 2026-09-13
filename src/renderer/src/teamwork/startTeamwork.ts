@@ -44,7 +44,7 @@ import type {
   TeamworkStatus
 } from '@shared/entities'
 import { sanitiseHandle } from '@shared/handle'
-import { checkOriginUrl } from '@shared/originUrl'
+import { checkOrigin, pathIdentityNote, type OriginKind } from '@shared/origin'
 import { parseRelayUrl } from '@shared/relayUrl'
 
 export type StepId = 'identity' | 'key' | 'relay' | 'push' | 'connected'
@@ -621,32 +621,60 @@ function urlsIn(text: string): string[] {
   return [...found.filter((url) => /^wss?:/i.test(url)), ...found.filter((url) => !/^wss?:/i.test(url))]
 }
 
-export type OriginDraftCheck = { state: 'empty' } | { state: 'ok'; url: string } | { state: 'bad'; reason: string }
+export type OriginDraftCheck =
+  | { state: 'empty' }
+  | {
+      state: 'ok'
+      /** What git will be given, which for a path is the normalised spelling. */
+      url: string
+      kind: OriginKind
+      /**
+       * What a teammate has to match, for a path, and null for a URL.
+       *
+       * Carried by the verdict rather than worked out by the field, because it
+       * is the same sentence the invitation sends and the same condition the
+       * runtime hashes: three places saying it three ways is how one of them
+       * ends up saying something that is not quite true.
+       */
+      note: string | null
+    }
+  | { state: 'bad'; reason: string }
 
 /**
  * The origin field's own verdict, before git is run.
  *
- * The same grammar the runtime refuses with — `checkOriginUrl` is shared —
- * because the mistake everybody makes here is typing a path, and being told
- * that a round trip later reads as the button being broken rather than the
- * answer being the wrong kind of thing.
+ * The same grammar the runtime refuses with — `checkOrigin` is shared — because
+ * what goes wrong here is rarely a typo. It is a path, and whether a path can
+ * be an identity depends on which path it is: `~/shared/app.git` cannot be one
+ * and `/Volumes/team/app.git` can. Learning that a round trip later reads as
+ * the button being broken rather than as the answer being fixable.
  */
 export function checkOriginDraft(raw: string): OriginDraftCheck {
   if (raw.trim() === '') return { state: 'empty' }
-  const checked = checkOriginUrl(raw)
-  return checked.ok ? { state: 'ok', url: checked.url } : { state: 'bad', reason: sentence(checked.reason) }
+  const checked = checkOrigin(raw)
+  if (!checked.ok) return { state: 'bad', reason: sentence(checked.reason) }
+  return {
+    state: 'ok',
+    url: checked.remote,
+    kind: checked.kind,
+    note: checked.kind === 'path' ? pathIdentityNote(checked.remote) : null
+  }
 }
 
 /**
- * Why a path will not do, for the disclosure beside the field.
+ * What each kind of origin has to agree about, for the disclosure beside the
+ * field.
  *
  * It used to be three sentences in front of everybody who opened the panel,
  * including the ones whose origin was fine. It is the answer to one question —
- * "why did it refuse my directory?" — so it is where a question is asked.
+ * "what exactly has to match?" — so it is where a question is asked.
  */
 export const ORIGIN_DETAIL =
-  'A path on this disk is not something your teammates can clone. Your URLs need not match each other exactly: ' +
-  'ssh against https, a port and a trailing .git are all normalised away. docs/teamwork.md has the rest.'
+  'Two checkouts are one project when their origins normalise to the same thing. For a URL that is forgiving: ssh ' +
+  'against https, a port and a trailing .git are all normalised away, so your URLs need not match each other ' +
+  'exactly. For a repository shared over a mounted volume it is not, because nothing on either Mac can tell that ' +
+  'one volume mounted at two paths is one repository — so the absolute path is the identity, case and .git and ' +
+  'all, and both of you have to mount it at the same one. docs/teamwork.md has the rest.'
 
 /** The label on the button that copies the invitation. Named so a test can find it. */
 export const COPY_INVITE_BUTTON = 'Copy the invitation'
@@ -664,6 +692,11 @@ export const COPY_INVITE_BUTTON = 'Copy the invitation'
  *
  * Returns null when the repository has no origin to clone, because an
  * invitation that cannot say where the repository is is worse than no button.
+ *
+ * When the origin is a path it carries the one condition the protocol cannot
+ * check for them: the same path on their Mac. This is the moment to say it —
+ * the alternative is a teammate who mounts the volume wherever their Finder put
+ * it, does all five steps correctly, and is never seen.
  */
 export function inviteText(input: {
   originUrl: string | null
@@ -672,6 +705,16 @@ export function inviteText(input: {
   handle: string | null
 }): string | null {
   if (input.originUrl === null) return null
+  const origin = checkOrigin(input.originUrl)
+  const mount =
+    origin.ok && origin.kind === 'path'
+      ? [
+          '',
+          `The repository is a directory rather than a URL, so mount it at exactly ${origin.remote} — that path is`,
+          'what both our machines hash to decide we are on the same project, and a different one means we never see',
+          'each other.'
+        ]
+      : []
   const who = input.handle === null ? 'I' : `I (${input.handle})`
   const relay =
     input.relayUrl === null
@@ -682,10 +725,13 @@ export function inviteText(input: {
     `${who} have set up teamwork on ${input.projectName} in teamree. Everyone who can push to the repository is on`,
     'the team, so there is nothing to accept and no account to make.',
     '',
-    `1. Clone it if you have not: git clone ${input.originUrl}`,
+    // Quoted only when it has to be, which for a URL is never and for a volume
+    // called "Team Share" is the difference between a command and two commands.
+    `1. Clone it if you have not: git clone ${shellPath(input.originUrl)}`,
     '2. Open teamree on your Mac and add that checkout as a project.',
     '3. Press Teamwork in the project header, choose “Join a team I was invited to”, and press Add my key.',
     '4. Press Commit and push. That is what puts you on the team.',
+    ...mount,
     '',
     relay,
     '',
@@ -1209,7 +1255,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
         summary:
           `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} on this project’s roster and no link to ` +
           `${others.length === 1 ? 'them' : 'any of them'} is open yet. If this does not change in a moment, the ` +
-          'reason it stopped is in this run’s log.'
+          `reason it stopped is in this run’s log.${mountMismatchNote(status)}`
       }
     }
     const ready = input.list?.enrolled === true && input.relay?.url != null
@@ -1248,20 +1294,49 @@ function connectedStep(input: StartTeamworkInput): StepCore {
     id: 'connected',
     title,
     mark: 'todo',
-    summary: `${relayLabel(status)} is reachable and no teammate’s machine is on it yet.`
+    summary: `${relayLabel(status)} is reachable and no teammate’s machine is on it yet.${mountMismatchNote(status)}`
   }
+}
+
+/**
+ * The one failure a path origin can produce that looks like nothing at all.
+ *
+ * Two machines that hash different project keys do not fail to connect: they
+ * compute different rendezvous points and never look for each other, which
+ * reads on both screens as "nobody is here yet" for as long as anybody is
+ * willing to wait. The panel cannot detect it — that is the whole limitation —
+ * so it says the condition out loud in the place where the silence appears, and
+ * only for the origins it can be true of.
+ */
+function mountMismatchNote(status: TeamworkStatus): string {
+  if (!status.origin.ok) return ''
+  const origin = checkOrigin(status.origin.url)
+  if (!origin.ok || origin.kind !== 'path') return ''
+  return (
+    ` This project is matched by the path it is mounted at, ${origin.remote}. A teammate whose Mac reaches the ` +
+    'same repository at any other path is on a different project as far as teamree is concerned, and will never ' +
+    'appear here.'
+  )
 }
 
 /**
  * Why a checkout with no usable `origin` cannot take part.
  *
  * One sentence, because the fix is now a field and a button directly under it
- * rather than a command to go and type somewhere else. Why a path will not do
- * is in `ORIGIN_DETAIL`, behind the disclosure beside that field, where it is
- * read by the people who need it and nobody else.
+ * rather than a command to go and type somewhere else. What exactly has to
+ * match is in `ORIGIN_DETAIL`, behind the disclosure beside that field, where
+ * it is read by the people who need it and nobody else.
+ *
+ * It names both kinds of answer. This used to end "a URL, not a path on this
+ * disk", which was the whole of the refusal a team sharing a repository over a
+ * mounted volume ever got; the path they are looking at is now an answer, and
+ * the sentence that greets them has to be the one that says so.
  */
 function originBlocker(reason: string): string {
-  return `${sentence(reason)} Add the URL you and your teammates both cloned — a URL, not a path on this disk.`
+  return (
+    `${sentence(reason)} Add the URL you and your teammates both cloned, or — for a repository on a shared volume ` +
+    '— the absolute path it is mounted at on every Mac.'
+  )
 }
 
 function relayLabel(status: TeamworkStatus): string {
