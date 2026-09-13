@@ -15,8 +15,6 @@ import { slugifyBranchName } from '../../shared/branchName'
  */
 export const slugify = slugifyBranchName
 
-const MAX_SLUG_LENGTH = 60
-const FALLBACK_SLUG = 'worktree'
 
 /**
  * Windows refuses to create a file or directory whose name is a DOS device,
