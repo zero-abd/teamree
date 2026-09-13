@@ -1,5 +1,7 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
+import { applicationMenuTemplate } from './appMenu'
+import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
 
@@ -11,6 +13,13 @@ function createWindow(): BrowserWindow {
     minHeight: 560,
     show: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    // macOS hides the title bar but keeps drawing the window buttons over our
+    // content, so they are placed against the strip the renderer draws. Setting
+    // this overrides hiddenInset's default x as well as its y, which is why both
+    // numbers and the renderer's matching inset come from one shared module.
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: TRAFFIC_LIGHT_X_PX, y: TRAFFIC_LIGHT_Y_PX } }
+      : {}),
     backgroundColor: '#14161a',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
@@ -51,6 +60,14 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(async () => {
+    // Before any window: with no menu of its own Electron installs a default
+    // one, whose File menu is a single "Close Window" on Cmd+W. A menu key
+    // equivalent never reaches the web contents, so that one item is what the
+    // renderer's "Close pane" binding has been losing to. See appMenu.ts.
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate(applicationMenuTemplate({ developing: process.env.ELECTRON_RENDERER_URL !== undefined }))
+    )
+
     ipcMain.handle('teamree:select-project-folder', async (event) => {
       const owner = BrowserWindow.fromWebContents(event.sender)
       if (!owner || event.senderFrame !== event.sender.mainFrame) return null

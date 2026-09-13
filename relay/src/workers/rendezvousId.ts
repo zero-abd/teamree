@@ -6,9 +6,14 @@
 // token never goes in one. What goes in the URL is its SHA-256, which names the
 // same pairing without conferring the ability to claim it.
 //
-// The relay never checks that the two agree. It has no reason to: a peer that
-// sends a hint for one pairing and a token for another simply lands somewhere
-// its partner is not, which costs only that peer.
+// The Worker host does check that the two agree, and the check is not about the
+// peer that got it wrong. A Durable Object is chosen by the name in the URL
+// before any frame arrives, so a hello carrying some other token would otherwise
+// park a socket in an object it has no business being in, for the whole pairing
+// budget, holding a slot against the pair the rendezvous belongs to. Requiring
+// the hello to name the object it landed in costs a legitimate peer nothing — it
+// derived the one from the other — and costs a squatter the only thing it had.
+// The container host pairs on the token alone and has no name to check against.
 
 export async function rendezvousId(token: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))

@@ -149,7 +149,12 @@ describe('a teammate who has gone away', () => {
   // deleted — and says how old the picture is instead.
   it('stays on the list and says how old the picture is', () => {
     mount(theirs({ live: false, heardAt: NOW - 240_000 }))
-    expect(screen.getByText('away · 4m')).toBeTruthy()
+    // And says *which* age the number is. `heardAt` moves when a snapshot
+    // changes rather than on contact, so this is the age of the picture and not
+    // of the absence — `away · 4m` beside a teammate who went thirty seconds
+    // ago claimed the second when it knew only the first. The number is the
+    // same one; the word beside it is what was wrong. See `teammateStaleness`.
+    expect(screen.getByText('away · picture 4m old')).toBeTruthy()
     expect(screen.getByText('Fix the relay budget')).toBeTruthy()
   })
 

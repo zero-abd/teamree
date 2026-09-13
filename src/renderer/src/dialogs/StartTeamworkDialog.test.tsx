@@ -310,7 +310,7 @@ describe('the button the project header sends people to', () => {
   // because this panel is what replaced it. Rendering the two together is what
   // keeps them from drifting apart again.
   it('is on this panel, under the name the tooltip gives it', () => {
-    const summary = teamworkSummary(status({ enrolled: false }))
+    const summary = teamworkSummary(status({ enrolled: false }), Date.now())
     expect(summary?.label).toBe('Your key is not here')
     expect(summary?.detail).toContain(ADD_KEY_BUTTON)
     expect(text(render())).toContain(ADD_KEY_BUTTON)
