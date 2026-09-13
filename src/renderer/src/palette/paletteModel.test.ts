@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Project, Worktree } from '@shared/entities'
+import type { InstalledAgent, Project, Worktree } from '@shared/entities'
 import { buildPaletteItems, filterPalette, moveSelection, score, type PaletteItem } from './paletteModel'
 
 function worktree(overrides: Partial<Worktree> & { id: string }): Worktree {
@@ -20,12 +20,19 @@ const projects: Project[] = [
   { id: 'p2', name: 'ledger', path: '/repos/ledger', baseRef: 'origin/main' }
 ]
 
+const agent = (kind: InstalledAgent['kind']): InstalledAgent => ({
+  kind,
+  command: kind,
+  binary: `/usr/local/bin/${kind}`
+})
+
 const context = (
   overrides: Partial<Parameters<typeof buildPaletteItems>[0]> = {}
 ): Parameters<typeof buildPaletteItems>[0] => ({
   worktrees: [],
   projects,
   activeWorktreeId: null,
+  agents: [],
   hintFor: () => '',
   ...overrides
 })
@@ -72,6 +79,71 @@ describe('buildPaletteItems', () => {
     for (const query of ['all panes', 'agents', 'waiting', 'dashboard']) {
       expect(filterPalette(items, query)[0]).toMatchObject({ kind: 'action', id: 'open-dashboard' })
     }
+  })
+
+  // The toolbar used to carry one button per agent, and the palette is where
+  // that went: invisible until it is asked for, so it costs no width, and it
+  // is where somebody looks for an action they know the app has.
+  it('offers every agent this machine has, and none it does not', () => {
+    const items = buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1', name: 'login fix' })],
+        activeWorktreeId: 'w1',
+        agents: [agent('claude'), agent('codex')]
+      })
+    )
+
+    const agents = items.filter((item) => item.kind === 'agent')
+    expect(agents.map((item) => item.id)).toEqual(['claude', 'codex'])
+    expect(agents.map((item) => item.label)).toEqual(['Start claude in this worktree', 'Start codex in this worktree'])
+  })
+
+  it('offers no agent row when the machine has none installed', () => {
+    const items = buildPaletteItems(context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1' }))
+
+    expect(items.some((item) => item.kind === 'agent')).toBe(false)
+  })
+
+  // A row is a promise that pressing Return does something, and `startAgent`
+  // acts on the active worktree: with none open, or with one whose checkout is
+  // still being made, there is nowhere for the pane to go.
+  it('offers no agent row when there is no ready worktree to start one in', () => {
+    const installed = [agent('claude')]
+
+    expect(buildPaletteItems(context({ agents: installed })).some((item) => item.kind === 'agent')).toBe(false)
+    expect(
+      buildPaletteItems(
+        context({ worktrees: [worktree({ id: 'w1', state: 'creating' })], activeWorktreeId: 'w1', agents: installed })
+      ).some((item) => item.kind === 'agent')
+    ).toBe(false)
+  })
+
+  // Both start an agent and only one of them does it here, so somebody unsure
+  // which they want has to be able to tell the rows apart — and to find this
+  // one by the word they would reach for.
+  it('says the agent opens a pane in the worktree already on screen', () => {
+    const items = buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1', name: 'login fix' })],
+        activeWorktreeId: 'w1',
+        agents: [agent('claude')]
+      })
+    )
+
+    const [found] = items.filter((item) => item.kind === 'agent')
+    expect(found?.hint).toBe('login fix')
+    expect(found?.detail).toBe('Opens a pane here')
+    for (const query of ['claude', 'start claude', 'claude here', 'claude this worktree']) {
+      expect(filterPalette(items, query)[0]).toMatchObject({ kind: 'agent', id: 'claude' })
+    }
+  })
+
+  it('puts the agents after the worktrees and before the rest of the actions', () => {
+    const items = buildPaletteItems(
+      context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', agents: [agent('claude')] })
+    )
+
+    expect(items.map((item) => item.kind).indexOf('agent')).toBe(items.map((item) => item.kind).indexOf('action') - 1)
   })
 
   it('shows the key that does the same thing', () => {

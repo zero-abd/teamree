@@ -263,6 +263,17 @@ export function WorkspaceArea({
           <h1 className="workspace__title">{worktree.name}</h1>
           <p className="workspace__path">{worktree.path}</p>
         </div>
+        {/*
+          Fixed buttons only, and deliberately no button per agent. This row is
+          for acting on the worktree in front of you, not a launcher for
+          whatever binaries happen to be on this machine's PATH: one button per
+          discovered agent made the bar grow with somebody's tool collection,
+          and put the two things that touch their repository — Changes and Push
+          — beside a row of names that varies from laptop to laptop. Starting an
+          agent in this worktree lives in the palette, which costs no width
+          until it is asked for, and on the empty state of a worktree with no
+          panes.
+        */}
         <div className="workspace__tools">
           <button
             type="button"
@@ -314,17 +325,6 @@ export function WorkspaceArea({
           >
             Split down
           </button>
-          {agents.map((agent) => (
-            <button
-              type="button"
-              key={agent.kind}
-              className="button button--ghost button--small"
-              title={`Open a pane running ${agent.command} (${agent.binary})`}
-              onClick={() => void startAgent(agent.command)}
-            >
-              {agent.command}
-            </button>
-          ))}
           <button
             type="button"
             className="button button--small"

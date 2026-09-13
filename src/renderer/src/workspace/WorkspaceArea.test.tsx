@@ -334,6 +334,45 @@ describe('the toolbar over an open worktree', () => {
   })
 })
 
+// The row used to carry one button per agent found on PATH, so its width grew
+// with somebody's tool collection and the two buttons that act on their
+// repository sat beside a list that differs from laptop to laptop. It is a
+// fixed set of actions on this worktree now, and this says so in the order a
+// person reads it, so a helpful addition cannot quietly put the launcher back.
+describe('the toolbar and the agents on this machine', () => {
+  const seedWithAgents = (): void => {
+    seed({
+      projects: [project],
+      worktrees: [worktree()],
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout() },
+      agents: [
+        { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
+        { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex' }
+      ]
+    })
+    mount()
+  }
+
+  it('offers the same buttons whatever agents are installed', () => {
+    seedWithAgents()
+    const tools = document.querySelector('.workspace__tools') as HTMLElement
+    const labels = within(tools)
+      .getAllByRole('button')
+      .map((button) => button.textContent)
+    expect(labels).toEqual(['All panes', 'Changes', 'Push', 'Split right', 'Split down', 'New terminal'])
+  })
+
+  it('does not offer a per-agent button, and cannot start one from here', () => {
+    seedWithAgents()
+    const tools = document.querySelector('.workspace__tools') as HTMLElement
+    expect(within(tools).queryByRole('button', { name: 'claude' })).toBeNull()
+    expect(within(tools).queryByRole('button', { name: 'codex' })).toBeNull()
+    for (const button of within(tools).getAllByRole('button')) fireEvent.click(button)
+    expect(startAgent).not.toHaveBeenCalled()
+  })
+})
+
 describe('pushing', () => {
   it('says nothing is to be sent when the remote already has the branch', () => {
     seed({ projects: [project], worktrees: [worktree()], activeWorktreeId: 'w1', statuses: { w1: status() } })

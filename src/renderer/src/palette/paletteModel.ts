@@ -4,7 +4,7 @@
 // it is the ranking: with twenty worktrees open, a palette that matches the
 // right thing third is a palette nobody uses twice.
 
-import type { Project, Worktree } from '@shared/entities'
+import type { InstalledAgent, Project, Worktree } from '@shared/entities'
 
 export type PaletteAction =
   | 'new-worktree'
@@ -22,11 +22,16 @@ export type PaletteItem =
   | { kind: 'worktree'; id: string; label: string; hint: string; detail: string; search: string }
   /** Run something. */
   | { kind: 'action'; id: PaletteAction; label: string; hint: string; detail: string; search: string }
+  /** Start one of the coding agents this machine has, in the worktree on
+   * screen. `id` is the command to run, which is what starting one needs. */
+  | { kind: 'agent'; id: string; label: string; hint: string; detail: string; search: string }
 
 export type PaletteContext = {
   worktrees: readonly Worktree[]
   projects: readonly Project[]
   activeWorktreeId: string | null
+  /** Coding agents found on this machine, as probed at startup. */
+  agents: readonly InstalledAgent[]
   /** Shortcut labels, so the palette shows the key that does the same thing. */
   hintFor: (action: PaletteAction) => string
 }
@@ -35,6 +40,10 @@ export type PaletteContext = {
  * Actions come after worktrees. Jumping is what the palette is opened for nine
  * times in ten, and an action typed by name still sorts to the top once its
  * letters are in the query.
+ *
+ * The agents sit between the two: they act on the worktree in front of you,
+ * which is nearer to jumping than to "add a project", and they are the only
+ * rows here whose existence depends on the machine.
  */
 export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
   const projectName = new Map(context.projects.map((project) => [project.id, project.name]))
@@ -64,7 +73,45 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     search: `${action.label} ${action.keywords}`
   }))
 
-  return [...worktrees, ...actions]
+  return [...worktrees, ...agentItems(context), ...actions]
+}
+
+/**
+ * One row per agent this machine actually has, starting it in the worktree
+ * already on screen.
+ *
+ * Built from the probe rather than from a list of names, because the palette
+ * offering an agent nobody has installed is worse than offering none: the row
+ * is a promise that pressing Return will do something. For the same reason
+ * there are none of these until there is a ready worktree to start one in —
+ * `startAgent` acts on the active worktree, and a checkout still being made
+ * has no directory to run a shell in.
+ *
+ * The wording carries the whole distinction from "New task": both start an
+ * agent, and only one of them does it here. Somebody who wants a fresh
+ * checkout should not land on this row, and somebody looking at the worktree
+ * they want the agent in should not be sent through a dialog that makes
+ * another one.
+ */
+function agentItems(context: PaletteContext): PaletteItem[] {
+  const active = context.worktrees.find((worktree) => worktree.id === context.activeWorktreeId)
+  if (active === undefined || active.state !== 'ready') return []
+
+  return context.agents.map((agent) => ({
+    kind: 'agent',
+    id: agent.command,
+    label: `Start ${agent.command} in this worktree`,
+    hint: active.name,
+    detail: 'Opens a pane here',
+    // "here" and "this worktree" are what somebody types when the distinction
+    // from a new task is the thing they are unsure about. Short, in this order,
+    // and without the word "agent": the matcher takes the first word-starting
+    // letter it can, so every extra word is another place a query can be sent
+    // past the word it meant — with "this" ahead of "here", typing "claude this
+    // worktree" jumped the h to "here" and matched nothing at all. And "agents"
+    // is how somebody reaches the all-panes view.
+    search: `Start ${agent.command} here in this worktree pane`
+  }))
 }
 
 const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[] = [
