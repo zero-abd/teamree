@@ -240,6 +240,25 @@ creates.
 - [x] The sidebar's filter box is gone; the palette already finds things by
       name, branch and project from anywhere
 
+## M18 — Which one of them needs you
+
+M17 put each pane's state on its worktree row, which answers the question one
+worktree at a time. With eight agents running, finding the one that wants you
+still meant reading the whole tree.
+
+- [x] One flat view of every pane in every worktree, taking the main area:
+      which agent or shell it is, where it lives, its state, and its silence
+- [x] Ordered by what would make somebody look — failures, then work in
+      progress, then waiting, then finished — and longest-silent first inside a
+      group, because the pane that has been sitting there is the neglected one
+- [x] Counts per state, so "3 waiting" is read rather than tallied
+- [x] A row opens its worktree and focuses its pane, which is also how the view
+      is left
+- [x] The same four states as the sidebar, derived by the same module: two
+      readings of one PTY would be two things to reconcile
+- [x] Live off the existing `terminals` invalidation, with the silences kept
+      counting by a clock of their own — no new runtime method
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,

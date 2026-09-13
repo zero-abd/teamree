@@ -13,6 +13,7 @@ export type PaletteAction =
   | 'split-down'
   | 'toggle-changes'
   | 'toggle-sidebar'
+  | 'open-dashboard'
   | 'add-project'
 
 export type PaletteItem =
@@ -71,6 +72,11 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
   { id: 'split-right', label: 'Split right', keywords: 'pane vertical column' },
   { id: 'split-down', label: 'Split down', keywords: 'pane horizontal row' },
   { id: 'toggle-changes', label: 'Show changes', keywords: 'diff git status files review' },
+  {
+    id: 'open-dashboard',
+    label: 'All panes',
+    keywords: 'agents dashboard overview attention waiting failed working everywhere'
+  },
   { id: 'toggle-sidebar', label: 'Toggle sidebar', keywords: 'hide show projects' },
   { id: 'add-project', label: 'Add project', keywords: 'repository repo folder clone' }
 ]

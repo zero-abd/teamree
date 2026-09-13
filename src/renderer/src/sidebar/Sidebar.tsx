@@ -10,7 +10,8 @@
 // The filter matches on task name and branch,
 // which is how people actually look for a piece of work in flight.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { WorktreeRow } from './WorktreeRow'
 
@@ -20,16 +21,9 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
   const statuses = useWorkspaceStore((state) => state.statuses)
   const mergePreviews = useWorkspaceStore((state) => state.mergePreviews)
   const terminals = useWorkspaceStore((state) => state.terminals)
-  const focusPane = useWorkspaceStore((state) => state.focusPane)
+  const revealPane = useWorkspaceStore((state) => state.revealPane)
   const paneList = useMemo(() => Object.values(terminals), [terminals])
-
-  // "no output for 4m" has to keep counting on its own: nothing arrives to say
-  // that more time has passed, which is the entire point of the number.
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 5_000)
-    return () => clearInterval(timer)
-  }, [])
+  const now = useNow()
   const collapsed = useWorkspaceStore((state) => state.collapsedProjects)
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const toggleProject = useWorkspaceStore((state) => state.toggleProject)
@@ -121,9 +115,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                       mergePreview={mergePreviews[worktree.id]}
                       terminals={paneList}
                       now={now}
-                      onFocusTerminal={(terminalId) => {
-                        void openWorktree(worktree.id).then(() => focusPane(terminalId))
-                      }}
+                      onFocusTerminal={(terminalId) => void revealPane(worktree.id, terminalId)}
                       active={worktree.id === activeWorktreeId}
                       onOpen={() => void openWorktree(worktree.id)}
                       onRetry={() => retryWorktree(worktree.id)}

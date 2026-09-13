@@ -34,6 +34,11 @@ git status cannot answer. It is deliberately a narrow reading: teamree watches
 a PTY, not an agent's protocol, so "waiting" means the output stopped, not that
 the agent asked you something.
 
+**All of them at once.** One view lists every pane in every worktree, ordered
+by what would make you look: failures first, then work in progress, then
+waiting, then finished, and within each the one that has been silent longest.
+Counts per state sit above it, and a row takes you to that pane.
+
 **A live picture of the work.** Status per worktree, updated by watching the
 checkout rather than by polling, so an edit made by an agent inside a
 ten-minute shell session moves the chips immediately. A panel shows the changed

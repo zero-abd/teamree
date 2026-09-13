@@ -64,6 +64,16 @@ describe('buildPaletteItems', () => {
     expect(items.some((item) => item.kind === 'action')).toBe(true)
   })
 
+  // Somebody hunting for the pane that needs them will type what they are
+  // after — the state, not the name of the view.
+  it('finds the all-panes view by the words a person would reach for it with', () => {
+    const items = buildPaletteItems(context())
+
+    for (const query of ['all panes', 'agents', 'waiting', 'dashboard']) {
+      expect(filterPalette(items, query)[0]).toMatchObject({ kind: 'action', id: 'open-dashboard' })
+    }
+  })
+
   it('shows the key that does the same thing', () => {
     const items = buildPaletteItems(context({ hintFor: (action) => (action === 'new-terminal' ? '⌘T' : '') }))
 

@@ -3,7 +3,7 @@
 // hiding that would make the sidebar lie.
 
 import type { Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
-import { agentRows, sinceLabel, worktreeActivity } from './agentRows'
+import { ACTIVITY_LABEL, agentRows, sinceLabel, worktreeActivity } from './agentRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 
@@ -20,14 +20,6 @@ type WorktreeRowProps = {
   onRetry: () => void
   onRemove: () => void
 }
-
-/** One phrase per state, shared by the row and its panes. */
-const ACTIVITY_LABEL = {
-  working: 'working',
-  quiet: 'waiting — no output',
-  done: 'finished',
-  failed: 'exited with an error'
-} as const
 
 export function WorktreeRow({
   worktree,

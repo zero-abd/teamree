@@ -80,6 +80,12 @@ type WorkspaceState = {
   collapsedProjects: Record<string, boolean>
   openWorktreeIds: string[]
   activeWorktreeId: string | null
+  /**
+   * Whether the pane dashboard has the main area. It replaces the panes rather
+   * than sharing the window with them: it is read to decide where to go next,
+   * and every way out of it is a way of going somewhere.
+   */
+  dashboardOpen: boolean
 
   sidebarWidth: number
   sidebarVisible: boolean
@@ -100,6 +106,8 @@ type WorkspaceState = {
 
   openWorktree: (worktreeId: string) => Promise<void>
   closeWorktreeTab: (worktreeId: string) => void
+  /** Opens the worktree a pane lives in and puts the focus on that pane. */
+  revealPane: (worktreeId: string, terminalId: string) => Promise<void>
 
   focusPane: (terminalId: string) => void
   /** Adopts a fresh terminal record, e.g. the one a resize answers with. */
@@ -127,6 +135,7 @@ type WorkspaceState = {
   startAgent: (command: string) => Promise<void>
 
   toggleProject: (projectId: string) => void
+  toggleDashboard: () => void
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
   openDialog: (dialog: NonNullable<DialogState>) => void
@@ -402,6 +411,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     collapsedProjects: {},
     openWorktreeIds: [],
     activeWorktreeId: null,
+    dashboardOpen: false,
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
     sidebarVisible: true,
@@ -543,6 +553,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const switching = get().activeWorktreeId !== worktreeId
       set((state) => ({
         activeWorktreeId: worktreeId,
+        // Opening a worktree is the answer the dashboard was open to ask for,
+        // whichever surface asked it — a row, a tab, the sidebar, the palette.
+        dashboardOpen: false,
         openWorktreeIds: state.openWorktreeIds.includes(worktreeId)
           ? state.openWorktreeIds
           : [...state.openWorktreeIds, worktreeId],
@@ -572,6 +585,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             : state.activeWorktreeId
         return { openWorktreeIds, activeWorktreeId }
       })
+    },
+
+    async revealPane(worktreeId, terminalId) {
+      // Focus is a property of a layout, and the layout for a worktree that was
+      // not open arrives with `openWorktree` — so the focus has to wait for it.
+      await get().openWorktree(worktreeId)
+      get().focusPane(terminalId)
     },
 
     recordTerminal(terminal) {
@@ -785,6 +805,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const clamped = clampSidebarWidth(width)
       set({ sidebarWidth: clamped })
       writeStoredSidebarWidth(storage, clamped)
+    },
+
+    toggleDashboard() {
+      set((state) => ({ dashboardOpen: !state.dashboardOpen }))
     },
 
     toggleSidebar() {

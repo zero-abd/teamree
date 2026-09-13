@@ -65,6 +65,9 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
         case 'find-in-pane':
           store.openPaneSearch()
           break
+        case 'open-dashboard':
+          store.toggleDashboard()
+          break
       }
     }
 
