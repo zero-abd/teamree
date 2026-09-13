@@ -53,6 +53,18 @@ export type PeerTransportOptions = {
   /** Stream frames the *peer* pushed to us, for a subscription we opened there. */
   onStreamEvent?: (stream: string, event: unknown) => void
   /**
+   * Called once, on the first transport message from the peer that decrypts.
+   *
+   * This is key confirmation, and it is not the same event as the handshake
+   * completing. A responder finishes `IK` having only written message 2, so a
+   * replayer with a captured message 1 and no private key reaches `established`
+   * carrying the real peer's static key. It can never produce a transport
+   * message, because that needs keys it does not have — so the first one that
+   * authenticates is the first evidence anybody is actually there, and it is
+   * evidence a recording cannot manufacture.
+   */
+  onConfirmed?: () => void
+  /**
    * The link can no longer be trusted and must be torn down: a Noise failure, a
    * frame that is not JSON. Both are unrecoverable — a Noise stream has no
    * resynchronisation point — so this is never a warning.
@@ -87,6 +99,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   const reader = createLineReader(options.session)
   let nextId = 0
   let live = true
+  let confirmed = false
 
   const write = (frame: Frame): void => {
     if (!live) return
@@ -153,6 +166,12 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       let values: unknown[]
       try {
         values = reader.push(message)
+        // After the decrypt, before anything is acted on: whatever is in this
+        // message, the fact that it authenticated is the interesting part.
+        if (!confirmed) {
+          confirmed = true
+          options.onConfirmed?.()
+        }
       } catch (error) {
         // A Noise message that fails to authenticate and a line that is not
         // JSON are the same kind of event: the stream's position is gone and

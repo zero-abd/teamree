@@ -67,7 +67,13 @@ export function parseMemberFile(text: string): MemberFileParse {
     // A label appearing twice is the one shape of damage that would otherwise
     // resolve silently, and whichever of the two won would be a coin toss over
     // who this key belongs to.
-    if (fields.has(label)) return { ok: false, reason: `"${label}" appears more than once` }
+    //
+    // Quoted through `quote`, because everything on this line came out of a
+    // committed file that anybody with push access wrote, and this reason
+    // travels to the renderer in a `members.list` result. A 200,000-character
+    // label should cost its author a truncated message, not everyone else a
+    // 200,000-character row.
+    if (fields.has(label)) return { ok: false, reason: `"${quote(label)}" appears more than once` }
     fields.set(label, trimmed.slice(separator + 1).trim())
   }
 
@@ -91,15 +97,47 @@ export function parseMemberFile(text: string): MemberFileParse {
   return { ok: true, value: { handle, publicKey, addedAt } }
 }
 
+/**
+ * The longest a quoted scrap of a committed file may be when it is echoed back
+ * in a problem. Long enough to recognise a typo in, short enough that a row is
+ * a row.
+ */
+export const MAX_QUOTED_LENGTH = 60
+
+/**
+ * One piece of attacker-controlled text, made safe to put in a message.
+ *
+ * Everything in a member file was written by somebody with push access, and
+ * problems travel to the renderer in a `members.list` result. Truncating is not
+ * politeness; it is the difference between a bad file costing its author a
+ * clipped message and costing every reader a screen of one.
+ */
+export function quote(raw: string): string {
+  // Control characters and newlines would break out of the one line a problem
+  // is rendered on, which is its own small kind of forgery.
+  // oxlint-disable-next-line no-control-regex -- matching them is the point
+  const flattened = raw.replace(/[\u0000-\u001f\u007f]/g, ' ')
+  return flattened.length <= MAX_QUOTED_LENGTH ? flattened : `${flattened.slice(0, MAX_QUOTED_LENGTH)}…`
+}
+
 /** True for a base64 string that really is 32 bytes and really is canonical. */
 export function isPublicKey(value: string): boolean {
   if (!PUBLIC_KEY_BASE64.test(value)) return false
   const decoded = Buffer.from(value, 'base64')
+  if (decoded.length !== 32) return false
+  // X25519 ignores the top bit of the last byte — RFC 7748 masks it before the
+  // scalar multiplication — so `K` and `K | 2^255` are the same identity spelled
+  // two ways. Every comparison in this codebase is on the base64 string, so two
+  // spellings of one key would walk straight past the duplicate-key check and
+  // arrive as two members with, as far as the handshake is concerned, the same
+  // key. No conforming encoder produces one: a public key is a field element
+  // below 2^255 - 19, so this bit is always clear in anything real.
+  if ((decoded[31] as number) & 0x80) return false
   // base64 leaves two unused bits in the last character, so a string can match
   // the shape, decode to the right length, and still not be what an encoder
   // would ever produce. Re-encoding is the cheapest way to insist on one
   // spelling per key, which matters because keys are compared as strings.
-  return decoded.length === 32 && decoded.toString('base64') === value
+  return decoded.toString('base64') === value
 }
 
 function readKey(raw: string): string | undefined {

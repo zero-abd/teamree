@@ -1,9 +1,12 @@
 // One link to one teammate: dial, handshake, run, and come back when it drops.
 //
-// A link is pairwise, not per project, because the rendezvous is: the token is
-// derived from the Diffie-Hellman between two keys, so two people who share
-// three repositories still meet in one place. What each of them is then allowed
-// to see is decided per project by the roster, in `presence.ts`.
+// A link is per teammate **per project**, because the rendezvous is. The token
+// is derived from the Diffie-Hellman between two keys *and the project key*, so
+// two people who share three repositories meet in three places. That costs a
+// connection per shared repository and buys the thing a pairwise session cannot
+// have: a Noise transcript that says which project it is for. The project goes
+// into the prologue as well as the token, so the binding is in the transcript
+// itself rather than inferred from where the two of them happened to meet.
 //
 // THE ONE RULE THAT IS NOT NEGOTIABLE. `src/shared/peer` distinguishes
 // `unknown_peer` from `decryption_failed` on purpose, and its author left a
@@ -12,6 +15,23 @@
 // stranger can walk a roster with. Every handshake failure here ends the
 // connection the same way — same close code, same empty reason, same silence —
 // and the difference survives only in this process, for its own operator.
+//
+// THE SECOND RULE THAT IS NOT NEGOTIABLE. Completing an `IK` handshake is not
+// proof that anybody is there. A responder finishes message 2 having only
+// *written* it, so a replayer holding a captured message 1 and no private key
+// reaches `established` with the real peer's static key attached to it. It can
+// read nothing and can never send a transport message — it has no keys — but a
+// link that announced itself `connected` on that basis would be claiming a
+// teammate is present when they are not, and would be doing it on evidence a
+// compromised relay can manufacture from a recording.
+//
+// So this file treats `established` as "the handshake parsed" and waits for the
+// first successfully *decrypted* transport message before it will say
+// `connected`, subscribe to anything, or let a snapshot be believed. That is
+// key confirmation, it costs one round trip of a frame that was going to be
+// sent anyway, and it is the property a replayer cannot forge. Nothing
+// actionable is ever put in the message-1 payload, which is the other half of
+// the same fix; the payload this sends is empty.
 //
 // Everything with a deadline in it is driven by an injected clock and an
 // injected timer, so the tests for reconnection, backoff and the hourly epoch
@@ -24,7 +44,7 @@ import type { Dispatcher } from '../../runtime/dispatcher'
 import type { SubscriptionHub } from '../../runtime/subscriptionHub'
 import { openRelayConnection, reconnectPolicyFor, type RelayClosure, type RelayConnection } from './relayConnection'
 import type { RelayDialer } from './relaySocket'
-import { epochAt, epochEndsAt, rendezvousToken, rendezvousUrl, sharedSecret } from './rendezvous'
+import { epochAt, epochEndsAt, rendezvousToken, rendezvousUrl, sessionPrologue, sharedSecret } from './rendezvous'
 
 /** A quiet pair still has to say something, or the relay's idle deadline ends it. */
 export const KEEPALIVE_MS = 120_000
@@ -54,6 +74,15 @@ export type PeerLinkOptions = {
   remotePublicKey: string
   /** What the roster files that key under, for the window to show. */
   handle: string
+  /**
+   * The project this link is for, as `projectKey.ts` derives it.
+   *
+   * Not optional, and not defaulted. It goes into the rendezvous and into the
+   * Noise prologue, so a link without one is a session that does not know what
+   * it is about — which is exactly the thing this parameter exists to stop
+   * happening by omission.
+   */
+  projectKey: string
   /** This installation's raw X25519 scalar. Never leaves this object. */
   staticPrivateKey: Uint8Array
   relayUrl: string
@@ -102,6 +131,8 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   /** Scoped to one attempt: why this socket is about to end, when we ended it. */
   let refusedThisAttempt = false
   let rolledOverThisAttempt = false
+  /** Scoped to one session: has anything from the far end ever decrypted? */
+  let confirmed = false
   let connection: RelayConnection | undefined
   let session: PeerSession | undefined
   let transport: PeerTransport | undefined
@@ -181,7 +212,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   }
 
   const onClosed = (closure: RelayClosure): void => {
-    const wasConnected = phase === 'connected'
+    const wasConnected = confirmed
     const wasRefused = refusedThisAttempt
     const wasRollover = rolledOverThisAttempt
     teardown('the peer link ended')
@@ -217,11 +248,11 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   }
 
   const runHandshake = (initiator: boolean, token: string): void => {
-    // The rendezvous token is bound into the transcript as the Noise prologue.
-    // Both sides necessarily hold the same one — the relay pairs connections
-    // that presented identical tokens, and nothing else — so this costs nothing
-    // and pins the handshake to the pairing it was meant for.
-    const prologue = Buffer.from(token, 'hex')
+    // Always passed, never defaulted. An empty prologue is a transcript that
+    // authenticates two keys and says nothing about what they are talking
+    // about, and every mitigation for that would have to live at a call site
+    // rather than here.
+    const prologue = sessionPrologue(options.projectKey, token)
 
     session = initiator
       ? createInitiatorSession({
@@ -240,7 +271,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
 
     cancelHandshakeDeadline = options.scheduler.setTimer(() => {
       cancelHandshakeDeadline = undefined
-      if (phase === 'connected') return
+      // Covers the unconfirmed window too: a replayer completes the handshake
+      // and then, having no keys, can never say anything. This is what ends
+      // that session rather than leaving it holding a slot forever.
+      if (confirmed) return
       // Says nothing to the peer, for the same reason a rejection says nothing.
       dropSilently()
     }, HANDSHAKE_TIMEOUT_MS)
@@ -275,6 +309,26 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       : { kind: 'rejected', local: 'the handshake did not complete' }
   }
 
+  /**
+   * Key confirmation: a transport message from the far end that authenticated.
+   *
+   * This is the moment a peer stops being a handshake that parsed and starts
+   * being somebody who holds the private key. Everything the user is told, and
+   * everything believed about what they are showing, hangs off it.
+   */
+  const confirm = (): void => {
+    if (confirmed || !transport) return
+    confirmed = true
+    backoffMs = BACKOFF_START_MS
+    moveTo('connected')
+    // One subscription for the life of the link. It answers immediately, so
+    // there is no separate first read to race with the stream.
+    void transport.call('peer.subscribe', {}).catch((error: unknown) => {
+      options.onError?.(error)
+      connection?.close(1000, '')
+    })
+  }
+
   const establish = (): void => {
     const active = session
     if (!active) return
@@ -294,7 +348,17 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       dispatch: options.dispatch,
       subscriptions: options.subscriptions,
       connectionId,
-      onStreamEvent: (_stream, event) => options.onPresence(event as PeerPresence),
+      // The first thing this side successfully decrypts is the first proof that
+      // somebody holding the private key is actually on the other end. Until
+      // then the handshake has only been parsed.
+      onConfirmed: confirm,
+      onStreamEvent: (_stream, event) => {
+        // Cannot arrive before confirmation — it had to be decrypted to get
+        // here — but the ordering is asserted rather than assumed, because a
+        // forged snapshot is exactly what a replayer would want.
+        if (!confirmed) return
+        options.onPresence(event as PeerPresence)
+      },
       onFatal: () => {
         // A Noise stream with a hole in it is over: there is no point it could
         // be picked up from, so the socket goes and the link rebuilds.
@@ -303,17 +367,13 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       onError: options.onError
     })
 
-    backoffMs = BACKOFF_START_MS
-    moveTo('connected')
-
-    // One subscription for the life of the link. It answers immediately, so
-    // there is no separate first read to race with the stream.
-    void transport.call('peer.subscribe', {}).catch((error: unknown) => {
-      options.onError?.(error)
-      connection?.close(1000, '')
-    })
-
+    // Deliberately NOT `connected` yet, and deliberately not a new phase the
+    // user reads: from where they sit this is still connecting, because nothing
+    // has yet shown that anyone is there.
     cancelKeepalive = repeat(options.scheduler, KEEPALIVE_MS, () => transport?.keepalive())
+    // The round trip that confirms the keys, made of a frame the relay's idle
+    // deadline wanted anyway. The peer's own keepalive confirms us to them.
+    transport.keepalive()
   }
 
   const connect = (): void => {
@@ -321,10 +381,11 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     attempts += 1
     refusedThisAttempt = false
     rolledOverThisAttempt = false
+    confirmed = false
     moveTo('connecting')
 
     const epoch = epochAt(options.scheduler.now())
-    const token = rendezvousToken(secret, epoch)
+    const token = rendezvousToken(secret, options.projectKey, epoch)
 
     connection = openRelayConnection({
       url: rendezvousUrl(options.relayUrl, token),

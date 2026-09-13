@@ -364,8 +364,18 @@ untrusted relay the team hosts splices two outbound WebSockets together, and
 everything across it is end-to-end encrypted. A teammate is a third transport
 onto the method catalogue that already exists, not a new protocol.
 
-- [ ] **A — Identity, with no network at all.** Keypair, `.teamree/members/`,
+- [x] **A — Identity, with no network at all.** Keypair, `.teamree/members/`,
       members shown in the app. The whole trust model, testable offline.
+  - [x] A member file has to be named exactly `<handle>.pub`. It was matched
+        case-insensitively at the suffix and case-sensitively at the stem, so
+        `bob.PUB` was accepted as a fully authorised member named "bob" — which
+        made attribution forgeable by anyone with push access, and attribution
+        is the whole mitigation for a feature that grants remote code execution
+  - [x] A public key whose ignored top bit is set is refused: X25519 masks it,
+        so `K` and `K | 2^255` are one identity with two spellings, and every
+        comparison here is on the spelling
+  - [x] Text quoted out of a committed file into a member problem is flattened
+        and capped before it reaches a window
 - [x] **B — The relay, and presence.** Outbound connections, the Noise `IK`
       handshake against keys from the roster, teammates' worktrees in the
       sidebar. No terminal output yet.
@@ -374,13 +384,24 @@ onto the method catalogue that already exists, not a new protocol.
         second place to keep it is a second place for it to go stale.
         `TEAMREE_RELAY_URL` overrides it for one run, for a tunnel nobody
         should commit. There is deliberately no default
-  - [x] A pairwise rendezvous per teammate, derived from the static-static
-        Diffie-Hellman and rotated hourly, with the token in the first frame
-        and only its hash in the URL
-  - [x] Noise `IK` over the splice, against the one key this link dialled.
-        Every way the handshake can fail ends the connection identically, so
-        "not a member" and "wrong machine" are one answer on the wire and two
-        in this machine's own log
+  - [x] A rendezvous per teammate **per repository**, derived from the
+        static-static Diffie-Hellman, the project and the hour, with the token
+        in the first frame and only its hash in the URL. This diverges from
+        `relay/README.md`, which specifies one pairwise rendezvous for all
+        time: a pairwise session is one indistinguishable shape across every
+        repository two people share, with nothing in its transcript saying
+        which project it is for. The relay needs no change either way
+  - [x] Noise `IK` over the splice, against the one key this link dialled,
+        with a prologue that is never empty and carries the project and the
+        pairing. Every way the handshake can fail ends the connection
+        identically, so "not a member" and "wrong machine" are one answer on
+        the wire and two in this machine's own log
+  - [x] Completing a handshake is not evidence anybody is there: a responder
+        finishes `IK` having only written its own message, so a replayed
+        message 1 reaches `established` carrying the real peer's key. A link
+        says `connected`, subscribes, and believes a snapshot only after the
+        first transport message from the far end that decrypts — which needs
+        keys a recording cannot supply
   - [x] A teammate is a fourth transport onto the existing catalogue, speaking
         the same newline-delimited JSON the CLI socket does — so the dispatcher,
         the subscription hub and every handler are unchanged. What a teammate

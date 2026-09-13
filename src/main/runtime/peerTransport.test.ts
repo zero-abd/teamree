@@ -175,6 +175,87 @@ describe('framing', () => {
   })
 })
 
+describe('key confirmation', () => {
+  it('does not fire on a handshake that merely completed', () => {
+    // The distinction the whole gate rests on. A responder finishes `IK` having
+    // only *written* message 2, so a replayer with a captured message 1 and no
+    // private key reaches `established` carrying the real peer's static key.
+    const [session] = handshakenPair()
+    let confirmed = false
+    createPeerTransport({
+      session,
+      send: () => {},
+      dispatch: createDispatcher(
+        new MethodRegistry(
+          createRuntimeContext({ version: 't', store: {} as never, subscriptions: new SubscriptionHub() })
+        )
+      ),
+      subscriptions: new SubscriptionHub(),
+      connectionId: 'peer_x',
+      onConfirmed: () => {
+        confirmed = true
+      },
+      onFatal: () => {}
+    })
+    expect(confirmed).toBe(false)
+  })
+
+  it('fires on the first transport message that authenticates, and only once', () => {
+    const [alice, bob] = handshakenPair()
+    let confirmations = 0
+    const receiver = createPeerTransport({
+      session: bob,
+      send: () => {},
+      dispatch: createDispatcher(
+        new MethodRegistry(
+          createRuntimeContext({ version: 't', store: {} as never, subscriptions: new SubscriptionHub() })
+        )
+      ),
+      subscriptions: new SubscriptionHub(),
+      connectionId: 'peer_y',
+      onConfirmed: () => {
+        confirmations += 1
+      },
+      onFatal: () => {}
+    })
+
+    // An empty keepalive line: nothing to act on, and proof that whoever sent
+    // it holds keys a recording cannot supply.
+    receiver.receive(alice.encrypt(new TextEncoder().encode('\n')))
+    expect(confirmations).toBe(1)
+    receiver.receive(alice.encrypt(new TextEncoder().encode('\n')))
+    expect(confirmations).toBe(1)
+  })
+
+  it('never fires for a sender who cannot produce a valid transport message', () => {
+    const [session] = handshakenPair()
+    let confirmed = false
+    let fatal = false
+    const transport = createPeerTransport({
+      session,
+      send: () => {},
+      dispatch: createDispatcher(
+        new MethodRegistry(
+          createRuntimeContext({ version: 't', store: {} as never, subscriptions: new SubscriptionHub() })
+        )
+      ),
+      subscriptions: new SubscriptionHub(),
+      connectionId: 'peer_z',
+      onConfirmed: () => {
+        confirmed = true
+      },
+      onFatal: () => {
+        fatal = true
+      }
+    })
+
+    // What a replayer has: the ability to open a connection, and nothing to say.
+    transport.receive(new Uint8Array(48))
+    expect(confirmed).toBe(false)
+    expect(fatal).toBe(true)
+  })
+})
+
 describe('subscriptions a teammate opened', () => {
   it('releases them when the link ends, so nothing outlives the machine that asked', async () => {
     const { caller, answerer, hub, registry } = rig(['peer.subscribe'])

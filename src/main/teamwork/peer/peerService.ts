@@ -4,12 +4,13 @@
 // The service is the only thing that knows the whole picture, and it keeps
 // three things in step:
 //
-//   * **Links.** One per teammate's public key, deduplicated across projects
-//     because a rendezvous is pairwise: two people who share three repositories
-//     still meet in one place. A link exists while that key is on some
-//     project's roster and that project has a relay; it is stopped the moment
-//     it is not, which is what makes revocation take effect at fetch speed
-//     rather than at restart speed.
+//   * **Links.** One per teammate **per project**, because the rendezvous is
+//     derived from the project as well as from the two keys. Two people who
+//     share three repositories hold three sessions, each of which knows in its
+//     own Noise transcript which project it is for. A link exists while that
+//     key is on that project's roster and that project has a relay; it is
+//     stopped the moment it is not, which is what makes revocation take effect
+//     at fetch speed rather than at restart speed.
 //
 //   * **What they told us.** The latest snapshot per peer, kept by revision so
 //     a reply overtaken in flight cannot put the sidebar back into a past its
@@ -19,11 +20,12 @@
 //     workspace does, pushed to every subscribed peer, filtered per project by
 //     that project's roster.
 //
-// The roster is checked in both directions and that is not redundant. Sending
-// is filtered so a teammate on one repository is not shown another's worktrees.
+// The roster is still checked in both directions, and with per-project sessions
+// that is now defence in depth rather than the only defence. Sending is
+// filtered so a teammate on one repository is not shown another's worktrees.
 // Receiving is filtered so a teammate cannot claim a project key they are not a
 // member of — the key is a hash of a remote, and somebody who knows the
-// repository exists can compute it.
+// repository exists can compute one.
 
 import type {
   PeerLink as PeerLinkStatus,
@@ -113,10 +115,16 @@ export class PeerService {
 
   readonly #projects = new Map<string, ProjectFacts>()
   readonly #links = new Map<string, LinkRecord>()
-  /** Which teammate a peer connection belongs to. Set before the link can call. */
-  readonly #peerByConnection = new Map<string, string>()
-  /** The latest snapshot per teammate, and when this machine heard it. */
-  readonly #heard = new Map<string, { presence: PeerPresence; heardAt: number }>()
+  /** Which teammate and which project a peer connection is. Set before it can call. */
+  readonly #peerByConnection = new Map<string, { publicKey: string; projectKey: string }>()
+  /**
+   * The latest snapshot per *link*, not per teammate.
+   *
+   * Keyed by the link, because a link is one teammate in one project: a
+   * snapshot that arrived over the session for one repository can then never be
+   * read out under another, whatever it claims to contain.
+   */
+  readonly #heard = new Map<string, { publicKey: string; presence: PeerPresence; heardAt: number }>()
   readonly #subscribers = new Map<string, SubscriptionChannel>()
 
   #dispatch: Dispatcher | undefined
@@ -175,36 +183,39 @@ export class PeerService {
     this.#projects.clear()
     for (const fact of facts) this.#projects.set(fact.projectId, fact)
 
-    // One relay per teammate, and the first project that names one wins. A team
-    // that has pointed two repositories at two relays is a team whose members
-    // meet on whichever their shared repositories agree about; there is nothing
-    // sensible to do with a disagreement except pick deterministically.
-    const wanted = new Map<string, { handle: string; relayUrl: string }>()
+    // One link per (teammate, project) that has a relay and a project key. Each
+    // gets its own rendezvous and its own session, so nothing downstream has to
+    // work out which repository a message was about.
+    const wanted = new Map<string, WantedLink>()
     for (const fact of [...this.#projects.values()].sort((a, b) => a.projectId.localeCompare(b.projectId))) {
-      if (!fact.relay || fact.disabledReason !== null) continue
+      if (!fact.relay || fact.disabledReason !== null || fact.projectKey === undefined) continue
       for (const key of fact.rosterKeys) {
         if (key === identity.publicKey) continue
-        if (wanted.has(key)) continue
-        wanted.set(key, { handle: this.#handleFor(key) ?? key.slice(0, 8), relayUrl: fact.relay.url })
+        wanted.set(linkIdFor(key, fact.projectKey), {
+          publicKey: key,
+          projectKey: fact.projectKey,
+          handle: this.#handleFor(key) ?? key.slice(0, 8),
+          relayUrl: fact.relay.url
+        })
       }
     }
     this.#handle = this.#handleFor(identity.publicKey) ?? null
 
-    for (const [key, record] of [...this.#links]) {
-      const want = wanted.get(key)
+    for (const [linkId, record] of [...this.#links]) {
+      const want = wanted.get(linkId)
       // A relay that moved is a different link, not the same one reconnecting.
       if (want && want.relayUrl === record.relayUrl) continue
       record.link.stop()
-      this.#links.delete(key)
-      this.#peerByConnection.delete(connectionIdFor(key))
-      this.#heard.delete(key)
+      this.#links.delete(linkId)
+      this.#peerByConnection.delete(linkId)
+      this.#heard.delete(linkId)
     }
 
     if (wanted.size > 0) this.#privateKey ??= await loadStaticPrivateKey(this.#options.dataDir)
 
-    for (const [key, want] of wanted) {
-      if (this.#links.has(key)) continue
-      this.#open(key, want.handle, want.relayUrl)
+    for (const [linkId, want] of wanted) {
+      if (this.#links.has(linkId)) continue
+      this.#open(linkId, want)
     }
 
     this.#options.onChange()
@@ -217,7 +228,9 @@ export class PeerService {
 
     const links = facts.rosterKeys
       .filter((key) => key !== this.#identityKey)
-      .map((key) => this.#links.get(key)?.status)
+      .map((key) =>
+        facts.projectKey === undefined ? undefined : this.#links.get(linkIdFor(key, facts.projectKey))?.status
+      )
       .filter((status): status is PeerLinkStatus => status !== undefined)
 
     return {
@@ -237,11 +250,15 @@ export class PeerService {
     const now = this.#scheduler.now()
     const worktrees: TeammateWorktree[] = []
     if (facts.projectKey !== undefined) {
-      for (const [publicKey, entry] of this.#heard) {
-        // The other half of the roster check. A project key is a hash of a
-        // remote, so anybody who knows the repository exists can compute one;
-        // being on the roster is what makes claiming it mean something.
-        if (!facts.rosterKeys.includes(publicKey)) continue
+      // Reached through this project's own links, so a snapshot heard on
+      // another repository's session cannot be read out here however it is
+      // shaped. Being on the roster is still required: it is what makes a
+      // project key — which is only a hash of a remote, computable by anybody
+      // who knows the repository exists — mean something when it is claimed.
+      for (const publicKey of facts.rosterKeys) {
+        if (publicKey === this.#identityKey) continue
+        const entry = this.#heard.get(linkIdFor(publicKey, facts.projectKey))
+        if (!entry) continue
         const project = entry.presence.projects.find((candidate) => candidate.projectKey === facts.projectKey)
         if (!project) continue
         const handle = this.#handleFor(publicKey) ?? entry.presence.handle ?? publicKey.slice(0, 8)
@@ -270,11 +287,15 @@ export class PeerService {
    * by anything they said in a message.
    */
   peerPresence(connectionId: string): PeerPresence {
-    const publicKey = this.#peerByConnection.get(connectionId)
-    if (publicKey === undefined) throw notFound('this connection is not a peer link')
+    const peer = this.#peerByConnection.get(connectionId)
+    if (peer === undefined) throw notFound('this connection is not a peer link')
+    // Narrowed to the one project this session is for, on top of the roster
+    // filter. The session already cannot be about anything else — the project
+    // is in its rendezvous and in its Noise prologue — and this is the same
+    // fact enforced where the data is chosen rather than only where it met.
     return presenceFor(
-      { source: this.#presenceSource(), now: this.#scheduler.now },
-      publicKey,
+      { source: this.#presenceSource(peer.projectKey), now: this.#scheduler.now },
+      peer.publicKey,
       this.#handle,
       this.#revision
     )
@@ -311,56 +332,64 @@ export class PeerService {
     }, PRESENCE_COALESCE_MS)
   }
 
-  #open(publicKey: string, handle: string, relayUrl: string): void {
+  #open(linkId: string, want: WantedLink): void {
     const privateKey = this.#privateKey
     const dispatch = this.#dispatch
     if (!privateKey || !dispatch) return
 
-    const connectionId = connectionIdFor(publicKey)
     // Before the link can dial, so the first `peer.presence` it answers already
-    // knows whose it is.
-    this.#peerByConnection.set(connectionId, publicKey)
+    // knows whose it is and which project it is for. The link id is also the
+    // connection id, so there is one name for one session rather than two that
+    // can stop agreeing.
+    this.#peerByConnection.set(linkId, { publicKey: want.publicKey, projectKey: want.projectKey })
 
     const link = createPeerLink({
-      remotePublicKey: publicKey,
-      handle,
+      remotePublicKey: want.publicKey,
+      handle: want.handle,
+      projectKey: want.projectKey,
       staticPrivateKey: privateKey,
-      relayUrl,
-      connectionId,
+      relayUrl: want.relayUrl,
+      connectionId: linkId,
       dial: this.#dial,
       dispatch,
       subscriptions: this.#options.subscriptions,
       scheduler: this.#scheduler,
       onStatusChange: (status) => {
-        const record = this.#links.get(publicKey)
+        const record = this.#links.get(linkId)
         if (record) record.status = status
-        if (status.phase !== 'connected') this.#heard.delete(publicKey)
+        // Anything but `connected` means nothing has confirmed on this session,
+        // so what it last showed is no longer something this app will render as
+        // live. Milestone E is what gives it a stale life instead.
+        if (status.phase !== 'connected') this.#heard.delete(linkId)
         this.#options.onChange()
       },
-      onPresence: (presence) => this.#record(publicKey, presence),
+      onPresence: (presence) => this.#record(linkId, want.publicKey, presence),
       onError: this.#options.onError
     })
 
-    this.#links.set(publicKey, { link, status: link.status, relayUrl })
+    this.#links.set(linkId, { link, status: link.status, relayUrl: want.relayUrl })
     link.start()
   }
 
-  /** Drops a snapshot that is behind the one already held for this teammate. */
-  #record(publicKey: string, presence: PeerPresence): void {
+  /** Drops a snapshot that is behind the one already held for this link. */
+  #record(linkId: string, publicKey: string, presence: PeerPresence): void {
     if (!isPresence(presence)) return
-    if (!isNewerPresence(this.#heard.get(publicKey)?.presence, presence)) return
-    this.#heard.set(publicKey, { presence, heardAt: this.#scheduler.now() })
+    if (!isNewerPresence(this.#heard.get(linkId)?.presence, presence)) return
+    this.#heard.set(linkId, { publicKey, presence, heardAt: this.#scheduler.now() })
     this.#options.onChange()
   }
 
-  #presenceSource(): PresenceSource {
+  /** `onlyProjectKey` narrows the source to the one repository a session is for. */
+  #presenceSource(onlyProjectKey?: string): PresenceSource {
     return {
       projects: (): PresenceProject[] =>
-        [...this.#projects.values()].map((fact) => ({
-          projectId: fact.projectId,
-          projectKey: fact.disabledReason === null ? fact.projectKey : undefined,
-          rosterKeys: fact.rosterKeys
-        })),
+        [...this.#projects.values()]
+          .filter((fact) => onlyProjectKey === undefined || fact.projectKey === onlyProjectKey)
+          .map((fact) => ({
+            projectId: fact.projectId,
+            projectKey: fact.disabledReason === null ? fact.projectKey : undefined,
+            rosterKeys: fact.rosterKeys
+          })),
       worktrees: (projectId) => this.#options.workspace.listWorktrees(projectId),
       terminals: (worktreeId) => this.#options.workspace.listTerminals(worktreeId)
     }
@@ -403,9 +432,25 @@ export class PeerService {
   }
 }
 
-/** Stable per teammate, so a rebuilt link reuses its subscription scope. */
-function connectionIdFor(publicKey: string): string {
-  return `peer_${publicKey.slice(0, 12)}`
+/**
+ * One teammate in one repository.
+ *
+ * Keyed by the project *key* rather than the local project id, because the key
+ * is what the rendezvous is derived from. Two local clones of one repository
+ * added as two projects would otherwise open two links on one rendezvous and
+ * displace each other for as long as the app ran; sharing the link is both
+ * correct and what the relay's own "a newer connection claimed this rendezvous"
+ * rule would force anyway.
+ */
+export function linkIdFor(publicKey: string, projectKey: string): string {
+  return `peer_${publicKey.slice(0, 12)}_${projectKey.slice(0, 16)}`
+}
+
+type WantedLink = {
+  publicKey: string
+  projectKey: string
+  handle: string
+  relayUrl: string
 }
 
 /**

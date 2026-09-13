@@ -14,12 +14,30 @@
 // because a URL reaches proxy logs and error reports and the token is a
 // capability, while its hash names the same pairing without conferring one.
 //
-// One decision the README leaves open: it writes `info = epoch` without saying
+// TWO DELIBERATE DIVERGENCES FROM THAT README, both in `info`.
+//
+// **The project is in it.** The README's scheme is pairwise — one rendezvous
+// per pair of teammates, for all time, across every repository they share. That
+// is one fewer connection per pair, and it buys a problem: two people who share
+// three repositories have one session, of one indistinguishable shape, and
+// nothing in the Noise transcript says which project any of it is for. Every
+// per-project rule then has to be re-derived by hand at every point of use, and
+// the day one of them is forgotten there is no second line of defence. Putting
+// the project key in `info` makes a session *be* for a project, which is what
+// the per-project roster checks were already pretending. It costs a connection
+// per pair per shared repository — twenty-one instead of seven for a team of
+// eight sharing three — and buys unlinkability between a pair's repositories as
+// well: the relay cannot tell that two rendezvous are the same two people.
+//
+// **The encoding is pinned.** The README writes `info = epoch` without saying
 // how the number is encoded. Nothing in the relay depends on the answer — to it
-// a rendezvous is 32 opaque bytes — but the two peers have to agree exactly, so
-// it is pinned here as the epoch's decimal digits in ASCII and covered by a
-// test with a fixed vector, so a change to it fails loudly rather than quietly
-// stranding every peer on the spelling they had before.
+// a rendezvous is 32 opaque bytes — but two peers who disagree never meet and
+// are never told why. So `info` is a versioned, unambiguous, structured string,
+// covered by a test with a fixed vector, and a change to it fails loudly rather
+// than quietly stranding every peer on the spelling they had before.
+//
+// The relay needs no change for either: "a team that wanted a different scheme,
+// or a fixed token per pair, would not have to change a line of it."
 
 import { createHash, createPrivateKey, createPublicKey, diffieHellman, hkdfSync, type KeyObject } from 'node:crypto'
 
@@ -28,6 +46,10 @@ export const RENDEZVOUS_SALT = 'teamree/relay/rendezvous/v1'
 
 /** Tokens rotate hourly, so no stable identifier accumulates against a pair. */
 export const EPOCH_SECONDS = 3600
+
+/** Version tags. Changing what goes into either derivation means changing these. */
+export const RENDEZVOUS_VERSION = 'teamree/rendezvous/v2'
+export const PROLOGUE_VERSION = 'teamree/peer/prologue/v2'
 
 const TOKEN_BYTES = 32
 
@@ -60,10 +82,53 @@ export function sharedSecret(privateKey: Uint8Array, publicKeyBase64: string): U
   return new Uint8Array(shared)
 }
 
-/** 64 lowercase hex characters, which is the only shape the relay accepts. */
-export function rendezvousToken(shared: Uint8Array, epoch: number): string {
-  const derived = hkdfSync('sha256', shared, RENDEZVOUS_SALT, String(epoch), TOKEN_BYTES)
+/**
+ * The rendezvous for one pair, in one project, in one hour.
+ *
+ * `info` is versioned and structured rather than a bare number: the project key
+ * is a fixed 64 hex characters and the epoch is decimal digits, separated by
+ * newlines, so no two different inputs can produce the same string. The version
+ * tag is what makes a future change to any of that a loud failure instead of a
+ * silent one.
+ *
+ * 64 lowercase hex characters out, which is the only shape the relay accepts.
+ */
+export function rendezvousToken(shared: Uint8Array, projectKey: string, epoch: number): string {
+  const derived = hkdfSync('sha256', shared, RENDEZVOUS_SALT, rendezvousInfo(projectKey, epoch), TOKEN_BYTES)
   return Buffer.from(derived).toString('hex')
+}
+
+export function rendezvousInfo(projectKey: string, epoch: number): string {
+  if (!/^[0-9a-f]{64}$/.test(projectKey)) throw new Error('a project key is 32 bytes as 64 hex characters')
+  return `${RENDEZVOUS_VERSION}\n${projectKey}\n${epoch}`
+}
+
+/**
+ * Bound into the Noise transcript by both sides, and never optional.
+ *
+ * `IK` authenticates two static keys and says nothing about what they are
+ * talking about. The prologue is the only place a fact can be put that both
+ * sides must already agree on and that an attacker cannot influence, so the
+ * project and the rendezvous go in it: a transcript then answers "which project
+ * is this session for" rather than leaving every caller to re-derive it.
+ *
+ * Both peers necessarily hold the same token — the relay pairs connections that
+ * presented identical ones, and nothing else — so this can never be the reason
+ * a legitimate handshake fails.
+ */
+export function sessionPrologue(projectKey: string, token: string): Uint8Array {
+  return new Uint8Array(
+    createHash('sha256')
+      .update(`${PROLOGUE_VERSION}\n`)
+      .update(rendezvousInfoPrefix(projectKey))
+      .update(token, 'utf8')
+      .digest()
+  )
+}
+
+function rendezvousInfoPrefix(projectKey: string): string {
+  if (!/^[0-9a-f]{64}$/.test(projectKey)) throw new Error('a project key is 32 bytes as 64 hex characters')
+  return `${projectKey}\n`
 }
 
 /** What goes in the URL: the token's hash, which names the pairing without being it. */

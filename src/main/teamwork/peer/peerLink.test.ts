@@ -9,6 +9,7 @@ import {
   createManualScheduler,
   createPeerRuntime,
   fixedRemoteRunner,
+  remoteRunner,
   makeProjectDir,
   project,
   terminal,
@@ -17,7 +18,9 @@ import {
   type ManualScheduler,
   type PeerRuntime
 } from './peerTestSupport'
-import { isNewerPresence } from './peerService'
+import { isNewerPresence, linkIdFor } from './peerService'
+import { normaliseRemote, projectKeyFor } from './projectKey'
+import { HANDSHAKE_TIMEOUT_MS } from './peerLink'
 import { RelayCloseCode } from './relayConnection'
 import { epochAt, rendezvousId, rendezvousToken, sharedSecret } from './rendezvous'
 
@@ -162,15 +165,95 @@ describe('two peers over a relay', () => {
 
   it('tells a teammate nothing about a project they are not a member of', async () => {
     const pair = await pairOfRuntimes()
-    // A second repository Alice is in and Bob is not, on the same pairwise link.
+    // A second repository Alice is in and Bob is not. Under the README's
+    // pairwise scheme this would ride the same session as the shared one.
     const privateProject = await makeProjectDir([{ handle: 'alice', publicKey: pair.aliceKey }])
     pair.alice.workspace.projects.push(project('p_private', privateProject))
     pair.alice.workspace.worktrees.push(worktree('wt_secret', 'p_private', 'acquisition', 'feat/acq'))
     await connect(pair)
 
-    const snapshot = pair.alice.service.peerPresence(`peer_${pair.bobKey.slice(0, 12)}`)
+    // Refused twice over: the session is for one project because its rendezvous
+    // and its prologue say so, and the roster is checked again where the data
+    // is chosen.
+    const shared = projectKeyFor(normaliseRemote(ORIGIN)!)
+    const snapshot = pair.alice.service.peerPresence(linkIdFor(pair.bobKey, shared))
     expect(snapshot.projects).toHaveLength(1)
     expect(JSON.stringify(snapshot)).not.toContain('acquisition')
+
+    // And there is no session the private one could have arrived over: a link
+    // exists per repository, and Bob is on the roster of exactly one of them.
+    const secret = projectKeyFor('github.com/team/secret')
+    expect(() => pair.alice.service.peerPresence(linkIdFor(pair.bobKey, secret))).toThrow()
+  })
+
+  it('gives one teammate one session per shared repository, not one in total', async () => {
+    const relay = createFakeRelay()
+    const scheduler = createManualScheduler()
+    const aliceData = await makeProjectDir([])
+    const bobData = await makeProjectDir([])
+    const aliceKey = (await loadIdentity(aliceData)).publicKey
+    const bobKey = (await loadIdentity(bobData)).publicKey
+    const roster = [
+      { handle: 'alice', publicKey: aliceKey },
+      { handle: 'bob', publicKey: bobKey }
+    ]
+    // Two repositories the two of them both push to.
+    const first = await makeProjectDir(roster)
+    const second = await makeProjectDir(roster)
+
+    const alice = await createPeerRuntime({
+      dial: relay.dial,
+      scheduler,
+      env: { TEAMREE_RELAY_URL: RELAY_URL },
+      dataDir: aliceData,
+      runner: remoteRunner({ [first]: ORIGIN, [second]: 'git@github.com:team/other.git' }),
+      workspace: { projects: [project('p_one', first), project('p_two', second)], worktrees: [], terminals: [] }
+    })
+    await alice.service.start()
+    await scheduler.advance(0)
+
+    // Two links, one per repository, each parked on a rendezvous of its own.
+    expect(linkTo(alice, 'p_one', bobKey)?.phase).toBe('waiting')
+    expect(linkTo(alice, 'p_two', bobKey)?.phase).toBe('waiting')
+    // Two different rendezvous for one pair of people, so the relay cannot tell
+    // that the two conversations are the same two people.
+    expect(new Set(relay.greetings()).size).toBe(2)
+  })
+
+  it('shares one link between two local clones of one repository', async () => {
+    const relay = createFakeRelay()
+    const scheduler = createManualScheduler()
+    const aliceData = await makeProjectDir([])
+    const bobData = await makeProjectDir([])
+    const aliceKey = (await loadIdentity(aliceData)).publicKey
+    const bobKey = (await loadIdentity(bobData)).publicKey
+    const roster = [
+      { handle: 'alice', publicKey: aliceKey },
+      { handle: 'bob', publicKey: bobKey }
+    ]
+    const cloneA = await makeProjectDir(roster)
+    const cloneB = await makeProjectDir(roster)
+
+    const alice = await createPeerRuntime({
+      dial: relay.dial,
+      scheduler,
+      env: { TEAMREE_RELAY_URL: RELAY_URL },
+      dataDir: aliceData,
+      // The same repository, checked out twice and added twice, which is an
+      // ordinary thing to do.
+      runner: remoteRunner({ [cloneA]: ORIGIN, [cloneB]: ORIGIN }),
+      workspace: { projects: [project('p_a', cloneA), project('p_b', cloneB)], worktrees: [], terminals: [] }
+    })
+    await alice.service.start()
+    await scheduler.advance(0)
+
+    // One rendezvous, because the rendezvous is derived from the repository and
+    // not from the local project row. Two links here would present the same
+    // token and the relay would have them displace each other forever.
+    expect(new Set(relay.greetings()).size).toBe(1)
+    // Both projects still report it, because both of them really are it.
+    expect(linkTo(alice, 'p_a', bobKey)?.phase).toBe('waiting')
+    expect(linkTo(alice, 'p_b', bobKey)?.phase).toBe('waiting')
   })
 
   it('refuses a project key claimed by somebody not on that project’s roster', async () => {
@@ -300,6 +383,40 @@ describe('the failure paths', () => {
     expect(linkTo(pair.bob, 'p_bob', pair.aliceKey)?.phase).toBe('connected')
   })
 
+  it('does not call a link connected until something from the far end decrypts', async () => {
+    const pair = await pairOfRuntimes()
+    await pair.alice.service.start()
+    await pair.bob.service.start()
+
+    // The relay pairs them and the handshake runs, but nothing is delivered:
+    // every frame the two of them write is held. This is the state a replayer
+    // leaves a responder in — the handshake completed, and nobody is there.
+    pair.relay.holdContent()
+    await pair.scheduler.advance(0)
+
+    const stuck = linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase
+    expect(stuck).not.toBe('connected')
+
+    // Release them and the first authenticated frame confirms the keys.
+    pair.relay.releaseContent()
+    await pair.scheduler.advance(0)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+  })
+
+  it('gives up on a handshake that completed and then said nothing', async () => {
+    const pair = await pairOfRuntimes()
+    pair.relay.holdContent()
+    await pair.alice.service.start()
+    await pair.bob.service.start()
+    await pair.scheduler.advance(0)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
+
+    // A session nobody can speak on must not hold its slot for ever. The
+    // handshake deadline covers the unconfirmed window for exactly this.
+    await pair.scheduler.advance(HANDSHAKE_TIMEOUT_MS + 1_000)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
+  })
+
   it('re-registers under the next hour’s token when the epoch turns while it waits', async () => {
     const relay = createFakeRelay()
     const pair = await pairOfRuntimes({ relay })
@@ -343,9 +460,10 @@ describe('the rendezvous derivation', () => {
   it('derives the same token on both sides and a different one each hour', () => {
     const a = new Uint8Array(32).fill(7)
     const secret = sharedSecret(a, Buffer.from(new Uint8Array(32).fill(9)).toString('base64'))
+    const project = 'c'.repeat(64)
     const now = 1_700_000_000_000
-    expect(rendezvousToken(secret, epochAt(now))).not.toBe(rendezvousToken(secret, epochAt(now) + 1))
-    expect(rendezvousToken(secret, epochAt(now))).toBe(rendezvousToken(secret, epochAt(now)))
+    expect(rendezvousToken(secret, project, epochAt(now))).not.toBe(rendezvousToken(secret, project, epochAt(now) + 1))
+    expect(rendezvousToken(secret, project, epochAt(now))).toBe(rendezvousToken(secret, project, epochAt(now)))
   })
 
   it('agrees with the relay’s URL shape', () => {

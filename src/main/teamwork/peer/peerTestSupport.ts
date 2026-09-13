@@ -94,6 +94,13 @@ export type FakeRelay = {
   connections: () => number
   /** Every rendezvous token that has been presented, in order. */
   greetings: () => readonly string[]
+  /**
+   * Stops forwarding content while still pairing, which is the shape a peer is
+   * left in by a replayer: the handshake completes and nothing can ever be said
+   * over it.
+   */
+  holdContent: () => void
+  releaseContent: () => void
 }
 
 type FakePeer = {
@@ -122,7 +129,9 @@ export function createFakeRelay(): FakeRelay {
   const live = new Set<FakePeer>()
   const seen: string[] = []
   let paused = false
+  let holding = false
   let sessionSeq = 0
+  const held: (() => void)[] = []
 
   const unregister = (peer: FakePeer): void => {
     live.delete(peer)
@@ -190,9 +199,11 @@ export function createFakeRelay(): FakeRelay {
         })
       },
       deliver: (payload) => {
-        peer.sayTo(() => {
+        const hand = (): void => {
           if (peer.open) handlers.onBinary(payload)
-        })
+        }
+        if (holding) held.push(hand)
+        else peer.sayTo(hand)
       }
     }
 
@@ -257,7 +268,15 @@ export function createFakeRelay(): FakeRelay {
       paused = false
     },
     connections: () => live.size,
-    greetings: () => seen
+    greetings: () => seen,
+    holdContent: () => {
+      holding = true
+    },
+    releaseContent: () => {
+      holding = false
+      const queued = held.splice(0, held.length)
+      for (const hand of queued) queueMicrotask(hand)
+    }
   }
 }
 
@@ -295,6 +314,22 @@ export type PeerRuntimeOptions = {
   runner?: GitRunner
   /** Lets a test wait on a condition instead of on the clock. */
   onChange?: () => void
+}
+
+/** One origin per checkout, for tests about two repositories at once. */
+export function remoteRunner(byPath: Readonly<Record<string, string>>): GitRunner {
+  return {
+    binary: 'git',
+    run: () => Promise.reject(new Error('not used')),
+    tryRun: ({ args, cwd }) => {
+      const remote = byPath[cwd ?? '']
+      return Promise.resolve(
+        args.join(' ') === 'remote get-url origin' && remote !== undefined
+          ? { exitCode: 0, stdout: `${remote}\n`, stderr: '' }
+          : { exitCode: 1, stdout: '', stderr: '' }
+      )
+    }
+  }
 }
 
 /** Answers `git remote get-url origin` with one URL and refuses everything else. */
