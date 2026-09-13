@@ -31,7 +31,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadIdentity } from '../../src/main/teamwork/identity'
-import { linkIdFor } from '../../src/main/teamwork/peer/peerService'
+import { linkIdFor, UNAIMED_LOGGED_PER_BURST } from '../../src/main/teamwork/peer/peerService'
 import {
   createFakeRelay,
   createManualScheduler,
@@ -111,10 +111,18 @@ describe('what one teammate’s typing costs the owner’s main thread', () => {
 
     expect(alice.changes() - before).toBe(0)
 
-    // And the refusals are all still in the record, which is the half of this
-    // that must not be traded away for the quiet.
+    // And every one of the refusals is still accounted for, which is the half
+    // of this that must not be traded away for the quiet. Not a line each: a
+    // line each is how a flood rolls the owner's real entries off the end of a
+    // log that rotates at a size, so the first of a burst are filed as they are
+    // and the rest are counted into one entry. Filed plus counted is all 400.
     const log = await alice.service.writeLog({})
-    expect(log.writes.filter((write) => write.outcome === 'no-pane')).toHaveLength(400)
+    const refusals = log.writes.filter((write) => write.outcome === 'no-pane')
+    expect(refusals).toHaveLength(UNAIMED_LOGGED_PER_BURST + 1)
+    expect(refusals.at(-1)?.reason).toBe(
+      `${400 - UNAIMED_LOGGED_PER_BURST} further keystrokes from this link reached no pane of this project ` +
+        'and were counted rather than filed one by one'
+    )
   })
 
   it('ATTACK: varying the pane id does not buy a window refresh per keystroke either', async () => {
