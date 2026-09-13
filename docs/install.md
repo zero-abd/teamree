@@ -179,13 +179,19 @@ do the CLI can do — which is how a coding agent drives teamree. It runs under
 the app's own Electron binary in plain-Node mode, so an installed app needs no
 separate Node runtime.
 
-**On macOS it is a button.** The first time you open an installed build that
-has no `teamree` on PATH, the app offers this by itself — once, in a card in the
-corner that takes no focus and blocks nothing. Answering it either way is the
-end of it: teamree does not ask again, and declining is a real answer rather
-than a postponement. After that the sidebar offers **Put teamree on my PATH**
-while the command is not linked to this build, and the command palette finds it
-by name at any time.
+**On macOS it is a button.** The first time you open an installed build whose
+`teamree` command is not this app's — absent, or a link to another copy — the app
+offers this by itself, once, in a card in the corner that takes no focus and
+blocks nothing. Answering it either way is the end of it: teamree does not ask
+again, and declining is a real answer rather than a postponement. After that the
+sidebar offers **Put teamree on my PATH** while the command is not linked to this
+build, and the command palette finds it by name at any time.
+
+It stays quiet where a question would be useless: a link that already points
+here, a build with no CLI in it, a source checkout, and a regular file or a
+directory sitting at the destination — that last one is a thing to explain rather
+than an offer to make, and the sidebar still carries you to the panel that
+explains it.
 
 It says what it will do before you press anything: link
 `/usr/local/bin/teamree` to the CLI inside this app. That is where a Mac
@@ -213,8 +219,18 @@ Three things it will not do, each of them said rather than hidden:
 
 Running from a source checkout, nothing offers itself: a link into a checkout
 breaks the moment that checkout moves, and a question asked on every `npm run
-dev` is a question nobody reads. The sidebar button and the palette still work
-there, and so does the command below.
+dev` is a question nobody reads. The button and the command below do work
+there — but only once the CLI has been built:
+
+```sh
+npm run build:cli
+```
+
+`resources/cli/teamree` is a launcher, and what it launches is
+`out/cli/index.js`, which `npm run dev` does not build. Until that file exists
+the panel says so and offers no button: linking the launcher would leave a
+`teamree` on your PATH that exits with `Cannot find module`, and it would have
+spent an administrator password to do it.
 
 The same two things from a terminal, with the app running:
 
@@ -225,15 +241,20 @@ teamree cli install
 
 ### Doing it yourself
 
-The button is a convenience; the command it runs is no secret, and on Windows
-and Linux it is all there is. Nothing published on those platforms today builds
-the app, so this is what to run against a build from source.
+The button is a convenience; what it does is no secret, and on Windows and Linux
+it is all there is. Nothing published on those platforms today builds the app, so
+this is what to run against a build from source.
 
 **macOS**
 
 ```sh
-sudo ln -sf "/Applications/teamree.app/Contents/Resources/cli/teamree" /usr/local/bin/teamree
+sudo ln -sfn "/Applications/teamree.app/Contents/Resources/cli/teamree" /usr/local/bin/teamree
 ```
+
+That is the button's own command, minus the `mkdir -p` it runs first for a Mac
+that has never had anything installed into `/usr/local/bin`. `-n` so that a
+destination which is itself a link to a directory is replaced rather than written
+inside.
 
 **Linux**, with the `.deb` installed:
 

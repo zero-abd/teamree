@@ -102,11 +102,11 @@ repository.
 **[`docs/trying-teamwork.md`](docs/trying-teamwork.md) is the thing to follow**:
 two people on two Macs, start to finish — the relay, both keys committed and
 pushed, and each other's worktrees in the sidebar — with a troubleshooting
-section for what actually goes wrong. Identity, the roster, the relay and
-presence are built; watching a teammate's pane and typing into one are the next
-two milestones, and the runbook is exact about which is which.
-`docs/teamwork.md` is why it is built this way, and `relay/README.md` is how to
-stand a relay up.
+section for what actually goes wrong. All five milestones have landed — identity,
+the relay and presence, watching a teammate's pane, typing into one, and
+staleness — and the runbook is exact about the one thing still untested, which is
+two Macs in two places. `docs/teamwork.md` is why it is built this way, and
+`relay/README.md` is how to stand a relay up.
 
 ## Packaged builds
 
@@ -172,10 +172,12 @@ in plain-Node mode, so an installed app needs no separate Node runtime. It finds
 the running app the same way it always does, through the discovery file the
 runtime writes, so the CLI and the GUI stay in step.
 
-Putting it on `PATH` is one command per platform, and they live in
-[`docs/install.md`](docs/install.md) with the rest of what an installed copy
-needs — including the reason a `.deb` install already has a `teamree` on `PATH`
-that is the application rather than the CLI.
+On macOS, putting it on `PATH` is a button: an installed build offers it once on
+first run, and the sidebar and the command palette both carry **Put teamree on my
+PATH** until the link is made. Everywhere else it is one command per platform.
+Both live in [`docs/install.md`](docs/install.md) with the rest of what an
+installed copy needs — including the reason a `.deb` install already has a
+`teamree` on `PATH` that is the application rather than the CLI.
 
 With the app running:
 

@@ -178,6 +178,22 @@ is there when they are not is the same error as a vanishing row, pointed the
 reassuring way, on the feature whose whole safety argument is that nothing can
 happen invisibly.
 
+**The shut lid may be this one.** A deadline measured on the wall clock cannot
+tell a teammate who went quiet from a machine that suspended with the lid down,
+which on a Mac is the ordinary case: the timers stop, the clock jumps by the
+whole sleep, and the deadline fires on waking with five minutes of silence to
+account for — the same wrong sentence as a vanishing row, pointed at whoever was
+on the other end. So every deadline here is measured against a monotonic clock
+as well as the wall clock, and a one-shot that comes back from a window this
+process did not run through concludes nothing about anybody: the link says **this
+machine was asleep, so nothing is known about your teammate until this link is
+back**, and goes and re-establishes it. The rows go stale and dated in the
+meantime, exactly as they do for a teammate who really did leave, because
+"unknown" is what both of them are. Where there is an Electron to ask,
+`powerMonitor`'s `resume` starts the same thing at once instead of at the next
+deadline; there is no Electron in the acceptance suite or the CLI, which is why
+it is an accelerator and never the mechanism.
+
 ## Risks
 
 Recorded now, so none of them is a surprise later.

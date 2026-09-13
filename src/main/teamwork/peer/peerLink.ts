@@ -42,6 +42,7 @@ import type { MethodName, ParamsOf, ResultOf } from '../../../shared/methods'
 import { createInitiatorSession, createResponderSession, isPeerError, type PeerSession } from '../../../shared/peer'
 import {
   createPeerTransport,
+  outputBytes,
   type RemoteReadVerdict,
   type Answered,
   type PeerTransport,
@@ -49,6 +50,7 @@ import {
   type RemoteWriteVerdict
 } from '../../runtime/peerTransport'
 import type { Dispatcher } from '../../runtime/dispatcher'
+import { startTimedWindow, type TimedWindow } from '../../runtime/elapsed'
 import type { SubscriptionHub } from '../../runtime/subscriptionHub'
 import { openRelayConnection, reconnectPolicyFor, type RelayClosure, type RelayConnection } from './relayConnection'
 import type { RelayDialer } from './relaySocket'
@@ -56,6 +58,15 @@ import { epochAt, epochEndsAt, rendezvousToken, rendezvousUrl, sessionPrologue, 
 
 /** One of the teammate's stream events, and where it sat in the received order. */
 type HeldEvent = { event: unknown; sequence: number }
+
+/**
+ * One stream's frames waiting for whoever asked for them, and what did not fit.
+ *
+ * The bound below is a bound and has to stay one, so a hold that runs long
+ * enough throws output away. `lost` is what that cost, in bytes, and `lostAt` is
+ * the frame it started at — the two things an `elided` is made of.
+ */
+type Unrouted = { events: HeldEvent[]; lost: number; lostAt: number }
 
 /** A quiet pair still has to say something, or the relay's idle deadline ends it. */
 export const KEEPALIVE_MS = 120_000
@@ -87,6 +98,19 @@ export const SILENCE_TIMEOUT_MS = KEEPALIVE_MS * 2.5
  * went on sending and nothing came back.
  */
 export const SILENT_PEER_DETAIL = 'your teammate’s machine stopped answering'
+
+/**
+ * What the same deadline may say when this machine is the one that was away.
+ *
+ * A lid closed here suspends the timers and steps the wall clock, so the
+ * deadline fires on wake having measured a silence nobody on the other end
+ * caused — the sentence above, pointed at the wrong machine. `elapsed.ts`
+ * tells the two apart, and this is what is left when it does: not that the
+ * teammate is fine, which this side cannot know either, but that whatever was
+ * known about them expired while nobody was listening. The link re-establishes
+ * and the rows it was showing go stale and dated in the meantime.
+ */
+export const WOKE_DETAIL = 'this machine was asleep, so nothing is known about your teammate until this link is back'
 
 /** Past this a paired connection that has not finished handshaking is not going to. */
 export const HANDSHAKE_TIMEOUT_MS = 15_000
@@ -164,6 +188,15 @@ export const WAITING_TOO_LONG_DETAIL =
  * writes frames behind the answer rather than after it. The window is one round
  * trip, so these are generous; they are bounds rather than a capacity, and a
  * stream nobody ever claims cannot grow without limit.
+ *
+ * Reaching the event bound throws output away, and that is said rather than
+ * done quietly: the frames that survive are handed over behind an `elided`
+ * carrying what went, the same event the owner's own pacer writes when its
+ * buffer overruns, because it is the same fact — output the pane printed and
+ * this side will never show. A relay that stalls and then hands over a fat
+ * batch is exactly the shape that reaches this, and it reaches it in one
+ * synchronous run of frames, before the continuation that would have attached
+ * the route has had a turn.
  */
 export const MAX_UNROUTED_STREAMS = 16
 export const MAX_UNROUTED_EVENTS = 256
@@ -180,6 +213,15 @@ export type LinkScheduler = {
   setTimer: (run: () => void, delayMs: number) => () => void
   /** Jitter, so a relay restarting does not get the whole team back at once. */
   random?: () => number
+  /**
+   * A clock this machine going to sleep cannot move. Defaults to
+   * `performance.now()`.
+   *
+   * Every deadline that could end in a sentence about somebody else's machine
+   * is measured against this, and the disagreement between it and `now` is how
+   * a slept machine is told from a silent teammate. See `elapsed.ts`.
+   */
+  monotonicNow?: () => number
 }
 
 export type PeerLinkOptions = {
@@ -247,6 +289,16 @@ export type PeerLink = {
   /** Stops for good: no reconnect, no timers, no socket. */
   stop: () => void
   /**
+   * This machine was asleep: whatever was believed about the teammate expired
+   * while nobody was listening, so believe nothing and go and find out.
+   *
+   * Called by the link itself when a deadline comes back from a window this
+   * process did not run through, and by the service when the operating system
+   * says the machine resumed. Both mean the same thing, and doing it twice for
+   * one wake costs nothing.
+   */
+  wake: () => void
+  /**
    * Asks the teammate for something, from the same catalogue.
    *
    * Refused unless the session is confirmed, which is the rule this whole file
@@ -313,6 +365,21 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
    * ruled out the clock and the relay file. Cleared by somebody arriving.
    */
   let heardThenSilent = false
+  /**
+   * Whether this machine has slept since it last confirmed anybody.
+   *
+   * Cleared by confirming, not by connecting: until a frame from the teammate
+   * decrypts again, the truthful thing to say about them is that this side was
+   * not there to hear.
+   */
+  let sleptWithoutAnswer = false
+  /** A wake already has a reconnect coming; a second signal for it is not two. */
+  let wakePending = false
+  /**
+   * Which attempt owns the socket. Events from an abandoned one are not this
+   * link's business — waking abandons a socket whose close is still in flight.
+   */
+  let generation = 0
   /** Scoped to one session: has anything from the far end ever decrypted? */
   let confirmed = false
   /** When that happened, so a session can be asked how long it lasted. */
@@ -320,7 +387,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   /** Streams this side opened on the teammate, by subscription id. */
   const routes = new Map<string, (event: unknown, sequence: number) => void>()
   /** Events for a subscription whose answer has not landed yet, in order. */
-  const unrouted = new Map<string, HeldEvent[]>()
+  const unrouted = new Map<string, Unrouted>()
   let cancelPresenceRoute: (() => void) | undefined
   let connection: RelayConnection | undefined
   let session: PeerSession | undefined
@@ -330,6 +397,8 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   let cancelSilenceDeadline: (() => void) | undefined
   let cancelHandshakeDeadline: (() => void) | undefined
   let cancelEpochWatch: (() => void) | undefined
+  /** The most recently armed deadline, kept so a closure can be asked about it. */
+  let outstanding: TimedWindow | undefined
 
   const snapshot = (): PeerLinkStatus => {
     const status: PeerLinkStatus = {
@@ -361,7 +430,37 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
    */
   const waitingDetail = (): string => {
     if (heardThenSilent) return SILENT_PEER_DETAIL
-    return rolloversWaiting >= WAITING_EPOCHS_BEFORE_DIAGNOSIS ? WAITING_TOO_LONG_DETAIL : WAITING_DETAIL
+    if (rolloversWaiting >= WAITING_EPOCHS_BEFORE_DIAGNOSIS) return WAITING_TOO_LONG_DETAIL
+    // Under the two-rotation diagnosis, because rotations are only counted
+    // while this machine is awake to wait through them, and above the ordinary
+    // wait, because "nobody has answered yet" omits the part this side did.
+    if (sleptWithoutAnswer) return WOKE_DETAIL
+    return WAITING_DETAIL
+  }
+
+  /**
+   * A one-shot that knows whether this process ran through its own wait.
+   *
+   * Every deadline that could end in a sentence about the teammate is armed
+   * through here, so the answer is available both to the deadline itself and to
+   * whatever else has to interpret an event that arrived alongside it — a
+   * socket dying on wake, most of all, which is a lid closing here and not a
+   * teammate leaving.
+   */
+  const setDeadline = (delayMs: number, run: (interrupted: boolean) => void): (() => void) => {
+    const window = startTimedWindow(options.scheduler, delayMs)
+    outstanding = window
+    return options.scheduler.setTimer(
+      () => {
+        // A window that has had its answer is not evidence any more: left
+        // standing, it would go on ageing past the wait it was armed for and
+        // eventually look like a sleep to anything that asked it later. `run`
+        // arms the next one.
+        if (outstanding === window) outstanding = undefined
+        run(window.wasInterrupted())
+      },
+      Math.max(1, delayMs)
+    )
   }
 
   const clearTimers = (): void => {
@@ -370,6 +469,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     cancelSilenceDeadline?.()
     cancelHandshakeDeadline?.()
     cancelEpochWatch?.()
+    outstanding = undefined
     cancelTimer = undefined
     cancelKeepalive = undefined
     cancelSilenceDeadline = undefined
@@ -419,7 +519,45 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     }, delay)
   }
 
+  /**
+   * This machine came back from somewhere it was not listening.
+   *
+   * Everything a link believes is a claim about the recent past, and a sleep
+   * ends the recency of all of it at once: the session's keys are as old as the
+   * sleep, the socket is probably a corpse the TCP stack has not noticed, and
+   * the last frame that decrypted arrived before any of it. So the verdict is
+   * not "silent" and not "fine" — it is withdrawn, and the link goes and earns
+   * a new one.
+   */
+  const wake = (): void => {
+    if (!running || wakePending) return
+    wakePending = true
+    sleptWithoutAnswer = true
+    // Whatever the deadlines concluded, they were not watching the teammate.
+    heardThenSilent = false
+    silentThisAttempt = false
+    // Nor were the rotations waited through: nobody was here to wait.
+    rolloversWaiting = 0
+    // The socket is abandoned rather than closed and waited on: its close frame
+    // may never come, and if it does it belongs to an attempt that is over.
+    generation += 1
+    const abandoned = connection
+    connection = undefined
+    teardown('this machine was asleep')
+    abandoned?.close(1000, '')
+    moveTo('connecting', WOKE_DETAIL)
+    scheduleRetry('immediate')
+  }
+
   const onClosed = (closure: RelayClosure): void => {
+    // A socket does not survive a suspended machine, and the close that lands
+    // on waking is this machine's sleep arriving as news about somebody else's.
+    // Asked before anything is concluded, because every conclusion below is a
+    // sentence about the teammate.
+    if (outstanding?.wasInterrupted() === true) {
+      wake()
+      return
+    }
     const wasConnected = confirmed
     const wasRefused = refusedThisAttempt
     const wasRollover = rolledOverThisAttempt
@@ -490,15 +628,21 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
           isAuthorisedPeer: (candidate) => Buffer.from(candidate).toString('base64') === options.remotePublicKey
         })
 
-    cancelHandshakeDeadline = options.scheduler.setTimer(() => {
+    cancelHandshakeDeadline = setDeadline(HANDSHAKE_TIMEOUT_MS, (interrupted) => {
       cancelHandshakeDeadline = undefined
+      // A handshake this machine slept through was never given its fifteen
+      // seconds, and the session it belongs to is as stale as the sleep.
+      if (interrupted) {
+        wake()
+        return
+      }
       // Covers the unconfirmed window too: a replayer completes the handshake
       // and then, having no keys, can never say anything. This is what ends
       // that session rather than leaving it holding a slot forever.
       if (confirmed) return
       // Says nothing to the peer, for the same reason a rejection says nothing.
       dropSilently()
-    }, HANDSHAKE_TIMEOUT_MS)
+    })
 
     if (initiator) {
       try {
@@ -521,24 +665,29 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
    * point of the deadline is that it is a number somebody can reason about.
    */
   const armSilenceDeadline = (delayMs: number): void => {
-    cancelSilenceDeadline = options.scheduler.setTimer(
-      () => {
-        cancelSilenceDeadline = undefined
-        const active = transport
-        if (!active) return
-        const quietFor = options.scheduler.now() - active.lastDecryptedAt
-        if (quietFor < SILENCE_TIMEOUT_MS) {
-          armSilenceDeadline(SILENCE_TIMEOUT_MS - quietFor)
-          return
-        }
-        silentThisAttempt = true
-        heardThenSilent = true
-        // The same silence a rejection gets, and for a plainer reason: there is
-        // nobody on the far end to tell.
-        connection?.close(1000, '')
-      },
-      Math.max(1, delayMs)
-    )
+    cancelSilenceDeadline = setDeadline(delayMs, (interrupted) => {
+      cancelSilenceDeadline = undefined
+      const active = transport
+      if (!active) return
+      // A deadline that returns from a window this process did not run through
+      // has measured this machine's sleep, not the teammate's silence. Blaming
+      // them for it would be this feature's own sentence pointed at the wrong
+      // end of the link.
+      if (interrupted) {
+        wake()
+        return
+      }
+      const quietFor = active.quietForMs
+      if (quietFor < SILENCE_TIMEOUT_MS) {
+        armSilenceDeadline(SILENCE_TIMEOUT_MS - quietFor)
+        return
+      }
+      silentThisAttempt = true
+      heardThenSilent = true
+      // The same silence a rejection gets, and for a plainer reason: there is
+      // nobody on the far end to tell.
+      connection?.close(1000, '')
+    })
   }
 
   const rejectHandshake = (local: string): void => {
@@ -578,11 +727,21 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     let held = unrouted.get(stream)
     if (!held) {
       if (unrouted.size >= MAX_UNROUTED_STREAMS) return
-      held = []
+      held = { events: [], lost: 0, lostAt: 0 }
       unrouted.set(stream, held)
     }
-    if (held.length >= MAX_UNROUTED_EVENTS) held.shift()
-    held.push({ event, sequence })
+    if (held.events.length >= MAX_UNROUTED_EVENTS) {
+      const dropped = held.events.shift()
+      if (dropped !== undefined) {
+        // The oldest, because the newest output is the output somebody is
+        // waiting to see — the same trade the owner's pacer makes, and counted
+        // in the same units so the two holes read as one number when they land
+        // in the same window.
+        if (held.lost === 0) held.lostAt = dropped.sequence
+        held.lost += outputBytes(dropped.event)
+      }
+    }
+    held.events.push({ event, sequence })
   }
 
   /** Both public call shapes, and the one refusal they share. */
@@ -603,7 +762,12 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // look later than it was.
     const held = unrouted.get(subscription)
     unrouted.delete(subscription)
-    for (const { event, sequence } of held ?? []) onEvent(event, sequence)
+    // In front of what outlived it, because that is where the hole is: what went
+    // was in front of everything still here. It carries the sequence of the
+    // first frame dropped, so a reader joining by frame order places the hole
+    // where it happened rather than at the boundary it happens to be read at.
+    if (held !== undefined && held.lost > 0) onEvent({ type: 'elided', bytes: held.lost }, held.lostAt)
+    for (const { event, sequence } of held?.events ?? []) onEvent(event, sequence)
     return () => {
       routes.delete(subscription)
     }
@@ -634,6 +798,9 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
 
     confirmed = true
     confirmedAt = options.scheduler.now()
+    // Somebody is there now, which is the only thing that retires what a sleep
+    // left unknown.
+    sleptWithoutAnswer = false
     // Now, and not at `establish`: the deadline's job is the unconfirmed window,
     // and this is the moment that window closes.
     cancelHandshakeDeadline?.()
@@ -693,7 +860,16 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // Deliberately NOT `connected` yet, and deliberately not a new phase the
     // user reads: from where they sit this is still connecting, because nothing
     // has yet shown that anyone is there.
-    cancelKeepalive = repeat(options.scheduler, KEEPALIVE_MS, () => transport?.keepalive())
+    cancelKeepalive = repeat(setDeadline, KEEPALIVE_MS, (interrupted) => {
+      // The most frequent deadline on a healthy link, so it is the one that
+      // notices a sleep soonest — a keepalive sent into an hour-old socket
+      // proves nothing to anybody.
+      if (interrupted) {
+        wake()
+        return
+      }
+      transport?.keepalive()
+    })
     // The other half of that keepalive, and the half neither relay host
     // supplies: sending one costs nothing and proves nothing, so this is what
     // requires one to come back.
@@ -706,12 +882,19 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   const connect = (): void => {
     if (!running) return
     attempts += 1
+    generation += 1
+    const mine = generation
+    /** Whether this attempt still owns the link. See `generation`. */
+    const stale = (): boolean => mine !== generation
     refusedThisAttempt = false
     rolledOverThisAttempt = false
     silentThisAttempt = false
+    wakePending = false
     confirmed = false
     confirmedAt = undefined
-    moveTo('connecting')
+    // Carried into the reconnect, because it is still true until somebody
+    // answers: this machine slept and nothing has been heard since.
+    moveTo('connecting', sleptWithoutAnswer ? WOKE_DETAIL : undefined)
 
     const epoch = epochAt(options.scheduler.now())
     const token = rendezvousToken(secret, options.projectKey, epoch)
@@ -722,6 +905,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       dial: options.dial,
       events: {
         onWaiting: () => {
+          if (stale()) return
           moveTo('waiting', waitingDetail())
           // A peer still parked when the hour turns re-registers under the new
           // token, which is what `relay/README.md` says a client does. Two
@@ -729,20 +913,29 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
           // lagging one crosses it; teamree does not paper over a wrong clock,
           // and pretending otherwise would mean guessing at neighbouring epochs
           // and pairing with whoever answered.
-          cancelEpochWatch = options.scheduler.setTimer(
-            () => {
+          cancelEpochWatch = setDeadline(
+            Math.max(1, epochEndsAt(options.scheduler.now()) - options.scheduler.now()),
+            (interrupted) => {
               cancelEpochWatch = undefined
+              // A rotation is only waited through by a machine that was awake
+              // for it, and the two-rotation diagnosis sends somebody to check
+              // their clock — which a slept machine would deserve and a
+              // teammate would not.
+              if (interrupted) {
+                wake()
+                return
+              }
               rolledOverThisAttempt = true
               // Counted here rather than where the next one is dialled: this is
               // the only place that knows a whole rotation was spent parked on
               // the relay with nobody arriving.
               rolloversWaiting += 1
               connection?.close(1000, '')
-            },
-            Math.max(1, epochEndsAt(options.scheduler.now()) - options.scheduler.now())
+            }
           )
         },
         onPaired: ({ initiator }) => {
+          if (stale()) return
           cancelEpochWatch?.()
           cancelEpochWatch = undefined
           // Somebody answered here, so whatever the wait was, it was not this.
@@ -751,6 +944,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
           runHandshake(initiator, token)
         },
         onBinary: (payload) => {
+          if (stale()) return
           if (session && session.stage === 'handshake') {
             const outcome = onHandshakeMessage(payload)
             if (outcome.kind === 'rejected') rejectHandshake(outcome.local)
@@ -759,7 +953,12 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
           }
           transport?.receive(payload)
         },
-        onClosed
+        onClosed: (closure) => {
+          // A socket the link walked away from can still deliver its close, and
+          // its reason is about an attempt that is already over.
+          if (stale()) return
+          onClosed(closure)
+        }
       }
     })
   }
@@ -779,6 +978,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       running = false
       teardown('teamwork stopped')
     },
+    wake,
     call: <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> =>
       ask(method, params).then((answer) => answer.result),
     callInOrder: ask,
@@ -790,15 +990,19 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
  * A repeating timer built from the one-shot seam, so a scheduler only has to
  * implement one thing and a test only has to drive one thing.
  */
-function repeat(scheduler: LinkScheduler, everyMs: number, run: () => void): () => void {
+function repeat(
+  setDeadline: (delayMs: number, run: (interrupted: boolean) => void) => () => void,
+  everyMs: number,
+  run: (interrupted: boolean) => void
+): () => void {
   let cancel: (() => void) | undefined
   let stopped = false
   const arm = (): void => {
     if (stopped) return
-    cancel = scheduler.setTimer(() => {
-      run()
+    cancel = setDeadline(everyMs, (interrupted) => {
+      run(interrupted)
       arm()
-    }, everyMs)
+    })
   }
   arm()
   return () => {

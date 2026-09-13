@@ -809,6 +809,18 @@ export type CliStatus = {
    * the moment that checkout moves.
    */
   packaged: boolean
+  /**
+   * The Node bundle the CLI at `source` would run, or null when there is none.
+   *
+   * `source` is a launcher script; the CLI itself is the bundle behind it, and
+   * the launcher looks for that in two places. A packaged app ships it beside
+   * the launcher. A source checkout only has one once `npm run build:cli` has
+   * written `out/cli/index.js` — which `npm run dev` does not do. Null is
+   * therefore the difference between a command and a symlink that resolves: the
+   * link can be made, a password can be spent making it, and `teamree` still
+   * exits with "Cannot find module".
+   */
+  bundle: string | null
   /** The link itself. */
   destination: string
   /** The directory holding it — the thing that has to be writable. */

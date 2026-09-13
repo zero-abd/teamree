@@ -1120,7 +1120,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async loadCli() {
-      set({ cliPending: true })
+      // A refusal belongs to the attempt that earned it. Without this, cancelling
+      // the password prompt and closing the dialog leaves "the password was not
+      // given" waiting for whoever opens it next, about an attempt nobody made.
+      set({ cliPending: true, cliError: null })
       try {
         set({ cli: await runtimeClient.call('cli.status', {}) })
       } catch (error) {
@@ -1138,10 +1141,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // read-back rather than a guess, and there is nothing left to re-read.
         set({ cliInstall: install, cli: install.status })
       } catch (error) {
-        set({ cliError: error instanceof Error ? error.message : String(error) })
-        // What is at the destination may be exactly why it was refused, so the
-        // panel is re-read: "there is a file there" has to survive the refusal.
+        // Re-read first, then say what refused: what is at the destination may
+        // be exactly why it was refused, so "there is a file there" has to
+        // survive the refusal — and the read clears the last refusal, so the
+        // new one goes on afterwards or it goes nowhere.
         await get().loadCli()
+        set({ cliError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ cliPending: false })
       }

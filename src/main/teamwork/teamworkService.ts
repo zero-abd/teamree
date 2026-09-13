@@ -81,7 +81,7 @@ export class TeamworkService {
    * project.
    *
    * Kept so that *any* read can be the thing that notices a change — opening
-   * the members dialog after a pull, as much as a watch firing. It is only ever
+   * the Start teamwork panel after a pull, as much as a watch firing. It is only ever
    * compared, never served: a reader gets what is on disk now.
    */
   readonly #lastRoster = new Map<string, string>()
