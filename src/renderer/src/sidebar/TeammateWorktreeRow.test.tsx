@@ -47,11 +47,11 @@ const theirs = (overrides: Partial<TeammateWorktree> = {}): TeammateWorktree => 
 
 const onWatch = vi.fn()
 
-function mount(worktree: TeammateWorktree = theirs(), watchingPaneId: string | null = null): void {
+function mount(worktree: TeammateWorktree = theirs(), watchingPaneIds: string[] = []): void {
   const [row] = teammateRows([worktree], NOW, {})
   render(
     <ul>
-      <TeammateWorktreeRow row={row!} watchingPaneId={watchingPaneId} onWatch={onWatch} />
+      <TeammateWorktreeRow row={row!} watchingPaneIds={watchingPaneIds} onWatch={onWatch} />
     </ul>
   )
 }
@@ -103,12 +103,16 @@ describe('a pane of theirs', () => {
   })
 
   it('says whether this window has it open, as a pressed state rather than a colour', () => {
-    mount(theirs(), 'priya:t7')
-    expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('true')
+    mount(theirs(), ['priya:t7'])
+    const button = screen.getByRole('button')
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+    // And what a second press would do, because a toggle whose hover text still
+    // offers what it already did is a button that lies about half its presses.
+    expect(button.getAttribute('title')).toBe('Stop watching priya’s claude')
   })
 
   it('is not pressed when a different pane is the one being watched', () => {
-    mount(theirs(), 'priya:t9')
+    mount(theirs(), ['priya:t9'])
     expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('false')
   })
 
@@ -132,7 +136,7 @@ describe('a pane of theirs', () => {
     const [row] = teammateRows([theirs()], NOW, { 'priya:t7': 'running tests' })
     render(
       <ul>
-        <TeammateWorktreeRow row={row!} watchingPaneId="priya:t7" onWatch={onWatch} />
+        <TeammateWorktreeRow row={row!} watchingPaneIds={['priya:t7']} onWatch={onWatch} />
       </ul>
     )
     expect(screen.getByText('running tests')).toBeTruthy()
