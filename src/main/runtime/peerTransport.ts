@@ -66,6 +66,7 @@ import {
   type StreamEvent
 } from '../../shared/protocol'
 import type { Dispatcher } from './dispatcher'
+import { defaultMonotonicNow, startTimedWindow } from './elapsed'
 import { createLineReader, encodeLine } from './peerFraming'
 import type { SubscriptionHub } from './subscriptionHub'
 
@@ -266,11 +267,19 @@ export type PeerTransportOptions = {
   onError?: (error: unknown) => void
 }
 
-/** The sliver of a clock the outbound pacing needs. */
+/** The sliver of a clock the outbound pacing and the deadlines need. */
 export type TransportScheduler = {
   now: () => number
   /** Returns the cancel for the timer it set. */
   setTimer: (run: () => void, delayMs: number) => () => void
+  /**
+   * A clock a sleeping machine cannot move. Defaults to `performance.now()`.
+   *
+   * Anything that decides a peer has failed to answer is measured against this
+   * rather than against `now`, because the wall clock jumps by the length of a
+   * lid being closed and the peer is not the one who closed it.
+   */
+  monotonicNow?: () => number
 }
 
 /** An answer from the peer, and the position of the frame that carried it. */
@@ -301,15 +310,18 @@ export type PeerTransport = {
    */
   keepalive: () => void
   /**
-   * When this session last turned something from the peer into plaintext, on
-   * the injected clock.
+   * How long it is since this session last turned something from the peer into
+   * plaintext, measured against a clock a sleeping machine cannot move.
    *
    * The only honest evidence anybody is there. A socket that has not been
    * closed is not evidence — a machine that suspends leaves one open on both
    * hosts — and neither is a frame this side sent. `peerLink.ts` reads this
-   * and nothing else to decide whether a link is still a link.
+   * and nothing else to decide whether a link is still a link, and it reads
+   * this rather than the difference between two wall-clock stamps because the
+   * wall clock moves by the whole of a sleep this side spent not listening —
+   * which is why there is no timestamp on this interface to subtract.
    */
-  readonly lastDecryptedAt: number
+  readonly quietForMs: number
   /** Fails every call still in flight and releases this peer's subscriptions. */
   close: (reason: string) => void
 }
@@ -353,7 +365,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
    * The window before the first frame is the handshake's to police, and
    * `peerLink.ts` has a separate deadline for it.
    */
-  let decryptedAt = scheduler.now()
+  let quiet = startTimedWindow(scheduler)
 
   const write = (frame: Frame): void => {
     if (!live) return
@@ -731,8 +743,17 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       // Armed before the frame is written, because `write` can fail the whole
       // transport in place and the cleanup that does must find this waiter
       // already holding its own cancel.
+      const window = startTimedWindow(scheduler, PEER_CALL_TIMEOUT_MS)
       const cancel = scheduler.setTimer(() => {
         if (!pending.delete(id)) return
+        // A deadline this side slept through gave the teammate no thirty
+        // seconds to answer in, so it is not evidence about them. The call is
+        // still settled — a promise nobody ever answers is the worse failure —
+        // but it is settled with what actually happened.
+        if (window.wasInterrupted()) {
+          reject(new Error(`this machine was asleep, so ${method} was never given an answer`))
+          return
+        }
         // Named, and named as silence rather than as a refusal: the far end has
         // not said no, it has said nothing, and the person who typed is owed
         // the difference.
@@ -763,7 +784,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         // it is worth exactly as much as it is fresh. A keepalive counts: it
         // carries an empty line that the decoder drops, and the decrypt that
         // produced it is the proof.
-        decryptedAt = scheduler.now()
+        quiet = startTimedWindow(scheduler)
         if (!confirmed) {
           confirmed = true
           options.onConfirmed?.()
@@ -799,8 +820,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       }
     },
 
-    get lastDecryptedAt() {
-      return decryptedAt
+    get quietForMs() {
+      return quiet.elapsedMs()
     },
 
     close: (reason) => fail(reason)
@@ -833,6 +854,7 @@ type PacedItem = { kind: 'data'; data: string; bytes: number } | { kind: 'event'
 
 const realScheduler: TransportScheduler = {
   now: () => Date.now(),
+  monotonicNow: defaultMonotonicNow,
   setTimer: (run, delayMs) => {
     const timer = setTimeout(run, delayMs)
     // A pending flush must never be the reason a process stays alive.

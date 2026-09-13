@@ -117,7 +117,12 @@ export function teamworkSummary(status: TeamworkStatus | undefined): TeamworkSum
   return {
     tone: 'pending',
     label: 'Connecting…',
-    detail: status.links.map((link) => `${link.handle}: ${link.phase}`).join('\n')
+    // The phase, and whatever the link has to say for itself — a link that is
+    // connecting because this machine has just woken up knows something the
+    // word "connecting" does not carry.
+    detail: status.links
+      .map((link) => (link.detail === undefined ? `${link.handle}: ${link.phase}` : `${link.handle}: ${link.detail}`))
+      .join('\n')
   }
 }
 

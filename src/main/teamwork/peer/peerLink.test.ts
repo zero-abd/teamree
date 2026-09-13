@@ -33,10 +33,12 @@ import {
   SILENT_PEER_DETAIL,
   WAITING_DETAIL,
   WAITING_TOO_LONG_DETAIL,
+  WOKE_DETAIL,
   type PeerLink
 } from './peerLink'
 import { RelayCloseCode } from './relayConnection'
 import type { RelayDialer } from './relaySocket'
+import type { WakeWatch } from './wakeWatch'
 import { Params } from '../../../shared/methods'
 import { createDispatcher } from '../../runtime/dispatcher'
 import { MethodRegistry } from '../../runtime/methodRegistry'
@@ -77,6 +79,8 @@ async function pairOfRuntimes(
     aliceCache?: TeammateCache
     /** Wraps Bob's socket, for a test about what one end does and the other does not. */
     bobDial?: (dial: RelayDialer) => RelayDialer
+    /** Stands in for the power monitor on Alice's machine only. */
+    aliceWatchWake?: WakeWatch
   } = {}
 ): Promise<Pair> {
   const relay = options.relay ?? createFakeRelay()
@@ -111,6 +115,7 @@ async function pairOfRuntimes(
     ...shared,
     dataDir: aliceData,
     ...(options.aliceCache ? { cache: options.aliceCache } : {}),
+    ...(options.aliceWatchWake ? { watchWake: options.aliceWatchWake } : {}),
     workspace: {
       projects: [project('p_alice', aliceProject)],
       worktrees: [worktree('wt_a1', 'p_alice', 'search ranking', 'feat/ranking')],
@@ -1266,5 +1271,130 @@ describe('a teammate whose machine stopped answering', () => {
     await pair.scheduler.advance(SILENCE_TIMEOUT_MS + KEEPALIVE_MS)
     expect(sink.events.map((event) => (event as { type?: unknown }).type)).toContain('lost')
     stop()
+  })
+})
+
+describe('a machine that was asleep itself', () => {
+  /**
+   * Longer than the silence deadline by an order of magnitude, which is what a
+   * closed lid looks like: the deadline was armed for two and a half keepalives
+   * and the machine comes back an hour later having run none of them.
+   */
+  const A_CLOSED_LID_MS = 3_600_000
+
+  it('does not say the teammate stopped answering when this machine slept through it', async () => {
+    // The shape macOS produces: the monotonic clock counts time spent
+    // suspended, so every overdue timer fires at once on waking, each having
+    // measured far more than it was ever armed for.
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+
+    await pair.scheduler.sleep(A_CLOSED_LID_MS, 'counted')
+
+    // Bob did nothing wrong and nothing on this screen may say he did.
+    const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(link?.detail).not.toBe(SILENT_PEER_DETAIL)
+    expect(link?.detail).toBe(WOKE_DETAIL)
+    // Nor is it quietly called healthy: an hour-old confirmation is not one.
+    expect(link?.phase).not.toBe('connected')
+  })
+
+  it('does not blame a teammate for the silence of a socket that died in the sleep', async () => {
+    // The bug exactly: this machine sleeps, its socket does not survive it, so
+    // nothing decrypts and the deadline fires on waking with five minutes of
+    // silence to account for. It belongs to the lid, not to Bob.
+    const lid = sleepingLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+    lid.sleep()
+
+    await pair.scheduler.sleep(A_CLOSED_LID_MS, 'counted')
+
+    const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(link?.detail).not.toBe(SILENT_PEER_DETAIL)
+    expect(link?.detail).toBe(WOKE_DETAIL)
+  })
+
+  it('does not say it either where the monotonic clock ignored the sleep', async () => {
+    // The other platform shape: the timers come back still owing the wait they
+    // were armed for, and only the wall clock has run away from them.
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+
+    await pair.scheduler.sleep(A_CLOSED_LID_MS, 'uncounted')
+    // Nothing is overdue on that clock, so the sleep surfaces at the next
+    // deadline rather than at once: the keepalive tick, which is the most
+    // frequent thing a healthy link does.
+    await pair.scheduler.advance(KEEPALIVE_MS)
+
+    const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(link?.detail).not.toBe(SILENT_PEER_DETAIL)
+    expect(link?.detail).toBe(WOKE_DETAIL)
+  })
+
+  it('treats what the teammate was showing as unknown, then goes and re-establishes it', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    const before = bobsRows(pair.alice)
+    expect(before.map((row) => row.live)).toEqual([true])
+
+    await pair.scheduler.sleep(A_CLOSED_LID_MS, 'counted')
+
+    // Kept, dated, and not live: the rows are what was true an hour ago, and
+    // an hour ago is exactly what the date on them says.
+    const during = bobsRows(pair.alice)
+    expect(during.map((row) => row.name)).toEqual(before.map((row) => row.name))
+    expect(during.some((row) => row.live)).toBe(false)
+
+    // And the link does not sit there having withdrawn its verdict: it dials,
+    // confirms, and the rows come back live because somebody answered.
+    await pair.scheduler.advance(KEEPALIVE_MS)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBeUndefined()
+    expect(bobsRows(pair.alice).every((row) => row.live)).toBe(true)
+  })
+
+  it('still says the teammate stopped answering when that is what happened', async () => {
+    // The fix must not be a way of never blaming anybody. This machine sleeps,
+    // comes back, re-establishes — and *then* Bob shuts his lid.
+    const lid = sleepingLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+
+    await pair.scheduler.sleep(A_CLOSED_LID_MS, 'counted')
+    await pair.scheduler.advance(KEEPALIVE_MS)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+
+    lid.sleep()
+    await pair.scheduler.advance(SILENCE_TIMEOUT_MS + KEEPALIVE_MS)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBe(SILENT_PEER_DETAIL)
+  })
+
+  it('acts on the operating system saying so, without waiting for a deadline', async () => {
+    // What `powerMonitor` is for: the same conclusion at the moment the machine
+    // is awake rather than at the next deadline that happens to fire. The seam
+    // is injected because there is no Electron in this suite — or in the
+    // acceptance suite, which is the reason the real one is imported lazily.
+    let resume = (): void => {}
+    const relay = createFakeRelay()
+    const pair = await pairOfRuntimes({
+      relay,
+      aliceWatchWake: (onWake) => {
+        resume = onWake
+        return Promise.resolve(() => {})
+      }
+    })
+    await connect(pair)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+
+    resume()
+    await pair.scheduler.advance(0)
+    const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(link?.phase).not.toBe('connected')
+    expect(link?.detail).toBe(WOKE_DETAIL)
+
+    await pair.scheduler.advance(KEEPALIVE_MS)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
   })
 })

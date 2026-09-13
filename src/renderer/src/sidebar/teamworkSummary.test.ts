@@ -51,6 +51,21 @@ describe('what the project header says about teamwork', () => {
     expect(away).toMatchObject({ tone: 'pending', label: 'Nobody connected' })
   })
 
+  it('carries what a connecting link has to say, so a wake does not read as ordinary', () => {
+    // "Connecting…" is right and it is not enough: a link that is connecting
+    // because this machine has just woken up is the one case where the reader
+    // needs to know that nothing is currently known about the teammate.
+    const summary = teamworkSummary(
+      status({
+        links: [
+          link({ phase: 'connecting', detail: 'this machine was asleep, so nothing is known about your teammate' })
+        ]
+      })
+    )
+    expect(summary).toMatchObject({ tone: 'pending', label: 'Connecting…' })
+    expect(summary?.detail).toContain('this machine was asleep')
+  })
+
   it('carries what a link that has waited too long has to say, under the same label', () => {
     // "Nobody connected" is still the right label — nothing has established
     // that anything is wrong — but a link that has waited across two hourly
