@@ -6,6 +6,12 @@
 // out of a filter that compared the reported name against `.teamree`, and each
 // fix was another guess at what that name would be.
 //
+// Being straight about what this guards, now that libuv's `fsevents.c` has been
+// read rather than guessed at: that library resolves the watched path with
+// `realpath` before it matches anything, so the mismatch below is not what was
+// breaking macOS. The test is kept because a filter that reads names is the
+// mistake worth never making twice, and because it costs milliseconds.
+//
 // This builds the same mismatch with a symlink, which works on any platform,
 // and asserts the thing that actually matters: the watcher notices what
 // `.teamree` did, through a path it was not watched under.

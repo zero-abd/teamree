@@ -27,11 +27,11 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
-      - run: npx vitest run src/main/teamwork/macWatchProbe.test.ts
+      - run: TEAMREE_MAC_PROBE=1 npx vitest run src/main/teamwork/macWatchProbe.test.ts
       - name: Probe again, with the machine busy
         run: |
           for i in 1 2 3 4 5 6 7 8; do (while :; do :; done) & done
-          npx vitest run src/main/teamwork/macWatchProbe.test.ts || true
+          TEAMREE_MAC_PROBE=1 npx vitest run src/main/teamwork/macWatchProbe.test.ts || true
           kill %1 %2 %3 %4 %5 %6 %7 %8
 
   repro:
