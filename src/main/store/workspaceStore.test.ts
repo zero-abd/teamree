@@ -1,9 +1,9 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Project, Worktree } from '../../shared/entities'
-import { WorkspaceStore } from './workspaceStore'
+import { describeStoreProblem, WorkspaceStore, type StoreProblem } from './workspaceStore'
 
 const project: Project = { id: 'p1', name: 'teamree', path: '/repos/teamree', baseRef: 'origin/main' }
 
@@ -68,12 +68,116 @@ describe('workspace store', () => {
     const corruptPath = join(directory, 'workspace.json')
     await writeFile(corruptPath, '{"projects": [{"id": "p1"', 'utf8')
 
-    const store = await WorkspaceStore.open(corruptPath)
+    const store = await WorkspaceStore.open(corruptPath, { onProblem: () => {} })
 
     expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [], terminals: [] })
     store.putProject(project)
     await store.flush()
     expect(JSON.parse(await readFile(corruptPath, 'utf8'))).toMatchObject({ projects: [project] })
+  })
+
+  // An empty sidebar is what a first launch looks like, so the one thing that
+  // distinguishes it from somebody's whole workspace failing to load has to be
+  // said rather than left for them to work out.
+  it('says a file could not be read instead of opening as if there were none', async () => {
+    const path = join(directory, 'workspace.json')
+    await writeFile(path, '{"projects": [{"id": "p1"', 'utf8')
+    const problems: StoreProblem[] = []
+
+    const unreadable = await WorkspaceStore.open(path, { onProblem: (problem) => problems.push(problem) })
+    const missing = await WorkspaceStore.open(join(directory, 'never-written.json'), { onProblem: () => {} })
+
+    expect(unreadable.unreadable).toContain('JSON')
+    expect(problems).toEqual([{ kind: 'unreadable', filePath: path, reason: unreadable.unreadable }])
+    expect(missing.unreadable).toBeUndefined()
+  })
+
+  // Crash-atomic writes make this unlikely, not impossible — a disk that filled
+  // mid-write, a filesystem that did not honour the rename, a file from an
+  // older build. Whatever it holds is somebody's projects, worktrees and agent
+  // session ids, and this process is the only thing between them and a fresh
+  // empty file written over the top.
+  it('keeps the bytes of a file it could not read before writing over them', async () => {
+    const path = join(directory, 'workspace.json')
+    const original = '{"projects": [{"id": "p1"'
+    await writeFile(path, original, 'utf8')
+    const problems: StoreProblem[] = []
+
+    const store = await WorkspaceStore.open(path, {
+      onProblem: (problem) => problems.push(problem),
+      now: () => Date.parse('2026-01-02T03:04:05.678Z')
+    })
+    store.putProject(project)
+    await store.flush()
+
+    const kept = join(directory, 'workspace.json.unreadable-2026-01-02T03-04-05-678Z')
+    expect(await readFile(kept, 'utf8')).toBe(original)
+    expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({ projects: [project] })
+    expect(problems.map((problem) => problem.kind)).toEqual(['unreadable', 'keptAside'])
+    // Said once: the file has been dealt with and is now an ordinary one.
+    store.putWorktree(worktree('w1'))
+    await store.flush()
+    expect(problems).toHaveLength(2)
+  })
+
+  it('writes nothing at all rather than over a file it could not move aside', async () => {
+    const path = join(directory, 'workspace.json')
+    const original = '{"projects": [{"id": "p1"'
+    await writeFile(path, original, 'utf8')
+    // Nowhere to put it: something is already sitting where it would go.
+    const occupied = join(directory, 'workspace.json.unreadable-2026-01-02T03-04-05-678Z')
+    await mkdir(occupied)
+    await writeFile(join(occupied, 'in-the-way'), 'x', 'utf8')
+    const problems: StoreProblem[] = []
+
+    const store = await WorkspaceStore.open(path, {
+      onProblem: (problem) => problems.push(problem),
+      now: () => Date.parse('2026-01-02T03:04:05.678Z')
+    })
+    store.putProject(project)
+    await store.flush()
+
+    expect(await readFile(path, 'utf8')).toBe(original)
+    expect(problems.map((problem) => problem.kind)).toEqual(['unreadable', 'notWritten'])
+  })
+
+  // Finding out at shutdown that nothing has been saved all session is finding
+  // out too late to do anything about it.
+  it('reports a failing write when it fails, not when the app quits', async () => {
+    const home = join(directory, 'state')
+    await mkdir(home)
+    const problems: StoreProblem[] = []
+    const store = await WorkspaceStore.open(join(home, 'workspace.json'), {
+      onProblem: (problem) => problems.push(problem)
+    })
+
+    // The place the file lives stops being a directory mid-session.
+    await rm(home, { recursive: true })
+    await writeFile(home, 'not a directory\n', 'utf8')
+    store.putProject(project)
+    await store.flush().catch(() => {})
+
+    expect(problems.map((problem) => problem.kind)).toEqual(['writeFailed'])
+
+    // And said once, however many mutations follow: a full disk is one fact.
+    store.putWorktree(worktree('w1'))
+    await store.flush().catch(() => {})
+    expect(problems).toHaveLength(1)
+  })
+
+  it('describes each problem in terms of what it costs the user', () => {
+    expect(describeStoreProblem({ kind: 'unreadable', filePath: '/w.json', reason: 'bad json' })).toContain(
+      'opened with nothing in it'
+    )
+    expect(describeStoreProblem({ kind: 'keptAside', filePath: '/w.json', keptAt: '/w.json.old' })).toContain(
+      '/w.json.old'
+    )
+    expect(describeStoreProblem({ kind: 'notWritten', filePath: '/w.json', reason: 'EACCES' })).toContain(
+      'nothing is being saved'
+    )
+    expect(describeStoreProblem({ kind: 'writeFailed', filePath: '/w.json', reason: 'ENOSPC' })).toContain(
+      'nothing has been saved since'
+    )
   })
 
   it('drops rows that no longer match the entity shape and keeps the rest', async () => {

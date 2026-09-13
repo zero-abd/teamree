@@ -31,9 +31,19 @@ describe('lacksWriteTree', () => {
     expect(lacksWriteTree('usage: git merge-tree <base-tree> <branch1> <branch2>')).toBe(true)
   })
 
+  // git translates "unknown option" and "usage"; it does not translate its own
+  // subcommand and flag names, so those are what a non-English git leaves to
+  // recognise it by.
+  it('recognises the same refusal from a git that is not speaking English', () => {
+    expect(
+      lacksWriteTree("error: unbekannte Option: `write-tree'\nAufruf: git merge-tree <base-tree> <branch1> <branch2>")
+    ).toBe(true)
+  })
+
   it('does not mistake an ordinary failure for an old git', () => {
     expect(lacksWriteTree('fatal: not a git repository')).toBe(false)
     expect(lacksWriteTree('')).toBe(false)
+    expect(lacksWriteTree('fatal: Nicht in einem Git-Repository')).toBe(false)
   })
 })
 

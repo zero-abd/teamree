@@ -5,13 +5,42 @@
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
+/**
+ * What was at the path, told apart rather than flattened.
+ *
+ * A file that was never written and a file that could not be read are
+ * different events: the first is how every first launch begins, and the second
+ * is somebody's workspace that this process is one write away from destroying.
+ * A caller that cannot distinguish them treats both as "start empty".
+ */
+export type JsonFileRead =
+  | { kind: 'missing' }
+  | { kind: 'parsed'; value: unknown }
+  | { kind: 'unreadable'; reason: string }
+
+export async function openJsonFile(filePath: string): Promise<JsonFileRead> {
+  let raw: string
+  try {
+    raw = await readFile(filePath, 'utf8')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing' }
+    return { kind: 'unreadable', reason: describe(error) }
+  }
+  try {
+    return { kind: 'parsed', value: JSON.parse(raw) as unknown }
+  } catch (error) {
+    return { kind: 'unreadable', reason: describe(error) }
+  }
+}
+
 /** Returns undefined for a missing, unreadable, or non-JSON file. */
 export async function readJsonFile(filePath: string): Promise<unknown> {
-  try {
-    return JSON.parse(await readFile(filePath, 'utf8')) as unknown
-  } catch {
-    return undefined
-  }
+  const read = await openJsonFile(filePath)
+  return read.kind === 'parsed' ? read.value : undefined
+}
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 export async function writeJsonFileAtomically(filePath: string, value: unknown): Promise<void> {

@@ -4,13 +4,20 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Worktree } from '../../shared/entities'
 import {
+  degradedWatchReport,
   ignoresCheckoutChange,
   ignoresGitDirChange,
   resolveGitDir,
   WorktreeWatcher,
+  type WatchDegraded,
   type WatchFn,
   type WatchHandle
 } from './worktreeWatcher'
+
+/** What the kernel hands back once this user has no inotify instances left. */
+function enospc(): NodeJS.ErrnoException {
+  return Object.assign(new Error('ENOSPC: System limit for number of file watchers reached'), { code: 'ENOSPC' })
+}
 
 function worktree(id: string, overrides: Partial<Worktree> = {}): Worktree {
   return {
@@ -272,13 +279,13 @@ describe('WorktreeWatcher', () => {
 
   it('keeps the git directory covered when the recursive watch is refused', () => {
     const fake = createFakeWatch()
-    const errors: unknown[] = []
+    const degraded: WatchDegraded[] = []
     fake.throwOn((_target, recursive) => recursive && !_target.endsWith('.git-dir'))
     const watcher = new WorktreeWatcher({
       onChange: () => {},
       watch: fake.watch,
       resolveGitDir: (checkout) => path.join(checkout, '.git-dir'),
-      onError: (error) => errors.push(error)
+      onDegraded: (event) => degraded.push(event)
     })
 
     watcher.sync([worktree('a')])
@@ -286,26 +293,58 @@ describe('WorktreeWatcher', () => {
     expect(watcher.watchedIds).toEqual(['a'])
     expect(watcher.watchesWorkingTree('a')).toBe(false)
     expect(fake.targets()).toEqual([path.join('/checkouts/a', '.git-dir')])
-    expect(errors).toHaveLength(1)
+    expect(degraded.map((event) => event.worktreeId)).toEqual(['a'])
   })
 
   it('records a recursive watch that dies later as degraded, not as gone', () => {
     const fake = createFakeWatch()
-    const errors: unknown[] = []
+    const degraded: WatchDegraded[] = []
     const watcher = new WorktreeWatcher({
       onChange: () => {},
       watch: fake.watch,
       resolveGitDir: () => undefined,
-      onError: (error) => errors.push(error)
+      onDegraded: (event) => degraded.push(event)
     })
     watcher.sync([worktree('a')])
     expect(watcher.watchesWorkingTree('a')).toBe(true)
 
-    fake.fail('/checkouts/a', new Error('ENOSPC: inotify watch limit reached'))
+    fake.fail('/checkouts/a', enospc())
 
     expect(watcher.watchedIds).toEqual(['a'])
     expect(watcher.watchesWorkingTree('a')).toBe(false)
-    expect(errors).toHaveLength(1)
+    expect(watcher.degradedIds).toEqual(['a'])
+    expect(degraded).toHaveLength(1)
+    expect(degraded[0]?.checkoutPath).toBe('/checkouts/a')
+  })
+
+  // The old default discarded this, and a status display that has stopped
+  // covering edits while still showing numbers is the quietest way to be wrong.
+  it('says what a degraded watch costs, in terms somebody could act on', () => {
+    const report = degradedWatchReport({ worktreeId: 'a', checkoutPath: '/checkouts/a', error: enospc() })
+
+    expect(report).toContain('/checkouts/a')
+    expect(report).toContain('ENOSPC')
+    expect(report).toContain('edits will not')
+  })
+
+  // A dying inotify watch reports over and over; the app only stops covering
+  // edits once.
+  it('reports a degradation once however many times the watch complains', () => {
+    const fake = createFakeWatch()
+    const degraded: WatchDegraded[] = []
+    const watcher = new WorktreeWatcher({
+      onChange: () => {},
+      watch: fake.watch,
+      resolveGitDir: () => undefined,
+      onDegraded: (event) => degraded.push(event)
+    })
+    watcher.sync([worktree('a')])
+
+    fake.fail('/checkouts/a', enospc())
+    fake.fail('/checkouts/a', enospc())
+    fake.fail('/checkouts/a', enospc())
+
+    expect(degraded).toHaveLength(1)
   })
 
   it('retries next sync when nothing could be watched at all', () => {
@@ -315,7 +354,7 @@ describe('WorktreeWatcher', () => {
       onChange: () => {},
       watch: fake.watch,
       resolveGitDir: () => undefined,
-      onError: () => {}
+      onDegraded: () => {}
     })
 
     watcher.sync([worktree('a')])
@@ -353,16 +392,25 @@ describe('WorktreeWatcher', () => {
     expect(fake.open()).toBe(0)
   })
 
-  it('reports a real file appearing in a real directory', async () => {
+  it('reports a real file appearing in a real directory', async (ctx) => {
     const checkout = await mkdtemp(path.join(os.tmpdir(), 'teamree-watch-'))
     created.push(checkout)
     await mkdir(path.join(checkout, 'src'), { recursive: true })
 
-    const reported = new Promise<void>((resolve) => {
+    const reported = new Promise<void>((resolve, reject) => {
       const watcher = new WorktreeWatcher({
         onChange: () => {
           watcher.close()
           resolve()
+        },
+        // This is the only test that asks the kernel for a real watch, and a
+        // watch is a scarce per-user resource. Left alone it does not fail —
+        // it simply never fires, and the run dies thirty seconds later saying
+        // nothing at all, sending the next reader hunting a race that is not
+        // there.
+        onDegraded: (event) => {
+          watcher.close()
+          reject(new WatchRefused(event))
         },
         resolveGitDir: () => undefined,
         settleMs: 20,
@@ -373,9 +421,36 @@ describe('WorktreeWatcher', () => {
       setTimeout(() => void writeFile(path.join(checkout, 'src', 'App.tsx'), 'export {}\n'), 50)
     })
 
-    await expect(reported).resolves.toBeUndefined()
+    try {
+      await reported
+    } catch (error) {
+      // A machine with nothing left to give proves nothing about this watcher,
+      // so it is said out loud and stepped over rather than reported as a
+      // fault in code that was never run.
+      if (error instanceof WatchRefused && error.isResourceShortage) ctx.skip(error.message)
+      throw error
+    }
   })
 })
+
+/** Carries the real cause out of the watcher, so the runner can name it. */
+class WatchRefused extends Error {
+  readonly isResourceShortage: boolean
+
+  constructor(event: WatchDegraded) {
+    const code = (event.error as NodeJS.ErrnoException | null)?.code
+    super(`${degradedWatchReport(event)}${code === 'EMFILE' || code === 'ENOSPC' ? INOTIFY_HINT : ''}`)
+    this.name = 'WatchRefused'
+    this.isResourceShortage = code === 'EMFILE' || code === 'ENOSPC'
+  }
+}
+
+/** Where to look, since the cause is the machine rather than this code. */
+const INOTIFY_HINT =
+  process.platform === 'linux'
+    ? ' Compare /proc/sys/fs/inotify/max_user_instances against what this user already holds; ' +
+      'parallel editors, watchers and test runners exhaust it long before a big tree does.'
+    : ''
 
 describe('resolveGitDir', () => {
   const created: string[] = []

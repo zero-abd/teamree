@@ -21,7 +21,7 @@
 import type { Terminal } from '../../shared/entities'
 import { Params } from '../../shared/methods'
 import type { GitService } from '../git'
-import { WorktreeWatcher, type WorktreeWatcherOptions } from '../git/worktreeWatcher'
+import { degradedWatchReport, WorktreeWatcher, type WorktreeWatcherOptions } from '../git/worktreeWatcher'
 import type { TerminalService } from '../terminals/method-handlers'
 import type { MethodRegistry } from './methodRegistry'
 import type { WorkspaceEventBus } from './workspaceEvents'
@@ -90,6 +90,13 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
  *
  * The watch set follows git's own events, so a worktree becoming ready starts
  * being watched and a removed one stops, without anything polling.
+ *
+ * A watch can also be refused — a filesystem that cannot do it recursively, or
+ * a machine with no inotify instances left, which takes only a handful of
+ * editors and test runners on Linux. The watcher carries on with the git
+ * directory alone when that happens, and this is the point where somebody has
+ * to be told: the chips keep moving on commits and stop moving on edits, and
+ * the difference is invisible from the outside.
  */
 export function publishWorktreeFileEvents(
   git: GitService,
@@ -97,6 +104,8 @@ export function publishWorktreeFileEvents(
   options: Omit<WorktreeWatcherOptions, 'onChange'> = {}
 ): { close: () => void } {
   const watcher = new WorktreeWatcher({
+    onError: (error) => console.warn('[worktrees] a filesystem watch failed', error),
+    onDegraded: (event) => console.warn(`[worktrees] ${degradedWatchReport(event)}`),
     ...options,
     onChange: () => bus.emit({ type: 'worktrees' })
   })

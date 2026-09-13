@@ -10,7 +10,7 @@
 
 import { useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import type { WorktreeChange } from '@shared/entities'
+import type { WorktreeChange, WorktreeLog } from '@shared/entities'
 
 /** One letter per kind, the way git itself abbreviates them. */
 const KIND_LETTER: Record<WorktreeChange['kind'], string> = {
@@ -79,9 +79,7 @@ export function ChangesPanel(): React.JSX.Element | null {
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
-        <p className="changes__empty">
-          {(log?.commits.length ?? 0) > 0 ? 'Everything here is committed.' : 'Nothing changed here yet.'}
-        </p>
+        <p className="changes__empty">{emptyChangesLabel(log)}</p>
       ) : (
         <ul className="changes__list">
           {rows.map((change) => (
@@ -156,6 +154,12 @@ export function ChangesPanel(): React.JSX.Element | null {
         </p>
       ) : null}
 
+      {log?.unavailable !== undefined ? (
+        <p className="commits__unknown" title={log.unavailable}>
+          Could not read what this branch has committed.
+        </p>
+      ) : null}
+
       {log && log.commits.length > 0 ? (
         <section className="commits" aria-label="Commits this worktree has made">
           <h3 className="commits__title">
@@ -196,6 +200,20 @@ export function ChangesPanel(): React.JSX.Element | null {
       )}
     </aside>
   )
+}
+
+/**
+ * What an empty changes list means, which is three different things.
+ *
+ * "Nothing changed here yet" is a claim about the worktree, and it is the wrong
+ * one to make when the base could not be compared against at all: an agent that
+ * has just committed a day of work leaves exactly this screen behind, and the
+ * sentence would tell somebody the work is gone.
+ */
+export function emptyChangesLabel(log: WorktreeLog | undefined): string {
+  if (log?.unavailable !== undefined) return 'Nothing uncommitted here.'
+  if ((log?.commits.length ?? 0) > 0) return 'Everything here is committed.'
+  return 'Nothing changed here yet.'
 }
 
 /**

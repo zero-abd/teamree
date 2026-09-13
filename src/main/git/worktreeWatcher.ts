@@ -112,6 +112,22 @@ export type WatchFn = (options: {
   onError: (error: unknown) => void
 }) => WatchHandle
 
+/**
+ * A worktree that has dropped to watching its git directory alone, and why.
+ *
+ * Not an error, which is exactly why it needs saying: the watch that is left
+ * still catches every commit, every `git add` and every branch switch, so
+ * nothing breaks and nothing looks broken. What changes is what the app is
+ * able to know — an edit in an editor no longer moves anything until it is
+ * committed — and a status display that has quietly stopped covering edits
+ * while still showing numbers is the failure this app exists to avoid.
+ */
+export type WatchDegraded = {
+  worktreeId: string
+  checkoutPath: string
+  error: unknown
+}
+
 export type WorktreeWatcherOptions = {
   /** Called once per settled burst. Always the same coarse invalidation. */
   onChange: () => void
@@ -120,10 +136,38 @@ export type WorktreeWatcherOptions = {
   minIntervalMs?: number
   /** Reported, never thrown: a watch that cannot be set up degrades instead. */
   onError?: (error: unknown) => void
+  /**
+   * Called once per worktree that loses its working-tree watch, whether it
+   * never started or died later. Defaults to reporting, never to silence: the
+   * previous default discarded it, and the app went on showing chips it had
+   * stopped being able to keep up to date.
+   */
+  onDegraded?: (event: WatchDegraded) => void
   now?: () => number
   schedule?: (run: () => void, delayMs: number) => () => void
   /** Overridable so a test need not lay down a real `.git` file. */
   resolveGitDir?: (checkoutPath: string) => string | undefined
+}
+
+/**
+ * What a lost working-tree watch means, in the terms somebody could act on.
+ *
+ * The common cause is not an enormous tree: it is running out of inotify
+ * instances, which a developer machine does at 128 of them — reachable with a
+ * handful of editors, watchers and test runners going at once.
+ */
+export function degradedWatchReport(event: WatchDegraded): string {
+  const code = (event.error as NodeJS.ErrnoException | null)?.code
+  const cause =
+    // inotify_init reports the per-user instance ceiling as EMFILE and the
+    // per-user watch ceiling as ENOSPC; neither is about this repository.
+    code === 'EMFILE' || code === 'ENOSPC'
+      ? `this machine has no filesystem watches left to give (${code})`
+      : `the filesystem refused a recursive watch${code ? ` (${code})` : ''}`
+  return (
+    `live status for ${event.checkoutPath} is degraded: ${cause}. ` +
+    'Commits and staged changes still show; edits will not, until something commits.'
+  )
 }
 
 type WatchedWorktree = {
@@ -147,6 +191,7 @@ export class WorktreeWatcher {
   readonly #settleMs: number
   readonly #minIntervalMs: number
   readonly #onError: (error: unknown) => void
+  readonly #onDegraded: (event: WatchDegraded) => void
   readonly #now: () => number
   readonly #schedule: (run: () => void, delayMs: number) => () => void
   readonly #resolveGitDir: (checkoutPath: string) => string | undefined
@@ -161,7 +206,8 @@ export class WorktreeWatcher {
     this.#watch = options.watch ?? nodeWatch
     this.#settleMs = options.settleMs ?? DEFAULT_SETTLE_MS
     this.#minIntervalMs = options.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS
-    this.#onError = options.onError ?? (() => {})
+    this.#onError = options.onError ?? ((error) => console.warn('[worktrees]', error))
+    this.#onDegraded = options.onDegraded ?? ((event) => console.warn('[worktrees]', degradedWatchReport(event)))
     this.#now = options.now ?? Date.now
     this.#schedule = options.schedule ?? scheduleWithTimeout
     this.#resolveGitDir = options.resolveGitDir ?? resolveGitDir
@@ -170,6 +216,11 @@ export class WorktreeWatcher {
   /** Worktree ids currently covered, for tests and for the status line. */
   get watchedIds(): string[] {
     return [...this.#watched.keys()]
+  }
+
+  /** Those covered by their git directory alone, which is a weaker promise. */
+  get degradedIds(): string[] {
+    return [...this.#watched].filter(([, watched]) => !watched.watchesWorkingTree).map(([id]) => id)
   }
 
   /** True when this worktree's working tree is covered, not just its git dir. */
@@ -222,17 +273,19 @@ export class WorktreeWatcher {
             if (!ignoresCheckoutChange(relative)) this.#report()
           },
           // A recursive watch can fail well after it was set up — inotify runs
-          // out of watches on a large tree — so this is not only a setup path.
+          // out of instances while the app is running — so this is not only a
+          // setup path.
           onError: (error) => this.#degrade(id, error)
         })
       )
       watchesWorkingTree = true
     } catch (error) {
       // Recursive watching is unavailable on some platforms and some
-      // filesystems. The git directory alone still catches every staged
-      // change, every commit and every branch switch, which is most of what
-      // the chips show, so it is worth carrying on without.
-      this.#onError(error)
+      // filesystems, and can simply be exhausted on any of them. The git
+      // directory alone still catches every staged change, every commit and
+      // every branch switch, which is most of what the chips show, so it is
+      // worth carrying on without — as long as somebody is told.
+      this.#onDegraded({ worktreeId: id, checkoutPath, error })
     }
 
     const gitDir = this.#resolveGitDir(checkoutPath)
@@ -275,8 +328,11 @@ export class WorktreeWatcher {
   /** A recursive watch that died mid-flight leaves the rest of its watches up. */
   #degrade(id: string, error: unknown): void {
     const watched = this.#watched.get(id)
-    if (watched) watched.watchesWorkingTree = false
-    this.#onError(error)
+    // Said once. A dying inotify watch can report repeatedly, and the app has
+    // already stopped covering edits after the first one.
+    if (!watched || !watched.watchesWorkingTree) return
+    watched.watchesWorkingTree = false
+    this.#onDegraded({ worktreeId: id, checkoutPath: watched.path, error })
   }
 
   /**
@@ -318,6 +374,7 @@ export function resolveGitDir(checkoutPath: string): string | undefined {
 }
 
 function nodeWatch(options: Parameters<WatchFn>[0]): WatchHandle {
+  if (options.recursive) assertRecursiveWatchIsPossible(options.target)
   const watcher = fsWatch(
     options.target,
     // Never the reason a process stays alive: the app quitting must not wait on
@@ -327,6 +384,26 @@ function nodeWatch(options: Parameters<WatchFn>[0]): WatchHandle {
   )
   watcher.on('error', options.onError)
   return { close: () => watcher.close() }
+}
+
+/**
+ * Asks the question a recursive watch will not answer.
+ *
+ * On Linux `recursive: true` is Node's own directory walker rather than a
+ * kernel feature, and when there is no inotify instance left to give it the
+ * watcher comes back looking healthy and then never fires: nothing throws,
+ * nothing reaches the error event, and this app goes on showing chips it has
+ * silently stopped being able to update. Measured, not assumed — it is what
+ * this machine does once the 128-instance ceiling is reached, which a handful
+ * of editors and test runners manage between them.
+ *
+ * The same request made non-recursively fails loudly with EMFILE, so it is
+ * asked first. It costs nothing to keep asking: every watch in a process
+ * shares one inotify instance, so this only ever fails where the recursive
+ * watch was going to be dead on arrival anyway.
+ */
+function assertRecursiveWatchIsPossible(target: string): void {
+  fsWatch(target, { persistent: false }, () => {}).close()
 }
 
 function scheduleWithTimeout(run: () => void, delayMs: number): () => void {

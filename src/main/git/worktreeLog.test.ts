@@ -112,6 +112,8 @@ describe('reading a worktree’s log from a real repository', () => {
 
     expect(log.commits).toEqual([])
     expect(log.truncated).toBe(false)
+    // An empty list is the answer here, so nothing qualifies it.
+    expect(log.unavailable).toBeUndefined()
   })
 
   it('caps the list and says that it capped it', async () => {
@@ -146,9 +148,14 @@ describe('reading a worktree’s log from a real repository', () => {
     expect(log.commits[0]?.subject).toBe('subject line')
   })
 
-  it('says nothing rather than failing when the base ref does not resolve', async () => {
+  // The whole point of this reader is telling an agent's finished work apart
+  // from an empty worktree. An empty list for a base nobody could resolve says
+  // the second when the first may be true.
+  it('says it could not read the log rather than reporting an empty one', async () => {
     const repo = await repository()
     await repo.git(['checkout', '-q', '-b', 'feature', 'main'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('a day of work')
 
     const log = await readWorktreeLog(repo.runner, {
       worktreeId: 'wt',
@@ -158,5 +165,27 @@ describe('reading a worktree’s log from a real repository', () => {
     })
 
     expect(log.commits).toEqual([])
+    expect(log.unavailable).toContain('does not resolve')
+    expect(log.unavailable).toContain('origin/never-fetched')
+  })
+
+  // `HEAD..branch` runs inside the worktree, where HEAD *is* that branch: git
+  // exits 0 and reports nothing, which is the one failure that looks exactly
+  // like an answer.
+  it('refuses a base of HEAD instead of comparing the branch with itself', async () => {
+    const repo = await repository()
+    await repo.git(['checkout', '-q', '-b', 'feature', 'main'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('a day of work')
+
+    const log = await readWorktreeLog(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      baseRef: 'HEAD',
+      branch: 'feature'
+    })
+
+    expect(log.commits).toEqual([])
+    expect(log.unavailable).toContain('no base ref')
   })
 })

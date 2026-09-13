@@ -19,9 +19,25 @@ export type GitRun = {
   env?: NodeJS.ProcessEnv
   /** Skip the index lock. Safe for reads, required for anything polled. */
   readOnly?: boolean
+  /**
+   * Stop reading stdout at this many bytes and report the output as clipped,
+   * rather than letting it run up against the hard cap and fail outright.
+   *
+   * For a caller that is going to cut the output down to a budget anyway, the
+   * whole thing never needed to fit in memory first — and a 40MB patch that
+   * ends as a rejection is reported to the user as "no patch", which is a
+   * confident wrong answer rather than a truncated right one.
+   */
+  stdoutLimitBytes?: number
 }
 
-export type GitOutput = { exitCode: number; stdout: string; stderr: string }
+export type GitOutput = {
+  exitCode: number
+  stdout: string
+  stderr: string
+  /** True when `stdoutLimitBytes` cut the read short; `stdout` holds the prefix. */
+  stdoutClipped?: boolean
+}
 
 export const DEFAULT_TIMEOUT_MS = 120_000
 const KILL_GRACE_MS = 2_000
@@ -42,7 +58,9 @@ export function createGitRunner(binary = process.env.TEAMREE_GIT_BINARY || 'git'
     tryRun,
     async run(run) {
       const output = await tryRun(run)
-      if (output.exitCode !== 0) {
+      // A clipped read killed git itself, so the exit code describes our own
+      // signal rather than anything git decided about the command.
+      if (output.exitCode !== 0 && output.stdoutClipped !== true) {
         throw new GitCommandError({
           args: run.args,
           cwd: run.cwd,
@@ -95,6 +113,7 @@ function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
     let timedOut = false
     let cancelled = false
     let overflowed = false
+    let clipped = false
 
     const finish = (fn: () => void): void => {
       if (settled) return
@@ -127,7 +146,17 @@ function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
+    const stdoutLimit = run.stdoutLimitBytes
     child.stdout.on('data', (chunk: string) => {
+      if (clipped) return
+      // Kept whole: the caller asked for a prefix long enough to answer its own
+      // question, and a chunk boundary is not a place to cut a patch.
+      if (stdoutLimit !== undefined && stdout.length + chunk.length >= stdoutLimit) {
+        stdout += chunk
+        clipped = true
+        stop()
+        return
+      }
       if (stdout.length + chunk.length > MAX_OUTPUT_BYTES) {
         overflowed = true
         stop()
@@ -153,6 +182,10 @@ function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
           reject(new GitCommandError({ args, cwd, exitCode: code, stderr, timedOut, cancelled }))
           return
         }
+        if (clipped) {
+          resolve({ exitCode: code ?? 0, stdout, stderr, stdoutClipped: true })
+          return
+        }
         if (overflowed) {
           reject(
             new GitCommandError({
@@ -176,6 +209,14 @@ function buildEnv(run: GitRun): NodeJS.ProcessEnv {
     // A background worktree create must never stall on a credential prompt.
     GIT_TERMINAL_PROMPT: '0',
     GIT_ASKPASS: process.env.GIT_ASKPASS ?? '',
+    // Several decisions in this app are made by reading git's own prose, and
+    // git ships translations in most distro packages and in Git for Windows.
+    // Under the C locale gettext hands back the untranslated message, which is
+    // the only thing that makes reading it meaningful at all. LANGUAGE outranks
+    // LC_ALL everywhere but the C locale, so it is cleared rather than trusted
+    // to stay out of the way.
+    LC_ALL: 'C',
+    LANGUAGE: '',
     // Status is polled; taking the index lock on every poll would fight the
     // user's own git commands in the same checkout.
     ...(run.readOnly ? { GIT_OPTIONAL_LOCKS: '0' } : {}),

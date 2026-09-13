@@ -12,6 +12,7 @@
 
 import type { WorktreeLog } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
+import { comparesAgainstItself } from './repository'
 
 /** Commits returned before the list reports itself capped. */
 export const DEFAULT_LOG_LIMIT = 50
@@ -75,6 +76,19 @@ export async function readWorktreeLog(runner: GitRunner, options: LogReadOptions
     baseRef: options.baseRef,
     readAt: (options.now ?? Date.now)()
   }
+  const nothingKnown = (unavailable: string): WorktreeLog => ({
+    ...base,
+    commits: [],
+    truncated: false,
+    unavailable
+  })
+
+  // Read inside the worktree, where HEAD is the branch being asked about: the
+  // range would be the branch against itself, and git answers that with a
+  // clean exit and no commits rather than with an error.
+  if (comparesAgainstItself(options.baseRef)) {
+    return nothingKnown('this project has no base ref to compare against, so nothing here can be called new')
+  }
 
   // One more than asked for, so "there are others" is known without walking the
   // whole history to count them.
@@ -92,10 +106,35 @@ export async function readWorktreeLog(runner: GitRunner, options: LogReadOptions
   })
 
   // A base ref that does not resolve is the ordinary case here — an unfetched
-  // remote — and is not worth an error. The honest answer is that nothing is
-  // known, which an empty list already says.
-  if (result.exitCode !== 0) return { ...base, commits: [], truncated: false }
+  // clone, offline, a base deleted on the remote — and is not worth an error.
+  // It is emphatically worth saying, though: an empty list reads as "this
+  // worktree has committed nothing", which for an agent that has just finished
+  // a day's work is the opposite of what happened.
+  if (result.exitCode !== 0) return nothingKnown(await refusalReason(runner, options, result.stderr))
 
   const all = parseLogRecords(result.stdout)
   return { ...base, commits: all.slice(0, limit), truncated: all.length > limit }
+}
+
+/**
+ * Why git would not walk the range. Asked only once it has refused, so the
+ * ordinary read still costs one process.
+ */
+async function refusalReason(runner: GitRunner, options: LogReadOptions, stderr: string): Promise<string> {
+  const resolved = await runner.tryRun({
+    args: ['rev-parse', '--verify', '--quiet', `${options.baseRef}^{commit}`],
+    cwd: options.worktreePath,
+    readOnly: true,
+    ...(options.signal ? { signal: options.signal } : {})
+  })
+  if (resolved.exitCode !== 0) {
+    // The same sentence the merge preview gives for the same cause, because it
+    // is the same cause and the same thing to do about it.
+    return `base ref "${options.baseRef}" does not resolve; fetch the remote or set another base`
+  }
+  return firstLine(stderr) || `git could not list what ${options.branch} has that ${options.baseRef} does not`
+}
+
+function firstLine(text: string): string {
+  return text.split('\n')[0]?.trim() ?? ''
 }

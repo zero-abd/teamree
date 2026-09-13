@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { GitService } from './gitService'
 import { createTempRepo, type TempRepo } from './testRepository'
-import { parsePorcelainV2 } from './worktreeStatus'
+import { parsePorcelainV2, readWorktreeStatus } from './worktreeStatus'
 
 const repos: TempRepo[] = []
 const services: GitService[] = []
@@ -122,5 +122,52 @@ describe('worktree.status', () => {
     expect(status.staged).toBe(0)
     expect(status.unstaged).toBe(0)
     expect(status.untracked).toBe(0)
+  })
+})
+
+describe('divergence against a base ref', () => {
+  // `rev-list --left-right --count HEAD...HEAD` exits 0 and prints "0 0", so a
+  // branch holding a week of commits reads as in sync with itself.
+  it('refuses a base of HEAD rather than counting the branch against itself', async () => {
+    const repo = await createTempRepo()
+    repos.push(repo)
+    await repo.git(['checkout', '-q', '-b', 'task'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('a day of work')
+
+    const status = await readWorktreeStatus(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      fallbackBranch: 'task',
+      baseRef: 'HEAD'
+    })
+
+    const counted = await repo.runner.tryRun({
+      args: ['rev-list', '--left-right', '--count', 'HEAD...HEAD'],
+      cwd: repo.repoPath
+    })
+    // git answers the self-comparison happily; this is what it would have said.
+    expect(counted.stdout.trim()).toBe('0\t0')
+    expect(status.ahead).toBe(0)
+    expect(status.behind).toBe(0)
+  })
+
+  it('still counts against a base that is a real commit', async () => {
+    const repo = await createTempRepo()
+    repos.push(repo)
+    const base = await repo.git(['rev-parse', 'HEAD'])
+    await repo.git(['checkout', '-q', '-b', 'task'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('a day of work')
+
+    const status = await readWorktreeStatus(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      fallbackBranch: 'task',
+      baseRef: base
+    })
+
+    expect(status.ahead).toBe(1)
+    expect(status.behind).toBe(0)
   })
 })

@@ -39,14 +39,23 @@ export function parseMergeTree(raw: string): { tree: string; conflicts: string[]
   return { tree, conflicts: [...new Set(conflicts)] }
 }
 
-/** Older git has `merge-tree` but not the form that answers this question. */
+/**
+ * Older git has `merge-tree` but not the form that answers this question.
+ *
+ * The English wordings are matched first because they are precise, and then
+ * the shape that survives translation: a refusal that names both the command
+ * and the option is this refusal whatever language the prose around it is in.
+ * Git translates "unknown option" and "usage"; it does not translate the
+ * spelling of its own subcommands and flags.
+ */
 export function lacksWriteTree(stderr: string): boolean {
   return (
     // git spells it several ways: "unknown option `write-tree'" with no dashes
     // at all, "--write-tree" with them, and quoted either way.
     /(?:unknown|invalid|unrecognized) option[:\s]+[`']?-{0,2}write-tree[`']?/i.test(stderr) ||
     /unknown rev [`']?--write-tree[`']?/i.test(stderr) ||
-    /usage:\s*git merge-tree\s+<base-tree>/i.test(stderr)
+    /usage:\s*git merge-tree\s+<base-tree>/i.test(stderr) ||
+    (/\bgit merge-tree\b/.test(stderr) && /\bwrite-tree\b/.test(stderr))
   )
 }
 

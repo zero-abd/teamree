@@ -1,7 +1,31 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { GitServiceError } from './errors'
+import type { GitRunner } from './gitProcess'
 import { createTempRepo, type TempRepo } from './testRepository'
-import { pushRefusal, pushWorktree } from './worktreePush'
+import { parsePushStatus, pushRefusal, pushWorktree } from './worktreePush'
+
+describe('parsePushStatus', () => {
+  const refspec = 'refs/heads/work:refs/heads/work'
+
+  it('reads the result flag rather than the sentence beside it', () => {
+    expect(parsePushStatus(`To /tmp/o.git\n=\t${refspec}\t[up to date]\nDone\n`, refspec)).toEqual({
+      flag: '=',
+      summary: '[up to date]'
+    })
+    expect(parsePushStatus(`To /tmp/o.git\n*\t${refspec}\t[new branch]\nDone\n`, refspec)?.flag).toBe('*')
+    // A fast-forward's flag is a space, which is still a flag.
+    expect(parsePushStatus(`To /tmp/o.git\n \t${refspec}\tabc123..def456\nDone\n`, refspec)?.flag).toBe(' ')
+  })
+
+  it('ignores lines about some other ref', () => {
+    const other = 'refs/heads/elsewhere:refs/heads/elsewhere'
+    expect(parsePushStatus(`To /tmp/o.git\n=\t${other}\t[up to date]\nDone\n`, refspec)).toBeNull()
+  })
+
+  it('says nothing rather than guessing when git printed no line for the ref', () => {
+    expect(parsePushStatus('', refspec)).toBeNull()
+  })
+})
 
 describe('pushRefusal', () => {
   // The message git prints for this suggests forcing to a reader in a hurry,
@@ -16,6 +40,17 @@ describe('pushRefusal', () => {
     expect(message).toContain('origin has commits that main does not')
     expect(message.toLowerCase()).not.toContain('--force')
     expect(message.toLowerCase()).not.toContain('force')
+  })
+
+  // The prose is git's; the porcelain flag is not, and a translated git only
+  // has the second one left to say it with.
+  it('explains a rejection from the porcelain flag when the prose is not English', () => {
+    const message = pushRefusal('Fehler: Push einiger Referenzen nach ... fehlgeschlagen', 'origin', 'main', {
+      flag: '!',
+      summary: '[rejected] (non-fast-forward)'
+    })
+
+    expect(message).toContain('origin has commits that main does not')
   })
 
   it('says when the remote would not let this machine in', () => {
@@ -86,6 +121,35 @@ describe('pushing to a real remote', () => {
     expect(second.alreadyUpToDate).toBe(true)
     // The second push did not set tracking again; the first one did that.
     expect(second.setUpstream).toBe(false)
+  })
+
+  // This is the one prose match in the app that failed unsafe: a miss reported
+  // a push that sent nothing as a push that sent the work.
+  it('reads "nothing was sent" from the result flag, not from git’s wording', async () => {
+    const repo = await repository({ withRemote: true })
+    await repo.git(['checkout', '-q', '-b', 'feature'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('some work')
+    await push(repo, 'feature')
+
+    // A git that speaks anything but English, answering the same question.
+    const translated: GitRunner = {
+      binary: repo.runner.binary,
+      run: (options) => repo.runner.run(options),
+      async tryRun(options) {
+        const result = await repo.runner.tryRun(options)
+        return options.args[0] === 'push' ? { ...result, stderr: 'Alles aktuell\n' } : result
+      }
+    }
+
+    const result = await pushWorktree(translated, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      branch: 'feature',
+      now: () => 777
+    })
+
+    expect(result.alreadyUpToDate).toBe(true)
   })
 
   it('counts the work left behind rather than refusing to push over it', async () => {
