@@ -13,13 +13,18 @@
 // `<div>`, because a disabled button is a thing that would work if something
 // were different and this is a thing that will not. Milestone C makes a pane
 // openable for reading; until then the honest affordance is none.
+//
+// **Whether this is a live view or a remembered one.** A row whose teammate is
+// away stays exactly where it was — a worktree disappearing reads as a worktree
+// deleted — and says how old it is, in the same words and the same rounding
+// every other age in this sidebar uses.
 
 import { ACTIVITY_LABEL, sinceLabel } from './agentRows'
 import { teammateTitle, type TeammateWorktreeRowModel } from './teammateRows'
 
 export function TeammateWorktreeRow({ row }: { row: TeammateWorktreeRowModel }): React.JSX.Element {
   return (
-    <li className={`worktree worktree--teammate worktree--${row.state}`}>
+    <li className={`worktree worktree--teammate worktree--${row.state}${row.staleness ? ' worktree--stale' : ''}`}>
       <div className="worktree__row worktree__row--teammate" title={teammateTitle(row)}>
         <div className="worktree__open worktree__open--teammate">
           <span className="worktree__title">
@@ -37,6 +42,14 @@ export function TeammateWorktreeRow({ row }: { row: TeammateWorktreeRowModel }):
                 every other fact on the row means. */}
             <span className="worktree__owner">{row.handle}</span>
             <span className="worktree__branch">{row.branch}</span>
+            {/* The age, never the bare word "offline": what is known is how old
+                this picture is, and the sentence behind it says their machine
+                is away rather than anything at all about the worktree. */}
+            {row.staleness ? (
+              <span className="worktree__stale" title={row.staleness.detail} aria-label={row.staleness.detail}>
+                {`away · ${row.staleness.age}`}
+              </span>
+            ) : null}
           </span>
         </div>
       </div>

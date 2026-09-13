@@ -2,7 +2,11 @@
 // them. Every test here drives both sides at once, because a handshake asserted
 // from one end is a handshake against a fixture.
 
+import { mkdtemp, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { TEAMMATE_CACHE_FILE, TeammateCacheStore, type TeammateCache } from '../../store/teammateCache'
 import { loadIdentity } from '../identity'
 import {
   createFakeRelay,
@@ -25,6 +29,8 @@ import { RelayCloseCode } from './relayConnection'
 import { epochAt, rendezvousId, rendezvousToken, sharedSecret } from './rendezvous'
 
 const RELAY_URL = 'ws://relay.invalid/v1/relay'
+/** Where `createManualScheduler` starts. A cache shares that clock or it ages wrongly. */
+const CLOCK_START = 1_700_000_000_000
 const ORIGIN = 'git@github.com:team/repo.git'
 
 type Pair = {
@@ -34,6 +40,8 @@ type Pair = {
   bob: PeerRuntime
   aliceKey: string
   bobKey: string
+  /** Alice's checkout, so a restart can be built against the same repository. */
+  aliceProject: string
 }
 
 /**
@@ -43,7 +51,9 @@ type Pair = {
  * because "is this key on the roster" is the whole of the trust model and a
  * stubbed answer to it would not be testing anything.
  */
-async function pairOfRuntimes(options: { relay?: FakeRelay; aliceSeesBob?: boolean } = {}): Promise<Pair> {
+async function pairOfRuntimes(
+  options: { relay?: FakeRelay; aliceSeesBob?: boolean; aliceCache?: TeammateCache } = {}
+): Promise<Pair> {
   const relay = options.relay ?? createFakeRelay()
   const scheduler = createManualScheduler()
 
@@ -75,6 +85,7 @@ async function pairOfRuntimes(options: { relay?: FakeRelay; aliceSeesBob?: boole
   const alice = await createPeerRuntime({
     ...shared,
     dataDir: aliceData,
+    ...(options.aliceCache ? { cache: options.aliceCache } : {}),
     workspace: {
       projects: [project('p_alice', aliceProject)],
       worktrees: [worktree('wt_a1', 'p_alice', 'search ranking', 'feat/ranking')],
@@ -91,7 +102,48 @@ async function pairOfRuntimes(options: { relay?: FakeRelay; aliceSeesBob?: boole
     }
   })
 
-  return { relay, scheduler, alice, bob, aliceKey, bobKey }
+  return { relay, scheduler, alice, bob, aliceKey, bobKey, aliceProject }
+}
+
+/**
+ * Alice's app, closed and opened again: same identity, same repository, same
+ * workspace, and nothing carried over in memory.
+ */
+async function reopenAlice(pair: Pair, cache?: TeammateCache): Promise<PeerRuntime> {
+  return createPeerRuntime({
+    dial: pair.relay.dial,
+    scheduler: pair.scheduler,
+    env: { TEAMREE_RELAY_URL: RELAY_URL },
+    runner: fixedRemoteRunner(ORIGIN),
+    dataDir: pair.alice.dataDir,
+    workspace: pair.alice.workspace,
+    ...(cache ? { cache } : {})
+  })
+}
+
+async function freshCachePath(): Promise<string> {
+  return join(await mkdtemp(join(tmpdir(), 'teamree-teammates-')), TEAMMATE_CACHE_FILE)
+}
+
+/** Polls a real filesystem fact. The clock everything else here uses is a fake one. */
+async function untilOnDisk(filePath: string): Promise<void> {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    if (
+      await stat(filePath).then(
+        () => true,
+        () => false
+      )
+    )
+      return
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+  throw new Error(`${filePath} never appeared`)
+}
+
+function bobsRows(runtime: PeerRuntime): { name: string; live: boolean; heardAt: number }[] {
+  return runtime.service
+    .presence({ projectId: 'p_alice' })
+    .worktrees.map((row) => ({ name: row.name, live: row.live, heardAt: row.heardAt }))
 }
 
 /** Brings both sides up and lets the handshake and the first snapshot settle. */
@@ -351,7 +403,7 @@ describe('the failure paths', () => {
     expect(linkTo(pair.bob, 'p_bob', pair.aliceKey)?.phase).toBe('connected')
   })
 
-  it('says a teammate who vanished is not connected, and forgets what they were showing', async () => {
+  it('says a teammate who vanished is not connected, and stops calling what they showed live', async () => {
     const pair = await pairOfRuntimes()
     await connect(pair)
     expect(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees).toHaveLength(1)
@@ -361,9 +413,9 @@ describe('the failure paths', () => {
 
     const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
     expect(link?.phase).toBe('waiting')
-    // Milestone B does not keep a stale cache; E is where that is built. What it
-    // must not do meanwhile is keep showing a snapshot as though it were live.
-    expect(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees).toEqual([])
+    // The rows stay — a worktree row vanishing reads as a worktree deleted —
+    // and not one of them is live any more.
+    expect(bobsRows(pair.alice).map((row) => [row.name, row.live])).toEqual([['flaky test', false]])
   })
 
   it('pairs on the first try after one side reconnects over its own half-open session', async () => {
@@ -443,6 +495,128 @@ describe('the failure paths', () => {
     // Both derived it independently from the same Diffie-Hellman, so they meet.
     expect(aliceToken).toBe(bobToken)
     expect(aliceToken).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+describe('a teammate who is not there', () => {
+  it('keeps a teammate’s worktrees on screen when their laptop closes, and says how old they are', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    const heardAt = pair.scheduler.now()
+
+    pair.bob.service.stop()
+    await pair.scheduler.advance(600_000)
+
+    const [row] = bobsRows(pair.alice)
+    expect(row?.name).toBe('flaky test')
+    expect(row?.live).toBe(false)
+    // The age is this machine's own arithmetic on its own stamp. Nothing about
+    // it came from the machine that is no longer answering.
+    expect(pair.scheduler.now() - (row?.heardAt ?? 0)).toBe(600_000)
+    expect(heardAt).toBeLessThanOrEqual(row?.heardAt ?? 0)
+  })
+
+  it('tells a teammate never heard from apart from one whose machine is away', async () => {
+    const relay = createFakeRelay()
+    relay.pause()
+    const pair = await pairOfRuntimes({ relay })
+    await pair.alice.service.start()
+    await pair.scheduler.advance(0)
+
+    const seen = pair.alice.service.presence({ projectId: 'p_alice' })
+    // No rows at all, and a named teammate with nothing behind them — never the
+    // same shape as somebody whose rows are simply old.
+    expect(seen.worktrees).toEqual([])
+    expect(seen.teammates).toEqual([{ handle: 'bob', publicKey: pair.bobKey, connected: false, heardAt: null }])
+  })
+
+  it('opens with what it knew last time, before anything has connected', async () => {
+    const cachePath = await freshCachePath()
+    const firstRun = await TeammateCacheStore.open(cachePath, { now: () => CLOCK_START })
+    const pair = await pairOfRuntimes({ aliceCache: firstRun })
+    await connect(pair)
+    expect(bobsRows(pair.alice).map((row) => row.live)).toEqual([true])
+
+    // Everything in memory goes; only the bytes on disk survive, and they are
+    // read by a store that has never seen this session.
+    pair.alice.service.stop()
+    pair.bob.service.stop()
+    await firstRun.flush()
+    const written = await TeammateCacheStore.open(cachePath, { now: () => CLOCK_START })
+    const revived = await reopenAlice(pair, written)
+    pair.relay.pause()
+    await revived.service.start()
+    await pair.scheduler.advance(0)
+
+    const seen = revived.service.presence({ projectId: 'p_alice' })
+    expect(seen.worktrees.map((row) => [row.handle, row.name, row.live])).toEqual([['bob', 'flaky test', false]])
+    // It is a picture, not a claim: nobody is connected and the standing says so.
+    expect(seen.teammates.map((teammate) => teammate.connected)).toEqual([false])
+  })
+
+  it('writes that cache beside the workspace, in the app’s own data directory', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+
+    const filePath = join(pair.alice.dataDir, TEAMMATE_CACHE_FILE)
+    await untilOnDisk(filePath)
+    expect((await stat(filePath)).isFile()).toBe(true)
+  })
+
+  it('stops showing a worktree the teammate removed while they were away', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    expect(bobsRows(pair.alice).map((row) => row.name)).toEqual(['flaky test'])
+
+    pair.bob.service.stop()
+    await pair.scheduler.advance(100)
+    // Away, so the row is still there. This is the case the cache exists for.
+    expect(bobsRows(pair.alice).map((row) => row.name)).toEqual(['flaky test'])
+
+    pair.bob.workspace.worktrees = [worktree('wt_b2', 'p_bob', 'retry budget', 'fix/retry')]
+    pair.bob.workspace.terminals = []
+    await pair.bob.service.start()
+    await pair.scheduler.advance(120_000)
+
+    // Their snapshot is the whole of what they have, so the one they deleted is
+    // gone rather than remembered. A cache that merged would keep it forever.
+    expect(bobsRows(pair.alice).map((row) => [row.name, row.live])).toEqual([['retry budget', true]])
+  })
+
+  it('comes back without the sidebar passing through empty on the way', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+
+    const counts: number[] = []
+    const watch = (): void => {
+      counts.push(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees.length)
+    }
+
+    watch()
+    pair.relay.closeAll(RelayCloseCode.GoingAway, 'going away')
+    watch()
+    await pair.scheduler.advance(5_000)
+    watch()
+
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+    // Never zero, at any point: reconnection reconciles what is on screen, and
+    // does not rebuild it from nothing.
+    expect(counts).toEqual([1, 1, 1])
+    expect(bobsRows(pair.alice).map((row) => row.live)).toEqual([true])
+  })
+
+  it('will not let a cached snapshot be read as a live one, however the link is going', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+
+    // The relay is gone, so the link is trying and failing rather than parked.
+    pair.relay.pause()
+    pair.relay.closeAll(RelayCloseCode.GoingAway, 'going away')
+    await pair.scheduler.advance(30_000)
+
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
+    expect(bobsRows(pair.alice).every((row) => row.live)).toBe(false)
+    expect(pair.alice.service.presence({ projectId: 'p_alice' }).teammates.map((one) => one.connected)).toEqual([false])
   })
 })
 

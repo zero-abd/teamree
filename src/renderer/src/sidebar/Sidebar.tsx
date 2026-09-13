@@ -14,7 +14,7 @@ import { useMemo } from 'react'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
-import { teammateRows } from './teammateRows'
+import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { WorktreeRow } from './WorktreeRow'
@@ -92,6 +92,9 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
           // repository, checked out somewhere else. The rows below make whose
           // they are unmissable, which is what lets them share the list.
           const theirs = teammateRows(teammates[project.id]?.worktrees ?? [], now)
+          // Teammates on the roster this machine has never heard a word from.
+          // Not the same as away, and not the same as having no worktrees.
+          const unheard = unheardTeammates(teammates[project.id])
           return (
             <section className="project" key={project.id}>
               <div className="project__head">
@@ -173,6 +176,11 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                   {theirs.map((row) => (
                     <TeammateWorktreeRow key={row.id} row={row} />
                   ))}
+                  {unheard.length > 0 ? (
+                    <li className="project__unheard" title={unheardTitle(unheard)}>
+                      {`Nothing heard yet from ${unheard.join(', ')}`}
+                    </li>
+                  ) : null}
                   {rows.length === 0 && theirs.length === 0 ? (
                     <li className="project__none">
                       {filter.trim().length > 0 ? (

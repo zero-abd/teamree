@@ -652,6 +652,33 @@
   border-left: 2px solid var(--teammate-line);
 }
 
+/* The age of a remembered row, in the muted register the rest of the sidebar
+   uses for what it is not currently confirming. Dimmed rather than hidden is
+   the whole point: it is still there, and it is still theirs. */
+.worktree__stale {
+  flex: 0 0 auto;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.worktree--stale .worktree__row--teammate {
+  border-left-style: dashed;
+  background: transparent;
+}
+
+.worktree--stale .worktree__open--teammate {
+  opacity: 0.72;
+}
+
+/* One line, not a row each: a teammate never heard from has no worktrees to
+   show and may genuinely have none. */
+.project__unheard {
+  padding: 3px var(--s2) 3px var(--s6);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
 .pane-row--teammate {
   cursor: default;
 }

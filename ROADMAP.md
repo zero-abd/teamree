@@ -467,8 +467,28 @@ onto the method catalogue that already exists, not a new protocol.
 - [ ] **D — Typing into a pane.** `terminal.write` over the same transport, with
       live attribution, a local audit log, and per-pane mute. The milestone that
       needs the most care: it is the one that hands somebody else a shell.
-- [ ] **E — Staleness.** The local cache, stale marking with its age, and
+- [x] **E — Staleness.** The local cache, stale marking with its age, and
       reconnection that reconciles rather than re-fetching the world.
+  - [x] A teammate's worktrees stay in the sidebar when their machine goes,
+        marked away and dated. A row vanishing reads as a worktree deleted,
+        which is the one thing this app must never wrongly say
+  - [x] The cache is a file beside the workspace, not a section inside it:
+        presence moves whenever a pane goes busy, and bytes another machine
+        sent have no business in the file holding somebody's projects
+  - [x] Offline, removed and never-seen are three shapes rather than three
+        readings of one. A snapshot is the whole of what a teammate has, so a
+        worktree missing from the newest one stops being shown; a teammate with
+        no snapshot at all is named as unheard instead of drawn as having
+        nothing
+  - [x] A cached row can never be read as a live one: `live` needs both a frame
+        that decrypted on this session and that session still being up, and the
+        revision a snapshot was heard at is dropped with the session, so a peer
+        that restarted at revision 1 is not mistaken for a late reply
+  - [x] Everything from a peer is bounded — worktrees, panes, string lengths,
+        teammates held, and the age past which a picture stops being one — and
+        bounded again when it is read back, whatever wrote the file
+  - [x] Reconnection reconciles: the rows on screen are never rebuilt from
+        nothing, so the sidebar does not flash empty on the way to being right
 
 ## Later
 

@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Project, Terminal, Worktree } from '../../../shared/entities'
 import type { GitRunner } from '../../git/gitProcess'
+import type { TeammateCache } from '../../store/teammateCache'
 import { formatMemberFile, MEMBER_FILE_SUFFIX, MEMBERS_DIR_SEGMENTS } from '../memberFile'
 import { createDispatcher, type Dispatcher } from '../../runtime/dispatcher'
 import { MethodRegistry } from '../../runtime/methodRegistry'
@@ -312,6 +313,8 @@ export type PeerRuntimeOptions = {
    * fixed answer keeps the test about the transport.
    */
   runner?: GitRunner
+  /** Lets a test drive the cache directly, and flush it before a restart. */
+  cache?: TeammateCache
   /** Lets a test wait on a condition instead of on the clock. */
   onChange?: () => void
 }
@@ -395,6 +398,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     scheduler: options.scheduler,
     env: options.env ?? {},
     ...(options.runner ? { runner: options.runner } : {}),
+    ...(options.cache ? { cache: options.cache } : {}),
     onChange: () => {
       changes += 1
       options.onChange?.()
