@@ -56,6 +56,7 @@ import { createGitRunner, type GitRunner } from '../../git/gitProcess'
 import type { Dispatcher } from '../../runtime/dispatcher'
 import { defaultMonotonicNow } from '../../runtime/elapsed'
 import {
+  PANE_CLOSED,
   PeerCallError,
   type RemoteReadVerdict,
   type RemoteWriteRequest,
@@ -93,6 +94,17 @@ import { webSocketDialer, type RelayDialer } from './relaySocket'
  * because the reader is across a relay rather than across a process boundary.
  */
 export const PRESENCE_COALESCE_MS = 150
+
+/**
+ * How many of a project's pane ids are remembered after the panes have gone.
+ *
+ * This is a list of what this machine has already shown a teammate, kept so a
+ * pane that closes under a reader can be named as closed rather than as never
+ * having been theirs. Bounded because it is a memory of everything that ever
+ * ran: a machine left open for a month would otherwise hold every id of it, and
+ * nobody has had two hundred and fifty-six panes open in one repository.
+ */
+export const REMEMBERED_PANES_PER_PROJECT = 256
 
 /** What the service needs of the workspace, so a test can hand it three arrays. */
 export type PeerWorkspace = {
@@ -187,6 +199,18 @@ export class PeerService {
    * on one repository is never reported on another's row.
    */
   readonly #watchers = new Map<string, Map<string, number>>()
+  /**
+   * Pane ids this machine has resolved inside a project, kept after the pane
+   * itself has closed.
+   *
+   * Per project and never global, because that is the whole of what it is safe
+   * to say: a teammate on a project's roster is already shown that project's
+   * panes in every presence snapshot, so telling them one of them has closed
+   * adds nothing they did not have. Answering the same question about a project
+   * they hold no key for would answer "is there a pane with this id somewhere
+   * on your machine", which is the question `remoteRead` exists to refuse.
+   */
+  readonly #panesHeld = new Map<string, Set<string>>()
   /**
    * Panes *this* machine is reading, by the link they are read over.
    *
@@ -691,6 +715,23 @@ export class PeerService {
       }
     }
     if (!this.#paneOf(project.projectId, terminalId)) {
+      // A pane of *this* project that has since gone is named as closed, and
+      // the words are the ones the stream itself ends with. A watcher joins by
+      // subscribing and then reading, and an owner who closes the pane between
+      // those two is the ordinary case, not a rare one: the subscription ends
+      // with `lost: the owner closed this pane` while the read that follows it
+      // is refused here. Refusing it with "there is no pane" made that reader's
+      // window say the pane had never been theirs to see, which is the one
+      // thing it must not say about a pane they were reading a moment ago.
+      //
+      // Only for a project this peer already holds the key to, and only for a
+      // pane it has already been answered for. Everything else keeps the answer
+      // below, which is deliberately the same answer a pane of another project
+      // gets: telling those apart would answer "is there a pane with this id
+      // somewhere on your machine".
+      if (this.#panesHeld.get(project.projectId)?.has(terminalId)) {
+        return { ok: false, code: ErrorCode.NotFound, message: PANE_CLOSED }
+      }
       return {
         ok: false,
         code: ErrorCode.NotFound,
@@ -1070,9 +1111,35 @@ export class PeerService {
   #paneOf(projectId: string, terminalId: string): Terminal | undefined {
     for (const worktree of this.#options.workspace.listWorktrees(projectId)) {
       const pane = this.#options.workspace.listTerminals(worktree.id).find((entry) => entry.id === terminalId)
-      if (pane) return pane
+      if (pane) {
+        this.#remember(projectId, terminalId)
+        return pane
+      }
     }
     return undefined
+  }
+
+  /**
+   * Files a pane under the project it was found in, so it can still be named
+   * once it is gone.
+   *
+   * Written here rather than anywhere a pane is created, because this is the
+   * one place that has both halves of the fact at once — and because the only
+   * ids worth keeping are the ones something has already asked about, which is
+   * exactly the set that passes through here.
+   */
+  #remember(projectId: string, terminalId: string): void {
+    const held = this.#panesHeld.get(projectId) ?? new Set<string>()
+    this.#panesHeld.set(projectId, held)
+    if (held.has(terminalId)) return
+    held.add(terminalId)
+    // Insertion order, so the id dropped is the one longest since first seen —
+    // which for a bound this far above any real pane count is a pane closed
+    // long ago, never one somebody is reading now.
+    if (held.size > REMEMBERED_PANES_PER_PROJECT) {
+      const oldest = held.values().next()
+      if (!oldest.done) held.delete(oldest.value)
+    }
   }
 
   /** Every pane id this machine has in one project. */

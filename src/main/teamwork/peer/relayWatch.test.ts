@@ -552,6 +552,36 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     })
   })
 
+  it('says a pane of this project closed, and says nothing at all about one that is not', async () => {
+    // The same close, without the race that makes it intermittent through a
+    // watcher: the read that follows a subscription is the one a closing pane
+    // overtakes, and here it is simply issued afterwards, by hand.
+    const doomed = await openPane('stty -echo 2>/dev/null; cat')
+
+    // Carol reads it while it is there, which is what makes her somebody this
+    // machine has already shown the pane to.
+    await expect(carol.call('terminal.read', { terminalId: doomed.terminalId })).resolves.toMatchObject({
+      data: expect.any(String)
+    })
+
+    await bob.terminals?.handlers['terminal.close']({ terminalId: doomed.terminalId })
+
+    // Closed, in the words the stream itself ends with, so a watcher is told
+    // the same thing whichever of the two reaches them first.
+    await expect(carol.call('terminal.read', { terminalId: doomed.terminalId })).rejects.toMatchObject({
+      code: ErrorCode.NotFound,
+      message: 'the owner closed this pane'
+    })
+
+    // And the boundary that must not move: an id this project has never had is
+    // answered exactly as a pane of a project Carol holds no key for is — she
+    // cannot use this to ask whether a pane exists somewhere on Bob's machine.
+    await expect(carol.call('terminal.read', { terminalId: 'term_not_a_pane' })).rejects.toMatchObject({
+      code: ErrorCode.NotFound,
+      message: 'there is no pane term_not_a_pane in this project'
+    })
+  })
+
   it('lands a teammate’s keystroke in the pane and tells the owner whose it was', async () => {
     const window = openWindow(alice, 'window_type_1')
     const opened = await aliceWatch(paneId, 'window_type_1')
