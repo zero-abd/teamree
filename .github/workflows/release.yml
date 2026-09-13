@@ -1,0 +1,150 @@
+# Turns a tag into something a colleague can download.
+#
+# The build is not repeated here. This workflow calls `build.yml`, the same one
+# `ci.yml` calls, so the installers it publishes are the ones that passed
+# typecheck, lint, format, the full suite, the smoke test and — the check that
+# matters — the packaged-app verification, which launches the artifact, drives
+# it through the CLI it ships and spawns a real PTY inside it. A release
+# pipeline that skipped that would be publishing an app nobody had started.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  # Re-runnable by hand against a tag, for the case where publishing failed
+  # after a three-runner build succeeded. Select the tag as the ref; the job
+  # refuses a branch rather than cutting a release named after one.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    # The installers are attached to the release inside this same run, so the
+    # upload is a courier between two jobs rather than a place to keep anything.
+    with:
+      retention-days: 7
+
+  publish:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # The only write this project's automation does.
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Insist on a tag
+        run: |
+          if [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "release: refusing to publish from ${{ github.ref }} — run this against a tag." >&2
+            exit 1
+          fi
+
+      # `merge-multiple` flattens the three per-runner uploads into one
+      # directory. Each upload's paths are already relative to `dist/`, so the
+      # installers land side by side with no nesting to strip.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: teamree-*
+          merge-multiple: true
+          path: release
+
+      # A release with no files is the failure this is most likely to have, and
+      # the least obvious afterwards.
+      - name: Check the installers arrived
+        run: |
+          ls -l release
+          count=$(find release -type f | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "release: the build produced no installers to publish." >&2
+            exit 1
+          fi
+          echo "release: $count file(s) to publish."
+
+      # Checksums are the only integrity claim an unsigned build can make, so
+      # they are attached as a file and printed into the notes: somebody looking
+      # at a warning dialog should not have to download a second file to find
+      # out whether the first one is the one that was built here.
+      - name: Checksum every installer
+        working-directory: release
+        # `--` rather than a bare glob: the sums are printed into the notes, so
+        # the names in them should be the names of the files and nothing else.
+        run: sha256sum -- * > SHA256SUMS.txt
+
+      - name: Write the release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          {
+            echo "teamree \`$TAG\`, for macOS, Windows and Linux."
+            echo
+            echo "## Nothing here is signed"
+            echo
+            echo "There is no Apple Developer certificate behind this build and no Windows"
+            echo "code-signing certificate. Both systems will say so, in wording that sounds"
+            echo "worse than what it means: the complaint is that nobody has paid a vendor to"
+            echo "vouch for the file, not that anything was found wrong with it. Neither"
+            echo "system has inspected the app; neither is telling you it is harmful."
+            echo
+            echo "What a signature would have told you, a checksum tells you too. Compare the"
+            echo "file you downloaded against \`SHA256SUMS.txt\` below and you know it is the"
+            echo "one this build produced. It cannot tell you the build is trustworthy — only"
+            echo "that what reached you is what left here."
+            echo
+            echo "**macOS** will say teamree \"cannot be opened because the developer cannot be"
+            echo "verified\". Move the app to \`/Applications\`, then run once:"
+            echo
+            echo '```sh'
+            echo 'xattr -d com.apple.quarantine /Applications/teamree.app'
+            echo '```'
+            echo
+            echo "**Windows** will show a blue SmartScreen panel. Choose **More info**, then"
+            echo "**Run anyway**. There is no other way past it for an unsigned installer."
+            echo
+            echo "**Linux** warns about none of this. Mark the AppImage executable, or install"
+            echo "the \`.deb\` with \`sudo apt install ./teamree_*_amd64.deb\`."
+            echo
+            echo "The full story — why each warning appears, what it does and does not mean,"
+            echo "how to put the \`teamree\` CLI on PATH, and how to uninstall — is in"
+            echo "[docs/install.md](https://github.com/${{ github.repository }}/blob/$TAG/docs/install.md)."
+            echo
+            echo "## Checksums"
+            echo
+            echo '```'
+            cat release/SHA256SUMS.txt
+            echo '```'
+          } > notes.md
+          cat notes.md
+
+      # A semver pre-release tag (`v0.2.0-rc.1`) is marked as one, so a team
+      # trying a candidate is not told it is the release.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          case "$TAG" in
+            *-*) prerelease=--prerelease ;;
+            *)   prerelease= ;;
+          esac
+
+          # Re-running after a failed publish should finish the job rather than
+          # collide with the half-made release the first attempt left behind.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
+          else
+            gh release create "$TAG" release/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "teamree $TAG" \
+              --notes-file notes.md \
+              $prerelease
+          fi

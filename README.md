@@ -13,6 +13,17 @@ and launched; the Windows installer has never been made. See the known gaps in
 `ROADMAP.md`, which are recorded rather than discovered. Team features come
 after this works.
 
+## Installing a build
+
+If somebody sent you a link rather than a checkout, the installers are on the
+releases page and **[`docs/install.md`](docs/install.md) is the thing to read
+first**. Not because installing is hard — it is a drag to Applications, an
+installer, or `apt install ./teamree_*.deb` — but because none of it is signed,
+and so macOS and Windows will both stop you with a warning the first time. That
+document explains what each warning is actually saying, what it is not saying,
+and the exact way past it on each platform. Every release carries the checksums
+that stand in for the signature.
+
 ## What it does
 
 **A worktree per task.** Add a repository, start a worktree from any base ref,
@@ -101,7 +112,7 @@ rebuilds the app first, so a package is never made from stale output.
 | --- | --- | --- |
 | macOS | `npm run package:mac` | `teamree-<version>-arm64.dmg`, `-x64.dmg`, and a `.zip` per architecture |
 | Windows | `npm run package:win` | `teamree-<version>-setup-x64.exe` (NSIS) |
-| Linux | `npm run package:linux` | `teamree-<version>-x64.AppImage`, `teamree_<version>_amd64.deb` |
+| Linux | `npm run package:linux` | `teamree-<version>-x86_64.AppImage`, `teamree_<version>_amd64.deb` |
 | The one you are on | `npm run package` | as above, for the host platform |
 
 Two more, for working on packaging itself:
@@ -122,8 +133,9 @@ pass `--no-sandbox` themselves, so a container needs no special invocation.
 Each platform's artifact must be built on that platform. `node-pty` publishes
 prebuilt binaries for macOS and Windows but none for Linux, where `npm install`
 compiles one — so a Linux package built anywhere else would contain no working
-terminal at all. `.github/workflows/ci.yml` runs every check and all three
-builds on three runners for that reason.
+terminal at all. `.github/workflows/build.yml` runs every check and all three
+builds on three runners for that reason, and both `ci.yml` and `release.yml`
+call it rather than restating it.
 
 The app icon is generated, not drawn by hand: `npm run icons` rewrites
 `build/icon.png`, `build/icon.icns`, `build/icon.ico` and `build/icons/`.
@@ -142,6 +154,11 @@ one-line flag change are written down in `electron-builder.yml`, next to the
 settings they switch on; `build/entitlements.mac.plist` is already filled in for
 a hardened-runtime, notarized build.
 
+Until somebody does that, every download is an unsigned one, and the person on
+the other end meets a warning rather than an app.
+[`docs/install.md`](docs/install.md) is written for them: what macOS and Windows
+each say, what they mean by it, and the way through on each platform.
+
 ## The `teamree` CLI from a packaged install
 
 The CLI ships inside the app, at `resources/cli/` next to a launcher per
@@ -150,40 +167,32 @@ in plain-Node mode, so an installed app needs no separate Node runtime. It finds
 the running app the same way it always does, through the discovery file the
 runtime writes, so the CLI and the GUI stay in step.
 
-Put it on `PATH` once, after installing:
+Putting it on `PATH` is one command per platform, and they live in
+[`docs/install.md`](docs/install.md) with the rest of what an installed copy
+needs — including the reason a `.deb` install already has a `teamree` on `PATH`
+that is the application rather than the CLI.
 
-**macOS**
-
-```sh
-sudo ln -sf "/Applications/teamree.app/Contents/Resources/cli/teamree" /usr/local/bin/teamree
-```
-
-**Linux** (the `.deb` installs to `/opt/teamree`)
-
-```sh
-sudo ln -sf /opt/teamree/resources/cli/teamree /usr/local/bin/teamree
-```
-
-An AppImage has no fixed install path — its contents only exist while it is
-mounted — so use the `.deb` if you want the CLI, or extract the AppImage with
-`--appimage-extract` and link the `teamree` inside it.
-
-**Windows** (PowerShell, no admin needed; the default install location is
-per-user)
-
-```powershell
-$cli = "$env:LOCALAPPDATA\Programs\teamree\resources\cli"
-[Environment]::SetEnvironmentVariable(
-  'Path', "$([Environment]::GetEnvironmentVariable('Path','User'));$cli", 'User')
-```
-
-Open a new terminal afterwards. `teamree.cmd` is what `cmd.exe` resolves and
-`teamree.ps1` is what PowerShell resolves; both are in that directory.
-
-Then, with the app running:
+With the app running:
 
 ```
 $ teamree status
 ```
 
 If the app is not running, the CLI says so and exits 3 rather than hanging.
+
+## Releases
+
+`.github/workflows/release.yml` turns a `v*` tag into downloadable installers.
+It does not build them itself: it calls `.github/workflows/build.yml`, which is
+the same workflow `ci.yml` calls on every pull request, so what gets published
+has been through typecheck, lint, format, the full suite, the smoke test and the
+packaged-app check on all three platforms. A release pipeline of its own would
+be a second, shorter sequence that nobody reads the output of, and the check it
+would be tempting to leave out — launching the artifact and spawning a PTY in it
+— is the only one that can tell a package that built from a package that works.
+
+The job then attaches every installer to the release along with a
+`SHA256SUMS.txt`, and writes notes that say plainly that nothing is signed and
+what each platform will do about that. Unsigned software that arrives without
+explaining itself gets clicked through or thrown away, and neither is what you
+want from somebody trying it for the first time.
