@@ -38,6 +38,9 @@ Read them in this order. The first is the only one you need in order to try it.
 - [**Cutting a release**](releasing.md) — the one command, everything it refuses
   before it spends a minute on anything, and what signing and notarizing would
   take.
+- [**Release notes**](release-notes/) — one file per version, written by hand and
+  read by the release script: what changed, for the person downloading it. The
+  release will not be cut without the file for the version being released.
 - [**The teamwork scenario**](teamwork-scenario.md) — what a passing end-to-end
   teamwork test looks like, step by step; `tests/teamwork/scenario.test.ts` is
   this document as a test, with the same step numbers.
