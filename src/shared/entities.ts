@@ -44,6 +44,15 @@ export type WorktreeStatus = {
   unstaged: number
   untracked: number
   conflicted: number
+  /**
+   * Entries a .gitignore covers, a wholly ignored directory counting as one.
+   *
+   * Not a change, and deliberately not added to any of the counts above — but
+   * removing the checkout deletes them, and git's own idea of "dirty" leaves
+   * them out, so this is the only warning there is. Optional because an answer
+   * that was never given is not the same as a count of zero.
+   */
+  ignored?: number
   /** Wall-clock time of the read, so stale reads are visible to the UI. */
   readAt: number
 }

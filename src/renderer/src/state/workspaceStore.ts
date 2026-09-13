@@ -34,9 +34,16 @@ export type DialogState =
   | { kind: 'members'; projectId: string }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
-  /** Raised only when git has already refused: there is work here to lose. */
-  | { kind: 'confirm-remove'; worktreeId: string; reason: string }
+  /** Raised only when the runtime has already refused: there is something here to lose. */
+  | { kind: 'confirm-remove'; worktreeId: string; reason: string; intent: RemoveIntent }
   | null
+
+/**
+ * Why the removal was asked for. A retry removes the old checkout only to
+ * build a new one in its place, and the confirmation has to say so — otherwise
+ * "Discard the work" is followed by a worktree reappearing.
+ */
+export type RemoveIntent = 'remove' | 'retry'
 
 /** What the task composer submits: a description, who runs it, and from where. */
 export type TaskDraft = {
@@ -429,6 +436,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       .catch(failed('Could not save the layout'))
   }
 
+  /** The create half of a retry, shared by the plain path and the confirmed one. */
+  const recreateWorktree = async (worktree: Worktree): Promise<void> => {
+    const created = await runtimeClient.call('worktree.create', {
+      projectId: worktree.projectId,
+      name: worktree.name,
+      startedFrom: worktree.startedFrom
+    })
+    set((state) => ({ worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), created] }))
+  }
+
   /** Drops a worktree from this window once the runtime has really removed it. */
   const forgetWorktree = (worktreeId: string): void => {
     useWorkspaceStore.getState().closeWorktreeTab(worktreeId)
@@ -565,49 +582,48 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       })().catch(failed('Could not start the task'))
     },
 
+    /**
+     * Builds the checkout again, after removing the one that failed.
+     *
+     * The removal is not forced. A failed row can have a whole checkout behind
+     * it — a create the last restart interrupted is marked failed with its
+     * files still on disk — and pressing Retry is not consent to throw those
+     * away. So the runtime gets to refuse, and the refusal becomes the same
+     * question the sidebar's cross asks.
+     */
     retryWorktree(worktreeId) {
       const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
       if (!worktree) return
-      void runtimeClient
-        .call('worktree.remove', { worktreeId, force: true, deleteBranch: false })
-        .then(() =>
-          runtimeClient.call('worktree.create', {
-            projectId: worktree.projectId,
-            name: worktree.name,
-            startedFrom: worktree.startedFrom
-          })
-        )
-        .then((created) => {
-          set((state) => ({
-            worktrees: [...state.worktrees.filter((entry) => entry.id !== worktreeId), created]
-          }))
-        })
-        .catch(failed('Retry failed'))
+      void (async () => {
+        try {
+          await runtimeClient.call('worktree.remove', { worktreeId, deleteBranch: false })
+        } catch (error) {
+          if (!isRefusal(error)) throw error
+          set({ dialog: { kind: 'confirm-remove', worktreeId, reason: refusalReason(error), intent: 'retry' } })
+          return
+        }
+        await recreateWorktree(worktree)
+      })().catch(failed('Retry failed'))
     },
 
     /**
      * Removes a worktree, and asks first when there is something to lose.
      *
-     * Not forced. The runtime refuses to delete a checkout with uncommitted
-     * changes and says so, which is a protection worth keeping rather than
-     * defeating: the only thing between a small cross in a sidebar and
-     * somebody's afternoon is that refusal.
+     * Not forced. The runtime refuses to delete a checkout with work in it and
+     * says so, which is a protection worth keeping rather than defeating: the
+     * only thing between a small cross in a sidebar and somebody's afternoon
+     * is that refusal.
      */
     async removeWorktree(worktreeId) {
       try {
         await runtimeClient.call('worktree.remove', { worktreeId })
         forgetWorktree(worktreeId)
       } catch (error) {
-        // A conflict here means exactly one thing: git found work in the
-        // checkout. Anything else is a real failure and is reported as one.
-        if ((error as { code?: string } | null)?.code === 'conflict') {
-          set({
-            dialog: {
-              kind: 'confirm-remove',
-              worktreeId,
-              reason: error instanceof Error ? error.message : 'this worktree has uncommitted changes'
-            }
-          })
+        // A conflict here means the runtime found something worth asking
+        // about: uncommitted work, or files only a .gitignore knows of.
+        // Anything else is a real failure and is reported as one.
+        if (isRefusal(error)) {
+          set({ dialog: { kind: 'confirm-remove', worktreeId, reason: refusalReason(error), intent: 'remove' } })
           return
         }
         failed('Could not remove the worktree')(error)
@@ -615,12 +631,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async forceRemoveWorktree(worktreeId) {
+      const dialog = get().dialog
+      const retrying =
+        dialog?.kind === 'confirm-remove' && dialog.worktreeId === worktreeId && dialog.intent === 'retry'
+      // Read before the removal, because forgetting the row takes the only
+      // copy of what the replacement has to be built from.
+      const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
       set({ dialog: null })
       try {
         await runtimeClient.call('worktree.remove', { worktreeId, force: true })
         forgetWorktree(worktreeId)
+        if (retrying && worktree) await recreateWorktree(worktree)
       } catch (error) {
-        failed('Could not remove the worktree')(error)
+        failed(retrying ? 'Retry failed' : 'Could not remove the worktree')(error)
       }
     },
 
@@ -696,11 +719,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    /**
+     * Closes a pane, but only once the process behind it is really gone.
+     *
+     * The pane is the only way to reach a PTY and everything running under it,
+     * so taking it off the screen first and asking afterwards would strand an
+     * agent mid-task with no row, no pane and no way back short of quitting.
+     */
     async closeTerminal(terminalId) {
-      const { activeWorktreeId, layouts } = get()
-      const layout = activeWorktreeId ? layouts[activeWorktreeId] : null
-      if (!layout || !activeWorktreeId) return
+      const { activeWorktreeId } = get()
+      if (!activeWorktreeId || !get().layouts[activeWorktreeId]) return
 
+      try {
+        await runtimeClient.call('terminal.close', { terminalId })
+      } catch (error) {
+        failed('Could not close the terminal')(error)
+        return
+      }
+
+      // Re-read: the close was awaited, and the layout can have moved under it.
+      const layout = get().layouts[activeWorktreeId]
+      if (!layout) return
       const nextFocus = neighbourTerminalId(layout.root, terminalId)
       const root = closePane(layout.root, terminalId)
       persistLayout({
@@ -713,12 +752,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         delete terminals[terminalId]
         return { terminals }
       })
-
-      try {
-        await runtimeClient.call('terminal.close', { terminalId })
-      } catch (error) {
-        failed('Could not close the terminal')(error)
-      }
     },
 
     async createTerminal(worktreeId) {
@@ -931,6 +964,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }
   }
 })
+
+/**
+ * Whether the runtime refused rather than failed.
+ *
+ * A refusal is an answer — there is something in this checkout — and the only
+ * one this window is allowed to turn into a question for the user. Everything
+ * else is a fault, and a fault must never be read as consent.
+ */
+function isRefusal(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === 'conflict'
+}
+
+function refusalReason(error: unknown): string {
+  return error instanceof Error ? error.message : 'this worktree has work in it that is not committed anywhere'
+}
 
 /** Drops entries whose worktree the runtime no longer lists. */
 function keptFor<T>(byWorktree: Record<string, T>, live: Set<string>): Record<string, T> {

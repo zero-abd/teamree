@@ -39,7 +39,11 @@ describe('parsePorcelainV2', () => {
       staged: 3, // staged.txt, both.txt, renamed.txt
       unstaged: 2, // unstaged.txt, both.txt
       untracked: 1,
-      conflicted: 1
+      conflicted: 1,
+      // Counted, and counted apart: an ignored file is not a change, but it is
+      // still something a removal would delete.
+      ignored: 1,
+      ignoredPaths: ['ignored.txt']
     })
   })
 

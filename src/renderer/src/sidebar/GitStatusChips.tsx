@@ -8,8 +8,14 @@ export function GitStatusChips({ status }: { status: WorktreeStatus | undefined 
   const summary = summarizeWorktreeStatus(status)
   if (!summary) return null
 
+  // Ignored entries are not a change and never colour the row's tone. They are
+  // here because removing the checkout deletes them and git's own refusal does
+  // not cover them, so this chip is the only notice they get.
+  const ignored = status?.ignored ?? 0
+  const description = ignored > 0 ? `${summary.description} · ${ignored} ignored` : summary.description
+
   return (
-    <span className="gitchips" title={summary.description} aria-label={`git status: ${summary.description}`}>
+    <span className="gitchips" title={description} aria-label={`git status: ${description}`}>
       {summary.ahead > 0 ? (
         <span className="gitchip">
           <span className="gitchip__glyph" aria-hidden="true">
@@ -30,6 +36,14 @@ export function GitStatusChips({ status }: { status: WorktreeStatus | undefined 
         <span className={`gitchip gitchip--${summary.tone}`}>
           <span className="gitchip__bullet" aria-hidden="true" />
           {summary.tone === 'conflict' ? summary.conflicted : summary.dirty}
+        </span>
+      ) : null}
+      {ignored > 0 ? (
+        <span className="gitchip gitchip--ignored">
+          <span className="gitchip__glyph" aria-hidden="true">
+            ⊘
+          </span>
+          {ignored}
         </span>
       ) : null}
     </span>

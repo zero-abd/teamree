@@ -371,6 +371,12 @@
   background: var(--danger);
 }
 
+/* Files a .gitignore covers. Kept at the muted weight the chips default to:
+   it is not a warning about the work, it is a note about what is on disk. */
+.gitchip--ignored {
+  color: var(--fg-muted);
+}
+
 /* Whether this worktree can go in. Kept quiet: it sits beside the status chips
    and must not shout over them, and "unknown" is not a warning — it is the
    absence of an answer. */
