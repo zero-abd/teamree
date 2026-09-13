@@ -361,6 +361,47 @@ export type MemberList = {
    * renamed their file is still the same person.
    */
   enrolled: boolean
+  /**
+   * Whether a key that arrives by `git pull` is noticed on its own.
+   *
+   * True is the ordinary state: `.teamree` is watched, and a roster that
+   * changed on disk reaches the window without anybody asking. False is not a
+   * fault and must not be shown as one — it means this list is only as fresh as
+   * this read, which is a different sentence and has to stay one.
+   */
+  watched: boolean
+  readAt: number
+}
+
+/**
+ * Where a project's relay is recorded, and what each of the two places said.
+ *
+ * Both halves are reported whatever is in effect, because the two questions a
+ * surprised person actually has are "which URL is this app using" and "why is
+ * it not the one I set". The environment override is named even when it is not
+ * set at all: an app launched from Finder inherits no shell environment, so
+ * "teamree saw no override" is the answer to a question that is otherwise
+ * unanswerable from inside the app.
+ */
+export type RelaySetting = {
+  projectId: string
+  /** Path relative to the project root, as a diff would show it. */
+  file: string
+  /** The URL teamwork would dial, or null when there is none to dial. */
+  url: string | null
+  /** Which of the two places the URL in effect came from. Null when neither did. */
+  source: 'repository' | 'environment' | null
+  /** Why there is no URL in effect, in words to act on. Null when there is one. */
+  problem: string | null
+  /** What the committed file says, read even when the environment is winning. */
+  committed: { url: string | null; problem: string | null }
+  /** The per-machine override, as this process sees it. */
+  override: {
+    /** The variable's name, so a message can say it rather than imply it. */
+    name: string
+    /** Null when this process has no such variable — which is what Finder does. */
+    value: string | null
+  }
   readAt: number
 }
 

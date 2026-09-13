@@ -21,4 +21,11 @@ export {
   type MemberFileParse
 } from './memberFile'
 export { memberFileName, memberFilePath, membersDirectory, readRoster, type Roster, type RosterEntry } from './roster'
+export {
+  degradedTeamreeWatchReport,
+  TeamreeWatcher,
+  type TeamreeWatchDegraded,
+  type TeamreeWatcherOptions,
+  type WatchedProject
+} from './teamreeWatcher'
 export { TeamworkService, type ProjectSource, type TeamworkServiceOptions } from './teamworkService'

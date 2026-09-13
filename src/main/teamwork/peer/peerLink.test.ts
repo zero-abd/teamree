@@ -24,7 +24,7 @@ import {
 } from './peerTestSupport'
 import { isNewerPresence, linkIdFor } from './peerService'
 import { normaliseRemote, projectKeyFor } from './projectKey'
-import { HANDSHAKE_TIMEOUT_MS } from './peerLink'
+import { HANDSHAKE_TIMEOUT_MS, WAITING_DETAIL, WAITING_TOO_LONG_DETAIL } from './peerLink'
 import { RelayCloseCode } from './relayConnection'
 import { epochAt, rendezvousId, rendezvousToken, sharedSecret } from './rendezvous'
 
@@ -488,6 +488,42 @@ describe('the failure paths', () => {
     expect(second).not.toBe(first)
     expect(epochAt(pair.scheduler.now())).toBe(firstEpoch + 1)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('waiting')
+  })
+
+  it('names the two things to check once nobody has arrived for two hours', async () => {
+    // A clock across the hourly boundary and a teammate on a different relay
+    // both look exactly like this, for ever, and the relay cannot tell either
+    // of us apart from an unanswered rendezvous. What the client knows is how
+    // long it has waited, and it says only that and what it narrows to.
+    const relay = createFakeRelay()
+    const pair = await pairOfRuntimes({ relay })
+    await pair.alice.service.start()
+    await pair.scheduler.advance(0)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBe(WAITING_DETAIL)
+
+    await pair.scheduler.advance(3_600_000)
+    // One rotation proves nothing: a link started at any point in an hour can
+    // cross its first boundary a second later.
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBe(WAITING_DETAIL)
+
+    await pair.scheduler.advance(3_600_000)
+    const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(link?.phase).toBe('waiting')
+    expect(link?.detail).toBe(WAITING_TOO_LONG_DETAIL)
+    expect(link?.detail).toContain('.teamree/relay')
+    expect(link?.detail).toContain('time')
+  })
+
+  it('goes back to saying nothing extra once somebody answers the rendezvous', async () => {
+    const pair = await pairOfRuntimes()
+    await pair.alice.service.start()
+    await pair.scheduler.advance(0)
+    await pair.scheduler.advance(7_200_000)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBe(WAITING_TOO_LONG_DETAIL)
+
+    await pair.bob.service.start()
+    await pair.scheduler.advance(0)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
   })
 
   it('never lets one hello reach the relay twice for the same pair of keys', async () => {

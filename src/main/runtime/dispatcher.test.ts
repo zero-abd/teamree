@@ -129,6 +129,8 @@ describe('dispatcher', () => {
       'project.remove',
       'status.get',
       'teamwork.presence',
+      'teamwork.relay',
+      'teamwork.setRelay',
       'teamwork.status',
       // Local, not peer-reachable. `teamwork.watch` is this machine asking to
       // read somebody else's pane; what crosses the wire underneath it is

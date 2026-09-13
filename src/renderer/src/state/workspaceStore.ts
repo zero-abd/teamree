@@ -10,6 +10,7 @@ import type {
   PaneNode,
   PaneWatchers,
   Project,
+  RelaySetting,
   TeammatePresence,
   TeamworkStatus,
   Terminal,
@@ -113,6 +114,21 @@ type WorkspaceState = {
   /** True while a roster is being read or written, so the dialog can say so. */
   membersPending: boolean
   /**
+   * Each project's relay, for the ones somebody has looked at. Read beside the
+   * roster because the two are the same fact about a team: who is on it, and
+   * where they meet.
+   */
+  relays: Record<string, RelaySetting>
+  relayPending: boolean
+  /**
+   * Why the last relay this window tried to write was refused, or null.
+   *
+   * Kept here rather than raised as a notice because the refusal carries the
+   * remedy — the corrected URL to type — and that belongs beside the field it
+   * is about, not in a corner of the window.
+   */
+  relayError: string | null
+  /**
    * Whether teamwork is running for each project, by project id.
    *
    * Absent means "not asked yet", which is deliberately not the same as "off":
@@ -197,6 +213,13 @@ type WorkspaceState = {
 
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
+  /** Reads where one project's relay is recorded, and what each place said. */
+  loadRelay: (projectId: string) => Promise<void>
+  /**
+   * Writes the relay into the repository. Like joining, it writes the file and
+   * stops: pushing it is what makes it the team's.
+   */
+  setRelay: (projectId: string, url: string) => Promise<void>
   /**
    * Writes this installation's key into the project. It does not commit and
    * does not push, and the dialog says so: doing either for somebody would hide
@@ -415,7 +438,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const reads: Promise<unknown>[] = []
     if (targets.projects) reads.push(refreshProjects())
     if (targets.terminals) reads.push(refreshTerminals())
-    if (targets.members) reads.push(refreshMembers())
+    if (targets.members) reads.push(refreshMembers(), refreshRelays())
     if (targets.teammates) reads.push(refreshTeammates())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
@@ -459,6 +482,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     )
     set((state) => ({
       members: lists.reduce((map, list) => (list ? { ...map, [list.projectId]: list } : map), { ...state.members })
+    }))
+  }
+
+  /**
+   * The other half of `.teamree`, on the same signal.
+   *
+   * The runtime's watch covers the whole directory, so the event that says a
+   * key arrived is the same one that says the relay did. Re-read only for the
+   * projects somebody has opened, exactly as the rosters are.
+   */
+  const refreshRelays = async (): Promise<void> => {
+    const projectIds = Object.keys(get().relays)
+    if (projectIds.length === 0) return
+    const settings = await Promise.all(
+      projectIds.map((projectId) => runtimeClient.call('teamwork.relay', { projectId }).catch(() => null))
+    )
+    set((state) => ({
+      relays: settings.reduce((map, setting) => (setting ? { ...map, [setting.projectId]: setting } : map), {
+        ...state.relays
+      })
     }))
   }
 
@@ -548,6 +591,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     mergePreviews: {},
     members: {},
     membersPending: false,
+    relays: {},
+    relayPending: false,
+    relayError: null,
     teamwork: {},
     teammates: {},
     watchers: {},
@@ -960,6 +1006,37 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         failed('Could not read the members of this project')(error)
       } finally {
         set({ membersPending: false })
+      }
+    },
+
+    async loadRelay(projectId) {
+      // A refusal is about one attempt at one project, so re-opening the dialog
+      // must not show somebody else's.
+      set({ relayPending: true, relayError: null })
+      try {
+        const setting = await runtimeClient.call('teamwork.relay', { projectId })
+        set((state) => ({ relays: { ...state.relays, [projectId]: setting } }))
+      } catch (error) {
+        failed('Could not read where this project’s relay is')(error)
+      } finally {
+        set({ relayPending: false })
+      }
+    },
+
+    async setRelay(projectId, url) {
+      set({ relayPending: true, relayError: null })
+      try {
+        const setting = await runtimeClient.call('teamwork.setRelay', { projectId, url })
+        set((state) => ({ relays: { ...state.relays, [projectId]: setting } }))
+        // The same half-done state a join leaves behind, said the same way: the
+        // file exists and means nothing to anybody else until it is pushed.
+        notify(`Wrote ${setting.file}. Commit and push it so your team meets there.`, 'info')
+      } catch (error) {
+        // Kept in the dialog rather than raised as a notice: a refusal names
+        // the URL to type instead, and that is only useful beside the field.
+        set({ relayError: error instanceof Error ? error.message : String(error) })
+      } finally {
+        set({ relayPending: false })
       }
     },
 

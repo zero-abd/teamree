@@ -9,6 +9,7 @@ import type {
   MemberList,
   PaneNode,
   Project,
+  RelaySetting,
   StartPoint,
   StartPointList,
   Terminal,
@@ -142,6 +143,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
   const layouts = new Map<string, Layout>()
   /** Rosters by project id, so joining one in the demo really does add a row. */
   const rosters = new Map<string, Member[]>()
+  /** The relay each project meets on, so setting one in the demo takes effect. */
+  const relays = new Map<string, string>()
 
   let connection: ConnectionState = { phase: 'connecting', detail: 'Starting runtime' }
   const connectionListeners = new Set<(state: ConnectionState) => void>()
@@ -244,6 +247,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
     { ...seededMember('you', SEEDED_PUBLIC_KEY, '2026-08-27'), isSelf: true }
   ])
   rosters.set(ledger.id, [seededMember('grace', 'tOZqe8RgnJt2KzVOWEfPkfYHQpB1i0Jt7Ojb9vDfjW4=', '2026-06-11')])
+  // The same split for the other team-wide fact: one project has a relay
+  // committed and one has none, which is what the panel is there to fix.
+  relays.set(atlas.id, 'wss://relay.example/v1/relay')
 
   const search = seedWorktree(atlas, 'incremental search index', 'task/incremental-search', 'ready')
   const themes = seedWorktree(atlas, 'theme tokens pass', 'task/theme-tokens', 'ready')
@@ -359,6 +365,25 @@ export function createSeededRuntimeClient(): RuntimeClient {
       self: { handle, publicKey: SEEDED_PUBLIC_KEY },
       selfFile: `.teamree/members/${handle}.pub`,
       enrolled: mine !== undefined,
+      watched: true,
+      readAt: Date.now()
+    }
+  }
+
+  /** The demo's one team-wide fact, and the environment saying nothing. */
+  const relaySetting = (projectId: string): RelaySetting => {
+    const url = relays.get(projectId) ?? null
+    return {
+      projectId,
+      file: '.teamree/relay',
+      url,
+      source: url === null ? null : 'repository',
+      problem:
+        url === null
+          ? 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
+          : null,
+      committed: { url, problem: null },
+      override: { name: 'TEAMREE_RELAY_URL', value: null },
       readAt: Date.now()
     }
   }
@@ -601,6 +626,13 @@ export function createSeededRuntimeClient(): RuntimeClient {
         truncated: false,
         readAt: Date.now()
       }
+    },
+
+    'teamwork.relay': ({ projectId }) => relaySetting(projectId),
+    'teamwork.setRelay': ({ projectId, url }) => {
+      relays.set(projectId, url)
+      announce({ type: 'members' })
+      return relaySetting(projectId)
     },
 
     'members.list': ({ projectId }) => memberList(projectId),

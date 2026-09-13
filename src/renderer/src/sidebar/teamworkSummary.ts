@@ -90,7 +90,14 @@ export function teamworkSummary(status: TeamworkStatus | undefined): TeamworkSum
     return {
       tone: 'pending',
       label: 'Nobody connected',
-      detail: `${relayLabel(status)} is reachable. No teammate’s machine is connected to it right now.`
+      // Per link underneath, because they do not all say the same thing: a link
+      // that has waited across two hourly rendezvous rotations has waited
+      // longer than a colleague who stepped out, and what it has to say about
+      // that is the only place the clock and the relay file get named.
+      detail: [
+        `${relayLabel(status)} is reachable. No teammate’s machine is connected to it right now.`,
+        ...status.links.filter((link) => link.detail !== undefined).map((link) => `${link.handle}: ${link.detail}`)
+      ].join('\n')
     }
   }
   return {

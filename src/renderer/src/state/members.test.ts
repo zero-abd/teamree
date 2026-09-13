@@ -62,3 +62,60 @@ it('adds you to a roster you are not in, and re-reads every roster on screen', a
 it('turns a roster change into a roster refetch and nothing else', () => {
   expect(targetsForEvent({ type: 'members' })).toEqual(refreshTargets({ members: true }))
 })
+
+it('writes the relay into the project and leaves committing it to the user', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const [, outsider] = useWorkspaceStore.getState().projects
+  await store.loadRelay(outsider!.id)
+  expect(useWorkspaceStore.getState().relays[outsider!.id]?.url).toBeNull()
+
+  await store.setRelay(outsider!.id, 'wss://relay.example/v1/relay')
+
+  const setting = useWorkspaceStore.getState().relays[outsider!.id]!
+  expect(setting.url).toBe('wss://relay.example/v1/relay')
+  expect(setting.source).toBe('repository')
+  // Said where somebody will read it, because the file is only half the step.
+  expect(useWorkspaceStore.getState().notices.at(-1)?.text).toContain('.teamree/relay')
+})
+
+it('says whether the override was seen, not only whether it won', async () => {
+  // "I set TEAMREE_RELAY_URL and nothing happened" has no answer inside the app
+  // unless the app reports having looked.
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const [joined] = useWorkspaceStore.getState().projects
+
+  await store.loadRelay(joined!.id)
+
+  expect(useWorkspaceStore.getState().relays[joined!.id]?.override).toEqual({
+    name: 'TEAMREE_RELAY_URL',
+    value: null
+  })
+})
+
+it('re-reads the relay on the same change that re-reads the roster', async () => {
+  // One directory, one watch, one event: a pull that brings in a key and a
+  // relay must not need two of anything.
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const stop = store.startWatching()
+  try {
+    const [joined, outsider] = useWorkspaceStore.getState().projects
+    await store.loadRelay(joined!.id)
+    await store.loadRelay(outsider!.id)
+
+    const call = vi.spyOn(runtimeClient, 'call')
+    await store.setRelay(outsider!.id, 'ws://127.0.0.1:8787/v1/relay')
+
+    await vi.waitFor(() => {
+      const read = call.mock.calls
+        .filter(([method]) => method === 'teamwork.relay')
+        .map(([, params]) => (params as { projectId: string }).projectId)
+      expect(read).toContain(joined!.id)
+    })
+    call.mockRestore()
+  } finally {
+    stop()
+  }
+})

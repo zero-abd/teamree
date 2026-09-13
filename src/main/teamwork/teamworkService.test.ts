@@ -42,7 +42,9 @@ function withoutEmail(inner: GitRunner): GitRunner {
   }
 }
 
-async function wire(options: { email?: string | null } = {}): Promise<Harness> {
+async function wire(
+  options: { email?: string | null; env?: NodeJS.ProcessEnv; watching?: boolean } = {}
+): Promise<Harness> {
   const repo = await createTempRepo()
   repos.push(repo)
   if (typeof options.email === 'string') await repo.git(['config', 'user.email', options.email])
@@ -61,6 +63,8 @@ async function wire(options: { email?: string | null } = {}): Promise<Harness> {
       dataDir,
       runner,
       now: () => Date.parse('2026-09-13T10:00:00Z'),
+      env: options.env ?? {},
+      watching: () => options.watching ?? false,
       onRosterChange: () => {
         harness.changes += 1
       }
@@ -215,5 +219,100 @@ describe('joining a project', () => {
     const refusal = harness.service.joinProject({ projectId: harness.project.id, handle: '///' })
 
     await expect(refusal).rejects.toThrow(/choose another handle/)
+  })
+})
+
+describe('a roster that changed on disk', () => {
+  it('sees a teammate’s key arrive by pulling it, without being restarted', async () => {
+    // The belt-and-braces half of the watch on `.teamree`: opening the dialog
+    // is itself a read, and a read that finds the directory has moved has to
+    // tell the rest of the app, or the sidebar goes on showing yesterday.
+    const harness = await wire({ email: 'ada@example.com' })
+    await harness.service.joinProject({ projectId: harness.project.id })
+    expect(harness.changes).toBe(1)
+
+    await harness.seed('grace', GRACE)
+    const list = await harness.service.listMembers({ projectId: harness.project.id })
+
+    expect(list.members.map((member) => member.handle)).toEqual(['ada', 'grace'])
+    expect(harness.changes).toBe(2)
+  })
+
+  it('announces nothing when a read finds the roster it already knew', async () => {
+    // Otherwise the announcement causes a re-read, which announces: the window
+    // and the runtime would chase each other for as long as the app ran.
+    const harness = await wire({ email: 'ada@example.com' })
+    await harness.seed('grace', GRACE)
+
+    await harness.service.listMembers({ projectId: harness.project.id })
+    await harness.service.listMembers({ projectId: harness.project.id })
+
+    expect(harness.changes).toBe(0)
+  })
+
+  it('says a roster nothing is watching is only as fresh as this read', async () => {
+    const unwatched = await wire({ email: 'ada@example.com' })
+    const watched = await wire({ email: 'ada@example.com', watching: true })
+
+    expect((await unwatched.service.listMembers({ projectId: unwatched.project.id })).watched).toBe(false)
+    expect((await watched.service.listMembers({ projectId: watched.project.id })).watched).toBe(true)
+  })
+})
+
+describe('the relay a project meets on', () => {
+  it('writes the file people were writing by hand, and leaves committing to them', async () => {
+    const harness = await wire({ email: 'ada@example.com' })
+
+    const setting = await harness.service.setRelay({
+      projectId: harness.project.id,
+      url: 'wss://relay.example/v1/relay'
+    })
+
+    expect(setting.url).toBe('wss://relay.example/v1/relay')
+    expect(setting.source).toBe('repository')
+    const written = await readFile(path.join(harness.repo.repoPath, '.teamree/relay'), 'utf8')
+    expect(written).toContain('wss://relay.example/v1/relay')
+    // Untracked, exactly like a member file: pushing it is what makes it the
+    // team's, and the app must not have taken that step.
+    expect(await harness.repo.git(['status', '--porcelain'])).toContain('.teamree/')
+    expect(harness.changes).toBe(1)
+  })
+
+  it('refuses the address a deploy printed, and says what to type instead', async () => {
+    const harness = await wire({ email: 'ada@example.com' })
+
+    const refusal = harness.service.setRelay({
+      projectId: harness.project.id,
+      url: 'https://teamree-relay.example.workers.dev'
+    })
+
+    await expect(refusal).rejects.toThrow(/wss:\/\/teamree-relay\.example\.workers\.dev\/v1\/relay/)
+  })
+
+  it('says the environment was looked at and had nothing in it', async () => {
+    // The answer to "I set the variable and nothing happened": an app opened
+    // from Finder inherits no shell environment, and until now nothing in the
+    // app could say whether the override had been seen at all.
+    const harness = await wire({ email: 'ada@example.com', env: {} })
+
+    const setting = await harness.service.readRelay({ projectId: harness.project.id })
+
+    expect(setting.override).toEqual({ name: 'TEAMREE_RELAY_URL', value: null })
+    expect(setting.url).toBeNull()
+    expect(setting.problem).toContain('.teamree/relay')
+  })
+
+  it('shows the committed relay as well as the override beating it', async () => {
+    const harness = await wire({
+      email: 'ada@example.com',
+      env: { TEAMREE_RELAY_URL: 'ws://127.0.0.1:8787/v1/relay' }
+    })
+    await harness.service.setRelay({ projectId: harness.project.id, url: 'wss://relay.example/v1/relay' })
+
+    const setting = await harness.service.readRelay({ projectId: harness.project.id })
+
+    expect(setting.url).toBe('ws://127.0.0.1:8787/v1/relay')
+    expect(setting.source).toBe('environment')
+    expect(setting.committed.url).toBe('wss://relay.example/v1/relay')
   })
 })

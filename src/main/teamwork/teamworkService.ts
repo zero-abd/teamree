@@ -10,17 +10,30 @@
 // not because that would be hard, but because doing it for someone would hide
 // the only step that means anything. A key nobody could push is not membership,
 // and a key this app pushed on your behalf is a claim you never made.
+//
+// The relay is here for the same reason and on the same terms. It is the other
+// fact a team has to agree on, it lives in the same directory, and setting it
+// writes `.teamree/relay` and stops — so the two of them are one commit rather
+// than one button and one heredoc.
 
 import { mkdir, open } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import type { MemberIdentity, MemberList, Project } from '../../shared/entities'
+import type { MemberIdentity, MemberList, Project, RelaySetting } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
 import { createGitRunner, type GitRunner } from '../git/gitProcess'
 import { notFound } from '../runtime/runtimeError'
-import { badHandle, rosterConflict } from './errors'
+import { badHandle, badRelayUrl, rosterConflict } from './errors'
 import { resolveHandle } from './handle'
 import { loadIdentity } from './identity'
 import { formatMemberFile } from './memberFile'
+import {
+  parseRelayUrl,
+  readRelayFile,
+  RELAY_FILE_NAME,
+  RELAY_URL_ENV,
+  relayOverride,
+  writeRelayFile
+} from './peer/relayUrl'
 import { memberFileName, memberFilePath, readRoster, type Roster } from './roster'
 
 /** Only the sliver of the workspace store this needs, so a test can hand it one project. */
@@ -37,9 +50,20 @@ export type TeamworkServiceOptions = {
   runner?: GitRunner
   now?: () => number
   /**
-   * Called once the roster on disk has changed, so the workspace stream can say
-   * so. Attached to the service rather than to a transport, which is what lets
-   * a window notice a join made from anywhere else.
+   * The environment the relay override is read from. Passed in rather than
+   * reached for so a test can say what this process can see.
+   */
+  env?: NodeJS.ProcessEnv
+  /**
+   * Whether this project's `.teamree` is being watched, so a roster read can
+   * say whether it will stay true by itself. Absent means nothing is watching,
+   * which is what a service built without a watcher should claim.
+   */
+  watching?: (projectId: string) => boolean
+  /**
+   * Called once what is in `.teamree` has changed, so the workspace stream can
+   * say so. Attached to the service rather than to a transport, which is what
+   * lets a window notice a join made from anywhere else.
    */
   onRosterChange?: () => void
 }
@@ -49,19 +73,38 @@ export class TeamworkService {
   readonly #dataDir: string
   readonly #runner: GitRunner
   readonly #now: () => number
+  readonly #env: NodeJS.ProcessEnv
+  readonly #watching: (projectId: string) => boolean
   readonly #onRosterChange: (() => void) | undefined
+  /**
+   * What the roster looked like the last time this service read one, per
+   * project.
+   *
+   * Kept so that *any* read can be the thing that notices a change — opening
+   * the members dialog after a pull, as much as a watch firing. It is only ever
+   * compared, never served: a reader gets what is on disk now.
+   */
+  readonly #lastRoster = new Map<string, string>()
 
   constructor(options: TeamworkServiceOptions) {
     this.#store = options.store
     this.#dataDir = options.dataDir
     this.#runner = options.runner ?? createGitRunner()
     this.#now = options.now ?? Date.now
+    this.#env = options.env ?? process.env
+    this.#watching = options.watching ?? ((): boolean => false)
     this.#onRosterChange = options.onRosterChange
   }
 
   async listMembers(params: ParamsOf<'members.list'>): Promise<MemberList> {
     const project = this.#project(params.projectId)
-    return this.#describe(project, await readRoster(project.path))
+    const roster = await readRoster(project.path)
+    // Belt and braces beside the watch on `.teamree`: a dialog opening is
+    // itself a read, and a read that finds the directory has moved is worth
+    // announcing however it came to happen. Only a *change* is announced, so
+    // the re-read this causes elsewhere finds the same roster and stops.
+    this.#noteRoster(project.id, roster)
+    return this.#describe(project, roster)
   }
 
   async joinProject(params: ParamsOf<'members.join'>): Promise<MemberList> {
@@ -96,18 +139,88 @@ export class TeamworkService {
       publicKey: identity.publicKey,
       addedAt: isoDate(this.#now())
     })
-    this.#onRosterChange?.()
 
     // Re-read rather than splicing the new entry in: what the caller gets back
     // is then what the next reader of the directory will see, including a
     // problem if the file did not land the way it was written.
-    return this.#describe(project, await readRoster(project.path), identity)
+    const written = await readRoster(project.path)
+    // Recorded and then announced, rather than announced *because* it changed:
+    // a join is this app writing the file, and it says so whether or not
+    // anything had read the directory before.
+    this.#lastRoster.set(project.id, fingerprint(written))
+    this.#onRosterChange?.()
+    return this.#describe(project, written, identity)
+  }
+
+  /**
+   * Where this project's relay is recorded, and what each of the two places
+   * said — including the environment when it said nothing at all.
+   */
+  async readRelay(params: ParamsOf<'teamwork.relay'>): Promise<RelaySetting> {
+    return this.#describeRelay(this.#project(params.projectId))
+  }
+
+  /**
+   * Writes the relay into the repository, beside the member keys.
+   *
+   * The one team-wide fact with no button until now: the URL is a file whose
+   * format somebody had to infer from a README, so the app's own template was
+   * exported and called by nothing. Writing it here is the same bargain as
+   * joining — the app writes the file and stops, because pushing it is what
+   * makes it the team's.
+   */
+  async setRelay(params: ParamsOf<'teamwork.setRelay'>): Promise<RelaySetting> {
+    const project = this.#project(params.projectId)
+    const parsed = parseRelayUrl(params.url)
+    if (!parsed.ok) throw badRelayUrl(`that is not a relay URL: ${parsed.reason}`)
+
+    await writeRelayFile(project.path, parsed.url)
+    // Said rather than left to the watch: the watch may be degraded, and the
+    // links have to be rebuilt against a relay that moved either way.
+    this.#onRosterChange?.()
+    return this.#describeRelay(project)
   }
 
   #project(projectId: string): Project {
     const project = this.#store.getProject(projectId)
     if (!project) throw notFound(`no project with id ${projectId}`)
     return project
+  }
+
+  /** Announces a roster that is not the one this service last saw, and only that. */
+  #noteRoster(projectId: string, roster: Roster): void {
+    const seen = this.#lastRoster.get(projectId)
+    const now = fingerprint(roster)
+    this.#lastRoster.set(projectId, now)
+    if (seen === undefined || seen === now) return
+    this.#onRosterChange?.()
+  }
+
+  async #describeRelay(project: Project): Promise<RelaySetting> {
+    const file = await readRelayFile(project.path)
+    const override = relayOverride(this.#env)
+    const committed = { url: file.ok ? file.url : null, problem: file.ok ? null : file.reason }
+
+    const effective = ((): Pick<RelaySetting, 'url' | 'source' | 'problem'> => {
+      if (override === null) {
+        return file.ok
+          ? { url: file.url, source: 'repository', problem: null }
+          : { url: null, source: null, problem: file.reason }
+      }
+      const parsed = parseRelayUrl(override)
+      return parsed.ok
+        ? { url: parsed.url, source: 'environment', problem: null }
+        : { url: null, source: null, problem: `${RELAY_URL_ENV} is not a relay URL: ${parsed.reason}` }
+    })()
+
+    return {
+      projectId: project.id,
+      file: RELAY_FILE_NAME,
+      ...effective,
+      committed,
+      override: { name: RELAY_URL_ENV, value: override },
+      readAt: this.#now()
+    }
   }
 
   async #describe(project: Project, roster: Roster, known?: { publicKey: string }): Promise<MemberList> {
@@ -132,6 +245,7 @@ export class TeamworkService {
       self,
       selfFile: handle === null ? null : memberFileName(handle),
       enrolled: mine !== undefined,
+      watched: this.#watching(project.id),
       readAt: this.#now()
     }
   }
@@ -172,6 +286,20 @@ export class TeamworkService {
       return undefined
     }
   }
+}
+
+/**
+ * Enough of a roster to tell two reads of it apart.
+ *
+ * The problems are in it as well as the members: a file that stopped being
+ * readable is a member who has left the list, and that has to reach the rest of
+ * the app the same way an added one does.
+ */
+function fingerprint(roster: Roster): string {
+  return JSON.stringify([
+    roster.entries.map((entry) => [entry.file, entry.publicKey, entry.addedAt]),
+    roster.problems.map((problem) => [problem.file, problem.reason])
+  ])
 }
 
 /** UTC, so two members added on the same day agree about which day that was. */

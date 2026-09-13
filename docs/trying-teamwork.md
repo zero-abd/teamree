@@ -154,7 +154,9 @@ the deploy printed: what you get is an `https://` host, and the relay endpoint i
 that host with `/v1/relay` on it, spoken as `wss://`. teamree refuses an
 `https://` URL rather than guessing at it, because guessing would work often
 enough to be trusted and then fail on the one deployment where the relay is not
-at the root.
+at the root — but the refusal now says what the corrected URL would be, so
+pasting the address the deploy printed costs you a sentence rather than a
+search.
 
 ### Write it into the repository
 
@@ -172,28 +174,22 @@ the first, which is the thing the identity design spends its whole argument
 avoiding. One person deploys a relay, pushes a one-line file, and the team is
 connected, visibly, in a diff.
 
-**Whoever set the relay up**, from the checkout:
-
-```sh
-cd ~/teamree-example
-mkdir -p .teamree
-cat > .teamree/relay <<'EOF'
-# The relay this project meets on. See relay/README.md.
-wss://teamree-relay.<your-subdomain>.workers.dev/v1/relay
-EOF
-git add .teamree/relay
-git commit -m "Meet on our relay"
-git push
-```
+**Whoever set the relay up** does it in the app, in the same **Members** dialog
+step 4 uses: paste the URL into **Set the relay for this project** and press
+**Write relay file**. That writes `.teamree/relay` — the same file, with the
+same comment header — and stops there, exactly as adding your key does. The
+dialog then names both files it has written and the one commit that covers them,
+which is step 4's commit: you can do this step and the next one and push once.
 
 Blank lines and `#` comments are skipped, the same way the member files' are;
 the first line that is neither is the URL. It must be `ws://` or `wss://`, and
 it carries no query string and no fragment.
 
-**The other one**: `git pull`, and check you have the same file. If you are each
-pointing at a different relay you will never meet, and nothing on either screen
-will say that — each of you will simply see a relay that nobody else is
-connected to.
+**The other one**: `git pull`, and check you have the same file. The dialog
+shows the URL in effect and where it came from, so the check is two people
+reading the same line rather than two people reading two files. If you are each
+pointing at a different relay you will never meet — and after an hour or two of
+that, the project header's tooltip says so and names the two things to check.
 
 There is one override, `TEAMREE_RELAY_URL` in the environment, and it is for a
 single run of a single machine: it exists for the ephemeral tunnel URL that the
@@ -203,7 +199,10 @@ is set. Two cautions, both from how macOS works rather than from teamree: an app
 launched from Finder or Spotlight does not inherit your shell's environment, so
 the override only applies if you start teamree from the terminal that has the
 variable set; and because it is per-machine it is exactly the second list this
-design avoids, so use it to test a relay and then commit the real one.
+design avoids, so use it to test a relay and then commit the real one. The
+Members dialog says which of the two it is looking at — including *"No
+`TEAMREE_RELAY_URL` in this app's environment"*, which is the answer to "I set
+the variable and nothing happened".
 
 ## 4. Both add your key to the repository, commit it, and push it
 
@@ -237,9 +236,12 @@ because that would be hard, but because doing it for you would hide the only
 step that means anything. A key nobody pushed is not membership; a key the app
 pushed on your behalf would be a claim you never made.
 
+The dialog prints these underneath, naming every file it has written — so if you
+also set the relay in step 3, this one commit carries both:
+
 ```sh
 cd ~/teamree-example
-git add .teamree/members/
+git add .teamree
 git commit -m "Add <your handle> to the team"
 git push
 ```
@@ -281,20 +283,18 @@ never pushed it. If your teammate's is missing, they never pushed theirs — and
 no message on your machine will ever say so, because your machine has no way to
 know they meant to.
 
-## 5. Both open the project, and restart the app
+## 5. Both open the project
 
 Add `~/teamree-example` as a project in teamree on both machines, the same way
 you would add any repository.
 
-**Then quit teamree and open it again, on both machines, after the last pull.**
-This is not superstition and it is the sharpest rough edge in the whole runbook.
-`.teamree/members` and `.teamree/relay` live in the primary checkout, which
-nothing in the app watches; the peer service re-reads them when the project list
-changes or when *this* app writes a member file, and a `git pull` that brings in
-your teammate's key or the relay file is neither of those. So the app can be
-sitting on a roster it read before either file existed. Restarting is the
-reliable way to make it read the repository again — as is removing the project
-and adding it back, if you would rather not lose your panes.
+There is nothing to restart. teamree watches `.teamree` in each project's
+primary checkout, so a pull that brings in your teammate's key or the relay file
+reaches the app by itself: the roster is re-read, the links are rebuilt against
+it, and the project header moves. Opening the Members dialog re-reads both
+files as well, which is the belt-and-braces half of the same thing — and if the
+watch could not be set up at all, that is the dialog that says so rather than
+letting a list nothing is following look as live as one that is.
 
 Open the Members dialog on both machines. You should each see two entries, one
 of them marked as you. That part reads the directory and needs no network at
@@ -404,11 +404,12 @@ pushed, makes you a member of nothing.
 cd ~/teamree-example && git pull && ls .teamree/members/
 ```
 
-Both handles, or you are not done. Then check that the app has actually read
-what you just pulled — see the restart in step 5, which is the second half of
-this failure and looks identical from the outside. The Members dialog is the
-test: if it shows two people and the header still says **Teamwork off** or
-**No teammates**, the app is reading a roster from before your pull.
+Both handles, or you are not done. The app follows that directory, so what is
+in it is what the Members dialog shows within a moment of the pull finishing —
+and opening the dialog re-reads it in any case. If the dialog shows two people
+and the header still says **No teammates**, that is worth reporting: it is the
+one shape of this failure the app is supposed to have stopped being able to
+have.
 
 If a key is in the directory and not in the dialog, the dialog will name the
 file and say why it was skipped — a name that is not exactly `<handle>.pub`, a
@@ -416,9 +417,9 @@ file whose contents name somebody other than its filename, two files with one
 key. One bad file costs one member and never the list.
 
 Related: revocation works the same way and at the same speed. Deleting a key
-removes somebody at the next fetch — and, today, at the next thing that makes
-the app re-read — not instantly. There is no revocation feed, because a
-revocation feed is a service, and avoiding services is the entire design.
+removes somebody at the next fetch that brings the deletion in, not instantly.
+There is no revocation feed, because a revocation feed is a service, and
+avoiding services is the entire design.
 
 ### There is no relay, or nobody committed one
 
@@ -431,14 +432,16 @@ get instead of the app quietly connecting to somebody else's server.
 cd ~/teamree-example && git pull && cat .teamree/relay
 ```
 
-Both of you, and compare the strings exactly, scheme included. If one of you has
-the file and the other does not, somebody did not push. If it says the scheme is
-`https`, not ws or wss, you pasted the address the deploy printed rather than
-the endpoint — add `/v1/relay` and make it `wss://`. If you set
-`TEAMREE_RELAY_URL` earlier to test a tunnel and forgot, it is still winning
-over the file in whatever process inherited it; the header's tooltip names where
-the URL came from, so it will say `(from the environment)` when that is what
-happened.
+Both of you, and compare the strings exactly, scheme included — or open the
+Members dialog on each machine, which shows the URL in effect and which of the
+two places it came from. If one of you has the file and the other does not,
+somebody did not push. If it says the scheme is `https`, not ws or wss, you
+pasted the address the deploy printed rather than the endpoint — add `/v1/relay`
+and make it `wss://`, which is what the dialog says back to you if you paste it
+there. If you set `TEAMREE_RELAY_URL` earlier to test a tunnel and forgot, it is
+still winning over the file in whatever process inherited it; the header's
+tooltip says `(from the environment)` when that is what happened, and the
+dialog names the variable and its value.
 
 ### The relay is not reachable
 
@@ -485,12 +488,20 @@ answered on a token derived from a different epoch is not a thing teamree will
 do to paper over a wrong clock.
 
 So if your clocks are far enough apart to straddle the boundary, you are each
-waiting at a different address, both of you see **Nobody connected**, and
-nothing anywhere says why. A peer still waiting when the hour turns re-registers
-under the new token by itself — so the shape of a small skew is intermittent:
-you meet for most of the hour and lose each other for about as long as the skew,
-around the boundary, and it clears itself. A skew of more than an hour means you
-never meet at all.
+waiting at a different address and both of you see **Nobody connected**. A peer
+still waiting when the hour turns re-registers under the new token by itself —
+so the shape of a small skew is intermittent: you meet for most of the hour and
+lose each other for about as long as the skew, around the boundary, and it
+clears itself. A skew of more than an hour means you never meet at all.
+
+The app cannot diagnose this, and neither can the relay: to the relay a
+rendezvous nobody answers and a rendezvous nobody else ever computed are the
+same 32 opaque bytes, which is the design working. What the app does know is how
+long it has waited, so a link that has waited across two hourly rotations says
+so in the header's tooltip and names the two things worth checking — the clocks,
+and whether you both have the same `.teamree/relay`. It is a narrowing, not a
+diagnosis, and it is deliberately not offered before then: a colleague making
+coffee accounts for the first hour.
 
 ```sh
 date -u

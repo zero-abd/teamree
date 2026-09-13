@@ -11,6 +11,7 @@ import type {
   PaneWatchers,
   PeerPresence,
   Project,
+  RelaySetting,
   RuntimeStatus,
   StartPointList,
   TeammatePresence,
@@ -118,6 +119,21 @@ export const Params = {
     /** Overrides the handle derived from git's configured email. */
     handle: z.string().min(1).optional()
   }),
+
+  /**
+   * Where the project's relay is recorded, and what each of the two places
+   * said — the committed file and the per-machine override, reported whichever
+   * one is in effect.
+   */
+  teamworkRelay: z.object({ projectId: z.string().min(1) }),
+  /**
+   * Writes the relay URL into the project, at `.teamree/relay`.
+   *
+   * Like joining, it writes the file and stops: the relay is a team-wide fact,
+   * and it becomes the team's when somebody pushes it. A URL that is not a
+   * WebSocket one is refused with what to type instead rather than guessed at.
+   */
+  teamworkSetRelay: z.object({ projectId: z.string().min(1), url: z.string().min(1) }),
 
   /**
    * Whether teamwork is running for a project, and how each link is going.
@@ -229,6 +245,8 @@ export type MethodContract = {
   'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
   'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }
 
+  'teamwork.relay': { params: z.infer<typeof Params.teamworkRelay>; result: RelaySetting }
+  'teamwork.setRelay': { params: z.infer<typeof Params.teamworkSetRelay>; result: RelaySetting }
   'teamwork.status': { params: z.infer<typeof Params.teamworkStatus>; result: TeamworkStatus }
   'teamwork.presence': { params: z.infer<typeof Params.teamworkPresence>; result: TeammatePresence }
   'teamwork.watch': {

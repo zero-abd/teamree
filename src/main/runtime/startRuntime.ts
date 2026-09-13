@@ -101,6 +101,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
       // Before the PTYs, because a shell dying rewrites files and there is no
       // point reporting changes nobody is left to read.
       areas.worktreeFiles.close()
+      areas.teamworkFiles.close()
       // Kills every PTY before the sockets go, so nothing is orphaned.
       await areas.terminals.shutdown().catch(report)
       subscriptions.closeAll()

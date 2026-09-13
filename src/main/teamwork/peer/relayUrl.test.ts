@@ -10,6 +10,12 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseRelayUrl, readRelayConfig, RELAY_FILE_SEGMENTS, RELAY_URL_ENV, relayFileTemplate } from './relayUrl'
 
+/** The corrected URL a refusal offers, or undefined when it offered none. */
+function suggestionFor(raw: string): string | undefined {
+  const parsed = parseRelayUrl(raw)
+  return parsed.ok ? undefined : parsed.suggestion
+}
+
 async function projectWith(relayFile?: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'teamree-relayurl-'))
   if (relayFile !== undefined) {
@@ -90,6 +96,25 @@ describe('what counts as a relay URL', () => {
     const parsed = parseRelayUrl('https://relay.example/v1/relay')
     expect(parsed.ok).toBe(false)
     expect(parsed.ok === false && parsed.reason).toContain('https')
+  })
+
+  it('tells somebody who pasted the address a deploy printed what to type instead', () => {
+    const parsed = parseRelayUrl('https://teamree-relay.example.workers.dev')
+    expect(parsed.ok).toBe(false)
+    expect(parsed.ok === false && parsed.suggestion).toBe('wss://teamree-relay.example.workers.dev/v1/relay')
+    // In the reason too: most of the places this is reported show only that.
+    expect(parsed.ok === false && parsed.reason).toContain('wss://teamree-relay.example.workers.dev/v1/relay')
+  })
+
+  it('corrects only the scheme when the address already has a path on it', () => {
+    // The path is somebody's answer to where their relay is served, and
+    // RELAY_PATH is configurable, so it is never overwritten with the default.
+    expect(suggestionFor('https://relay.example/v1/relay/')).toBe('wss://relay.example/v1/relay')
+    expect(suggestionFor('http://127.0.0.1:8787/meet')).toBe('ws://127.0.0.1:8787/meet')
+  })
+
+  it('guesses nothing at a scheme that was never an address anybody deployed', () => {
+    expect(suggestionFor('ftp://relay.example/v1/relay')).toBeUndefined()
   })
 
   it('refuses a query or a fragment, which a relay URL never carries', () => {

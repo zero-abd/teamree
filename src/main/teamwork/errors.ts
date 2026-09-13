@@ -20,6 +20,15 @@ export function badHandle(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.InvalidParams, message)
 }
 
+/**
+ * What was typed is not a relay URL. The message carries the remedy rather than
+ * only the diagnosis: `parseRelayUrl` works out what the corrected URL would be
+ * when the input is recognisably the address a deploy printed.
+ */
+export function badRelayUrl(message: string): TeamworkError {
+  return new TeamworkError(ErrorCode.InvalidParams, message)
+}
+
 /** An id that is not shaped like anything this runtime hands out. */
 export function badPaneId(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.InvalidParams, message)
