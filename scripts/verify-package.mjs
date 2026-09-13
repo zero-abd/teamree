@@ -11,10 +11,23 @@
 // backends and a sidecar on Windows, and nothing short of spawning a shell
 // proves all of that survived packaging.
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, statSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  closeSync,
+  rmdirSync,
+  rmSync,
+  statSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { electronSandboxArgs } from './electron-sandbox.mjs'
+import { packagedAppCandidates } from './packaged-app.mjs'
 
 const MARKER = `pty-ok-${Math.random().toString(36).slice(2, 10)}`
 const STARTUP_TIMEOUT_MS = 45_000
@@ -32,18 +45,36 @@ function ok(message) {
 
 // ------------------------------------------------------------ the artifact --
 
+/** Best-effort version of a candidate, so an ambiguous dist names both builds. */
+function describeVersion(candidate) {
+  const plist = join(candidate, 'Contents', 'Info.plist')
+  if (!existsSync(plist)) return 'version unknown'
+  const match = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(readFileSync(plist, 'utf8'))
+  return match ? `version ${match[1]}` : 'version unknown'
+}
+
 /** Layout of a packaged app differs per platform; everything else does not. */
 function locateApp(explicit) {
-  const candidates = explicit
-    ? [explicit]
-    : process.platform === 'darwin'
-      ? ['dist/mac-arm64/teamree.app', 'dist/mac/teamree.app', 'dist/mac-universal/teamree.app']
-      : process.platform === 'win32'
-        ? ['dist/win-unpacked']
-        : ['dist/linux-unpacked']
+  // Newest first, not a fixed order — see scripts/packaged-app.mjs for the
+  // stale build this used to pick up and pass.
+  const candidates = explicit ? [explicit] : packagedAppCandidates()
 
-  const root = candidates.find((candidate) => existsSync(candidate))
-  if (!root) fail(`no packaged app found. Looked for: ${candidates.join(', ')}`)
+  const present = candidates.filter((candidate) => existsSync(candidate))
+  if (present.length === 0) fail(`no packaged app found. Looked for: ${candidates.join(', ')}`)
+
+  // Taking the first match silently verified whichever build happened to be
+  // listed earliest, which on a machine that has packaged more than once is the
+  // older one. A verification that passes against a stale app is worse than no
+  // verification, so an ambiguous dist is a refusal rather than a guess.
+  if (present.length > 1) {
+    fail(
+      `more than one packaged app is in dist/, so it is not clear which one to verify:\n` +
+        present.map((candidate) => `  ${candidate}  (${describeVersion(candidate)})`).join('\n') +
+        `\nRemove the ones you do not mean to check, or name one:  npm run package:verify -- <path>`
+    )
+  }
+
+  const root = present[0]
 
   if (process.platform === 'darwin') {
     return {
@@ -83,12 +114,145 @@ ok(`node-pty binary for ${process.platform}-${process.arch} is unpacked (${binar
 
 // macOS only: node-pty builds spawn-helper under `OS=="mac"` and calls it from
 // a `#if defined(__APPLE__)` branch. Linux execvp's in process and ships none.
-if (process.platform === 'darwin') {
-  const helper = join(binaryDirs[0], 'spawn-helper')
-  if (!existsSync(helper)) fail(`spawn-helper is missing from ${binaryDirs[0]}`)
-  const mode = statSync(helper).mode & 0o777
-  if (!(mode & 0o111)) fail(`spawn-helper is not executable (mode ${mode.toString(8)})`)
-  ok(`spawn-helper is unpacked and executable (mode ${mode.toString(8)})`)
+//
+// Both architectures, not just the one this is running on, and that is the
+// whole point of this block. A universal app carries a node-pty prebuild per
+// architecture — `node-gyp-build` resolves `prebuilds/darwin-<arch>` from
+// `process.arch` at run time — and everything below this section runs the app,
+// so it exercises whichever half the machine happens to be. `macos-latest` is
+// Apple Silicon, which makes the Intel half the half nothing ever executes. If
+// the universal merge or the ad-hoc signature damaged it, a release would go
+// out green and every Intel Mac would open no terminal, which for this app is
+// the whole app.
+//
+// What is here is static, and static is the most that can be said without an
+// Intel Mac or Rosetta: each architecture's `pty.node` and `spawn-helper` are
+// present, spawn-helper is executable, and each file is a Mach-O for the
+// architecture whose directory it is sitting in and is no shorter than its own
+// header says it must be. The last two are the ones with teeth — they catch a
+// merge that wrote the same slice into both directories, and a file cut off
+// before its load commands end.
+//
+// Neither is complete, and neither is running it. A copy truncated past the
+// load commands still reads as well-formed here, and nothing static can tell
+// you a binary executes. Until an Intel Mac or Rosetta runs the x64 slice, that
+// half of the universal app is asserted, not demonstrated.
+const CPU_TYPES = new Map([
+  [0x01000007, 'x64'],
+  [0x0100000c, 'arm64'],
+  [0x00000007, 'ia32'],
+  [0x0000000c, 'arm']
+])
+
+/**
+ * What a Mach-O file says about itself: the architectures it is for, and the
+ * smallest size it could be and still be whole.
+ *
+ * `arches` is empty for a file that is not a Mach-O at all. `declared` is the
+ * end of the last structure the header points at — the load commands for a thin
+ * binary, the last slice for a fat one — so a file shorter than that has been
+ * cut off somewhere between the build and here.
+ */
+function machoHeader(path) {
+  const head = Buffer.alloc(4096)
+  const fd = openSync(path, 'r')
+  let read = 0
+  try {
+    read = readSync(fd, head, 0, head.length, 0)
+  } finally {
+    closeSync(fd)
+  }
+  const nothing = { arches: [], declared: 0 }
+  if (read < 8) return nothing
+
+  const name = (cpu) => CPU_TYPES.get(cpu) ?? `cputype ${cpu}`
+
+  // A fat header is big-endian by definition, whatever is inside it.
+  const fat = head.readUInt32BE(0)
+  if (fat === 0xcafebabe || fat === 0xcafebabf) {
+    const wide = fat === 0xcafebabf
+    const stride = wide ? 32 : 20
+    const arches = []
+    let declared = 0
+    for (let i = 0; i < head.readUInt32BE(4); i += 1) {
+      const at = 8 + i * stride
+      if (at + stride > read) break
+      arches.push(name(head.readUInt32BE(at)))
+      // fat_arch is {cputype, cpusubtype, offset, size, align} with 32-bit
+      // offset and size; fat_arch_64 widens both to 64 and adds a reserved
+      // word, which is the 20 versus 32 bytes above.
+      const offset = wide ? Number(head.readBigUInt64BE(at + 8)) : head.readUInt32BE(at + 8)
+      const size = wide ? Number(head.readBigUInt64BE(at + 16)) : head.readUInt32BE(at + 12)
+      declared = Math.max(declared, offset + size)
+    }
+    return { arches, declared }
+  }
+
+  // A thin header carries its own byte order: MH_MAGIC read the right way
+  // round, MH_CIGAM read the wrong one.
+  for (const [magic, read32] of [
+    [head.readUInt32LE(0), (at) => head.readUInt32LE(at)],
+    [head.readUInt32BE(0), (at) => head.readUInt32BE(at)]
+  ]) {
+    if (magic !== 0xfeedface && magic !== 0xfeedfacf) continue
+    // mach_header is 28 bytes, mach_header_64 is 32; sizeofcmds sits at offset
+    // 20 in both, and the load commands follow the header immediately.
+    const headerSize = magic === 0xfeedfacf ? 32 : 28
+    return { arches: [name(read32(4))], declared: headerSize + (read >= 24 ? read32(20) : 0) }
+  }
+  return nothing
+}
+
+// Only for a package that ships prebuilds at all. `npm_config_build_from_source`
+// makes node-pty delete its whole `prebuilds` tree and compile into
+// build/Release instead, and such a package legitimately has neither directory
+// — it also could not have been merged into a universal app, so there is no
+// second slice to check.
+const prebuilds = join(ptyRoot, 'prebuilds')
+const shipsPrebuilds = existsSync(prebuilds) && readdirSync(prebuilds).some((entry) => entry.startsWith('darwin-'))
+
+if (process.platform === 'darwin' && shipsPrebuilds) {
+  // node-pty publishes a prebuild for both, and scripts/afterpack.mjs keeps
+  // every `darwin-*` set in every macOS package precisely so a universal app
+  // has both. One missing is a packaging fault whichever kind of build this is.
+  for (const arch of ['arm64', 'x64']) {
+    const dir = join(prebuilds, `darwin-${arch}`)
+    if (!existsSync(dir)) fail(`node-pty has no darwin-${arch} prebuild in ${ptyRoot}`)
+
+    for (const name of ['pty.node', 'spawn-helper']) {
+      const path = join(dir, name)
+      if (!existsSync(path)) fail(`${name} is missing from ${dir}`)
+
+      // The executable bit is demanded of spawn-helper alone, because that is
+      // the only one that is exec'd: node-pty dlopen's pty.node, and node-pty
+      // ships it 0644. Requiring it of both would fail a package that is fine.
+      const mode = statSync(path).mode & 0o777
+      if (name === 'spawn-helper' && !(mode & 0o111)) {
+        fail(`${path} is not executable (mode ${mode.toString(8)}); every PTY spawn on ${arch} would fail`)
+      }
+
+      const { arches, declared } = machoHeader(path)
+      if (arches.length === 0) fail(`${path} is not a Mach-O binary`)
+      if (!arches.includes(arch)) {
+        fail(
+          `${path} is a Mach-O for ${arches.join(', ')}, not ${arch}.`,
+          'A darwin-<arch> prebuild directory holding another architecture is a merge that went wrong: ' +
+            'the app would load it on that architecture and fail to open any terminal.'
+        )
+      }
+      const bytes = statSync(path).size
+      if (bytes < declared) {
+        fail(
+          `${path} is ${bytes} bytes; its own Mach-O header accounts for ${declared}.`,
+          'The file was cut short after it was built. It would fail to load rather than fail to work.'
+        )
+      }
+      ok(`darwin-${arch}/${name}: ${arches.join(', ')}, ${bytes} bytes, mode ${mode.toString(8)}`)
+    }
+  }
+  // Said plainly because the PASS line below must not be read as more than it
+  // is: this script runs the app, and the app runs as one architecture.
+  ok(`both darwin slices check out statically; only ${process.arch} is executed below`)
 }
 
 // node-pty chooses its Windows backend at spawn time — ConPTY from conpty.node,
@@ -286,4 +450,6 @@ console.log(output.trimEnd())
 console.log('-----------------------------------------------------\n')
 
 cleanup()
-console.log('verify-package: PASS — packaged app launches, ships a working CLI, and spawns a real PTY')
+console.log(
+  `verify-package: PASS — packaged app launches, ships a working CLI, and spawns a real PTY on ${process.platform}-${process.arch}`
+)

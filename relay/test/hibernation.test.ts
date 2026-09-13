@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest'
 import { CloseCode, PING_FRAME, PONG_FRAME } from '../src/core/protocol.js'
 import { RendezvousPair, type PairSocket, type PairState } from '../src/workers/rendezvousPair.js'
+import { rendezvousId } from '../src/workers/rendezvousId.js'
 import { captureLog, createManualClock, rendezvousToken, type ManualClock } from './support/harness.js'
 
 const OPEN = 1
@@ -67,8 +68,18 @@ class FakeSocket implements PairSocket {
 
 class FakeState implements PairState {
   readonly sockets: FakeSocket[] = []
+  /**
+   * What the runtime calls this object. The Worker addresses one by the hash of
+   * a rendezvous, so this is the only thing an object can check a hello against.
+   * Left nameless unless a test is about that.
+   */
+  readonly id: { name?: string }
   private alarmAt: number | null = null
   private readonly autoResponses = new Map<FakeSocket, number>()
+
+  constructor(name?: string) {
+    this.id = name === undefined ? {} : { name }
+  }
 
   acceptWebSocket(socket: PairSocket): void {
     this.sockets.push(socket as FakeSocket)
@@ -115,8 +126,8 @@ class FakeState implements PairState {
  * A relay whose Durable Object is rebuilt for every single event, which is the
  * worst case the runtime is allowed to put it in.
  */
-function hibernatingPair(overrides: Record<string, string> = {}) {
-  const state = new FakeState()
+function hibernatingPair(overrides: Record<string, string> = {}, name?: string) {
+  const state = new FakeState(name)
   const clock: ManualClock = createManualClock()
   const log = captureLog(clock.now)
   const environment = { RELAY_KEEPALIVE_INTERVAL_MS: '30000', ...overrides }
@@ -291,15 +302,58 @@ describe('a pairing held by a durable object', () => {
     expect(relay.state.pendingAlarm).toBe(relay.clock.now() + 30_000)
   })
 
-  it('takes no more sockets than a pairing can account for, however many are offered', () => {
+  it('keeps a rendezvous open for its own pair however many sockets are aimed at it', async () => {
     const relay = hibernatingPair()
+    const token = rendezvousToken()
 
     // The object's name is a hex string the client picked, with no token behind
-    // it: anybody may address any object, so the object is what has to say no.
+    // it: anybody may address any object. None of these has said a word, so none
+    // of them may cost the pair the rendezvous belongs to its place in it.
     const offered = Array.from({ length: 200 }, () => relay.offer())
+    expect(offered.every((attempt) => attempt.accepted)).toBe(true)
 
-    expect(offered.filter((attempt) => attempt.accepted)).toHaveLength(3)
-    expect(relay.log.records.filter((record) => record.event === 'upgrade.refused')).toHaveLength(197)
+    // Bounded all the same, because every frame this object handles costs work
+    // in proportion to what is attached: each arrival ends the silent socket
+    // that has been here longest rather than being refused itself.
+    expect(relay.state.getWebSockets()).toHaveLength(3)
+    expect(offered.filter((attempt) => attempt.socket.closedWith?.code === CloseCode.Capacity)).toHaveLength(197)
+
+    const first = relay.connect()
+    await relay.say(first, hello(token))
+    const second = relay.connect()
+    await relay.say(second, hello(token))
+
+    expect(JSON.parse(second.control[0] ?? '{}')).toMatchObject({ t: 'paired' })
+  })
+
+  it('turns away a hello for a rendezvous it is not the home of', async () => {
+    const token = rendezvousToken()
+    const relay = hibernatingPair({ RELAY_PAIR_TIMEOUT_MS: '600000' }, await rendezvousId(token))
+
+    // A token nobody but the sender has ever seen, presented to an object named
+    // after one two teammates share. Unchecked, this parks a socket here for the
+    // whole pairing budget — ten minutes — instead of the ten seconds a silent
+    // one gets, and three of them shut the rendezvous.
+    const squatter = relay.connect()
+    await relay.say(squatter, hello(rendezvousToken()))
+    expect(squatter.closedWith?.code).toBe(CloseCode.BadHello)
+
+    // And the hello that does name this object is untouched.
+    const owner = relay.connect()
+    await relay.say(owner, hello(token))
+    expect(JSON.parse(owner.control[0] ?? '{}')).toEqual({ t: 'waiting' })
+  })
+
+  it('charges a peer for its control frames as well as for its content', async () => {
+    const relay = hibernatingPair({ RELAY_MAX_FRAMES_PER_SECOND: '4' })
+    const peer = relay.connect()
+    await relay.say(peer, hello(rendezvousToken()))
+
+    // This host has no send queue to measure and no connection cap, so the
+    // budgets are the whole of what bounds one peer's demand on the object.
+    for (let index = 0; index < 5; index += 1) await relay.say(peer, PING_FRAME)
+
+    expect(peer.closedWith?.code).toBe(CloseCode.RateLimited)
   })
 
   it('still has room for the peer that arrives to displace the pair', async () => {
@@ -389,6 +443,27 @@ describe('a pairing held by a durable object', () => {
     await relay.vanish(second)
 
     expect(first.closedWith?.code).toBe(CloseCode.PartnerGone)
+  })
+
+  it('sends a survivor back rather than blaming it for state the object lost', async () => {
+    const relay = hibernatingPair()
+    const token = rendezvousToken()
+    const first = relay.connect()
+    const second = relay.connect()
+    await relay.say(first, hello(token))
+    await relay.say(second, hello(token))
+    await relay.say(first, new Uint8Array([1]))
+
+    // One event in which the runtime is part-way through taking the partner's
+    // socket away. The pairing is rebuilt without it, so this peer's own state
+    // says paired and the table it is looked up in does not.
+    second.breakAttachment()
+    await relay.say(first, new Uint8Array([2]))
+
+    // 1001, which a client comes back from. A protocol complaint would be this
+    // object telling a peer that did nothing wrong that its client is broken,
+    // for a socket the peer cannot see and a table it did not write.
+    expect(first.closedWith?.code).toBe(CloseCode.GoingAway)
   })
 
   it('gives whoever deployed it no way to read what the pair is saying', async () => {

@@ -54,6 +54,14 @@ worth a minute before you start.
 > So adding a key to this repository is not a formality and no longer grants
 > only a view of worktree names. Add the keys of people you would hand an
 > unlocked laptop to, because that is now exactly what you are doing.
+>
+> Your own identity is inside that grant. `identity.key` is an ordinary file
+> owned by the same account every pane runs as, so a teammate typing into a
+> pane, an agent working in one, or an `npm install` in a worktree can read it
+> and be you — on every project you are on, not only this one, and with nothing
+> to tell your teammates apart from the copy. Getting out of that means
+> replacing your key in the roster, which is the recovery at the bottom of this
+> document.
 
 ## Two roles
 
@@ -279,6 +287,25 @@ member file's *name* is what decides whose key it is, a second spelling of a
 colleague's handle would be a way to file your own key under their name, and
 attribution is the whole mitigation for a feature that grants remote code
 execution.
+
+**One installation, one key, and never a copy of one.** Your keypair lives in
+the app's own data directory, at `~/Library/Application Support/teamree/identity.key`,
+and it is this machine's identity in *every* project it takes part in rather
+than in this one. If you also work on a desktop, open teamree there and press
+**Add my key** there too, typing a handle of its own — `ana` and `ana-desktop`
+in the roster is the intended shape, not a mess to tidy up. Copying
+`identity.key` across looks like it worked, because the second machine correctly
+says you are already in, and then nothing settles afterwards: "Two machines, one
+key" below is what that looks like from both ends.
+
+**Adding a key is silent, and that is worth knowing before you rely on it.**
+Nothing in the app announces that somebody joined. A new key becomes another
+person in the **Start teamwork** panel and another link in the header's count,
+indistinguishable from a colleague who was there all along. Anybody who can push
+can add any key, including one belonging to somebody the rest of you have never
+met, and it is obeyed without comment. The only control is a person reading the
+diff, so if your team wants this watched, watch the path it happens on:
+`.teamree/members/`, in whatever review your repository already has.
 
 **Then commit it and push it, and this is the step people forget.** The app
 writes the file and stops. It does not stage it, commit it or push it — not
@@ -557,9 +584,102 @@ file whose contents name somebody other than its filename, two files with one
 key. One bad file costs one member and never the list.
 
 Related: revocation works the same way and at the same speed. Deleting a key
-removes somebody at the next fetch that brings the deletion in, not instantly.
-There is no revocation feed, because a revocation feed is a service, and
-avoiding services is the entire design.
+removes somebody at the next fetch that brings the deletion in, not instantly,
+and it takes effect on each machine separately as that machine fetches. Until a
+teammate pulls, their copy of the roster still has the removed key in it, and
+they go on opening a link to that person and accepting everything a member may
+do — which is all of it. So a removal is only as done as the slowest checkout on
+the team, and if it is urgent, say so out loud rather than assuming the commit
+carried it. There is no revocation feed, because a revocation feed is a service,
+and avoiding services is the entire design.
+
+### Two machines, one key
+
+If `identity.key` has been copied from one machine to another — or restored onto
+a new one out of a backup of the old — both machines are the same member, and
+the symptom is a link that never settles.
+
+Two peers find each other at a rendezvous derived from the Diffie-Hellman
+between their two keys and the project, and there is nothing per machine in it,
+so both of your machines compute the same address as each other. A rendezvous
+holds two connections; a third claims it and the relay ends the live pair rather
+than guess which two belong together. Whichever of your machines dials last
+therefore displaces whatever was connected, and the one it displaced comes back
+and displaces that. Your teammate watches the header go **1 connected**, then
+**Nobody connected**, then round again, for as long as both of your machines are
+running.
+
+When it is your two machines that get spliced to each other, the handshake
+fails: each of them holds your private key and neither holds your teammate's.
+Whichever of yours lost that exchange reads **1 refused**, with *authentication
+failed; the message was not produced by this session (decryption_failed)* in the
+tooltip.
+
+Both sentences point at the wrong person. Your teammate is told *your teammate's
+machine dropped the connection*, which is true of a machine of yours and not of
+theirs, and the refusal reads as an accusation against them. Neither machine
+knows your other machine exists, and from the wire neither can: it presents as
+your key, because it is.
+
+The fix is to stop using one key twice. On the machine that should not have it,
+quit teamree, move `identity.key` out of the way, and start it again — it
+generates a new keypair on a run that finds no file:
+
+```sh
+mv ~/Library/Application\ Support/teamree/identity.key ~/identity.key.old
+```
+
+Then press **Add my key** in that project with a handle of its own typed in the
+field — `ana-desktop` rather than `ana`, which is taken by your other machine —
+and commit and push the file it writes. Two member files for one person is the
+shape this is meant to have.
+
+### A new machine, or a key you no longer have
+
+teamree generates a keypair on first run and never replaces one it can find, so
+a machine that has lost `identity.key` — a new laptop, a reinstall, or a file
+moved aside because the app said it was not a usable identity — comes back with
+a new key and no claim on the member file the old one is filed under.
+
+Press **Add my key** there and you are told something that sounds worse than it
+is: *`.teamree/members/ana.pub` is already somebody else's key; choose another
+handle*. It is your file. The app cannot tell — all it sees is a handle in the
+roster whose key is not the key this machine holds, which is also exactly what a
+real collision with a colleague looks like — but the advice is the wrong one to
+take here. Filing yourself under `ana2` commits a second file and leaves
+`ana.pub` in the roster for good, and an entry nobody holds the key for is not
+inert: every teammate opens a link to it, it parks at waiting and never moves,
+and after two hourly rotations each of them is told to go and check their clock
+and their `.teamree/relay`. Both will be fine, and nothing they check will say
+why.
+
+Delete the entry first, then join:
+
+```sh
+cd ~/teamree-example
+git rm .teamree/members/ana.pub
+```
+
+Then press **Add my key**. Your handle is free now, so it defaults back to it —
+if the panel still refuses, close and reopen it, which re-reads the directory.
+Commit both halves together and push:
+
+```sh
+git add .teamree
+git commit -m "Re-key ana"
+git push
+```
+
+What that commit shows is one member file with a new `key:` line, which is
+exactly the diff your teammates should be looking at — and, if the check is to
+mean anything, confirming with you somewhere that is not the repository, since
+anyone who can push can write that same diff. Nothing else has to happen on
+their machines: the next fetch brings the new key in and the link rebuilds
+against it.
+
+Removing somebody who has left the team is the same two steps without the
+re-join — `git rm` their file, commit, push — and it arrives at the same speed:
+on each machine as that machine fetches, and not before.
 
 ### There is no relay, or nobody committed one
 
@@ -613,7 +733,9 @@ cd ~/teamree-example && git remote get-url origin
 ```
 
 It catches the leader most often, because `init-example-repo.mjs` makes a
-repository with no remote and step 2 is where one gets added. A remote under any
+repository with no remote and step 2 is where one gets added. Adding one is the
+whole fix: the next time the panel reads its status it asks git again, so there
+is nothing to restart and nothing to wait for. A remote under any
 other name does not count — teamree does not guess at which of several remotes
 you meant, because two peers guessing differently would show each other nothing
 and say nothing about why.

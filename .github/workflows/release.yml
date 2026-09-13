@@ -1,19 +1,21 @@
 # Turns a tag into something a colleague can download.
 #
 # The build is not repeated here. This workflow calls `build.yml`, the same one
-# `ci.yml` calls, so the installers it publishes are the ones that passed
-# typecheck, lint, format, the full suite, the smoke test and — the check that
-# matters — the packaged-app verification, which launches the artifact, drives
-# it through the CLI it ships and spawns a real PTY inside it. A release
-# pipeline that skipped that would be publishing an app nobody had started.
+# `ci.yml` calls, so the `.dmg` it publishes is the one that passed typecheck,
+# lint, format, the full suite, the smoke test and — the check that matters —
+# the packaged-app verification, which launches the artifact, drives it through
+# the CLI it ships and spawns a real PTY inside it, once against the unpacked
+# app and once against the copy inside the mounted image. A release pipeline
+# that skipped that would be publishing an app nobody had started.
 name: release
 
 on:
   push:
     tags: ['v*']
   # Re-runnable by hand against a tag, for the case where publishing failed
-  # after the build succeeded. Select the tag as the ref; the job
-  # refuses a branch rather than cutting a release named after one.
+  # after the build succeeded. Select the tag as the ref; the `guard` job below
+  # refuses a branch, before the build rather than after it, rather than cutting
+  # a release named after one.
   workflow_dispatch:
 
 permissions:
@@ -24,10 +26,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Before the build rather than after it. This was a step in `publish`, which
+  # needs `build` — so a `workflow_dispatch` against a branch packaged an
+  # Electron app for forty-five minutes and only then refused to publish it. The
+  # answer is the same answer and it is knowable in seconds.
+  guard:
+    name: Insist on a tag
+    runs-on: ubuntu-latest
+    steps:
+      # Through the environment rather than interpolated into the script: the
+      # ref is attacker-controllable on a fork, and `${{ }}` inside `run:` is
+      # substituted before the shell ever sees it.
+      - name: Insist on a tag
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF_TYPE" != "tag" ]; then
+            echo "release: refusing to publish from $REF — run this against a tag." >&2
+            exit 1
+          fi
+          echo "release: $REF is a tag."
+
   build:
+    needs: guard
     uses: ./.github/workflows/build.yml
-    # The installers are attached to the release inside this same run, so the
-    # upload is a courier between two jobs rather than a place to keep anything.
+    # The `.dmg` is attached to the release inside this same run, so the upload
+    # is a courier between two jobs rather than a place to keep anything.
     with:
       retention-days: 7
 
@@ -36,17 +61,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      # The only write this project's automation does.
+      # The only write this project's automation does, and it has never been
+      # exercised: nothing has been released from this repository. Asking for it
+      # here is necessary and not sufficient — a repository whose Actions
+      # workflow-permissions setting is "read repository contents" overrides
+      # this, and the first sign would be `gh release create` failing with 403
+      # after a full build. Settings → Actions → General → Workflow permissions
+      # is where that is turned on; README's "Releases" section says so too.
       contents: write
     steps:
       - uses: actions/checkout@v5
-
-      - name: Insist on a tag
-        run: |
-          if [ "${{ github.ref_type }}" != "tag" ]; then
-            echo "release: refusing to publish from ${{ github.ref }} — run this against a tag." >&2
-            exit 1
-          fi
 
       # `merge-multiple` flattens the per-runner uploads into one directory.
       # Each upload's paths are already relative to `dist/`, so the installers

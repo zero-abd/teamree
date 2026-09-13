@@ -1,10 +1,19 @@
 // Boots the built app with the window hidden, asserts the renderer mounted and
 // the preload bridge is reachable, then exits. Used by CI and by `npm run smoke`.
 //
+// It also runs the peer library's cipher check here, in a genuine Electron main
+// process, which is the process the teamwork feature's handshakes actually
+// happen in. `src/shared/peer/electronRuntime.test.ts` runs the same check under
+// every `npm test` with `ELECTRON_RUN_AS_NODE=1`, which is the same binary and
+// the same BoringSSL but not the same process type — and the whole reason this
+// check exists is that a runtime difference nobody had exercised took the
+// feature out of every shipped build. So it is exercised in both.
+//
 // Electron does not pump its event loop until this module finishes evaluating,
 // so everything here hangs off callbacks rather than top-level await.
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { runPeerCheck } from './electron-peer-check.mjs'
 
 const TIMEOUT_MS = 30_000
 const root = process.cwd()
@@ -60,6 +69,32 @@ async function run() {
 
   if (!mounted) failures.push('renderer did not mount into #root')
   if (!bridged) failures.push('preload bridge is not exposed on window.teamree')
+
+  await checkPeerCrypto()
+}
+
+/**
+ * The peer library, in this process. `run-smoke.mjs` compiled it and named the
+ * directory on the command line; without one, say so rather than quietly
+ * checking nothing, because a check that can skip itself is how the cipher
+ * defect survived 1803 passing tests.
+ */
+async function checkPeerCrypto() {
+  const bundle = process.argv[2]
+  if (!bundle) {
+    failures.push('no peer bundle was passed; run this through scripts/run-smoke.mjs')
+    return
+  }
+  const result = await runPeerCheck(bundle)
+  for (const failure of result.failures) failures.push(`peer crypto: ${failure}`)
+  if (result.nativeChaCha) {
+    // Not a failure — but it means this run proved less than it looks like it
+    // did, and the reader should know which runtime actually answered.
+    console.log(`smoke: note — ${result.runtime} has a native chacha20-poly1305, which Electron 38 did not`)
+  }
+  if (result.failures.length === 0) {
+    console.log(`smoke: peer handshake and published Noise vectors pass under ${result.runtime}`)
+  }
 }
 
 app
