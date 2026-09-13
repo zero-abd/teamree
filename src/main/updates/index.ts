@@ -1,0 +1,31 @@
+// Public face of the update check. The runtime imports from here.
+
+export {
+  GITHUB_API_ORIGIN,
+  MAX_NOTES_CHARS,
+  MAX_RESPONSE_BYTES,
+  RELEASE_HOST,
+  REQUEST_TIMEOUT_MS,
+  UPDATE_REPOSITORY,
+  isReleaseDownload,
+  plainText,
+  readLatestRelease,
+  type LatestRelease,
+  type ReleaseChannel
+} from './latestRelease'
+export {
+  UPDATE_METHODS,
+  createUpdateHandlers,
+  registerUpdateHandlers,
+  type UpdateHandlers,
+  type UpdateMethodName
+} from './handlers'
+export { compareVersions, isNewerRelease, isPrereleaseVersion, parseVersion, type Version } from './semver'
+export {
+  AUTOMATIC_CHECK_INTERVAL_MS,
+  STARTUP_CHECK_DELAY_MS,
+  UpdateService,
+  type StoredUpdateSettings,
+  type UpdateServiceOptions,
+  type UpdateSettingsRecord
+} from './updateService'

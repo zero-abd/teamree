@@ -1010,3 +1010,63 @@ export type CliInstall = {
   /** Read back after the link was made, by resolving it. */
   status: CliStatus
 }
+
+/**
+ * A release this build could move to, as the app is willing to describe it.
+ *
+ * Everything here came off the GitHub API and has been through
+ * `src/main/updates/latestRelease.ts`, which is the only place that trusts any
+ * of it: the tag has been matched against the shape this project's tags have,
+ * both URLs have been checked to be addresses in this repository, and the notes
+ * are plain text with the control characters taken out. They are still somebody
+ * else's words — render them as text, never as markup.
+ */
+export type UpdateRelease = {
+  /** The version, without the tag's `v`, e.g. "0.2.0". */
+  version: string
+  /** The tag it was published under, e.g. "v0.2.0". */
+  tag: string
+  /**
+   * The release notes, as text, or null when there are none to show.
+   *
+   * Null is also what a release remembered from an earlier run carries: the
+   * version a check found is written down so that a restart still knows about
+   * it, and the notes deliberately are not — see `workspaceDocument.ts`.
+   */
+  notes: string | null
+  /** The `.dmg`, when a check found one. Null leaves the release page. */
+  downloadUrl: string | null
+  /** The release's page, which exists for every published tag. */
+  releaseUrl: string
+  publishedAt: number | null
+}
+
+/** What this build is, what is out there, and whether teamree is looking. */
+export type UpdateState = {
+  /** This build's version: package.json's, baked in at build time. */
+  current: string
+  /**
+   * Whether there is anything to compare against.
+   *
+   * False for a build that is not a release — `npm run dev` reports
+   * `0.0.0-dev`, which precedes every published version and would otherwise
+   * have every developer's window announcing an update on every launch.
+   */
+  checkable: boolean
+  /** Whether teamree checks by itself. The preference, as the user left it. */
+  automatic: boolean
+  /** The newer release, or null when there is none to offer. */
+  available: UpdateRelease | null
+  /** True while a check is in flight, so a button can say so. */
+  checking: boolean
+  /** When the last check was attempted, whether or not it succeeded. */
+  checkedAt: number | null
+  /**
+   * Why the last check produced no answer, in one line, or null when it did.
+   *
+   * Kept rather than raised: a check that could not reach GitHub is not an
+   * error the user has to do anything about, and interrupting them with one
+   * would be worse than the staleness it is warning about.
+   */
+  problem: string | null
+}

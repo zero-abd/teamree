@@ -15,6 +15,7 @@ import type {
   StartPoint,
   StartPointList,
   Terminal,
+  UpdateState,
   Worktree,
   WorktreeChange,
   WorktreeStatus
@@ -437,6 +438,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
    */
   let cliLinked = false
   let cliAskedAt: number | null = null
+  let automaticUpdates = true
   const cliStatus = (): CliStatus => ({
     installable: true,
     platform: 'darwin',
@@ -458,6 +460,18 @@ export function createSeededRuntimeClient(): RuntimeClient {
   })
 
   let appearance: Appearance = DEFAULT_APPEARANCE
+  const updateState = (): UpdateState => ({
+    current: '0.0.1-demo',
+    // Nothing to compare a demo build against, which is also what a checkout
+    // says about itself — and it keeps this stand-in from advertising a release
+    // that has nothing to do with what is running.
+    checkable: false,
+    automatic: automaticUpdates,
+    available: null,
+    checking: false,
+    checkedAt: Date.now() - 60_000,
+    problem: null
+  })
 
   const handlers: { [M in MethodName]: (params: ParamsOf<M>) => ResultOf<M> } = {
     'status.get': () => ({
@@ -938,6 +952,18 @@ export function createSeededRuntimeClient(): RuntimeClient {
       cliAskedAt ??= Date.now()
       return cliStatus()
     },
+
+    // The seeded runtime is a demonstration, and a demonstration that reached
+    // GitHub would not be one. It answers as a current build that has looked
+    // recently: the card is worth showing in a screenshot, but not at the cost
+    // of this file being the one place in the renderer that opens a socket.
+    'update.state': () => updateState(),
+    'update.check': () => updateState(),
+    'update.setAutomatic': ({ automatic }) => {
+      automaticUpdates = automatic
+      return updateState()
+    },
+    'update.download': () => ({ opened: 'https://github.com/zero-abd/teamree/releases/latest' }),
     'terminal.list': ({ worktreeId }) =>
       [...terminals.values()]
         .map((terminal) => terminal.record)

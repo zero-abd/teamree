@@ -4,7 +4,8 @@
 // it is the ranking: with twenty worktrees open, a palette that matches the
 // right thing third is a palette nobody uses twice.
 
-import type { InstalledAgent, Project, Worktree } from '@shared/entities'
+import type { InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
+import { automaticUpdatesLabel } from '../updates/updateNotice'
 
 export type PaletteAction =
   | 'new-worktree'
@@ -17,6 +18,8 @@ export type PaletteAction =
   | 'add-project'
   | 'install-cli'
   | 'open-appearance'
+  | 'check-for-updates'
+  | 'toggle-automatic-updates'
 
 export type PaletteItem =
   /** Jump to a worktree. */
@@ -33,6 +36,12 @@ export type PaletteContext = {
   activeWorktreeId: string | null
   /** Coding agents found on this machine, as probed at startup. */
   agents: readonly InstalledAgent[]
+  /**
+   * What the runtime knows about newer releases, or null before it has been
+   * asked. Only the preference is read from it: it decides which way round the
+   * toggle's label reads.
+   */
+  update: UpdateState | null
   /** Shortcut labels, so the palette shows the key that does the same thing. */
   hintFor: (action: PaletteAction) => string
 }
@@ -65,7 +74,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
       }
     })
 
-  const actions: PaletteItem[] = ACTIONS.map((action) => ({
+  const actions: PaletteItem[] = [...ACTIONS, ...updateActions(context)].map((action) => ({
     kind: 'action',
     id: action.id,
     label: action.label,
@@ -113,6 +122,30 @@ function agentItems(context: PaletteContext): PaletteItem[] {
     // is how somebody reaches the all-panes view.
     search: `Start ${agent.command} here in this worktree pane`
   }))
+}
+
+/**
+ * The two update rows, which are here rather than in the list below because one
+ * of them says something different depending on how it is set.
+ *
+ * The preference has no other home — this app has no settings window, and a
+ * window's worth of chrome for one boolean would be the wrong trade — so the
+ * palette is where somebody who does not want to be told about releases goes to
+ * say so. The card offers the same thing at the moment it matters.
+ */
+function updateActions(context: PaletteContext): { id: PaletteAction; label: string; keywords: string }[] {
+  return [
+    {
+      id: 'check-for-updates',
+      label: 'Check for updates',
+      keywords: 'version release new upgrade download latest'
+    },
+    {
+      id: 'toggle-automatic-updates',
+      label: automaticUpdatesLabel(context.update),
+      keywords: 'updates automatic quiet stop checking release version notify'
+    }
+  ]
 }
 
 const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[] = [

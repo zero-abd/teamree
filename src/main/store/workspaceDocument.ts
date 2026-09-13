@@ -79,6 +79,31 @@ export type AskedQuestions = z.infer<typeof AskedSchema>
 /** The questions there are. Adding one is adding a field above. */
 export type AskedQuestion = keyof AskedQuestions
 
+/**
+ * What the update check remembers between runs.
+ *
+ * Three small facts, and what is *not* here is the decision worth explaining:
+ * the release notes are not kept. They are text from the GitHub API, and this
+ * file is the one the app cannot afford to have trouble reading — the store
+ * refuses to write over a file it could not parse precisely because somebody's
+ * projects are in it. `teammateCache.ts` makes the same argument for the bytes
+ * a peer sends, and keeps them somewhere else. So a run that is inside the rate
+ * limit can still say that 0.2.0 exists, and offers the release page rather
+ * than notes it did not keep.
+ *
+ * `automatic` is absent until somebody turns the check off, which is what makes
+ * "on unless said otherwise" a fact about the schema rather than a fact spread
+ * across the readers.
+ */
+const UpdatesSchema = z.object({
+  automatic: z.boolean().optional(),
+  lastCheckedAt: z.number().optional(),
+  /** Bounded because every other field on disk that came off a wire is. */
+  lastSeenVersion: z.string().min(1).max(64).optional()
+})
+
+export type UpdateRecord = z.infer<typeof UpdatesSchema>
+
 export type WorkspaceDocument = {
   version: number
   projects: Project[]
@@ -113,6 +138,8 @@ export type WorkspaceDocument = {
    * kind of thing — so it costs no new file on disk.
    */
   appearance: Appearance
+  /** The update check's preference and clock. See `UpdatesSchema`. */
+  updates: UpdateRecord
 }
 
 export function emptyWorkspaceDocument(): WorkspaceDocument {
@@ -124,7 +151,8 @@ export function emptyWorkspaceDocument(): WorkspaceDocument {
     terminals: [],
     mutedTerminals: [],
     asked: {},
-    appearance: sanitizeAppearance(undefined)
+    appearance: sanitizeAppearance(undefined),
+    updates: {}
   }
 }
 
@@ -148,7 +176,10 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     asked: AskedSchema.safeParse(record.asked).data ?? {},
     // Salvaged one colour at a time rather than parsed whole: a theme with a
     // single bad hex in it should cost that colour, not the whole choice.
-    appearance: sanitizeAppearance(record.appearance)
+    appearance: sanitizeAppearance(record.appearance),
+    // Salvaged on the same terms: a preference nobody can read is a preference
+    // that has not been expressed, which is the default rather than a failure.
+    updates: UpdatesSchema.safeParse(record.updates).data ?? {}
   }
 }
 

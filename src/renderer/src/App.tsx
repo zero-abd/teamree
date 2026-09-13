@@ -20,6 +20,7 @@ import { StatusBar } from './shell/StatusBar'
 import { TitleBar } from './shell/TitleBar'
 import { useWorkspaceStore } from './state/workspaceStore'
 import { applyPalette } from './theme/applyPalette'
+import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
 
 export function App(): React.JSX.Element {
@@ -107,6 +108,10 @@ export function App(): React.JSX.Element {
       {/* Nothing is focused and nothing is blocked: the window is usable
           whether or not anybody answers this. */}
       <FirstRunCliOffer />
+
+      {/* The same corner and the same terms: nothing focused, nothing blocked,
+          and it stands aside while the first-run question is on screen. */}
+      <UpdateAvailableCard />
 
       {dialog?.kind === 'palette' ? <CommandPalette modifier={modifier} /> : null}
       {dialog?.kind === 'confirm-remove' ? (

@@ -169,6 +169,13 @@ describe('dispatcher', () => {
       'terminal.subscribe',
       'terminal.write',
       'unsubscribe',
+      // Local, and never peer-reachable: a teammate has no business making this
+      // machine ask GitHub anything, changing a preference on it, or opening a
+      // page in the browser of whoever is sitting in front of it.
+      'update.check',
+      'update.download',
+      'update.setAutomatic',
+      'update.state',
       'workspace.subscribe',
       'worktree.changes',
       'worktree.commit',

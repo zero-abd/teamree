@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { InstalledAgent, Project, Worktree } from '@shared/entities'
+import type { InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
 import { buildPaletteItems, filterPalette, moveSelection, score, type PaletteItem } from './paletteModel'
 
 function worktree(overrides: Partial<Worktree> & { id: string }): Worktree {
@@ -26,6 +26,17 @@ const agent = (kind: InstalledAgent['kind']): InstalledAgent => ({
   binary: `/usr/local/bin/${kind}`
 })
 
+const updateState = (overrides: Partial<UpdateState> = {}): UpdateState => ({
+  current: '0.1.0',
+  checkable: true,
+  automatic: true,
+  available: null,
+  checking: false,
+  checkedAt: null,
+  problem: null,
+  ...overrides
+})
+
 const context = (
   overrides: Partial<Parameters<typeof buildPaletteItems>[0]> = {}
 ): Parameters<typeof buildPaletteItems>[0] => ({
@@ -33,6 +44,7 @@ const context = (
   projects,
   activeWorktreeId: null,
   agents: [],
+  update: null,
   hintFor: () => '',
   ...overrides
 })
@@ -144,6 +156,20 @@ describe('buildPaletteItems', () => {
     )
 
     expect(items.map((item) => item.kind).indexOf('agent')).toBe(items.map((item) => item.kind).indexOf('action') - 1)
+  })
+
+  // The menu has the same command, under About, where a Mac user looks for it.
+  // This is the other way in, for somebody whose hands are already on the
+  // palette — and the only way to the preference, which has no other home.
+  it('offers the update check, and a preference that reads as an instruction', () => {
+    const offered = (update: Parameters<typeof buildPaletteItems>[0]['update']): string[] =>
+      buildPaletteItems(context({ update }))
+        .filter((item) => item.kind === 'action')
+        .map((item) => item.label)
+
+    expect(offered(null)).toContain('Check for updates')
+    expect(offered(null)).toContain('Stop checking for updates automatically')
+    expect(offered(updateState({ automatic: false }))).toContain('Check for updates automatically')
   })
 
   it('shows the key that does the same thing', () => {
