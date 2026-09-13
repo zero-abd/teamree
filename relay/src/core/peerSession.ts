@@ -225,6 +225,16 @@ export class PeerSession implements Peer {
     this.lastHeardAt = this.host.clock.now()
   }
 
+  /**
+   * A sign of life the host saw without core being given a frame for it. The
+   * Durable Object host needs this and the container host does not: there the
+   * runtime answers a peer's keepalive on the object's behalf, without waking
+   * it, so a timestamp read back afterwards is the only evidence the peer left.
+   */
+  noteHeard(at: number): void {
+    if (at > this.lastHeardAt) this.lastHeardAt = at
+  }
+
   /** The socket ended, for any reason, including one of this object's own. */
   onSocketClosed(code: number): void {
     const wasOpen = this.state !== 'closed'
@@ -294,8 +304,14 @@ export class PeerSession implements Peer {
       return
     }
 
-    if (this.state === 'paired' && config.idleTimeoutMs > 0 && now - this.lastSpliceAt >= config.idleTimeoutMs) {
-      this.close(CloseCode.Idle, 'no content frames within the idle budget')
+    // Idle means nothing at all has happened here: no content in either
+    // direction, and no sign of life from the peer. Counting content alone
+    // would hang up on a pair that was keeping itself alive in exactly the way
+    // this relay documents, and telling somebody to send keepalives that do not
+    // work is worse than having no keepalive to offer.
+    const quietSince = Math.max(this.lastSpliceAt, this.lastHeardAt)
+    if (this.state === 'paired' && config.idleTimeoutMs > 0 && now - quietSince >= config.idleTimeoutMs) {
+      this.endForSilence()
       return
     }
 
@@ -324,6 +340,17 @@ export class PeerSession implements Peer {
       this.lastPingAt = now
       ping()
     }
+  }
+
+  /**
+   * Both halves hear the same true thing. Closing this one on its own would
+   * leave `leave` to tell the other that its partner disconnected, and nothing
+   * disconnected: they were both quiet, and both are being reaped for it.
+   */
+  private endForSilence(): void {
+    const reason = 'no sign of life on this session within the idle budget'
+    if (this.token !== null && this.host.rendezvous.endSession(this.token, this, CloseCode.Idle, reason)) return
+    this.close(CloseCode.Idle, reason)
   }
 
   private onHello(text: string): void {

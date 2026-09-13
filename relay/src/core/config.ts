@@ -9,6 +9,13 @@ export type RelayConfig = {
   /** The single WebSocket path. Anything else gets a 404 from the HTTP server. */
   path: string
 
+  /**
+   * The next three are admission control, and only the container host has
+   * anywhere to enforce them: they are counts across a whole process, and the
+   * Worker host has no process and no global view of who is connected. What
+   * bounds a Durable Object instead is the fixed number of sockets one of them
+   * will hold, which is not a knob — see `src/workers/rendezvousPair.ts`.
+   */
   maxConnections: number
   maxConnectionsPerAddress: number
   maxConnectionsPerAddressPerMinute: number
@@ -27,7 +34,10 @@ export type RelayConfig = {
   helloTimeoutMs: number
   /** How long an unpaired peer may park. 0 parks until the socket dies. */
   pairTimeoutMs: number
-  /** Silence on a paired session, counting spliced frames only. 0 disables. */
+  /**
+   * How long a paired session may show no sign of life at all — no content in
+   * either direction and nothing from the peer, keepalives included. 0 disables.
+   */
   idleTimeoutMs: number
   keepaliveIntervalMs: number
   shutdownGraceMs: number

@@ -126,6 +126,26 @@ export class Rendezvous {
     return { removed: true, endedSession: true }
   }
 
+  /**
+   * Ends a live session and gives both halves the same reason, for a teardown
+   * the relay itself decided on rather than one a peer caused. `leave` cannot
+   * serve this: it exists for a peer that went away, so it tells the survivor
+   * its partner disconnected — which would be a lie here, and an expensive one,
+   * because a peer told that reconnects at once and rebuilds a Noise session
+   * for a fault that never happened.
+   */
+  endSession(token: string, peer: Peer, code: number, reason: string): boolean {
+    const existing = this.entries.get(token)
+    if (existing === undefined || existing.kind !== 'paired') return false
+    if (existing.first.id !== peer.id && existing.second.id !== peer.id) return false
+    // Dropped before either close, so that neither of them re-enters `leave`
+    // and tells the other one it was abandoned.
+    this.dropSession(token, existing)
+    existing.first.close(code, reason)
+    existing.second.close(code, reason)
+    return true
+  }
+
   partnerOf(peer: Peer): Peer | undefined {
     return this.partners.get(peer.id)
   }

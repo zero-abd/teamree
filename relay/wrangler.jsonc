@@ -24,9 +24,22 @@
   // live sockets, not to keep anything.
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RelayPair"] }],
 
-  // Every limit the relay enforces, at its default. Change one here and
+  // The limits this host can enforce, at their defaults. Change one here and
   // redeploy; a value that cannot be parsed stops the Worker starting rather
   // than being quietly ignored.
+  //
+  // The ones that are missing are missing on purpose, and README.md says so in
+  // the same words: RELAY_MAX_CONNECTIONS, RELAY_MAX_CONNECTIONS_PER_ADDRESS and
+  // RELAY_MAX_CONNECTIONS_PER_ADDRESS_PER_MINUTE are counts across a whole
+  // process, and a Worker has no process to count across. Setting them here
+  // would be a value the relay reads and then has nowhere to apply, which is
+  // exactly the kind of quiet non-enforcement the rest of this file avoids.
+  // What bounds a Durable Object instead is the fixed number of sockets it will
+  // hold, in src/workers/rendezvousPair.ts. RELAY_MAX_BUFFERED_BYTES is absent
+  // for a different reason: the runtime owns the send queue and does not show
+  // its depth, so there is nothing to compare a bound against. The remaining
+  // absences — host, port, proxy hops, health token, shutdown grace — belong to
+  // the container host's process, which this is not.
   "vars": {
     "RELAY_PATH": "/v1/relay",
     "RELAY_MAX_FRAME_BYTES": "262144",

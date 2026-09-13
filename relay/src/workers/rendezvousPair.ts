@@ -25,11 +25,32 @@ import { createWorkersLogger } from './logging.js'
 
 const OPEN = 1
 
+/**
+ * How many sockets one object will hold.
+ *
+ * An object holds one pairing, and `Rendezvous` already refuses to run more than
+ * one: a third peer that presents the token displaces the two that were there.
+ * The socket count has to let that third one in — displacing is how a peer whose
+ * laptop slept gets its session back — and nothing beyond it. So three, not two:
+ * the pair, plus the one arriving to take it over.
+ *
+ * A cap is needed at all because the object's name is a client-chosen hex string
+ * with no token behind it and no proof of anything. Without one, a client is
+ * free to point every socket it can open at a single object, and each frame that
+ * object then handles costs work linear in how many are attached.
+ */
+const MAX_SOCKETS = 3
+
 /** The slice of the Durable Object runtime this needs, named so it can be faked. */
 export type PairState = {
   acceptWebSocket: (socket: PairSocket, tags?: string[]) => void
   getWebSockets: (tag?: string) => PairSocket[]
   setWebSocketAutoResponse: (pair: unknown) => void
+  /**
+   * When the runtime last answered this socket's keepalive on the object's
+   * behalf. Optional because it is the runtime's to provide and a fake need not.
+   */
+  getWebSocketAutoResponseTimestamp?: (socket: PairSocket) => Date | null
   storage: { getAlarm: () => Promise<number | null>; setAlarm: (at: number) => Promise<void> }
 }
 
@@ -42,6 +63,19 @@ export type PairSocket = {
 }
 
 export type PairEnvironment = Record<string, string | undefined>
+
+/**
+ * The runtime owns this socket and may be part-way through taking it away. A
+ * read that throws is not a reason to fail the event being handled — and on a
+ * close, failing it is exactly how a partner ends up never being told.
+ */
+function readSnapshot(socket: PairSocket): SessionSnapshot | null {
+  try {
+    return (socket.deserializeAttachment() as SessionSnapshot | null) ?? null
+  } catch {
+    return null
+  }
+}
 
 export type PairDependencies = {
   clock?: Clock
@@ -72,20 +106,35 @@ export class RendezvousPair {
     }
   }
 
-  /** Takes over an upgrade the Worker has routed here. */
-  accept(socket: PairSocket, origin: string): void {
+  /**
+   * Takes over an upgrade the Worker has routed here, or refuses it. False means
+   * the object already holds as many connections as a pairing can account for,
+   * and the caller must answer the upgrade rather than complete it.
+   */
+  accept(socket: PairSocket, origin: string): boolean {
+    if (this.occupied() >= MAX_SOCKETS) {
+      this.log.warn('upgrade.refused', {
+        reason: 'rendezvous already holds as many connections as a pairing can account for',
+        addressRef: this.log.ref(origin)
+      })
+      return false
+    }
     this.state.acceptWebSocket(socket)
     const id = `peer_${randomHex(6)}`
     const session = this.build(socket, id, origin, undefined)
     socket.serializeAttachment(session.snapshot())
     this.log.info('connection.opened', { conn: id, addressRef: this.log.ref(origin) })
     void this.armAlarm()
+    return true
   }
 
   async onMessage(socket: PairSocket, message: string | ArrayBuffer): Promise<void> {
     const live = this.rehydrate()
     const session = live.sessions.get(socket)
-    if (session === undefined) return
+    if (session === undefined) {
+      this.unknownSocket(socket, 'message')
+      return
+    }
     if (typeof message === 'string') session.onText(message)
     else session.onBinary(new Uint8Array(message))
     this.persist(live.sessions)
@@ -98,7 +147,10 @@ export class RendezvousPair {
     // that is never told its peer left is the worst failure this relay has.
     const live = this.rehydrate(socket)
     const session = live.sessions.get(socket)
-    if (session === undefined) return
+    if (session === undefined) {
+      this.unknownSocket(socket, 'close')
+      return
+    }
     session.onSocketClosed(code)
     this.persist(live.sessions)
   }
@@ -133,9 +185,15 @@ export class RendezvousPair {
     const all = alsoInclude !== undefined && !attached.includes(alsoInclude) ? [...attached, alsoInclude] : attached
 
     for (const socket of all) {
-      const snapshot = socket.deserializeAttachment() as SessionSnapshot | null
-      if (snapshot === null || snapshot === undefined) continue
+      const snapshot = readSnapshot(socket)
+      if (snapshot === null) continue
       const session = this.build(socket, snapshot.id, snapshot.origin, snapshot, rendezvous)
+      // The runtime answers this peer's keepalive without waking the object, so
+      // the timestamp it kept is the only evidence the peer is still there. Read
+      // every time rather than on the alarm alone: the session is rebuilt from
+      // its attachment, and an attachment cannot record what never woke it.
+      const heardAt = this.lastAutoResponse(socket)
+      if (heardAt !== null) session.noteHeard(heardAt)
       sessions.set(socket, session)
       if (snapshot.token === null || snapshot.state === 'closed') continue
       const group = byToken.get(snapshot.token) ?? []
@@ -157,6 +215,52 @@ export class RendezvousPair {
     }
 
     return { sessions, rendezvous }
+  }
+
+  /**
+   * Sockets that still have a session on them. A peer that was just displaced
+   * stays attached for the moment between being told and its close arriving, and
+   * it must not hold a slot against the connection that displaced it. A socket
+   * whose attachment cannot be read is counted: the object cannot tell whether
+   * it is finished, and guessing in the other direction is what would let the
+   * cap be walked past.
+   */
+  private occupied(): number {
+    let held = 0
+    for (const socket of this.state.getWebSockets()) {
+      if (readSnapshot(socket)?.state !== 'closed') held += 1
+    }
+    return held
+  }
+
+  /**
+   * Every session is found by the identity of the socket the runtime hands back,
+   * and nothing here checks that a hibernation wake preserves it. If it ever
+   * does not, this is the symptom — and a frame dropped in silence is the worst
+   * possible way to find that out, so it is said out loud. The connection cannot
+   * be served without its state either way, so it is ended rather than left open
+   * swallowing frames.
+   */
+  private unknownSocket(socket: PairSocket, phase: 'message' | 'close'): void {
+    this.log.warn('connection.unknown', { phase })
+    if (phase === 'close') return
+    try {
+      // "Going away" rather than a protocol complaint: the peer did nothing
+      // wrong, the relay lost its state, and reconnecting is the right answer.
+      socket.close(CloseCode.GoingAway, 'no session for this connection')
+    } catch {
+      // Already gone, which is the same outcome by a different route.
+    }
+  }
+
+  private lastAutoResponse(socket: PairSocket): number | null {
+    const read = this.state.getWebSocketAutoResponseTimestamp
+    if (read === undefined) return null
+    try {
+      return read.call(this.state, socket)?.getTime() ?? null
+    } catch {
+      return null
+    }
   }
 
   private persist(sessions: Map<PairSocket, PeerSession>): void {
