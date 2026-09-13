@@ -17,33 +17,18 @@
 // the alternative — a second, weaker search beside the real one — is how an app
 // ends up with two answers to "where is it".
 
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { PaneWatchers } from '@shared/entities'
 import { offerCliInstall } from '../dialogs/cliInstallModel'
-import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import type { PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { evidenceLine } from './outputEvidence'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
-import { teammateRows, unheardTeammates, unheardTitle, type TeammatePaneRow } from './teammateRows'
+import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { WorktreeRow } from './WorktreeRow'
-
-/**
- * One teammate's pane at a time, and the whole of what the window remembers
- * about watching.
- *
- * One rather than many because bytes cost a relay budget and a reader has one
- * pair of eyes: `docs/teamwork.md` is explicit that output flows only for a
- * pane somebody has open, and "open" meaning "was opened once and never shut"
- * is how that turns into the N² traffic it exists to prevent.
- */
-type OpenWatch = { projectId: string; paneId: string; label: string; handle: string }
-
-/** How much of a watched pane is kept to quote its last line from. */
-const WATCH_TAIL_CHARS = 4_000
 
 export function Sidebar({
   newWorktreeHint,
@@ -100,27 +85,20 @@ export function Sidebar({
   const evidence = usePaneEvidence(onScreen, terminals)
   const watching = useWorkspaceStore((state) => state.watchers)
 
-  const [watch, setWatch] = useState<OpenWatch | null>(null)
-  // Whatever the pane this window is watching has said since it was opened.
-  // Nothing else has a line to quote, because nothing else is streaming.
-  const [watchTail, setWatchTail] = useState('')
+  // The panes themselves are in the workspace, beside this window's own — the
+  // sidebar only says which of these rows is one of them, and quotes what they
+  // have printed. It used to hold the viewer as well, floating over everything,
+  // and that is exactly what a watched pane stopped being.
+  const watches = useWorkspaceStore((state) => state.watches)
+  const watchTails = useWorkspaceStore((state) => state.watchTails)
+  const toggleWatchedPane = useWorkspaceStore((state) => state.toggleWatchedPane)
 
-  const openWatch = useCallback((projectId: string, pane: TeammatePaneRow) => {
-    setWatchTail('')
-    setWatch((current) =>
-      // A second press on the pane already open stops watching, which is also
-      // what makes stopping reachable without reaching for the viewer.
-      current?.paneId === pane.terminalId
-        ? null
-        : { projectId, paneId: pane.terminalId, label: pane.label, handle: pane.handle }
-    )
-  }, [])
-
-  const onWatchOutput = useCallback((data: string) => {
-    setWatchTail((tail) => (tail + data).slice(-WATCH_TAIL_CHARS))
-  }, [])
-
-  const watchEvidence = useMemo(() => (watch ? { [watch.paneId]: evidenceLine(watchTail) } : {}), [watch, watchTail])
+  // Only an open pane has a line to quote, because only an open pane streams.
+  const watchEvidence = useMemo(() => {
+    const lines: Record<string, string | null> = {}
+    for (const watch of watches) lines[watch.paneId] = evidenceLine(watchTails[watch.id] ?? '')
+    return lines
+  }, [watches, watchTails])
 
   // Teamwork is set up per repository, so an app-level entry has to pick one:
   // the repository whose worktree is open, and otherwise the first. Undefined
@@ -336,8 +314,8 @@ export function Sidebar({
                       <TeammateWorktreeRow
                         key={row.id}
                         row={row}
-                        watchingPaneId={watch?.paneId ?? null}
-                        onWatch={(pane) => openWatch(project.id, pane)}
+                        watchingPaneIds={watchingIn(watches, project.id)}
+                        onWatch={(pane) => toggleWatchedPane(project.id, pane)}
                       />
                     ))}
                     {unheard.length > 0 ? (
@@ -386,23 +364,13 @@ export function Sidebar({
           </button>
         </div>
       ) : null}
-
-      {/* Over the window rather than in the pane tree, because it is not one of
-          your panes: it is a window onto somebody else's machine, and it goes
-          away when you stop looking. */}
-      {watch ? (
-        <WatchedPaneView
-          key={watch.paneId}
-          projectId={watch.projectId}
-          paneId={watch.paneId}
-          label={watch.label}
-          handle={watch.handle}
-          onOutput={onWatchOutput}
-          onClose={() => setWatch(null)}
-        />
-      ) : null}
     </div>
   )
+}
+
+/** The panes of one project this window has open, for the rows to mark. */
+function watchingIn(watches: readonly { projectId: string; paneId: string }[], projectId: string): string[] {
+  return watches.filter((watch) => watch.projectId === projectId).map((watch) => watch.paneId)
 }
 
 /** What everybody else is doing to each pane, in the shape a row reads. */

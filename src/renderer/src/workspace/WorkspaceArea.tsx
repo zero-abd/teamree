@@ -1,12 +1,26 @@
-// The right-hand side: which worktree is open, what it is doing, and its panes.
+// The right-hand side: which worktree is open, what it is doing, and its panes
+// — and, beside them, whatever teammates' panes this window has open.
+//
+// The teammates' panes are held out here rather than inside the worktree's own
+// tree for one reason, and it is about their lifetime rather than about the
+// layout. Every navigation in this area replaces what is under it: the pane
+// board takes the whole area, so does teamwork's setup, and switching tabs
+// mounts a different tree. A watched pane put inside any of those would unmount
+// on the next click, and unmounting closes the subscription and reopens it when
+// you come back — the relay's budget paid twice over for a pane nobody stopped
+// watching. So the area is a split: the workspace on one side, a teammate's
+// pane on the other, and the gutter between them is the same gutter that sits
+// between two of your own.
 
 import { useCallback, useMemo } from 'react'
 import { Dashboard } from '../dashboard/Dashboard'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { PaneTree } from '../panes/PaneTree'
+import { SplitFrame } from '../panes/SplitFrame'
 import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 import { TeamworkView } from '../teamwork/TeamworkView'
+import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { ChangesPanel } from './ChangesPanel'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { terminalTarget } from './terminalTarget'
@@ -19,12 +33,64 @@ export function WorkspaceArea({
   modifier: PlatformModifier
   isAppChord: (event: KeyboardEvent) => boolean
 }): React.JSX.Element {
+  const watches = useWorkspaceStore((state) => state.watches)
+  const watchSizes = useWorkspaceStore((state) => state.watchSizes)
+  const setWatchSizes = useWorkspaceStore((state) => state.setWatchSizes)
+  const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
+  const focusPane = useWorkspaceStore((state) => state.focusPane)
+  const closeWatchedPane = useWorkspaceStore((state) => state.closeWatchedPane)
+  const noteWatchedPaneOutput = useWorkspaceStore((state) => state.noteWatchedPaneOutput)
+  const closeHint = shortcutHint('close-pane', modifier)
+
+  // Keyed by the pane rather than by position, so closing the first of three
+  // does not remount — and so re-open — the two beside it.
+  const cells = [
+    { key: 'workspace', node: <WorkspaceMain modifier={modifier} isAppChord={isAppChord} /> },
+    ...watches.map((watch) => ({
+      key: watch.id,
+      node: (
+        <WatchedPaneView
+          projectId={watch.projectId}
+          paneId={watch.paneId}
+          label={watch.label}
+          handle={watch.handle}
+          focused={focusedWatchId === watch.id}
+          onFocus={() => focusPane(watch.id)}
+          isAppChord={isAppChord}
+          closeHint={closeHint}
+          onOutput={(data) => noteWatchedPaneOutput(watch.id, data)}
+          onClose={() => closeWatchedPane(watch.id)}
+        />
+      )
+    }))
+  ]
+
+  // A split of one when nobody is being watched, which renders as the workspace
+  // filling the area and no gutter at all. Rendered unconditionally all the
+  // same: a wrapper that appeared the moment a watch opened would remount the
+  // workspace under it, and with it every terminal in the tab.
+  return (
+    <SplitFrame className="workspace-split" direction="row" sizes={watchSizes} onResize={setWatchSizes} cells={cells} />
+  )
+}
+
+function WorkspaceMain({
+  modifier,
+  isAppChord
+}: {
+  modifier: PlatformModifier
+  isAppChord: (event: KeyboardEvent) => boolean
+}): React.JSX.Element {
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
   const layout = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
   )
   const terminals = useWorkspaceStore((state) => state.terminals)
+  // A teammate's pane holding the focus is what takes it off yours. Two panes
+  // wearing the focused border would be two answers to where the next keystroke
+  // goes, and the border is the only place the window says it.
+  const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
@@ -344,7 +410,7 @@ export function WorkspaceArea({
               node={layout.root}
               path={[]}
               terminals={terminals}
-              focusedTerminalId={layout.focusedTerminalId}
+              focusedTerminalId={focusedWatchId === null ? layout.focusedTerminalId : null}
               onFocus={focusPane}
               onClose={onClose}
               onResize={onResize}
