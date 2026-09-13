@@ -7,8 +7,8 @@
 // cannot import a `.ts` file any more than Node can.
 //
 // So: esbuild, at check time, into a throwaway directory. Not `out/`, because
-// `npm test` runs before `npm run build` on CI and a check that silently needs a
-// prior build step is a check that silently does not run.
+// `npm test` runs before `npm run build` in the release sequence, and a check
+// that silently needs a prior build step is a check that silently does not run.
 //
 // Three entry points rather than one. `index.ts` is the public API and is what
 // the product actually calls, but the published Noise vectors put a payload in

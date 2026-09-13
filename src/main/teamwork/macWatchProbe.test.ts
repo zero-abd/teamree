@@ -1,15 +1,20 @@
 // DIAGNOSTIC. Not a test: it asserts nothing and prints what the platform
-// actually did, so the macOS runner can be read as an instrument.
+// actually did, so a Mac can be read as an instrument.
 //
-// Why it exists. `teamreeWatcher.test.ts` fails on the macOS runner and never
-// on Linux, always with `nothing was reported`, and three fixes in a row were
-// guesses at what macOS puts in an event's `filename` — each made on a Linux
-// box, each disproved by a CI cycle. This asks the platform instead of
+// Why it exists. `teamreeWatcher.test.ts` fails on macOS and never on Linux,
+// always with `nothing was reported`, and three fixes in a row were guesses at
+// what macOS puts in an event's `filename` — each made on a Linux box, each
+// disproved by the next run on a Mac. This asks the platform instead of
 // guessing at it.
 //
 // It is skipped unless `TEAMREE_MAC_PROBE=1`, because it spends a minute in
-// sleeps and belongs to nobody's ordinary suite. `.github/workflows/macwatch.yml`
-// sets it. Read the log for lines beginning `[probe]`:
+// sleeps and belongs to nobody's ordinary suite. A GitHub Actions workflow used
+// to set it on a macOS runner; that has been removed along with the rest of
+// them, so it is now a command somebody types on a Mac:
+//
+//   TEAMREE_MAC_PROBE=1 npx vitest run src/main/teamwork/macWatchProbe.test.ts
+//
+// Read the log for lines beginning `[probe]`:
 //
 //   `0`  does a bare `fs.watch` on a directory fire at all — under `os.tmpdir()`
 //        and under its resolved path, with `persistent` both ways. A `NEVER
@@ -26,7 +31,7 @@
 //   `D`  what a non-recursive watch on the checkout root is told about a write
 //        three levels down, and about `.teamree` being removed.
 //
-// Delete this file and that workflow once the answer is in the watcher.
+// Delete this file once the answer is in the watcher.
 
 import { watch as fsWatch, type FSWatcher } from 'node:fs'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'

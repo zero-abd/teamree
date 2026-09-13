@@ -6,7 +6,7 @@ install it, [`install.md`](install.md) is the one to read.
 ## Why this is a script and not a workflow
 
 Releases are cut from a maintainer's Mac, by one command, rather than by hosted
-CI. Two reasons, and neither is temporary.
+CI. Three reasons, and none of them is temporary.
 
 The artifact is a universal macOS `.dmg`, and the check that matters is that the
 packaged app opens a real terminal — `node-pty` has to survive packaging, with
@@ -21,10 +21,28 @@ and then the packaged app twice — unpacked, and the copy inside the mounted
 sequence somewhere else would not make it stricter; it would only make it
 somebody else's machine.
 
+The third reason is what somebody else's machine costs. There were four GitHub
+Actions workflows here — `ci.yml`, `build.yml`, `release.yml` and a temporary
+`macwatch.yml` — and they have been removed. Not because they were broken: they
+ran, and they ran the whole sequence above. Every job in them ran on a `macos`
+runner, which GitHub bills at ten times the Linux rate against a free account's
+monthly allowance, and a full run packaged a 190 MB Electron app. A handful of
+pushes spent the month, after which every pull request carried a red cross that
+was about the allowance rather than about the code — which is the fastest way to
+teach everybody to ignore a red cross.
+
 That sequence has been run on a hosted runner, once, on 13 September 2026: every
 step of it, including `npm run install:verify`. So the instructions in
 [`install.md`](install.md) have been machine-checked rather than only written
-down, which is what that document claims.
+down, which is what that document claims. It is also the only time that will have
+happened until somebody runs it by hand again.
+
+Nothing runs on a push, on a pull request or on a tag now, which puts the
+day-to-day checks on whoever is editing.
+[`../CONTRIBUTING.md`](../CONTRIBUTING.md) names them.
+`npm run release:dry-run` runs those and everything below it, and stops before
+creating anything — the honest rehearsal, and the thing to run when a change
+touches packaging.
 
 ## The command
 

@@ -6,7 +6,8 @@
 // carries only one architecture's prebuild opens no terminal at all on the
 // other, which for a terminal-shaped application is the whole of it.
 //
-// This cannot be caught downstream. CI packages on an Apple Silicon runner and
+// This cannot be caught downstream. `npm run release` packages on whichever Mac
+// a maintainer cuts the release from — an Apple Silicon one, so far — and
 // verifies the app there, where the arm64 binary is present and everything
 // works; the Intel half would fail first on somebody else's Mac. And the pruning
 // happens per-architecture during a build that electron-builder then merges, so

@@ -29,9 +29,10 @@ import { relayIsBuilt, startTwoPeers } from '../../scripts/teamwork/two-peers.mj
 /**
  * Act II needs the relay's own build, which is a separate package with its own
  * `dist/`. Missing, it says so and skips: another package's absent build is not
- * a broken peer transport. `scripts/require-relay-build.mjs` reads the same
- * file and fails instead on CI, where a skip nobody sees is a test that does
- * not exist.
+ * a broken peer transport. `scripts/require-test-environment.mjs` stats the
+ * same file before the suite starts and refuses to run at all rather than let
+ * it skip, because a skip nobody sees is a test that does not exist — and with
+ * no CI anywhere, this local run is the only place anybody would see it.
  */
 const RELAY_BUILT = relayIsBuilt()
 

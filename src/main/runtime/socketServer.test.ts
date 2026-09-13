@@ -71,8 +71,8 @@ async function waitUntil(predicate: () => boolean, timeoutMs = 2000): Promise<vo
 // Recorded rather than closed, deliberately. A named pipe needs a Windows
 // kernel; there is no shim that would make one appear here, so the test could
 // only be written to be skipped on every machine this project runs on, which
-// buys a green block and no evidence. Windows was dropped on purpose — see the
-// matrix comment in .github/workflows/build.yml — and the app ships macOS-only.
+// buys a green block and no evidence. Windows was dropped on purpose — see
+// "macOS is the supported platform" in ROADMAP.md — and the app ships macOS-only.
 // If Windows ever comes back, this is the first gap that needs filling.
 describe.skipIf(process.platform === 'win32')('socket server', () => {
   let directory: string
