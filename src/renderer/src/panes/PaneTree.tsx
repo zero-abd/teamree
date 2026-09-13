@@ -16,6 +16,10 @@ export type PaneCallbacks = {
   onResize: (path: number[], sizes: number[]) => void
   isAppChord: (event: KeyboardEvent) => boolean
   closeHint: string
+  /** The one pane showing the find bar, if any. */
+  searchTerminalId: string | null
+  searchToken: number
+  onCloseSearch: () => void
 }
 
 export function PaneTree({
@@ -36,7 +40,10 @@ function PaneLeaf({
   onFocus,
   onClose,
   isAppChord,
-  closeHint
+  closeHint,
+  searchTerminalId,
+  searchToken,
+  onCloseSearch
 }: PaneCallbacks & { terminalId: string }): React.JSX.Element {
   const terminal = terminals[terminalId]
   const focused = focusedTerminalId === terminalId
@@ -85,6 +92,9 @@ function PaneLeaf({
         focused={focused}
         onFocus={() => onFocus(terminalId)}
         isAppChord={isAppChord}
+        searchOpen={searchTerminalId === terminalId}
+        searchToken={searchToken}
+        onCloseSearch={onCloseSearch}
       />
     </section>
   )

@@ -35,6 +35,8 @@ export function WorkspaceArea({
   const agents = useWorkspaceStore((state) => state.agents)
   const startAgent = useWorkspaceStore((state) => state.startAgent)
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
+  const paneSearch = useWorkspaceStore((state) => state.paneSearch)
+  const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -72,6 +74,10 @@ export function WorkspaceArea({
             <div>
               <dt>{shortcutHint('open-palette', modifier)}</dt>
               <dd>go to anything</dd>
+            </div>
+            <div>
+              <dt>{shortcutHint('find-in-pane', modifier)}</dt>
+              <dd>find in pane</dd>
             </div>
           </dl>
         </div>
@@ -167,6 +173,9 @@ export function WorkspaceArea({
               onResize={onResize}
               isAppChord={isAppChord}
               closeHint={shortcutHint('close-pane', modifier)}
+              searchTerminalId={paneSearch?.terminalId ?? null}
+              searchToken={paneSearch?.token ?? 0}
+              onCloseSearch={closePaneSearch}
             />
           ) : (
             <div className="placeholder placeholder--inset">

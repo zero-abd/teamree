@@ -197,6 +197,18 @@
   color: var(--fg);
 }
 
+/* The frame exists only so the find bar has something to be absolute against.
+   The bar must not take space of its own: a terminal that changes size gets
+   refitted, and a refit resizes the PTY under a program that is only being
+   read. */
+.terminal-frame {
+  display: flex;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
 .terminal-surface {
   flex: 1;
   min-width: 0;
@@ -227,6 +239,90 @@
 }
 
 .pane__restored--agent {
+/* Find bar ---------------------------------------------------------------- */
+
+.pane-search {
+  display: flex;
+  position: absolute;
+  top: var(--s2);
+  right: var(--s3);
+  /* Above every layer xterm stacks inside the surface next to it, the highest
+     of which is 11; the surface is not a stacking context of its own. */
+  z-index: 20;
+  align-items: center;
+  gap: var(--s1);
+  padding: var(--s1) var(--s1) var(--s1) var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+}
+
+.pane-search__field {
+  width: 180px;
+  padding: 2px var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.pane-search__field::placeholder {
+  color: var(--fg-muted);
+}
+
+.pane-search__field:focus-visible {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: var(--ring);
+}
+
+/* Reserved so the controls beside it do not shuffle as the count changes. */
+.pane-search__count {
+  min-width: 76px;
+  padding: 0 var(--s1);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pane-search__count--missed {
+  color: var(--warning);
+}
+
+.pane-search__toggle {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.pane-search__toggle--word {
+  text-decoration: underline;
+}
+
+.pane-search__toggle:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.pane-search__toggle[aria-pressed='true'] {
+  border-color: var(--accent-line);
   background: var(--accent-soft);
   color: var(--accent-bright);
 }

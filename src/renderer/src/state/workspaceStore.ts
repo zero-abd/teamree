@@ -37,6 +37,14 @@ export type DialogState =
 
 export type Notice = { id: number; text: string; tone: 'error' | 'info' }
 
+/**
+ * The find bar belongs to one pane at a time — the focused one — so a second
+ * pane claiming it puts the first one's bar away. `token` changes on every
+ * press of the chord, which is how a repeat press re-takes a field that is
+ * already open.
+ */
+export type PaneSearch = { terminalId: string; token: number }
+
 type WorkspaceState = {
   connection: ConnectionState
   runtimeVersion: string | null
@@ -75,6 +83,7 @@ type WorkspaceState = {
 
   sidebarWidth: number
   sidebarVisible: boolean
+  paneSearch: PaneSearch | null
   dialog: DialogState
   notices: Notice[]
 
@@ -100,6 +109,9 @@ type WorkspaceState = {
   createTerminal: (worktreeId: string) => Promise<void>
   focusNextPane: () => void
   applySplitSizes: (worktreeId: string, path: number[], sizes: number[]) => void
+  /** Opens the find bar over the focused pane, or re-takes it if it is already there. */
+  openPaneSearch: () => void
+  closePaneSearch: () => void
 
   toggleChanges: () => void
   /** Shows the patch for one path, or clears the selection when given null. */
@@ -393,6 +405,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
     sidebarVisible: true,
+    paneSearch: null,
     dialog: null,
     notices: [],
 
@@ -632,6 +645,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const index = layout.focusedTerminalId ? ids.indexOf(layout.focusedTerminalId) : -1
       const next = ids[(index + 1) % ids.length]
       if (next) persistLayout({ ...layout, focusedTerminalId: next })
+    },
+
+    openPaneSearch() {
+      const focused = activeLayout()?.focusedTerminalId
+      if (!focused) return
+      set((state) => ({ paneSearch: { terminalId: focused, token: (state.paneSearch?.token ?? 0) + 1 } }))
+    },
+
+    closePaneSearch() {
+      set({ paneSearch: null })
     },
 
     applySplitSizes(worktreeId, path, sizes) {

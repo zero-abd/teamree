@@ -2,6 +2,7 @@
 // custom properties once per terminal so the emulator and the chrome around it
 // can never drift apart.
 
+import type { ISearchOptions } from '@xterm/addon-search'
 import type { ITheme } from '@xterm/xterm'
 
 const FALLBACK: ITheme = {
@@ -55,6 +56,50 @@ export function readTerminalTheme(root: Element | null): ITheme {
     if (value) colors[key] = value
   }
   return theme
+}
+
+type SearchDecorations = NonNullable<ISearchOptions['decorations']>
+
+/**
+ * Search highlights reuse the selection colour, because a match is a selection
+ * the user did not have to make by hand. The active one is told apart by an
+ * accent border rather than a filled accent background: xterm draws the cell's
+ * own text over the decoration, and a bright fill would bury it.
+ *
+ * The addon parses these itself and only understands #RRGGBB, so every entry
+ * must map to a solid hex token.
+ */
+const SEARCH_VARIABLE_BY_KEY: Record<keyof Required<SearchDecorations>, string> = {
+  matchBackground: '--term-selection',
+  matchBorder: '--term-bright-black',
+  matchOverviewRuler: '--term-bright-black',
+  activeMatchBackground: '--term-selection',
+  activeMatchBorder: '--accent-bright',
+  activeMatchColorOverviewRuler: '--accent-bright'
+}
+
+const SEARCH_FALLBACK: Required<SearchDecorations> = {
+  matchBackground: '#2b3350',
+  matchBorder: '#5c6577',
+  matchOverviewRuler: '#5c6577',
+  activeMatchBackground: '#2b3350',
+  activeMatchBorder: '#a6a7ff',
+  activeMatchColorOverviewRuler: '#a6a7ff'
+}
+
+export function readSearchDecorations(root: Element | null): SearchDecorations {
+  if (!root || typeof getComputedStyle !== 'function') return SEARCH_FALLBACK
+  const computed = getComputedStyle(root)
+  const read = (key: keyof Required<SearchDecorations>): string =>
+    computed.getPropertyValue(SEARCH_VARIABLE_BY_KEY[key]).trim() || SEARCH_FALLBACK[key]
+  return {
+    matchBackground: read('matchBackground'),
+    matchBorder: read('matchBorder'),
+    matchOverviewRuler: read('matchOverviewRuler'),
+    activeMatchBackground: read('activeMatchBackground'),
+    activeMatchBorder: read('activeMatchBorder'),
+    activeMatchColorOverviewRuler: read('activeMatchColorOverviewRuler')
+  }
 }
 
 export const TERMINAL_FONT_FAMILY =

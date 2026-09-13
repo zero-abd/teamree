@@ -70,6 +70,11 @@ export function StatusBar({ modifier }: { modifier: PlatformModifier }): React.J
         <kbd>{shortcutHint('split-down', modifier)}</kbd>
       </span>
 
+      <span className="statusbar__item">
+        <span className="statusbar__muted">find</span>
+        <kbd>{shortcutHint('find-in-pane', modifier)}</kbd>
+      </span>
+
       <span className="statusbar__item" title={`${totalTerminals} terminals across all worktrees`}>
         <span className="statusbar__muted">terminals</span>
         {paneCount}
