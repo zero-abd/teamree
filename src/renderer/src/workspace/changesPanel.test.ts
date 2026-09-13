@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorktreeLog } from '@shared/entities'
-import { directoryOf, emptyChangesLabel, fileNameOf, lineKind } from './ChangesPanel'
+import { directoryOf, draftFor, emptyChangesLabel, fileNameOf, lineKind, withDraft } from './ChangesPanel'
 import { changedCount } from './WorkspaceArea'
 
 describe('emptyChangesLabel', () => {
@@ -88,5 +88,39 @@ describe('changedCount', () => {
 
   it('is zero when the status has not been read yet', () => {
     expect(changedCount(undefined)).toBe(0)
+  })
+})
+
+// A half-typed commit message is the one thing on this screen the app cannot
+// reconstruct — the panel already refuses to clear it when a commit is refused.
+// It belongs to the worktree it was typed for, and not to the panel, which is
+// never remounted when the tabs change underneath it.
+describe('commit message drafts', () => {
+  it('keeps each worktree’s message to itself', () => {
+    const drafts = withDraft({}, 'wt-a', 'fix the parser')
+
+    expect(draftFor(drafts, 'wt-a')).toBe('fix the parser')
+    expect(draftFor(drafts, 'wt-b')).toBe('')
+  })
+
+  // Discarding it on a tab switch would be the same loss by a kinder route:
+  // going to read another worktree's diff is not abandoning the message.
+  it('hands a message back when its worktree comes round again', () => {
+    const drafts = withDraft(withDraft({}, 'wt-a', 'fix the parser'), 'wt-b', 'bump the relay')
+
+    expect(draftFor(drafts, 'wt-a')).toBe('fix the parser')
+    expect(draftFor(drafts, 'wt-b')).toBe('bump the relay')
+  })
+
+  it('has nothing to show before a worktree is chosen', () => {
+    expect(draftFor(withDraft({}, 'wt-a', 'fix the parser'), null)).toBe('')
+  })
+
+  // What a landed commit empties, and only for the worktree it landed in.
+  it('forgets a message that has been emptied, and leaves the rest', () => {
+    const drafts = withDraft(withDraft({}, 'wt-a', 'fix the parser'), 'wt-b', 'bump the relay')
+    const after = withDraft(drafts, 'wt-a', '')
+
+    expect(after).toEqual({ 'wt-b': 'bump the relay' })
   })
 })
