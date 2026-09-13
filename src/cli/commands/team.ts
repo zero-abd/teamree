@@ -476,7 +476,7 @@ export const teamCommands: readonly CommandSpec[] = [
           ['source', relay.source ?? '-'],
           ['problem', relay.problem ?? '-'],
           ['file', relay.file],
-          ['committed', relay.committed.url ?? `none - ${relay.committed.problem ?? 'no file'}`],
+          ['on disk', relay.onDisk.url ?? `none - ${relay.onDisk.problem ?? 'no file'}`],
           ['override', `${relay.override.name}=${relay.override.value ?? '(not set)'}`]
         ])
       }
@@ -505,7 +505,7 @@ export const teamCommands: readonly CommandSpec[] = [
       return {
         data: relay,
         text: [
-          `Wrote ${relay.file} in ${project.name}: ${relay.committed.url ?? '(nothing)'}.`,
+          `Wrote ${relay.file} in ${project.name}: ${relay.onDisk.url ?? '(nothing)'}.`,
           'Commit and push it to make it the team’s.',
           ...(relay.source === 'environment'
             ? [`Note: ${relay.override.name} is set, so this machine keeps dialling ${relay.url ?? 'nothing'}.`]

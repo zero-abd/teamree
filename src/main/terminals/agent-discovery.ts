@@ -12,6 +12,7 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import path from 'node:path'
 import { AGENT_KINDS, type AgentKind } from './agent-command'
+import { loginShellPath } from './shell-environment'
 
 export type InstalledAgent = {
   kind: AgentKind
@@ -22,7 +23,7 @@ export type InstalledAgent = {
 }
 
 export type DiscoveryOptions = {
-  /** Defaults to the process PATH. */
+  /** Defaults to agentSearchPath() below. */
   pathValue?: string
   platform?: NodeJS.Platform
   /** Windows executable extensions; defaults to PATHEXT or a sane list. */
@@ -31,10 +32,27 @@ export type DiscoveryOptions = {
   isExecutable?: (candidate: string) => boolean
 }
 
+/**
+ * Where to look for an agent: the PATH the user's login shell ends up with, and
+ * the process PATH only when that could not be had.
+ *
+ * The process PATH was the whole answer here once, and on macOS it is the wrong
+ * one every time the app is opened the way an app is opened — from Finder, the
+ * Dock or Spotlight, where launchd hands it `/usr/bin:/bin:/usr/sbin:/sbin` and
+ * nothing the user's profile adds. An agent installed under /opt/homebrew/bin
+ * or by a version manager is then not on the PATH this process can see, while
+ * being on the one every terminal on the machine can, teamree's own panes
+ * included. Asking the login shell is what makes discovery agree with what the
+ * user gets when they type the name themselves.
+ */
+function agentSearchPath(platform: NodeJS.Platform = process.platform): string {
+  return loginShellPath({ platform }) ?? process.env.PATH ?? ''
+}
+
 /** The agents on PATH, in the catalogue's own order so the list is stable. */
 export function findInstalledAgents(options: DiscoveryOptions = {}): InstalledAgent[] {
   const platform = options.platform ?? process.platform
-  const pathValue = options.pathValue ?? process.env.PATH ?? ''
+  const pathValue = options.pathValue ?? agentSearchPath(platform)
   const isExecutable = options.isExecutable ?? canExecute
   const separator = platform === 'win32' ? ';' : ':'
   // Joined with the flavour of the platform being asked about, not the one this
