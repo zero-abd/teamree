@@ -1,13 +1,15 @@
 # Roadmap
 
 Milestone 1 is single-user and is complete; its remaining limits are under "Known gaps".
-Milestone 2 is teamwork, and its five lettered stages have all landed — built and tested,
+Milestone 2 is teamwork, and its six lettered stages have all landed — built and tested,
 but never yet run between two machines in two places.
 
 ## Stack
 
 - TypeScript end to end
-- Electron for the shell, so terminal rendering behaves the same on every platform
+- macOS, and only macOS: the one platform packaged, published and supported
+- Electron for the shell, so a terminal and the chrome around it are one document —
+  one engine, one palette, one language
 - React + Vite for the renderer
 - A runtime owning git, worktrees, terminals, and state
 - One contract in `src/shared` typing the runtime, the GUI, and the CLI from a single declaration
@@ -16,8 +18,8 @@ but never yet run between two machines in two places.
 ## Architecture
 
 Three consumers, one contract. The renderer reaches the runtime over Electron IPC through
-an isolated preload bridge. The CLI reaches the same runtime over a unix socket, or a named
-pipe on Windows, speaking newline-delimited JSON. Both are typed from `src/shared/methods.ts`,
+an isolated preload bridge. The CLI reaches the same runtime over a unix socket, speaking
+newline-delimited JSON. Both are typed from `src/shared/methods.ts`,
 so a change to a method signature breaks every caller at compile time rather than at runtime.
 
 ## M0 — Scaffold
@@ -302,6 +304,123 @@ The sidebar said a pane was working. It did not say what it was working on.
       an exited pane read once more and then never again — no subscription,
       which would push every byte an agent prints into the renderer to show one
       line
+
+## M22 — A teammate's pane in the window, not over it
+
+A watched pane was a card fixed to the bottom-right corner at 70% of the window:
+one at a time, over whatever was underneath, and gone the moment you looked at
+anything else. It was the one surface in the app that could not be moved,
+resized or closed with the chord that closes panes — which is a strange thing
+for the surface whose whole job is to be read carefully.
+
+- [x] It is a pane: a cell beside your own, with the gutter that sits between
+      two of yours, the pane bar, the close button, the focused border, and a
+      slot in the cycle the next-pane chord walks
+- [x] Several at once, because a second pane is a second cell rather than a
+      second card — two teammates side by side is the thing one card could not do
+- [x] Held one level above the worktree's own pane tree, which is about lifetime
+      rather than layout: the board, teamwork's setup panel and a tab switch each
+      replace what is under them, and a watched pane inside any of them would
+      unmount on the next click — closing a subscription and reopening it, paying
+      the relay's budget twice for a pane nobody stopped watching
+- [x] What made it *not* one of your panes is untouched, because none of it was
+      ever about where the window put it: the size is still the owner's and
+      letterboxed, typing is still a request, the bar still says whose machine a
+      keystroke lands on, and a gap from the relay's budget is still written into
+      the stream where it happened
+
+## M23 — Saying that a newer build exists
+
+Three releases had shipped and nothing in the app had ever mentioned a fourth.
+Somebody who downloaded the first `.dmg` ran it until a person told them
+otherwise.
+
+- [x] `update.state`, `update.check`, `update.setAutomatic` and `update.download`:
+      the newest published release, compared by semver precedence and never as
+      strings, in a card in the corner when there is one
+- [x] A check, and deliberately not an updater. These builds are unsigned and the
+      mechanism a Mac app replaces itself through validates the replacement's
+      signature, so the card does the half that is available: what is out, that
+      release's notes, and the download — and sends the reader to
+      `docs/install.md`, where the quarantine advice is kept honest by a script
+- [x] Nothing waits on it: the first check is armed half a minute after startup
+      and awaited by nothing, GitHub is asked at most once every six hours with
+      the clock in the workspace file rather than in memory, and a failed check is
+      a log line rather than a dialog
+- [x] A check somebody asked for always answers — including "you are on the
+      latest release" — because a menu item that does nothing visible reads as
+      broken
+- [x] The answer is treated as what it is, text from the internet: the tag has to
+      match the shape of this project's tags before it reaches a URL, the download
+      has to parse to an `https` address on github.com under this repository, the
+      body is read through a byte budget, and the notes are flattened to plain
+      text in a text node
+
+## M24 — The colours are the user's
+
+The palette was eleven stylesheets deep in one hard-coded near-black, so the only
+way to have a different one was to edit the source.
+
+- [x] A true `#000000` ground by default, four presets, and all forty-two colours
+      editable behind a disclosure — from the sidebar rail, the command palette,
+      and `Cmd+,`, which is where a Mac user looks first
+- [x] One derivation from a seed, so a palette somebody builds by hand goes
+      through exactly the ramp a shipped one does, and it ends in a legibility
+      pass: every ink is pushed off its surface until it clears its WCAG target,
+      which is what makes an editor this open safe to ship
+- [x] `tokens.css` keeps the literals so the first frame is painted before any
+      script runs, a test recomputes them so the two copies cannot drift, and the
+      choice is read before the window exists so the frame Electron shows first is
+      already the right colour
+- [x] Terminals follow the window: all sixteen ANSI colours mapped where eight had
+      been silently keeping the emulator's own defaults, the pane taking the
+      window's ground so a pane and the chrome around it are one surface, and a
+      theme switch reaching panes that are already open
+
+## M25 — Saying what the setup is doing
+
+Two complaints, one report: setting a team up worked and was confusing, and step
+4 appeared to hang at `git push` with nothing to show for it.
+
+- [x] The push was never hanging; it had nothing to say. It runs with
+      `--progress` and streams git's own stderr to the step, which says how long
+      it has been going and when git has gone quiet, with a Stop while it runs and
+      a Try again afterwards naming the one thing to do first — which for a
+      rejection is a pull and never a force
+- [x] ssh runs in batch mode. `GIT_TERMINAL_PROMPT=0` stops *git* prompting and
+      does nothing to ssh, which opens `/dev/tty` directly for a passphrase or an
+      unknown host key — behind this app's own window, where nobody can answer it.
+      A credential refusal now arrives as itself, naming the command that fixes it
+- [x] A stopped or timed-out publish is a result with the commit still in it
+      rather than a throw that loses the half that worked
+- [x] The panel asks which end of teamwork you are on before anything else, and
+      every step says what the machine at the other end is waiting on while it is
+      not done — the half nobody could see. A joiner with no `.teamree/relay` is
+      told to wait for their teammate rather than quietly encouraged to stand up a
+      second relay
+- [x] It ends on four separate verdicts — key, relay, push, connected — because
+      half-working is the ordinary outcome here, and on the invitation to send,
+      written out and copyable, naming the URL to clone
+
+## M26 — All of it in one window
+
+Five branches landed in a few hours and none of them had ever been rendered
+beside the others. A question about a teammate's keystrokes is a modal that
+nobody in this window opened, and three of the collisions were that one fact
+seen from three places.
+
+- [x] Chords no longer fire underneath a modal the window did not open: a consent
+      prompt refuses Escape, so a chord that acted behind it acted on a window the
+      person could not get back to until they had answered
+- [x] Two modals no longer both trap the keyboard. `Modal` keeps a stack and only
+      the innermost answers keys, so the dialog underneath cannot pull focus out of
+      the prompt on top
+- [x] Neither corner card draws under a scrim any more. Each says in its own
+      header that a card behind a modal is a card being talked over, and each now
+      asks one place what is on top of the window rather than knowing about the
+      half of the answer that existed when it was written
+- [x] A teammate's pane repaints when the palette changes, like every other pane —
+      it was written while the palette could not change
 
 ## Known gaps
 

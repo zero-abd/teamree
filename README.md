@@ -67,8 +67,9 @@ the published file by somebody who had not installed it before: what the warning
 means, the route through System Settings if you would rather not type a command,
 how to put the `teamree` CLI on your PATH, and how to uninstall.
 
-macOS is the only platform with a published build. On Windows and Linux, run it
-from source — it is the same application.
+macOS is the only platform teamree is packaged, published or supported on. That
+is a decision rather than a gap waiting to close, and `ROADMAP.md` has what was
+learned before the platforms were narrowed to one.
 
 ## From source
 
@@ -117,6 +118,19 @@ of them.
 check whether the branch would merge into its base. Push when it is ready. There
 is no force push and no flag to ask for one.
 
+**A window in your own colours.** The ground is absolute black, with the title
+strip, sidebar and status rail lit against it. Four presets ship and all
+forty-two colours are editable — press **⌘,** — and a palette you build by hand
+goes through the same legibility pass a shipped one does, so an editor this open
+cannot make teamree unreadable. Terminals follow the window.
+
+**It says when there is a newer build.** teamree asks GitHub for the newest
+release — at most once every six hours, never while anything waits on it, and not
+at all once you turn it off — and puts a card in the corner when there is one. It
+cannot install it for you and does not pretend to: these builds are unsigned, and
+the mechanism a Mac app replaces itself through refuses an unsigned replacement.
+So the card carries what is out, that release's notes, and the download.
+
 ## Everything, from a shell
 
 `teamree` talks to the running app over a local socket. Every command takes
@@ -137,9 +151,10 @@ draws, so both stay in step.
 ## Working with other people
 
 Two people on two Macs can see each other's worktrees in the same sidebar, read
-what a teammate's pane is doing, and — with that teammate's say-so — answer a
-prompt in it. Identity is the git
-remote: a teammate is somebody whose key is committed to the repository.
+what a teammate's pane is doing — in a pane of your own, beside your work, as
+many at once as you like — and, with that teammate's say-so, answer a prompt in
+it. Identity is the git remote: a teammate is somebody whose key is committed to
+the repository.
 
 Machines behind two routers cannot reach each other, so both dial out to a small
 relay that splices their connections together and is never trusted with what
