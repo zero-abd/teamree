@@ -49,6 +49,42 @@
   -webkit-app-region: no-drag;
 }
 
+/* The lockup: the mark on its tile, then the wordmark, read as one thing.
+
+   Same treatment as the site's header lockup, so the app and the page are one
+   identity — a rounded tile at the 22.5% corner ratio the app icons use, with
+   the mark centred in it — scaled to this strip rather than copied. The site
+   sets a 34px tile in a 56px bar; 24px is the same 62% of a 38px one, which
+   leaves the tile clear of both edges and still shorter than the strip. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.brand__tile {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 22.5%;
+  background: var(--bg-raised);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+/* Two thirds of the tile, the same proportion the site gives it, and the
+   largest the reduced mark was drawn to survive. It takes the wordmark's
+   colour: the pair is one mark in one ink, not an icon beside a label. */
+.brand__mark {
+  width: 16px;
+  height: 16px;
+  color: var(--fg);
+}
+
 .wordmark {
   display: inline-flex;
   align-items: baseline;
