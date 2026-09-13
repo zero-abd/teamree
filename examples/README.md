@@ -21,6 +21,20 @@ same file. It exists so that teamwork can be tried on something real. Testing
 proves nothing: an agent needs something to read, something to change, and a test
 suite that says whether it broke anything.
 
+Two things in it are there for the teamwork run rather than for the bill-splitter,
+and both should survive anybody tidying it up:
+
+- **`test/tasks/` — one failing test per task**, outside the `npm test` glob.
+  Inside it, every agent starts red for two reasons that are not its own and
+  learns to ignore the suite. Outside it, "done" is still a command anybody can
+  run, which is what lets two people trust each other's finished work without
+  reading it.
+- **Task 1 has a question in it that its implementer cannot answer**, marked
+  *Ask first* in `TASKS.md`, unanswered in the note on `spike/json-output`, and
+  deliberately untested. An agent that stops there and asks is the entire event
+  teamwork exists to serve, and a sample where every requirement is decidable
+  from the repository never produces it.
+
 **`init-example-repo.mjs`** — turns `ledger/` into an actual git repository:
 
 ```sh
@@ -30,7 +44,9 @@ node examples/init-example-repo.mjs ~/teamree-example --with-origin
 
 Six commits on `main` and a `spike/json-output` branch, so the start-from picker
 has something real in it. Every commit leaves the suite passing, so any of them
-can be checked out and run. `--with-origin` also makes a bare repository beside
+can be checked out and run, and the script refuses to finish if it copied a file
+that no commit covers — a checkout that is dirty the moment it is made is a
+fixture that teaches everybody to ignore `git status`. `--with-origin` also makes a bare repository beside
 it and pushes to it, which is what `scripts/teamwork/two-peers.mjs` needs: two
 peers that can both clone and push without a git host in between.
 

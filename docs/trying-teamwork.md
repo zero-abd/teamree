@@ -93,6 +93,12 @@ pieces of work chosen so that three people can take one each without touching th
 same file. That last part is what makes it worth using here — two agents in two
 worktrees should be able to finish and both merge.
 
+Each task has a test that fails today and passes when the task is done, so "done"
+is a command either of you can run rather than a judgement, and the diff the
+merge preview shows you has a green suite behind it. One task also has a question
+in it that whoever takes it cannot answer alone: that is step 7, and it is the
+thing you are really here to try.
+
 **Leader**, from a teamree checkout:
 
 ```sh
@@ -133,6 +139,15 @@ cd ~/teamree-example && npm test
 ```
 
 39 tests, about a second, and no network.
+
+The three task targets are deliberately outside that suite, and red:
+
+```sh
+npm run test:task1   # 5 of 6 failing, until somebody writes --json
+```
+
+That is the shape to expect: `npm test` green means you have broken nothing, and
+one target test going green means somebody finished something.
 
 ## 3. Stand up a relay, and commit where it is
 
@@ -325,9 +340,10 @@ teamwork is doing. The ones you will see are:
 
 **Leader**: create a worktree — describe the task, pick an agent, pick what to
 start from — and let the agent run. `TASKS.md` in the example has three real
-ones; task 1, `--json` output, is a good first choice because the
-`spike/json-output` branch already has a half-finished note about it to start
-from.
+ones; task 1, `--json` output, is the one to take here: the `spike/json-output`
+branch already has a half-finished note about it to start from, and it is the
+task with the unanswerable question in it. Give the agent the task and tell it to
+run `npm run test:task1` until that passes.
 
 You should see, on your own machine, what you always see: the worktree in the
 sidebar, its pane underneath, a state dot and how long since it last said
@@ -356,9 +372,20 @@ reading.
 **Leader**: your own pane now says it is being watched, and by whom, by the
 handle their key is filed under in `.teamree/members/`.
 
-Now the part the whole design is for. Wait for the agent to stop on a question
-it cannot answer by itself — task 1 in `TASKS.md` is a good one for this — and
-have the **joiner type the answer into the leader's pane**.
+Now the part the whole design is for. Wait for the agent to stop on the question
+task 1 puts in front of it, and have the **joiner type the answer into the
+leader's pane**.
+
+The question is marked **Ask first** in `TASKS.md`, and it is real: under
+`--json`, what happens to a ledger that does not parse — today's message on
+stderr with nothing on stdout, or a JSON error object on stdout so the caller
+only ever parses one format? Both are ordinary, nothing in the repository
+prefers either, and the target test says nothing about it on purpose. The joiner
+answers in one line, and the agent carries on. That is the ninety seconds the
+whole feature exists for.
+
+If the agent decides for itself instead of asking, that is worth writing down:
+it is the sample failing to produce the moment, not the feature failing.
 
 - The leader's pane names the joiner while they type, and goes on saying they
   typed there after they stop.
@@ -382,6 +409,11 @@ Nothing here is new — it is the single-user flow. The agent commits, the leade
 checks whether the branch would merge into its base, and pushes. The joiner does
 the same in their own worktree on a different task from `TASKS.md`. Both should
 merge, because the tasks were chosen not to overlap.
+
+Before either of you pushes, the same two commands each: `npm test` still 39
+passing, and your own `npm run test:task<n>` now passing. Two green targets and
+two branches that merge is the whole claim of this walkthrough, and it is
+checkable in about two seconds.
 
 **Leader**: close your laptop, or quit teamree, and watch the joiner's sidebar.
 Your worktrees stay where they were, marked stale and dated, rather than
