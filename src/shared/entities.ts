@@ -788,6 +788,18 @@ export type CliLinkState =
  */
 export type CliPathSource = 'environment' | 'login'
 
+/**
+ * Why a link to this app would not outlive the day, when it would not.
+ *
+ * Both of these are how a Mac runs an app nobody has put in /Applications yet,
+ * and both of them look like a working app to everything except a symlink.
+ * `volume` is the copy inside the mounted disk image, which the DMG window
+ * invites a double-click on. `translocated` is the read-only copy macOS runs
+ * instead when an app is opened from a disk image or a download, out of a
+ * per-boot temporary directory that is gone by the next launch.
+ */
+export type CliImpermanence = 'volume' | 'translocated'
+
 /** Where the CLI is, what is at its destination, and what linking will cost. */
 export type CliStatus = {
   /**
@@ -821,6 +833,15 @@ export type CliStatus = {
    * exits with "Cannot find module".
    */
   bundle: string | null
+  /**
+   * Where this app is running from, when that is somewhere a link cannot
+   * follow. Null when it is somewhere ordinary.
+   *
+   * The thing that has to be known before a password is asked for: a link into
+   * a mounted disk image, or into the copy macOS translocates an app to, is
+   * made successfully, reads back successfully, and dangles by the evening.
+   */
+  impermanent: CliImpermanence | null
   /** The link itself. */
   destination: string
   /** The directory holding it — the thing that has to be writable. */
@@ -828,6 +849,15 @@ export type CliStatus = {
   state: CliLinkState
   /** Where what is at the destination actually lands. Null when nothing is there. */
   resolved: string | null
+  /**
+   * Whether `resolved` is a path with nothing at it.
+   *
+   * Only ever true of a symlink, and it is the difference between the two
+   * things `elsewhere` covers. A link to another copy of teamree is a command
+   * that works and drives the wrong app; a link to a copy that has been deleted
+   * or ejected is not a command at all, and a shell asked to run it says so.
+   */
+  dangling: boolean
   /** Whether writing the link will ask for an administrator password. */
   needsAdministrator: boolean
   /** Null when nothing this app can read says the directory is on PATH. */

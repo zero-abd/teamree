@@ -445,3 +445,109 @@ describe('the question this installation asks once', () => {
     expect((await service.dismissPrompt()).askedAt).toBe(1700000000000)
   })
 })
+
+describe('running from somewhere a link cannot follow', () => {
+  /** What the DMG window invites a double-click on, spelled the way macOS spells it. */
+  const ON_VOLUME = '/Volumes/teamree 0.1.0/teamree.app/Contents/Resources/cli/teamree'
+  /** What macOS runs instead when an app is opened outside /Applications. */
+  const TRANSLOCATED =
+    '/private/var/folders/9m/2k4n0000gn/T/AppTranslocation/8F2C1A3E-0000-4E2B-9C11-5D6E7F801234/d/' +
+    'teamree.app/Contents/Resources/cli/teamree'
+
+  it('names the disk image rather than linking into it', async () => {
+    const { bin } = await scratchApp()
+    const { service } = harness({ source: ON_VOLUME, directory: bin, packaged: true })
+
+    expect((await service.status()).impermanent).toBe('volume')
+  })
+
+  it('names App Translocation, and is not fooled by a directory that merely says so', async () => {
+    const { bin } = await scratchApp()
+    expect((await harness({ source: TRANSLOCATED, directory: bin }).service.status()).impermanent).toBe('translocated')
+
+    // A folder somebody made called AppTranslocation, outside the per-boot
+    // temporary directory macOS actually uses, is a path a link survives.
+    const impostor = '/Users/ann/AppTranslocation/teamree.app/Contents/Resources/cli/teamree'
+    expect((await harness({ source: impostor, directory: bin }).service.status()).impermanent).toBeNull()
+  })
+
+  it('says the app is somewhere ordinary when it is', async () => {
+    const { source, bin } = await scratchApp()
+    expect((await harness({ source, directory: bin }).service.status()).impermanent).toBeNull()
+  })
+
+  it('refuses to link the copy inside the disk image, and says what to do instead', async () => {
+    const { bin } = await scratchApp()
+    const { service, escalated } = harness({ source: ON_VOLUME, directory: bin, writable: async () => false })
+
+    await expect(service.install()).rejects.toThrow(/Applications/)
+    await expect(service.install()).rejects.toThrow(/eject/i)
+    await expect(service.install()).rejects.toMatchObject({ code: ErrorCode.Conflict })
+    // No password spent on a link that would dangle, and nothing written.
+    expect(escalated).toEqual([])
+    await expect(lstat(join(bin, 'teamree'))).rejects.toThrow()
+  })
+
+  it('refuses the translocated copy too, before it asks for anything', async () => {
+    const { bin } = await scratchApp()
+    const { service, escalated } = harness({ source: TRANSLOCATED, directory: bin, writable: async () => false })
+
+    await expect(service.install()).rejects.toThrow(/Applications/)
+    await expect(service.install()).rejects.toMatchObject({ code: ErrorCode.Conflict })
+    expect(escalated).toEqual([])
+  })
+
+  it('refuses even when the link already points at the copy on the volume', async () => {
+    const { bin } = await scratchApp()
+    await symlink(ON_VOLUME, join(bin, 'teamree'))
+    const { service } = harness({ source: ON_VOLUME, directory: bin })
+
+    // 'already-linked' would be true of the link and false of the command: the
+    // volume is ejected eventually, and then it leads nowhere.
+    await expect(service.install()).rejects.toThrow(/Applications/)
+  })
+})
+
+describe('a link whose app has gone', () => {
+  it('says the target is not there, which a link to another copy does not', async () => {
+    const { source, bin, root } = await scratchApp()
+    await symlink(join(root, 'gone', 'teamree'), join(bin, 'teamree'))
+    const { service } = harness({ source, directory: bin })
+
+    const status = await service.status()
+    expect(status.state).toBe('elsewhere')
+    expect(status.dangling).toBe(true)
+  })
+
+  it('says nothing of the kind about a link that lands on something', async () => {
+    const { source, bin, root } = await scratchApp()
+    const older = join(root, 'Downloads', 'teamree.app', 'Contents', 'Resources', 'cli')
+    await mkdir(older, { recursive: true })
+    await writeFile(join(older, 'teamree'), '#!/bin/sh\n')
+    await symlink(join(older, 'teamree'), join(bin, 'teamree'))
+    const { service } = harness({ source, directory: bin })
+
+    const status = await service.status()
+    expect(status.state).toBe('elsewhere')
+    expect(status.dangling).toBe(false)
+  })
+
+  it('is false of everything that is not a link at all', async () => {
+    const { source, bin } = await scratchApp()
+    expect((await harness({ source, directory: bin }).service.status()).dangling).toBe(false)
+
+    await writeFile(join(bin, 'teamree'), 'somebody else’s binary')
+    expect((await harness({ source, directory: bin }).service.status()).dangling).toBe(false)
+  })
+
+  it('replaces it and stops calling it dangling afterwards', async () => {
+    const { source, bin, root } = await scratchApp()
+    await symlink(join(root, 'gone', 'teamree'), join(bin, 'teamree'))
+    const { service } = harness({ source, directory: bin })
+
+    const result = await service.install()
+    expect(result.outcome).toBe('replaced')
+    expect(result.status.dangling).toBe(false)
+    expect(await readlink(join(bin, 'teamree'))).toBe(source)
+  })
+})
