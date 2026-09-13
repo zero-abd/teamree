@@ -250,6 +250,25 @@ describePty('restoring terminals across a restart', () => {
     expect(second.list('wt_1')).toEqual([])
   }, 20_000)
 
+  it('deletes the record of a pane whose worktree is gone, and keeps the ones that came back', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+
+    const first = manager(repositories, checkout)
+    const kept = first.create({ worktreeId: 'wt_1' })
+    await first.shutdown()
+
+    // A pane of a worktree removed while the app was closed. No later start
+    // will do any better: the checkout it names is gone for good, so a record
+    // left here is one workspace.json carries for the life of the installation
+    // — a set of them per worktree ever removed.
+    repositories.putTerminal(record({ id: 'term_orphan', worktreeId: 'wt_deleted', cwd: checkout }))
+
+    const second = manager(repositories, checkout)
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+    expect(repositories.listTerminals().map((row) => row.id)).toEqual([kept.id])
+  }, 20_000)
+
   it('leaves behind a terminal whose worktree is no longer there', async () => {
     const { checkout, launch } = await fakeAgent('claude')
     const repositories = createRepositories()
