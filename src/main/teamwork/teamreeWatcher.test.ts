@@ -10,7 +10,14 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { formatMemberFile, MEMBERS_DIR_SEGMENTS } from './memberFile'
 import { readRoster } from './roster'
-import { degradedTeamreeWatchReport, TeamreeWatcher, type WatchFn, type WatchHandle } from './teamreeWatcher'
+import {
+  DEFAULT_SWEEP_FROM_MS,
+  DEFAULT_SWEEP_UNTIL_MS,
+  degradedTeamreeWatchReport,
+  TeamreeWatcher,
+  type WatchFn,
+  type WatchHandle
+} from './teamreeWatcher'
 
 const roots: string[] = []
 
@@ -112,6 +119,7 @@ function fakeWatches(): {
   fire: (target: string, relative: string | null) => void
   fail: (target: string, error: unknown) => void
   refuse: (target: string, error: NodeJS.ErrnoException) => void
+  allow: (target: string) => void
 } {
   const listeners = new Map<string, Parameters<WatchFn>[0]>()
   const refusals = new Map<string, unknown>()
@@ -129,9 +137,170 @@ function fakeWatches(): {
     watch,
     fire: (target, relative) => listeners.get(target)?.onChange(relative),
     fail: (target, error) => listeners.get(target)?.onError(error),
-    refuse: (target, error) => refusals.set(target, error)
+    refuse: (target, error) => refusals.set(target, error),
+    allow: (target) => refusals.delete(target)
   }
 }
+
+/** The sweep's clock, driven by hand: what delay it asked for, and when it runs. */
+function fakeClock(): { sweep: (run: () => void, delayMs: number) => () => void; delays: number[]; tick: () => void } {
+  const delays: number[] = []
+  let pending: (() => void) | undefined
+  return {
+    delays,
+    sweep: (run, delayMs) => {
+      delays.push(delayMs)
+      pending = run
+      return () => {
+        pending = undefined
+      }
+    },
+    tick: () => {
+      const run = pending
+      pending = undefined
+      run?.()
+    }
+  }
+}
+
+describe('the sweep under the watch', () => {
+  // The failure this whole file is about, made deterministic: the platform
+  // delivers nothing at all, and the roster still has to stop being stale.
+  //
+  // On the macOS runner this is not hypothetical — the three tests above fail
+  // there as silence and have never failed on Linux. The fake below simply
+  // never calls anybody back, which is that platform's behaviour with the
+  // timing taken out of it.
+  it('notices a key that no watch ever mentioned', async () => {
+    const root = await checkout()
+    await writeMemberFile(root, 'ana')
+    const fake = fakeWatches()
+    const clock = fakeClock()
+    let reports = 0
+    let run: (() => void) | undefined
+    const watcher = new TeamreeWatcher({
+      onChange: () => {
+        reports += 1
+      },
+      watch: fake.watch,
+      sweep: clock.sweep,
+      schedule: (task) => {
+        run = task
+        return () => {
+          run = undefined
+        }
+      }
+    })
+    watcher.sync([{ id: 'p1', path: root }])
+
+    // The pull lands, and not one of the three watches says so.
+    await writeMemberFile(root, 'bo')
+    clock.tick()
+    run?.()
+    expect(reports).toBe(1)
+
+    // And the relay file, which changes neither directory's mtime.
+    await writeFile(join(root, '.teamree', 'relay'), 'wss://relay.example/v1/relay\n', 'utf8')
+    clock.tick()
+    run?.()
+    expect(reports).toBe(2)
+
+    watcher.close()
+  })
+
+  it('says nothing at all while nothing is happening', async () => {
+    const root = await checkout()
+    await writeMemberFile(root, 'ana')
+    const fake = fakeWatches()
+    const clock = fakeClock()
+    let reports = 0
+    let run: (() => void) | undefined
+    const watcher = new TeamreeWatcher({
+      onChange: () => {
+        reports += 1
+      },
+      watch: fake.watch,
+      sweep: clock.sweep,
+      schedule: (task) => {
+        run = task
+        return () => {
+          run = undefined
+        }
+      }
+    })
+    watcher.sync([{ id: 'p1', path: root }])
+    for (let sweeps = 0; sweeps < 5; sweeps += 1) {
+      clock.tick()
+      run?.()
+    }
+    expect(reports).toBe(0)
+    watcher.close()
+  })
+
+  it('backs off, so a project nothing is happening to is not being polled', () => {
+    // The cost of the floor, stated: four steps from the short delay after an
+    // attach to half a minute, and no further.
+    const fake = fakeWatches()
+    const clock = fakeClock()
+    const watcher = new TeamreeWatcher({ onChange: () => {}, watch: fake.watch, sweep: clock.sweep })
+    watcher.sync([{ id: 'p1', path: '/repo' }])
+    for (let sweeps = 0; sweeps < 6; sweeps += 1) clock.tick()
+    expect(clock.delays).toEqual([
+      DEFAULT_SWEEP_FROM_MS,
+      800,
+      3_200,
+      12_800,
+      DEFAULT_SWEEP_UNTIL_MS,
+      DEFAULT_SWEEP_UNTIL_MS,
+      DEFAULT_SWEEP_UNTIL_MS
+    ])
+    watcher.close()
+  })
+
+  it('starts over from the short delay when a watch has just been attached', () => {
+    // Attaching is the moment an event is most likely to be lost — on darwin a
+    // new handle rebuilds the stream every other watch in the process is
+    // listening on — so the backoff is not something to have already spent.
+    const fake = fakeWatches()
+    const clock = fakeClock()
+    const missing = Object.assign(new Error('no such file'), { code: 'ENOENT' })
+    fake.refuse(join('/repo', '.teamree'), missing)
+    fake.refuse(join('/repo', '.teamree', 'members'), missing)
+    const watcher = new TeamreeWatcher({
+      onChange: () => {},
+      watch: fake.watch,
+      sweep: clock.sweep,
+      schedule: (task) => {
+        task()
+        return () => {}
+      }
+    })
+    watcher.sync([{ id: 'p1', path: '/repo' }])
+    clock.tick()
+    clock.tick()
+    expect(clock.delays.at(-1)).toBe(3_200)
+
+    // `.teamree` has appeared, so the next `sync` attaches a watch on it.
+    fake.allow(join('/repo', '.teamree'))
+    watcher.sync([{ id: 'p1', path: '/repo' }])
+    expect(clock.delays.at(-1)).toBe(DEFAULT_SWEEP_FROM_MS)
+    watcher.close()
+  })
+
+  it('stops sweeping a project it is no longer watching, and stops when closed', () => {
+    const fake = fakeWatches()
+    const clock = fakeClock()
+    const watcher = new TeamreeWatcher({ onChange: () => {}, watch: fake.watch, sweep: clock.sweep })
+    watcher.sync([{ id: 'p1', path: '/repo' }])
+    const armed = clock.delays.length
+    watcher.sync([])
+    clock.tick()
+    expect(clock.delays.length).toBe(armed)
+    watcher.close()
+    clock.tick()
+    expect(clock.delays.length).toBe(armed)
+  })
+})
 
 describe('the watch set', () => {
   it('reports a burst of files once rather than a roster read per key', () => {
@@ -156,16 +325,14 @@ describe('the watch set', () => {
     expect(reports).toBe(0)
     run?.()
     expect(reports).toBe(1)
+    watcher.close()
   })
 
   it('reports on what .teamree did, whatever the platform called the event', async () => {
     // The filter used to read the event's filename, and the filename is the one
-    // thing here that is not the same on two platforms. Linux's inotify names
-    // the direct child; macOS has no non-recursive watch, so `fs.watch` is
-    // FSEvents underneath and reports a path relative to the watched directory
-    // — spelled differently again when that directory is reached through a
-    // symlink, which `os.tmpdir()` is on macOS. Two CI failures, two guesses at
-    // the string.
+    // thing here that is not the same on two platforms. Two CI failures, two
+    // guesses at the string, and both guesses rested on a description of macOS
+    // that libuv's own `fsevents.c` contradicts — see the note beside the filter.
     //
     // So the names below are deliberately the wrong shape on purpose: an
     // absolute path, an empty string, and nothing at all. What the watcher
@@ -212,14 +379,11 @@ describe('the watch set', () => {
   })
 
   it('catches a key arriving when only the checkout-root watch fires', async () => {
-    // The macOS case, which cost two CI failures. FSEvents is recursive, so the
-    // watch on the checkout root receives nested changes — and the watches on
-    // `.teamree` and `members/` are the ones a Linux box relies on. If the root
-    // watch is the only one that speaks, it still has to be enough.
-    //
-    // It was not: a key landing in `members/` changes that directory's mtime and
-    // leaves `.teamree`'s alone, so a mark of `.teamree` by itself said nothing
-    // had happened. Only the root watch is fired here, deliberately.
+    // What the root watch has to be able to say on its own, whichever of the
+    // three is the one that speaks. A key landing in `members/` changes that
+    // directory's mtime and leaves `.teamree`'s alone, so a mark of `.teamree`
+    // by itself said nothing had happened, and one CI failure came of exactly
+    // that. Only the root watch is fired here, deliberately.
     const root = await checkout()
     await writeMemberFile(root, 'ana')
     const fake = fakeWatches()
@@ -304,6 +468,7 @@ describe('the watch set', () => {
     expect(degraded[0]).toContain('no filesystem watches left')
     // What it costs, not what broke: nothing here has broken.
     expect(degraded[0]).toContain('git pull')
+    watcher.close()
   })
 
   it('stops saying a project is unwatched once its watches are back', async () => {
@@ -351,6 +516,7 @@ describe('the watch set', () => {
     watcher.sync([{ id: 'p1', path: '/repo' }])
     expect(watcher.watches('p1')).toBe(true)
     expect(degraded).toHaveLength(0)
+    watcher.close()
   })
 
   it('says so once when a watch dies mid-flight, not on every report of it', () => {
@@ -362,6 +528,7 @@ describe('the watch set', () => {
     fake.fail(join('/repo', '.teamree'), new Error('and again'))
     expect(degraded).toHaveLength(1)
     expect(watcher.watches('p1')).toBe(false)
+    watcher.close()
   })
 
   it('drops the watches of a project that is no longer in the list', () => {
@@ -372,5 +539,6 @@ describe('the watch set', () => {
     watcher.sync([])
     expect(watcher.watchedIds).toEqual([])
     expect(watcher.watches('p1')).toBe(false)
+    watcher.close()
   })
 })

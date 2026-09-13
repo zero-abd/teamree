@@ -20,6 +20,13 @@ nothing else; after setup they are two members with identical powers.
 The project is `examples/ledger`. Its `TASKS.md` has three pieces of work chosen
 not to overlap, and the agent in this story is taking task 1.
 
+Task 1 is the one carrying a question its implementer cannot settle alone —
+`--json` output, and what it should do with a ledger that does not parse. The
+task marks it **Ask first** and its target test says nothing about it, so an
+agent that reads the requirement properly stops there. The test below uses a
+shorter stand-in question, because what is under test is a question crossing two
+machines and an answer coming back, not an agent's judgement about JSON.
+
 ## Setup — they are on a team
 
 **0. Both public keys are in the repository, and both have pulled.**

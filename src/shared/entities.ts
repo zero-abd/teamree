@@ -556,6 +556,15 @@ export type TeamworkStatus = {
    * where no relay can ever help, and never say why.
    */
   origin: { ok: true } | { ok: false; reason: string }
+  /**
+   * Whether this machine's own key is on the roster this checkout holds.
+   *
+   * False is the one cause of silence that is entirely this end's: every link
+   * below dials a rendezvous the teammate's machine has no key to compute, so
+   * they all wait forever and every phrase about them points at somebody
+   * else's laptop. The roster read that fills in `links` already knows this.
+   */
+  enrolled: boolean
   links: PeerLink[]
   readAt: number
 }

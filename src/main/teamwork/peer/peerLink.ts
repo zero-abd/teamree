@@ -42,6 +42,7 @@ import type { MethodName, ParamsOf, ResultOf } from '../../../shared/methods'
 import { createInitiatorSession, createResponderSession, isPeerError, type PeerSession } from '../../../shared/peer'
 import {
   createPeerTransport,
+  type RemoteReadVerdict,
   type Answered,
   type PeerTransport,
   type RemoteWriteRequest,
@@ -199,6 +200,7 @@ export type PeerLinkOptions = {
    * the one method on the allow-list that runs code.
    */
   onRemoteWrite?: (write: RemoteWriteRequest) => RemoteWriteVerdict
+  onRemoteRead?: (terminalId: string) => RemoteReadVerdict
   onError?: (error: unknown) => void
 }
 
@@ -577,6 +579,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       },
       onWatchChange: options.onWatchersChange,
       ...(options.onRemoteWrite ? { onRemoteWrite: options.onRemoteWrite } : {}),
+      ...(options.onRemoteRead ? { onRemoteRead: options.onRemoteRead } : {}),
       scheduler: options.scheduler,
       onFatal: () => {
         // A Noise stream with a hole in it is over: there is no point it could

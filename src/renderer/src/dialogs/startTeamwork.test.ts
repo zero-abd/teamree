@@ -72,6 +72,7 @@ function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
     relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
     disabledReason: null,
     origin: { ok: true },
+    enrolled: true,
     links: [],
     readAt: 0,
     ...overrides
