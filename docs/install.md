@@ -24,8 +24,10 @@ they are on the screen.
 teamree has no Apple Developer certificate behind it and no Windows
 code-signing certificate. Those are commercial products — an Apple Developer
 membership is an annual fee and an identity check, a Windows certificate is the
-same from a different vendor — and this project has neither. macOS and Windows
-both notice, and both say so.
+same from a different vendor — and this project has neither, deliberately. That
+is not going to change, so what follows is the permanent answer rather than a
+workaround for something being fixed later. macOS and Windows both notice, and
+both say so.
 
 It is worth being exact about what they are saying, because the wording is
 alarming and the meaning is narrow. Neither system has examined teamree and

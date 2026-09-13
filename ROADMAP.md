@@ -341,11 +341,12 @@ recorded so none of them is discovered by surprise later.
   the platform — whether the artifact upload and download hand the files between jobs
   as expected, and whether `gh release create` behaves as read. Until a tag is pushed,
   this is a pipeline that has been reasoned through, not one that has run.
-- **Nothing is signed, and that is what a new user meets first.** There is no Apple
-  Developer certificate and no Windows code-signing certificate, so macOS refuses the
-  app as being from an unverified developer and Windows shows a SmartScreen panel.
-  Neither is avoidable without buying into the respective programme; both are now
-  documented rather than left to be discovered, in `docs/install.md` and in the notes
+- **Nothing is signed. That is a decision, not a task waiting to be done.** There is
+  no Apple Developer certificate and no Windows code-signing certificate, and none is
+  being bought, so macOS refuses the app as being from an unverified developer and
+  Windows shows a SmartScreen panel. It is still the first thing a new user meets,
+  which is why it is recorded here — but nobody should pick this entry up expecting to
+  close it. Both warnings are documented rather than left to be discovered, in `docs/install.md` and in the notes
   every release carries, with what each warning does and does not mean and the exact
   way past it. A published checksum is the substitute for the integrity half of a
   signature. There is no substitute for the identity half: a colleague's confidence
