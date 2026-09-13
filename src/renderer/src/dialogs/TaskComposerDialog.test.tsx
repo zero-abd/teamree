@@ -194,7 +194,9 @@ describe('what it submits', () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     expect(screen.getByRole('button', { name: 'Create worktree' })).toBeTruthy()
-    expect(screen.getByText('No coding agent on PATH, so this creates the worktree alone.')).toBeTruthy()
+    expect(
+      screen.getByText('No coding agent on the PATH your login shell sets, so this creates the worktree alone.')
+    ).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Agent' })).toHaveProperty('disabled', true)
     submit().click()
     expect(startTask).toHaveBeenCalledWith({

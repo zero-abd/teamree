@@ -32,7 +32,13 @@ export function submitLabel(agent: InstalledAgent | null): string {
  */
 export function taskPlanNote(agents: readonly InstalledAgent[], probed: boolean, agent: InstalledAgent | null): string {
   if (!probed) return 'Looking for coding agents…'
-  if (agents.length === 0) return 'No coding agent on PATH, so this creates the worktree alone.'
+  // Which PATH, said out loud, because the plain word was the wrong one: the
+  // app used to look on the PATH it was started with, which on a desktop launch
+  // is not the user's, and somebody whose `which claude` answers in a pane had
+  // no way to tell that from an agent they had not installed. Now the sentence
+  // is true, and it names the one place to go and look.
+  if (agents.length === 0)
+    return 'No coding agent on the PATH your login shell sets, so this creates the worktree alone.'
   return agent
     ? `Creates the worktree, then runs ${agent.command} in it.`
     : 'Creates the worktree, with no agent in it.'

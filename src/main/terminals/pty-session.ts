@@ -14,6 +14,7 @@ import { ScrollbackBuffer } from './scrollback'
 import {
   buildShellCommand,
   buildTerminalEnv,
+  loginShellPath,
   shellCannotRun,
   SHELL_UNRUNNABLE,
   TERMINAL_TYPE,
@@ -164,7 +165,10 @@ export class PtySession {
   static start(init: PtySessionInit): PtySession {
     const platform = init.platform ?? process.platform
     const { file, args } = buildShellCommand(init.shell, init.command, platform)
-    const env = buildTerminalEnv(init.env, platform)
+    // The login shell's PATH rather than this process's: a pane opened from a
+    // desktop launch would otherwise start from the PATH launchd handed the
+    // app, which is not the one the user installed anything on.
+    const env = buildTerminalEnv(init.env, platform, loginShellPath({ platform }))
 
     // The two platforms answer "that shell is not there" in different places.
     // Windows refuses in spawn() below. POSIX does not refuse at all: the fork

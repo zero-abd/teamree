@@ -1,10 +1,13 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   buildShellCommand,
   buildTerminalEnv,
+  loginShellPath,
+  resetLoginShellPathCache,
   resolveLoginShell,
   shellCannotRun,
   shellName,
@@ -34,6 +37,8 @@ describe('resolveLoginShell', () => {
 
 describe('buildShellCommand', () => {
   it('runs an explicit command through the shell', () => {
+    // Without a profile in front of it: the PATH such a command needs arrives
+    // in its environment instead, from loginShellPath below.
     expect(buildShellCommand('/bin/zsh', 'claude --resume', 'darwin')).toEqual({
       file: '/bin/zsh',
       args: ['-c', 'claude --resume']
@@ -117,6 +122,158 @@ describe('buildTerminalEnv', () => {
   it('drops undefined values rather than passing them through', () => {
     const env = buildTerminalEnv({ PATH: '/usr/bin', UNSET: undefined })
     expect(Object.keys(env)).not.toContain('UNSET')
+  })
+
+  it('prefers a PATH the caller resolved to the one this process inherited', () => {
+    const env = buildTerminalEnv({ PATH: '/usr/bin:/bin', HOME: '/Users/x' }, 'darwin', '/opt/homebrew/bin:/usr/bin')
+    expect(env.PATH).toBe('/opt/homebrew/bin:/usr/bin')
+    expect(env.HOME).toBe('/Users/x')
+    // An empty one is not a resolved PATH, and does not displace a real one.
+    expect(buildTerminalEnv({ PATH: '/usr/bin' }, 'darwin', '').PATH).toBe('/usr/bin')
+  })
+})
+
+describe('loginShellPath', () => {
+  const created: string[] = []
+  const originalShell = process.env.SHELL
+
+  beforeEach(() => {
+    resetLoginShellPathCache()
+  })
+
+  afterEach(async () => {
+    if (originalShell === undefined) delete process.env.SHELL
+    else process.env.SHELL = originalShell
+    resetLoginShellPathCache()
+    await Promise.all(created.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  })
+
+  /** There is no login shell to ask on Windows, so these run where there is. */
+  const itPosix = process.platform === 'win32' ? it.skip : it
+
+  /**
+   * Plays the part of a POSIX login shell: runs the script it was handed with a
+   * PATH of its own, the way a profile would have left one, optionally after
+   * printing the things a profile prints. The test never spells the probe out —
+   * it only answers it — so the script stays free to change.
+   */
+  const answersWith =
+    (loginPath: string, noise = '') =>
+    (_file: string, args: readonly string[]): string =>
+      noise +
+      execFileSync('/bin/sh', ['-c', args[args.length - 1] ?? ''], { env: { PATH: loginPath }, encoding: 'utf8' })
+
+  itPosix('takes the PATH the user profile ended up with, asked for as a login shell', () => {
+    let asked: readonly string[] = []
+    const resolved = loginShellPath({
+      platform: 'darwin',
+      env: { SHELL: '/bin/zsh' },
+      run: (file, args) => {
+        expect(file).toBe('/bin/zsh')
+        asked = args
+        return answersWith('/opt/homebrew/bin:/usr/bin')(file, args)
+      }
+    })
+
+    expect(resolved).toBe('/opt/homebrew/bin:/usr/bin')
+    // Login, or ~/.zprofile is never read; interactive, or ~/.zshrc is not
+    // either, and that is where a version manager puts its shims; and a
+    // command, or there is nothing for it to answer with.
+    expect(asked.slice(0, 3)).toEqual(['-l', '-i', '-c'])
+  })
+
+  itPosix('ignores whatever the profile printed before the answer', () => {
+    const resolved = loginShellPath({
+      platform: 'darwin',
+      env: { SHELL: '/bin/bash' },
+      run: answersWith('/opt/homebrew/bin:/usr/bin', 'Last login: yesterday\nnvm: v20.11.0 in use\n')
+    })
+
+    expect(resolved).toBe('/opt/homebrew/bin:/usr/bin')
+  })
+
+  itPosix('keeps the fallback when the answer is not a search path', () => {
+    const zsh = { platform: 'darwin' as const, env: { SHELL: '/bin/zsh' } }
+
+    // Nothing ran the probe, so nothing marked its answer.
+    expect(loginShellPath({ ...zsh, run: () => 'zsh: command not found: printf' })).toBeUndefined()
+    // Marked, and still not a search path: no absolute directory anywhere in it.
+    expect(loginShellPath({ ...zsh, run: answersWith('relative/bin') })).toBeUndefined()
+    // An empty PATH is an answer the user can do nothing with either.
+    expect(loginShellPath({ ...zsh, run: answersWith('') })).toBeUndefined()
+    // And a shell that could not be started at all.
+    expect(loginShellPath({ ...zsh, run: () => null })).toBeUndefined()
+  })
+
+  itPosix('asks fish in its own dialect, where PATH is a list rather than a string', () => {
+    let script = ''
+    loginShellPath({
+      platform: 'darwin',
+      env: { SHELL: '/opt/homebrew/bin/fish' },
+      run: (_file, args) => {
+        script = args[args.length - 1] ?? ''
+        return ''
+      }
+    })
+
+    // In fish "$PATH" is the entries joined with spaces, which is not a PATH.
+    expect(script).toContain('string join : $PATH')
+  })
+
+  it('does not ask a shell that may not understand the question', () => {
+    let asked = false
+    const resolved = loginShellPath({
+      platform: 'linux',
+      env: { SHELL: '/usr/local/bin/nu' },
+      run: () => {
+        asked = true
+        return ''
+      }
+    })
+
+    expect(resolved).toBeUndefined()
+    expect(asked).toBe(false)
+  })
+
+  it('has no login shell to ask on Windows', () => {
+    let asked = false
+    const resolved = loginShellPath({
+      platform: 'win32',
+      env: { SHELL: '/bin/zsh' },
+      run: () => {
+        asked = true
+        return ''
+      }
+    })
+
+    expect(resolved).toBeUndefined()
+    expect(asked).toBe(false)
+  })
+
+  itPosix('comes back with nothing rather than throwing when SHELL names nothing', () => {
+    expect(loginShellPath({ platform: 'darwin', env: { SHELL: '/nowhere/at/all/zsh' } })).toBeUndefined()
+  })
+
+  itPosix('asks once and remembers, so a pane does not pay for a shell start', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'teamree-login-shell-'))
+    created.push(dir)
+    const runs = path.join(dir, 'runs')
+    const shell = path.join(dir, 'zsh')
+    await writeFile(
+      shell,
+      `#!/bin/sh\necho x >> '${runs}'\nPATH=/opt/homebrew/bin:/usr/bin\nexport PATH\nshift $(($# - 1)); eval "$1"\n`,
+      'utf8'
+    )
+    await chmod(shell, 0o755)
+    process.env.SHELL = shell
+
+    expect(loginShellPath()).toBe('/opt/homebrew/bin:/usr/bin')
+    expect(loginShellPath()).toBe('/opt/homebrew/bin:/usr/bin')
+
+    // Twice asked, once run: a login shell is too expensive to start for every
+    // pane, and an agent installed later is still found, because discovery
+    // walks these directories again every time it is called.
+    expect((await readFile(runs, 'utf8')).trim().split('\n')).toHaveLength(1)
   })
 })
 
