@@ -37,6 +37,7 @@ import {
 } from '@shared/entities'
 import { Modal } from './Modal'
 import {
+  ADD_KEY_BUTTON,
   checkRelayDraft,
   KEY_GRANT_WARNING,
   memberFilePreview,
@@ -331,7 +332,7 @@ function JoinBody({
             about this box. */}
         {error === null ? null : <p className="field__error">{error}</p>}
         <button type="submit" className="button button--primary" disabled={pending || chosen === null}>
-          {pending ? 'Writing…' : 'Add my key'}
+          {pending ? 'Writing…' : ADD_KEY_BUTTON}
         </button>
         <p className="members__caveat">This writes the file and stops. Step 4 is the part that means something.</p>
       </form>
