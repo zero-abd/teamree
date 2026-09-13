@@ -28,6 +28,19 @@ export const TEAMMATE_AWAY_AFTER_MS = 15_000
 export type TeammateStaleness = {
   /** How old the picture is, rounded down, as every other row here does it. */
   age: string
+  /**
+   * The short form the row shows, which names which age this is.
+   *
+   * `heardAt` moves when a teammate's snapshot *changes*, not on contact, so
+   * for somebody whose worktrees have been static for an hour this is an hour
+   * the moment their link drops — and truthfully so: that is when the picture
+   * was taken. What it is not is an hour of absence, and `away · 1h` beside a
+   * teammate who went thirty seconds ago said exactly that. So the badge says
+   * which fact its number is the age of, and the number itself is untouched:
+   * the age of what is on screen is the honest one, and it is the one every
+   * other thing on the row is measured against.
+   */
+  badge: string
   /** The whole sentence, for the title and for a screen reader. */
   detail: string
 }
@@ -49,6 +62,7 @@ export function teammateStaleness(options: {
   const age = sinceLabel(awayFor)
   return {
     age,
+    badge: `away · picture ${age} old`,
     // Says what is actually known — that the machine is not reachable — and
     // never anything about the worktree itself. A worktree that has gone is a
     // row that is not here at all, and the two must not read alike.

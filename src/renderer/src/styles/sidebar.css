@@ -9,29 +9,39 @@
   border-right: 1px solid transparent;
 }
 
+/* The wordmark moved to the title strip, so this row is just the section label
+   and its add button; the button sits at the end of the row. */
 .sidebar__head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--s2);
   padding: var(--s4) var(--s4) var(--s2);
 }
 
-.wordmark {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 2px;
-  font-size: var(--text-lg);
-  font-weight: 620;
-  letter-spacing: -0.015em;
-  color: var(--fg);
+.sidebar__filter {
+  padding: 0 var(--s4) var(--s3);
 }
 
-.wordmark__dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--accent);
+.sidebar__filter input {
+  width: 100%;
+  padding: 5px var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.sidebar__filter input::placeholder {
+  color: var(--fg-muted);
+}
+
+.sidebar__filter input:focus-visible {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: var(--ring);
 }
 
 .sidebar__scroll {

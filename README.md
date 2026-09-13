@@ -67,10 +67,13 @@ and check whether the branch would merge into its base — answered in memory, s
 asking costs the repository nothing. Push when it is ready. There is no force
 push and no flag to ask for one.
 
-**Everything the GUI can do, the CLI can do.** `teamree` talks to the running
-app over a local socket, so an agent can create a worktree, open a terminal,
-run a command and read the output back — and the GUI reflects all of it live,
-because both ends meet at the same runtime rather than at a transport.
+**Everything, from a shell.** `teamree` talks to the running app over a local
+socket, so an agent can create a worktree, open a terminal, run a command and
+read the output back — and the GUI reflects all of it live, because both ends
+meet at the same runtime rather than at a transport. Every command takes
+`--json` and emits exactly one JSON document on stdout, with errors on stderr
+and exit codes that mean something: 0 success, 1 the command failed, 2 you typed
+it wrong, 3 nothing is running to talk to.
 
 ```sh
 teamree worktree create --project app --name "fix login"
@@ -78,6 +81,57 @@ teamree worktree wait fix-login
 teamree terminal run --worktree fix-login --command "npm test"
 teamree worktree changes fix-login
 ```
+
+**Teamwork too.** It used to be the window's alone, which made a feature about
+working with somebody unusable by the agent working beside you. The `team` group
+closes that: an agent can see the roster, tell whether teamwork is actually
+connected, read what a teammate's pane is doing, and answer a prompt in it.
+
+```sh
+teamree team status app            # on? who is connected? which relay?
+teamree team members app           # the roster, as the repository records it
+teamree team join app              # write this machine's key into it
+teamree team relay set app wss://relay.example/v1/relay
+teamree team panes app             # the pane ids the next two commands take
+teamree team watch app ana --json  # a bounded snapshot of ana's pane
+teamree team watch app ana --follow
+teamree team type app ana --text y --enter
+teamree team watchers app          # who is reading and typing here
+teamree team mute t_12             # and how to stop them
+teamree team write-log             # the record of every remote keystroke
+teamree worktree start-points app  # everything a new worktree could branch from
+teamree worktree layout fix-login  # where the panes are and which has focus
+```
+
+`team watch` is a bounded snapshot by default, because a command that never
+returns is not one a script can call: it opens the pane, lets the scrollback
+land, and stops when the pane has been quiet for a moment. `--follow` streams
+until you interrupt it, until the pane's process exits, or until the link goes
+away. `--follow` and `--json` are refused together, because `--json` promises
+exactly one document and a stream is not one.
+
+`team type` is here for the same reason the rest is: withholding it from the CLI
+would not remove the capability from the product, only from the caller whose
+commands can be read back. Every guard that makes it survivable is at the
+owner's end and is unchanged by the caller being a script — their machine
+refuses unless your key is on the roster, refuses outright when they have muted
+the pane, caps one write, and records who typed how much into which pane in a
+log that survives a restart.
+
+**Three things are still the window's alone**, and none of them is a capability
+an agent lacks:
+
+- **Rearranging panes** (`layout.set`). There is no honest way to type a pane
+  tree with split ratios at a shell prompt, and getting one wrong scrambles
+  somebody's window. The arrangement changes through operations that mean
+  something — `terminal split`, `terminal close` — and `worktree layout` reads
+  it back.
+- **Resizing a pty** (`terminal.resize`). A size is a property of the thing
+  drawing the pane; a CLI is not drawing one. `terminal create --cols --rows`
+  sets it where it can be known.
+- **Dismissing the first-run offer to put `teamree` on your PATH**
+  (`cli.dismissPrompt`). It records an answer to a question only the window
+  asks.
 
 **The relay, for when the team is not in one room.** Two machines behind two
 routers cannot reach each other, so both dial out to a small relay that splices
@@ -93,10 +147,16 @@ npm run dev
 ```
 
 `npm test` runs the suite, including an acceptance pass that drives a real
-runtime over the real socket. `npm run typecheck`, `npm run lint` and
-`npm run format:check` are what CI checks, on one macOS runner, alongside the
-build, the smoke test, the packaged app, and the app inside the `.dmg` that is
-published.
+runtime over the real socket. The tests that drive the real relay need
+`relay/dist`, and would skip without it — 34 of them — so the suite checks for it
+before it starts, however it was started, and refuses to run rather than quietly
+running less than it claims. `TEAMREE_SKIP_RELAY_TESTS=1` is the way to say you
+meant it. Building it is `cd relay && npm ci && npm run build`, which is what the
+refusal says too.
+
+`npm run typecheck`, `npm run lint` and `npm run format:check` are what CI
+checks, on a single macOS runner, alongside the relay's own suite, the build, the
+smoke test, the packaged app, and the app inside the `.dmg` that is published.
 
 ## Trying teamwork
 
@@ -119,6 +179,11 @@ two Macs in two places. `docs/teamwork.md` is why it is built this way, and
 
 Packaging is electron-builder, configured in `electron-builder.yml`. Every command
 rebuilds the app first, so a package is never made from stale output.
+
+Only the macOS command is built by CI and only its artifact is released. The
+other two are kept configured and are described here as what the configuration
+produces, not as something that has been seen to work lately — `ROADMAP.md` is
+exact about which of them has ever been launched.
 
 | Platform | Command | Artifacts in `dist/` |
 | --- | --- | --- |

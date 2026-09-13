@@ -15,7 +15,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
-    "pretest": "node scripts/require-relay-build.mjs",
+    "pretest": "node scripts/require-test-environment.mjs",
     "test": "vitest run",
     "lint": "oxlint src",
     "format": "oxfmt -c=.oxfmtrc.json .",
@@ -34,6 +34,9 @@
     "format:check": "oxfmt --check -c=.oxfmtrc.json ."
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -41,6 +44,7 @@
     "electron": "^38.0.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^4.0.0",
+    "jsdom": "^27.4.0",
     "oxfmt": "^0.5.0",
     "oxlint": "^1.0.0",
     "typescript": "^5.7.0",
@@ -48,6 +52,7 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
+    "@noble/ciphers": "^2.4.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-webgl": "^0.19.0",

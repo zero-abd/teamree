@@ -33,6 +33,21 @@ describe('a row that is remembered rather than watched', () => {
     expect(stale?.detail).not.toMatch(/delet|remov|gone/i)
   })
 
+  it('says which fact its number is the age of, because it is the picture and not the absence', () => {
+    // `heardAt` moves when a teammate's snapshot changes, not on contact, so a
+    // colleague whose worktrees have been static for an hour arrives here at
+    // an hour the instant their link drops. That is the honest age of what is
+    // on screen — it must stay honest, and every pane's quiet time on the row
+    // is measured from it — but `away · 1h` read as an hour of absence, which
+    // is not what happened.
+    const stale = away(3_600_000)
+    expect(stale?.age).toBe('1h')
+    expect(stale?.badge).toBe('away · picture 1h old')
+    // The word is still there: the machine is away, and a badge that dropped
+    // it would leave that fact to a dashed border and nothing else.
+    expect(stale?.badge).toContain('away')
+  })
+
   it('never reads a clock ahead of this one as time already elapsed', () => {
     expect(teammateStaleness({ live: false, heardAt: NOW + 60_000, handle: 'bob', now: NOW })).toBeNull()
   })

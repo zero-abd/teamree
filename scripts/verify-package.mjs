@@ -45,14 +45,36 @@ function ok(message) {
 
 // ------------------------------------------------------------ the artifact --
 
+/** Best-effort version of a candidate, so an ambiguous dist names both builds. */
+function describeVersion(candidate) {
+  const plist = join(candidate, 'Contents', 'Info.plist')
+  if (!existsSync(plist)) return 'version unknown'
+  const match = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(readFileSync(plist, 'utf8'))
+  return match ? `version ${match[1]}` : 'version unknown'
+}
+
 /** Layout of a packaged app differs per platform; everything else does not. */
 function locateApp(explicit) {
   // Newest first, not a fixed order — see scripts/packaged-app.mjs for the
   // stale build this used to pick up and pass.
   const candidates = explicit ? [explicit] : packagedAppCandidates()
 
-  const root = candidates.find((candidate) => existsSync(candidate))
-  if (!root) fail(`no packaged app found. Looked for: ${candidates.join(', ')}`)
+  const present = candidates.filter((candidate) => existsSync(candidate))
+  if (present.length === 0) fail(`no packaged app found. Looked for: ${candidates.join(', ')}`)
+
+  // Taking the first match silently verified whichever build happened to be
+  // listed earliest, which on a machine that has packaged more than once is the
+  // older one. A verification that passes against a stale app is worse than no
+  // verification, so an ambiguous dist is a refusal rather than a guess.
+  if (present.length > 1) {
+    fail(
+      `more than one packaged app is in dist/, so it is not clear which one to verify:\n` +
+        present.map((candidate) => `  ${candidate}  (${describeVersion(candidate)})`).join('\n') +
+        `\nRemove the ones you do not mean to check, or name one:  npm run package:verify -- <path>`
+    )
+  }
+
+  const root = present[0]
 
   if (process.platform === 'darwin') {
     return {

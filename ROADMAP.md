@@ -1,6 +1,8 @@
 # Roadmap
 
-Milestone 1 is single-user and is the current target. Team features come after it works.
+Milestone 1 is single-user and is complete; its remaining limits are under "Known gaps".
+Milestone 2 is teamwork, and its five lettered stages have all landed — built and tested,
+but never yet run between two machines in two places.
 
 ## Stack
 
@@ -361,18 +363,20 @@ recorded so none of them is discovered by surprise later.
   build; nothing in the workflow produced it, and the tests that spawn the built relay
   as a child process and drive real WebSockets through it — the only ones that prove
   teamwork end to end rather than against a fake — skip when it is absent. So they
-  skipped on every run, in a warning nobody reads, and the run stayed green: fifteen
-  tests reported skipped and an exit code of zero, which is indistinguishable at a
-  glance from fifteen tests that passed. The workflow now installs and builds the relay
-  before testing and runs the relay's own 71 tests, which had never run here either;
-  and `pretest` refuses to start the suite at all when `relay/dist` is missing and `CI`
-  is set, so that absence fails the run loudly instead of silently shrinking it. The
-  same condition still only warns on a developer's machine, where another package's
-  missing build is not a broken peer transport. Checked here by running the workflow's
-  sequence in order on a checkout with no `node_modules`: the relay's suite passes 71,
-  and the two relay-backed files report 15 tests run where hiding `relay/dist` makes
-  the same command report 15 skipped and still exit zero. That the steps do this on a
-  runner is reasoned, not observed.
+  skipped on every run, in a warning nobody reads, and the run stayed green: the
+  skipped tests reported as skipped and an exit code of zero, which is
+  indistinguishable at a glance from the same number having passed. The workflow now
+  installs and builds the relay before testing and runs the relay's own suite, which
+  had never run here either; and `pretest` refuses to start the suite at all when
+  `relay/dist` is missing and `CI` is set, so that absence fails the run loudly instead
+  of silently shrinking it. `vitest.config.ts` runs the same check as a `globalSetup`,
+  so `npx vitest run` cannot slip past it either. The same condition still only warns
+  on a developer's machine, where another package's missing build is not a broken peer
+  transport. Measured on macOS at this commit: the relay's own suite passes 84, and
+  `relayProcess.test.ts` and `relayWatch.test.ts` report 23 tests run where hiding
+  `relay/dist` makes the same command report 23 skipped and still exit zero — 34
+  skipped once `tests/teamwork/scenario.test.ts` and `tests/teamwork/two-peers.test.ts`
+  are counted with them. That the steps do this on a runner is reasoned, not observed.
 
   Turning them on turned up the reason to watch them. `relayWatch.test.ts` is the most
   timing-exposed file in the suite — a real relay, real PTYs and real wall-clock waits —
@@ -395,7 +399,8 @@ recorded so none of them is discovered by surprise later.
   `run:` block — it does not mean the jobs pass.
 - **No release has ever been published.** `release.yml` builds on a `v*` tag through
   the same workflow CI uses, collects the one runner's `.dmg`, writes
-  `SHA256SUMS.txt` and attaches both to a GitHub release. It has never been fired.
+  `SHA256SUMS.txt` and attaches both to a GitHub release, with notes that say it
+  is for macOS and nothing else. It has never been fired.
   The parts that can be checked without GitHub have been: the workflow parses and
   lints, and the note-writing and checksum steps were run here against stand-in files
   and produce what they claim to. What has not been checked is everything that needs
@@ -426,9 +431,14 @@ recorded so none of them is discovered by surprise later.
   way past it. A published checksum is the substitute for the integrity half of a
   signature. There is no substitute for the identity half: a colleague's confidence
   that the file is teamree rests on where they got the link, not on anything the
-  operating system can tell them. The macOS instructions in that document are written
-  from Apple's behaviour and the ad-hoc signing the build already does; they have not
-  been walked through on a Mac at this commit.
+  operating system can tell them. One half of the macOS instructions is now checked
+  rather than asserted: `npm run install:verify` reads the quarantine command out of
+  `docs/install.md`, installs a real packaged bundle at the path the document names,
+  quarantines it both ways a download arrives and runs that command verbatim, and CI
+  runs it on the macOS leg. The other half is not. The dialogs, the **Open Anyway**
+  route through System Settings and the macOS-version differences around it are
+  written from Apple's behaviour and the ad-hoc signing the build already does, and
+  have not been walked through on a Mac at this commit.
 - **A `git pull` is noticed, but not always at once.** This entry used to say nothing
   re-read `.teamree` at all, and that is no longer true. Each project gets a
   non-recursive watch on its checkout root, on `.teamree` and on `.teamree/members`,
@@ -541,7 +551,8 @@ onto the method catalogue that already exists, not a new protocol.
         says `connected`, subscribes, and believes a snapshot only after the
         first transport message from the far end that decrypts — which needs
         keys a recording cannot supply
-  - [x] A teammate is a fourth transport onto the existing catalogue, speaking
+  - [x] A teammate is a third transport onto the existing catalogue, beside
+        Electron IPC and the CLI socket, speaking
         the same newline-delimited JSON the CLI socket does — so the dispatcher,
         the subscription hub and every handler are unchanged. What a teammate
         may call is one explicit list, and it is presence and nothing else

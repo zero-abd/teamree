@@ -62,8 +62,18 @@ const RELAY_ENTRY = join(REPO_ROOT, 'relay', 'dist', 'node', 'index.js')
  * It is the *runtime's* budget and not the wrapper's: `npx` puts two processes
  * between here and the runtime, they die the instant the group is signalled,
  * and the runtime under them is still closing ptys and unlinking its socket.
+ *
+ * Derived from what the runtime is allowed to spend, not picked. `runtime.stop`
+ * closes every pty before it goes near its socket or its discovery file, and one
+ * pty's close is itself allowed 2s for SIGHUP, 2s more for SIGKILL and up to 5s
+ * for the exit event, plus half a second of output drain — so a pane taking the
+ * worst case the runtime is written for cannot reach the file-removal step
+ * inside five seconds. This used to be five seconds, which meant the harness's
+ * backstop fired at the very moment the runtime's own did: the kill is what
+ * left the discovery file behind, and the harness then reported the leak it had
+ * just caused. Measured, an ordered shutdown here takes 26-135ms.
  */
-const SHUTDOWN_GRACE_MS = 5_000
+const SHUTDOWN_GRACE_MS = 20_000
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -199,7 +209,8 @@ async function startPeer({ root, origin, handle, log }) {
     for (let attempt = 0; attempt < 200; attempt += 1) {
       if (exited) {
         throw new Error(
-          `${handle}'s runtime exited before it was ready (${JSON.stringify(exited)})\n${output.join('')}`
+          `${handle}'s runtime exited before it was ready (${JSON.stringify(exited)})` +
+            `${whyItDied(output.join(''))}\n${output.join('')}`
         )
       }
       if (await exists(discoveryPath)) break
@@ -224,6 +235,8 @@ async function startPeer({ root, origin, handle, log }) {
 }
 
 class Peer {
+  /** True when the ordered shutdown ran out of budget and the tree was killed. */
+  hadToBeKilled = false
   /** @type {string | undefined} This peer's own clone, once the runtime has it. */
   projectId = undefined
   /** @type {{ handle: string | null, publicKey: string } | undefined} */
@@ -333,8 +346,28 @@ class Peer {
 
   /** Waits until a teammate's session has authenticated and been confirmed. */
   async waitForLink(options = {}) {
-    const what = `${this.handle} to connect to a teammate`
-    await until(async () => (await this.links()).some((link) => link.phase === 'connected'), what, options.timeoutMs)
+    let seen = []
+    await until(
+      async () => {
+        seen = await this.links()
+        return seen.some((link) => link.phase === 'connected')
+      },
+      // The phases and whatever the runtime complained about, not just the
+      // fact. "dialling forever", "handshaking and dropping", and "no link at
+      // all because the peer service never started" read identically without
+      // them — and the last of those is invisible from this end, because
+      // `startRuntime` reports a peer service that failed to start and carries
+      // on serving. Every reader of this timeout has so far gone looking for a
+      // race in the relay; the runtime's own words come first now.
+      () => `${this.handle} to connect to a teammate (last seen: ${JSON.stringify(seen)})${this.saidSoFar()}`,
+      options.timeoutMs
+    )
+  }
+
+  /** What this peer's runtime has written to its own output, if anything. */
+  saidSoFar() {
+    const said = this.output.join('').trim()
+    return said === '' ? '' : `\n${this.handle}'s runtime said:\n${said}`
   }
 
   async gitPush() {
@@ -368,7 +401,13 @@ class Peer {
     // never notice the day clean shutdown started hanging.
     killTree(this.child, 'SIGTERM')
     const ordered = await this.#wentQuietly()
-    if (!ordered) killTree(this.child, 'SIGKILL')
+    if (!ordered) {
+      // Remembered, because everything the check below then finds — the
+      // discovery file, the socket — is this kill's doing and not the
+      // runtime's. Reporting those as a leak names the wrong culprit.
+      this.hadToBeKilled = true
+      killTree(this.child, 'SIGKILL')
+    }
     await ended
   }
 
@@ -453,7 +492,15 @@ export class TwoPeers {
     // the opposite.
     await this.joiner.gitPull()
 
-    await Promise.all(this.peers.map((peer) => peer.waitForLink(options)))
+    try {
+      await Promise.all(this.peers.map((peer) => peer.waitForLink(options)))
+    } catch (error) {
+      // The relay is a dependency of this wait and not a participant in it, so
+      // its having died says more about the timeout than anything either peer
+      // could report about itself.
+      const trouble = this.relay.trouble()
+      throw trouble === '' ? error : new Error(`${error.message}\nand the relay is not well:\n${trouble}`)
+    }
     return this.relay
   }
 
@@ -496,6 +543,13 @@ export class TwoPeers {
       if (peer.child.exitCode === null && peer.child.signalCode === null) {
         leftovers.push(`${peer.handle}: runtime pid ${peer.child.pid} is still running`)
       }
+      if (peer.hadToBeKilled) {
+        leftovers.push(
+          `${peer.handle}: the runtime did not finish its ordered shutdown in ${SHUTDOWN_GRACE_MS}ms ` +
+            `and was killed, so whatever it had not yet removed is still there${peer.saidSoFar()}`
+        )
+        continue
+      }
       // The runtime removes its discovery file and unlinks its socket on a clean
       // shutdown. Either one left behind means the next run inherits a lie.
       if (await exists(peer.discoveryPath)) leftovers.push(`${peer.handle}: ${peer.discoveryPath} was left behind`)
@@ -529,6 +583,29 @@ function killTree(child, signal) {
   } catch {
     // Already gone.
   }
+}
+
+/**
+ * Names the one cause of a dead runtime that is not about this code at all.
+ *
+ * The host is TypeScript, transpiled from the working tree at spawn time, so a
+ * write to any file it imports while it is being read kills the child with a
+ * syntax error from halfway through somebody's edit. Measured here: an agent
+ * saved `src/main/teamwork/peer/peerService.ts` during a run and the runtime
+ * died on "Private name #currentProject must be declared in an enclosing
+ * class", which is not a thing that file has ever said on disk.
+ *
+ * Said out loud because the shape of the failure points somewhere else
+ * entirely: it arrives as a teamwork test failing at startup, and every reader
+ * so far has gone hunting a race in the relay.
+ */
+function whyItDied(said) {
+  if (!/Transform failed|TransformError|SyntaxError/.test(said)) return ''
+  return (
+    '. The host transpiles the working tree as it imports it, so this is what a ' +
+    'source file being written mid-run looks like — check whether anything was ' +
+    'saving into src/ while this ran, rather than reading it as a teamwork fault'
+  )
 }
 
 async function exists(path) {
@@ -570,7 +647,11 @@ async function until(predicate, what, timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     if (await predicate()) return
-    if (Date.now() > deadline) throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`)
+    // `what` may be a function so a caller can report the state it last saw,
+    // which is the whole of what a reader of a timeout has to go on.
+    if (Date.now() > deadline) {
+      throw new Error(`timed out after ${timeoutMs}ms waiting for ${typeof what === 'function' ? what() : what}`)
+    }
     await sleep(50)
   }
 }
@@ -621,8 +702,20 @@ async function startRelay(log) {
 
   const url = `ws://127.0.0.1:${port}/v1/relay`
   log(`relay at ${url}`)
+
+  // What the relay does after it is listening, which until now nothing watched.
+  // A relay that dies mid-run is invisible from either peer's end — both of
+  // them simply stop connecting — and the only symptom is a link that times
+  // out, which reads as a fault in the peers. Kept here so the timeout can say
+  // so instead.
+  const trouble = []
+  child.stderr.on('data', (chunk) => trouble.push(chunk.toString('utf8')))
+  child.once('exit', (code, signal) => trouble.push(`the relay exited (${JSON.stringify({ code, signal })})`))
+
   return {
     url,
+    /** Empty while the relay is healthy; the reason it is not, otherwise. */
+    trouble: () => trouble.join('').trim(),
     stop: () =>
       new Promise((resolve) => {
         if (child.exitCode !== null) return resolve()

@@ -40,11 +40,54 @@ import type {
  * into. Refusing outright rather than chunking is deliberate — half a paste
  * landing in somebody's shell is worse than none of it.
  *
- * Counted in characters by the schema and in bytes where the bytes are: a
- * schema cap bounds what has to be parsed, and the transport that is about to
- * put it on a wire is the thing that knows what a byte is.
+ * Counted in bytes everywhere, including here. It used to be characters in the
+ * schema and bytes at the far end, which is two caps wearing one name: a paste
+ * of this many non-ASCII characters passed the sender's own machine and came
+ * back from the teammate's refused as three times the size. The person who
+ * pasted was told their teammate would not take it, by a machine that could
+ * have told them itself. One unit, and the refusal where the typing is.
  */
 export const MAX_REMOTE_WRITE_BYTES = 65_536
+
+/**
+ * A string field capped by what it weighs rather than by how long it reads.
+ *
+ * `.max()` counts UTF-16 code units, and every bound in this file that a wire
+ * has to honour is a bound on bytes. The two agree for ASCII and disagree by up
+ * to three times for everything else, which is the whole of the bug this
+ * replaces: an emoji is one character and four bytes.
+ */
+function atMostBytes(bytes: number, minimum = 0) {
+  return z
+    .string()
+    .min(minimum)
+    .refine((text) => utf8Length(text) <= bytes, { message: `must be at most ${bytes} bytes` })
+}
+
+/** How many bytes this string is once encoded, without allocating the encoding. */
+function utf8Length(text: string): number {
+  let bytes = 0
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4
+  }
+  return bytes
+}
+
+/**
+ * The most a pane id a remote keystroke names may be.
+ *
+ * Every id this runtime mints is a short word and a counter — `term_12` — so
+ * this is three orders of magnitude of headroom and refuses nothing anybody
+ * types. It is here because `data` was capped and the id beside it was not, and
+ * the id is copied further than the data ever goes: into the owner's write log,
+ * onto their disk, and into the map that remembers who typed where. An
+ * unbounded id is therefore a megabyte of somebody else's choosing in a file
+ * that is supposed to be the owner's evidence — see `writeLog.ts`, which bounds
+ * the entry as well, and `peerTransport.judgeWrite`, which refuses past this
+ * before the schema is ever reached.
+ */
+export const MAX_TERMINAL_ID_CHARS = 256
 
 export const Params = {
   statusGet: z.object({}),
@@ -211,7 +254,7 @@ export const Params = {
   teamworkType: z.object({
     projectId: z.string().min(1),
     paneId: z.string().min(1),
-    data: z.string().min(1).max(MAX_REMOTE_WRITE_BYTES)
+    data: atMostBytes(MAX_REMOTE_WRITE_BYTES, 1)
   }),
   /** Who is reading and typing into this machine's panes, right now, in one project. */
   teamworkWatchers: z.object({ projectId: z.string().min(1) }),
@@ -227,10 +270,28 @@ export const Params = {
    */
   teamworkMute: z.object({ terminalId: z.string().min(1), muted: z.boolean() }),
   /**
-   * The owner's record of every remote write, oldest first.
+   * The owner's record of every remote write their machine made a decision
+   * about, oldest first.
    *
    * Local, on their machine, and readable after the fact — including after a
    * restart, which is what makes it a record rather than a display.
+   *
+   * "Made a decision about" and not "every write that arrived", because the two
+   * are different and the difference is deliberate. Everything the *owner's*
+   * side judges is here whether it landed or not — not a member, no such pane,
+   * the pane has exited, the pane is muted — because those are bounded by the
+   * owner's own state and each one is a thing somebody may need to account for
+   * later.
+   *
+   * What the transport refuses before that — a write larger than one keystroke
+   * may carry, one arriving faster than a person types, one on an unconfirmed
+   * session, one that is not a write at all — is answered to the teammate and
+   * not written here. A caller chooses how many of those to send and how large
+   * each is, so recording them is a way of filling this file from the other end
+   * of a relay, which is the one thing it must survive: see
+   * `tests/security/auditLogErasure.test.ts`, and the note on `PEER_WRITE_BURST`
+   * in `peerTransport.ts`. A count of them belongs somewhere; a line each does
+   * not.
    */
   teamworkWriteLog: z.object({
     /** Trailing entries to return. Defaults to everything retained. */
@@ -259,7 +320,13 @@ export const Params = {
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional()
   }),
-  terminalWrite: z.object({ terminalId: z.string().min(1), data: z.string() }),
+  terminalWrite: z.object({
+    terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
+    // Capped here as well as at the receiving end, and in the same unit. This
+    // is the frame `teamwork.type` turns into, so a paste that is too large for
+    // the wire is refused on the machine it was pasted on.
+    data: atMostBytes(MAX_REMOTE_WRITE_BYTES)
+  }),
   terminalResize: z.object({
     terminalId: z.string().min(1),
     cols: z.number().int().positive(),
@@ -268,11 +335,11 @@ export const Params = {
   terminalClose: z.object({ terminalId: z.string().min(1) }),
   /** Point-in-time scrollback snapshot; for live output use terminal.subscribe. */
   terminalRead: z.object({
-    terminalId: z.string().min(1),
+    terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
     /** Trailing bytes to return. Defaults to the full retained buffer. */
     tailBytes: z.number().int().positive().optional()
   }),
-  terminalSubscribe: z.object({ terminalId: z.string().min(1) }),
+  terminalSubscribe: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
   terminalSplit: z.object({
     /** Pane to divide. The new terminal takes half of it. */
     terminalId: z.string().min(1),
@@ -305,7 +372,13 @@ export type MethodContract = {
   'worktree.list': { params: z.infer<typeof Params.worktreeList>; result: Worktree[] }
   'worktree.get': { params: z.infer<typeof Params.worktreeGet>; result: Worktree }
   'worktree.create': { params: z.infer<typeof Params.worktreeCreate>; result: Worktree }
-  'worktree.remove': { params: z.infer<typeof Params.worktreeRemove>; result: { removed: true } }
+  // `checkoutLeftAt` is set when the row was dropped but the directory was
+  // not: git had never heard of the checkout, or refused to read it. The files
+  // are all still there, and this is the last thing that knows where.
+  'worktree.remove': {
+    params: z.infer<typeof Params.worktreeRemove>
+    result: { removed: true; checkoutLeftAt?: string }
+  }
   'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
