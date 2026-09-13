@@ -312,19 +312,25 @@ recorded so none of them is discovered by surprise later.
   command is never re-issued unless it resumes something, so a pane left on a deploy
   or a migration comes back as a shell rather than running it twice. Keeping the
   process itself alive would mean moving PTYs into a daemon that outlives the app.
-- **Linux and macOS are packaged and launched. Windows is not.** Linux is no longer
-  theoretical: `npm ci` compiles node-pty, `npm run package:linux` produces both the
-  AppImage and the `.deb`, and the packaged app has been launched headless under
-  Xvfb, driven through the CLI it ships, and made to spawn a real PTY and read a
-  command's output back — three times over, as the unpacked tree, as the AppImage's
-  own payload, and as a `.deb` installed with `dpkg`. The Windows installer still
-  needs Windows: it has never been built and the app has never started there.
-- **The CI workflow has still never run on GitHub.** It is no longer a stub — it runs
-  typecheck, lint, format, the full suite, the build, the headless smoke test, the
-  package and the packaged-app check on three runners — but "configured" is not
-  "green". Every step of the Linux job has been executed locally, in order, on Linux,
-  and passes. The macOS and Windows jobs are reasoned from the same scripts and have
-  not been run. The action versions have since been checked against the upstream tags
+- **macOS is the supported platform. Windows and Linux are not, for now.** That is a
+  decision rather than a gap waiting to close: CI builds macOS only, and nobody should
+  pick this up expecting to finish it. What was learned before narrowing is kept
+  because it is true. Linux was packaged and launched for real — `npm ci` compiles
+  node-pty, both the AppImage and the `.deb` are produced, and the packaged app was
+  launched headless, driven through the CLI it ships, and made to spawn a real PTY,
+  three times over: as the unpacked tree, as the AppImage's payload, and as a `.deb`
+  installed with `dpkg`. It reached green in CI. Windows never did — it was still
+  turning up a fresh POSIX assumption on every run — and the Windows installer has
+  never been built nor the app started there. The platform-specific code and the
+  Windows-conditional workflow steps are all still present, so putting a platform back
+  is adding a block to the matrix rather than a rewrite.
+- **CI runs, and macOS is green.** It runs typecheck, lint, format, the full suite,
+  the build, the headless smoke test, the package and the packaged-app check — the one
+  that launches the artifact and drives it — and macOS passes all of it and uploads a
+  build. Its first four runs all failed, each for a real reason that a developer
+  machine had been hiding: a stale CLI build, a configured git identity, LF line
+  endings, and a sandbox helper that only needs its permissions fixed on a runner.
+  The action versions have since been checked against the upstream tags
   and all resolve, so the first run will not fail on those; they are two to three
   majors behind current, which is a maintenance note rather than a fault. Those steps
   now live in `build.yml`, which `ci.yml` and `release.yml` both call rather than
