@@ -23,7 +23,8 @@ afterEach(async () => {
 
 /**
  * A repository on a machine that has never been told who its user is: no local
- * identity, and no global or system config to fall back on either.
+ * identity, no global or system config to fall back on, and no licence to guess
+ * one from the account name and the hostname.
  */
 async function unconfiguredRepo(): Promise<{ repoPath: string; runner: GitRunner }> {
   const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-identity-'))
@@ -48,7 +49,16 @@ async function unconfiguredRepo(): Promise<{ repoPath: string; runner: GitRunner
     GIT_AUTHOR_EMAIL: undefined,
     GIT_COMMITTER_NAME: undefined,
     GIT_COMMITTER_EMAIL: undefined,
-    EMAIL: undefined
+    EMAIL: undefined,
+    // Emptying the config is not enough on its own: with nothing configured,
+    // git will happily invent an identity from the account name and the
+    // hostname, and whether that guess succeeds is a property of the machine.
+    // It fails in a container with no real user, and succeeds on a macOS CI
+    // runner — which is how this fixture passed on one and not the other. This
+    // says "never guess", so the condition under test is the same everywhere.
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'user.useConfigOnly',
+    GIT_CONFIG_VALUE_0: 'true'
   }
   const real = createGitRunner()
   const withBlankIdentity = (run: GitRun): GitRun => ({ ...run, env: { ...run.env, ...blank } })
