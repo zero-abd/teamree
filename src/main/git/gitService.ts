@@ -94,7 +94,14 @@ export type GitServiceOptions = {
 /** What the runtime persists between launches. */
 export type GitSnapshot = { projects: Project[]; worktrees: Worktree[] }
 
-type BranchVerdict = 'skip' | 'safe' | 'force'
+/**
+ * What `--delete-branch` was judged to deserve, before anything was destroyed.
+ *
+ * 'merged' and 'unjudged' both used to be 'safe', and they are not the same
+ * thing: one is a proof that the commits are in the base ref, the other is the
+ * absence of one. Telling them apart is what lets the proof be acted on.
+ */
+type BranchVerdict = 'skip' | 'merged' | 'unjudged' | 'force'
 
 const DEFAULT_CREATE_TIMEOUT_MS = 10 * 60_000
 
@@ -115,6 +122,9 @@ export class GitService {
   readonly #startPointLimit: number | undefined
   readonly #creating = new Map<string, AbortController>()
   readonly #settling = new Map<string, Promise<Worktree>>()
+  // One chain per project, so two creates never both read a store neither has
+  // written to yet. See `createWorktree`.
+  readonly #reservations = new Map<string, Promise<void>>()
   // How each worktree's start point was interpreted. Advisory display detail
   // with nowhere to live on the frozen Worktree, so it is session-scoped: the
   // durable answer is `startedFrom`, which holds the resolved sha.
@@ -206,6 +216,36 @@ export class GitService {
     const name = params.name.trim()
     if (!name) throw new GitServiceError(ErrorCode.InvalidParams, 'worktree name must not be blank')
 
+    // Serialised per project, and this is a data-loss fix rather than tidiness.
+    // Choosing the branch and the path reads the store; the record that claims
+    // them is written afterwards. Two creates overlapping in that gap both read
+    // a store neither has written to, agree on the same slug, and end up with
+    // two records naming one checkout path — after which whichever `worktree
+    // add` loses cleans up over the winner's checkout, and an agent's afternoon
+    // goes with it. Only the reservation is serialised: `#buildCheckout` still
+    // runs concurrently, so the slow part (a fetch, then the add) is unaffected.
+    return this.#reserve(project.id, () => this.#openWorktreeRecord(project, name, params))
+  }
+
+  /** Runs `reserve` after every earlier reservation for this project has finished. */
+  #reserve(projectId: string, reserve: () => Promise<Worktree>): Promise<Worktree> {
+    const previous = this.#reservations.get(projectId) ?? Promise.resolve()
+    const reserved = previous.then(reserve, reserve)
+    // The tail swallows the outcome: one caller's failure is not the next
+    // caller's, and an unhandled rejection here would take the process with it.
+    const tail = reserved.then(
+      () => undefined,
+      () => undefined
+    )
+    this.#reservations.set(projectId, tail)
+    void tail.then(() => {
+      if (this.#reservations.get(projectId) === tail) this.#reservations.delete(projectId)
+    })
+    return reserved
+  }
+
+  /** Claims a branch name and a checkout path, and starts building into them. */
+  async #openWorktreeRecord(project: Project, name: string, params: ParamsOf<'worktree.create'>): Promise<Worktree> {
     const branch = await this.#chooseBranch(project, name, params.branch)
     const checkoutPath = await allocateCheckoutPath(
       this.#worktreesRoot,
@@ -253,7 +293,7 @@ export class GitService {
     return settled ?? this.#store.getWorktree(worktreeId) ?? null
   }
 
-  async removeWorktree(params: ParamsOf<'worktree.remove'>): Promise<{ removed: true }> {
+  async removeWorktree(params: ParamsOf<'worktree.remove'>): Promise<{ removed: true; checkoutLeftAt?: string }> {
     const initial = this.#requireWorktree(params.worktreeId)
     if (initial.state === 'creating') await this.cancelWorktreeCreate(initial.id)
 
@@ -262,9 +302,11 @@ export class GitService {
     const force = params.force === true
 
     if (!project) {
-      // The repo was untracked underneath us; the row is all that is left.
+      // The repo was untracked underneath us; the row is all that is left. The
+      // files are not: nothing here deletes them, so say where they went.
       this.#forget(worktree)
-      return { removed: true }
+      const survived = await this.#surviving(worktree)
+      return { removed: true, ...survived }
     }
 
     // Judged before anything is destroyed: refusing after the checkout is gone
@@ -273,18 +315,32 @@ export class GitService {
     if (params.deleteBranch) branchVerdict = await this.#judgeBranchDeletion(project, worktree.branch, force)
 
     const previousState = worktree.state
-    if (!this.#patch(worktree.id, { state: 'removing' })) return { removed: true }
+    // Somebody else dropped the record while this was starting. Nothing was
+    // destroyed, so the files are wherever they were.
+    if (!this.#patch(worktree.id, { state: 'removing' })) {
+      return { removed: true, ...(await this.#surviving(worktree)) }
+    }
 
+    let detached: { checkoutLeftAt?: string }
     try {
-      await this.#detachCheckout(project, worktree, force)
+      detached = await this.#detachCheckout(project, worktree, force)
     } catch (error) {
       this.#patch(worktree.id, { state: previousState })
       throw error
     }
 
     this.#forget(worktree)
-    if (branchVerdict !== 'skip') await this.#deleteBranch(project, worktree.branch, branchVerdict === 'force')
-    return { removed: true }
+    // 'merged' is a proof, not a guess: `merge-base --is-ancestor` has already
+    // shown every commit on this branch is in the base ref, which is the whole
+    // reason the verdict is taken before anything is destroyed. `git branch -d`
+    // asks a different question — merged into HEAD or upstream — and answers it
+    // "no" for a branch that is plainly in the base, after the checkout is gone.
+    // So the proof is acted on, and `-d` is left to judge only the case where
+    // there was no proof to have.
+    if (branchVerdict !== 'skip') {
+      await this.#deleteBranch(project, worktree.branch, branchVerdict !== 'unjudged')
+    }
+    return { removed: true, ...detached }
   }
 
   async worktreeStatus(params: ParamsOf<'worktree.status'>): Promise<WorktreeStatus> {
@@ -550,6 +606,10 @@ export class GitService {
     // Set only once this create is the one thing that could have made the
     // branch, so the cleanup below never deletes one it did not create.
     let ourBranch: { branch: string; sha: string } | null = null
+    // The same rule applied to the checkout path. False until `worktree add`
+    // has been asked for, because before that this create has put nothing at
+    // that path — and the path may already be somebody else's checkout.
+    let ourCheckout = false
     try {
       const start = await resolveStartPoint(this.#runner, {
         root: project.path,
@@ -564,6 +624,7 @@ export class GitService {
       }
       ourBranch = { branch: worktree.branch, sha: start.sha }
       await mkdir(path.dirname(worktree.path), { recursive: true })
+      ourCheckout = true
       // The resolved sha, never the name: git's own DWIM must not get a second
       // vote after we have already decided what the name meant.
       await this.#runner.run({
@@ -578,7 +639,7 @@ export class GitService {
       // or disappear, the sha cannot.
       return this.#patch(worktreeId, { state: 'ready', startedFrom: start.sha, clearError: true }) ?? worktree
     } catch (error) {
-      await this.#discardPartialCheckout(project, worktree, ourBranch)
+      await this.#discardPartialCheckout(project, worktree, ourBranch, ourCheckout)
       const cancelled = error instanceof GitCommandError && error.cancelled
       return (
         this.#patch(worktreeId, {
@@ -620,16 +681,24 @@ export class GitService {
   async #discardPartialCheckout(
     project: Project,
     worktree: Worktree,
-    ourBranch: { branch: string; sha: string } | null
+    ourBranch: { branch: string; sha: string } | null,
+    ourCheckout: boolean
   ): Promise<void> {
     const quiet = async (args: string[]): Promise<void> => {
       await this.#runner.tryRun({ args, cwd: project.path, timeoutMs: 60_000 }).catch(() => undefined)
     }
-    await quiet(['worktree', 'remove', '--force', worktree.path])
-    await quiet(['worktree', 'prune'])
-    // Only ever delete inside our own root; a user-chosen checkout path is theirs.
-    if (isInside(this.#worktreesRoot, worktree.path)) {
-      await rm(worktree.path, { recursive: true, force: true }).catch(() => undefined)
+    // Gated the way the branch below is gated, and for the same reason. This
+    // used to run unconditionally, which meant a create that failed before it
+    // ever reached `worktree add` still ran `remove --force` and then `rm -rf`
+    // over its recorded path — and when a second record held that same path,
+    // that path was a ready checkout with an agent working in it.
+    if (ourCheckout && !this.#pathHeldByAnotherRecord(worktree)) {
+      await quiet(['worktree', 'remove', '--force', worktree.path])
+      await quiet(['worktree', 'prune'])
+      // Only ever delete inside our own root; a user-chosen checkout path is theirs.
+      if (isInside(this.#worktreesRoot, worktree.path)) {
+        await rm(worktree.path, { recursive: true, force: true }).catch(() => undefined)
+      }
     }
     if (!ourBranch) return
     // The add is what creates the branch, and it creates it at the start point
@@ -637,6 +706,16 @@ export class GitService {
     // read that fails leaves the question open rather than answering it "mine".
     const tip = await this.#branchTip(project, ourBranch.branch).catch(() => null)
     if (tip === ourBranch.sha) await quiet(['branch', '-D', ourBranch.branch])
+  }
+
+  /**
+   * Whether some other record names this checkout path. If one does, the
+   * directory is that record's, whatever this one believes — and a record is
+   * the only thing that knows where a running agent's files are.
+   */
+  #pathHeldByAnotherRecord(worktree: Worktree): boolean {
+    const key = pathKey(worktree.path)
+    return this.#store.listWorktrees().some((other) => other.id !== worktree.id && pathKey(other.path) === key)
   }
 
   /** The commit a local branch points at, or null when there is no such branch. */
@@ -657,7 +736,12 @@ export class GitService {
     return null
   }
 
-  async #detachCheckout(project: Project, worktree: Worktree, force: boolean): Promise<void> {
+  /**
+   * Takes the checkout away from git, and reports whether the directory itself
+   * survived. Three of the paths below drop the record with every file still
+   * on disk, and a caller told only "removed" has no way left to find them.
+   */
+  async #detachCheckout(project: Project, worktree: Worktree, force: boolean): Promise<{ checkoutLeftAt?: string }> {
     // Deliberately not caught: a repository git cannot be asked about is not a
     // repository with nothing in it. Reading the failure as "git has never
     // heard of this checkout" is what let a removal report success, forget
@@ -667,22 +751,31 @@ export class GitService {
     if (!registered) {
       // Already gone as far as git is concerned; drop any stale bookkeeping.
       await this.#runner.tryRun({ args: ['worktree', 'prune'], cwd: project.path }).catch(() => undefined)
-      return
+      return this.#surviving(worktree)
     }
 
     if (!force) await this.#refuseIfIgnoredFilesWouldGo(worktree)
 
-    const args = ['worktree', 'remove']
+    // `status.showUntrackedFiles` is pinned for the same reason it is pinned
+    // wherever else this app asks git what has changed — but here it is the
+    // difference between a refusal and a silent delete. An unforced removal
+    // has no safety check of its own for modified or untracked files: it
+    // relies entirely on `git worktree remove` refusing a dirty checkout, and
+    // git decides dirty with its own `git status`, which obeys that setting.
+    // People set it to `no` in ~/.gitconfig to make status usable on a large
+    // repository, where it then covers every repository they own — and an
+    // uncommitted file is exactly the kind nothing else has a copy of.
+    const args = ['-c', 'status.showUntrackedFiles=normal', 'worktree', 'remove']
     if (force) args.push('--force')
     args.push(worktree.path)
     const result = await this.#runner.tryRun({ args, cwd: project.path, timeoutMs: 120_000 })
-    if (result.exitCode === 0) return
+    if (result.exitCode === 0) return this.#surviving(worktree)
 
     // Fallback for the one case `git worktree remove` refuses outright on our
     // 2.25 floor: the checkout directory is gone but its metadata is not.
     if (isNotAWorkingTree(result.stderr)) {
       await this.#runner.tryRun({ args: ['worktree', 'prune'], cwd: project.path }).catch(() => undefined)
-      return
+      return this.#surviving(worktree)
     }
     if (!force && /contains modified or untracked files|is dirty/i.test(result.stderr)) {
       throw new GitServiceError(
@@ -691,6 +784,11 @@ export class GitService {
       )
     }
     throw new GitCommandError({ args, cwd: project.path, exitCode: result.exitCode, stderr: result.stderr })
+  }
+
+  /** Where the checkout still is, when forgetting the record did not move it. */
+  async #surviving(worktree: Worktree): Promise<{ checkoutLeftAt?: string }> {
+    return (await isDirectory(worktree.path)) ? { checkoutLeftAt: worktree.path } : {}
   }
 
   /**
@@ -737,15 +835,16 @@ export class GitService {
       cwd: project.path,
       readOnly: true
     })
-    if (merged.exitCode === 0) return 'safe'
+    if (merged.exitCode === 0) return 'merged'
     if (merged.exitCode === 1) {
       throw new GitServiceError(
         ErrorCode.Conflict,
         `branch "${branch}" has commits that are not in ${target}; remove with force to delete it anyway`
       )
     }
-    // Base ref unreadable (no remote, unborn branch). Let `git branch -d` judge.
-    return 'safe'
+    // Base ref unreadable (no remote, unborn branch). Nothing was proved here,
+    // so `git branch -d` is left to judge on its own terms.
+    return 'unjudged'
   }
 
   async #deleteBranch(project: Project, branch: string, force: boolean): Promise<void> {
@@ -754,9 +853,14 @@ export class GitService {
     if (result.exitCode === 0) return
     if (/not found/i.test(result.stderr)) return
     if (/not fully merged/i.test(result.stderr)) {
+      // Only reachable from the 'unjudged' verdict, and by then the checkout is
+      // gone and the record with it. Telling the user to "remove with force"
+      // would send them back to a worktree that no longer exists, so the
+      // sentence says what actually happened and what is left to do.
       throw new GitServiceError(
         ErrorCode.Conflict,
-        `branch "${branch}" has unmerged commits; remove with force to delete it anyway`
+        `the worktree was removed, but branch "${branch}" has commits that are not merged anywhere ` +
+          `this app can see; delete it yourself with: git branch -D ${branch}`
       )
     }
     throw new GitCommandError({ args, cwd: project.path, exitCode: result.exitCode, stderr: result.stderr })

@@ -35,8 +35,13 @@ export class RelayPair implements DurableObject {
     const origin = request.headers.get('CF-Connecting-IP') ?? 'unknown'
     // The object's name is chosen by whoever dialled, with no token behind it,
     // so anyone may address any object. What stops that being a way to pile an
-    // unbounded number of sockets into one is that the object refuses them, and
-    // this is where the refusal is spent: an HTTP response rather than a socket.
+    // unbounded number of sockets into one is that the object bounds what it
+    // holds. It makes room for an arriving connection rather than refusing it,
+    // so this is the last resort and not the first answer: a rendezvous every
+    // one of whose pairing slots is held by a connection that presented its
+    // token. A WebSocket client cannot read this status — it is handed the same
+    // transport error it gets when there is no relay at all — which is why a
+    // refusal must not be what an ordinary teammate meets.
     if (!this.pair.accept(server as unknown as PairSocket, origin)) {
       return new Response('this rendezvous already has as many connections as it can hold', { status: 503 })
     }

@@ -54,7 +54,15 @@ export type PeerServiceHandlers = {
 }
 
 export function registerPeerHandlers(registry: MethodRegistry, service: PeerService): PeerService {
-  registry.register('teamwork.status', Params.teamworkStatus, (params) => service.status(params))
+  // Asked before answering, because the project key is a hash of the `origin`
+  // remote and git's config is the one input behind this answer that no watch
+  // in this app covers. Without it a user who fixes their remote goes on being
+  // told to fix it. It costs a `stat` per call and a git subprocess only when
+  // that `stat` moved.
+  registry.register('teamwork.status', Params.teamworkStatus, async (params) => {
+    await service.refreshIfOriginMoved(params.projectId)
+    return service.status(params)
+  })
   registry.register('teamwork.presence', Params.teamworkPresence, (params) => service.presence(params))
   registry.register('teamwork.watchers', Params.teamworkWatchers, (params) => service.watchers(params))
   registry.register('teamwork.type', Params.teamworkType, (params) => service.type(params))
