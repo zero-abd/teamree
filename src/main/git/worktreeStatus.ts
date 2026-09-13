@@ -20,9 +20,26 @@ export type ParsedStatus = {
   unstaged: number
   untracked: number
   conflicted: number
+  /** Ignored entries, a wholly ignored directory counting as one. */
+  ignored: number
+  /** The first few of them by name, for a sentence a person can act on. */
+  ignoredPaths: string[]
 }
 
 const DETACHED = '(detached)'
+
+/** Enough names to recognise a checkout by; the count carries the rest. */
+export const IGNORED_SAMPLE_LIMIT = 6
+
+/**
+ * Asked of git whenever ignored entries are wanted.
+ *
+ * `traditional` collapses a wholly ignored directory into a single entry, so
+ * neither the walk nor the output grows with what is inside node_modules — but
+ * only while untracked files are listed normally, which is why that is pinned
+ * here rather than left to whatever `status.showUntrackedFiles` says.
+ */
+const IGNORED_ARGS = ['--ignored=traditional', '--untracked-files=normal']
 
 export function parsePorcelainV2(raw: string): ParsedStatus {
   const parsed: ParsedStatus = {
@@ -34,7 +51,9 @@ export function parsePorcelainV2(raw: string): ParsedStatus {
     staged: 0,
     unstaged: 0,
     untracked: 0,
-    conflicted: 0
+    conflicted: 0,
+    ignored: 0,
+    ignoredPaths: []
   }
 
   for (const rawLine of raw.split('\n')) {
@@ -50,7 +69,13 @@ export function parsePorcelainV2(raw: string): ParsedStatus {
       parsed.untracked += 1
       continue
     }
-    if (marker === '!') continue // ignored; never surfaced as a change
+    if (marker === '!') {
+      // Never a change — but `git worktree remove` deletes these along with
+      // everything else, and counts that leave them out are why it can.
+      parsed.ignored += 1
+      if (parsed.ignoredPaths.length < IGNORED_SAMPLE_LIMIT) parsed.ignoredPaths.push(line.slice(2))
+      continue
+    }
     if (marker === 'u') {
       // Unmerged paths are their own bucket: showing them as both staged and
       // unstaged would double-count the one thing the user must resolve.
@@ -102,7 +127,10 @@ export type StatusReadOptions = {
 
 export async function readWorktreeStatus(runner: GitRunner, options: StatusReadOptions): Promise<WorktreeStatus> {
   const { stdout } = await runner.run({
-    args: ['status', '--porcelain=v2', '--branch'],
+    // The ignored entries cost nothing extra to ask for: git has already
+    // decided which untracked paths an ignore rule covers in order to leave
+    // them out, so this only changes whether it says so.
+    args: ['status', '--porcelain=v2', '--branch', ...IGNORED_ARGS],
     cwd: options.worktreePath,
     readOnly: true,
     signal: options.signal,
@@ -127,8 +155,34 @@ export async function readWorktreeStatus(runner: GitRunner, options: StatusReadO
     unstaged: parsed.unstaged,
     untracked: parsed.untracked,
     conflicted: parsed.conflicted,
+    ignored: parsed.ignored,
     readAt: (options.now ?? Date.now)()
   }
+}
+
+/** Ignored entries in a checkout: how many, and the first few by name. */
+export type IgnoredEntries = { count: number; names: string[] }
+
+/**
+ * What removing this checkout would delete that nothing has told the user
+ * about: the `.env`, the local database, the virtualenv an agent built.
+ *
+ * Read on its own rather than off a status the caller happens to hold, because
+ * the answer decides whether a directory is destroyed and a status is a cache.
+ */
+export async function readIgnoredEntries(
+  runner: GitRunner,
+  options: { worktreePath: string; signal?: AbortSignal }
+): Promise<IgnoredEntries> {
+  const { stdout } = await runner.run({
+    args: ['status', '--porcelain=v2', ...IGNORED_ARGS],
+    cwd: options.worktreePath,
+    readOnly: true,
+    signal: options.signal,
+    timeoutMs: 60_000
+  })
+  const parsed = parsePorcelainV2(stdout)
+  return { count: parsed.ignored, names: parsed.ignoredPaths }
 }
 
 /** `--left-right` prints "<behind>\t<ahead>" for `base...HEAD`. */

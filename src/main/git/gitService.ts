@@ -13,7 +13,7 @@
 //    drops rows git no longer knows about.
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
@@ -43,7 +43,7 @@ import { readWorktreeLog } from './worktreeLog'
 import { commitWorktree } from './worktreeCommit'
 import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
-import { readWorktreeStatus } from './worktreeStatus'
+import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
 
 export type GitEvent =
   | { type: 'project.added'; project: Project }
@@ -527,7 +527,10 @@ export class GitService {
     // In-flight creates own branch names git has not heard of yet, so records
     // are merged into the taken set.
     const recorded = this.#store.listWorktrees(project.id).map((worktree) => worktree.branch)
-    const fromGit = await listBranchNames(this.#runner, project.path).catch(() => [] as string[])
+    // Deliberately not caught into an empty list: a collision check with
+    // nothing to check against says "that name is free" about every name there
+    // is, and the caller cannot tell that answer from a real one.
+    const fromGit = await listBranchNames(this.#runner, project.path)
     const existing = [...fromGit, ...recorded]
 
     if (requested === undefined) return allocateBranchName(taskName, existing)
@@ -544,12 +547,22 @@ export class GitService {
 
   async #buildCheckout(worktreeId: string, project: Project, signal: AbortSignal): Promise<Worktree> {
     const worktree = this.#requireWorktree(worktreeId)
+    // Set only once this create is the one thing that could have made the
+    // branch, so the cleanup below never deletes one it did not create.
+    let ourBranch: { branch: string; sha: string } | null = null
     try {
       const start = await resolveStartPoint(this.#runner, {
         root: project.path,
         requested: worktree.startedFrom,
         signal
       })
+      // Asked again here rather than trusted from #chooseBranch: that listing
+      // is as old as the start point took to resolve — network time when the
+      // ref needed fetching — and a pane or a CLI can claim a name inside it.
+      if (await this.#branchTip(project, worktree.branch)) {
+        throw new GitServiceError(ErrorCode.Conflict, `branch "${worktree.branch}" already exists`)
+      }
+      ourBranch = { branch: worktree.branch, sha: start.sha }
       await mkdir(path.dirname(worktree.path), { recursive: true })
       // The resolved sha, never the name: git's own DWIM must not get a second
       // vote after we have already decided what the name meant.
@@ -565,7 +578,7 @@ export class GitService {
       // or disappear, the sha cannot.
       return this.#patch(worktreeId, { state: 'ready', startedFrom: start.sha, clearError: true }) ?? worktree
     } catch (error) {
-      await this.#discardPartialCheckout(project, worktree)
+      await this.#discardPartialCheckout(project, worktree, ourBranch)
       const cancelled = error instanceof GitCommandError && error.cancelled
       return (
         this.#patch(worktreeId, {
@@ -597,8 +610,18 @@ export class GitService {
       .catch(() => undefined)
   }
 
-  /** Best effort: a failed create must not leave a half-checkout or a stray branch. */
-  async #discardPartialCheckout(project: Project, worktree: Worktree): Promise<void> {
+  /**
+   * Best effort: a failed create must not leave a half-checkout or a stray
+   * branch. `ourBranch` names the ref this create made, and is the only ref
+   * this may delete — a name that was already taken, or that somebody else
+   * claimed while the add was running, holds work this create knows nothing
+   * about.
+   */
+  async #discardPartialCheckout(
+    project: Project,
+    worktree: Worktree,
+    ourBranch: { branch: string; sha: string } | null
+  ): Promise<void> {
     const quiet = async (args: string[]): Promise<void> => {
       await this.#runner.tryRun({ args, cwd: project.path, timeoutMs: 60_000 }).catch(() => undefined)
     }
@@ -608,17 +631,46 @@ export class GitService {
     if (isInside(this.#worktreesRoot, worktree.path)) {
       await rm(worktree.path, { recursive: true, force: true }).catch(() => undefined)
     }
-    await quiet(['branch', '-D', worktree.branch])
+    if (!ourBranch) return
+    // The add is what creates the branch, and it creates it at the start point
+    // already resolved. A ref sitting anywhere else is somebody else's, and a
+    // read that fails leaves the question open rather than answering it "mine".
+    const tip = await this.#branchTip(project, ourBranch.branch).catch(() => null)
+    if (tip === ourBranch.sha) await quiet(['branch', '-D', ourBranch.branch])
+  }
+
+  /** The commit a local branch points at, or null when there is no such branch. */
+  async #branchTip(project: Project, branch: string): Promise<string | null> {
+    const wanted = `refs/heads/${branch}`
+    const { stdout } = await this.#runner.run({
+      args: ['for-each-ref', '--format=%(refname) %(objectname)', wanted],
+      cwd: project.path,
+      readOnly: true,
+      timeoutMs: 60_000
+    })
+    for (const line of stdout.split('\n')) {
+      // The argument is read as a pattern, and `refs/heads/x` matches
+      // `refs/heads/x/y` too; only the exact ref is this branch.
+      const [name, sha] = line.trim().split(' ')
+      if (name === wanted && sha) return sha
+    }
+    return null
   }
 
   async #detachCheckout(project: Project, worktree: Worktree, force: boolean): Promise<void> {
-    const inventory = await readWorktreeInventory(this.#runner, project.path).catch(() => [])
+    // Deliberately not caught: a repository git cannot be asked about is not a
+    // repository with nothing in it. Reading the failure as "git has never
+    // heard of this checkout" is what let a removal report success, forget
+    // which project the row belonged to, and leave every file on disk.
+    const inventory = await readWorktreeInventory(this.#runner, project.path)
     const registered = inventory.some((entry) => samePath(entry.path, worktree.path))
     if (!registered) {
       // Already gone as far as git is concerned; drop any stale bookkeeping.
       await this.#runner.tryRun({ args: ['worktree', 'prune'], cwd: project.path }).catch(() => undefined)
       return
     }
+
+    if (!force) await this.#refuseIfIgnoredFilesWouldGo(worktree)
 
     const args = ['worktree', 'remove']
     if (force) args.push('--force')
@@ -628,7 +680,7 @@ export class GitService {
 
     // Fallback for the one case `git worktree remove` refuses outright on our
     // 2.25 floor: the checkout directory is gone but its metadata is not.
-    if (/is not a working tree|does not exist|No such file/i.test(result.stderr)) {
+    if (isNotAWorkingTree(result.stderr)) {
       await this.#runner.tryRun({ args: ['worktree', 'prune'], cwd: project.path }).catch(() => undefined)
       return
     }
@@ -639,6 +691,42 @@ export class GitService {
       )
     }
     throw new GitCommandError({ args, cwd: project.path, exitCode: result.exitCode, stderr: result.stderr })
+  }
+
+  /**
+   * Stops a removal that would take ignored files with it.
+   *
+   * `git worktree remove` refuses a dirty checkout, and dirty to git means
+   * modified-or-untracked — everything except the files an ignore rule covers.
+   * Those are exactly the files nothing else has: no branch holds them, no
+   * remote has a copy. This app cannot tell a rebuildable node_modules from
+   * the only .env that ever existed, so it says what is there and leaves the
+   * judgement to the person whose files they are.
+   */
+  async #refuseIfIgnoredFilesWouldGo(worktree: Worktree): Promise<void> {
+    if (!(await isDirectory(worktree.path))) return // nothing on disk to lose
+
+    let ignored: IgnoredEntries
+    try {
+      ignored = await readIgnoredEntries(this.#runner, { worktreePath: worktree.path })
+    } catch (error) {
+      // A checkout git will not read is one `worktree remove` will not delete
+      // either — it refuses and the prune below takes the record instead,
+      // leaving whatever is on disk exactly where it is. Any other failure is
+      // a question left open, and an open question is not a yes.
+      if (error instanceof GitCommandError && isNotAWorkingTree(error.stderr)) return
+      throw error
+    }
+    if (ignored.count === 0) return
+
+    const rest = ignored.count - ignored.names.length
+    const named = rest > 0 ? `${ignored.names.join(', ')} and ${rest} more` : ignored.names.join(', ')
+    const noun = ignored.count === 1 ? 'file or folder' : 'files and folders'
+    throw new GitServiceError(
+      ErrorCode.Conflict,
+      `worktree "${worktree.name}" holds ${ignored.count} ignored ${noun} that git would delete ` +
+        `without a word (${named}); remove with force to discard them`
+    )
   }
 
   async #judgeBranchDeletion(project: Project, branch: string, force: boolean): Promise<BranchVerdict> {
@@ -699,6 +787,19 @@ function hasControlCharacter(value: string): boolean {
     if (code < 0x20 || code === 0x7f) return true
   }
   return false
+}
+
+/** Git's several ways of saying there is no checkout at that path. */
+function isNotAWorkingTree(stderr: string): boolean {
+  return /is not a working tree|does not exist|No such file|not a git repository/i.test(stderr)
+}
+
+async function isDirectory(target: string): Promise<boolean> {
+  try {
+    return (await stat(target)).isDirectory()
+  } catch {
+    return false
+  }
 }
 
 function isProject(project: Project | undefined): project is Project {
