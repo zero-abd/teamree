@@ -43,6 +43,7 @@ import { createInitiatorSession, createResponderSession, isPeerError, type PeerS
 import {
   createPeerTransport,
   outputBytes,
+  PEER_CALL_TIMEOUT_MS,
   type RemoteReadVerdict,
   type Answered,
   type PeerTransport,
@@ -66,7 +67,19 @@ type HeldEvent = { event: unknown; sequence: number }
  * enough throws output away. `lost` is what that cost, in bytes, and `lostAt` is
  * the frame it started at — the two things an `elided` is made of.
  */
-type Unrouted = { events: HeldEvent[]; lost: number; lostAt: number }
+type Unrouted = {
+  events: HeldEvent[]
+  lost: number
+  lostAt: number
+  /**
+   * How long this stream has been waiting for somebody to claim it.
+   *
+   * Measured rather than stamped, and measured on a clock a sleeping machine
+   * cannot move, for the same reason every other deadline in this file is. See
+   * `elapsed.ts`.
+   */
+  opened: TimedWindow
+}
 
 /** A quiet pair still has to say something, or the relay's idle deadline ends it. */
 export const KEEPALIVE_MS = 120_000
@@ -111,6 +124,57 @@ export const SILENT_PEER_DETAIL = 'your teammate’s machine stopped answering'
  * and the rows it was showing go stale and dated in the meantime.
  */
 export const WOKE_DETAIL = 'this machine was asleep, so nothing is known about your teammate until this link is back'
+
+/**
+ * What a frame that does not authenticate is, and what it is not.
+ *
+ * A Noise transport frame is authenticated by keys only the two machines hold,
+ * so one that fails to open means what arrived is not what was sent under that
+ * session — a bit changed, a frame replayed, dropped or reordered. The relay is
+ * the one thing between the two sockets and the one thing this project's threat
+ * model says not to trust, and this is the only symptom it has.
+ *
+ * It used to arrive on screen as "your teammate's machine dropped the
+ * connection", which is the sentence for a socket that closed and names the
+ * only party here nothing has been established about. What is known is what
+ * this says: something did not survive the trip.
+ */
+export const UNAUTHENTICATED_DETAIL =
+  'a message did not authenticate, so the frames did not reach this machine as your teammate sent them'
+
+/**
+ * How long a link that has given up waits before looking again.
+ *
+ * Three close codes mean something a reconnect cannot fix: the relay refused
+ * this client's greeting, refused a frame, or refused one as too large. The
+ * link says so and stops dialling, which is right — and it used to stop for
+ * ever, which is not. Nothing revived it: `PeerService.reconcile()` skips a
+ * link it already holds on an unchanged relay, so a teammate lost this way was
+ * lost until the app was restarted.
+ *
+ * None of the three is actually permanent. A relay gets restarted, rolled back
+ * and upgraded without this app hearing about it, and `4008` in particular is
+ * sent both for a frame this client got wrong and for the relay failing to
+ * find the other socket in its own pairing table — a condition this end had no
+ * part in and no way to tell apart from the other. So the link looks again,
+ * rarely: far enough apart to cost a relay that means it nothing, close enough
+ * that somebody who fixes the relay does not also have to tell everyone on the
+ * team to restart.
+ */
+export const STOPPED_RETRY_MS = 300_000
+
+/**
+ * What a pairing that never became a session is, and what it is not.
+ *
+ * The relay splices two sockets and then the frames stop: a replayer holding a
+ * recording, a relay that pairs and forwards nothing, a middle that drops. The
+ * handshake deadline expires and this side closes its own socket to end it —
+ * and that close arrives back at `onClosed` carrying `paired: true`, which used
+ * to come out as "your teammate's machine dropped the connection". Nobody hung
+ * up. This end gave up on a conversation that never started, and the teammate
+ * may well be sitting there paired, waiting for the same frames.
+ */
+export const HANDSHAKE_STALLED_DETAIL = 'your teammate’s machine was reached but the two never finished connecting'
 
 /** Past this a paired connection that has not finished handshaking is not going to. */
 export const HANDSHAKE_TIMEOUT_MS = 15_000
@@ -200,6 +264,22 @@ export const WAITING_TOO_LONG_DETAIL =
  */
 export const MAX_UNROUTED_STREAMS = 16
 export const MAX_UNROUTED_EVENTS = 256
+
+/**
+ * How long an unclaimed stream may hold one of those slots.
+ *
+ * The window a hold is for is one round trip, and `PEER_CALL_TIMEOUT_MS` is the
+ * longest a round trip is allowed to be: past it the call that would have
+ * claimed this stream has already been failed, so nothing is coming for it.
+ *
+ * Without this the only thing that ever removed an entry was `route`, and
+ * `route` is only reached when the subscribe answer that names the stream comes
+ * back. A `terminal.subscribe` that times out never learns its id, never routes
+ * and never unsubscribes: the far side goes on streaming that pane for the life
+ * of the link, and the entry keeps its slot for the life of the link too.
+ * Sixteen of those and every later stream loses its head.
+ */
+export const UNROUTED_HOLD_MS = PEER_CALL_TIMEOUT_MS
 
 /**
  * Timers and the clock, as one seam.
@@ -380,6 +460,24 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
    * link's business — waking abandons a socket whose close is still in flight.
    */
   let generation = 0
+  /**
+   * Scoped to one attempt: did this session end on a frame that did not
+   * authenticate?
+   *
+   * Kept apart from `refusedThisAttempt` because it answers a second question —
+   * whether this session counts as one that worked. A session broken by
+   * something between the two machines did not work, however long it ran.
+   */
+  let unauthenticatedThisAttempt = false
+  /**
+   * Scoped to one attempt: did the handshake run out its deadline?
+   *
+   * A pairing that never became a session. Separate from every other reason a
+   * socket ends because it is the one where the socket was closed *by this
+   * side*, on purpose, and the relay's `paired: true` on the way out describes
+   * the rendezvous rather than anything either machine did.
+   */
+  let stalledThisAttempt = false
   /** Scoped to one session: has anything from the far end ever decrypted? */
   let confirmed = false
   /** When that happened, so a session can be asked how long it lasted. */
@@ -388,6 +486,21 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   const routes = new Map<string, (event: unknown, sequence: number) => void>()
   /** Events for a subscription whose answer has not landed yet, in order. */
   const unrouted = new Map<string, Unrouted>()
+  /**
+   * Streams that were refused a hold, and how much of them went with the
+   * refusal.
+   *
+   * A tally and nothing else: no events, so a stream here costs a number rather
+   * than a buffer. It exists because the bound above used to be enforced by
+   * dropping the frames and writing nothing down, which left `route` with no
+   * entry, no `elided`, and a watcher quietly missing the head of the pane it
+   * had just asked for — the one thing the event bound beside it is careful not
+   * to do.
+   *
+   * Bounded like everything else fed from the wire, and by the same number,
+   * because the far end chooses how many stream ids exist.
+   */
+  const overflowed = new Map<string, { lost: number; lostAt: number; opened: TimedWindow }>()
   let cancelPresenceRoute: (() => void) | undefined
   let connection: RelayConnection | undefined
   let session: PeerSession | undefined
@@ -488,6 +601,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     cancelPresenceRoute = undefined
     routes.clear()
     unrouted.clear()
+    overflowed.clear()
     transport?.close(reason)
     transport = undefined
     session?.close()
@@ -504,14 +618,16 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     connection?.close(1000, '')
   }
 
-  const scheduleRetry = (kind: 'immediate' | 'backoff'): void => {
+  const scheduleRetry = (kind: 'immediate' | 'backoff' | 'gave-up'): void => {
     if (!running) return
     const delay =
       kind === 'immediate'
         ? RECONNECT_FLOOR_MS
-        : // Full jitter: the whole window rather than a fixed fraction of it, so
-          // a relay coming back does not get every link on the team at once.
-          Math.max(RECONNECT_FLOOR_MS, Math.round(backoffMs * random()))
+        : kind === 'gave-up'
+          ? STOPPED_RETRY_MS
+          : // Full jitter: the whole window rather than a fixed fraction of it, so
+            // a relay coming back does not get every link on the team at once.
+            Math.max(RECONNECT_FLOOR_MS, Math.round(backoffMs * random()))
     if (kind === 'backoff') backoffMs = Math.min(backoffMs * 2, BACKOFF_CEILING_MS)
     cancelTimer = options.scheduler.setTimer(() => {
       cancelTimer = undefined
@@ -560,11 +676,21 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     }
     const wasConnected = confirmed
     const wasRefused = refusedThisAttempt
+    const wasStalled = stalledThisAttempt
     const wasRollover = rolledOverThisAttempt
     const wasSilent = silentThisAttempt
     // A session that worked earns the reset; one that confirmed and went inside
     // a keepalive does not, because that is the shape a peer can repeat at will.
-    const lasted = confirmedAt !== undefined && options.scheduler.now() - confirmedAt >= HEALTHY_SESSION_MS
+    //
+    // Nor does one that ended on a frame that did not authenticate, whatever
+    // the clock says about its length: forgiving those puts a relay that
+    // corrupts one frame per session in charge of how often this machine
+    // dials, which is a fresh handshake a second, per link, for as long as it
+    // cares to keep doing it.
+    const lasted =
+      confirmedAt !== undefined &&
+      !unauthenticatedThisAttempt &&
+      options.scheduler.now() - confirmedAt >= HEALTHY_SESSION_MS
     if (lasted) backoffMs = BACKOFF_START_MS
     teardown('the peer link ended')
     if (!running) return
@@ -588,6 +714,13 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     const policy = reconnectPolicyFor(closure)
     if (policy.kind === 'stop') {
       moveTo('stopped', policy.reason)
+      // Said, and then looked at again a long time later. Every one of these is
+      // a fact about the relay, and nothing in this process learns that a relay
+      // has been fixed: with no timer here the link was not "stopped" but gone,
+      // for as long as the app kept running. `PeerService.reconcile()` does not
+      // rebuild it either — it skips a linkId it already holds whose relay URL
+      // has not changed — so this timer is the only thing that revives it.
+      scheduleRetry('gave-up')
       return
     }
     // A link that got all the way up and then dropped is a teammate whose
@@ -596,6 +729,11 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // And a machine that stopped answering did not drop anything: its socket is
     // still open, which is the whole reason this side had to notice for itself.
     if (wasSilent) moveTo('waiting', SILENT_PEER_DETAIL)
+    // Before the `paired` branch, and never reached once a session confirmed:
+    // the deadline returns early when it has. A rendezvous that paired and then
+    // carried nothing is not somebody hanging up, and the relay saying `paired`
+    // is the one thing both of those have in common.
+    else if (wasStalled) moveTo('waiting', HANDSHAKE_STALLED_DETAIL)
     else if (wasConnected || closure.paired) moveTo('waiting', 'your teammate’s machine dropped the connection')
     else moveTo('unreachable', closure.reason || 'the relay could not be reached')
     // A session that confirmed and then went straight away is not the "your
@@ -640,6 +778,11 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       // and then, having no keys, can never say anything. This is what ends
       // that session rather than leaving it holding a slot forever.
       if (confirmed) return
+      // Recorded before the socket goes, because the close this causes comes
+      // back through `onClosed` carrying `paired: true` and would otherwise be
+      // read there as the teammate hanging up. They did not: this end gave up
+      // on a conversation that never started.
+      stalledThisAttempt = true
       // Says nothing to the peer, for the same reason a rejection says nothing.
       dropSilently()
     })
@@ -718,6 +861,44 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
    * arrived: a pane's output and a presence snapshot are both just objects, and
    * a link that guessed could be made to guess wrong.
    */
+  /**
+   * Lets go of every hold that has outlived the call it was waiting for.
+   *
+   * Both maps, because a tally that is never claimed is as stale as a buffer
+   * that is never claimed, and neither of them is ever removed by anything
+   * else once its subscribe answer has failed to arrive.
+   */
+  const expireHolds = (): void => {
+    for (const [stream, held] of unrouted) {
+      if (held.opened.elapsedMs() >= UNROUTED_HOLD_MS) unrouted.delete(stream)
+    }
+    for (const [stream, held] of overflowed) {
+      if (held.opened.elapsedMs() >= UNROUTED_HOLD_MS) overflowed.delete(stream)
+    }
+  }
+
+  /**
+   * Counts output this link will never be able to hand over.
+   *
+   * The tally is bounded like the holds it stands in for, and the oldest goes
+   * first for the same reason the oldest *event* goes first: what somebody is
+   * waiting to see is the newest thing, and a stream that has been counted
+   * without being claimed for longer than a call may take is not going to be.
+   */
+  const tally = (stream: string, event: unknown, sequence: number): void => {
+    let counted = overflowed.get(stream)
+    if (!counted) {
+      if (overflowed.size >= MAX_UNROUTED_STREAMS) {
+        expireHolds()
+        const oldest = [...overflowed.keys()][0]
+        if (overflowed.size >= MAX_UNROUTED_STREAMS && oldest !== undefined) overflowed.delete(oldest)
+      }
+      counted = { lost: 0, lostAt: sequence, opened: startTimedWindow(options.scheduler) }
+      overflowed.set(stream, counted)
+    }
+    counted.lost += outputBytes(event)
+  }
+
   const deliver = (stream: string, event: unknown, sequence: number): void => {
     const route = routes.get(stream)
     if (route) {
@@ -726,8 +907,20 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     }
     let held = unrouted.get(stream)
     if (!held) {
-      if (unrouted.size >= MAX_UNROUTED_STREAMS) return
-      held = { events: [], lost: 0, lostAt: 0 }
+      // Whatever has been sitting here longer than a call may take is not
+      // waiting for an answer any more: the call that would have claimed it has
+      // already been failed. Dropped here rather than on a timer of its own,
+      // because this is the only moment the room is needed.
+      if (unrouted.size >= MAX_UNROUTED_STREAMS) expireHolds()
+      if (unrouted.size >= MAX_UNROUTED_STREAMS) {
+        // Still full of streams that may yet be claimed, so this one gets no
+        // buffer — but it does get counted. What it loses is output the pane
+        // printed and this side will never show, which is the same fact the
+        // event bound below writes down, and it is owed the same `elided`.
+        tally(stream, event, sequence)
+        return
+      }
+      held = { events: [], lost: 0, lostAt: 0, opened: startTimedWindow(options.scheduler) }
       unrouted.set(stream, held)
     }
     if (held.events.length >= MAX_UNROUTED_EVENTS) {
@@ -761,12 +954,17 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // trip that asked for them, and arriving late here must not make a frame
     // look later than it was.
     const held = unrouted.get(subscription)
+    // A stream that was refused a buffer still knows what it cost, and that is
+    // the whole reason the tally exists: there is nothing to replay, and saying
+    // so is not the same as saying nothing.
+    const lost = held ?? overflowed.get(subscription)
     unrouted.delete(subscription)
+    overflowed.delete(subscription)
     // In front of what outlived it, because that is where the hole is: what went
     // was in front of everything still here. It carries the sequence of the
     // first frame dropped, so a reader joining by frame order places the hole
     // where it happened rather than at the boundary it happens to be read at.
-    if (held !== undefined && held.lost > 0) onEvent({ type: 'elided', bytes: held.lost }, held.lostAt)
+    if (lost !== undefined && lost.lost > 0) onEvent({ type: 'elided', bytes: lost.lost }, lost.lostAt)
     for (const { event, sequence } of held?.events ?? []) onEvent(event, sequence)
     return () => {
       routes.delete(subscription)
@@ -849,9 +1047,23 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       ...(options.onRemoteWrite ? { onRemoteWrite: options.onRemoteWrite } : {}),
       ...(options.onRemoteRead ? { onRemoteRead: options.onRemoteRead } : {}),
       scheduler: options.scheduler,
-      onFatal: () => {
+      onFatal: (failure) => {
         // A Noise stream with a hole in it is over: there is no point it could
         // be picked up from, so the socket goes and the link rebuilds.
+        //
+        // What the reader is told about it depends on which failure it was. A
+        // frame that did not authenticate is the relay's one symptom, and the
+        // close that follows would otherwise re-enter `onClosed` with both
+        // `confirmed` and `paired` true and come out as "your teammate's
+        // machine dropped the connection" — the sentence for a socket that
+        // closed, aimed at the only party here nothing has been established
+        // about. Recorded before the close rather than after it, so `onClosed`
+        // finds the verdict already made.
+        if (failure.kind === 'unauthenticated') {
+          refusedThisAttempt = true
+          unauthenticatedThisAttempt = true
+          moveTo('refused', UNAUTHENTICATED_DETAIL)
+        }
         connection?.close(1000, '')
       },
       onError: options.onError
@@ -887,6 +1099,8 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     /** Whether this attempt still owns the link. See `generation`. */
     const stale = (): boolean => mine !== generation
     refusedThisAttempt = false
+    unauthenticatedThisAttempt = false
+    stalledThisAttempt = false
     rolledOverThisAttempt = false
     silentThisAttempt = false
     wakePending = false
@@ -941,6 +1155,13 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
           // Somebody answered here, so whatever the wait was, it was not this.
           rolloversWaiting = 0
           heardThenSilent = false
+          // And the screen has to stop saying it. "Nobody has answered on this
+          // rendezvous yet" was left standing for the whole fifteen seconds of
+          // the handshake, contradicted by the relay in the same breath that
+          // started it: somebody has answered, and the two are now agreeing
+          // keys. That is what `connecting` means here, exactly as it does for
+          // the unconfirmed window after the handshake parses.
+          moveTo('connecting', sleptWithoutAnswer ? WOKE_DETAIL : undefined)
           runHandshake(initiator, token)
         },
         onBinary: (payload) => {

@@ -26,11 +26,18 @@ import { isNewerPresence, linkIdFor, parsePeerPresence } from './peerService'
 import { normaliseRemote, projectKeyFor } from './projectKey'
 import {
   createPeerLink,
+  BACKOFF_CEILING_MS,
+  HANDSHAKE_STALLED_DETAIL,
   HANDSHAKE_TIMEOUT_MS,
+  HEALTHY_SESSION_MS,
   KEEPALIVE_MS,
   MAX_UNROUTED_EVENTS,
+  MAX_UNROUTED_STREAMS,
+  RECONNECT_FLOOR_MS,
   SILENCE_TIMEOUT_MS,
   SILENT_PEER_DETAIL,
+  STOPPED_RETRY_MS,
+  UNAUTHENTICATED_DETAIL,
   WAITING_DETAIL,
   WAITING_TOO_LONG_DETAIL,
   WOKE_DETAIL,
@@ -44,7 +51,7 @@ import { createDispatcher } from '../../runtime/dispatcher'
 import { MethodRegistry } from '../../runtime/methodRegistry'
 import { createRuntimeContext } from '../../runtime/runtimeContext'
 import { SubscriptionHub, type SubscriptionChannel } from '../../runtime/subscriptionHub'
-import { MAX_PEER_SUBSCRIPTIONS, STREAM_FLUSH_MS } from '../../runtime/peerTransport'
+import { MAX_PEER_SUBSCRIPTIONS, PEER_CALL_TIMEOUT_MS, STREAM_FLUSH_MS } from '../../runtime/peerTransport'
 import { MAX_CACHED_PANES, MAX_CACHED_TEXT, MAX_CACHED_WORKTREES } from '../../store/teammateCache'
 import { loadStaticPrivateKey } from '../identity'
 import { epochAt, rendezvousId, rendezvousToken, sharedSecret } from './rendezvous'
@@ -206,6 +213,42 @@ function muteAfterHandshake(dial: RelayDialer): RelayDialer {
         if (sent === 1) socket.sendBinary(payload)
       },
       close: (code, reason) => socket.close(code, reason)
+    }
+  }
+}
+
+/**
+ * A relay that changes one byte of one frame on its way through.
+ *
+ * The single observable symptom of the component the threat model says not to
+ * trust. A relay that flips a bit, replays a frame, drops one or reorders two
+ * produces exactly this on the far side — a frame that does not authenticate —
+ * and nothing else it can do produces it. The bit is flipped in a frame this
+ * side *sends*, because the relay is what sits between the two sockets.
+ */
+function relayThatChangesAByte(): { wrap: (dial: RelayDialer) => RelayDialer; arm: () => void } {
+  let armed = false
+  return {
+    arm: () => {
+      armed = true
+    },
+    wrap: (dial) => (url, handlers) => {
+      const socket = dial(url, handlers)
+      return {
+        sendText: (text) => socket.sendText(text),
+        sendBinary: (payload) => {
+          if (!armed) {
+            socket.sendBinary(payload)
+            return
+          }
+          armed = false
+          const changed = Uint8Array.from(payload)
+          const last = changed.length - 1
+          if (last >= 0) changed[last] = (changed[last] ?? 0) ^ 0x01
+          socket.sendBinary(changed)
+        },
+        close: (code, reason) => socket.close(code, reason)
+      }
     }
   }
 }
@@ -969,6 +1012,184 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
   })
 })
 
+/**
+ * Lets one session run long enough to count as healthy, has the relay break it,
+ * and returns how long the link then waited before it was back.
+ *
+ * The clock's jitter is fixed at 1, so the wait is the backoff itself and two
+ * of these can be compared.
+ */
+async function breakOneSession(pair: Pair, middle: { arm: () => void }): Promise<number> {
+  await pair.scheduler.advance(HEALTHY_SESSION_MS)
+  middle.arm()
+  await pair.scheduler.advance(KEEPALIVE_MS)
+  expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
+
+  let waited = 0
+  while (waited < BACKOFF_CEILING_MS) {
+    await pair.scheduler.advance(RECONNECT_FLOOR_MS)
+    waited += RECONNECT_FLOOR_MS
+    if (linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase === 'connected') break
+  }
+  return waited
+}
+
+describe('a frame that does not authenticate', () => {
+  it('does not report the relay corrupting a frame as the teammate dropping the connection', async () => {
+    // The relay is the component that is not trusted, and a frame that fails to
+    // authenticate is the one symptom it has. Calling that "your teammate's
+    // machine dropped the connection" points the reader at the only party the
+    // code has established nothing about.
+    const middle = relayThatChangesAByte()
+    const pair = await pairOfRuntimes({ bobDial: middle.wrap })
+    await connect(pair)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+
+    middle.arm()
+    await pair.scheduler.advance(KEEPALIVE_MS)
+
+    const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(link?.detail).not.toBe('your teammate’s machine dropped the connection')
+    expect(link?.detail).toBe(UNAUTHENTICATED_DETAIL)
+  })
+
+  it('leaves the operator a trace of it, rather than swallowing the reason', async () => {
+    // A relay quietly corrupting every session is indistinguishable, from the
+    // outside, from a teammate with a bad network — unless the reason reaches
+    // somewhere it can be read.
+    const middle = relayThatChangesAByte()
+    const pair = await pairOfRuntimes({ bobDial: middle.wrap })
+    await connect(pair)
+
+    middle.arm()
+    await pair.scheduler.advance(KEEPALIVE_MS)
+
+    const said = pair.alice.errors().map((error) => (error instanceof Error ? error.message : String(error)))
+    expect(said.some((message) => /authentication failed/.test(message))).toBe(true)
+  })
+
+  it('makes a relay that corrupts every session pay more each time, not once a second forever', async () => {
+    // Each of these sessions ran a full `HEALTHY_SESSION_MS` before the relay
+    // broke it, which is what used to buy the backoff its reset: the next dial
+    // came a second later, every time, for ever. That is a fresh X25519
+    // handshake per second per link for as long as the relay cares to keep
+    // corrupting one frame, while the screen blamed the teammate for it. A
+    // session something in the middle broke is not a session that worked,
+    // whatever the clock says about its length.
+    const middle = relayThatChangesAByte()
+    const pair = await pairOfRuntimes({ bobDial: middle.wrap })
+    await connect(pair)
+
+    const first = await breakOneSession(pair, middle)
+    const second = await breakOneSession(pair, middle)
+
+    expect(first).toBeGreaterThanOrEqual(RECONNECT_FLOOR_MS)
+    expect(second).toBeGreaterThan(first)
+  })
+})
+
+describe('a rendezvous that paired and then went nowhere', () => {
+  /** Pairs the two peers on the relay and lets nothing binary through. */
+  async function pairedButHeld(): Promise<Pair> {
+    const pair = await pairOfRuntimes()
+    await pair.alice.service.start()
+    await pair.bob.service.start()
+    pair.relay.holdContent()
+    await pair.scheduler.advance(0)
+    return pair
+  }
+
+  it('stops saying nobody has answered once the relay has said somebody has', async () => {
+    // The relay sends `paired` and this side goes on showing the sentence for
+    // an empty rendezvous for the whole fifteen seconds of the handshake. The
+    // teammate is right there, and the one place that says otherwise is the
+    // screen of the person waiting for them.
+    const pair = await pairedButHeld()
+
+    const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(link?.detail).not.toBe(WAITING_DETAIL)
+  })
+
+  it('does not call a handshake that never finished a teammate dropping the connection', async () => {
+    // A relay that pairs two peers and then withholds their frames — which is
+    // what a replayer looks like from here — ran out the handshake deadline,
+    // and this side closed its own socket to end it. That close came back
+    // `paired`, so it was read as the teammate hanging up. Nobody hung up:
+    // nothing ever arrived.
+    const pair = await pairedButHeld()
+
+    await pair.scheduler.advance(HANDSHAKE_TIMEOUT_MS)
+
+    const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(link?.detail).not.toBe('your teammate’s machine dropped the connection')
+    expect(link?.detail).toBe(HANDSHAKE_STALLED_DETAIL)
+  })
+
+  it('still says the teammate dropped when a connected link really is hung up on', async () => {
+    // The fix must not become a way of never saying it. Bob connects properly
+    // and then his process goes.
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+
+    pair.bob.service.stop()
+    await pair.scheduler.advance(100)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBe('your teammate’s machine dropped the connection')
+  })
+})
+
+describe('a close the relay sends for a condition of its own', () => {
+  it('comes back from a 4008 instead of losing the teammate until the app restarts', async () => {
+    // 4008 is documented as a protocol error, and the relay also sends it when
+    // its own pairing table cannot read the other socket's attachment — a
+    // condition inside the relay that this client had no part in and cannot
+    // tell apart from the documented one. The link stopped for good on it, and
+    // nothing ever revived it: `reconcile()` skips a link it already holds on
+    // an unchanged relay, so the teammate was gone until the app was restarted.
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+
+    pair.relay.closeAll(RelayCloseCode.Protocol, 'no partner for a paired connection')
+    await pair.scheduler.advance(0)
+    // Still recorded, and still reported, because the operator needs to know it
+    // happened. What changed is that it is no longer for ever.
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('stopped')
+
+    await pair.scheduler.advance(STOPPED_RETRY_MS)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
+  })
+
+  it('waits a long time before doing so, so a relay that means it is not hammered', async () => {
+    // The other half. These three codes are the ones a reconnect cannot fix on
+    // its own, so coming back must cost a great deal more than an ordinary
+    // drop: this is a link looking again in case somebody fixed the relay, not
+    // a link retrying.
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+
+    pair.relay.closeAll(RelayCloseCode.Protocol, 'no partner for a paired connection')
+    await pair.scheduler.advance(0)
+
+    await pair.scheduler.advance(BACKOFF_CEILING_MS)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('stopped')
+  })
+
+  it('does not go on blaming a frame this client sent, which it cannot know', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+
+    pair.relay.closeAll(RelayCloseCode.Protocol, 'no partner for a paired connection')
+    await pair.scheduler.advance(0)
+
+    const detail = linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail ?? ''
+    expect(detail).not.toBe('the relay refused a frame this client sent')
+    // Both of the things it could be, because this end cannot tell them apart.
+    expect(detail).toContain('this client sent')
+    expect(detail).toContain('its own record')
+  })
+})
+
 describe('what a dropped session costs the side it dropped on', () => {
   it('makes a teammate who confirms and drops in a loop pay for the loop', async () => {
     const pair = await pairOfRuntimes()
@@ -1153,6 +1374,107 @@ describe('what a stream costs before anybody has claimed it', () => {
 
     stop()
     pair.bob.subscriptions.unsubscribe(connection, subscription)
+    alice.link.stop()
+  })
+})
+
+describe('what a stream costs when there are already too many of them', () => {
+  /**
+   * A link of Alice's onto Bob, plus a way of opening streams on Bob that
+   * Alice has not routed — the window every subscription opens with.
+   */
+  async function rigWithStreams(pair: Pair): Promise<{
+    alice: { link: PeerLink; phase: () => string }
+    open: () => { id: string; emit: (event: unknown) => void; end: () => void }
+  }> {
+    await pair.bob.service.start()
+    await pair.scheduler.advance(0)
+    const alice = await rawLink({
+      relay: pair.relay,
+      scheduler: pair.scheduler,
+      dataDir: pair.alice.dataDir,
+      remotePublicKey: pair.bobKey,
+      handle: 'alice'
+    })
+    expect(alice.phase()).toBe('connected')
+    const connection = linkIdFor(pair.aliceKey, projectKeyFor(normaliseRemote(ORIGIN)!))
+    return {
+      alice,
+      open: () => {
+        let channel: SubscriptionChannel | undefined
+        const id = pair.bob.subscriptions.subscribe(connection, (opened) => {
+          channel = opened
+          return () => {}
+        })
+        return {
+          id,
+          emit: (event) => channel?.emit(event as never),
+          end: () => pair.bob.subscriptions.unsubscribe(connection, id)
+        }
+      }
+    }
+  }
+
+  it('says what it lost when a stream arrives past the stream bound, instead of nothing', async () => {
+    // The event bound one line above this one is honest: it drops the oldest
+    // frames and hands whoever claims the stream an `elided` saying how much
+    // went. The *stream* bound was not. Past sixteen unclaimed streams the
+    // seventeenth was dropped with nothing written down, so `route` found no
+    // entry, emitted no `elided`, and the watcher silently missed the head of
+    // the pane it had just asked for.
+    const pair = await pairOfRuntimes()
+    const { alice, open } = await rigWithStreams(pair)
+
+    const streams = Array.from({ length: MAX_UNROUTED_STREAMS + 1 }, () => open())
+    const chunk = 'y'.repeat(32)
+    for (const stream of streams) {
+      stream.emit({ type: 'data', data: chunk })
+      await pair.scheduler.advance(STREAM_FLUSH_MS)
+    }
+
+    const last = streams[streams.length - 1]!
+    const events: unknown[] = []
+    const stop = alice.link.route(last.id, (event) => events.push(event))
+
+    expect(events[0]).toEqual({ type: 'elided', bytes: chunk.length })
+
+    stop()
+    for (const stream of streams) stream.end()
+    alice.link.stop()
+  })
+
+  it('lets go of a stream nobody ever claimed, so a later one is not punished for it', async () => {
+    // An `unrouted` entry was only ever removed by `route`, and `route` is only
+    // reached when the subscribe answer that names the stream comes back. A
+    // `terminal.subscribe` that times out never learns the id, never routes and
+    // never unsubscribes — so the far side goes on streaming that pane for the
+    // life of the link and the entry holds one of the sixteen slots for ever.
+    // Enough of those and every later stream loses its head silently.
+    const pair = await pairOfRuntimes()
+    const { alice, open } = await rigWithStreams(pair)
+
+    const abandoned = Array.from({ length: MAX_UNROUTED_STREAMS }, () => open())
+    const chunk = 'z'.repeat(32)
+    for (const stream of abandoned) {
+      stream.emit({ type: 'data', data: chunk })
+      await pair.scheduler.advance(STREAM_FLUSH_MS)
+    }
+
+    // Past the longest a call may take to be answered: nothing is coming to
+    // claim these, and the slots are the only thing they still hold.
+    await pair.scheduler.advance(PEER_CALL_TIMEOUT_MS)
+
+    const wanted = open()
+    wanted.emit({ type: 'data', data: chunk })
+    await pair.scheduler.advance(STREAM_FLUSH_MS)
+
+    const events: unknown[] = []
+    const stop = alice.link.route(wanted.id, (event) => events.push(event))
+    // Whole: its head is there and there is no hole in front of it.
+    expect(events).toEqual([{ type: 'data', data: chunk }])
+
+    stop()
+    for (const stream of [...abandoned, wanted]) stream.end()
     alice.link.stop()
   })
 })
