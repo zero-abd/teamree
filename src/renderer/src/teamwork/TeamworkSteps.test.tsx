@@ -15,7 +15,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
-import { TeamworkSteps, type TeamworkStepsProps } from './StartTeamworkDialog'
+import { TeamworkSteps, type TeamworkStepsProps } from './TeamworkSteps'
 import { ADD_KEY_BUTTON, KEY_GRANT_WARNING } from './startTeamwork'
 import { teamworkSummary } from '../sidebar/teamworkSummary'
 
@@ -237,16 +237,25 @@ describe('each step says whether it is done', () => {
 })
 
 describe('choosing a relay', () => {
-  it('shows all four ways to get one, with their costs, to whoever has none', () => {
+  // Four ways presented as equals is a decision handed to the one person in the
+  // room least able to take it — and `relay/README.md` has always said which
+  // one to take. Two are on the page; the rest are a button away.
+  it('leads with the Worker and keeps one fallback, with their costs', () => {
     const shown = text(render())
     expect(shown).toContain('Deploy the Worker to your team’s own Cloudflare account')
+    expect(shown).toContain('Recommended')
     expect(shown).toContain('A tunnel to a relay on your own machine')
-    expect(shown).toContain('A mesh VPN, or a box on the LAN')
-    expect(shown).toContain('A VPS you rent')
-    expect(shown).toContain('npm run deploy')
+    expect(shown).toContain('/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy')
     expect(shown).toContain('cloudflared tunnel --url http://localhost:8787')
     expect(shown).toMatch(/Effort/)
     expect(shown).toMatch(/Money/)
+  })
+
+  it('does not put the other two in front of anybody who has not asked for them', () => {
+    const shown = text(render())
+    expect(shown).not.toContain('A mesh VPN, or a box on the LAN')
+    expect(shown).not.toContain('A VPS you rent')
+    expect(shown).toContain('Other ways to get a relay')
   })
 
   it('says which addresses are stable enough to commit and which belong in the override', () => {

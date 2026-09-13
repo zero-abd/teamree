@@ -179,6 +179,11 @@ describe('step 3, the team’s relay', () => {
     expect(overridden.summary).toMatch(/per-machine and dies with this process/)
   })
 
+  it('ranks them rather than listing them, with exactly one to take and one to fall back on', () => {
+    expect(RELAY_OPTIONS.map((option) => option.tier)).toEqual(['lead', 'fallback', 'more', 'more'])
+    expect(RELAY_OPTIONS.filter((option) => option.tier === 'lead').map((option) => option.id)).toEqual(['worker'])
+  })
+
   it('offers four ways to get one, each saying whether its address is stable enough to commit', () => {
     expect(RELAY_OPTIONS.map((option) => option.id)).toEqual(['worker', 'tunnel', 'mesh', 'vps'])
     // The tunnel is the one that must not be committed: it changes every time
@@ -196,15 +201,29 @@ describe('step 3, the team’s relay', () => {
     }
   })
 
-  // Every option starts `cd relay`, and `relay/` is only in a checkout of
-  // teamree: an installation from the .dmg ships neither the directory nor the
-  // README, so the four options land a person in a directory they do not have.
-  // Said once, in the lead, rather than four times in the commands.
+  // Where the commands run stopped being one answer: the Worker deploy ships
+  // inside teamree and needs no clone, and the container ones cannot work
+  // without one because the Dockerfile is in it. A panel that gave the old
+  // single answer would send half its readers to a directory they do not have,
+  // so the two halves are checked against the document that owns them.
   it('says where the commands run, in the panel and in relay/README.md', () => {
-    expect(RELAY_LEAD).toMatch(/clone of the teamree repository/)
-    for (const option of RELAY_OPTIONS) expect(option.commands.startsWith('cd relay')).toBe(true)
     const readme = readFileSync(new URL('../../../../relay/README.md', import.meta.url), 'utf8')
-    expect(readme.slice(0, readme.indexOf('cd relay'))).toMatch(/clone of the teamree repository/)
+
+    // The copy inside the installed app, because that is where somebody is
+    // reading this. Telling them to cd into a directory the app does not have
+    // is the failure this whole panel exists downstream of.
+    const worker = RELAY_OPTIONS.find((option) => option.id === 'worker')!
+    expect(worker.commands).toBe('/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy')
+    expect(readme).toContain(worker.commands)
+    expect(worker.effort).toMatch(/from a clone of teamree the same command is relay\/teamree-relay deploy/)
+    expect(RELAY_LEAD).toMatch(/ships with teamree and needs no\s+clone/)
+    expect(readme).toMatch(/no clone of this repository/i)
+
+    for (const option of RELAY_OPTIONS.filter((entry) => entry.id !== 'worker')) {
+      expect(option.commands.startsWith('cd relay')).toBe(true)
+    }
+    expect(RELAY_LEAD).toMatch(/clone of the teamree repository/)
+    expect(readme).toMatch(/does need a clone of this repository/)
   })
 
   it('does not promise the Worker is free, because relay/README.md does not', () => {

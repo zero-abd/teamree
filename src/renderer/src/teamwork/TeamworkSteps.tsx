@@ -18,15 +18,15 @@
 //
 // **It does not pick a relay for you either.** A bare URL field assumes the
 // person already knows what to paste, and the one thing certainly true of
-// somebody opening this for the first time is that they do not. So the four
-// real ways to get one are listed with what each costs — and, because that is
-// the half teamree actually cares about, whether the address it produces is
-// stable enough to commit or belongs in the environment override.
+// somebody opening this for the first time is that they do not. What it does
+// now is rank: one recommendation, one fallback, and the two that are somebody
+// else's infrastructure behind a disclosure. Four options presented as equals
+// was a decision handed to the one person in the room least able to take it.
 //
 // The roster, the relay panel and the push commands were already here; they are
 // the same panels, under the steps that say why each one matters.
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   UNWATCHED_TEAMREE_LAG,
   type Member,
@@ -35,15 +35,17 @@ import {
   type RelaySetting,
   type TeamworkStatus
 } from '@shared/entities'
-import { Modal } from './Modal'
 import {
   ADD_KEY_BUTTON,
   checkRelayDraft,
   KEY_GRANT_WARNING,
   memberFilePreview,
   pushPlan,
+  MORE_RELAYS_BUTTON,
+  MORE_RELAYS_LEAD,
   RELAY_LEAD,
   RELAY_OPTIONS,
+  type RelayOption,
   shortKey,
   startTeamworkFlow,
   type RelayDraftCheck,
@@ -52,70 +54,6 @@ import {
   type StartTeamworkStep,
   type StepMark
 } from './startTeamwork'
-import { useWorkspaceStore } from '../state/workspaceStore'
-
-export function StartTeamworkDialog({ projectId }: { projectId: string }): React.JSX.Element {
-  const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === projectId))
-  const list = useWorkspaceStore((state) => state.members[projectId])
-  const relay = useWorkspaceStore((state) => state.relays[projectId])
-  const status = useWorkspaceStore((state) => state.teamwork[projectId])
-  const readErrors = useWorkspaceStore((state) => state.teamworkReadErrors[projectId])
-  const membersPending = useWorkspaceStore((state) => state.membersPending)
-  const membersError = useWorkspaceStore((state) => state.membersError)
-  const relayPending = useWorkspaceStore((state) => state.relayPending)
-  const relayError = useWorkspaceStore((state) => state.relayError)
-  const loadMembers = useWorkspaceStore((state) => state.loadMembers)
-  const loadRelay = useWorkspaceStore((state) => state.loadRelay)
-  const loadTeamwork = useWorkspaceStore((state) => state.loadTeamwork)
-  const setRelay = useWorkspaceStore((state) => state.setRelay)
-  const joinProject = useWorkspaceStore((state) => state.joinProject)
-  const clearMembersError = useWorkspaceStore((state) => state.clearMembersError)
-  const closeDialog = useWorkspaceStore((state) => state.closeDialog)
-
-  // All three read on open. The runtime watches `.teamree` and says when it
-  // moves, so this is belt and braces rather than the only way any of them is
-  // refreshed — and it is what covers a project whose watch could not be set up.
-  useEffect(() => {
-    void loadMembers(projectId)
-    void loadRelay(projectId)
-    void loadTeamwork(projectId)
-  }, [loadMembers, loadRelay, loadTeamwork, projectId])
-
-  return (
-    <Modal
-      title="Start teamwork"
-      description={`Everyone who can push to ${project?.name ?? 'this repository'} is on the team. Their keys are in it.`}
-      onClose={closeDialog}
-    >
-      <div className="teamwork-setup">
-        <TeamworkSteps
-          projectPath={project?.path}
-          list={list}
-          relay={relay}
-          status={status}
-          membersPending={membersPending}
-          membersError={membersError}
-          relayPending={relayPending}
-          relayError={relayError}
-          readErrors={readErrors ?? {}}
-          onJoin={(handle) => void joinProject(projectId, handle)}
-          onClearMembersError={clearMembersError}
-          onSetRelay={(url) => void setRelay(projectId, url)}
-          onRetry={(read) => {
-            if (read === 'list') void loadMembers(projectId)
-            else if (read === 'relay') void loadRelay(projectId)
-            else void loadTeamwork(projectId)
-          }}
-        />
-        <div className="form__actions">
-          <button type="button" className="button" onClick={closeDialog}>
-            Close
-          </button>
-        </div>
-      </div>
-    </Modal>
-  )
-}
 
 export type TeamworkStepsProps = {
   /**
@@ -455,45 +393,91 @@ function RelayRefusal({
 }
 
 /**
- * The four ways a team actually gets a relay, with their costs.
+ * How a team gets a relay: the one to take, the one to fall back on, and a way
+ * to reach the rest without having to read them.
  *
  * Shown only to somebody who has none, because a joiner has no decision to
  * make: their relay arrives in the repository, and this is a wall of choices
- * about a thing already chosen.
+ * about a thing already chosen. And ranked rather than listed, because the wall
+ * was the problem — `relay/README.md` has always said to take the Worker unless
+ * you have a reason not to, and a panel that showed four equals was refusing to
+ * pass that sentence on.
+ *
+ * The folded two are a button with `aria-expanded` rather than a `details`
+ * element: what is inside is not rendered until it is asked for, so it is
+ * absent from the page rather than merely hidden, and nothing can read out or
+ * tab into an option nobody opened.
  */
 function RelayOptions(): React.JSX.Element {
+  const [showMore, setShowMore] = useState(false)
+  const lead = RELAY_OPTIONS.filter((option) => option.tier !== 'more')
+  const more = RELAY_OPTIONS.filter((option) => option.tier === 'more')
+
   return (
     <div className="relay-options">
       <p className="relay-options__lead">{RELAY_LEAD}</p>
       <ul className="relay-options__list">
-        {RELAY_OPTIONS.map((option) => (
-          <li key={option.id} className="relay-option">
-            <p className="relay-option__name">{option.name}</p>
-            <p className="relay-option__what">{option.what}</p>
-            <pre className="relay-option__commands">{option.commands}</pre>
-            <dl className="relay-option__costs">
-              <div>
-                <dt>Effort</dt>
-                <dd>{option.effort}</dd>
-              </div>
-              <div>
-                <dt>Money</dt>
-                <dd>{option.money}</dd>
-              </div>
-              <div>
-                <dt>Address</dt>
-                <dd>{option.address}</dd>
-              </div>
-            </dl>
-            <p className={`relay-option__keep relay-option__keep--${option.keep}`}>
-              {option.keep === 'commit'
-                ? 'Stable enough to commit: paste it below and push .teamree/relay.'
-                : 'Too short-lived to commit: use TEAMREE_RELAY_URL instead, and leave .teamree/relay alone.'}
-            </p>
-          </li>
+        {lead.map((option) => (
+          <RelayOptionCard key={option.id} option={option} />
         ))}
       </ul>
+      <div className="relay-options__more">
+        <button
+          type="button"
+          className="button button--small"
+          aria-expanded={showMore}
+          onClick={() => setShowMore((open) => !open)}
+        >
+          <span className="disclosure__caret" aria-hidden="true">
+            {showMore ? '▾' : '▸'}
+          </span>
+          {MORE_RELAYS_BUTTON}
+        </button>
+        {showMore ? (
+          <>
+            <p className="relay-options__lead">{MORE_RELAYS_LEAD}</p>
+            <ul className="relay-options__list">
+              {more.map((option) => (
+                <RelayOptionCard key={option.id} option={option} />
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </div>
     </div>
+  )
+}
+
+/** One way to get a relay, with what it costs and where its address belongs. */
+function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element {
+  return (
+    <li className={`relay-option relay-option--${option.tier}`}>
+      <p className="relay-option__name">
+        {option.name}
+        {option.tier === 'lead' ? <span className="relay-option__tier">Recommended</span> : null}
+      </p>
+      <p className="relay-option__what">{option.what}</p>
+      <pre className="relay-option__commands">{option.commands}</pre>
+      <dl className="relay-option__costs">
+        <div>
+          <dt>Effort</dt>
+          <dd>{option.effort}</dd>
+        </div>
+        <div>
+          <dt>Money</dt>
+          <dd>{option.money}</dd>
+        </div>
+        <div>
+          <dt>Address</dt>
+          <dd>{option.address}</dd>
+        </div>
+      </dl>
+      <p className={`relay-option__keep relay-option__keep--${option.keep}`}>
+        {option.keep === 'commit'
+          ? 'Stable enough to commit: paste it below and push .teamree/relay.'
+          : 'Too short-lived to commit: use TEAMREE_RELAY_URL instead, and leave .teamree/relay alone.'}
+      </p>
+    </li>
   )
 }
 

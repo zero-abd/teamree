@@ -135,6 +135,16 @@ kbd {
   color: var(--fg);
 }
 
+/* The one or two actions a screen exists for, when that screen is otherwise
+   empty. Bigger than a toolbar button because it is not in a toolbar: it is
+   the answer to "what do I do here", and it has to look like one. */
+.button--lead {
+  padding: 9px var(--s5);
+  border-radius: var(--r2);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
 .button--small {
   padding: 3px 9px;
   font-size: var(--text-sm);

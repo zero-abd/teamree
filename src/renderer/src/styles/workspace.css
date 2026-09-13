@@ -171,6 +171,10 @@
 .placeholder {
   display: flex;
   flex: 1;
+  /* The empty workspace centres its children, which left this shrink-to-fit —
+     and a shrink-to-fit column is as wide as its widest paragraph, so anything
+     laid out across it had nothing to lay out across. */
+  align-self: stretch;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -196,11 +200,42 @@
   color: var(--fg-secondary);
 }
 
+/* The two things somebody opens this app to do, side by side, each with the
+   one sentence that says what pressing it will actually do. Wraps rather than
+   scrolls: a narrow window stacks them, and neither is ever cut in half. */
+.starters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s4) var(--s5);
+  /* Explicit rather than shrink-to-fit: a wrapping flex container's max-content
+     width is its widest item, not the sum, so left to itself this column always
+     stacked the two — which is the arrangement meant for a narrow window. */
+  width: 100%;
+  max-width: 620px;
+  margin-top: var(--s2);
+}
+
+.starter {
+  display: flex;
+  flex: 0 1 260px;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.starter__note {
+  max-width: 34ch;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .legend {
   display: grid;
-  grid-template-columns: repeat(2, auto);
+  grid-template-columns: repeat(3, auto);
   gap: var(--s2) var(--s5);
-  margin-top: var(--s3);
+  margin-top: var(--s4);
   padding-top: var(--s4);
   border-top: 1px solid var(--line);
 }

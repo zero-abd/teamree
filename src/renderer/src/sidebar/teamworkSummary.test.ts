@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { PeerLink, TeamworkStatus } from '@shared/entities'
-import { ADD_KEY_BUTTON } from '../dialogs/startTeamwork'
+import { ADD_KEY_BUTTON } from '../teamwork/startTeamwork'
 import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
 
 function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {

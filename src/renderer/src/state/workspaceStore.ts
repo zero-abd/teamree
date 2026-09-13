@@ -39,7 +39,6 @@ import { readStoredSession, sessionChanged, writeStoredSession } from './storedS
 export type DialogState =
   | { kind: 'add-project' }
   | { kind: 'install-cli' }
-  | { kind: 'start-teamwork'; projectId: string }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
   /** Raised only when the runtime has already refused: there is something here to lose. */
@@ -212,6 +211,17 @@ type WorkspaceState = {
    * and every way out of it is a way of going somewhere.
    */
   dashboardOpen: boolean
+  /**
+   * Which project's teamwork setup has the main area, or null.
+   *
+   * Setting teamwork up used to be a modal, and a modal is the wrong shape for
+   * it: it is a multi-step task with commands to copy and files to commit, read
+   * against a repository rather than answered in a sentence. It takes the whole
+   * main area now, the way the pane board does, and for the same reason — it is
+   * about a project rather than about the worktree that happens to be open, so
+   * binding it to that tab would be the wrong frame.
+   */
+  teamworkProjectId: string | null
 
   sidebarWidth: number
   sidebarVisible: boolean
@@ -314,6 +324,10 @@ type WorkspaceState = {
 
   toggleProject: (projectId: string) => void
   toggleDashboard: () => void
+  /** Gives the main area to one project's teamwork setup. */
+  openTeamwork: (projectId: string) => void
+  /** Gives it back, to whatever the window was showing before. */
+  closeTeamwork: () => void
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
   openDialog: (dialog: NonNullable<DialogState>) => void
@@ -792,6 +806,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     openWorktreeIds: [],
     activeWorktreeId: null,
     dashboardOpen: false,
+    teamworkProjectId: null,
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
     sidebarVisible: lastSession.sidebarVisible,
@@ -987,7 +1002,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         activeWorktreeId: worktreeId,
         // Opening a worktree is the answer the dashboard was open to ask for,
         // whichever surface asked it — a row, a tab, the sidebar, the palette.
+        // The teamwork view goes for the same reason: somebody who has picked a
+        // worktree has asked to be somewhere else.
         dashboardOpen: false,
+        teamworkProjectId: null,
         openWorktreeIds: state.openWorktreeIds.includes(worktreeId)
           ? state.openWorktreeIds
           : [...state.openWorktreeIds, worktreeId],
@@ -1404,13 +1422,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     toggleDashboard() {
-      set((state) => ({ dashboardOpen: !state.dashboardOpen }))
+      // Two views, one main area: whichever is asked for takes it.
+      set((state) => ({ dashboardOpen: !state.dashboardOpen, teamworkProjectId: null }))
     },
 
     toggleSidebar() {
       set((state) => ({ sidebarVisible: !state.sidebarVisible }))
       // Bringing the sidebar back brings every expanded row with it.
       if (get().sidebarVisible) readOnScreen()
+    },
+
+    openTeamwork(projectId) {
+      set({ teamworkProjectId: projectId, dashboardOpen: false })
+    },
+
+    closeTeamwork() {
+      set({ teamworkProjectId: null })
     },
 
     openDialog(dialog) {

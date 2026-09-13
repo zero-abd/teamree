@@ -12,7 +12,7 @@
 // The toolbar is here too, for the one claim on it that is a promise about
 // somebody's repository rather than a label: that Push never forces.
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Layout, Project, Worktree, WorktreeStatus } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
@@ -78,10 +78,21 @@ const openDialog = vi.fn()
 const pushActiveWorktree = vi.fn()
 const createTerminal = vi.fn()
 const startAgent = vi.fn()
+const openWorktree = vi.fn()
+const openTeamwork = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
-    { ...INITIAL, openDialog, pushActiveWorktree, createTerminal, startAgent, ...overrides },
+    {
+      ...INITIAL,
+      openDialog,
+      pushActiveWorktree,
+      createTerminal,
+      startAgent,
+      openWorktree,
+      openTeamwork,
+      ...overrides
+    },
     true
   )
 }
@@ -95,6 +106,8 @@ beforeEach(() => {
   pushActiveWorktree.mockReset()
   createTerminal.mockReset()
   startAgent.mockReset()
+  openWorktree.mockReset()
+  openTeamwork.mockReset()
   seed()
 })
 
@@ -145,6 +158,55 @@ describe('when there is nothing open', () => {
     expect(keys).toContain('⌘N')
     expect(keys).toContain('⌘K')
     expect(keys).toContain('⌘⇧D')
+  })
+
+  // What was here before: a heading, a sentence naming a chord, and a legend of
+  // six more. A reference card handed to somebody who has not yet done the
+  // thing it is a reference for. These are the two things the app is for.
+  it('offers a terminal and teamwork as buttons, not as chords to memorise', async () => {
+    seed({ projects: [project], worktrees: [worktree()] })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Open a terminal' }))
+    await waitFor(() => expect(createTerminal).toHaveBeenCalledWith('w1'))
+    // The tab first, then the pane in it: a pane nobody can see is not the
+    // thing that was asked for.
+    expect(openWorktree).toHaveBeenCalledWith('w1')
+    fireEvent.click(screen.getByRole('button', { name: 'Start teamwork' }))
+    expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p1')
+  })
+
+  it('says which worktree the terminal would open in, rather than making somebody guess', () => {
+    seed({ projects: [project], worktrees: [worktree()] })
+    mount()
+    const button = screen.getByRole('button', { name: 'Open a terminal' })
+    const described = document.getElementById(button.getAttribute('aria-describedby') ?? '')
+    expect(described?.textContent).toBe('A shell in Rewrite the pager, on rewrite-the-pager.')
+  })
+
+  // There is no terminal outside a worktree — that is the shape of the app —
+  // so with none to run one in, the button says what it will really do rather
+  // than opening a task composer somebody did not ask for.
+  it('says it will make a worktree first when there is none to run a terminal in', () => {
+    seed({ projects: [project] })
+    mount()
+    expect(screen.queryByRole('button', { name: 'Open a terminal' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open a terminal in a new worktree' }))
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
+    expect(createTerminal).not.toHaveBeenCalled()
+  })
+
+  // A worktree still being checked out has no directory to start a shell in.
+  it('does not offer a worktree that is not ready as somewhere to open one', () => {
+    seed({ projects: [project], worktrees: [worktree({ state: 'creating' })] })
+    mount()
+    expect(screen.getByRole('button', { name: 'Open a terminal in a new worktree' })).toBeTruthy()
+  })
+
+  it('shows the teamwork setup instead of any of that when it has the area', () => {
+    seed({ projects: [project], teamworkProjectId: 'p1' })
+    mount()
+    expect(screen.getByRole('main', { name: 'Set up teamwork in pager' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Nothing open' })).toBeNull()
   })
 
   it('shows the dashboard instead of any of that when it is open', () => {

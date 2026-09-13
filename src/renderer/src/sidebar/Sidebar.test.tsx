@@ -100,13 +100,28 @@ const theirWorktree = (handle: string, paneId: string) => ({
 
 const openDialog = vi.fn()
 const toggleProject = vi.fn()
+const openTeamwork = vi.fn()
+const closeTeamwork = vi.fn()
+const toggleDashboard = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
-  useWorkspaceStore.setState({ ...INITIAL, projects: [project], openDialog, toggleProject, ...overrides }, true)
+  useWorkspaceStore.setState(
+    {
+      ...INITIAL,
+      projects: [project],
+      openDialog,
+      toggleProject,
+      openTeamwork,
+      closeTeamwork,
+      toggleDashboard,
+      ...overrides
+    },
+    true
+  )
 }
 
 const mount = (): void => {
-  render(<Sidebar newWorktreeHint="⌘N" />)
+  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" />)
 }
 
 beforeEach(() => {
@@ -116,6 +131,9 @@ beforeEach(() => {
   watchPane.mockReturnValue(new Promise(() => {}))
   openDialog.mockReset()
   toggleProject.mockReset()
+  openTeamwork.mockReset()
+  closeTeamwork.mockReset()
+  toggleDashboard.mockReset()
   seed()
 })
 
@@ -195,10 +213,13 @@ describe('a project header', () => {
     expect(screen.queryByText(/Teamwork off|No teammates|refused/)).toBeNull()
   })
 
-  it('opens the setup panel from the header', () => {
+  // Named with the project, because the rail above the tree has an entry of
+  // the same name: two buttons reading "Teamwork" are one button to anybody
+  // listening rather than looking.
+  it('opens the setup view for the project it belongs to', () => {
     mount()
-    screen.getByRole('button', { name: 'Teamwork' }).click()
-    expect(openDialog).toHaveBeenCalledWith({ kind: 'start-teamwork', projectId: 'p1' })
+    screen.getByRole('button', { name: 'Teamwork in pager' }).click()
+    expect(openTeamwork).toHaveBeenCalledWith('p1')
   })
 
   it('starts a new task in the project the button belongs to', () => {
@@ -293,6 +314,64 @@ describe('the CLI offer', () => {
     })
     mount()
     expect(screen.queryByRole('button', { name: 'Put teamree on my PATH' })).toBeNull()
+  })
+})
+
+// Everything this window can show used to be reachable only from a chord or a
+// button buried in a project header. These are app-level places, so they sit
+// above the tree, and they have to say which one you are in without relying on
+// a colour.
+describe('the rail above the tree', () => {
+  it('is a landmark of its own, separate from the tree', () => {
+    mount()
+    expect(screen.getByRole('navigation', { name: 'Go to' })).toBeTruthy()
+  })
+
+  // A field that filters this list would be a second, weaker search beside the
+  // real one. This opens the real one.
+  it('sends search to the palette rather than pretending to be one', () => {
+    mount()
+    const search = screen.getByRole('button', { name: 'Search worktrees and commands' })
+    expect(search.textContent).toContain('⌘K')
+    search.click()
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'palette' })
+  })
+
+  it('goes to the teamwork setup for the project in hand', () => {
+    mount()
+    screen.getByRole('button', { name: 'Teamwork' }).click()
+    expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p1')
+  })
+
+  it('says which destination you are in, and not only in colour', () => {
+    seed({ teamworkProjectId: 'p1' })
+    mount()
+    expect(screen.getByRole('button', { name: 'Teamwork' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('button', { name: 'All panes' }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('comes back from a destination you are already in', () => {
+    seed({ teamworkProjectId: 'p1' })
+    mount()
+    screen.getByRole('button', { name: 'Teamwork' }).click()
+    expect(closeTeamwork).toHaveBeenCalledOnce()
+    expect(openTeamwork).not.toHaveBeenCalled()
+  })
+
+  it('goes to every pane in every worktree', () => {
+    mount()
+    screen.getByRole('button', { name: 'All panes' }).click()
+    expect(toggleDashboard).toHaveBeenCalledOnce()
+  })
+
+  // Teamwork is set up per repository. With none added the entry says why
+  // rather than doing nothing when pressed.
+  it('says why teamwork cannot be reached before a repository has been added', () => {
+    seed({ projects: [] })
+    mount()
+    const teamwork = screen.getByRole('button', { name: 'Teamwork' }) as HTMLButtonElement
+    expect(teamwork.disabled).toBe(true)
+    expect(teamwork.getAttribute('title')).toBe('Teamwork is set up per repository, and there is none here yet.')
   })
 })
 

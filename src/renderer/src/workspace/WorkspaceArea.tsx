@@ -1,12 +1,14 @@
 // The right-hand side: which worktree is open, what it is doing, and its panes.
 
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Dashboard } from '../dashboard/Dashboard'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { PaneTree } from '../panes/PaneTree'
+import { TeamworkView } from '../teamwork/TeamworkView'
 import { ChangesPanel } from './ChangesPanel'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { terminalTarget } from './terminalTarget'
 import { WorktreeTabs } from './WorktreeTabs'
 
 export function WorkspaceArea({
@@ -43,6 +45,27 @@ export function WorkspaceArea({
   const projects = useWorkspaceStore((state) => state.projects)
   const connection = useWorkspaceStore((state) => state.connection)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const worktrees = useWorkspaceStore((state) => state.worktrees)
+  const openWorktreeIds = useWorkspaceStore((state) => state.openWorktreeIds)
+  const openWorktree = useWorkspaceStore((state) => state.openWorktree)
+  const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
+  const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
+
+  // Where "open a terminal" would go, and whose teamwork "start teamwork"
+  // would set up. Both are read before the early returns below, because hooks
+  // are, and both are null only in states this component then does not offer.
+  const target = useMemo(() => terminalTarget(worktrees, openWorktreeIds), [worktrees, openWorktreeIds])
+  const teamworkProject = worktree
+    ? projects.find((project) => project.id === worktree.projectId)
+    : (projects.find((project) => project.id === target?.projectId) ?? projects[0])
+
+  // Open the tab first and put the pane in it second: the pane is the thing
+  // asked for, and it has to appear somewhere the person is looking.
+  const startTerminal = useCallback(async () => {
+    if (target === null) return
+    await openWorktree(target.id)
+    await createTerminal(target.id)
+  }, [target, openWorktree, createTerminal])
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -55,6 +78,11 @@ export function WorkspaceArea({
   // Before the empty state, not after it: which pane needs you is a question
   // about every worktree, and it is worth asking with none of them open.
   if (dashboardOpen) return <Dashboard modifier={modifier} />
+
+  // Same reasoning, and the reason this stopped being a modal: setting teamwork
+  // up is a question about a repository, not about the worktree that happens to
+  // be open, so it takes the area rather than floating over it.
+  if (teamworkProjectId !== null) return <TeamworkView projectId={teamworkProjectId} />
 
   if (!worktree || !activeWorktreeId) {
     // A runtime that never came up leaves a window that looks ordinary and
@@ -104,14 +132,72 @@ export function WorkspaceArea({
       )
     }
 
+    // Nothing open, and — until this — nothing offered: a heading, a sentence
+    // naming a chord, and a legend of six more. That is a reference card handed
+    // to somebody who has not yet done the thing it is a reference for. The two
+    // things a person actually opens this app to do are here as buttons; the
+    // chords stay, underneath, for the second week rather than the first hour.
     return (
       <main className="workspace workspace--empty">
         <div className="placeholder">
           <h1 className="placeholder__title">Nothing open</h1>
           <p className="placeholder__body">
-            Pick a worktree on the left, or start a new one with <kbd>{shortcutHint('new-worktree', modifier)}</kbd>.
+            Pick a worktree on the left, or start here. Every terminal teamree opens lives in a worktree, so there is
+            always one repository and one branch behind what you are looking at.
           </p>
+
+          <div className="starters">
+            <div className="starter">
+              <button
+                type="button"
+                className="button button--primary button--lead"
+                aria-describedby="starter-terminal"
+                onClick={() => {
+                  if (target === null) {
+                    if (teamworkProject) openDialog({ kind: 'new-task', projectId: teamworkProject.id })
+                    return
+                  }
+                  void startTerminal()
+                }}
+              >
+                {target === null ? 'Open a terminal in a new worktree' : 'Open a terminal'}
+              </button>
+              <p className="starter__note" id="starter-terminal">
+                {target === null
+                  ? 'There is no worktree to run one in yet, so this asks what the task is and makes one first.'
+                  : `A shell in ${target.name}, on ${target.branch}.`}
+              </p>
+            </div>
+
+            <div className="starter">
+              <button
+                type="button"
+                className="button button--lead"
+                aria-describedby="starter-teamwork"
+                disabled={teamworkProject === undefined}
+                onClick={() => {
+                  if (teamworkProject) openTeamwork(teamworkProject.id)
+                }}
+              >
+                Start teamwork
+              </button>
+              <p className="starter__note" id="starter-teamwork">
+                {teamworkProject === undefined
+                  ? 'Teamwork is set up per repository, and there is none here yet.'
+                  : `Put your key in ${teamworkProject.name} and pick a relay, so a teammate can see these panes and type into them.`}
+              </p>
+            </div>
+          </div>
+
           <dl className="legend">
+            <div>
+              <dt>{shortcutHint('new-worktree', modifier)}</dt>
+              <dd>new worktree</dd>
+            </div>
+            <div>
+              <dt>{shortcutHint('new-terminal', modifier)}</dt>
+              <dd>new terminal</dd>
+            </div>
             <div>
               <dt>{shortcutHint('split-right', modifier)}</dt>
               <dd>split right</dd>

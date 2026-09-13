@@ -41,9 +41,6 @@ vi.mock('./dialogs/InstallCliDialog', () => ({ InstallCliDialog: marker('install
 vi.mock('./dialogs/TaskComposerDialog', () => ({
   TaskComposerDialog: ({ projectId }: { projectId: string }) => <div data-testid="new-task">{projectId}</div>
 }))
-vi.mock('./dialogs/StartTeamworkDialog', () => ({
-  StartTeamworkDialog: ({ projectId }: { projectId: string }) => <div data-testid="start-teamwork">{projectId}</div>
-}))
 vi.mock('./dialogs/ConfirmRemoveDialog', () => ({
   ConfirmRemoveDialog: ({ reason }: { reason: string }) => <div data-testid="confirm-remove">{reason}</div>
 }))
@@ -102,7 +99,7 @@ describe('the notice layer', () => {
 describe('which dialog is on screen', () => {
   it('shows none of them by default', () => {
     render(<App />)
-    for (const kind of ['palette', 'add-project', 'install-cli', 'new-task', 'start-teamwork', 'confirm-remove']) {
+    for (const kind of ['palette', 'add-project', 'install-cli', 'new-task', 'confirm-remove']) {
       expect(screen.queryByTestId(kind)).toBeNull()
     }
   })
@@ -119,12 +116,6 @@ describe('which dialog is on screen', () => {
     seed({ dialog: { kind: 'confirm-remove', worktreeId: 'w1', reason, intent: 'remove' } })
     render(<App />)
     expect(screen.getByTestId('confirm-remove').textContent).toBe(reason)
-  })
-
-  it('opens the teamwork panel for the project it was asked about', () => {
-    seed({ dialog: { kind: 'start-teamwork', projectId: 'p2' } })
-    render(<App />)
-    expect(screen.getByTestId('start-teamwork').textContent).toBe('p2')
   })
 })
 

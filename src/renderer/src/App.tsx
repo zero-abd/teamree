@@ -11,7 +11,6 @@ import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
 import { InstallCliDialog } from './dialogs/InstallCliDialog'
-import { StartTeamworkDialog } from './dialogs/StartTeamworkDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { SidebarResizer } from './shell/SidebarResizer'
@@ -59,7 +58,10 @@ export function App(): React.JSX.Element {
 
       {sidebarVisible ? (
         <>
-          <Sidebar newWorktreeHint={shortcutHint('new-worktree', modifier)} />
+          <Sidebar
+            newWorktreeHint={shortcutHint('new-worktree', modifier)}
+            searchHint={shortcutHint('open-palette', modifier)}
+          />
           <SidebarResizer />
         </>
       ) : null}
@@ -98,7 +100,6 @@ export function App(): React.JSX.Element {
       ) : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
-      {dialog?.kind === 'start-teamwork' ? <StartTeamworkDialog projectId={dialog.projectId} /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
     </div>
   )

@@ -132,16 +132,35 @@ export const KEY_GRANT_WARNING = {
 /**
  * Who chooses a relay, and where the commands below are run.
  *
- * All four options start `cd relay`, and `relay/` is in a checkout of teamree
- * rather than in the project being worked on — an app installed from the `.dmg`
- * has no such directory at all. Said once here rather than four times in the
- * commands, which is where the options would otherwise stop being copyable.
+ * The two halves of that second question are not the same, and saying so is the
+ * point of this paragraph. The Worker deploy ships inside teamree and runs from
+ * any directory; the container options need a clone, because the Dockerfile is
+ * in one. Getting this the wrong way round is not a hypothetical: it is the
+ * failure that prompted the work — a panel that said `cd relay` to somebody
+ * reading it inside an installed app, who made an empty `relay/` directory in
+ * their own project and got a missing-package-file error out of npm, twice.
+ * `relay/README.md` is the authority on both halves, and this is said once here
+ * rather than in each of the commands, which is where the options would
+ * otherwise stop being copyable.
  */
 export const RELAY_LEAD =
   'If somebody on your team has already stood a relay up, you do not choose: git pull, and it arrives in ' +
-  '.teamree/relay. This list is for whoever is standing one up. teamree never starts a relay itself — it dials ' +
-  'a URL, and standing one up happens in a terminal. Every option below starts in a clone of the teamree ' +
-  'repository, because that is where relay/ is: an app installed from the .dmg does not have that directory.'
+  '.teamree/relay. This is for whoever is standing one up. teamree never starts a relay itself — it dials ' +
+  'a URL, and standing one up happens in a terminal. The Worker deploy below ships with teamree and needs no ' +
+  'clone; the container options do, because the Dockerfile lives in a clone of the teamree repository.'
+
+/**
+ * The label on the disclosure that holds the options nobody should have to read.
+ *
+ * A constant because the panel and its test both name it, and a disclosure
+ * whose label drifts is a disclosure nobody can be told to open.
+ */
+export const MORE_RELAYS_BUTTON = 'Other ways to get a relay'
+
+/** Said once, above the folded options, so opening it is an informed choice. */
+export const MORE_RELAYS_LEAD =
+  'Neither of these is better than the Worker for a team that has no relay yet. They are here for a team that ' +
+  'already has the network or the server, and would rather not add a Cloudflare account to it.'
 
 /**
  * Where the resulting URL belongs, which is the part of this decision that is
@@ -154,8 +173,28 @@ export const RELAY_LEAD =
  */
 export type RelayKeep = 'commit' | 'override'
 
+/**
+ * How prominent an option is, which is the whole of what was wrong here.
+ *
+ * Four ways to get a relay were listed as equals, and a list of four equals is
+ * a decision handed to somebody who has no way of taking it. `relay/README.md`
+ * has always said "take the Worker unless you have a reason not to", so the
+ * panel now says that too: one recommendation, one fallback for trying this out
+ * this afternoon, and the two that are somebody else's infrastructure folded
+ * away behind a disclosure rather than deleted — a team that already runs a box
+ * on a VPN still needs the commands.
+ */
+export type RelayTier =
+  /** The answer, unless you know why it is not. Exactly one option is this. */
+  | 'lead'
+  /** The one alternative worth putting in front of somebody unprompted. */
+  | 'fallback'
+  /** Real, documented, and behind a disclosure. */
+  | 'more'
+
 export type RelayOption = {
   id: 'worker' | 'tunnel' | 'mesh' | 'vps'
+  tier: RelayTier
   name: string
   /** What it is, and who it is right for. */
   what: string
@@ -169,24 +208,30 @@ export type RelayOption = {
 }
 
 /**
- * The four ways a team actually gets a relay, with what each costs.
+ * Every way a team actually gets a relay, with what each costs, in the order
+ * somebody should meet them.
  *
- * Presented rather than defaulted. A bare URL field assumes the person already
- * knows what to paste, and the one thing that is certainly true of somebody
- * opening this panel for the first time is that they do not. The facts are
- * `relay/README.md`'s; this is that document's decision table with the part
- * teamree cares about — whether the address is stable enough to commit — made
- * explicit.
+ * Presented rather than defaulted: a bare URL field assumes the person already
+ * knows what to paste, and the one thing certainly true of somebody opening
+ * this panel for the first time is that they do not. But presented in rank —
+ * see `RelayTier`. The facts are `relay/README.md`'s; this is that document's
+ * decision table with the part teamree cares about — whether the address is
+ * stable enough to commit — made explicit.
  */
 export const RELAY_OPTIONS: readonly RelayOption[] = [
   {
     id: 'worker',
+    tier: 'lead',
     name: 'Deploy the Worker to your team’s own Cloudflare account',
     what:
       'Start here unless you have a reason not to. It is one command, there is nothing to babysit, and it works ' +
       'from anywhere because both machines dial out to it.',
-    commands: 'cd relay\nnpm install\nnpx wrangler login\nnpm run deploy',
-    effort: 'One command, once. Needs a Cloudflare account; nothing to configure and no resource ids to fill in.',
+    commands: '/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy',
+    effort:
+      'One command, once, run from any directory: it writes the Worker project into ~/teamree-relay and deploys ' +
+      'from there. The path above is the copy that ships inside the installed app, which is where you are reading ' +
+      'this; from a clone of teamree the same command is relay/teamree-relay deploy. Needs a Cloudflare account ' +
+      'and Node 20 or newer, and there are no resource ids to fill in.',
     money:
       'Durable Objects have been on the Workers free plan since 7 April 2025 for classes on the SQLite backend, ' +
       'which this relay’s wrangler.jsonc already declares — so a small team is very likely free. relay/README.md ' +
@@ -194,11 +239,13 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
       'Objects pricing page before a large team lives in this all day.',
     keep: 'commit',
     address:
-      'Wrangler prints https://teamree-relay.<your-subdomain>.workers.dev. The relay is that host with /v1/relay ' +
-      'on it, spoken as wss://. Paste what it printed below and teamree will show you the corrected URL.'
+      'It prints wss://teamree-relay.<your-subdomain>.workers.dev/v1/relay, which is the line to paste below. If ' +
+      'you have only the https:// host Wrangler printed, paste that instead — teamree refuses it rather than ' +
+      'guessing, and offers you the corrected URL.'
   },
   {
     id: 'tunnel',
+    tier: 'fallback',
     name: 'A tunnel to a relay on your own machine',
     what:
       'The fastest way to try this with somebody on another continent. Run the container here and put a tunnel in ' +
@@ -216,6 +263,7 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
   },
   {
     id: 'mesh',
+    tier: 'more',
     name: 'A mesh VPN, or a box on the LAN',
     what:
       'Run the container on any machine the others can already reach — one office network, or Tailscale or ' +
@@ -231,6 +279,7 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
   },
   {
     id: 'vps',
+    tier: 'more',
     name: 'A VPS you rent',
     what:
       'The container on a small server, a hostname pointed at it, and Caddy or nginx in front for TLS. Durable, ' +

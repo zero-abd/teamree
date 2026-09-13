@@ -264,25 +264,66 @@
 
 /* ---------------------------------------------------------- the setup flow */
 
-/* Wider than the other dialogs, because this one is the only place a person is
-   asked to make a decision — which relay — rather than to confirm one. */
-.modal:has(.steps) {
-  width: min(640px, calc(100vw - 48px));
-}
-
-.teamwork-setup {
+/* This was a dialog, and the dialog was the problem: five steps, two files to
+   write and a block of commands to copy do not fit in a box you dismiss by
+   clicking beside it. It takes the main area now, like the pane board. */
+.teamwork-view {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.teamwork-view:focus-visible {
+  outline: none;
+}
+
+.teamwork-view__head {
+  flex: none;
+  padding: var(--s5) var(--s5) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+.teamwork-view__head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--s4);
-  padding: 0 var(--s5) var(--s5);
+}
+
+.teamwork-view__identity {
+  min-width: 0;
+}
+
+.teamwork-view__title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.teamwork-view__lede {
+  margin-top: var(--s1);
+  color: var(--fg-secondary);
+}
+
+.teamwork-view__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s5);
+}
+
+/* Wide enough for a command block, narrow enough to read: the steps are prose
+   with code in them, and prose the width of a monitor is not read. */
+.teamwork-view__column {
+  max-width: 78ch;
+  margin: 0 auto;
 }
 
 .steps {
   display: flex;
   flex-direction: column;
   gap: var(--s3);
-  max-height: min(62vh, 640px);
-  overflow-y: auto;
 }
 
 /* Above the steps rather than inside one: a person who works through four of
@@ -469,9 +510,46 @@
 }
 
 .relay-option__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
   color: var(--fg);
   font-size: var(--text-sm);
   font-weight: 600;
+}
+
+/* The recommendation, said once and in a badge rather than in another
+   paragraph: the option's own first sentence already says to start here. */
+.relay-option__tier {
+  padding: 0 6px;
+  border: 1px solid var(--accent-line);
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.relay-option--lead {
+  border-color: var(--accent-line);
+  background: var(--bg-raised);
+}
+
+/* Says which way the press will go. Decorative: the button's own
+   `aria-expanded` is the fact, and this is that fact for the eye. */
+.disclosure__caret {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* The two nobody should have to read, and the way to them. */
+.relay-options__more {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
 }
 
 .relay-option__what {

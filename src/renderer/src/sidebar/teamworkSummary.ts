@@ -23,7 +23,7 @@
 // talking carries nothing and this says nothing new about it.
 
 import type { PeerLink, TeamworkStatus } from '@shared/entities'
-import { ADD_KEY_BUTTON } from '../dialogs/startTeamwork'
+import { ADD_KEY_BUTTON } from '../teamwork/startTeamwork'
 import { sinceLabel } from './agentRows'
 
 /**
