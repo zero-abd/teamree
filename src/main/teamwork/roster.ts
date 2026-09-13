@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import type { MemberProblem } from '../../shared/entities'
 import { sanitiseHandle } from './handle'
 import { MEMBER_FILE_SUFFIX, MEMBERS_DIR_SEGMENTS, parseMemberFile, quote } from './memberFile'
+import { readHumanPolicy, verifyHumanMembership } from './humanMembership'
 
 export type RosterEntry = {
   handle: string
@@ -47,6 +48,17 @@ export function memberFileName(handle: string): string {
 }
 
 export async function readRoster(projectPath: string): Promise<Roster> {
+  let policy
+  try {
+    policy = await readHumanPolicy(projectPath)
+  } catch {
+    return {
+      entries: [],
+      problems: [
+        { file: '.teamree/human-policy.json', reason: 'Invalid human verification policy; access is disabled' }
+      ]
+    }
+  }
   const directory = membersDirectory(projectPath)
   const files = await listMemberFiles(directory)
 
@@ -118,6 +130,13 @@ export async function readRoster(projectPath: string): Promise<Roster> {
     }
 
     const owner = claimed.get(parsed.value.publicKey)
+    if (policy) {
+      const token = /^human-proof:\s*(\S+)\s*$/m.exec(text)?.[1]
+      if (!token || !verifyHumanMembership(token, policy, parsed.value)) {
+        reject('Human verification is required: obtain a signed member file from the team invitation page')
+        continue
+      }
+    }
     if (owner !== undefined) {
       // Two handles on one key would make a peer ambiguous the moment anything
       // looks one up by key, which is exactly what a handshake does.

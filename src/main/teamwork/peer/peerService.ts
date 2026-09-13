@@ -226,6 +226,7 @@ export class PeerService {
     const wanted = new Map<string, WantedLink>()
     for (const fact of [...this.#projects.values()].sort((a, b) => a.projectId.localeCompare(b.projectId))) {
       if (!fact.relay || fact.disabledReason !== null || fact.projectKey === undefined) continue
+      if (!fact.rosterKeys.includes(identity.publicKey)) continue
       for (const key of fact.rosterKeys) {
         if (key === identity.publicKey) continue
         wanted.set(linkIdFor(key, fact.projectKey), {

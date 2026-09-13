@@ -20,6 +20,7 @@ import { notFound } from '../runtime/runtimeError'
 import { badHandle, rosterConflict } from './errors'
 import { resolveHandle } from './handle'
 import { loadIdentity } from './identity'
+import { readHumanPolicy } from './humanMembership'
 import { formatMemberFile } from './memberFile'
 import { memberFileName, memberFilePath, readRoster, type Roster } from './roster'
 
@@ -75,6 +76,12 @@ export class TeamworkService {
     // the reader refuses.
     if (roster.entries.some((entry) => entry.publicKey === identity.publicKey)) {
       return this.#describe(project, roster, identity)
+    }
+
+    if (await readHumanPolicy(project.path)) {
+      throw new Error(
+        'This team requires human verification. Ask the owner for an invitation, complete the crew game and Persona check, then save the signed member file in .teamree/members/. Your device public key is available in Members.'
+      )
     }
 
     const handle = resolveHandle({ override: params.handle, gitEmail: await this.#gitEmail(project.path) })

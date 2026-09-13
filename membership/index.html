@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Join the crew · Teamree</title></head>
+<body><main>
+  <header><span class="brand">teamree / crew check</span><span class="pill">People + their agents</span></header>
+  <h1>A human behind<br>every worker.</h1>
+  <p class="intro">Meet your team. Connect the crew. Verify your presence.</p>
+  <ol class="steps"><li id="step1">01 · Invitation</li><li id="step2">02 · Crew game</li><li id="step3">03 · Persona</li></ol>
+  <section id="invite-panel"><h2>Your seat is waiting.</h2><p>Paste the invitation from your team owner. It is already linked to your device’s public key.</p>
+    <form id="invite-form"><label for="invite">Invitation code</label><input id="invite" required autocomplete="off" spellcheck="false"><button>Join the crew</button></form>
+  </section>
+  <section id="game-panel" hidden><span class="eyebrow">A little teamwork</span><h2>Connect the crew</h2><p>Select these crew members in order. The route stays visible, and there is no speed requirement.</p><p id="route" class="route"></p><div id="crew" class="crew"></div><p id="progress" aria-live="polite"></p><button id="reset" class="secondary">Reset route</button><button id="game-submit" disabled>Check route</button><p class="note">This game completes onboarding. Persona provides the human-presence check.</p></section>
+  <section id="persona-panel" hidden><h2>Now, meet Persona.</h2><p>Verify human presence to activate your membership. Teamree receives the verification result, not your identity documents.</p><div id="relay-container"></div><button id="check" class="secondary">Check verification result</button></section>
+  <section id="done-panel" hidden><span class="eyebrow">Welcome aboard</span><h2>You’re part of the crew.</h2><p>Human presence verified and crew game completed.</p><button id="download">Download signed member file</button><p id="instructions"></p><p class="note">Your team owner must approve and merge this file before other teammates grant access.</p></section>
+  <p id="status" role="status" aria-live="polite"></p>
+  <button id="restart" class="secondary" hidden>Start a new attempt</button>
+  <footer>Human presence verification does not establish legal identity or one account per person.</footer>
+</main><script type="module" src="/src/client.ts"></script></body></html>

@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { generateKeyPairSync } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -78,6 +79,17 @@ async function wire(options: { email?: string | null } = {}): Promise<Harness> {
 }
 
 describe('listing a project roster', () => {
+  it('refuses unsigned enrollment when human verification is required', async () => {
+    const { service, project, repo } = await wire({ email: 'alice@example.com' })
+    const issuer = generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' })
+    await mkdir(path.join(repo.repoPath, '.teamree'), { recursive: true })
+    await writeFile(
+      path.join(repo.repoPath, '.teamree', 'human-policy.json'),
+      JSON.stringify({ teamId: 'team', issuerPublicKey: issuer, revoked: [] })
+    )
+    await expect(service.joinProject({ projectId: project.id })).rejects.toThrow('requires human verification')
+    expect((await service.listMembers({ projectId: project.id })).members).toEqual([])
+  })
   it('says you are not in a roster you have not joined, and what you would be filed as', async () => {
     const { service, project } = await wire({ email: 'ada.lovelace@example.com' })
 
