@@ -672,105 +672,86 @@ pre[tabindex]{ scrollbar-gutter:stable; }
          header, the footer and the browser tab all carry the reduced form and
          agree with each other. The full mark appears at 72px and above. -->
     <symbol id="mark" viewBox="0 0 64 64" fill="currentColor">
-  <!--
-    The teamree mark: three terminal windows on a branching trunk that merges
-    back into one root. Rebuilt from the owner's artwork (brand/*-source.png) as
-    primitives rather than traced, so the geometry is exact and editable. One
-    grid unit here is 16 pixels of that 1254px artwork; the mark is symmetric
-    about x=32 and spans x 2..62, y 5.5..58.44.
+      <!-- the root: a wide shallow crescent the trunk flares into -->
+        <path d="M15.90 58.66 Q32 49.00 48.10 58.66 Q32 55.50 15.90 58.66 Z"/>
 
-    Single colour: everything is currentColor, so the same file is the black
-    mark on light ground and the white mark on dark. No tile — callers that want
-    a rounded tile draw it themselves, at radius 22.5% of the tile's side.
-  -->
+        <!-- the trunk, descending from the top window into the root -->
+        <path d="M30.09 21.63 H33.91 V57.06 H30.09 Z"/>
 
-  <!-- the root: a wide shallow crescent the trunk flares into -->
-  <path d="M16.28 58.44 Q32 49.19 47.72 58.44 Q32 55.69 16.28 58.44 Z"/>
+        <!-- the two branches, sweeping down and inward from the lower windows -->
+        <g fill="none" stroke="currentColor" stroke-width="3.55" stroke-linecap="round">
+          <path d="M15.81 39.00 C15.81 45.00 32.00 47.00 28.85 55.00"/>
+          <path d="M48.19 39.00 C48.19 45.00 32.00 47.00 35.15 55.00"/>
+        </g>
 
-  <!-- the trunk, descending from the top window into the root -->
-  <path d="M30.13 21.63 H33.88 V57.06 H30.13 Z"/>
+        <!--
+          The chevron where the branches meet the trunk. Each arm is a tapered wedge,
+          not a stroke: in the artwork it comes to a point at the top, widens as it
+          descends, and its outer edge then sweeps back in and flares into the trunk.
+          A constant-width round-capped stroke gets the tip 2 units too fat and the
+          foot 1.5 units too wide, which is the difference between an arrowhead and a
+          pair of sticks. The right edge runs to 30.60 rather than to the trunk's own
+          30.09 so the two shapes overlap instead of sharing an antialiased seam.
+        -->
+        <g>
+          <path d="M27.05 37.60 L25.09 40.02 C26.94 42.22 29.25 44.10 30.13 46.30 L30.60 46.30 L30.60 40.77 Z"/>
+          <path d="M36.95 37.60 L38.91 40.02 C37.06 42.22 34.75 44.10 33.87 46.30 L33.40 46.30 L33.40 40.77 Z"/>
+        </g>
 
-  <!-- the two branches, sweeping down and inward from the lower windows -->
-  <g fill="none" stroke="currentColor" stroke-width="3.63" stroke-linecap="round">
-    <path d="M15.81 39.13 C17.91 45.69 32.91 48.50 30.16 54.75"/>
-    <path d="M48.19 39.13 C46.09 45.69 31.09 48.50 33.84 54.75"/>
-  </g>
-
-  <!-- the chevron where the branches meet the trunk -->
-  <g fill="none" stroke="currentColor" stroke-width="3.13" stroke-linecap="round">
-    <path d="M27.09 39.25 L32 46.75"/>
-    <path d="M36.91 39.25 L32 46.75"/>
-  </g>
-
-  <!--
-    The three windows. Each is one rounded rect with its contents knocked out
-    by fill-rule="evenodd": three chrome dots, a `>` prompt and a `_` cursor.
-    The counters never overlap, so the rule is unambiguous.
-  -->
-  <g fill-rule="evenodd">
-    <!-- top centre -->
-    <path d="M24.44 5.5 H39.56 A3.38 3.38 0 0 1 42.94 8.88 V18.5 A3.38 3.38 0 0 1 39.56 21.88 H24.44 A3.38 3.38 0 0 1 21.06 18.5 V8.88 A3.38 3.38 0 0 1 24.44 5.5 Z
-             M23.5 8.88 A1.13 1.13 0 0 1 25.75 8.88 A1.13 1.13 0 0 1 23.5 8.88 Z
-             M26.66 8.88 A1.13 1.13 0 0 1 28.91 8.88 A1.13 1.13 0 0 1 26.66 8.88 Z
-             M29.81 8.88 A1.13 1.13 0 0 1 32.06 8.88 A1.13 1.13 0 0 1 29.81 8.88 Z
-             M24.77 13.70 L27.34 15.69 L24.77 17.68 A0.84 0.84 0 0 0 25.80 19.01 L29.23 16.36 A0.84 0.84 0 0 0 29.23 15.02 L25.80 12.36 A0.84 0.84 0 0 0 24.77 13.70 Z
-             M31.00 19.22 L34.81 19.22 A0.81 0.81 0 0 0 34.81 17.59 L31.00 17.59 A0.81 0.81 0 0 0 31.00 19.22 Z"/>
-    <!-- lower left -->
-    <path d="M5.38 23.31 H20.50 A3.38 3.38 0 0 1 23.88 26.69 V36.31 A3.38 3.38 0 0 1 20.50 39.69 H5.38 A3.38 3.38 0 0 1 2 36.31 V26.69 A3.38 3.38 0 0 1 5.38 23.31 Z
-             M4.44 26.69 A1.13 1.13 0 0 1 6.69 26.69 A1.13 1.13 0 0 1 4.44 26.69 Z
-             M7.59 26.69 A1.13 1.13 0 0 1 9.84 26.69 A1.13 1.13 0 0 1 7.59 26.69 Z
-             M10.75 26.69 A1.13 1.13 0 0 1 13.00 26.69 A1.13 1.13 0 0 1 10.75 26.69 Z
-             M5.70 31.51 L8.28 33.50 L5.70 35.49 A0.84 0.84 0 0 0 6.73 36.82 L10.17 34.17 A0.84 0.84 0 0 0 10.17 32.83 L6.73 30.18 A0.84 0.84 0 0 0 5.70 31.51 Z
-             M11.94 37.03 L15.75 37.03 A0.81 0.81 0 0 0 15.75 35.41 L11.94 35.41 A0.81 0.81 0 0 0 11.94 37.03 Z"/>
-    <!-- lower right -->
-    <path d="M43.50 23.31 H58.63 A3.38 3.38 0 0 1 62 26.69 V36.31 A3.38 3.38 0 0 1 58.63 39.69 H43.50 A3.38 3.38 0 0 1 40.13 36.31 V26.69 A3.38 3.38 0 0 1 43.50 23.31 Z
-             M42.56 26.69 A1.13 1.13 0 0 1 44.81 26.69 A1.13 1.13 0 0 1 42.56 26.69 Z
-             M45.72 26.69 A1.13 1.13 0 0 1 47.97 26.69 A1.13 1.13 0 0 1 45.72 26.69 Z
-             M48.88 26.69 A1.13 1.13 0 0 1 51.13 26.69 A1.13 1.13 0 0 1 48.88 26.69 Z
-             M43.83 31.51 L46.40 33.50 L43.83 35.49 A0.84 0.84 0 0 0 44.86 36.82 L48.30 34.17 A0.84 0.84 0 0 0 48.30 32.83 L44.86 30.18 A0.84 0.84 0 0 0 43.83 31.51 Z
-             M50.06 37.03 L53.88 37.03 A0.81 0.81 0 0 0 53.88 35.41 L50.06 35.41 A0.81 0.81 0 0 0 50.06 37.03 Z"/>
-  </g>
+        <!--
+          The three windows. Each is one rounded rect with its contents knocked out
+          by fill-rule="evenodd": three chrome dots, a `>` prompt and a `_` cursor.
+          The counters never overlap, so the rule is unambiguous.
+        -->
+        <g fill-rule="evenodd">
+          <!-- top centre -->
+          <path d="M24.44 5.5 H39.56 A3.38 3.38 0 0 1 42.94 8.88 V18.5 A3.38 3.38 0 0 1 39.56 21.88 H24.44 A3.38 3.38 0 0 1 21.06 18.5 V8.88 A3.38 3.38 0 0 1 24.44 5.5 Z
+                   M23.5 8.88 A1.13 1.13 0 0 1 25.75 8.88 A1.13 1.13 0 0 1 23.5 8.88 Z
+                   M26.66 8.88 A1.13 1.13 0 0 1 28.91 8.88 A1.13 1.13 0 0 1 26.66 8.88 Z
+                   M29.81 8.88 A1.13 1.13 0 0 1 32.06 8.88 A1.13 1.13 0 0 1 29.81 8.88 Z
+                   M24.77 13.70 L27.34 15.69 L24.77 17.68 A0.84 0.84 0 0 0 25.80 19.01 L29.23 16.36 A0.84 0.84 0 0 0 29.23 15.02 L25.80 12.36 A0.84 0.84 0 0 0 24.77 13.70 Z
+                   M31.00 19.22 L34.81 19.22 A0.81 0.81 0 0 0 34.81 17.59 L31.00 17.59 A0.81 0.81 0 0 0 31.00 19.22 Z"/>
+          <!-- lower left -->
+          <path d="M5.38 23.31 H20.50 A3.38 3.38 0 0 1 23.88 26.69 V36.31 A3.38 3.38 0 0 1 20.50 39.69 H5.38 A3.38 3.38 0 0 1 2 36.31 V26.69 A3.38 3.38 0 0 1 5.38 23.31 Z
+                   M4.44 26.69 A1.13 1.13 0 0 1 6.69 26.69 A1.13 1.13 0 0 1 4.44 26.69 Z
+                   M7.59 26.69 A1.13 1.13 0 0 1 9.84 26.69 A1.13 1.13 0 0 1 7.59 26.69 Z
+                   M10.75 26.69 A1.13 1.13 0 0 1 13.00 26.69 A1.13 1.13 0 0 1 10.75 26.69 Z
+                   M5.70 31.51 L8.28 33.50 L5.70 35.49 A0.84 0.84 0 0 0 6.73 36.82 L10.17 34.17 A0.84 0.84 0 0 0 10.17 32.83 L6.73 30.18 A0.84 0.84 0 0 0 5.70 31.51 Z
+                   M11.94 37.03 L15.75 37.03 A0.81 0.81 0 0 0 15.75 35.41 L11.94 35.41 A0.81 0.81 0 0 0 11.94 37.03 Z"/>
+          <!-- lower right -->
+          <path d="M43.50 23.31 H58.63 A3.38 3.38 0 0 1 62 26.69 V36.31 A3.38 3.38 0 0 1 58.63 39.69 H43.50 A3.38 3.38 0 0 1 40.13 36.31 V26.69 A3.38 3.38 0 0 1 43.50 23.31 Z
+                   M42.56 26.69 A1.13 1.13 0 0 1 44.81 26.69 A1.13 1.13 0 0 1 42.56 26.69 Z
+                   M45.72 26.69 A1.13 1.13 0 0 1 47.97 26.69 A1.13 1.13 0 0 1 45.72 26.69 Z
+                   M48.88 26.69 A1.13 1.13 0 0 1 51.13 26.69 A1.13 1.13 0 0 1 48.88 26.69 Z
+                   M43.83 31.51 L46.40 33.50 L43.83 35.49 A0.84 0.84 0 0 0 44.86 36.82 L48.30 34.17 A0.84 0.84 0 0 0 48.30 32.83 L44.86 30.18 A0.84 0.84 0 0 0 43.83 31.51 Z
+                   M50.06 37.03 L53.88 37.03 A0.81 0.81 0 0 0 53.88 35.41 L50.06 35.41 A0.81 0.81 0 0 0 50.06 37.03 Z"/>
+        </g>
     </symbol>
     <symbol id="mark-sm" viewBox="0 0 64 64" fill="currentColor">
-  <!--
-    The small-size form of the mark (brand/mark.svg), for 32px and below.
+      <!-- the root -->
+        <path d="M14 58.8 Q32 45.6 50 58.8 Q32 54.2 14 58.8 Z"/>
 
-    Same three windows, same trunk, same branches, same merge — the window
-    contents are dropped and every stroke is thickened, because at 16px the
-    dots and the `>_` antialias into grey and the three windows close up into
-    one blob. Rendered and looked at at 16, 20, 24, 28 and 32 before this shape
-    was settled; see the report in the commit that introduced it.
+        <!-- the trunk -->
+        <path d="M29.2 18 H34.8 V57 H29.2 Z"/>
 
-    The two changes beyond "drop the detail": the gap under the top window is
-    opened from 1.4 units to 4 so the windows stay three at 16px, and the trunk
-    and branches go from 3.6 units to 5.6 and 5 so they survive a single device
-    pixel. The root is deepened for the same reason.
-  -->
+        <!-- the branches -->
+        <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
+          <path d="M14.9 37 C14.9 43.8 32 45.8 29.2 54.4"/>
+          <path d="M49.1 37 C49.1 43.8 32 45.8 34.8 54.4"/>
+        </g>
 
-  <!-- the root -->
-  <path d="M14 58.8 Q32 45.6 50 58.8 Q32 54.2 14 58.8 Z"/>
+        <!-- the chevron where the branches meet the trunk -->
+        <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
+          <path d="M26.6 39.6 L32 46.4"/>
+          <path d="M37.4 39.6 L32 46.4"/>
+        </g>
 
-  <!-- the trunk -->
-  <path d="M29.2 18 H34.8 V57 H29.2 Z"/>
-
-  <!-- the branches -->
-  <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
-    <path d="M14.9 37 C17.1 44.2 32.9 47.6 30 54"/>
-    <path d="M49.1 37 C46.9 44.2 31.1 47.6 34 54"/>
-  </g>
-
-  <!-- the chevron where the branches meet the trunk -->
-  <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
-    <path d="M26.6 39.6 L32 46.4"/>
-    <path d="M37.4 39.6 L32 46.4"/>
-  </g>
-
-  <!-- the three windows, solid -->
-  <g>
-    <path d="M24.4 4.5 H39.6 A3.4 3.4 0 0 1 43 7.9 V16.1 A3.4 3.4 0 0 1 39.6 19.5 H24.4 A3.4 3.4 0 0 1 21 16.1 V7.9 A3.4 3.4 0 0 1 24.4 4.5 Z"/>
-    <path d="M5.4 23.5 H20.5 A3.4 3.4 0 0 1 23.9 26.9 V35.1 A3.4 3.4 0 0 1 20.5 38.5 H5.4 A3.4 3.4 0 0 1 2 35.1 V26.9 A3.4 3.4 0 0 1 5.4 23.5 Z"/>
-    <path d="M43.5 23.5 H58.6 A3.4 3.4 0 0 1 62 26.9 V35.1 A3.4 3.4 0 0 1 58.6 38.5 H43.5 A3.4 3.4 0 0 1 40.1 35.1 V26.9 A3.4 3.4 0 0 1 43.5 23.5 Z"/>
-  </g>
+        <!-- the three windows, solid -->
+        <g>
+          <path d="M24.4 4.5 H39.6 A3.4 3.4 0 0 1 43 7.9 V16.1 A3.4 3.4 0 0 1 39.6 19.5 H24.4 A3.4 3.4 0 0 1 21 16.1 V7.9 A3.4 3.4 0 0 1 24.4 4.5 Z"/>
+          <path d="M5.4 23.5 H20.5 A3.4 3.4 0 0 1 23.9 26.9 V35.1 A3.4 3.4 0 0 1 20.5 38.5 H5.4 A3.4 3.4 0 0 1 2 35.1 V26.9 A3.4 3.4 0 0 1 5.4 23.5 Z"/>
+          <path d="M43.5 23.5 H58.6 A3.4 3.4 0 0 1 62 26.9 V35.1 A3.4 3.4 0 0 1 58.6 38.5 H43.5 A3.4 3.4 0 0 1 40.1 35.1 V26.9 A3.4 3.4 0 0 1 43.5 23.5 Z"/>
+        </g>
     </symbol>
     <symbol id="chev" viewBox="0 0 16 16">
       <path d="M8 10.6 2.7 5.3l1.3-1.3L8 8l4-4 1.3 1.3z"/>
