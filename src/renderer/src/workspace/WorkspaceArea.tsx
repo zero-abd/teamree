@@ -270,8 +270,9 @@ export function WorkspaceArea({
           discovered agent made the bar grow with somebody's tool collection,
           and put the two things that touch their repository — Changes and Push
           — beside a row of names that varies from laptop to laptop. Starting an
-          agent lives on the empty state of a worktree with no panes, and in a
-          terminal.
+          agent in this worktree lives in the palette, which costs no width
+          until it is asked for, and on the empty state of a worktree with no
+          panes.
         */}
         <div className="workspace__tools">
           <button

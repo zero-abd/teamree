@@ -22,6 +22,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const projects = useWorkspaceStore((state) => state.projects)
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
+  const agents = useWorkspaceStore((state) => state.agents)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   const [query, setQuery] = useState('')
@@ -33,12 +34,13 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         worktrees,
         projects,
         activeWorktreeId,
+        agents,
         hintFor: (action) => {
           const command = ACTION_SHORTCUTS[action]
           return command ? shortcutHint(command, modifier) : ''
         }
       }),
-    [worktrees, projects, activeWorktreeId, modifier]
+    [worktrees, projects, activeWorktreeId, agents, modifier]
   )
 
   const matches = useMemo(() => filterPalette(items, query), [items, query])
@@ -52,6 +54,13 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
 
     if (item.kind === 'worktree') {
       void store.openWorktree(item.id)
+      return
+    }
+
+    // The command, not the kind: this is the thing the pane will run, and the
+    // runtime pins the session id so a pane started here resumes like any other.
+    if (item.kind === 'agent') {
+      void store.startAgent(item.id)
       return
     }
 
