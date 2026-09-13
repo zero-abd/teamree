@@ -23,6 +23,8 @@
 // writer set, which is exactly the mechanism `applyPalette` uses. A real
 // Chromium would resolve `tokens.css` underneath them as well.
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { act, render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -98,5 +100,23 @@ describe('the palette, on its way from the appearance to an emulator', () => {
 
     expect(grounds.at(-1)).toBe(resolvePalette(DEFAULT_APPEARANCE)['term-bg'])
     expect(grounds.at(-1)).not.toBe(resolvePalette(MIDNIGHT)['term-bg'])
+  })
+
+  // The two cases above measure the orderings against each other on a harness of
+  // their own, which is what makes the difference visible at all — but a harness
+  // is not `App`, and reverting the one line that matters leaves both of them
+  // green. So the line itself is the last assertion, read off the source the way
+  // `stylesheets.test.ts` reads the stylesheets and `mac-file-list.test.ts` reads
+  // the packaging config: where the behaviour cannot be exercised, the file is
+  // the thing to check.
+  it('is written by a layout effect in App, which is where it has to be', () => {
+    const app = readFileSync(join(import.meta.dirname, '..', 'App.tsx'), 'utf8')
+    const write = /(useEffect|useLayoutEffect)\(\(\) => \{\s*applyPalette\(/.exec(app)
+
+    expect(write, 'App.tsx no longer writes the palette in an effect of its own').not.toBeNull()
+    expect(
+      (write as RegExpExecArray)[1],
+      'App.tsx writes the palette in a passive effect, so every pane reads it one theme behind'
+    ).toBe('useLayoutEffect')
   })
 })
