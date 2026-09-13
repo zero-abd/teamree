@@ -5,8 +5,9 @@ each other — the identity scheme is what makes the relay untrusted, and the
 relay being untrusted is what makes "anyone can type" survivable — and a
 later change to one of them is a change to the others.
 
-Nothing here is built yet. The milestones at the bottom are the order to build
-it in, and each one is useful on its own.
+The milestones at the bottom are the order to build it in, and each one is
+useful on its own. Identity, the peer crypto, the relay and the transport are
+built; watching a pane, typing into one, and the stale cache are not.
 
 ## The shape of it
 
@@ -100,8 +101,19 @@ boring, because:
 [Noise](https://noiseprotocol.org/) `IK` session over the spliced connection —
 `IK` because each side already knows the other's static public key, from the
 repository — and everything after the handshake is ciphertext the relay cannot
-read. A compromised relay can drop frames or refuse to pair, and that is the
-whole of its power.
+read.
+
+A compromised relay cannot read, alter or forge content. It **can** do two
+things, and an early version of this document wrongly said it could not. It can
+drop frames or refuse to pair, which is denial of service and was always
+conceded. And, because `IK`'s first message is inherently replayable and the
+relay holds both that frame and the rendezvous token, it can replay a recorded
+handshake to forge a peer's *presence* — a session the other side believes is
+established and authenticated to a colleague who is not there. It still cannot
+send a second frame or read a byte. The fix is to refuse to treat anything in a
+first message as actionable until a frame arrives that only the real holder of
+the private key could have sent; until that is in, presence is the one thing here
+a relay operator can fake.
 
 Noise rather than a scheme of our own. A hand-rolled handshake is where this
 kind of project gets its one unrecoverable bug.
