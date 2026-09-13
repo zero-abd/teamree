@@ -58,9 +58,7 @@ for (const clip of clips) {
   }
   ratios.push({ id, ratio: height / width })
 
-  const frame = new RegExp(
-    `(<div class="demo-frame" data-demo="${id}">[\\s\\S]*?<video )width="\\d+" height="\\d+"`
-  )
+  const frame = new RegExp(`(<div class="demo-frame" data-demo="${id}">[\\s\\S]*?<video )width="\\d+" height="\\d+"`)
   if (!frame.test(page)) fail(`the page has no <video> inside the "${id}" frame. Ids must match the manifest.`)
   page = page.replace(frame, `$1width="${width}" height="${height}"`)
 
@@ -76,10 +74,7 @@ for (const clip of clips) {
 // stepping. If the clips disagree, the tallest wins and nothing is cropped away.
 const tallest = ratios.reduce((worst, item) => (item.ratio > worst.ratio ? item : worst), ratios[0])
 const padding = (tallest.ratio * 100).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
-page = page.replace(
-  /(\.demo-frame::before\{ content:""; display:block; padding-top:)[\d.]+%/,
-  `$1${padding}%`
-)
+page = page.replace(/(\.demo-frame::before\{ content:""; display:block; padding-top:)[\d.]+%/, `$1${padding}%`)
 
 if (page === before) {
   console.log('sync-demos: already in step with the manifest.')
