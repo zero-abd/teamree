@@ -12,12 +12,31 @@
 // property of the roster reader. It is the load-bearing part of the only
 // defence this feature has, and these are the ways it was forgeable.
 
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { formatMemberFile, isPublicKey, MAX_QUOTED_LENGTH, MEMBERS_DIR_SEGMENTS, quote } from './memberFile'
 import { readRoster } from './roster'
+
+/**
+ * Whether two names differing only in case are two files here.
+ *
+ * They are on Linux and are not on macOS, and the forgery below is shaped by
+ * that: where the filesystem folds them, an attacker cannot add a second file
+ * at all — they can only overwrite the first, which git shows as a change to
+ * the member's own key rather than as an innocuous new one.
+ */
+async function caseSensitiveFilesystem(): Promise<boolean> {
+  const probe = await mkdtemp(join(tmpdir(), 'teamree-case-'))
+  await writeFile(join(probe, 'probe'), 'a', 'utf8')
+  try {
+    await readFile(join(probe, 'PROBE'), 'utf8')
+    return false
+  } catch {
+    return true
+  }
+}
 
 const KEY_A = Buffer.alloc(32, 1).toString('base64')
 const KEY_B = Buffer.alloc(32, 2).toString('base64')
@@ -43,10 +62,27 @@ describe('a member file has to be named exactly right', () => {
     const root = await projectWithFiles({ 'bob.pub': member('bob', KEY_A), 'bob.PUB': member('bob', KEY_B) })
     const roster = await readRoster(root)
 
+    // One member named bob either way, and never the intruder's key under his
+    // name — which is the property that matters. What differs is what the
+    // attacker was even able to write.
     expect(roster.entries).toHaveLength(1)
-    expect(roster.entries[0]).toMatchObject({ handle: 'bob', publicKey: KEY_A })
-    expect(roster.problems).toHaveLength(1)
-    expect(roster.problems[0]?.file).toContain('bob.PUB')
+    expect(roster.entries[0]?.handle).toBe('bob')
+
+    if (await caseSensitiveFilesystem()) {
+      // Two files. The real bob keeps his key, and the squatted one is reported
+      // rather than quietly ignored.
+      expect(roster.entries[0]?.publicKey).toBe(KEY_A)
+      expect(roster.problems).toHaveLength(1)
+      expect(roster.problems[0]?.file).toContain('bob.PUB')
+      return
+    }
+
+    // One file. There was never a `bob.PUB` to refuse: the second write landed
+    // on `bob.pub` itself. The attacker gains nothing they could not have got by
+    // editing the file directly, and loses the disguise — a changed key in an
+    // existing member's file is the conspicuous version of this.
+    expect(roster.entries[0]?.publicKey).toBe(KEY_B)
+    expect(roster.problems).toEqual([])
   })
 
   it('reports a wrong-case suffix rather than ignoring the file in silence', async () => {
