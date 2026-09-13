@@ -54,6 +54,46 @@ describe('what the project header says about teamwork', () => {
     expect(away).toMatchObject({ tone: 'pending', label: 'Nobody connected' })
   })
 
+  it('carries what a connecting link has to say, so a wake does not read as ordinary', () => {
+    // "Connecting…" is right and it is not enough: a link that is connecting
+    // because this machine has just woken up is the one case where the reader
+    // needs to know that nothing is currently known about the teammate.
+    const summary = teamworkSummary(
+      status({
+        links: [
+          link({ phase: 'connecting', detail: 'this machine was asleep, so nothing is known about your teammate' })
+        ]
+      }),
+      NOW
+    )
+    expect(summary).toMatchObject({ tone: 'pending', label: 'Connecting…' })
+    expect(summary?.detail).toContain('this machine was asleep')
+  })
+
+  it('gives a connected link both of the things it knows, not whichever was written last', () => {
+    // The two facts a line under this header can carry are independent: what
+    // the link has to say for itself, and how long since anything arrived. A
+    // link can be connecting *because this machine woke* and a link can be
+    // four minutes silent, and neither sentence is a substitute for the other.
+    const woke = teamworkSummary(
+      status({
+        links: [
+          link({
+            phase: 'connecting',
+            detail: 'this machine was asleep, so nothing is known about your teammate',
+            lastHeardAt: NOW - 240_000
+          })
+        ]
+      }),
+      NOW
+    )
+    expect(woke?.detail).toContain('priya: this machine was asleep, so nothing is known about your teammate')
+    expect(woke?.detail).toContain('last heard 4m ago')
+    // And the phase is still what a link with nothing else to say falls back on.
+    const plain = teamworkSummary(status({ links: [link({ lastHeardAt: NOW - 240_000 })] }), NOW)
+    expect(plain?.detail).toBe('priya: connected, last heard 4m ago')
+  })
+
   it('carries what a link that has waited too long has to say, under the same label', () => {
     // "Nobody connected" is still the right label — nothing has established
     // that anything is wrong — but a link that has waited across two hourly

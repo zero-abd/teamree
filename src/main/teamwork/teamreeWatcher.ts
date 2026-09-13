@@ -70,6 +70,7 @@
 
 import { existsSync, statSync, watch as fsWatch } from 'node:fs'
 import { join } from 'node:path'
+import { UNWATCHED_TEAMREE_LAG } from '../../shared/entities'
 import { MEMBERS_DIR_SEGMENTS } from './memberFile'
 import { RELAY_FILE_SEGMENTS } from './peer/relayUrl'
 
@@ -167,11 +168,7 @@ export function degradedTeamreeWatchReport(event: TeamreeWatchDegraded): string 
     code === 'EMFILE' || code === 'ENOSPC'
       ? `this machine has no filesystem watches left to give (${code})`
       : `the filesystem refused a watch${code ? ` (${code})` : ''}`
-  return (
-    `${event.path} is not being watched: ${cause}. ` +
-    'A teammate’s key or a relay arriving by git pull will be noticed by the periodic check rather than at once, ' +
-    'so the roster can be up to half a minute behind the last pull.'
-  )
+  return `${event.path} is not being watched: ${cause}. ${UNWATCHED_TEAMREE_LAG}`
 }
 
 /** All this needs of a project: where its checkout is. */

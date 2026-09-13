@@ -7,7 +7,7 @@
 import { execFile } from 'node:child_process'
 import { lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ErrorCode } from '../../shared/protocol'
@@ -22,7 +22,13 @@ afterEach(async () => {
   await Promise.all(scratches.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
-/** An app bundle with a CLI in it, at a path awkward enough to be interesting. */
+/**
+ * An app bundle with a CLI in it, at a path awkward enough to be interesting.
+ *
+ * The launcher and the Node bundle it runs, because that is what
+ * `extraResources` puts there: a launcher on its own is what a checkout has
+ * before `npm run build:cli`, and it is not an app anybody can run.
+ */
 async function scratchApp(appName = 'my "teamree" copy.app'): Promise<{ root: string; source: string; bin: string }> {
   // Canonical, because the service resolves the link it made and compares it
   // with the app's own path: on macOS a temporary directory is reached through
@@ -34,9 +40,23 @@ async function scratchApp(appName = 'my "teamree" copy.app'): Promise<{ root: st
   await mkdir(resources, { recursive: true })
   const source = join(resources, 'teamree')
   await writeFile(source, '#!/bin/sh\n', { mode: 0o755 })
+  await writeFile(join(resources, 'teamree.mjs'), 'process.exit(0)\n')
   const bin = join(root, 'bin')
   await mkdir(bin)
   return { root, source, bin }
+}
+
+/** A source checkout: the launcher is in it, and nothing has built the bundle. */
+async function scratchCheckout(): Promise<{ source: string; bin: string; bundle: string }> {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'tmr-cli-')))
+  scratches.push(root)
+  const repo = join(root, 'teamree')
+  await mkdir(join(repo, 'resources', 'cli'), { recursive: true })
+  const source = join(repo, 'resources', 'cli', 'teamree')
+  await writeFile(source, '#!/bin/sh\n', { mode: 0o755 })
+  const bin = join(root, 'bin')
+  await mkdir(bin)
+  return { source, bin, bundle: join(repo, 'out', 'cli', 'index.js') }
 }
 
 type Harness = { service: CliService; escalated: string[] }
@@ -122,6 +142,37 @@ describe('what is at the destination', () => {
 
     const locked = harness({ source, directory: bin, writable: async () => false })
     expect((await locked.service.status()).needsAdministrator).toBe(true)
+  })
+})
+
+describe('the bundle behind the launcher', () => {
+  it('resolves it the way the launcher does, in both places the launcher looks', async () => {
+    const app = await scratchApp()
+    expect((await harness({ source: app.source, directory: app.bin }).service.status()).bundle).toBe(
+      join(dirname(app.source), 'teamree.mjs')
+    )
+
+    const checkout = await scratchCheckout()
+    await mkdir(dirname(checkout.bundle), { recursive: true })
+    await writeFile(checkout.bundle, 'process.exit(0)\n')
+    expect((await harness({ source: checkout.source, directory: checkout.bin }).service.status()).bundle).toBe(
+      checkout.bundle
+    )
+  })
+
+  it('has none when nothing has built it, which is every checkout before npm run build:cli', async () => {
+    const { source, bin } = await scratchCheckout()
+    expect((await harness({ source, directory: bin }).service.status()).bundle).toBeNull()
+  })
+
+  it('refuses to link a launcher with no bundle behind it, and asks for no password to do it', async () => {
+    const { source, bin } = await scratchCheckout()
+    const { service, escalated } = harness({ source, directory: bin, writable: async () => false })
+
+    await expect(service.install()).rejects.toThrow(/npm run build:cli/)
+    await expect(service.install()).rejects.toMatchObject({ code: ErrorCode.NotFound })
+    await expect(lstat(join(bin, 'teamree'))).rejects.toThrow()
+    expect(escalated).toEqual([])
   })
 })
 

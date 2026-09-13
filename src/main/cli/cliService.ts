@@ -20,11 +20,14 @@
 //   - A link that already points at this app is success. The button is
 //     idempotent, and pressing it twice must not read as a failure.
 //   - Nothing is reported as done until the link has been resolved and found to
-//     land on this app's CLI. A privileged command that was run is not the same
-//     fact as a link that works.
+//     land on this app's CLI, and that CLI has been found to have a bundle
+//     behind it. A privileged command that was run is not the same fact as a
+//     link that works, and a link that resolves is not the same fact either:
+//     `resources/cli/teamree` is a launcher, and in a checkout that never ran
+//     `npm run build:cli` there is nothing for it to launch.
 
-import { access, constants, lstat, mkdir, readFile, readlink, realpath, symlink, unlink } from 'node:fs/promises'
-import { join } from 'node:path'
+import { access, constants, lstat, mkdir, readFile, readlink, realpath, stat, symlink, unlink } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import type { CliInstall, CliPathSource, CliStatus } from '../../shared/entities'
 import { conflict, internal, notFound } from '../runtime/runtimeError'
 import { linkCommand, type AdministratorRunner } from './administrator'
@@ -116,6 +119,7 @@ export class CliService {
       platform: this.#platform,
       source: this.#source,
       packaged: this.#packaged,
+      bundle: await this.#bundle(),
       destination,
       directory: this.#directory,
       state,
@@ -139,6 +143,15 @@ export class CliService {
     const source = before.source
     if (source === null) {
       throw notFound('This build of teamree has no CLI in it to link, so there is nothing to put on PATH.')
+    }
+    // Before the destination is even looked at, because this one is about the
+    // thing being linked: a launcher with nothing behind it cannot become a
+    // working command by being linked, already-linked included.
+    if (before.bundle === null) {
+      throw notFound(
+        `${source} is the launcher, and the CLI bundle it runs has not been built. Linking it would put a ` +
+          'teamree on your PATH that cannot start. Build it first: npm run build:cli'
+      )
     }
     if (before.state === 'linked') {
       return { outcome: 'already-linked', replaced: null, administrator: false, status: await this.#answered(before) }
@@ -206,6 +219,26 @@ export class CliService {
     await symlink(source, destination)
   }
 
+  /**
+   * The bundle the launcher would run, found the way the launcher finds it.
+   *
+   * `resources/cli/teamree` walks its own symlinks, takes the directory it
+   * lands in, and runs `teamree.mjs` there if it exists and
+   * `../../out/cli/index.js` otherwise — without checking that the second one
+   * exists. This resolves the same two candidates in the same order and does
+   * check, which is the whole difference between "teamree is on your PATH" and
+   * a root-owned link to a script that fails on its first line.
+   */
+  async #bundle(): Promise<string | null> {
+    const source = this.#source
+    if (source === null) return null
+    const here = dirname(await realpath(source).catch(() => source))
+    for (const candidate of [join(here, 'teamree.mjs'), join(here, '..', '..', 'out', 'cli', 'index.js')]) {
+      if (await isFile(candidate)) return candidate
+    }
+    return null
+  }
+
   async #describeDestination(destination: string): Promise<Pick<CliStatus, 'state' | 'resolved'>> {
     const entry = await lstat(destination).catch(() => null)
     if (entry === null) return { state: 'absent', resolved: null }
@@ -243,6 +276,11 @@ function inMemoryPrompt(): CliPromptRecord {
 
 function withoutTrailingSlash(value: string): string {
   return value.length > 1 && value.endsWith('/') ? value.slice(0, -1) : value
+}
+
+/** `[ -f ]`, which is what the launcher tests its bundle with. */
+async function isFile(path: string): Promise<boolean> {
+  return (await stat(path).catch(() => null))?.isFile() ?? false
 }
 
 async function canWrite(directory: string): Promise<boolean> {

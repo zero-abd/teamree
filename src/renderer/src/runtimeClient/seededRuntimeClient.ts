@@ -436,6 +436,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     platform: 'darwin',
     source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
     packaged: true,
+    bundle: '/Applications/teamree.app/Contents/Resources/cli/teamree.mjs',
     destination: '/usr/local/bin/teamree',
     directory: '/usr/local/bin',
     state: cliLinked ? 'linked' : 'absent',

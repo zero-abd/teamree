@@ -47,9 +47,34 @@
 // Two things are kept wherever they sat, because both are facts rather than
 // volume: an exit and a title. A scrollback holds neither, so a watcher who
 // lost them would be told a pane is still running when it has already finished.
+//
+// AN `elided` BEFORE THE ANSWER IS NOT A HOLE, AND IS NOT AUTOMATICALLY A LIE
+// EITHER. It says bytes the pane printed never made it here — the owner's pacer
+// overran `STREAM_BUFFER_BYTES`, or this side's own hold buffer overran
+// `MAX_UNROUTED_EVENTS`. Passed through, it warns a reader about bytes the
+// scrollback they are about to be shown already contains, which is a lie in the
+// reassuring direction: it claims a loss that did not happen. Dropped without
+// looking, it would hide the one loss this join really can suffer.
+//
+// Which of the two it is follows from what the scrollback is: a *contiguous*
+// tail of everything the pane has ever printed, `SCROLLBACK_CAP_BYTES` long,
+// appended to before any subscriber is told anything. So the snapshot plus the
+// live tail is a contiguous run with no interior gap, whatever the wire lost in
+// between — and the only output of this watch that nobody can produce again is
+// output the snapshot does not reach back far enough to carry.
+//
+// That is a subtraction, and both terms cross the wire. The window is everything
+// the pane printed between the subscribe and the read: the bytes that arrived,
+// plus the byte counts the `elided` frames in that window name. The snapshot is
+// what the answer carries. Whatever the window has over the snapshot is gone,
+// and it is gone from the head of the window, which is why it is announced in
+// front of the snapshot rather than behind it. When the snapshot covers the
+// window — a scrollback sixteen times the pacer's buffer, against a window one
+// round trip wide, so very nearly always — the subtraction is zero and nothing
+// is claimed.
 
 import type { MethodName, ParamsOf, ResultOf, WatchedPaneEvent } from '../../../shared/methods'
-import type { Answered } from '../../runtime/peerTransport'
+import { outputBytes, type Answered } from '../../runtime/peerTransport'
 import type { SubscriptionChannel } from '../../runtime/subscriptionHub'
 
 /** The far end, reduced to the three things a watch does with it. */
@@ -125,6 +150,17 @@ export function watchPane(options: PaneWatchOptions): () => void {
       const { result, sequence: answeredAt } = await target.callInOrder('terminal.read', { terminalId })
       if (stopped) return
       const { data } = result
+      // The window against the snapshot that replaces it. A shortfall is output
+      // printed while this watcher was already watching that no scrollback
+      // still holds, so it is the one elision of this join that is true, and it
+      // subsumes every `elided` the window carried: those bytes are either
+      // inside the snapshot or inside this number.
+      let windowBytes = 0
+      for (const { event, sequence } of held) {
+        if (sequence <= answeredAt) windowBytes += outputBytes(event)
+      }
+      const missing = windowBytes - Buffer.byteLength(data, 'utf8')
+      if (missing > 0) channel.emit({ type: 'elided', bytes: missing } satisfies WatchedPaneEvent)
       if (data.length > 0) channel.emit({ type: 'data', data } satisfies WatchedPaneEvent)
       replaying = false
       // Held output from at or before the answer's frame is the overlap the
@@ -132,7 +168,7 @@ export function watchPane(options: PaneWatchOptions): () => void {
       // nothing else will ever send again, and an exit or a title is kept
       // wherever it sat because a snapshot cannot carry one.
       for (const { event, sequence } of held.splice(0)) {
-        if (sequence <= answeredAt && isOutput(event)) continue
+        if (sequence <= answeredAt && isOverlap(event)) continue
         channel.emit(event)
       }
     } catch (error) {
@@ -154,8 +190,17 @@ export function watchPane(options: PaneWatchOptions): () => void {
   }
 }
 
-function isOutput(event: unknown): boolean {
-  return typeof event === 'object' && event !== null && (event as { type?: unknown }).type === 'data'
+/**
+ * Whether the snapshot already accounts for this frame.
+ *
+ * Its bytes do, and so do the marks left where bytes went: an `elided` from the
+ * window has been weighed against the snapshot above and is either covered by it
+ * or already counted in the one emitted in front of it.
+ */
+function isOverlap(event: unknown): boolean {
+  if (typeof event !== 'object' || event === null) return false
+  const type = (event as { type?: unknown }).type
+  return type === 'data' || type === 'elided'
 }
 
 function reasonFor(error: unknown): string {

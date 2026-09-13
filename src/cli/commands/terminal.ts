@@ -207,7 +207,10 @@ export const terminalCommands: readonly CommandSpec[] = [
       'slow test run or a sleep, looks finished while it is still going. Use it only for interactive shells, ' +
       'and raise --quiet-ms when the command is slow.\n\n' +
       'For running a command and knowing for certain when it finished, use `teamree terminal run`, which ' +
-      'waits on the real process exit and returns its exit code.',
+      'waits on the real process exit and returns its exit code.\n\n' +
+      'If this machine sleeps mid-wait, the gap counts for nothing: the quiet window restarts on wake and the ' +
+      'timeout is charged only for time actually spent watching. The result then carries interrupted: true, ' +
+      'because far more wall-clock time passed than the wait was asked for.',
     args: [TERMINAL_ARG],
     flags: [
       {
@@ -247,7 +250,11 @@ export const terminalCommands: readonly CommandSpec[] = [
           ['reason', result.reason],
           ['terminal', result.terminalId],
           ['exit code', result.exitCode === undefined ? '-' : String(result.exitCode)],
-          ['output bytes', String(result.output.length)]
+          ['output bytes', String(result.output.length)],
+          // Only worth a line when it happened, and then it is worth saying plainly.
+          ...(result.interrupted
+            ? ([['interrupted', 'yes - this machine slept; the quiet window restarted after it woke']] as const)
+            : [])
         ])
       }
     }
@@ -293,7 +300,14 @@ export const terminalCommands: readonly CommandSpec[] = [
           timeoutMs: readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WAIT_TIMEOUT_MS
         })
         return {
-          data: { terminalId: terminal.id, exitCode: result.exitCode ?? null, output: result.output },
+          data: {
+            terminalId: terminal.id,
+            exitCode: result.exitCode ?? null,
+            output: result.output,
+            // The exit code is unaffected, but wall-clock time is: anything
+            // timing this command needs to know the machine slept through part of it.
+            interrupted: result.interrupted
+          },
           text: result.output
         }
       } finally {

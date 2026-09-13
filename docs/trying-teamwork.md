@@ -9,13 +9,14 @@ you should see after each step.
 macOS is the supported platform, and CI builds nothing else. Everything below
 assumes two Macs.
 
-> **Nothing here has been done across two real machines yet.** The identity, the
-> relay and the presence transport are built and tested — including two runtimes
-> with separate data directories and separate identities talking over the real
-> relay process on a real port — but that test is two peers on *one* computer.
-> Where a step below has only ever been exercised that way, it says so. If you
-> are the first pair to do this properly, the parts that surprise you are worth
-> writing down.
+> **Nothing here has been done across two real machines yet.** All five
+> milestones are built and tested — identity, the relay and presence, watching a
+> pane, typing into one, and staleness — including two runtimes with separate
+> data directories and separate identities talking over the real relay process
+> on a real port. But that test is two peers on *one* computer, and so is every
+> other test behind this document: no step below has been exercised across a
+> network. If you are the first pair to do this properly, the parts that
+> surprise you are worth writing down.
 
 ## What actually works today
 
@@ -28,7 +29,8 @@ A teammate's worktrees, branches and panes appearing in your sidebar without
 either of you subscribing to anything. Opening one of their panes and reading
 it live. Typing into it, attributed by name, recorded locally, and stoppable by
 the owner at any moment. A teammate whose machine goes away leaving their rows
-behind, marked stale and dated, rather than vanishing.
+behind, marked stale and dated, rather than vanishing — after the link's own
+five-minute silence deadline, which step 8 explains.
 
 **Not exercised between two Macs in two places.** All of the above has been
 driven between two runtimes through a real relay, with real Noise and real
@@ -83,6 +85,15 @@ the one command that gets past it.
 Open the app once on each machine before going further. The first run is what
 generates your keypair — an X25519 pair written to the app's own data directory,
 never to a repository — and step 4 needs it to exist.
+
+**A card appears in the corner on that first run**, before you have done
+anything else here, asking whether to put the `teamree` command on your PATH. It
+is not part of teamwork and nothing below needs it; it is offered here because
+it is the first thing you will see and because a question you did not expect is
+worse than one you did. It takes no focus, the window works behind it, and it is
+asked once whichever button you press — `docs/install.md` has what it does and
+what it will ask for. Installed builds only: from a checkout nothing offers
+itself.
 
 ## 2. Both get the example repository
 
@@ -167,6 +178,12 @@ container yourself works too, and is the answer for a team that will not use a
 hosted runtime — but a relay on a laptop re-inherits the NAT problem the relay
 exists to solve and goes away when the laptop sleeps.
 
+The **Start teamwork** panel lists four rather than two, because it splits the
+container path into the three shapes it actually takes: a tunnel in front of
+your own machine, a box on a LAN or a mesh VPN, and a VPS you rent. Same two
+paths, told apart by what each one costs and by whether its address is stable
+enough to commit.
+
 What you need at the end of it is **one WebSocket URL**. It is not the address
 the deploy printed: what you get is an `https://` host, and the relay endpoint is
 that host with `/v1/relay` on it, spoken as `wss://`. teamree refuses an
@@ -216,7 +233,7 @@ Blank lines and `#` comments are skipped, the same way the member files' are;
 the first line that is neither is the URL. It must be `ws://` or `wss://`, and
 it carries no query string and no fragment.
 
-**The other one**: `git pull`, and check you have the same file. The dialog
+**The other one**: `git pull`, and check you have the same file. The panel
 shows the URL in effect and where it came from, so the check is two people
 reading the same line rather than two people reading two files. If you are each
 pointing at a different relay you will never meet — and after an hour or two of
@@ -271,7 +288,7 @@ pushed on your behalf would be a claim you never made. Until your key is on the
 roster your checkout can see, the project header says **Your key is not here**
 and names this step, rather than counting teammates who cannot reach you.
 
-The dialog prints these underneath, naming every file it has written — so if you
+The panel prints these underneath, naming every file it has written — so if you
 also set the relay in step 3, this one commit carries both:
 
 ```sh
@@ -341,9 +358,10 @@ belt-and-braces half of the same thing — and if the watch could not be set up 
 all, that is the panel that says so rather than letting a list nothing is
 following look as live as one that is.
 
-Open the **Start teamwork** panel on both machines. Its last step should list
-two entries, one of them marked as you. That part reads the directory and needs no network at
-all, so it is a clean check on step 4 before you blame anything on the relay.
+Open the **Start teamwork** panel on both machines. Its last step, *Connected*,
+lists the roster above the links: two entries, one of them marked **you**. That
+part reads the directory and needs no network at all, so it is a clean check on
+step 4 before you blame anything on the relay.
 
 Then look at the project header in the sidebar, which says in one phrase what
 teamwork is doing. The ones you will see are:
@@ -351,21 +369,28 @@ teamwork is doing. The ones you will see are:
 - **Teamwork off** — nothing is set up here, and the tooltip says which thing:
   no `.teamree/relay`, no `origin` remote, or a roster with nobody in it. This
   is the ordinary state of a project nobody has done this to, not a fault.
-- **No teammates** — the roster has nobody in it but you.
 - **Your key is not here** — your own key is not in `.teamree/members` in this
   checkout, so nobody can address your machine. This is step 4, either not done
-  or not pushed, and no amount of waiting fixes it.
+  or not pushed, and no amount of waiting fixes it. It is said before anything
+  about somebody else's machine, deliberately: the fault is here.
+- **No teammates** — the roster has nobody in it but you.
 - **Connecting…** — dialling.
 - **Nobody connected** — the relay is reachable, your key is on the roster, and
   no teammate's machine is on it. Normal when your colleague has not got there
   yet.
 - **1 connected** — the one you are after, and it means a Noise session that
-  authenticated against the key in the repository and has since been confirmed
-  by a frame only the holder of the private half could have sent.
+  authenticated against the key in the repository, was confirmed by a frame only
+  the holder of the private half could have sent, and has said something within
+  the last five minutes. Step 8 is why that last clause is there.
 - **Relay unreachable** — this machine cannot get to the relay. Your teammate
   may be perfectly fine.
 - **1 refused** — somebody answered on your rendezvous and was not who they
   should have been. This is the one that is worth reading the tooltip for.
+- **1 stopped** — that link gave up rather than going round again, and the
+  tooltip says what the relay said when it did. Also worth the tooltip.
+
+With more than one teammate the connected phrase carries the rest: **2
+connected · 1 away**.
 
 ## 6. The leader starts some work, and the joiner sees it
 
@@ -451,6 +476,19 @@ Your worktrees stay where they were, marked stale and dated, rather than
 vanishing — a row disappearing reads as a worktree deleted, and for a worktree
 that is the one thing this display must never wrongly say.
 
+**Wait for it, and know which of the two you did.** Quitting teamree closes the
+socket, so the joiner's header leaves **1 connected** at once. Closing the lid
+does not: a suspended Mac leaves its connection open at both ends and neither
+relay will end it for us, so the link has a deadline of its own — nothing
+decrypted for two and a half keepalive intervals, **five minutes**, and the link
+is over. Until then the joiner's header honestly says **1 connected**, because
+five minutes ago it was. Then the rows are marked about fifteen seconds later,
+which is the grace that stops an ordinary reconnection blinking a badge at
+everybody.
+
+So: about fifteen seconds for a quit, up to about five and a quarter minutes for
+a lid. If you want to see it inside a coffee break, quit the app.
+
 `docs/teamwork-scenario.md` is the whole story written as steps with expected
 observations, and `tests/teamwork/scenario.test.ts` is that document as a
 test.
@@ -469,7 +507,7 @@ and their own identities, through real WebSockets and a real Noise handshake. It
 needs the relay built, and says so and skips if it is not:
 
 ```sh
-cd relay && npm install && npm run build
+cd relay && npm ci && npm run build
 ```
 
 There is also a harness that stands up two runtimes with two clones, two
@@ -505,12 +543,13 @@ pushed, makes you a member of nothing.
 cd ~/teamree-example && git pull && ls .teamree/members/
 ```
 
-Both handles, or you are not done. The app follows that directory, so what is
-in it is what the **Start teamwork** panel shows within a moment of the pull
-finishing — and opening it re-reads the directory in any case. If the panel shows two people
-and the header still says **No teammates**, that is worth reporting: it is the
-one shape of this failure the app is supposed to have stopped being able to
-have.
+Both handles, or you are not done. The app follows that directory, so the pull
+reaches the **Start teamwork** panel by itself — usually at once, and within
+half a minute at worst, on the timer step 5 describes. Opening the panel re-reads
+the directory in any case, which is the quickest way to skip that wait. If the
+panel shows two people and the header still says **No teammates**, that is worth
+reporting: it is the one shape of this failure the app is supposed to have
+stopped being able to have.
 
 If a key is in the directory and not in the panel, the panel will name the
 file and say why it was skipped — a name that is not exactly `<handle>.pub`, a
@@ -534,15 +573,16 @@ cd ~/teamree-example && git pull && cat .teamree/relay
 ```
 
 Both of you, and compare the strings exactly, scheme included — or open the
-**Start teamwork** panel on each machine, which shows the URL in effect and which of the
-two places it came from. If one of you has the file and the other does not,
-somebody did not push. If it says the scheme is `https`, not ws or wss, or that
-it has no path, you pasted the address the deploy printed rather than the
-endpoint — add `/v1/relay` and make it `wss://`, which is what the dialog says
-back to you if you paste it there. If you set `TEAMREE_RELAY_URL` earlier to
-test a tunnel and forgot, it is still winning over the file in whatever process
-inherited it; the header's tooltip says `(from the environment)` when that is
-what happened, and the dialog names the variable and its value.
+**Start teamwork** panel on each machine, which shows the URL in effect and
+which of the two places it came from. If one of you has the file and the other
+does not, somebody did not push. If it says the scheme is `https`, not ws or
+wss, or that it has no path, you pasted the address the deploy printed rather
+than the endpoint — add `/v1/relay` and make it `wss://`, which is what the
+panel says back to you if you paste it there. If you set `TEAMREE_RELAY_URL`
+earlier to test a tunnel and forgot, it is still winning over the file in
+whatever process inherited it; the header's tooltip says `(from the
+environment)` when that is what happened, and the panel names the variable and
+its value.
 
 ### The relay is not reachable
 
@@ -626,6 +666,11 @@ but it can be up to a minute after the lid opens before the header says
 **1 connected** again, and the first attempt after waking often fails on wifi
 that has not reassociated yet.
 
+The other end has its own delay and it is longer: the machine that stayed awake
+goes on reading **1 connected** for up to five minutes after the lid shut, until
+its silence deadline fires. Both of those are the same event seen from two
+sides, and neither is a thing to press.
+
 If you are running the relay container on a laptop, the laptop *is* the relay:
 it sleeps, it leaves the café's wifi, it gets carried to a meeting, and every
 time it does, both of you drop. This is the main reason to prefer the deployed
@@ -646,6 +691,12 @@ vanish while they are merely offline, that is a bug worth reporting rather than
 something to work around. Check the project header — **Nobody connected** or
 **Relay unreachable** says the same event in a place that is not guessing.
 
+The opposite complaint is the commoner one, and it is not a fault: a teammate
+who shut a laptop stays **1 connected** and un-greyed for up to five minutes.
+Their socket is still open at both ends and this machine is the only thing that
+can notice, which it does on the silence deadline in step 8. Give it the five
+minutes before you read it as wrong.
+
 ### The worktree is there, but the pane shows nothing
 
 Metadata flows on its own and bytes flow on demand, so a pane you have not
@@ -653,10 +704,12 @@ opened has sent you nothing by design. Open it and the scrollback arrives
 first.
 
 If you have opened it and it stays empty, the pane may genuinely be quiet —
-check the age beside it. If it is not quiet, note it: there is a known defect
-where the first thing a pane says after a watch opens could be dropped under
-load, recorded in `ROADMAP.md`, and a report that it happened to you on two
-real Macs is more useful than the measurement we have.
+check the age beside it. If it is not quiet, note it. The join between the
+scrollback and the live tail used to drop output under load, the more of it the
+busier the machine; it is fixed and covered by tests against the real relay, so
+a pane that loses its first line on two real Macs is a new report rather than a
+known one — and the interesting detail is what the machine was doing at the
+time.
 
 ### Your typing does not reach the pane
 

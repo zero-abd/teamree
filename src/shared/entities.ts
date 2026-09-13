@@ -374,6 +374,20 @@ export type MemberList = {
 }
 
 /**
+ * What an unwatched `.teamree` actually costs, in the one sentence both sides
+ * say.
+ *
+ * The runtime reports it when a watch cannot be attached and the window says it
+ * beside a roster that is `watched: false`. It is shared because the two used
+ * to disagree: the panel told people to reopen it after a pull, which described
+ * a version of this app that existed before the sweep did. A lost watch is not
+ * a lost roster — it is a roster that catches up on a timer.
+ */
+export const UNWATCHED_TEAMREE_LAG =
+  'A teammate’s key or a relay arriving by git pull will be noticed by the periodic check rather than at once, so ' +
+  'the roster can be up to half a minute behind the last pull.'
+
+/**
  * Where a project's relay is recorded, and what each of the two places said.
  *
  * Both halves are reported whatever is in effect, because the two questions a
@@ -831,6 +845,18 @@ export type CliStatus = {
    * the moment that checkout moves.
    */
   packaged: boolean
+  /**
+   * The Node bundle the CLI at `source` would run, or null when there is none.
+   *
+   * `source` is a launcher script; the CLI itself is the bundle behind it, and
+   * the launcher looks for that in two places. A packaged app ships it beside
+   * the launcher. A source checkout only has one once `npm run build:cli` has
+   * written `out/cli/index.js` — which `npm run dev` does not do. Null is
+   * therefore the difference between a command and a symlink that resolves: the
+   * link can be made, a password can be spent making it, and `teamree` still
+   * exits with "Cannot find module".
+   */
+  bundle: string | null
   /** The link itself. */
   destination: string
   /** The directory holding it — the thing that has to be writable. */

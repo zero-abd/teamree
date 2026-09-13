@@ -168,7 +168,15 @@ function quietFor(link: PeerLink, now: number): number | undefined {
 }
 
 /**
- * One link, per line, under the header.
+ * One link, per line, under the header: what it has to say for itself, and how
+ * long it has been since anybody said anything.
+ *
+ * The detail wins over the phase where there is one, because a link that is
+ * connecting *because this machine has just woken up* knows something the word
+ * "connecting" does not carry. The age is appended to either, because it is a
+ * different fact from the phase and not a substitute for it — a link can be
+ * connected and four minutes silent at the same time, which is the whole
+ * reason the number is here.
  *
  * Rounded down by `sinceLabel`, as every other age in this sidebar is, so a
  * silence is never flattered: "4m" while the fifth minute runs is the wrong way
@@ -176,7 +184,7 @@ function quietFor(link: PeerLink, now: number): number | undefined {
  */
 function linkLine(link: PeerLink, now: number): string {
   const quiet = quietFor(link, now)
-  const head = `${link.handle}: ${link.phase}`
+  const head = `${link.handle}: ${link.detail ?? link.phase}`
   return quiet === undefined ? head : `${head}, last heard ${sinceLabel(quiet)} ago`
 }
 

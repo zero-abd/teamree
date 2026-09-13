@@ -208,6 +208,51 @@ describe('joining a pane that is already running', () => {
     expect(output(sink.events)).toBe('before\r\nduring\r\n')
   })
 
+  it('does not warn about bytes the scrollback it is about to show already holds', async () => {
+    const peer = scriptedPeer()
+    const sink = recorder()
+    watchPane({ target: peer.target, terminalId: 't1', channel: sink.channel })
+    await peer.answerSubscribe('sub_1')
+
+    // Something overran on the way here — the owner's pacer, or this side's own
+    // hold buffer — while the read was in flight. The bytes went missing from
+    // the stream, not from the pane: the scrollback the answer carries reaches
+    // back past them and has every one. Passing the warning on would tell a
+    // reader they are missing output that is on the screen in front of them.
+    peer.say({ type: 'data', data: 'during\r\n' })
+    peer.say({ type: 'elided', bytes: 7 })
+    peer.say({ type: 'data', data: 'after\r\n' })
+    await peer.answerRead('before\r\nduring\r\nlost!\r\nafter\r\n')
+
+    expect(sink.events.filter((event) => (event as { type?: string }).type === 'elided')).toEqual([])
+    expect(output(sink.events)).toBe('before\r\nduring\r\nlost!\r\nafter\r\n')
+  })
+
+  it('says what the snapshot could not reach back to, in front of the snapshot', async () => {
+    const peer = scriptedPeer()
+    const sink = recorder()
+    watchPane({ target: peer.target, terminalId: 't1', channel: sink.channel })
+    await peer.answerSubscribe('sub_1')
+
+    // The other half of the same question, and the only shape in which a
+    // pre-answer `elided` is true: a burst that outran the owner's scrollback
+    // as well as the wire. Here the window is 1010 bytes and the snapshot is
+    // six, which is the ratio a real pane reaches by printing more than
+    // `SCROLLBACK_CAP_BYTES` between the subscribe and the read.
+    peer.say({ type: 'elided', bytes: 1_000 })
+    peer.say({ type: 'data', data: 'aaaa' })
+    peer.say({ type: 'data', data: 'tail\r\n' })
+    await peer.answerRead('tail\r\n')
+
+    // 1004, not the 1000 the wire dropped: the four bytes that did arrive are
+    // just as gone, because the snapshot that replaces them does not hold them
+    // either. And before the snapshot, because that is where the hole is.
+    expect(sink.events).toEqual([
+      { type: 'elided', bytes: 1_004 },
+      { type: 'data', data: 'tail\r\n' }
+    ])
+  })
+
   it('keeps an exit that arrived during the read, because a scrollback cannot hold one', async () => {
     const peer = scriptedPeer()
     const sink = recorder()

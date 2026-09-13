@@ -194,7 +194,12 @@ stale, showing the age of what is displayed. It does not disappear: a row
 vanishing when a laptop closes reads as "it was deleted", which for a worktree is
 the one thing it must never wrongly say.
 
-*Runs today.*
+*Runs today*, for the ending where the socket closes — quitting the app. The
+other ending, a lid shut on a socket that stays open at both ends, is bo's own
+silence deadline: nothing decrypted for two and a half keepalive intervals, five
+minutes, and the link is over. That is asserted in
+`src/main/teamwork/peer/peerLink.ts`'s own suite, against an injected clock,
+because five minutes of real time does not belong in this scenario.
 
 ## What "passing" means
 

@@ -3,6 +3,7 @@
 // runtime may interleave them freely on the same connection.
 
 import { createConnection, type Socket } from 'node:net'
+import { startTimedWindow } from '../main/runtime/elapsed.js'
 import type { MethodName, ParamsOf, ResultOf } from '../shared/methods.js'
 import {
   createFrameDecoder,
@@ -38,8 +39,36 @@ export type RuntimeClient = {
 type Pending = {
   resolve: (value: unknown) => void
   reject: (error: Error) => void
-  timer: NodeJS.Timeout
+  timer: ObservedTimeout
   method: string
+}
+
+type ObservedTimeout = { cancel: () => void }
+
+/**
+ * A deadline that only fires on time this process was awake for.
+ *
+ * A one-shot armed for fifteen seconds comes back the moment a lid reopens,
+ * having measured hours, and spending the budget there blames the runtime for a
+ * silence nobody was listening to. `startTimedWindow` recognises that gap, and
+ * the timer is re-armed instead; a connection that actually died still rejects
+ * through the socket's own error and close handlers.
+ */
+function observedTimeout(ms: number, fire: () => void): ObservedTimeout {
+  let timer: NodeJS.Timeout | undefined
+  const arm = (): void => {
+    const window = startTimedWindow({ now: () => Date.now() }, ms)
+    timer = setTimeout(() => {
+      if (window.wasInterrupted()) {
+        arm()
+        return
+      }
+      fire()
+    }, ms)
+    timer.unref?.()
+  }
+  arm()
+  return { cancel: () => clearTimeout(timer) }
 }
 
 const CONNECT_HINT = 'Start the teamree desktop app (npm run dev in the repo, or launch the installed app), then retry.'
@@ -78,7 +107,7 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
     let closed = false
     let nextId = 0
 
-    const connectTimer = setTimeout(() => {
+    const connectTimer = observedTimeout(timeoutMs, () => {
       socket.destroy()
       reject(
         new NoRuntimeError(
@@ -86,12 +115,11 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
           CONNECT_HINT
         )
       )
-    }, timeoutMs)
-    connectTimer.unref?.()
+    })
 
     const failAllPending = (error: Error): void => {
       for (const [id, entry] of pending) {
-        clearTimeout(entry.timer)
+        entry.timer.cancel()
         pending.delete(id)
         entry.reject(error)
       }
@@ -99,7 +127,7 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
 
     socket.on('error', (error: NodeJS.ErrnoException) => {
       if (!connected) {
-        clearTimeout(connectTimer)
+        connectTimer.cancel()
         reject(describeConnectFailure(error, options.endpoint))
         return
       }
@@ -152,7 +180,7 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
 
         const entry = pending.get(frame.id)
         if (!entry) continue
-        clearTimeout(entry.timer)
+        entry.timer.cancel()
         pending.delete(frame.id)
         if (frame.ok) entry.resolve(frame.result)
         else entry.reject(toCallError(frame, entry.method))
@@ -172,7 +200,7 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
       const id = `cli-${++nextId}`
       const request: Request = { id, method, params }
       return new Promise<unknown>((resolveCall, rejectCall) => {
-        const timer = setTimeout(() => {
+        const timer = observedTimeout(timeoutMs, () => {
           pending.delete(id)
           rejectCall(
             new CliError({
@@ -182,8 +210,7 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
               hint: 'Raise the budget with --timeout <ms> if the operation is genuinely slow.'
             })
           )
-        }, timeoutMs)
-        timer.unref?.()
+        })
         pending.set(id, { resolve: resolveCall, reject: rejectCall, timer, method })
         // Requests share the frame encoder: the protocol's framing is one JSON
         // value per line in both directions, even though `Frame` names only the
@@ -214,8 +241,8 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
       },
       close: () => {
         closed = true
-        clearTimeout(connectTimer)
-        for (const entry of pending.values()) clearTimeout(entry.timer)
+        connectTimer.cancel()
+        for (const entry of pending.values()) entry.timer.cancel()
         pending.clear()
         socket.destroy()
       }
@@ -223,7 +250,7 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
 
     socket.on('connect', () => {
       connected = true
-      clearTimeout(connectTimer)
+      connectTimer.cancel()
       resolve(client)
     })
   })

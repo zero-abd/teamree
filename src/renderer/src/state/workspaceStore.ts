@@ -72,6 +72,12 @@ export type Notice = { id: number; text: string; tone: 'error' | 'info' }
  */
 export type PaneSearch = { terminalId: string; token: number }
 
+/**
+ * Which of the teamwork panel's three reads last failed, and what each said.
+ * Keyed the way the panel's own input is, so it can be handed over as it is.
+ */
+export type TeamworkReadErrors = { list?: string; relay?: string; status?: string }
+
 type WorkspaceState = {
   connection: ConnectionState
   runtimeVersion: string | null
@@ -150,6 +156,16 @@ type WorkspaceState = {
    * anything had looked.
    */
   teamwork: Record<string, TeamworkStatus>
+  /**
+   * Why the last read behind the teamwork panel failed, by project id, for the
+   * ones that did.
+   *
+   * A read that threw and a read still in flight both leave the answer out of
+   * the maps above, and the panel has to tell them apart: without this it said
+   * "Reading…" for the life of the window, with the whole of the explanation in
+   * a notice that had already gone.
+   */
+  teamworkReadErrors: Record<string, TeamworkReadErrors>
   /** What each project's teammates are showing, by project id. */
   teammates: Record<string, TeammatePresence>
   /**
@@ -316,6 +332,32 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
   const failed = (what: string) => (error: unknown) => {
     notify(`${what}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  /**
+   * A read the teamwork panel depends on threw. Kept beside the notice rather
+   * than instead of it: the notice is for whoever is not looking at the panel,
+   * and the panel is where the step that cannot be answered is.
+   */
+  const readFailed = (projectId: string, read: keyof TeamworkReadErrors, error: unknown): void => {
+    const message = error instanceof Error ? error.message : String(error)
+    set((state) => ({
+      teamworkReadErrors: {
+        ...state.teamworkReadErrors,
+        [projectId]: { ...state.teamworkReadErrors[projectId], [read]: message }
+      }
+    }))
+  }
+
+  /** The same read has since succeeded, so its refusal is history. */
+  const readSucceeded = (projectId: string, read: keyof TeamworkReadErrors): void => {
+    set((state) => {
+      const current = state.teamworkReadErrors[projectId]
+      if (current?.[read] === undefined) return {}
+      const rest = { ...current }
+      delete rest[read]
+      return { teamworkReadErrors: { ...state.teamworkReadErrors, [projectId]: rest } }
+    })
   }
 
   // Layouts are the one thing the user edits directly (dragging a gutter, moving
@@ -660,6 +702,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     members: {},
     membersPending: false,
     membersError: null,
+    teamworkReadErrors: {},
     relays: {},
     relayPending: false,
     relayError: null,
@@ -1077,7 +1120,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async loadCli() {
-      set({ cliPending: true })
+      // A refusal belongs to the attempt that earned it. Without this, cancelling
+      // the password prompt and closing the dialog leaves "the password was not
+      // given" waiting for whoever opens it next, about an attempt nobody made.
+      set({ cliPending: true, cliError: null })
       try {
         set({ cli: await runtimeClient.call('cli.status', {}) })
       } catch (error) {
@@ -1095,10 +1141,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // read-back rather than a guess, and there is nothing left to re-read.
         set({ cliInstall: install, cli: install.status })
       } catch (error) {
-        set({ cliError: error instanceof Error ? error.message : String(error) })
-        // What is at the destination may be exactly why it was refused, so the
-        // panel is re-read: "there is a file there" has to survive the refusal.
+        // Re-read first, then say what refused: what is at the destination may
+        // be exactly why it was refused, so "there is a file there" has to
+        // survive the refusal — and the read clears the last refusal, so the
+        // new one goes on afterwards or it goes nowhere.
         await get().loadCli()
+        set({ cliError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ cliPending: false })
       }
@@ -1126,8 +1174,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const list = await runtimeClient.call('members.list', { projectId })
         set((state) => ({ members: { ...state.members, [projectId]: list } }))
+        readSucceeded(projectId, 'list')
       } catch (error) {
         failed('Could not read the members of this project')(error)
+        readFailed(projectId, 'list', error)
       } finally {
         set({ membersPending: false })
       }
@@ -1140,8 +1190,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const setting = await runtimeClient.call('teamwork.relay', { projectId })
         set((state) => ({ relays: { ...state.relays, [projectId]: setting } }))
+        readSucceeded(projectId, 'relay')
       } catch (error) {
         failed('Could not read where this project’s relay is')(error)
+        readFailed(projectId, 'relay', error)
       } finally {
         set({ relayPending: false })
       }
@@ -1151,8 +1203,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const status = await runtimeClient.call('teamwork.status', { projectId })
         set((state) => ({ teamwork: { ...state.teamwork, [status.projectId]: status } }))
+        readSucceeded(projectId, 'status')
       } catch (error) {
         failed('Could not read whether teamwork is running here')(error)
+        readFailed(projectId, 'status', error)
       }
     },
 
