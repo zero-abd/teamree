@@ -485,7 +485,14 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 <!-- demo-sections:start — the width/height on each <video> and the aspect ratio
      in .demo-frame::before come from public/demos/manifest.json. Run
      `node site/tools/sync-demos.mjs` after the clips land and it will reconcile
-     both against the manifest rather than anyone doing it by hand. -->
+     both against the manifest rather than anyone doing it by hand.
+
+     preload is "none", not "metadata", because the host does not answer byte
+     ranges: a metadata preload cannot be a partial fetch there, so it opens a
+     connection per clip and throws away whatever arrives before the browser
+     gives up. Nothing is fetched until a clip is scrolled to, the poster covers
+     the gap, and the width/height attributes mean the layout never waited on
+     the metadata anyway. -->
 <section id="what">
   <div class="wrap demo">
     <div class="demo-body">
@@ -511,7 +518,7 @@ pre[tabindex]{ scrollbar-gutter:stable; }
           <span>Worktrees</span>
         </div>
         <!-- demo:video:parked
-<video width="1600" height="1000" muted loop playsinline preload="metadata" controls
+<video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/worktrees.jpg"
                aria-label="Screen capture: starting three parallel tasks in teamree, each in its own git worktree.">
           <source src="/demos/worktrees.webm" type="video/webm">
@@ -533,7 +540,7 @@ demo:video:parked -->
           <span>Terminals</span>
         </div>
         <!-- demo:video:parked
-<video width="1600" height="1000" muted loop playsinline preload="metadata" controls
+<video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/terminals.jpg"
                aria-label="Screen capture: splitting a terminal in teamree and running two commands side by side.">
           <source src="/demos/terminals.webm" type="video/webm">
@@ -589,7 +596,7 @@ demo:video:parked -->
           <span>The CLI</span>
         </div>
         <!-- demo:video:parked
-<video width="1600" height="1000" muted loop playsinline preload="metadata" controls
+<video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/cli.jpg"
                aria-label="Screen capture: a coding agent driving teamree through the teamree command line, with the window updating as it goes.">
           <source src="/demos/cli.webm" type="video/webm">
@@ -619,7 +626,7 @@ demo:video:parked -->
           <span>Teamwork</span>
         </div>
         <!-- demo:video:parked
-<video width="1600" height="1000" muted loop playsinline preload="metadata" controls
+<video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/teamwork.jpg"
                aria-label="Screen capture: two people connected in teamree, one watching and typing into the other's pane.">
           <source src="/demos/teamwork.webm" type="video/webm">

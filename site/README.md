@@ -91,6 +91,13 @@ deliberately broken sources rather than by reasoning about it:
   while the clips are parked, and `:has()` does not reliably re-evaluate when
   script changes the subtree. The element stays; only the control goes.
 
+`preload` is `none` rather than `metadata`, and that is a consequence of the
+host rather than a preference: it does not answer byte ranges, so a metadata
+preload cannot be a partial fetch — it opens a connection per clip and discards
+whatever arrives before the browser gives up. Nothing is fetched until a clip is
+scrolled to. The poster covers the gap and the `width`/`height` attributes mean
+the layout never depended on the metadata.
+
 Playback, for anyone changing it: the markup carries native `controls` so the
 page works with JavaScript off; the script removes them, fits a custom play
 button, and plays a clip only while it is on screen. `prefers-reduced-motion`
