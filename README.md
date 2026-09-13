@@ -350,3 +350,9 @@ never run, because no runner is provisioned for this repository (see "Status").
 Its tag trigger has been removed rather than left to hang a red cross off a
 release that was built correctly by hand; the workflow is kept, still runnable by
 hand, and its comment says exactly what to put back when Actions works again.
+
+## Licence
+
+MIT. The full text is in [`LICENSE`](LICENSE), and it covers everything in this
+repository, including the relay in `relay/`. Copyright © 2026 Abdullah Al
+Mahmud.
