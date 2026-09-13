@@ -16,7 +16,7 @@
 // Node is required and is not something this can paper over: Wrangler is a Node
 // program. The shell wrapper beside this file says so when there is no node.
 import { spawn } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -427,6 +427,19 @@ export async function main(argv, { cwd = process.cwd(), root = templateRoot() } 
   }
 }
 
-if (process.argv[1] !== undefined && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// Both sides are resolved through symlinks before comparing. `import.meta.url`
+// is already resolved and `process.argv[1]` is not, so comparing them raw made
+// this program a no-op whenever it was reached through a link — which includes
+// anything under a macOS temp directory, since /var is itself a symlink.
+function isThisModule(entry) {
+  if (entry === undefined) return false
+  try {
+    return pathToFileURL(realpathSync(entry)).href === pathToFileURL(realpathSync(fileURLToPath(import.meta.url))).href
+  } catch {
+    return pathToFileURL(entry).href === import.meta.url
+  }
+}
+
+if (isThisModule(process.argv[1])) {
   await main(process.argv.slice(2))
 }

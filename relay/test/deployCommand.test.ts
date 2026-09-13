@@ -9,7 +9,8 @@
 // fixes them. Both are asserted below, against the sentences themselves,
 // because a refusal whose wording drifts is a refusal that stops helping.
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -255,4 +256,26 @@ describe('finding the sources it carries', () => {
   it('looks one directory up from itself, which is the relay package in a clone and in the app', () => {
     expect(templateRoot()).toBe(RELAY_ROOT)
   })
+})
+
+describe('reached through a symlink', () => {
+  // `import.meta.url` is resolved through symlinks and `process.argv[1]` is not,
+  // so comparing them raw made the whole program a silent no-op behind a link.
+  // macOS puts every temp directory under /var, which is itself a symlink, so
+  // this was reachable by anything that ran the command from a temp path.
+  it('still writes the project when the script is reached through a linked directory', () => {
+    const root = mkdtempSync(join(tmpdir(), 'teamree-relay-symlink-'))
+    const linked = join(root, 'linked')
+    symlinkSync(join(import.meta.dirname, '..'), linked)
+    const target = join(root, 'project')
+
+    const result = spawnSync(process.execPath, [join(linked, 'bin', 'teamree-relay.mjs'), 'deploy', target, '--dry-run'], {
+      encoding: 'utf8',
+      timeout: 120_000
+    })
+
+    expect(existsSync(join(target, 'wrangler.jsonc'))).toBe(true)
+    expect(result.stdout).toContain('wrote the Worker project')
+    rmSync(root, { recursive: true, force: true })
+  }, 180_000)
 })
