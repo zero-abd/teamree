@@ -144,7 +144,7 @@ const RELAY = {
   url: 'wss://relay.example/v1/relay',
   source: 'repository',
   problem: null,
-  committed: { url: 'wss://relay.example/v1/relay', problem: null },
+  onDisk: { url: 'wss://relay.example/v1/relay', problem: null },
   override: { name: 'TEAMREE_RELAY_URL', value: null },
   readAt: NOW
 }

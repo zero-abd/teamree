@@ -36,9 +36,7 @@ function ok(message) {
 function describeVersion(candidate) {
   const plist = join(candidate, 'Contents', 'Info.plist')
   if (!existsSync(plist)) return 'version unknown'
-  const match = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(
-    readFileSync(plist, 'utf8')
-  )
+  const match = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(readFileSync(plist, 'utf8'))
   return match ? `version ${match[1]}` : 'version unknown'
 }
 
