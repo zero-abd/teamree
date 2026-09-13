@@ -34,9 +34,10 @@
 // What comes out is the same coarse invalidation every other producer emits.
 // The value here is entirely in the timing.
 
-import { watch as fsWatch } from 'node:fs'
+import { existsSync, statSync, watch as fsWatch } from 'node:fs'
 import { join } from 'node:path'
 import { MEMBERS_DIR_SEGMENTS } from './memberFile'
+import { RELAY_FILE_SEGMENTS } from './peer/relayUrl'
 
 /** Long enough to swallow a checkout writing several files, short enough to feel live. */
 export const DEFAULT_SETTLE_MS = 200
@@ -73,28 +74,38 @@ export type TeamreeWatchDegraded = {
 }
 
 /**
- * The direct child of the watched directory that an event names.
+ * What the two team-wide facts looked like last time an event made us check.
  *
- * Not the same thing as the reported name, and the difference is a platform
- * one that cost a CI failure. Linux's inotify reports only the direct child,
- * so `.teamree` arrives as `.teamree`. macOS has no non-recursive watch to
- * give: `fs.watch` is backed by FSEvents, which is recursive by nature, and
- * libuv reports the path *relative to the watched directory* — so the same
- * event arrives as `.teamree/members/bo.pub`.
+ * Three numbers, not one, and the third is why: a key arriving does not touch
+ * `.teamree`'s own mtime — it changes the mtime of `members/`, the directory it
+ * lands in — and the relay file changes neither, since editing a file leaves
+ * its parent alone. A mark of `.teamree` by itself answers "did teamwork
+ * appear or go", which is only one of the three things this watch is for.
  *
- * Comparing the whole string therefore worked on the platform this was written
- * on and silently failed on the only platform this ships to, in the case that
- * matters most: a project whose `.teamree` arrives in somebody else's commit
- * is watched at its root and nowhere else, so the root's filter is the only
- * thing that can notice it at all. Rejecting the event leaves the app holding
- * the roster from before the pull with nothing on screen to say so — which is
- * the exact failure this file exists to remove.
+ * `undefined` for a path means it is not there at all, which is a state worth
+ * telling apart from every other: a project nobody has set teamwork up on is
+ * the case the checkout-root watch exists for.
  */
-function firstSegment(relative: string): string {
-  // Both separators, because the reported path is the platform's own and this
-  // comparison should not be a second thing that only holds on one of them.
-  const cut = relative.search(/[\\/]/)
-  return cut === -1 ? relative : relative.slice(0, cut)
+type TeamreeMark = readonly (number | undefined)[]
+
+function mtimeOf(path: string): number | undefined {
+  try {
+    return statSync(path).mtimeMs
+  } catch {
+    return undefined
+  }
+}
+
+function markOf(projectPath: string): TeamreeMark {
+  return [
+    mtimeOf(join(projectPath, TEAMREE_DIR)),
+    mtimeOf(join(projectPath, ...MEMBERS_DIR_SEGMENTS)),
+    mtimeOf(join(projectPath, ...RELAY_FILE_SEGMENTS))
+  ]
+}
+
+function sameMark(a: TeamreeMark | undefined, b: TeamreeMark): boolean {
+  return a !== undefined && a.length === b.length && a.every((each, index) => each === b[index])
 }
 
 /** What a lost watch means, in terms somebody could act on. */
@@ -144,6 +155,8 @@ type WatchedTeamree = {
  */
 export class TeamreeWatcher {
   readonly #watched = new Map<string, WatchedTeamree>()
+  /** What `.teamree` looked like when this project last reported. */
+  readonly #marks = new Map<string, TeamreeMark>()
   readonly #onChange: () => void
   readonly #watch: WatchFn
   readonly #settleMs: number
@@ -208,6 +221,11 @@ export class TeamreeWatcher {
   #attach(projectId: string, projectPath: string): void {
     const watched = this.#watched.get(projectId) ?? { path: projectPath, handles: new Map(), covered: true }
     this.#watched.set(projectId, watched)
+    // The baseline for the checkout-root filter below. Taken here rather than
+    // on the first event, so that a build writing into the checkout is still
+    // free: without it the first write after attaching would always look like a
+    // change, because nothing had been recorded to compare it against.
+    if (!this.#marks.has(projectId)) this.#marks.set(projectId, markOf(projectPath))
 
     const teamreeDir = join(projectPath, TEAMREE_DIR)
     const membersDir = join(projectPath, ...MEMBERS_DIR_SEGMENTS)
@@ -216,7 +234,24 @@ export class TeamreeWatcher {
     // writes and an agent works, and a report per file written there would cost
     // a roster read for every one of them.
     this.#attachOne(watched, projectId, projectPath, {
-      interesting: (relative) => relative === null || firstSegment(relative) === TEAMREE_DIR,
+      // Asked of the filesystem, not of the event's filename.
+      //
+      // This used to compare the reported name against `.teamree`, which is a
+      // statement about how a platform spells its events and not about what
+      // happened. Linux's inotify names the direct child; macOS has no
+      // non-recursive watch to offer, so `fs.watch` is FSEvents underneath and
+      // reports a path relative to the watched directory — and when the watched
+      // path and the path the event arrives on differ, as they do under a
+      // symlinked temporary directory, the spelling differs again. Two CI
+      // failures on the only platform this ships to, and each fix was another
+      // guess at the same string.
+      //
+      // So the string is no longer load-bearing. Any event on the checkout root
+      // costs one `stat` of `.teamree`, and only a real change to it — appearing,
+      // going, or being written — reports. That is cheaper than the roster read
+      // this filter exists to avoid, and it is the same answer on every platform
+      // because it is not an opinion about the platform.
+      interesting: () => this.#teamreeChanged(projectId, projectPath),
       // The checkout itself is the one directory that has to be there: it is
       // what notices `.teamree` appearing, so a project whose path has gone is
       // a project nothing can be heard about.
@@ -224,6 +259,27 @@ export class TeamreeWatcher {
     })
     this.#attachOne(watched, projectId, teamreeDir)
     this.#attachOne(watched, projectId, membersDir)
+
+    // Degraded is a state to recover from, not a verdict.
+    //
+    // `#lose` sets it when a watch dies, and a watch dying is exactly what a
+    // branch switch does: checking out a branch without `.teamree` takes the
+    // directory and its watches with it. Without this, the project stayed
+    // marked unwatched for the life of the process — including after the branch
+    // came back, the directory returned, and every watch was successfully
+    // re-attached a few lines above.
+    //
+    // That is the failure of this area pointed the other way. A roster that has
+    // silently stopped following its file is the thing worth warning about; a
+    // warning left standing over a roster that is being followed perfectly well
+    // is how somebody learns to ignore the warning.
+    watched.covered =
+      watched.handles.has(projectPath) &&
+      // A directory that is not there needs no watch — a project nobody has set
+      // teamwork up on is covered by the watch on its checkout. One that is
+      // there and has no watch is the case this flag exists for.
+      (!existsSync(teamreeDir) || watched.handles.has(teamreeDir)) &&
+      (!existsSync(membersDir) || watched.handles.has(membersDir))
   }
 
   #attachOne(
@@ -273,6 +329,10 @@ export class TeamreeWatcher {
     const watched = this.#watched.get(id)
     if (!watched) return
     this.#watched.delete(id)
+    // A project that comes back is a project nobody has looked at since, so its
+    // remembered `.teamree` would be a claim about a checkout this watcher is
+    // no longer following.
+    this.#marks.delete(id)
     for (const handle of watched.handles.values()) {
       try {
         handle.close()
@@ -283,6 +343,19 @@ export class TeamreeWatcher {
   }
 
   /** Collapses a burst — a pull writes several files — into one report. */
+  /**
+   * Whether `.teamree` itself has changed since the last event said it had.
+   *
+   * Remembered per project so a build writing into the checkout — which is what
+   * a checkout is for — costs one `stat` and no report.
+   */
+  #teamreeChanged(projectId: string, projectPath: string): boolean {
+    const mark = markOf(projectPath)
+    const changed = !sameMark(this.#marks.get(projectId), mark)
+    this.#marks.set(projectId, mark)
+    return changed
+  }
+
   #report(): void {
     if (this.#closed || this.#cancelPending) return
     this.#cancelPending = this.#schedule(
