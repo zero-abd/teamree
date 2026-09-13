@@ -692,3 +692,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Somebody typing is louder than somebody reading, because it is: one of them
+   is running commands as you. */
+.pane-row__watchers--typing {
+  color: var(--accent-bright);
+}
+
+/* Quiet, and always there while it is true. A mute the owner cannot see in the
+   list is a mute they will not remember lifting. */
+.pane-row__muted {
+  flex: 0 0 auto;
+  color: var(--warning);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}

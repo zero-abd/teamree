@@ -533,18 +533,118 @@ export type PaneWatcher = {
   since: number
 }
 
-/** One of this machine's panes and who is reading it. */
+/**
+ * One person who has typed into one of this machine's panes.
+ *
+ * The other half of the same bargain, and the half that matters more: a
+ * teammate's keystroke runs as the owner, so the owner is told whose it was
+ * while it happens rather than afterwards. `at` is what makes that live — a
+ * reader compares it with the clock and says "is typing" or "typed", and never
+ * claims somebody is at the keyboard because they once were.
+ *
+ * The counters cover the whole time this runtime has been up, so a pane that
+ * has been typed into says so even when nobody is typing now. `refused` sits
+ * beside `writes` deliberately: somebody still typing at a muted pane is a fact
+ * the owner wants, and it is one that would vanish if only what landed counted.
+ */
+/**
+ * How long after a keystroke somebody is still "typing".
+ *
+ * Here rather than in either half, because the runtime decides when to say a
+ * burst has ended and the window decides whether to draw one, and two numbers
+ * would eventually disagree about whether anybody is at the keyboard.
+ *
+ * A second and a half: long enough to survive somebody thinking mid-command,
+ * short enough that "ana is typing" goes away while she is still in the room.
+ */
+export const TYPING_WINDOW_MS = 1_500
+
+export type PaneTypist = {
+  /** What the roster files their key under. */
+  handle: string
+  /** Their public key, which is the identity the handshake authenticated. */
+  publicKey: string
+  /** Their first keystroke into this pane, by this machine's clock. */
+  since: number
+  /** Their most recent one, which is what makes "is typing" a live answer. */
+  at: number
+  /** Keystrokes that reached the pane. */
+  writes: number
+  /** Bytes that reached the pane. Never the bytes themselves. */
+  bytes: number
+  /** Keystrokes this machine refused: a mute, a pane that had gone, a roster. */
+  refused: number
+}
+
+/** One of this machine's panes, and what everyone else is doing to it. */
 export type WatchedPane = {
   terminalId: string
   /** Sorted by handle, so two reads compare cleanly. */
   watchers: PaneWatcher[]
+  /** Sorted by handle, for the same reason. */
+  typists: PaneTypist[]
+  /**
+   * The owner has stopped remote keystrokes reaching this pane.
+   *
+   * Reported even when nobody is reading or typing, because a mute the owner
+   * cannot see is a mute they cannot lift — and because `docs/teamwork.md` is
+   * explicit that a muted pane still exists. Mute stops the bytes; it does not
+   * hide the worktree.
+   */
+  muted: boolean
 }
 
-/** Every pane of this machine somebody is watching, in one project. */
+/** Every pane of this machine somebody is reading, has typed into, or muted. */
 export type PaneWatchers = {
   projectId: string
-  /** Only panes with at least one watcher; an empty list means nobody is reading. */
+  /**
+   * Only panes with something to say: a reader, a typist, or a mute. An empty
+   * list means nobody is reading, nobody has typed, and nothing is muted.
+   */
   panes: WatchedPane[]
+  readAt: number
+}
+
+/**
+ * One remote keystroke, as the owner's own record of it.
+ *
+ * WHAT IT DELIBERATELY DOES NOT HOLD IS THE BYTES. The argument is written out
+ * in `src/main/teamwork/peer/writeLog.ts`, where the file is written; the short
+ * form is that a remote write carries *input*, and input includes what a
+ * terminal deliberately does not echo. Keeping it would turn the owner's audit
+ * trail into a plaintext store of their teammates' passphrases, which is a
+ * worse thing to own than this log is good.
+ */
+export type RemoteWrite = {
+  /** By the owner's clock, which is the only one this record trusts. */
+  at: number
+  handle: string
+  publicKey: string
+  projectId: string
+  terminalId: string
+  /** How much was sent, never what it was. */
+  bytes: number
+  /** How many submissions it carried, so a command is not read as a keypress. */
+  returns: number
+  /** Whether it reached the pane, and what stopped it when it did not. */
+  outcome: RemoteWriteOutcome
+  /** Why it was refused, in the words the teammate was given. Absent when it landed. */
+  reason?: string
+}
+
+/**
+ * `written` is the only one where bytes reached a pty. The rest are the ways
+ * this machine said no, kept apart rather than collapsed into "refused",
+ * because "I muted you" and "that pane is gone" are different answers.
+ */
+export type RemoteWriteOutcome = 'written' | 'muted' | 'no-pane' | 'not-a-member' | 'too-large'
+
+/** The owner's record of what teammates have typed here. */
+export type RemoteWriteLog = {
+  /** Oldest first, so this list's order is the order it happened in. */
+  writes: RemoteWrite[]
+  /** Why the record may be incomplete, or null when nothing has gone wrong. */
+  problem: string | null
   readAt: number
 }
 

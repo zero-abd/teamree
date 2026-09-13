@@ -27,26 +27,34 @@
 // member of — the key is a hash of a remote, and somebody who knows the
 // repository exists can compute one.
 
-import type {
-  PaneWatcher,
-  PaneWatchers,
-  PeerLink as PeerLinkStatus,
-  PeerPane,
-  PeerPresence,
-  Project,
-  TeammatePresence,
-  TeammateWorktree,
-  TeamworkStatus,
-  Terminal,
-  WatchedPane,
-  Worktree
+import {
+  TYPING_WINDOW_MS,
+  type PaneTypist,
+  type PaneWatcher,
+  type PaneWatchers,
+  type PeerLink as PeerLinkStatus,
+  type PeerPane,
+  type PeerPresence,
+  type Project,
+  type RemoteWrite,
+  type RemoteWriteLog,
+  type RemoteWriteOutcome,
+  type TeammatePresence,
+  type TeammateWorktree,
+  type TeamworkStatus,
+  type Terminal,
+  type WatchedPane,
+  type Worktree
 } from '../../../shared/entities'
-import type { ParamsOf } from '../../../shared/methods'
+import type { ParamsOf, ResultOf } from '../../../shared/methods'
 import { createGitRunner, type GitRunner } from '../../git/gitProcess'
 import type { Dispatcher } from '../../runtime/dispatcher'
+import { PeerCallError, type RemoteWriteRequest, type RemoteWriteVerdict } from '../../runtime/peerTransport'
 import type { SubscriptionChannel, SubscriptionHub } from '../../runtime/subscriptionHub'
 import { notFound } from '../../runtime/runtimeError'
-import { badPaneId } from '../errors'
+import { ErrorCode } from '../../../shared/protocol'
+import { badPaneId, TeamworkError } from '../errors'
+import { createRemoteWriteLog, returnsIn, type RemoteWriteRecorder } from './writeLog'
 import { loadIdentity, loadStaticPrivateKey } from '../identity'
 import { readRoster } from '../roster'
 import { watchPane } from './paneWatch'
@@ -148,6 +156,31 @@ export class PeerService {
    * teammate who went quiet rather than a teammate who went away.
    */
   readonly #watching = new Map<string, Set<SubscriptionChannel>>()
+  /**
+   * Who has typed into each of this machine's panes, keyed by pane and then by
+   * the key that typed.
+   *
+   * Keyed by the pane rather than by the link, unlike the watchers above,
+   * because this is the owner's question and not the teammate's: what the owner
+   * needs in front of them is "whose keystrokes are in this pane", and two
+   * people typing into one pane is exactly the case that must not be able to
+   * look like one.
+   */
+  readonly #typists = new Map<string, Map<string, PaneTypist>>()
+  /**
+   * Panes the owner has muted, by this machine's own terminal id.
+   *
+   * In memory, for the life of this runtime, and deliberately not on disk. A
+   * mute is the owner's answer to something happening now; a mute file would
+   * outlive the pane it named and would have to be pruned at startup, which is
+   * the one moment pruning is least reliable — panes are being restored while
+   * it runs. The cost is that a restart lifts every mute, and the reason that
+   * is survivable is that a restart also rebuilds every link from nothing:
+   * there is no stream in flight for a restored mute to catch, and the pane
+   * says in the window whether it is muted.
+   */
+  readonly #muted = new Set<string>()
+  readonly #log: RemoteWriteRecorder
 
   #dispatch: Dispatcher | undefined
   #identityKey: string | null = null
@@ -156,12 +189,20 @@ export class PeerService {
   #revision = 0
   #started = false
   #cancelCoalesce: (() => void) | undefined
+  /** When the window was last told about typing, so a burst is not a flood of reads. */
+  #typingToldAt = 0
+  #cancelTypingIdle: (() => void) | undefined
 
   constructor(options: PeerServiceOptions) {
     this.#options = options
     this.#runner = options.runner ?? createGitRunner()
     this.#scheduler = options.scheduler ?? defaultScheduler
     this.#dial = options.dial ?? webSocketDialer
+    this.#log = createRemoteWriteLog({
+      dataDir: options.dataDir,
+      now: () => this.#scheduler.now(),
+      ...(options.onError ? { onError: options.onError } : {})
+    })
   }
 
   /**
@@ -183,6 +224,8 @@ export class PeerService {
     this.#started = false
     this.#cancelCoalesce?.()
     this.#cancelCoalesce = undefined
+    this.#cancelTypingIdle?.()
+    this.#cancelTypingIdle = undefined
     for (const record of this.#links.values()) record.link.stop()
     this.#links.clear()
     this.#peerByConnection.clear()
@@ -317,68 +360,66 @@ export class PeerService {
    * everything asked of them is released when it is torn down.
    */
   openWatch(params: ParamsOf<'teamwork.watch'>): OpenedWatch {
-    const facts = this.#projects.get(params.projectId)
-    if (!facts) throw notFound(`no project with id ${params.projectId}`)
-    if (facts.projectKey === undefined) {
-      throw notFound(`project ${params.projectId} is not shared with anyone`)
-    }
-
-    const target = parsePeerPaneId(params.paneId)
-    if (!target) throw badPaneId(`${params.paneId} is not a teammate’s pane id`)
-
-    // Resolved through the roster and this project's own links, exactly as
-    // `presence` is: a pane id is a string a caller can type, and the thing
-    // that makes it mean somebody is their key being on this project's roster.
-    for (const publicKey of facts.rosterKeys) {
-      if (publicKey === this.#identityKey) continue
-      if (publicKey.slice(0, KEY_PREFIX_LENGTH) !== target.keyPrefix) continue
-      const linkId = linkIdFor(publicKey, facts.projectKey)
-      const record = this.#links.get(linkId)
-      const heard = this.#heard.get(linkId)
-      if (!record || !heard) continue
-      const pane = findPane(heard.presence, facts.projectKey, target.terminalId)
-      if (!pane) continue
-      if (record.status.phase !== 'connected') {
-        throw notFound(`${record.status.handle} is not connected, so their pane cannot be read`)
-      }
-
-      const handle = this.#handleFor(publicKey) ?? heard.presence.handle ?? publicKey.slice(0, 8)
-      return {
-        handle,
-        // The owner's, and never negotiated. `docs/teamwork.md`: a watcher with
-        // a smaller window letterboxes rather than resizing a pty under a
-        // program that is only being read.
-        cols: pane.cols ?? DEFAULT_COLS,
-        rows: pane.rows ?? DEFAULT_ROWS,
-        start: (channel) => {
-          const stop = watchPane({
-            target: record.link,
-            terminalId: target.terminalId,
-            channel,
-            ...(this.#options.onError ? { onError: this.#options.onError } : {})
-          })
-          const open = this.#watching.get(linkId) ?? new Set<SubscriptionChannel>()
-          open.add(channel)
-          this.#watching.set(linkId, open)
-          return () => {
-            open.delete(channel)
-            if (open.size === 0) this.#watching.delete(linkId)
-            stop()
-          }
+    const { record, handle, terminalId, pane, linkId } = this.#resolvePeerPane(params.projectId, params.paneId, 'read')
+    return {
+      handle,
+      // The owner's, and never negotiated. `docs/teamwork.md`: a watcher with
+      // a smaller window letterboxes rather than resizing a pty under a
+      // program that is only being read.
+      cols: pane.cols ?? DEFAULT_COLS,
+      rows: pane.rows ?? DEFAULT_ROWS,
+      start: (channel) => {
+        const stop = watchPane({
+          target: record.link,
+          terminalId,
+          channel,
+          ...(this.#options.onError ? { onError: this.#options.onError } : {})
+        })
+        const open = this.#watching.get(linkId) ?? new Set<SubscriptionChannel>()
+        open.add(channel)
+        this.#watching.set(linkId, open)
+        return () => {
+          open.delete(channel)
+          if (open.size === 0) this.#watching.delete(linkId)
+          stop()
         }
       }
     }
-
-    throw notFound(`no teammate pane with id ${params.paneId} in this project`)
   }
 
   /**
-   * Who is reading this machine's panes, right now.
+   * Types into one of a teammate's panes.
    *
-   * The owner's half of "everyone sees everything": watching is visible while
-   * it happens, in the same list the panes are in, because the argument in
-   * `docs/teamwork.md` for why any of this is survivable is that none of it can
-   * be done invisibly.
+   * The same resolution `openWatch` does, for the same reason: a pane id is a
+   * string a caller can type, and what makes it mean somebody is their key
+   * being on this project's roster and their session being confirmed. What
+   * crosses the wire is `terminal.write`, answered by their own terminal
+   * service, gated by their own machine.
+   *
+   * A refusal from the far end is rethrown with the code they gave it, never
+   * flattened into a generic failure: "that pane is muted" and "that pane is
+   * gone" are what the person who typed needs, and are the difference between
+   * a feature that is honest about failing and one that swallows keystrokes.
+   */
+  async type(params: ParamsOf<'teamwork.type'>): Promise<ResultOf<'teamwork.type'>> {
+    const { record, terminalId } = this.#resolvePeerPane(params.projectId, params.paneId, 'type into')
+    try {
+      return await record.link.call('terminal.write', { terminalId, data: params.data })
+    } catch (error) {
+      throw error instanceof PeerCallError ? new TeamworkError(error.code, error.message) : notFound(reasonFor(error))
+    }
+  }
+
+  /**
+   * Who is reading this machine's panes and who has typed into them, right now,
+   * and which of them the owner has muted.
+   *
+   * The owner's half of "everyone sees everything": both halves of it are
+   * visible while they happen, in the same list the panes are in, because the
+   * argument in `docs/teamwork.md` for why any of this is survivable is that
+   * none of it can be done invisibly. A pane appears here for any of the three
+   * reasons and not only for the first — a mute nobody can see is a mute nobody
+   * can lift.
    */
   watchers(params: ParamsOf<'teamwork.watchers'>): PaneWatchers {
     const facts = this.#projects.get(params.projectId)
@@ -400,14 +441,116 @@ export class PeerService {
       }
     }
 
-    const panes: WatchedPane[] = [...byPane]
-      .map(([terminalId, watchers]) => ({
+    // Every pane of this project as well as every pane being read over one of
+    // its links, so a mute or a typist on a pane nobody is watching is still
+    // reported. Both halves are already scoped to this project — the watchers
+    // by the link they arrived on, the panes by this machine's own list — so
+    // one project's answer still cannot carry another's rows.
+    const named = new Set([...byPane.keys(), ...this.#panesOf(facts.projectId)])
+
+    const panes: WatchedPane[] = [...named]
+      .map((terminalId) => ({
         terminalId,
-        watchers: watchers.sort((a, b) => a.handle.localeCompare(b.handle))
+        watchers: (byPane.get(terminalId) ?? []).sort((a, b) => a.handle.localeCompare(b.handle)),
+        typists: [...(this.#typists.get(terminalId)?.values() ?? [])]
+          .map((typist) => ({ ...typist }))
+          .sort((a, b) => a.handle.localeCompare(b.handle)),
+        muted: this.#muted.has(terminalId)
       }))
+      .filter((pane) => pane.watchers.length > 0 || pane.typists.length > 0 || pane.muted)
       .sort((a, b) => a.terminalId.localeCompare(b.terminalId))
 
     return { projectId: facts.projectId, panes, readAt: this.#scheduler.now() }
+  }
+
+  /**
+   * Stops, or restarts, remote keystrokes reaching one of this machine's panes.
+   *
+   * Instant, local, and nobody's business but the owner's: no round trip, no
+   * agreement, and no way for a teammate to refuse it or to know it happened
+   * except by being told their keystroke went nowhere. It takes effect on the
+   * next keystroke to arrive, which — because the check and the pty write are
+   * in one task with nothing awaited between them — is every keystroke that has
+   * not already been written.
+   */
+  mute(params: ParamsOf<'teamwork.mute'>): PaneWatchers {
+    const projectId = this.#projectOfPane(params.terminalId)
+    if (projectId === undefined) throw notFound(`no pane of this machine with id ${params.terminalId}`)
+    if (params.muted) this.#muted.add(params.terminalId)
+    else this.#muted.delete(params.terminalId)
+    this.#options.onChange()
+    return this.watchers({ projectId })
+  }
+
+  /** The owner's record of every remote write, from their own disk. */
+  writeLog(params: ParamsOf<'teamwork.writeLog'>): Promise<RemoteWriteLog> {
+    return this.#log.read(params.limit)
+  }
+
+  /**
+   * Whether one teammate's keystroke may reach one of this machine's panes, and
+   * the record of it either way.
+   *
+   * THE ORDER IS THE POINT. The attribution and the record are updated before
+   * the verdict is returned, and the verdict is returned into the same task
+   * that dispatches the write — so there is no arrangement of events in which
+   * bytes reach a pty and the owner cannot see whose they were. The disk copy
+   * follows on its own; losing it would cost history, never attribution.
+   *
+   * Everything is checked against what this machine currently believes rather
+   * than against anything the caller said: the key comes from the handshake,
+   * the roster from the last read of the repository, and the pane from this
+   * runtime's own list. A teammate whose key left the roster is refused at the
+   * next keystroke, which is what "revocation at fetch speed" means here.
+   */
+  remoteWrite(connectionId: string, write: RemoteWriteRequest): RemoteWriteVerdict {
+    const at = this.#scheduler.now()
+    const peer = this.#peerByConnection.get(connectionId)
+    if (!peer) {
+      // Nothing to attribute it to, which is itself the reason to refuse: this
+      // is a connection the peer service never opened.
+      return this.#refuse(
+        { at, handle: 'unknown', publicKey: '', projectId: '', terminalId: write.terminalId },
+        write,
+        'not-a-member',
+        'this connection is not a peer link'
+      )
+    }
+
+    const handle = this.#handleFor(peer.publicKey) ?? peer.publicKey.slice(0, 8)
+    const stamp = { at, handle, publicKey: peer.publicKey, projectId: '', terminalId: write.terminalId }
+
+    // On the roster of a project this session is actually for. Both halves
+    // matter: the roster is membership, and the project key is what stops a
+    // teammate reached over one repository's session typing into another's.
+    const project = [...this.#projects.values()].find(
+      (fact) =>
+        fact.projectKey === peer.projectKey && fact.disabledReason === null && fact.rosterKeys.includes(peer.publicKey)
+    )
+    if (!project) {
+      return this.#refuse(stamp, write, 'not-a-member', 'you are not on this project’s roster')
+    }
+    stamp.projectId = project.projectId
+
+    // A pane of that project, and one that is still running. Resolved from this
+    // machine's own list rather than from anything the caller named, which is
+    // the same scoping `teamwork.watch` puts on reading.
+    const pane = this.#paneOf(project.projectId, write.terminalId)
+    if (!pane) {
+      return this.#refuse(stamp, write, 'no-pane', `there is no pane ${write.terminalId} in this project`)
+    }
+    if (!pane.running) {
+      return this.#refuse(stamp, write, 'no-pane', 'that pane’s process has exited')
+    }
+
+    // Last, and closest to the write, because it is the one that has to be
+    // freshest: a mute applied a microsecond ago stops this keystroke.
+    if (this.#muted.has(write.terminalId)) {
+      return this.#refuse(stamp, write, 'muted', 'the owner has muted this pane')
+    }
+
+    this.#recordWrite(stamp, write, 'written')
+    return { ok: true }
   }
 
   /**
@@ -504,6 +647,7 @@ export class PeerService {
       },
       onPresence: (presence) => this.#record(linkId, want.publicKey, presence),
       onWatchersChange: (terminalIds) => this.#recordWatchers(linkId, terminalIds),
+      onRemoteWrite: (write) => this.remoteWrite(linkId, write),
       onError: this.#options.onError
     })
 
@@ -529,6 +673,169 @@ export class PeerService {
       channel.close()
     }
     this.#watching.delete(linkId)
+  }
+
+  /**
+   * One of a teammate's panes, resolved the way the roster says it may be.
+   *
+   * `intent` is only ever words for the error, and it is a parameter because
+   * "cannot be read" and "cannot be typed into" are two different sentences to
+   * be told at the moment a link is down.
+   */
+  #resolvePeerPane(projectId: string, paneId: string, intent: string): ResolvedPeerPane {
+    const facts = this.#projects.get(projectId)
+    if (!facts) throw notFound(`no project with id ${projectId}`)
+    if (facts.projectKey === undefined) throw notFound(`project ${projectId} is not shared with anyone`)
+
+    const target = parsePeerPaneId(paneId)
+    if (!target) throw badPaneId(`${paneId} is not a teammate’s pane id`)
+
+    // Resolved through the roster and this project's own links, exactly as
+    // `presence` is: a pane id is a string a caller can type, and the thing
+    // that makes it mean somebody is their key being on this project's roster.
+    for (const publicKey of facts.rosterKeys) {
+      if (publicKey === this.#identityKey) continue
+      if (publicKey.slice(0, KEY_PREFIX_LENGTH) !== target.keyPrefix) continue
+      const linkId = linkIdFor(publicKey, facts.projectKey)
+      const record = this.#links.get(linkId)
+      const heard = this.#heard.get(linkId)
+      if (!record || !heard) continue
+      const pane = findPane(heard.presence, facts.projectKey, target.terminalId)
+      if (!pane) continue
+      if (record.status.phase !== 'connected') {
+        throw notFound(`${record.status.handle} is not connected, so their pane cannot be ${intent}`)
+      }
+      return {
+        record,
+        linkId,
+        publicKey,
+        handle: this.#handleFor(publicKey) ?? heard.presence.handle ?? publicKey.slice(0, 8),
+        terminalId: target.terminalId,
+        pane
+      }
+    }
+
+    throw notFound(`no teammate pane with id ${paneId} in this project`)
+  }
+
+  /** Files a refused keystroke and turns it into the answer the teammate gets. */
+  #refuse(
+    stamp: WriteStamp,
+    write: RemoteWriteRequest,
+    outcome: RemoteWriteOutcome,
+    reason: string
+  ): RemoteWriteVerdict {
+    this.#recordWrite(stamp, write, outcome, reason)
+    // `conflict` for a mute because the pane is in a state the owner put it in
+    // and a different argument would not help; `not_found` for the rest,
+    // because from where the teammate stands there is nothing there to type at.
+    const code = outcome === 'muted' ? ErrorCode.Conflict : ErrorCode.NotFound
+    return { ok: false, code, message: reason }
+  }
+
+  /**
+   * The attribution and the record, in that order and both before the caller
+   * has an answer.
+   *
+   * The attribution is in memory and cannot fail, which is why it is the thing
+   * the owner's guarantee rests on. The log is the durable copy of the same
+   * fact and is allowed to be slower.
+   */
+  #recordWrite(stamp: WriteStamp, write: RemoteWriteRequest, outcome: RemoteWriteOutcome, reason?: string): void {
+    const entry: RemoteWrite = {
+      at: stamp.at,
+      handle: stamp.handle,
+      publicKey: stamp.publicKey,
+      projectId: stamp.projectId,
+      terminalId: stamp.terminalId,
+      bytes: write.bytes,
+      returns: returnsIn(write.data),
+      outcome
+    }
+    if (reason !== undefined) entry.reason = reason
+    this.#log.record(entry)
+    this.#attribute(entry)
+  }
+
+  /** Who is typing in which pane, kept live so the owner is never in doubt. */
+  #attribute(entry: RemoteWrite): void {
+    const held = this.#typists.get(entry.terminalId) ?? new Map<string, PaneTypist>()
+    const existing = held.get(entry.publicKey)
+    const fresh = existing === undefined || entry.at - existing.at > TYPING_WINDOW_MS
+    const typist: PaneTypist = existing ?? {
+      handle: entry.handle,
+      publicKey: entry.publicKey,
+      since: entry.at,
+      at: entry.at,
+      writes: 0,
+      bytes: 0,
+      refused: 0
+    }
+    typist.handle = entry.handle
+    typist.at = entry.at
+    if (entry.outcome === 'written') {
+      typist.writes += 1
+      typist.bytes += entry.bytes
+    } else {
+      typist.refused += 1
+    }
+    held.set(entry.publicKey, typist)
+    this.#typists.set(entry.terminalId, held)
+
+    // Bounded, because this is a map keyed by something a long-running app
+    // accumulates. The pane typed into least recently is the one to forget.
+    while (this.#typists.size > MAX_TYPED_PANES) {
+      const oldest = [...this.#typists].sort((a, b) => lastTypedAt(a[1]) - lastTypedAt(b[1]))[0]
+      if (!oldest) break
+      this.#typists.delete(oldest[0])
+    }
+
+    this.#tellWindowAboutTyping(entry.at, fresh)
+  }
+
+  /**
+   * Wakes the window for a burst rather than for a keystroke.
+   *
+   * A read per keypress would be a refetch of three collections per keypress,
+   * so a burst is announced when it starts, kept alive at a pulse while it goes
+   * on, and announced once more when it has stopped — that last one matters
+   * most, because a window that was never told is a window still saying
+   * somebody is typing after they have walked away.
+   */
+  #tellWindowAboutTyping(at: number, fresh: boolean): void {
+    this.#cancelTypingIdle?.()
+    this.#cancelTypingIdle = this.#scheduler.setTimer(() => {
+      this.#cancelTypingIdle = undefined
+      this.#options.onChange()
+    }, TYPING_WINDOW_MS)
+
+    if (!fresh && at - this.#typingToldAt < TYPING_PULSE_MS) return
+    this.#typingToldAt = at
+    this.#options.onChange()
+  }
+
+  /** This machine's own pane, in one project, or undefined when it is not there. */
+  #paneOf(projectId: string, terminalId: string): Terminal | undefined {
+    for (const worktree of this.#options.workspace.listWorktrees(projectId)) {
+      const pane = this.#options.workspace.listTerminals(worktree.id).find((entry) => entry.id === terminalId)
+      if (pane) return pane
+    }
+    return undefined
+  }
+
+  /** Every pane id this machine has in one project. */
+  #panesOf(projectId: string): string[] {
+    return this.#options.workspace
+      .listWorktrees(projectId)
+      .flatMap((worktree) => this.#options.workspace.listTerminals(worktree.id).map((pane) => pane.id))
+  }
+
+  /** Which project one of this machine's panes is in. */
+  #projectOfPane(terminalId: string): string | undefined {
+    for (const fact of this.#projects.values()) {
+      if (this.#paneOf(fact.projectId, terminalId)) return fact.projectId
+    }
+    return undefined
   }
 
   /** Keeps the moment each watch started, so a row can say how long. */
@@ -592,6 +899,44 @@ export class PeerService {
     }
     return facts
   }
+}
+
+/**
+ * How often a burst of typing wakes the window while it is still going.
+ *
+ * Twice a second. Fast enough that "ana is typing" is never a claim about a
+ * second ago, slow enough that a paste or a fast typist is not a refetch per
+ * keystroke.
+ */
+export const TYPING_PULSE_MS = 500
+
+/**
+ * How many panes' typists are remembered.
+ *
+ * A pane that is gone is not forgotten with it — the record of who typed in it
+ * is the point — but a machine left running for a month must not accumulate
+ * one of these per pane it has ever had. The durable record is the log.
+ */
+export const MAX_TYPED_PANES = 512
+
+/** One teammate's pane, resolved through the roster to the link that reaches it. */
+type ResolvedPeerPane = {
+  record: LinkRecord
+  linkId: string
+  publicKey: string
+  handle: string
+  /** The pane's id **on the owner's machine**, never the namespaced one. */
+  terminalId: string
+  pane: PeerPane
+}
+
+/** Everything about a write that is known before it is judged. */
+type WriteStamp = {
+  at: number
+  handle: string
+  publicKey: string
+  projectId: string
+  terminalId: string
 }
 
 /** What `openWatch` resolved, and the start the subscription hub drives. */
@@ -669,6 +1014,17 @@ type WantedLink = {
  */
 export function isNewerPresence(held: PeerPresence | undefined, incoming: PeerPresence): boolean {
   return held === undefined || incoming.revision > held.revision
+}
+
+/** The most recent keystroke in one pane, whoever sent it. */
+function lastTypedAt(typists: Map<string, PaneTypist>): number {
+  let latest = 0
+  for (const typist of typists.values()) latest = Math.max(latest, typist.at)
+  return latest
+}
+
+function reasonFor(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 /** A peer's own runtime produced this, but it still arrived over a wire. */

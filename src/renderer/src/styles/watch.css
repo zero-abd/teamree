@@ -59,10 +59,10 @@
   white-space: nowrap;
 }
 
-/* Spelled out, always, never a lock icon. A symbol is a thing a reader has to
-   already know the meaning of; this is a promise about what their keyboard
-   does and it is worth the room. */
-.watch__readonly {
+/* Spelled out, always, never an icon. A symbol is a thing a reader has to
+   already know the meaning of; this says whose machine their keyboard is on
+   and it is worth the room. */
+.watch__typing {
   margin-left: auto;
   padding: 1px var(--s2);
   border: 1px solid var(--line);
@@ -70,6 +70,13 @@
   color: var(--fg-muted);
   font-size: var(--text-xs);
   letter-spacing: 0.02em;
+}
+
+/* A refusal replaces the promise rather than sitting beside it: the sentence
+   about what typing does here is not true while the far end is saying no. */
+.watch__typing--refused {
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .watch__size {

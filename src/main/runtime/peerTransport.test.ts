@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { Params } from '../../shared/methods'
+import { MAX_REMOTE_WRITE_BYTES, Params } from '../../shared/methods'
 import { createInitiatorSession, createResponderSession, generateStaticKeyPair } from '../../shared/peer'
 import type { PeerSession } from '../../shared/peer'
 import { ErrorCode } from '../../shared/protocol'
@@ -22,6 +22,8 @@ import {
   STREAM_BUFFER_BYTES,
   STREAM_FLUSH_MS,
   type PeerTransport,
+  type RemoteWriteRequest,
+  type RemoteWriteVerdict,
   type TransportScheduler
 } from './peerTransport'
 import { createRuntimeContext } from './runtimeContext'
@@ -83,6 +85,8 @@ type Rig = {
   hub: SubscriptionHub
   /** Every stream event the teammate received, in order. */
   received: { stream: string; event: unknown }[]
+  /** Every keystroke that reached a pane on the answering side, in order. */
+  written: string[]
   /** The panes the answering side believes the teammate has open. */
   watched: () => readonly string[]
   /** Pushes one event into a pane the teammate subscribed to. */
@@ -90,7 +94,13 @@ type Rig = {
   clock: ReturnType<typeof manualClock>
 }
 
-type RigOptions = { allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][] }
+type RigOptions = {
+  allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][]
+  /** The owner's verdict on a keystroke. Left out to prove nothing writes without one. */
+  onRemoteWrite?: (write: RemoteWriteRequest) => RemoteWriteVerdict
+  /** Run when the answering side first decrypts anything, as key confirmation is. */
+  onConfirmed?: (transport: PeerTransport) => void
+}
 
 /**
  * Two transports wired mouth to ear.
@@ -99,11 +109,12 @@ type RigOptions = { allowedMethods?: readonly Parameters<MethodRegistry['registe
  * property under test is message boundaries, and a queue between them would
  * only prove the queue kept order.
  */
-function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][], _options?: RigOptions): Rig {
+function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][], options?: RigOptions): Rig {
   const [callerSession, answererSession] = handshakenPair()
   const hub = new SubscriptionHub()
   const clock = manualClock()
   const received: { stream: string; event: unknown }[] = []
+  const written: string[] = []
   const panes = new Map<string, { emit: (event: unknown) => void; close: () => void }>()
   let watched: readonly string[] = []
   const registry = new MethodRegistry(createRuntimeContext({ version: 't', store: {} as never, subscriptions: hub }))
@@ -131,6 +142,12 @@ function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0]
   }))
   registry.register('peer.presence', z.object({}), () => ({ revision: 1, handle: 'them', projects: [] }))
   registry.register('worktree.remove', z.object({ worktreeId: z.string() }), () => ({ removed: true as const }))
+  // Everything that actually reached a pane, so "refused" can be asserted as
+  // nothing having happened rather than as an error message having come back.
+  registry.register('terminal.write', Params.terminalWrite, (params) => {
+    written.push(params.data)
+    return { written: true as const }
+  })
 
   let answerer: PeerTransport
   const caller = createPeerTransport({
@@ -157,6 +174,8 @@ function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0]
       watched = terminalIds
     },
     ...(allowedMethods ? { allowedMethods } : {}),
+    ...(options?.onRemoteWrite ? { onRemoteWrite: options.onRemoteWrite } : {}),
+    ...(options?.onConfirmed ? { onConfirmed: () => options.onConfirmed?.(answerer) } : {}),
     onFatal: () => {}
   })
 
@@ -166,6 +185,7 @@ function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0]
     registry,
     hub,
     received,
+    written,
     clock,
     watched: () => watched,
     pane: (terminalId) => panes.get(terminalId)
@@ -200,22 +220,95 @@ describe('what a teammate can reach', () => {
     })
   })
 
-  it('lets a teammate read a pane and gives them no way at all to write to one', () => {
+  it('lets a teammate read a pane and type into one, and reach nothing else', () => {
     // The list is asserted whole, so widening it stays a deliberate edit to one
     // line and never a side effect of registering a handler. C added the two
-    // reads that a watcher needs; D is what adds `terminal.write`, and until it
-    // does, a teammate's keystroke reaches a method this runtime does not admit
-    // to having. That absence is the whole of "read-only".
+    // reads a watcher needs; D added `terminal.write` and nothing besides. A
+    // teammate's window is not this pane's window and their keyboard is not its
+    // power switch, so resize and close stay off it.
     expect([...PEER_METHODS]).toEqual([
       'peer.presence',
       'peer.subscribe',
       'terminal.read',
       'terminal.subscribe',
+      'terminal.write',
       'unsubscribe'
     ])
-    expect(PEER_METHODS).not.toContain('terminal.write')
     expect(PEER_METHODS).not.toContain('terminal.resize')
     expect(PEER_METHODS).not.toContain('terminal.close')
+  })
+
+  it('refuses a keystroke when nothing is there to attribute it to', async () => {
+    // A transport wired without `onRemoteWrite` cannot say whose bytes these
+    // are, so it does not carry them. "On the allow-list" and "allowed" are
+    // deliberately two different things for the one method that runs code.
+    const { caller, written } = rig(['terminal.write'])
+    await expect(caller.call('terminal.write', { terminalId: 't_1', data: 'x' })).rejects.toMatchObject({
+      code: ErrorCode.UnknownMethod
+    })
+    expect(written).toEqual([])
+  })
+
+  it('asks the owner about every keystroke and writes only what they allow', async () => {
+    const asked: string[] = []
+    const { caller, written } = rig(['terminal.write'], {
+      onRemoteWrite: (write) => {
+        asked.push(write.data)
+        return write.data === 'no'
+          ? { ok: false, code: ErrorCode.Conflict, message: 'the owner has muted this pane' }
+          : { ok: true }
+      }
+    })
+
+    await expect(caller.call('terminal.write', { terminalId: 't_1', data: 'yes' })).resolves.toEqual({ written: true })
+    await expect(caller.call('terminal.write', { terminalId: 't_1', data: 'no' })).rejects.toMatchObject({
+      code: ErrorCode.Conflict,
+      // The owner's own words, carried to the person who typed. A refusal with
+      // a generic message is a keystroke that vanished for no stated reason.
+      message: 'the owner has muted this pane'
+    })
+
+    expect(asked).toEqual(['yes', 'no'])
+    expect(written).toEqual(['yes'])
+  })
+
+  it('runs nothing from a message whose session was refused as it was being read', async () => {
+    // Key confirmation happens on the first frame that decrypts and can itself
+    // end the link: a session that authenticated a different key than the one
+    // this side dialled is torn down inside `onConfirmed`, in the middle of the
+    // message carrying it. Whatever else that message held arrived over a
+    // session this machine has just refused, and a keystroke in it must not run
+    // merely because the loop had already started.
+    const { caller, written } = rig(['terminal.write'], {
+      onRemoteWrite: () => ({ ok: true }),
+      onConfirmed: (answerer) => answerer.close('the handshake authenticated a different key')
+    })
+
+    // Never answered, because the link it was sent over is gone. The sender
+    // learns that from their own socket closing, which is what a real relay
+    // does to the partner of a connection that went.
+    void caller.call('terminal.write', { terminalId: 't_1', data: 'rm -rf ~' }).catch(() => {})
+    await Promise.resolve()
+
+    expect(written).toEqual([])
+  })
+
+  it('refuses a paste too large for the wire before anybody is asked about it', async () => {
+    let asked = 0
+    const { caller, written } = rig(['terminal.write'], {
+      onRemoteWrite: () => {
+        asked += 1
+        return { ok: true }
+      }
+    })
+    // One write is not allowed to spend a whole second of the relay's byte
+    // budget for a link that is also carrying the pane's output back.
+    const paste = 'x'.repeat(MAX_REMOTE_WRITE_BYTES + 1)
+    await expect(caller.call('terminal.write', { terminalId: 't_1', data: paste })).rejects.toMatchObject({
+      code: ErrorCode.InvalidParams
+    })
+    expect(asked).toBe(0)
+    expect(written).toEqual([])
   })
 
   it('widens by exactly the list it is given, which is how C plugs in', async () => {

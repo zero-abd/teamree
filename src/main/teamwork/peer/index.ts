@@ -5,8 +5,19 @@ export type { LinkScheduler, PeerLink, PeerLinkOptions } from './peerLink'
 export { PEER_SERVICE_METHODS, registerPeerHandlers } from './handlers'
 export { watchPane } from './paneWatch'
 export type { PaneWatchOptions, WatchTarget } from './paneWatch'
-export { parsePeerPaneId, PeerService, PRESENCE_COALESCE_MS } from './peerService'
+export { MAX_TYPED_PANES, parsePeerPaneId, PeerService, PRESENCE_COALESCE_MS, TYPING_PULSE_MS } from './peerService'
 export type { OpenedWatch, PeerServiceOptions, PeerWorkspace } from './peerService'
+export {
+  createRemoteWriteLog,
+  returnsIn,
+  WRITE_LOG_DIR,
+  WRITE_LOG_FILE,
+  WRITE_LOG_MAX_BYTES,
+  WRITE_LOG_MODE,
+  WRITE_LOG_PREVIOUS_FILE,
+  type RemoteWriteLogOptions,
+  type RemoteWriteRecorder
+} from './writeLog'
 export { presenceFor } from './presence'
 export type { PresenceProject, PresenceSource } from './presence'
 export { normaliseRemote, projectKeyFor, readProjectKey } from './projectKey'

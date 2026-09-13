@@ -11,8 +11,9 @@
 // which is how people actually look for a piece of work in flight.
 
 import { useCallback, useMemo, useState } from 'react'
-import type { PaneWatcher, PaneWatchers } from '@shared/entities'
+import type { PaneWatchers } from '@shared/entities'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
+import type { PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { evidenceLine } from './outputEvidence'
@@ -263,9 +264,11 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
   )
 }
 
-/** The watcher list per pane, in the shape a row reads. */
-function watchersByPane(watchers: PaneWatchers | undefined): Record<string, readonly PaneWatcher[]> {
-  const byPane: Record<string, readonly PaneWatcher[]> = {}
-  for (const pane of watchers?.panes ?? []) byPane[pane.terminalId] = pane.watchers
+/** What everybody else is doing to each pane, in the shape a row reads. */
+function watchersByPane(watchers: PaneWatchers | undefined): Record<string, PaneAttention> {
+  const byPane: Record<string, PaneAttention> = {}
+  for (const pane of watchers?.panes ?? []) {
+    byPane[pane.terminalId] = { watchers: pane.watchers, typists: pane.typists, muted: pane.muted }
+  }
   return byPane
 }
