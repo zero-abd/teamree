@@ -208,6 +208,17 @@ export type RemoteReadVerdict = { ok: true } | { ok: false; code: ErrorCode; mes
 export const MAX_PEER_SUBSCRIPTIONS = 32
 
 /**
+ * What a reader is told when the pane they were reading is no longer there.
+ *
+ * One sentence in one place, said down two paths that must never disagree: the
+ * stream ends here when the owner closes a pane, and a read that raced that
+ * close is refused with the same words by `PeerService.remoteRead`. A watcher
+ * that got one of those and not the other would be told the pane went for two
+ * different reasons depending on which frame won.
+ */
+export const PANE_CLOSED = 'the owner closed this pane'
+
+/**
  * The methods on the allow-list that leave a subscription behind.
  *
  * Spelled out for the same reason `PEER_METHODS` is: which calls cost this
@@ -746,7 +757,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     // tell them: the stream simply stops, and a watcher left looking at a
     // window that no longer updates would read it as a teammate gone quiet.
     // A peer that ended its own subscription already knows and is not told.
-    if (!asked) write({ stream: subscriptionId, event: { type: 'lost', reason: 'the owner closed this pane' } })
+    if (!asked) write({ stream: subscriptionId, event: { type: 'lost', reason: PANE_CLOSED } })
   })
 
   const handleResponse = (response: Response, sequence: number): void => {
