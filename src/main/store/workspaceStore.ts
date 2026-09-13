@@ -191,6 +191,18 @@ export class WorkspaceStore {
   }
 
   /**
+   * Drops a worktree's layout on its own. `removeWorktree` already takes the
+   * layout with it, so this is for the one case that outlives it: closing the
+   * panes of a worktree that has just been removed writes the emptied layout
+   * back, and the record the removal deleted would return with it.
+   */
+  removeLayout(worktreeId: string): boolean {
+    const removed = this.layouts.delete(worktreeId)
+    if (removed) this.persist()
+    return removed
+  }
+
+  /**
    * Terminal records, which are descriptions rather than live terminals: the
    * PTY they name died with the process that started it.
    */
