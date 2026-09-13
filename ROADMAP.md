@@ -422,6 +422,29 @@ seen from three places.
 - [x] A teammate's pane repaints when the palette changes, like every other pane —
       it was written while the palette could not change
 
+## M27 — What the pane said before the restart
+
+A pane came back in the right directory with an empty screen. The build that
+failed at midnight and the migration that stopped halfway had both been printed
+into a buffer that died with the app, and the only trace left of either was that
+the pane existed.
+
+- [x] Each pane's output kept as a capped tail beside the workspace file, one
+      small file per pane, written when the pane exits and again on the way out
+- [x] A restored pane opens on that record, under a line saying what it is and
+      above a line saying where the new shell begins — nothing in it can be
+      taken for something that is still running
+- [x] Still nothing re-issued. A record is bytes, and putting bytes back on a
+      screen runs nothing: the refusal in `session-restore.ts` is untouched
+- [x] Replayed through an allowlist that keeps text, whitespace and colour and
+      drops every other sequence, so a stored escape cannot answer a cursor
+      report into a shell that never asked, write the clipboard, rename the
+      window or reset the emulator on the way in
+- [x] An agent pane that resumes its conversation is not also handed a
+      transcript of it
+- [x] Pruned with the pane it belongs to, the way a mute is, and swept at
+      startup of anything a crash orphaned
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,
@@ -462,12 +485,23 @@ recorded so none of them is discovered by surprise later.
   committed identity — a file in `.teamree` that both checkouts pull, the way
   the relay URL already works — which is a larger decision than this one and has
   not been taken.
-- **A restarted shell is a fresh shell.** Panes and their directories come back, and
-  an agent pane comes back with its conversation (see M10), but an ordinary pane's
-  scrollback and whatever it was running are gone: the PTY died with the app. A
-  command is never re-issued unless it resumes something, so a pane left on a deploy
-  or a migration comes back as a shell rather than running it twice. Keeping the
-  process itself alive would mean moving PTYs into a daemon that outlives the app.
+- **A restarted shell is a fresh shell, but no longer a blank one.** This entry used
+  to say that an ordinary pane's scrollback died with the app along with whatever it
+  was running, and half of that is no longer true. What a pane printed is kept beside
+  the workspace file — never in it — and put back when the pane reopens (see M27):
+  the last 128 KiB per pane, reduced to text and colour so that nothing stored can
+  act when it is replayed, under a line saying it is a record of a session that has
+  ended and above a line saying where the live shell starts. It is written when a
+  pane exits and again when the app quits, so what is still at risk is narrower than
+  it was: a pane that is *running* something when the machine loses power loses
+  whatever it printed since it last exited.
+
+  The process half stands, and it is the larger half. The PTY still dies with the
+  app. A command is still never re-issued unless it resumes something, so a pane
+  left on a deploy or a migration now comes back as a shell showing what the deploy
+  said, rather than running it twice — which is the honest outcome and not a
+  workaround for the missing half. Keeping the process itself alive would still mean
+  moving PTYs into a daemon that outlives the app, and that has not been done.
 - **One download, universal, unsigned.** A decision, recorded so nobody
   "fixes" it back: macOS ships as a single `teamree-<version>.dmg` carrying both
   architectures rather than a menu of four files. The cost is size and it is

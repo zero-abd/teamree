@@ -30,6 +30,7 @@ import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import { UpdateService, registerUpdateHandlers } from '../../updates'
 import type { TerminalService } from '../../terminals/method-handlers'
+import type { ScrollbackRepository } from '../../terminals/session-manager'
 import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerStatusHandler } from './statusHandler'
@@ -73,6 +74,13 @@ export type RegisterHandlersOptions = {
    * download call then refuses rather than pretending to have opened something.
    */
   openExternal?: (url: string) => Promise<void>
+  /**
+   * Where each pane's output is kept between launches. Opened by the runtime
+   * rather than here because opening it reads a directory, and this function is
+   * the synchronous assembly of a registry. Absent, panes still come back — with
+   * nothing above their prompt.
+   */
+  scrollback?: ScrollbackRepository
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
@@ -91,13 +99,20 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
     layouts: registry.context.store,
     sessions: registry.context.store,
+    // Beside the workspace file rather than in it: a pane's description belongs
+    // in the file this app must be able to read, and a pane's transcript is
+    // orders of magnitude larger, rewritten constantly, and worth nothing if it
+    // is lost. `scrollbackArchive.ts` makes the argument in full.
+    ...(options.scrollback === undefined ? {} : { scrollback: options.scrollback }),
     // A pane going busy or quiet is the only thing this app knows about what an
     // agent is doing, and it is what the sidebar reads. Two events per burst of
     // work, not one per chunk of output.
     onActivityChange: () => workspaceEvents.emit({ type: 'terminals' })
   })
   // Terminals first: each recorded one comes back under the id its panes
-  // already name, and an agent pane comes back with its conversation resumed.
+  // already name, an agent pane comes back with its conversation resumed, and
+  // every other one comes back showing what it printed before the app quit,
+  // under a line saying that is what it is.
   terminals.restoreSessions()
   // Then the layouts, for whatever did not come back — a worktree deleted while
   // the app was closed, a shell that no longer exists. Without this the UI

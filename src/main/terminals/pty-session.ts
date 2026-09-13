@@ -11,6 +11,7 @@ import type { TerminalEvent } from '../../shared/methods'
 import { killProcessTree } from './process-tree'
 import { recoverTailOnTeardown } from './pty-tail'
 import { ScrollbackBuffer } from './scrollback'
+import { replayableRecord, tailFromLineBoundary, type RecordedScrollback } from './scrollbackRecord'
 import {
   buildShellCommand,
   buildTerminalEnv,
@@ -94,6 +95,14 @@ export type PtySessionInit = {
   scrollbackCapBytes?: number
   /** Set when this session is a previous run's pane being brought back. */
   restored?: 'shell' | 'agent'
+  /**
+   * What the pane printed the last time it was open, for a pane being brought
+   * back. Read by everything that reads this pane's output and appended to by
+   * nothing: it is a record of a process that has ended, kept apart from the
+   * live buffer so that no byte of it can ever be mistaken for one this session
+   * produced.
+   */
+  restoredRecord?: RecordedScrollback
   /** Which coding agent this pane runs, when it runs one. */
   agent?: AgentKind
   /** Called when the pane starts or stops producing output. */
@@ -117,6 +126,8 @@ export class PtySession {
   private readonly pty: IPty
   private readonly platform: NodeJS.Platform
   private readonly scrollback: ScrollbackBuffer
+  /** The previous run's output, when this pane is one that was brought back. */
+  private readonly record: RecordedScrollback | undefined
   private readonly titles = new TitleSequenceScanner()
   private readonly listeners = new Set<TerminalEventListener>()
   private readonly subscriptions: IDisposable[] = []
@@ -151,6 +162,7 @@ export class PtySession {
     this.pty = handle
     this.pid = handle.pid
     this.scrollback = new ScrollbackBuffer(init.scrollbackCapBytes)
+    this.record = init.restoredRecord
     this.title = initialTitle(init, platform)
     this.restored = init.restored
     this.lastOutputAt = (init.now ?? Date.now)()
@@ -255,8 +267,48 @@ export class PtySession {
     }
   }
 
+  /**
+   * What this pane shows: the record of the run before this one, if there is
+   * one, and then everything this session has printed.
+   *
+   * The record is framed rather than concatenated. Every reader of this — the
+   * renderer repainting a pane, `teamree terminal read`, a teammate joining a
+   * watch — is told in words where the old output ends and this session begins,
+   * because a reader who thinks a finished build is still running will wait for
+   * it. See `scrollbackRecord.ts` for the marks and for why nothing in a record
+   * can do anything but print.
+   */
   read(tailBytes?: number): string {
-    return this.scrollback.tail(tailBytes)
+    const live = this.scrollback.tail(tailBytes)
+    if (this.record === undefined) return live
+    const framed = replayableRecord(this.record)
+    if (tailBytes === undefined) return `${framed}${live}`
+
+    // A tail short enough to be answered out of this session alone is answered
+    // that way: the live output is the newer half, and the record is only ever
+    // asked for what is left over.
+    const remaining = tailBytes - Buffer.byteLength(live, 'utf8')
+    if (remaining <= 0) return live
+    return `${tailFromLineBoundary(framed, remaining)}${live}`
+  }
+
+  /**
+   * The pane's output as it is written down for the next launch: the record it
+   * came back with, then this session's own.
+   *
+   * Without the marks, deliberately. They describe a record rather than being
+   * part of one, and whoever replays this next adds them again — keeping them
+   * would nest one restart's framing inside the next one's, and leave a line
+   * promising a new shell in the middle of the scrollback.
+   */
+  recordedOutput(capBytes?: number): string {
+    const live = this.scrollback.tail(capBytes)
+    if (this.record === undefined) return live
+    // A record that ended mid-line must not have this session's first line run
+    // on from it.
+    const joined = this.record.text.endsWith('\n') ? this.record.text : `${this.record.text}\r\n`
+    const combined = `${joined}${live}`
+    return capBytes === undefined ? combined : tailFromLineBoundary(combined, capBytes)
   }
 
   get retainedBytes(): number {

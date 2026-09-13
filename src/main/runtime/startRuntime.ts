@@ -3,6 +3,7 @@
 // client must never reach a dispatcher whose registry is still half-built.
 
 import { join } from 'node:path'
+import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { discoveryFilePath, removeDiscoveryFile, writeDiscoveryFile } from './discoveryFile'
@@ -74,10 +75,20 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const report = onError ?? ((error: unknown) => console.error('[runtime]', error))
 
   const store = await WorkspaceStore.open(join(userDataDir, WORKSPACE_FILE_NAME))
+  // After the store, because the sweep needs to know which panes still exist: a
+  // transcript whose pane is gone is an orphan, and this is where the ones that
+  // were orphaned without anybody closing a pane stop accumulating. A workspace
+  // file this launch could not read answers nothing rather than "no panes" —
+  // the store is refusing to write over that file because the panes it lists
+  // are coming back, and their output has to still be there when they do.
+  const scrollback = await ScrollbackArchive.open(
+    join(userDataDir, SCROLLBACK_DIR_NAME),
+    store.unreadable === undefined ? store.listTerminals().map((record) => record.id) : undefined
+  )
   const subscriptions = new SubscriptionHub()
   const context = createRuntimeContext({ version, store, subscriptions })
   const registry = new MethodRegistry(context)
-  const areas = registerHandlers(registry, { openExternal })
+  const areas = registerHandlers(registry, { openExternal, scrollback })
   const dispatch = createDispatcher(registry)
 
   // After the dispatcher, and deliberately: a teammate reaching a registry that

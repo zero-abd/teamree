@@ -1,0 +1,240 @@
+// What a pane's output may be kept as, and what it is allowed to do when it is
+// put back on screen.
+//
+// Terminal output is not text. It is a stream of instructions to an emulator,
+// written by whatever was running in the pane, and some of those instructions
+// make the emulator *send bytes back*: a cursor-position report, a device
+// attributes request, ENQ's answerback, focus reporting. Live, that is a
+// conversation — a program asked the emulator a question and read the answer on
+// its own stdin. Replayed into a pane a week later it is something else
+// entirely: the answer would be typed into a brand new shell that never asked
+// anything, which is a file on disk putting characters on somebody's command
+// line. Other sequences reach outside the pane altogether — OSC 52 writes the
+// system clipboard, OSC 0 renames the window, OSC 8 hangs a URL off a run of
+// text — and ESC c resets the emulator outright, erasing whatever was above it.
+//
+// So a record is not kept the way it arrived. It is reduced to an allowlist on
+// the way to disk and reduced again on the way back, and that list has exactly
+// one escape sequence on it: SGR, which sets colour and weight and can do
+// nothing else. Every other CSI, every string sequence (OSC, DCS, APC, PM,
+// SOS), every C0 control that is not whitespace, and the whole C1 range are
+// dropped.
+//
+// An allowlist rather than a list of the dangerous ones, because the dangerous
+// ones are not a closed set: emulators gain sequences, and a denylist written
+// today is wrong later without anybody touching it. The cost is that a record
+// of a full-screen program reads as the lines it drew rather than as the
+// picture it drew — `outputEvidence.ts` makes the same trade for the same
+// reason, and a record is for reading rather than for working in. The gain is
+// that nothing on this disk can reprogram a terminal on the next launch, and
+// that `cat`ing one of these files is safe too.
+
+/** One pane's kept output, and when this machine wrote it down. */
+export type RecordedScrollback = {
+  text: string
+  /** By this machine's clock, at the moment the record was taken. */
+  endedAt: number
+}
+
+const ESC = '\x1b'
+const BEL = '\x07'
+const ST_C1 = '\u009c'
+
+/** The dim a pane's own asides are printed in; see TerminalView's exit line. */
+const DIM = `${ESC}[38;5;244m`
+const RESET = `${ESC}[0m`
+
+/**
+ * What is left once the sanitizer has run: text, the whitespace controls, and
+ * colour. Exported because it is the claim this module makes, and a claim is
+ * worth being able to assert directly.
+ */
+export const INERT_RECORD = /^(?:[^\u0000-\u001f\u007f-\u009f]|[\n\r\t\u0008]|\u001b\[[0-9;:]*m)*$/u
+
+/**
+ * The record as it is written into a restored pane: what it is, the output
+ * itself, and the line the new shell starts under.
+ *
+ * Both marks are said in words rather than left to be inferred from a colour,
+ * because the one thing a reader must never do here is take a record for a
+ * running process. The first line says the output is finished and when it
+ * stopped; the last says where this run begins. A record long enough to scroll
+ * past its own opening line still has the closing one immediately above the
+ * first thing the new shell printed, which is the boundary that actually gets
+ * read.
+ */
+export function replayableRecord(record: RecordedScrollback): string {
+  return `${openingMark(record.endedAt)}${record.text}${closingMark()}`
+}
+
+/** Said before the record, so it is described before it is read. */
+export function openingMark(endedAt: number): string {
+  return (
+    `${RESET}${DIM}[record — what this pane printed before teamree quit at ` +
+    `${clockLabel(endedAt)}; nothing in it is running]${RESET}\r\n`
+  )
+}
+
+/** Said after it, which is the line somebody reads on the way down. */
+export function closingMark(): string {
+  return `${RESET}\r\n${DIM}[end of record — a new shell starts below]${RESET}\r\n`
+}
+
+/**
+ * Local wall-clock, to the minute.
+ *
+ * Absolute rather than "two hours ago": a restored pane can sit open for days,
+ * and a relative label computed once at restore is a sentence that goes quietly
+ * wrong while nobody is looking at it. Seconds would be noise on a record.
+ */
+export function clockLabel(at: number): string {
+  const when = new Date(at)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return (
+    `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} ` +
+    `${pad(when.getHours())}:${pad(when.getMinutes())}`
+  )
+}
+
+/**
+ * The output reduced to what it is safe to replay: printable text, the
+ * whitespace controls a line is made of, and SGR.
+ *
+ * Applied on the way in so the file on disk is already inert, and again on the
+ * way out because the file is the boundary whatever wrote it — the rule
+ * `parseTeammateCache` states about bounds, for the same reason.
+ */
+export function sanitizeRecordedOutput(text: string): string {
+  let kept = ''
+  let index = 0
+
+  while (index < text.length) {
+    const char = text[index] as string
+
+    if (char === ESC) {
+      const sequence = readEscape(text, index)
+      if (sequence.keep !== undefined) kept += sequence.keep
+      index = sequence.end
+      continue
+    }
+
+    // The whitespace a record is made of. A tab holds a column, a carriage
+    // return is how a progress line overwrote itself, and a backspace is how a
+    // spinner erased the frame before it.
+    if (char === '\n' || char === '\r' || char === '\t' || char === '\b') {
+      kept += char
+      index += 1
+      continue
+    }
+
+    // The C1 range is the eight-bit spelling of the sequences above, and the
+    // introducers take a payload with them: dropping the single byte would
+    // leave `6n` sitting in the record as text where a cursor report had been.
+    const code = char.charCodeAt(0)
+    if (code === 0x9b) {
+      index = scanCsi(text, index + 1).end
+      continue
+    }
+    if (code === 0x90 || code === 0x98 || code === 0x9d || code === 0x9e || code === 0x9f) {
+      index = endOfString(text, index + 1)
+      continue
+    }
+
+    // Everything else under a space is signalling rather than text — BEL rings,
+    // ENQ answers back, SO and SI switch character sets.
+    if (code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f)) {
+      index += 1
+      continue
+    }
+
+    kept += char
+    index += 1
+  }
+
+  return kept
+}
+
+/**
+ * The trailing `capBytes` of `text`, starting at a line boundary.
+ *
+ * Bytes rather than characters, because that is the unit a cap can mean
+ * anything in; and then forward to the first newline, because a byte-aligned
+ * cut lands wherever it lands. Half a colour sequence is either nonsense on
+ * screen or — when the half that survives is the opening one — an escape left
+ * waiting to swallow whatever follows it.
+ */
+export function tailFromLineBoundary(text: string, capBytes: number): string {
+  const buffer = Buffer.from(text, 'utf8')
+  if (buffer.byteLength <= capBytes) return text
+
+  let start = buffer.byteLength - capBytes
+  // A cut inside a multi-byte character would decode to a replacement one.
+  while (start < buffer.byteLength && ((buffer[start] ?? 0) & 0xc0) === 0x80) start++
+  const cut = buffer.subarray(start).toString('utf8')
+  const newline = cut.indexOf('\n')
+  return newline === -1 ? cut : cut.slice(newline + 1)
+}
+
+/** One escape sequence: where it ends, and what of it is worth keeping. */
+type Escape = { end: number; keep?: string }
+
+/**
+ * Consumes the sequence starting at `start` and decides its fate.
+ *
+ * Only a CSI whose final byte is `m` and whose parameters are plain digits
+ * survives — SGR, and deliberately not a private-parameter `m`, which is a
+ * different instruction wearing the same final byte. A sequence the text cuts
+ * off in the middle is dropped along with the rest of the string, because there
+ * is no final byte to judge it by and guessing at one is how a half-sequence
+ * gets replayed whole.
+ */
+function readEscape(text: string, start: number): Escape {
+  const next = text[start + 1]
+  if (next === undefined) return { end: text.length }
+
+  if (next === '[') {
+    const csi = scanCsi(text, start + 2)
+    if (csi.final === 'm' && /^[0-9;:]*$/.test(csi.params)) return { end: csi.end, keep: text.slice(start, csi.end) }
+    return { end: csi.end }
+  }
+
+  // The string sequences: OSC, DCS, SOS, PM, APC. Each runs to a string
+  // terminator and the whole payload goes with it — a title, a clipboard write,
+  // a notification and a hyperlink are all things a record is not allowed to do
+  // on somebody's behalf a week after the fact.
+  if (next === ']' || next === 'P' || next === 'X' || next === '^' || next === '_') {
+    return { end: endOfString(text, start + 2) }
+  }
+
+  // The short escapes: ESC c resets the emulator, ESC ( B picks a character
+  // set, ESC = switches the keypad. None of them is output.
+  let index = start + 1
+  while (index < text.length && (text[index] as string) >= ' ' && (text[index] as string) <= '/') index++
+  return { end: Math.min(index + 1, text.length) }
+}
+
+/**
+ * Consumes a CSI from just after its introducer, to the final byte that names
+ * what it does. A sequence with no final byte is one the tail cut in half.
+ */
+function scanCsi(text: string, from: number): { end: number; final?: string; params: string } {
+  let index = from
+  while (index < text.length) {
+    const char = text[index] as string
+    if (char >= '@' && char <= '~') return { end: index + 1, final: char, params: text.slice(from, index) }
+    index++
+  }
+  return { end: text.length, params: text.slice(from) }
+}
+
+/** Where a string sequence ends: BEL, ESC backslash, or the C1 terminator. */
+function endOfString(text: string, from: number): number {
+  let index = from
+  while (index < text.length) {
+    const char = text[index] as string
+    if (char === BEL || char === ST_C1) return index + 1
+    if (char === ESC && text[index + 1] === '\\') return index + 2
+    index++
+  }
+  return text.length
+}
