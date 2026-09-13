@@ -27,6 +27,14 @@ import type {
   WorktreeStatus
 } from '@shared/entities'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
+import {
+  isWatchedPaneId,
+  neighbourWatchId,
+  paneCycle,
+  watchedPaneId,
+  WATCH_TAIL_CHARS,
+  type WatchedPane
+} from '../panes/watchedPanes'
 import { awaitWorktreeReady } from './awaitWorktreeReady'
 import { relayUrlFromOutput } from '../teamwork/startTeamwork'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
@@ -241,6 +249,47 @@ type WorkspaceState = {
    */
   watchers: Record<string, PaneWatchers>
   /**
+   * Teammates' panes open here, in the order they were opened — which is the
+   * order they are drawn in, left to right, beside your own.
+   *
+   * Several at once, which the floating viewer could not do and this can. The
+   * reason it used to be one was the relay's budget: `docs/teamwork.md` is
+   * explicit that output flows only for a pane somebody has open, and a viewer
+   * that was opened once and never shut is how that becomes the N² traffic the
+   * rule exists to prevent. That argument was about a pane nobody could see
+   * they still had open. A pane in the workspace is one you are looking at, it
+   * carries the same close button as every other pane, and closing it is what
+   * closes the subscription — so the cost is visible and the remedy is where a
+   * remedy belongs.
+   */
+  watches: WatchedPane[]
+  /**
+   * The fractions of the width given to the workspace and to each watched pane
+   * beside it, as the gutters between them were last dragged.
+   *
+   * Not persisted: it is an arrangement of panes that only exist while they are
+   * being watched, and a window that came back with a column reserved for a
+   * teammate's pane it had not reopened would be remembering the wrong half.
+   */
+  watchSizes: number[]
+  /**
+   * Whatever each watched pane has printed since it was opened, by pane id.
+   *
+   * Only an open pane has a line to quote in the sidebar, because only an open
+   * pane is streaming; the tail is trimmed to the last few thousand characters
+   * because a quote needs the end of it and nothing else.
+   */
+  watchTails: Record<string, string>
+  /**
+   * The watched pane with the focus, or null when one of your own has it.
+   *
+   * Held here rather than in a `Layout` because the layouts are the runtime's,
+   * and the runtime has never heard of this pane: it is a window onto a pty on
+   * another machine, and writing it into a tree the runtime reconciles against
+   * its own sessions would have it pruned at the next launch.
+   */
+  focusedWatchId: string | null
+  /**
    * Where this app's CLI is and what is at the path it would be linked to.
    *
    * Probed once at startup beside the agents, and for the same reason: it is
@@ -320,7 +369,8 @@ type WorkspaceState = {
   /** Opens the worktree a pane lives in and puts the focus on that pane. */
   revealPane: (worktreeId: string, terminalId: string) => Promise<void>
 
-  focusPane: (terminalId: string) => void
+  /** Puts the focus on one pane, whether it is yours or a teammate's. */
+  focusPane: (paneId: string) => void
   /** Adopts a fresh terminal record, e.g. the one a resize answers with. */
   recordTerminal: (terminal: Terminal) => void
   splitFocusedPane: (direction: 'row' | 'column') => Promise<void>
@@ -426,6 +476,21 @@ type WorkspaceState = {
    * would be pressed twice.
    */
   mutePane: (terminalId: string, muted: boolean) => Promise<void>
+  /**
+   * Opens a teammate's pane as a pane in this window, or closes the one that is
+   * already open on it.
+   *
+   * The second press being a close is what keeps stopping reachable from the
+   * row that started it, for somebody whose eye is on the sidebar rather than
+   * on the pane.
+   */
+  toggleWatchedPane: (projectId: string, pane: { terminalId: string; label: string; handle: string }) => void
+  /** Closes one, which is what stops the bytes: the pane is the subscription. */
+  closeWatchedPane: (id: string) => void
+  /** Records what a watched pane has printed, so a sidebar row can quote it. */
+  noteWatchedPaneOutput: (id: string, data: string) => void
+  /** Keeps the width the gutters beside the watched panes were dragged to. */
+  setWatchSizes: (sizes: number[]) => void
 
   toggleProject: (projectId: string) => void
   toggleDashboard: () => void
@@ -895,6 +960,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     teamwork: {},
     teammates: {},
     watchers: {},
+    watches: [],
+    watchSizes: [],
+    watchTails: {},
+    focusedWatchId: null,
     changesOpen: false,
     changes: {},
     logs: {},
@@ -1168,13 +1237,31 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       )
     },
 
-    focusPane(terminalId) {
+    focusPane(paneId) {
+      // A teammate's pane is focused here and not in a layout, because the
+      // layouts belong to the runtime and this pane is not one of its sessions.
+      // Everything else about focus is the same for both, which is the point:
+      // one id space, one chord, one highlighted border.
+      if (isWatchedPaneId(paneId)) {
+        if (get().watches.some((watch) => watch.id === paneId)) set({ focusedWatchId: paneId })
+        return
+      }
+      // Focusing one of your own is also what takes the focus off a teammate's:
+      // two panes wearing the focused border would be two answers to where the
+      // next keystroke goes, and one of them would be wrong.
+      if (get().focusedWatchId !== null) set({ focusedWatchId: null })
       const layout = activeLayout()
-      if (!layout || layout.focusedTerminalId === terminalId) return
-      persistLayout({ ...layout, focusedTerminalId: terminalId })
+      if (!layout || layout.focusedTerminalId === paneId) return
+      persistLayout({ ...layout, focusedTerminalId: paneId })
     },
 
     async splitFocusedPane(direction) {
+      // Splitting somebody else's pane is not a thing that can be asked for:
+      // the tree the new pane would go in is on their machine, and this window
+      // has no say in it. Refused in silence rather than by a disabled button,
+      // because the button splits whatever pane has the focus and most of the
+      // time that is one of your own.
+      if (get().focusedWatchId !== null) return
       const layout = activeLayout()
       const terminalId = layout?.focusedTerminalId
       if (!layout || !terminalId) return
@@ -1243,14 +1330,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     focusNextPane() {
       const layout = activeLayout()
-      if (!layout?.root) return
-      const ids = collectTerminalIds(layout.root)
-      const index = layout.focusedTerminalId ? ids.indexOf(layout.focusedTerminalId) : -1
+      // Teammates' panes are in the cycle for the same reason they are in the
+      // tree: a pane you can type into that the chord for "next pane" refuses
+      // to reach is a pane that is only half in the window.
+      const ids = paneCycle(layout?.root ?? null, get().watches)
+      if (ids.length === 0) return
+      const current = get().focusedWatchId ?? layout?.focusedTerminalId ?? null
+      const index = current === null ? -1 : ids.indexOf(current)
       const next = ids[(index + 1) % ids.length]
-      if (next) persistLayout({ ...layout, focusedTerminalId: next })
+      if (next !== undefined) get().focusPane(next)
     },
 
     openPaneSearch() {
+      // Find searches an emulator's scrollback, and a watched pane's scrollback
+      // is a picture held at the owner's size and scaled to fit — there is no
+      // search addon on it, and there could not be one that meant anything
+      // about the pane rather than about the last few screens of it that
+      // reached here. Opening the field over a pane that is not the focused one
+      // would be worse than not opening it.
+      if (get().focusedWatchId !== null) return
       const focused = activeLayout()?.focusedTerminalId
       if (!focused) return
       set((state) => ({ paneSearch: { terminalId: focused, token: (state.paneSearch?.token ?? 0) + 1 } }))
@@ -1681,6 +1779,49 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } catch (error) {
         failed('Could not change this pane’s mute')(error)
       }
+    },
+
+    toggleWatchedPane(projectId, pane) {
+      const id = watchedPaneId(projectId, pane.terminalId)
+      if (get().watches.some((watch) => watch.id === id)) {
+        get().closeWatchedPane(id)
+        return
+      }
+      set((state) => ({
+        watches: [...state.watches, { id, projectId, paneId: pane.terminalId, label: pane.label, handle: pane.handle }],
+        watchTails: { ...state.watchTails, [id]: '' },
+        // Focused on arrival, like a pane you just opened: it is the thing that
+        // was asked for, and it is the one you are about to type into.
+        focusedWatchId: id
+      }))
+    },
+
+    closeWatchedPane(id) {
+      set((state) => {
+        if (!state.watches.some((watch) => watch.id === id)) return {}
+        const watchTails = { ...state.watchTails }
+        delete watchTails[id]
+        return {
+          watches: state.watches.filter((watch) => watch.id !== id),
+          watchTails,
+          focusedWatchId: state.focusedWatchId === id ? neighbourWatchId(state.watches, id) : state.focusedWatchId
+        }
+      })
+    },
+
+    noteWatchedPaneOutput(id, data) {
+      set((state) => {
+        const tail = state.watchTails[id]
+        // Absent means the pane has already been closed, and the chunk is one
+        // that was in flight when it went. Keeping it would leave a tail behind
+        // for a pane nobody can see, quoted in a row that is no longer live.
+        if (tail === undefined) return {}
+        return { watchTails: { ...state.watchTails, [id]: (tail + data).slice(-WATCH_TAIL_CHARS) } }
+      })
+    },
+
+    setWatchSizes(sizes) {
+      set({ watchSizes: sizes })
     },
 
     toggleProject(projectId) {

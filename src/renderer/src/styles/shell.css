@@ -106,7 +106,10 @@
   grid-area: sidebar;
 }
 
-.workspace {
+/* The workspace and, beside it, any teammate's pane this window has open. It
+   is a split of one until somebody is being watched, which is why the grid cell
+   belongs to it rather than to `.workspace` itself. */
+.workspace-split {
   grid-area: workspace;
 }
 
