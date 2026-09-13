@@ -8,6 +8,7 @@ import { agentCommands } from './commands/agent.js'
 import { cliCommands } from './commands/cli.js'
 import { projectCommands } from './commands/project.js'
 import { statusCommands } from './commands/status.js'
+import { teamCommands } from './commands/team.js'
 import { terminalCommands } from './commands/terminal.js'
 import { worktreeCommands } from './commands/worktree.js'
 
@@ -16,6 +17,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   ...projectCommands,
   ...worktreeCommands,
   ...terminalCommands,
+  ...teamCommands,
   ...agentCommands,
   ...cliCommands
 ]

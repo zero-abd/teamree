@@ -55,7 +55,13 @@
 // would be shown that output twice. So a read flushes its pane first, and the
 // answer leaves after everything it describes.
 
-import { MAX_REMOTE_WRITE_BYTES, type MethodName, type ParamsOf, type ResultOf } from '../../shared/methods'
+import {
+  MAX_REMOTE_WRITE_BYTES,
+  MAX_TERMINAL_ID_CHARS,
+  type MethodName,
+  type ParamsOf,
+  type ResultOf
+} from '../../shared/methods'
 import type { PeerSession } from '../../shared/peer'
 import {
   encodeFrame,
@@ -184,6 +190,41 @@ export const MAX_PEER_SUBSCRIPTIONS = 32
  * covering the next one.
  */
 const SUBSCRIBING_METHODS: readonly MethodName[] = ['peer.subscribe', 'terminal.subscribe'] as const
+
+/**
+ * How many requests a second one teammate may ask this runtime for, and how
+ * many may arrive at once.
+ *
+ * A frame is not a request: one Noise transport message carries 65,455 bytes of
+ * newline-delimited JSON, which is some nine hundred `unsubscribe`s, so the
+ * relay's 200-frames-a-second budget bounds the wire and bounds nothing about
+ * this process. Every request past this is work the owner's main thread does on
+ * somebody else's say-so — and that thread owns every pty and the window's IPC,
+ * so it is the thing the whole app stops with.
+ *
+ * The burst is what a legitimate client does at once: a watcher joining opens
+ * presence, reads a scrollback and subscribes per pane, which is tens of calls
+ * in one breath and never hundreds. The rate is what it may sustain.
+ */
+export const PEER_REQUEST_BURST = 200
+export const PEER_REQUESTS_PER_SECOND = 100
+
+/**
+ * The same, for the one method that runs code.
+ *
+ * `terminal.write` is a keystroke, and a person types ten a second; a key held
+ * down repeats at thirty. Fifty a second sustained, a hundred at once, is a
+ * ceiling no human hand or paste reaches and a long way below what it costs to
+ * flood a pty — and the write bucket is spent *as well as* the request bucket,
+ * never instead of it.
+ *
+ * A write refused here never reaches `onRemoteWrite`, so it is never recorded:
+ * that is deliberate. A flood the owner's disk faithfully recorded would be a
+ * flood of the owner's audit log, which is the thing `writeLog.ts` exists to
+ * keep. The teammate is still told, in the answer, that they were too fast.
+ */
+export const PEER_WRITE_BURST = 100
+export const PEER_WRITES_PER_SECOND = 50
 
 export type PeerTransportOptions = {
   session: PeerSession
@@ -339,9 +380,38 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   const asked = new Map<string, string>()
   /** Subscription id to the pane it streams, for every watch the peer holds. */
   const watching = new Map<string, string>()
-  /** Subscriptions the peer has itself asked to end, so its own goodbye is not echoed. */
+  /**
+   * Subscriptions the peer has itself asked to end, so its own goodbye is not
+   * echoed.
+   *
+   * Only ids this link actually holds ever reach it — see `ours` below. An id
+   * this connection never opened is not remembered at all, because a set fed
+   * from the wire is a set the other end chooses the size of, and the only
+   * thing that ever emptied this one was a subscription genuinely ending.
+   */
   const releasing = new Set<string>()
+  /**
+   * Subscription ids the hub has minted for this link and has not yet ended.
+   *
+   * The transport's own books, kept because the hub's count moves inside the
+   * handler and the cap has to be decided in front of it. `reserved` is the
+   * part that is promised and not yet minted: a subscribing request takes its
+   * slot the moment it is let past the check, so a burst in one frame cannot
+   * all read the same count — which is what would happen the day a subscribing
+   * handler awaits anything before it subscribes.
+   */
+  const ours = new Set<string>()
+  /**
+   * Subscriptions that ended before the answer naming them came back, which is
+   * what a source closing itself synchronously looks like from here. Held so
+   * the slot that answer was going to occupy is released rather than leaked.
+   */
+  const endedEarly = new Set<string>()
+  let reserved = 0
   const paced = new Map<string, PacedStream>()
+  /** What a teammate may ask for, refilled by time and spent by asking. */
+  const requests = createBucket(PEER_REQUEST_BURST, PEER_REQUESTS_PER_SECOND, scheduler)
+  const writes = createBucket(PEER_WRITE_BURST, PEER_WRITES_PER_SECOND, scheduler)
   /** One second's worth of bytes, spent by flushes and refilled by time. */
   let budget = STREAM_BYTES_PER_SECOND
   let budgetAt = scheduler.now()
@@ -569,6 +639,11 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       paced.delete(subscriptionId)
     }
     const asked = releasing.delete(subscriptionId)
+    // The slot goes back when the subscription does, whichever end ended it. An
+    // id that is not on our books ended before its own answer came back — the
+    // source closed itself synchronously — and is remembered so that answer
+    // gives the slot back rather than holding it for the life of the link.
+    if (!ours.delete(subscriptionId) && reserved > 0) noteEndedEarly(subscriptionId)
     if (!watching.delete(subscriptionId)) return
     announceWatches()
     // The owner closed the pane out from under a reader. Nothing else would
@@ -599,26 +674,65 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       })
       return
     }
-    if (
-      method !== undefined &&
-      subscribing.has(method) &&
-      options.subscriptions.countFor(options.connectionId) >= MAX_PEER_SUBSCRIPTIONS
-    ) {
-      // Answered rather than dropped, and answered with the reason: a teammate
-      // that has genuinely opened too many panes can close some, and one that
-      // is not going to learns nothing from this it did not already know.
+    // Before anything is decided about what this request is: a request is work
+    // on the owner's main thread, and a frame is nine hundred of them. Answered
+    // rather than dropped, for the same reason every other refusal here is —
+    // typing that went nowhere and said nothing is a lie to whoever typed it.
+    if (!requests.spend()) {
       write({
         id: idOf(value),
         ok: false,
         error: {
           code: ErrorCode.Conflict,
-          message: `this link already holds ${MAX_PEER_SUBSCRIPTIONS} streams; release one before opening another`
+          message: `this link may ask for ${PEER_REQUESTS_PER_SECOND} things a second; slow down and try again`
         }
       })
       return
     }
+    // The subscription slot is taken here, synchronously, rather than counted
+    // out of the hub. The hub's count only moves inside the handler, so a
+    // check that read it would be a check every request in one frame passed —
+    // today only because no subscribing handler awaits anything before it
+    // subscribes. That is one `await` away from being a cap on nothing.
+    const subscribes = method !== undefined && subscribing.has(method)
+    if (subscribes) {
+      if (heldSubscriptions() >= MAX_PEER_SUBSCRIPTIONS) {
+        // Answered rather than dropped, and answered with the reason: a teammate
+        // that has genuinely opened too many panes can close some, and one that
+        // is not going to learns nothing from this it did not already know.
+        write({
+          id: idOf(value),
+          ok: false,
+          error: {
+            code: ErrorCode.Conflict,
+            message: `this link already holds ${MAX_PEER_SUBSCRIPTIONS} streams; release one before opening another`
+          }
+        })
+        return
+      }
+      reserved += 1
+    }
+    const releaseReservation = (): void => {
+      if (!subscribes) return
+      reserved -= 1
+    }
 
     if (method === 'terminal.write') {
+      // The keystroke's own budget, spent on top of the request's. A person
+      // types ten a second; nothing legitimate is refused here, and a flood is
+      // refused before it reaches a verdict, a pty, or the owner's log.
+      if (!writes.spend()) {
+        releaseReservation()
+        write({
+          id: idOf(value),
+          ok: false,
+          error: {
+            code: ErrorCode.Conflict,
+            message: `this link may type ${PEER_WRITES_PER_SECOND} times a second; slow down and try again`
+          }
+        })
+        return
+      }
       const verdict = judgeWrite(value)
       if (!verdict.ok) {
         write({ id: idOf(value), ok: false, error: { code: verdict.code, message: verdict.message } })
@@ -634,6 +748,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       const terminalId = terminalIdOf(value)
       const verdict = judgeRead(terminalId)
       if (!verdict.ok) {
+        releaseReservation()
         write({ id: idOf(value), ok: false, error: { code: verdict.code, message: verdict.message } })
         return
       }
@@ -645,9 +760,16 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       const terminalId = terminalIdOf(value)
       if (terminalId !== undefined) asked.set(idOf(value), terminalId)
     }
+    // Only for a subscription this link actually holds. The id arrives from the
+    // wire, so remembering it on the caller's say-so was a set the far end
+    // chose the size and the contents of — an id naming nothing was kept for
+    // the life of the link, and an id naming a subscription that did not exist
+    // *yet* was believed when it did, which swallowed the owner's "I closed
+    // this pane". Both stop being possible when the only ids that are
+    // remembered are the ids the hub minted here.
     if (method === 'unsubscribe') {
       const subscription = subscriptionOf(value)
-      if (subscription !== undefined) releasing.add(subscription)
+      if (subscription !== undefined && ours.has(subscription)) releasing.add(subscription)
     }
     // The pane whose scrollback is about to be answered, so its own output can
     // be got out of the pacer first. Read here rather than in the continuation
@@ -655,14 +777,59 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     const reading = method === 'terminal.read' ? terminalIdOf(value) : undefined
     void options.dispatch(value, { connectionId: options.connectionId }).then(
       (response) => {
+        if (subscribes) settleReservation(response)
         recordWatch(response)
         if (reading !== undefined) flushPane(reading)
         write(response)
       },
       (error: unknown) => {
+        releaseReservation()
         options.onError?.(error)
       }
     )
+  }
+
+  /**
+   * What this link holds, counted the way that cannot be raced.
+   *
+   * Reservations plus the subscriptions already on our books, and never less
+   * than what the hub says: a handler that subscribes synchronously has already
+   * moved the hub's count while its own reservation is still outstanding, so
+   * the two are a maximum rather than a sum — adding them would count one
+   * subscription twice and halve the cap.
+   */
+  const heldSubscriptions = (): number =>
+    Math.max(ours.size + reserved, options.subscriptions.countFor(options.connectionId))
+
+  /**
+   * A reservation, once the answer says what became of it.
+   *
+   * A subscription that was minted takes the slot its reservation was holding;
+   * anything else — a refusal, a handler that answered without subscribing, a
+   * source that closed itself before the answer got back — gives it up.
+   */
+  const settleReservation = (response: Frame): void => {
+    reserved -= 1
+    if (!('ok' in response) || response.ok !== true) return
+    const subscription = (response.result as { subscription?: unknown } | undefined)?.subscription
+    if (typeof subscription !== 'string') return
+    if (endedEarly.delete(subscription)) return
+    ours.add(subscription)
+  }
+
+  /**
+   * An id whose subscription ended before its own answer came back.
+   *
+   * Bounded by what can be in flight, because nothing else can be waiting for
+   * an answer that would claim it.
+   */
+  const noteEndedEarly = (subscriptionId: string): void => {
+    endedEarly.add(subscriptionId)
+    while (endedEarly.size > reserved) {
+      const oldest = endedEarly.values().next()
+      if (oldest.done === true) return
+      endedEarly.delete(oldest.value)
+    }
   }
 
   /**
@@ -703,6 +870,17 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     const data = paramOf(value, 'data')
     if (terminalId === undefined || data === undefined) {
       return { ok: false, code: ErrorCode.InvalidParams, message: 'a write needs a terminal and some data' }
+    }
+    // The id is capped here as well as in the schema, because this runs *before*
+    // the schema does: the owner's verdict below records the write whether or
+    // not it lands, so an unbounded id is a megabyte of the caller's choosing
+    // in the owner's audit log, and two of them are the whole log rotated away.
+    if (terminalId.length > MAX_TERMINAL_ID_CHARS) {
+      return {
+        ok: false,
+        code: ErrorCode.InvalidParams,
+        message: `a pane id may not be longer than ${MAX_TERMINAL_ID_CHARS} characters`
+      }
     }
     const bytes = byteLength(data)
     if (bytes > MAX_REMOTE_WRITE_BYTES) {
@@ -836,6 +1014,36 @@ export class PeerCallError extends Error {
     super(message)
     this.name = 'PeerCallError'
     this.code = code
+  }
+}
+
+/**
+ * One link's allowance for something, refilled by time and spent by asking.
+ *
+ * A token bucket rather than a counter per window, because a window boundary is
+ * a thing to aim at: a caller that sends its whole allowance at the end of one
+ * window and the start of the next gets twice the rate for an instant, which is
+ * exactly the burst this is here to bound. Measured on the wall clock the rest
+ * of this file's pacing uses — a machine that slept comes back with a full
+ * bucket, which errs towards letting a teammate type.
+ */
+type Bucket = { spend: () => boolean }
+
+function createBucket(capacity: number, perSecond: number, scheduler: TransportScheduler): Bucket {
+  let tokens = capacity
+  let at = scheduler.now()
+  return {
+    spend: () => {
+      const now = scheduler.now()
+      const earned = ((now - at) * perSecond) / 1000
+      if (earned > 0) {
+        tokens = Math.min(capacity, tokens + earned)
+        at = now
+      }
+      if (tokens < 1) return false
+      tokens -= 1
+      return true
+    }
   }
 }
 

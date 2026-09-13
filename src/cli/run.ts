@@ -103,7 +103,8 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
         client,
         json: useJson,
         cwd,
-        endpointSource: discovered.source
+        endpointSource: discovered.source,
+        streams
       })
       emitSuccess(commandName(spec), output, useJson, streams)
       return ExitCode.Success
