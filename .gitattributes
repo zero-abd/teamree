@@ -11,3 +11,12 @@
 *.icns binary
 *.ico binary
 *.node binary
+
+# The landing page's demo clips and their posters. Without these, `* text=auto`
+# above is the only thing standing between a Windows checkout and a corrupted
+# video, and git's autodetection is not something to bet a silent 0-byte asset
+# on -- one was served to production as a 200 during this work.
+*.jpg binary
+*.jpeg binary
+*.mp4 binary
+*.webm binary

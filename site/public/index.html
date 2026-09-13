@@ -187,13 +187,11 @@ h2{ font-size:var(--text-2xl); max-width:24ch; }
 .gate{
   background:var(--bg-panel);
   border:1px solid var(--line-strong);
-  border-left:3px solid var(--warning);
   border-radius:var(--r3);
   padding:var(--s6);
 }
 @media (max-width:560px){ .gate{ padding:var(--s5) var(--s4); } }
-.gate h2{ font-size:var(--text-xl); max-width:30ch; display:flex; align-items:center; gap:10px; }
-.gate h2 svg{ width:20px; height:20px; fill:var(--warning); flex:none; }
+.gate h3{ font-size:var(--text-lg); font-weight:620; letter-spacing:-.015em; }
 .gate p{ margin-top:var(--s4); color:var(--fg-secondary); max-width:70ch; }
 .gate .quote{
   margin-top:var(--s4); padding:var(--s3) var(--s4);
@@ -204,11 +202,11 @@ h2{ font-size:var(--text-2xl); max-width:24ch; }
 .gate-warn{
   display:flex; gap:var(--s3); align-items:flex-start;
   margin-top:var(--s4); padding:var(--s4);
-  background:rgb(232 97 90 / 10%); border:1px solid rgb(232 97 90 / 38%);
+  background:var(--bg-raised); border:1px solid var(--line-strong);
   border-radius:var(--r2); color:var(--fg);
 }
-.gate-warn svg{ width:19px; height:19px; fill:var(--danger); flex:none; margin-top:3px; }
-.gate-warn b{ color:var(--fg); font-weight:640; }
+.gate-warn svg{ width:19px; height:19px; fill:var(--warning); flex:none; margin-top:3px; }
+.gate-warn b, .gate-warn strong{ color:var(--fg); font-weight:640; }
 .gate .quote b{ color:var(--fg); font-weight:640; }
 .gate ol{ margin-top:var(--s5); padding-left:0; list-style:none; counter-reset:step; }
 .gate ol li{ counter-increment:step; position:relative; padding-left:38px; margin-top:var(--s4); color:var(--fg-secondary); }
@@ -327,12 +325,7 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 .demo-body ul{ margin-top:var(--s4); padding-left:0; list-style:none; }
 .demo-body ul li{ position:relative; padding-left:22px; margin-top:var(--s2); color:var(--fg-secondary); font-size:var(--text-base); }
 .demo-body ul li::before{ content:""; position:absolute; left:2px; top:.68em; width:6px; height:6px; border-radius:50%; background:var(--accent); }
-.demo-body .warn{
-  padding:var(--s4); background:var(--bg-panel);
-  border:1px solid var(--line-strong); border-left:3px solid var(--warning);
-  border-radius:0 var(--r2) var(--r2) 0;
-}
-.demo-body .warn strong{ color:var(--fg); }
+.demo-body p strong{ color:var(--fg); font-weight:600; }
 
 .demo-figure{ margin:0; min-width:0; }
 .demo-frame{
@@ -423,8 +416,8 @@ pre[tabindex]{ scrollbar-gutter:stable; }
       <span class="word">teamree<i class="dot" aria-hidden="true"></i></span>
     </a>
     <nav class="nav" aria-label="Primary">
-      <a class="hide-sm" href="#what">What it does</a>
-      <a class="hide-sm" href="#teamwork">Teamwork</a>
+      <a href="#what">What it does</a>
+      <a href="#teamwork">Teamwork</a>
       <a href="#install">Install</a>
       <a class="ghlink" href="https://github.com/zero-abd/teamree" rel="noopener">
         <svg aria-hidden="true" focusable="false"><use href="#gh"/></svg>GitHub
@@ -441,7 +434,7 @@ pre[tabindex]{ scrollbar-gutter:stable; }
   <p class="lede">
     teamree is an ADE — an agentic development environment. Give every task its own
     git worktree and its own terminals, run a coding agent in each, and see at a glance
-    <b>which one needs you</b>. There is a CLI the agents can drive themselves, and
+    <strong>which one needs you</strong>. There is a CLI the agents can drive themselves, and
     teammates who can watch, and type into, each other's panes.
   </p>
 
@@ -457,113 +450,10 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 
   <p class="dl-meta">teamree-0.1.0.dmg<span class="sep" aria-hidden="true">/</span>192&nbsp;MiB<span class="sep" aria-hidden="true">/</span>free</p>
   <p class="dl-note">
-    <b>It is not signed.</b> macOS will stop you the first time with a dialog whose prominent
-    button is <b>Move to Trash</b> — press <b>Done</b> instead, then run one command.
-    <a href="#install">The whole of it is below</a>, before you need it. macOS 12 or later;
-    the only platform teamree is packaged for today.
+    Unsigned build: macOS asks for one extra step the first time you open it.
+    <a href="#install">Installing</a> has the whole of it. macOS 12 or later.
   </p>
 </div>
-
-<section id="install">
-  <div class="wrap">
-    <div class="gate">
-      <h2>
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2 2 21h20L12 2Zm0 5.6 6.2 11.6H5.8L12 7.6ZM11 10v4.6h2V10h-2Zm0 6v2h2v-2h-2Z"/></svg>
-        Read this before you open it
-      </h2>
-      <p>
-        teamree has no Apple Developer certificate behind it, so the build you just
-        downloaded is unsigned. The first time you open it, macOS refuses — with a dialog
-        whose two buttons are <b>Move to Trash</b> and <b>Done</b>:
-      </p>
-      <p class="quote">
-        <b>&ldquo;teamree&rdquo; Not Opened</b><br>
-        Apple could not verify &ldquo;teamree&rdquo; is free of malware that may harm your
-        Mac or compromise your privacy.
-      </p>
-      <p class="gate-warn">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2 2 21h20L12 2Zm0 5.6 6.2 11.6H5.8L12 7.6ZM11 10v4.6h2V10h-2Zm0 6v2h2v-2h-2Z"/></svg>
-        <span><b>Do not press Move to Trash.</b> It is the prominent button and it is the
-        wrong one — it deletes the app you just downloaded. Press <b>Done</b>.</span>
-      </p>
-      <p>
-        Nothing has been found wrong with teamree. macOS has not examined it and detected
-        something; it is telling you the file arrived without a certificate naming who built
-        it, so Apple has never seen it and cannot vouch for it either way. What the missing
-        signature actually costs you is the guarantee that the file was not altered on its
-        way here — and a checksum gives you that by another route, which is why every release
-        publishes one.
-      </p>
-      <ol>
-        <li><b>Open the <code>.dmg</code> and drag teamree to Applications.</b> There is an Applications shortcut in the window to drag onto, and no licence to agree to.</li>
-        <li><b>Open it, get the dialog above, and press Done.</b></li>
-        <li>
-          <b>Clear the quarantine flag, once.</b> Every file a browser downloads is marked
-          with <code>com.apple.quarantine</code>; removing it tells macOS this is a file you
-          put there on purpose.
-          <div class="cmd has-copy">
-            <pre><code id="cmd-xattr">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
-            <button class="cmd-copy" type="button" data-copy="cmd-xattr">Copy</button>
-          </div>
-        </li>
-        <li><b>Open it normally.</b> It will not ask again.</li>
-      </ol>
-      <p>
-        <b>There is no &ldquo;Open Anyway&rdquo; button in that dialog.</b> Through macOS 14
-        you could Control-click the app and choose Open; macOS 15 removed that, and on 15 and
-        later — macOS 26 included — the dialog offers no way through at all. If you would
-        rather not type a command, the button does exist, just elsewhere: after pressing Done,
-        go to <b>System Settings &rarr; Privacy &amp; Security</b> and scroll to the Security
-        section, where a line naming teamree appears with <b>Open Anyway</b> beside it. Expect
-        it to ask for your password or Touch ID.
-      </p>
-      <p class="caption">
-        Being exact about that last paragraph, because the rest of this is written from
-        watching a real download install itself: the command above was run against this build
-        and watched to work, and the dialog is quoted off the screen. The System Settings route
-        was not clicked through. <code>Open Anyway</code> is the button macOS ships for this
-        case, but nobody here has confirmed how that pane looks on macOS 26 with teamree in it.
-        If you take that route and it does not match, the command is the one that was tested.
-      </p>
-      <p>
-        <b>Two silences that look like something worse than they are.</b> Before you clear
-        the flag, <code>open teamree.app</code> from a terminal prints nothing and exits 0,
-        and the app still does not start. The bundled <code>teamree</code> CLI is killed
-        outright — no stdout, no stderr, exit status 137. Neither is a broken build; both are
-        this.
-      </p>
-      <p>
-        <b>And one thing that will look like failure afterwards.</b>
-        <code>spctl -a -vv</code> says <code>rejected</code> before you clear quarantine and
-        after. Clearing the attribute removes what makes macOS enforce the check; it does not
-        give the app a signature, and nothing short of a Developer ID will make
-        <code>spctl</code> say <code>accepted</code>. The app opens regardless. If you went
-        looking for a way to confirm the fix worked, open the app — do not ask
-        <code>spctl</code>.
-      </p>
-      <p>
-        <b>Check the download against the release.</b> Compare the output of this against the
-        matching line in <code>SHA256SUMS.txt</code>, published beside the <code>.dmg</code>.
-        If they agree, the file you have is the file the build produced.
-      </p>
-      <div class="cmd has-copy">
-        <pre><code id="cmd-sum">shasum -a 256 teamree-0.1.0.dmg</code></pre>
-        <button class="cmd-copy" type="button" data-copy="cmd-sum">Copy</button>
-      </div>
-      <p class="sha">
-        <span class="sha-label">v0.1.0</span>
-        <code>ccf09c74af6ba75a032fee58b11dc578ece77dd3ec38401328fe34a8131bf8d2</code>
-      </p>
-      <p class="caption">
-        The macOS builds <em>are</em> signed, but only ad-hoc — a signature with no identity
-        attached, which is the floor Apple Silicon needs to execute a binary at all. It is not
-        a Developer ID, it is not notarised, and the <code>.dmg</code> itself is not signed at
-        all. The full account, including what <code>codesign</code> prints if you check, is in
-        <a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md" rel="noopener">docs/install.md</a>.
-      </p>
-    </div>
-  </div>
-</section>
 
 <section>
   <div class="wrap">
@@ -624,6 +514,23 @@ demo:video:parked -->
 
 <section id="terminals">
   <div class="wrap demo flip">
+    <figure class="demo-figure">
+      <div class="demo-frame" data-demo="terminals">
+        <div class="demo-pending" aria-hidden="true">
+          <svg viewBox="0 0 1024 1024" focusable="false"><use href="#mark"/></svg>
+          <span>Terminals</span>
+        </div>
+        <!-- demo:video:parked
+<video width="1600" height="1000" muted loop playsinline preload="metadata" controls
+               poster="/demos/terminals.jpg"
+               aria-label="Screen capture: splitting a terminal in teamree and running two commands side by side.">
+          <source src="/demos/terminals.webm" type="video/webm">
+          <source src="/demos/terminals.mp4" type="video/mp4">
+        </video>
+demo:video:parked -->
+      </div>
+      <figcaption class="demo-cap">Splitting terminals and running work side by side.</figcaption>
+    </figure>
     <div class="demo-body">
       <p class="demo-step">02 &mdash; Terminals</p>
       <h2>Split the pane. Run the work side by side.</h2>
@@ -642,23 +549,6 @@ demo:video:parked -->
         command is deliberately never re-run.
       </p>
     </div>
-    <figure class="demo-figure">
-      <div class="demo-frame" data-demo="terminals">
-        <div class="demo-pending" aria-hidden="true">
-          <svg viewBox="0 0 1024 1024" focusable="false"><use href="#mark"/></svg>
-          <span>Terminals</span>
-        </div>
-        <!-- demo:video:parked
-<video width="1600" height="1000" muted loop playsinline preload="metadata" controls
-               poster="/demos/terminals.jpg"
-               aria-label="Screen capture: splitting a terminal in teamree and running two commands side by side.">
-          <source src="/demos/terminals.webm" type="video/webm">
-          <source src="/demos/terminals.mp4" type="video/mp4">
-        </video>
-demo:video:parked -->
-      </div>
-      <figcaption class="demo-cap">Splitting terminals and running work side by side.</figcaption>
-    </figure>
   </div>
 </section>
 
@@ -673,12 +563,6 @@ demo:video:parked -->
         window reflects all of it live, because both ends meet at the same runtime rather
         than at a transport.
       </p>
-      <div class="cmd">
-<pre><code><span class="tok-p">teamree</span> worktree create <span class="tok-f">--project</span> app <span class="tok-f">--name</span> <span class="tok-s">"fix login"</span>
-<span class="tok-p">teamree</span> worktree wait fix-login
-<span class="tok-p">teamree</span> terminal run <span class="tok-f">--worktree</span> fix-login <span class="tok-f">--command</span> <span class="tok-s">"npm test"</span>
-<span class="tok-p">teamree</span> worktree changes fix-login <span class="tok-f">--json</span></code></pre>
-      </div>
       <p>
         Every command takes <code>--json</code> and emits exactly one JSON document on stdout,
         with errors on stderr and exit codes that mean something: 0 success, 1 the command
@@ -703,33 +587,19 @@ demo:video:parked -->
       </div>
       <figcaption class="demo-cap">An agent driving the app through the teamree CLI.</figcaption>
     </figure>
+    <div class="demo-wide">
+      <div class="cmd">
+<pre tabindex="0" role="region" aria-label="Example teamree CLI commands. Scrolls horizontally."><code><span class="tok-p">teamree</span> worktree create <span class="tok-f">--project</span> app <span class="tok-f">--name</span> <span class="tok-s">"fix login"</span>
+<span class="tok-p">teamree</span> worktree wait fix-login
+<span class="tok-p">teamree</span> terminal run <span class="tok-f">--worktree</span> fix-login <span class="tok-f">--command</span> <span class="tok-s">"npm test"</span>
+<span class="tok-p">teamree</span> worktree changes fix-login <span class="tok-f">--json</span></code></pre>
+      </div>
+    </div>
   </div>
 </section>
 
 <section id="teamwork">
   <div class="wrap demo flip">
-    <div class="demo-body">
-      <p class="demo-step">04 &mdash; Teamwork</p>
-      <h2>Watch a teammate's pane. Answer the prompt it is stuck on.</h2>
-      <p>
-        A teammate's worktrees appear in your sidebar. You can read what one of their panes
-        is doing and, when they have let you, type into it — which is usually one character
-        and a return, because the thing that stopped an agent at 2am is a question.
-      </p>
-      <div class="cmd">
-<pre><code><span class="tok-p">teamree</span> team status app          <span class="tok-c"># on? who is connected? which relay?</span>
-<span class="tok-p">teamree</span> team members app         <span class="tok-c"># the roster, as the repository records it</span>
-<span class="tok-p">teamree</span> team watch app ana <span class="tok-f">--follow</span>
-<span class="tok-p">teamree</span> team type app ana <span class="tok-f">--text</span> y <span class="tok-f">--enter</span>
-<span class="tok-p">teamree</span> team write-log            <span class="tok-c"># every remote keystroke, kept</span></code></pre>
-      </div>
-      <p>
-        Every guard that makes typing into somebody else's terminal survivable sits at the
-        owner's end: their machine refuses unless your key is on the roster, refuses outright
-        when they have muted the pane, caps one write, and records who typed how much into
-        which pane in a log that survives a restart.
-      </p>
-    </div>
     <figure class="demo-figure">
       <div class="demo-frame" data-demo="teamwork">
         <div class="demo-pending" aria-hidden="true">
@@ -747,6 +617,52 @@ demo:video:parked -->
       </div>
       <figcaption class="demo-cap">Connecting two people and a shared session.</figcaption>
     </figure>
+    <div class="demo-body">
+      <p class="demo-step">04 &mdash; Teamwork</p>
+      <h2>Watch a teammate's pane. Answer the prompt it is stuck on.</h2>
+      <p>
+        A teammate's worktrees appear in your sidebar. You can read what one of their panes
+        is doing and type into it — which is usually one character and a return, because the
+        thing that stopped an agent at 2am is a question.
+      </p>
+      <p>
+        <strong>Adding a teammate's key lets them run commands on your machine, as you.</strong>
+        That is the capability, and it is worth stating plainly: a public key committed to
+        <code>.teamree/members/</code> is a standing permission for as long as it is in the
+        repository, and there is no per-request grant to approve. It is a capability rather
+        than a permission model, and it is built so that it cannot be used invisibly — the
+        pane says it is being watched and by whom, typing is attributed live, and every remote
+        write is recorded on your machine with who and when. Mute is instant and yours, but it
+        is a per-pane opt-out after the fact rather than a gate before it. Add the keys of
+        people you would hand an unlocked laptop to.
+      </p>
+      <p>
+        Every guard that makes typing into somebody else's terminal survivable sits at the
+        owner's end: their machine refuses unless your key is on the roster, refuses outright
+        when they have muted the pane, caps one write, and records who typed how much into
+        which pane in a log that survives a restart.
+      </p>
+      <p><strong>What it takes to set up.</strong> None of this is inside the app alone:</p>
+      <ul>
+        <li>A git repository you can both push to, cloned by each of you, with an <code>origin</code> remote — push access <em>is</em> membership</li>
+        <li>A relay your team deploys, its <code>wss://</code> URL committed to <code>.teamree/relay</code></li>
+        <li>Each person's public key committed to <code>.teamree/members/&lt;handle&gt;.pub</code> <em>and pushed</em> — written is not enough</li>
+        <li>Node 20 or newer, a Cloudflare account and one browser sign-in, on whichever machine deploys the relay</li>
+      </ul>
+      <p>
+        <a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md" rel="noopener">Trying teamwork</a>
+        is the walkthrough in order, with what you should see after each step.
+      </p>
+    </div>
+    <div class="demo-wide">
+      <div class="cmd">
+<pre tabindex="0" role="region" aria-label="Example teamree team commands. Scrolls horizontally."><code><span class="tok-p">teamree</span> team status app          <span class="tok-c"># on? who is connected? which relay?</span>
+<span class="tok-p">teamree</span> team members app         <span class="tok-c"># the roster, as the repository records it</span>
+<span class="tok-p">teamree</span> team watch app ana <span class="tok-f">--follow</span>
+<span class="tok-p">teamree</span> team type app ana <span class="tok-f">--text</span> y <span class="tok-f">--enter</span>
+<span class="tok-p">teamree</span> team write-log            <span class="tok-c"># every remote keystroke, kept</span></code></pre>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -758,12 +674,20 @@ demo:video:parked -->
       So both dial out to a small relay that splices their connections together and is never
       trusted with what crosses it. A team runs its own, as a Cloudflare Worker. The installed
       app carries the Worker with it, so it is one command from any directory and needs no
-      clone of the repository:
+      clone of the repository — given the three things that command assumes:
     </p>
     <div class="cmd has-copy" style="margin-top:var(--s5)">
-      <pre><code id="cmd-relay">/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy</code></pre>
-      <button class="cmd-copy" type="button" data-copy="cmd-relay">Copy</button>
+      <pre tabindex="0" role="region" aria-label="Command to deploy the relay. Scrolls horizontally."><code id="cmd-relay">/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy</code></pre>
+      <button class="cmd-copy" type="button" data-copy="cmd-relay"
+              data-what="the relay deploy command" aria-label="Copy the relay deploy command">Copy</button>
     </div>
+    <p class="caption">
+      It assumes <strong>Node 20 or newer</strong> on that machine — macOS ships none, and the
+      wrapper exits saying so — a <strong>Cloudflare account</strong>, and a
+      <strong>browser sign-in</strong> the first time. It writes the Worker project into
+      <code>~/teamree-relay</code>, deploys it to your team&rsquo;s own Cloudflare account and
+      prints the <code>wss://</code> URL to commit. One person does it once, for the team.
+    </p>
   </div>
 </section>
 <!-- demo-sections:end -->
@@ -808,29 +732,136 @@ demo:video:parked -->
     <dl class="facts">
       <div class="fact">
         <dt>Platform</dt>
-        <dd><b>macOS only</b>, one universal <code>.dmg</code> — a decision rather than a gap waiting to close. Linux was packaged and launched for real before the build matrix narrowed; the Windows packaging has never been built by anybody, and nobody should download this expecting it to arrive.</dd>
+        <dd><strong>macOS only</strong>, one universal <code>.dmg</code> — a decision rather than a gap waiting to close. Linux was packaged and launched for real before the build matrix narrowed; the Windows packaging has never been built by anybody, and nobody should download this expecting it to arrive.</dd>
       </div>
       <div class="fact">
         <dt>Signing</dt>
-        <dd><b>Unsigned</b>, ad-hoc only. The packaging will sign and notarize the moment a Developer ID is put in front of it; nobody has one yet.</dd>
+        <dd><strong>Unsigned</strong>, ad-hoc only. The packaging will sign and notarize the moment a Developer ID is put in front of it; nobody has one yet.</dd>
       </div>
       <div class="fact">
         <dt>Single-user</dt>
-        <dd><b>Done.</b> Worktrees, terminals, status, git and the CLI are built and under test.</dd>
+        <dd><strong>Done.</strong> Worktrees, terminals, status, git and the CLI are built and under test.</dd>
       </div>
       <div class="fact">
         <dt>Teamwork</dt>
-        <dd><b>Built, not weathered.</b> All five stages have landed — identity, the relay and presence, watching a pane, typing into one, staleness. Two Macs in two places is the one thing still untested.</dd>
+        <dd><strong>Built, not weathered.</strong> All five stages have landed — identity, the relay and presence, watching a pane, typing into one, staleness. Two Macs in two places is the one thing still untested.</dd>
       </div>
       <div class="fact">
         <dt>Price</dt>
-        <dd><b>Free.</b> The source is on GitHub and so is the roadmap, including the known gaps — recorded rather than discovered.</dd>
+        <dd><strong>Free.</strong> The source is on GitHub and so is the roadmap, including the known gaps — recorded rather than discovered.</dd>
       </div>
       <div class="fact">
         <dt>Bring your own agent</dt>
-        <dd>teamree is <b>a place to run agents, not another one</b>. It looks on your PATH for the five it knows how to resume — claude, codex, gemini, opencode, droid — and offers what it finds.</dd>
+        <dd>teamree is <strong>a place to run agents, not another one</strong>. It looks on your PATH for the five it knows how to resume — claude, codex, gemini, opencode, droid — and offers what it finds.</dd>
       </div>
     </dl>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <p class="sec-label">Installing</p>
+    <h2>First launch, and the one command it needs.</h2>
+    <p class="sec-lede">
+      teamree is not notarised, so macOS asks you to confirm the first launch. This is what it
+      says, what to press, and the command that settles it for good.
+    </p>
+    <div class="gate" style="margin-top:var(--s6)">
+      <h3>What macOS shows you, and what to do</h3>
+      <p>
+        teamree has no Apple Developer certificate behind it, so the build you just
+        downloaded is unsigned. The first time you open it, macOS refuses — with a dialog
+        whose two buttons are <b>Move to Trash</b> and <b>Done</b>:
+      </p>
+      <p class="quote">
+        <b>&ldquo;teamree&rdquo; Not Opened</b><br>
+        Apple could not verify &ldquo;teamree&rdquo; is free of malware that may harm your
+        Mac or compromise your privacy.
+      </p>
+      <p class="gate-warn">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2 2 21h20L12 2Zm0 5.6 6.2 11.6H5.8L12 7.6ZM11 10v4.6h2V10h-2Zm0 6v2h2v-2h-2Z"/></svg>
+        <span><strong>Do not press Move to Trash.</strong> It is the prominent button and it is the
+        wrong one — it deletes the app you just downloaded. Press <b>Done</b>.</span>
+      </p>
+      <p>
+        Nothing has been found wrong with teamree. macOS has not examined it and detected
+        something; it is telling you the file arrived without a certificate naming who built
+        it, so Apple has never seen it and cannot vouch for it either way. What the missing
+        signature actually costs you is the guarantee that the file was not altered on its
+        way here — and a checksum gives you that by another route, which is why every release
+        publishes one.
+      </p>
+      <ol>
+        <li><strong>Open the <code>.dmg</code> and drag teamree to Applications.</strong> There is an Applications shortcut in the window to drag onto, and no licence to agree to.</li>
+        <li><strong>Open it, get the dialog above, and press Done.</strong></li>
+        <li>
+          <strong>Clear the quarantine flag, once.</strong> Every file a browser downloads is marked
+          with <code>com.apple.quarantine</code>; removing it tells macOS this is a file you
+          put there on purpose.
+          <div class="cmd has-copy">
+            <pre tabindex="0" role="region" aria-label="Command to clear the quarantine flag. Scrolls horizontally."><code id="cmd-xattr">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
+            <button class="cmd-copy" type="button" data-copy="cmd-xattr"
+                    data-what="the quarantine command" aria-label="Copy the quarantine command">Copy</button>
+          </div>
+        </li>
+        <li><strong>Open it normally.</strong> It will not ask again.</li>
+      </ol>
+      <p>
+        <strong>There is no &ldquo;Open Anyway&rdquo; button in that dialog.</strong> Through macOS 14
+        you could Control-click the app and choose Open; macOS 15 removed that, and on 15 and
+        later — macOS 26 included — the dialog offers no way through at all. If you would
+        rather not type a command, the button does exist, just elsewhere: after pressing Done,
+        go to <b>System Settings &rarr; Privacy &amp; Security</b> and scroll to the Security
+        section, where a line naming teamree appears with <b>Open Anyway</b> beside it. Expect
+        it to ask for your password or Touch ID.
+      </p>
+      <p class="caption">
+        Being exact about that last paragraph, because the rest of this is written from
+        watching a real download install itself: the command above was run against this build
+        and watched to work, the dialog is quoted off the screen, and <b>Done</b> was pressed
+        on it and dismissed it. The System Settings route was not clicked through.
+        <code>Open Anyway</code> is the button macOS ships for this case, but nobody here has
+        confirmed how that pane looks on macOS 26 with teamree in it. If you take that route
+        and it does not match, the command is the one that was tested.
+      </p>
+      <p>
+        <strong>Two silences that look like something worse than they are.</strong> Before you clear
+        the flag, <code>open teamree.app</code> from a terminal prints nothing and exits 0,
+        and the app still does not start. The bundled <code>teamree</code> CLI is killed
+        outright — no stdout, no stderr, exit status 137. Neither is a broken build; both are
+        this.
+      </p>
+      <p>
+        <strong>And one thing that will look like failure afterwards.</strong>
+        <code>spctl -a -vv</code> says <code>rejected</code> before you clear quarantine and
+        after. Clearing the attribute removes what makes macOS enforce the check; it does not
+        give the app a signature, and nothing short of a Developer ID will make
+        <code>spctl</code> say <code>accepted</code>. The app opens regardless. If you went
+        looking for a way to confirm the fix worked, open the app — do not ask
+        <code>spctl</code>.
+      </p>
+      <p>
+        <strong>Check the download against the release.</strong> Compare the output of this against the
+        matching line in <code>SHA256SUMS.txt</code>, published beside the <code>.dmg</code>.
+        If they agree, the file you have is the file the build produced.
+      </p>
+      <div class="cmd has-copy">
+        <pre tabindex="0" role="region" aria-label="Command to check the download&#39;s checksum. Scrolls horizontally."><code id="cmd-sum">shasum -a 256 teamree-0.1.0.dmg</code></pre>
+        <button class="cmd-copy" type="button" data-copy="cmd-sum"
+                data-what="the checksum command" aria-label="Copy the checksum command">Copy</button>
+      </div>
+      <p class="sha">
+        <span class="sha-label">v0.1.0</span>
+        <code>ccf09c74af6ba75a032fee58b11dc578ece77dd3ec38401328fe34a8131bf8d2</code>
+      </p>
+      <p class="caption">
+        The macOS builds <em>are</em> signed, but only ad-hoc — a signature with no identity
+        attached, which is the floor Apple Silicon needs to execute a binary at all. It is not
+        a Developer ID, it is not notarised, and the <code>.dmg</code> itself is not signed at
+        all. The full account, including what <code>codesign</code> prints if you check, is in
+        <a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md" rel="noopener">docs/install.md</a>.
+      </p>
+    </div>
   </div>
 </section>
 
@@ -846,7 +877,7 @@ demo:video:parked -->
       <a class="btn-ghost" href="https://github.com/zero-abd/teamree/releases/tag/v0.1.0" rel="noopener">Release notes &amp; checksums</a>
     </div>
     <p class="dl-meta">teamree-0.1.0.dmg<span class="sep" aria-hidden="true">/</span>192&nbsp;MiB<span class="sep" aria-hidden="true">/</span>universal</p>
-    <p class="dl-note">Then: <code>xattr -dr com.apple.quarantine /Applications/teamree.app</code> — <a href="#install">why</a>.</p>
+    <p class="dl-note">Then: <code>xattr -dr com.apple.quarantine /Applications/teamree.app</code> — <a href="#install">why this command is needed</a>.</p>
   </div>
 </section>
 
@@ -881,11 +912,17 @@ document.querySelectorAll('.cmd-copy').forEach(function (button) {
   button.addEventListener('click', function () {
     var source = document.getElementById(button.dataset.copy);
     if (!source || !navigator.clipboard) return;
+    // Each button carries an aria-label naming what it copies, because three
+    // buttons all called "Copy" name nothing. That label is then the accessible
+    // name, so moving the visible text alone would never be announced: both move.
+    var what = button.dataset.what || 'this command';
     navigator.clipboard.writeText(source.textContent.trim()).then(function () {
       button.textContent = 'Copied';
+      button.setAttribute('aria-label', 'Copied ' + what);
       button.dataset.copied = 'yes';
       setTimeout(function () {
         button.textContent = 'Copy';
+        button.setAttribute('aria-label', 'Copy ' + what);
         delete button.dataset.copied;
       }, 1600);
     }, function () {});
