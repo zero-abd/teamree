@@ -39,7 +39,12 @@ const HISTORY = [
     message: 'Add the command line, and a weekend to try it on',
     paths: ['bin/ledger.js', 'fixtures/trip.ledger', 'fixtures/broken.ledger', 'test/cli.test.js']
   },
-  { message: 'Write down what is left to do', paths: ['README.md', 'TASKS.md'] }
+  // The tasks and their target tests land together, because a task whose "done"
+  // is somebody's opinion is not a task anybody can take in parallel.
+  {
+    message: 'Write down what is left to do, and a failing test for each',
+    paths: ['README.md', 'TASKS.md', 'test/tasks']
+  }
 ]
 
 /**
@@ -58,10 +63,16 @@ prints one object and nothing else, with amounts in cents rather than decimal
 strings — the caller is a program, and handing it "18.10" to parse back is
 handing it the floating-point bug this codebase was built to avoid.
 
-Unresolved: whether \`--json\` should suppress the exit code 70 self-check, or
-report it as a field. Probably report it. Nothing is implemented yet.
+Where I stopped: I do not know what this should do with a ledger that does not
+parse. Keeping today's behaviour — the message on stderr, exit 1, nothing on
+stdout — leaves a caller handling two output formats. Printing the error as JSON
+on stdout gives it one, and makes a failed run look like a successful one to
+anybody reading stdout alone.
 
-See TASKS.md, task 1.
+I am not the person to decide that, and neither is whoever picks this up: it is
+the contract the flag exists to offer, and it outlives us both. Ask somebody.
+
+Nothing is implemented. See TASKS.md, task 1.
 `
 
 /** Written so that `.teamree/members/` exists before anybody adds a key to it. */
@@ -102,6 +113,10 @@ async function isEmptyish(path) {
     return (await readdir(path)).length === 0
   } catch (error) {
     if (error.code === 'ENOENT') return true
+    // A file where a directory was asked for is something already there, and
+    // gets the same refusal a non-empty directory does rather than a stack
+    // trace about scandir.
+    if (error.code === 'ENOTDIR') return false
     throw error
   }
 }
@@ -112,7 +127,7 @@ async function isEmptyish(path) {
  * @param {object} options
  * @param {string} options.destination Where the checkout goes.
  * @param {boolean} [options.withOrigin] Also create `<destination>.git` and push to it.
- * @param {boolean} [options.force] Replace an existing directory.
+ * @param {boolean} [options.force] Replace an existing destination, and the bare repository beside it.
  * @param {(line: string) => void} [options.log]
  * @returns {Promise<{ path: string, origin?: string, branches: string[] }>}
  */
@@ -120,12 +135,16 @@ export async function createExampleRepo(options) {
   const destination = resolve(options.destination)
   const log = options.log ?? (() => {})
 
-  if (!(await isEmptyish(destination))) {
-    if (!options.force) {
-      throw new Error(`${destination} already exists and is not empty; pass --force to replace it`)
-    }
-    await rm(destination, { recursive: true, force: true })
+  // Both refusals happen before anything is written. A run that creates the
+  // checkout and then stops because the bare repository beside it is in the way
+  // leaves a half-made fixture that the next run then refuses to replace.
+  const originPath = options.withOrigin ? `${destination}.git` : undefined
+  for (const path of [destination, originPath]) {
+    if (path === undefined || (await isEmptyish(path))) continue
+    if (!options.force) throw new Error(`${path} already exists and is not empty; pass --force to replace it`)
   }
+
+  await rm(destination, { recursive: true, force: true })
 
   await mkdir(dirname(destination), { recursive: true })
   await cp(SOURCE, destination, { recursive: true })
@@ -150,11 +169,20 @@ export async function createExampleRepo(options) {
   git(['commit', '--quiet', '-m', 'Sketch what machine-readable output would look like'], destination)
   git(['checkout', '--quiet', 'main'], destination)
 
+  // HISTORY names its paths one by one, so a file added to `ledger/` and not to
+  // a commit would be copied in and never tracked — and the first person to run
+  // `git status` would find work nobody wrote sitting in their checkout. This
+  // turns that into a failure here, where the fixture is made.
+  const untracked = git(['status', '--porcelain'], destination).trim()
+  if (untracked !== '') {
+    throw new Error(`copied files that no commit in HISTORY covers:\n${untracked}`)
+  }
+
   const branches = ['main', SPIKE_BRANCH]
   let origin
 
-  if (options.withOrigin) {
-    origin = `${destination}.git`
+  if (originPath) {
+    origin = originPath
     await rm(origin, { recursive: true, force: true })
     // --initial-branch matters even though nothing is ever committed here
     // directly. A bare repository's HEAD is what `git clone` checks out, and a
@@ -167,8 +195,14 @@ export async function createExampleRepo(options) {
   }
 
   log(`Created ${destination}`)
-  log(`  ${HISTORY.length + 1} commits on main, plus the ${SPIKE_BRANCH} branch`)
-  if (origin) log(`  pushed to ${origin}`)
+  log(`  ${HISTORY.length + 1} commits on main, checked out, with nothing uncommitted`)
+  log(`  branch ${SPIKE_BRANCH}, one commit ahead of main, holding a note about task 1`)
+  log('  .teamree/members/, empty, for the public keys')
+  log('  TASKS.md: 3 tasks, no two of them touching the same file')
+  log('  test/tasks/: one failing test per task, outside `npm test`')
+  if (origin) log(`  pushed ${branches.join(' and ')} to ${origin}`)
+  log('')
+  log(`Check it before anybody starts: cd ${destination} && npm test`)
 
   return { path: destination, origin, branches }
 }
@@ -185,7 +219,7 @@ function parseArgv(argv) {
 const USAGE = `usage: node examples/init-example-repo.mjs <destination> [--with-origin] [--force]
 
   --with-origin   also create <destination>.git and push main and ${SPIKE_BRANCH} to it
-  --force         replace <destination> if it already exists`
+  --force         replace <destination>, and <destination>.git, if they already exist`
 
 // Only when run directly, so the two-peer harness can import createExampleRepo.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
