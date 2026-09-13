@@ -18,6 +18,7 @@ import { createDispatcher } from './dispatcher'
 import { MethodRegistry } from './methodRegistry'
 import {
   createPeerTransport,
+  MAX_PEER_SUBSCRIPTIONS,
   PEER_METHODS,
   STREAM_BUFFER_BYTES,
   STREAM_FLUSH_MS,
@@ -461,6 +462,32 @@ describe('subscriptions a teammate opened', () => {
 
     answerer.close('the teammate went away')
     expect(hub.countFor('peer_answerer')).toBe(0)
+  })
+
+  it('refuses a new stream once the teammate holds too many, rather than opening them without limit', async () => {
+    const { caller, hub } = rig()
+
+    const held: string[] = []
+    for (let pane = 0; pane < MAX_PEER_SUBSCRIPTIONS; pane += 1) {
+      held.push((await caller.call('terminal.subscribe', { terminalId: `t${pane}` })).subscription)
+    }
+    expect(hub.countFor('peer_answerer')).toBe(MAX_PEER_SUBSCRIPTIONS)
+
+    // Refused with a reason a teammate can act on, and refused in the one place
+    // that knows the caller is a teammate at all. Nobody reads thirty panes;
+    // every record past that is a pacing buffer this machine keeps on somebody
+    // else's say-so.
+    await expect(caller.call('terminal.subscribe', { terminalId: 'one_too_many' })).rejects.toMatchObject({
+      code: ErrorCode.Conflict
+    })
+    expect(hub.countFor('peer_answerer')).toBe(MAX_PEER_SUBSCRIPTIONS)
+
+    // A ceiling and not a fuse: a teammate who closes a pane may open another.
+    await caller.call('unsubscribe', { subscription: held[0]! })
+    await expect(caller.call('terminal.subscribe', { terminalId: 'one_more' })).resolves.toMatchObject({
+      subscription: expect.any(String) as unknown as string
+    })
+    expect(hub.countFor('peer_answerer')).toBe(MAX_PEER_SUBSCRIPTIONS)
   })
 })
 

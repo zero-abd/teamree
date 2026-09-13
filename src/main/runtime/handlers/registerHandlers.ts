@@ -126,7 +126,13 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
       },
       dataDir,
       subscriptions: registry.context.subscriptions,
-      onChange: () => workspaceEvents.emit({ type: 'teammates' })
+      onChange: () => workspaceEvents.emit({ type: 'teammates' }),
+      // Nothing a peer does should be able to fail quietly here. A snapshot
+      // refused, a watch that could not be started: none of them stop the app,
+      // and without this none of them leave a trace either — which is how a
+      // sidebar showing a teammate's yesterday looks exactly like one showing
+      // their today.
+      onError: (error) => console.error('[teamwork]', error)
     })
   )
   // A teammate's view of this machine rides the same bus everything else does,

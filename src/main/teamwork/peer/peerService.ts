@@ -28,6 +28,7 @@
 // repository exists can compute one.
 
 import { join } from 'node:path'
+import { z } from 'zod'
 import {
   TYPING_WINDOW_MS,
   type PaneTypist,
@@ -36,6 +37,8 @@ import {
   type PeerLink as PeerLinkStatus,
   type PeerPane,
   type PeerPresence,
+  type PeerProject,
+  type PeerWorktree,
   type Project,
   type RemoteWrite,
   type RemoteWriteLog,
@@ -55,7 +58,15 @@ import { PeerCallError, type RemoteWriteRequest, type RemoteWriteVerdict } from 
 import type { SubscriptionChannel, SubscriptionHub } from '../../runtime/subscriptionHub'
 import { notFound } from '../../runtime/runtimeError'
 import { ErrorCode } from '../../../shared/protocol'
-import { TeammateCacheStore, TEAMMATE_CACHE_FILE, type TeammateCache } from '../../store/teammateCache'
+import {
+  MAX_CACHED_PANES,
+  MAX_CACHED_TEXT,
+  MAX_CACHED_WORKTREES,
+  TeammateCacheStore,
+  TEAMMATE_CACHE_FILE,
+  type TeammateCache
+} from '../../store/teammateCache'
+import { AGENT_KINDS } from '../../terminals/agent-command'
 import { badPaneId, TeamworkError } from '../errors'
 import { createRemoteWriteLog, returnsIn, type RemoteWriteRecorder } from './writeLog'
 import { loadIdentity, loadStaticPrivateKey } from '../identity'
@@ -654,14 +665,27 @@ export class PeerService {
     )
   }
 
-  /** PEER-ONLY. The same snapshot, now and on every change. */
+  /**
+   * PEER-ONLY. The same snapshot, now and on every change.
+   *
+   * One per connection, and a second subscribe *replaces* the first rather than
+   * displacing it. The map is keyed by connection, so an overwrite used to
+   * leave the older subscription registered in the hub with nothing left
+   * holding its channel: impossible to tear down, and dead until the link
+   * dropped. Closing it here is what makes "one per connection" true of the hub
+   * and not just of this map.
+   */
   peerSubscribe(connectionId: string, channel: SubscriptionChannel): () => void {
     const snapshot = this.peerPresence(connectionId)
+    const previous = this.#subscribers.get(connectionId)
     this.#subscribers.set(connectionId, channel)
+    // After the new one is filed, so the teardown the close runs finds it there
+    // and leaves it alone.
+    previous?.close()
     // Immediately, so there is no separate first read for the stream to race.
     channel.emit(snapshot)
     return () => {
-      this.#subscribers.delete(connectionId)
+      if (this.#subscribers.get(connectionId) === channel) this.#subscribers.delete(connectionId)
     }
   }
 
@@ -752,17 +776,27 @@ export class PeerService {
    * door through which anything becomes live. A cached entry is stale, and
    * what makes it live again is this, not the link coming up.
    */
-  #record(linkId: string, publicKey: string, presence: PeerPresence): void {
-    if (!isPresence(presence)) return
-    const held = this.#heard.get(linkId)
-    if (!isNewerPresence(held?.live === true ? held.presence : undefined, presence)) return
-    const heardAt = this.#scheduler.now()
-    this.#heard.set(linkId, { publicKey, presence, heardAt, live: true })
+  #record(linkId: string, publicKey: string, incoming: unknown): void {
     // Only the project this session is for, out of everything the snapshot
     // happens to carry. A peer that named ten project keys it invented would
     // otherwise get ten cache slots for them and push out every real one.
     const projectKey = this.#peerByConnection.get(linkId)?.projectKey
-    const project = presence.projects.find((candidate) => candidate.projectKey === projectKey)
+    const presence = parsePeerPresence(incoming, projectKey)
+    if (!presence) {
+      // Said out loud rather than returned quietly. A snapshot that is not one
+      // is either a teammate running something this build does not understand
+      // or somebody probing, and both are things an operator wants to know
+      // about; silence here is what turned this into a sidebar that froze.
+      this.#options.onError?.(
+        new Error(`a presence snapshot from ${this.#handleFor(publicKey) ?? publicKey.slice(0, 8)} was not a snapshot`)
+      )
+      return
+    }
+    const held = this.#heard.get(linkId)
+    if (!isNewerPresence(held?.live === true ? held.presence : undefined, presence)) return
+    const heardAt = this.#scheduler.now()
+    this.#heard.set(linkId, { publicKey, presence, heardAt, live: true })
+    const [project] = presence.projects
     if (projectKey !== undefined && project) {
       this.#cache?.put({ publicKey, projectKey, handle: presence.handle, heardAt, worktrees: project.worktrees })
     }
@@ -1098,9 +1132,14 @@ function findPane(presence: PeerPresence, projectKey: string, terminalId: string
  * displace each other for as long as the app ran; sharing the link is both
  * correct and what the relay's own "a newer connection claimed this rendezvous"
  * rule would force anyway.
+ *
+ * Both keys whole. This id is the map key *and* the connection id, so two links
+ * that shared one would displace each other silently — a teammate's session
+ * answering under somebody else's name. Truncating bought nothing that carrying
+ * the whole of each key does not, and the whole of each key costs nothing.
  */
 export function linkIdFor(publicKey: string, projectKey: string): string {
-  return `peer_${publicKey.slice(0, 12)}_${projectKey.slice(0, 16)}`
+  return `peer_${publicKey}_${projectKey}`
 }
 
 type WantedLink = {
@@ -1144,9 +1183,103 @@ function reasonFor(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** A peer's own runtime produced this, but it still arrived over a wire. */
-function isPresence(value: unknown): value is PeerPresence {
-  if (typeof value !== 'object' || value === null) return false
-  const record = value as Record<string, unknown>
-  return typeof record.revision === 'number' && Array.isArray(record.projects)
+/**
+ * A snapshot from a teammate's runtime, as it arrived.
+ *
+ * The same shape `src/shared/entities.ts` declares, written out again as a
+ * schema because a type is a claim about this process's own data and these
+ * bytes are somebody else's. Zod because that is what this codebase already
+ * validates a boundary with — `Params` for the method boundary, the schemas in
+ * `store/teammateCache.ts` for the file one, and this for the wire.
+ */
+const PanePayload = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  shell: z.string(),
+  agent: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
+  running: z.boolean(),
+  exitCode: z.number().optional(),
+  busy: z.boolean(),
+  cols: z.number().int().positive().optional(),
+  rows: z.number().int().positive().optional(),
+  quietForMs: z.number().nonnegative()
+})
+
+const WorktreePayload = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  branch: z.string(),
+  state: z.enum(['creating', 'ready', 'removing', 'failed']),
+  panes: z.array(PanePayload)
+})
+
+const ProjectPayload = z.object({
+  projectKey: z.string().min(1),
+  worktrees: z.array(WorktreePayload)
+})
+
+const PresencePayload = z.object({
+  revision: z.number(),
+  // Nullish rather than nullable: a runtime older than the field sends nothing
+  // rather than null, and refusing that would blank a working teammate.
+  handle: z.string().nullish(),
+  projects: z.array(ProjectPayload)
+})
+
+/**
+ * Whether a snapshot is one at all, and how much of it is kept.
+ *
+ * Two jobs and both belong here. **Refusing** is the first: a two-field check
+ * let `{revision, projects: [null]}` through, and the lookup that then threw
+ * did so inside the delivery path, leaving the entry poisoned and every later
+ * `teamwork.presence` for that project throwing for as long as the link stayed
+ * up — a sidebar frozen on stale data with nothing anywhere saying why.
+ *
+ * **Bounding** is the second, and it is the same argument
+ * `store/teammateCache.ts` makes about the file: every byte here came off
+ * another machine, so the counts and the lengths are this process's to decide
+ * and not the sender's. The numbers are that file's, deliberately, because a
+ * snapshot kept in memory and the copy of it written to disk being bounded
+ * differently would mean one of the two numbers was wrong.
+ *
+ * Narrowed to `onlyProjectKey` on the way through: a session is for one
+ * repository, so a peer that names ten it invented gets none of them kept.
+ */
+export function parsePeerPresence(value: unknown, onlyProjectKey: string | undefined): PeerPresence | undefined {
+  const parsed = PresencePayload.safeParse(value)
+  if (!parsed.success) return undefined
+  const project = parsed.data.projects.find((candidate) => candidate.projectKey === onlyProjectKey)
+  return {
+    revision: parsed.data.revision,
+    handle: parsed.data.handle ?? null,
+    // `AGENT_KINDS` is an array rather than a tuple, so `z.enum` over it widens
+    // the agent to `string` and the cast puts it back. The same cast is in
+    // `store/teammateCache.ts` for the same reason.
+    projects: project ? [boundProject(project as PeerProject)] : []
+  }
+}
+
+function boundProject(project: PeerProject): PeerProject {
+  return {
+    projectKey: project.projectKey,
+    worktrees: project.worktrees.slice(0, MAX_CACHED_WORKTREES).map(boundWorktree)
+  }
+}
+
+function boundWorktree(worktree: PeerWorktree): PeerWorktree {
+  return {
+    ...worktree,
+    id: clip(worktree.id),
+    name: clip(worktree.name),
+    branch: clip(worktree.branch),
+    panes: worktree.panes.slice(0, MAX_CACHED_PANES).map(boundPane)
+  }
+}
+
+function boundPane(pane: PeerPane): PeerPane {
+  return { ...pane, id: clip(pane.id), title: clip(pane.title), shell: clip(pane.shell) }
+}
+
+function clip(text: string): string {
+  return text.length <= MAX_CACHED_TEXT ? text : text.slice(0, MAX_CACHED_TEXT)
 }

@@ -309,6 +309,14 @@ export type PeerRuntime = {
   /** Fires the change the workspace bus would have fired. */
   changed: () => void
   changes: () => number
+  /**
+   * Everything the service reported through `onError`, in order.
+   *
+   * Collected always rather than opted into, because a failure this service
+   * swallows is indistinguishable from one that never happened — which is the
+   * shape of bug these tests exist to catch.
+   */
+  errors: () => readonly unknown[]
 }
 
 export type PeerRuntimeOptions = {
@@ -416,6 +424,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
   registerUnsubscribeHandler(registry)
 
   let changes = 0
+  const errors: unknown[] = []
   const service = new PeerService({
     workspace: {
       listProjects: () => options.workspace.projects,
@@ -438,7 +447,8 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     onChange: () => {
       changes += 1
       options.onChange?.()
-    }
+    },
+    onError: (error) => errors.push(error)
   })
 
   registerPeerHandlers(registry, service)
@@ -453,7 +463,8 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     dataDir,
     ...(terminals ? { terminals } : {}),
     changed: () => service.notifyWorkspaceChanged(),
-    changes: () => changes
+    changes: () => changes,
+    errors: () => errors
   }
 }
 
