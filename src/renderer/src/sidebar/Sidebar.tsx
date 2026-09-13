@@ -105,10 +105,6 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
   return (
     <nav className="sidebar" aria-label="Projects and worktrees">
       <div className="sidebar__head">
-        <span className="wordmark">
-          teamree
-          <span className="wordmark__dot" aria-hidden="true" />
-        </span>
         <button
           type="button"
           className="button button--ghost button--icon"
