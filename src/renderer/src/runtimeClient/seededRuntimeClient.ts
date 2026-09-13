@@ -661,6 +661,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       projectId,
       relay: { url: 'wss://relay.example/v1/relay', source: 'repository' as const },
       disabledReason: null,
+      enrolled: true,
       links: [
         {
           publicKey: SEEDED_PEER_KEY,

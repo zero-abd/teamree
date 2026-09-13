@@ -117,6 +117,8 @@ type ProjectFacts = {
   /** Public key to the handle the roster files it under, for display. */
   handles: Map<string, string>
   relay: RelayLocation | null
+  /** Whether this machine's own key is among `rosterKeys`. */
+  enrolled: boolean
   /** Why teamwork is not running for this project, or null when it is. */
   disabledReason: string | null
 }
@@ -273,7 +275,9 @@ export class PeerService {
     const identity = await loadIdentity(this.#options.dataDir)
     this.#identityKey = identity.publicKey
 
-    const facts = await Promise.all(this.#options.workspace.listProjects().map((project) => this.#readProject(project)))
+    const facts = await Promise.all(
+      this.#options.workspace.listProjects().map((project) => this.#readProject(project, identity.publicKey))
+    )
     this.#projects.clear()
     for (const fact of facts) this.#projects.set(fact.projectId, fact)
 
@@ -368,6 +372,7 @@ export class PeerService {
       projectId: facts.projectId,
       relay: facts.relay,
       disabledReason: facts.disabledReason,
+      enrolled: facts.enrolled,
       links,
       readAt: this.#scheduler.now()
     }
@@ -1012,7 +1017,7 @@ export class PeerService {
     return undefined
   }
 
-  async #readProject(project: Project): Promise<ProjectFacts> {
+  async #readProject(project: Project, identityKey: string): Promise<ProjectFacts> {
     const [roster, relay, key] = await Promise.all([
       readRoster(project.path).catch(() => ({ entries: [], problems: [] })),
       readRelayConfig(project.path, this.#options.env),
@@ -1025,6 +1030,7 @@ export class PeerService {
       projectKey: key.ok ? key.key : undefined,
       rosterKeys: roster.entries.map((entry) => entry.publicKey),
       relay: relay.configured ? relay.location : null,
+      enrolled: roster.entries.some((entry) => entry.publicKey === identityKey),
       disabledReason: null,
       handles
     }

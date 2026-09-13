@@ -58,21 +58,32 @@
   box-shadow: var(--ring);
 }
 
-/* Transient messages, stacked above the status rail. */
+/* Transient messages, stacked above the status rail.
+
+   Above the modal layer, not below it: the errors a dialog raises — a folder
+   that is not a git checkout, a handle that collides — arrive here, and under
+   the scrim they were painted and then covered, so the dialog simply sat there
+   saying nothing. Nothing in the app is allowed to lose a message this way.
+
+   The stack itself takes no pointer events, only the cards in it: the gaps
+   between the cards are part of its box, and over a dialog that box would be
+   swallowing clicks meant for the form behind it. */
 
 .notices {
   position: fixed;
   right: var(--s4);
   bottom: 34px;
-  z-index: 40;
+  z-index: 70;
   display: flex;
   flex-direction: column;
   gap: var(--s2);
   max-width: 420px;
+  pointer-events: none;
 }
 
 .notice {
   display: flex;
+  pointer-events: auto;
   align-items: flex-start;
   gap: var(--s3);
   padding: var(--s3) var(--s3) var(--s3) var(--s4);

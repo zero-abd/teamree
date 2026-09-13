@@ -42,4 +42,28 @@ describe('stylesheets', () => {
     })
     expect(empty).toEqual([])
   })
+
+  // Errors raised by a dialog are notices, and a notice under the modal scrim
+  // is painted and then covered: the dialog stays open, the button goes live
+  // again, and nothing appears. The two numbers live in two files, so the
+  // relationship is asserted here rather than a literal in either of them.
+  it('stacks the notices above the modal layer, so no dialog can hide its own error', () => {
+    expect(zIndexOf('.notices')).toBeGreaterThan(zIndexOf('.modal-layer'))
+  })
 })
+
+/** The `z-index` one selector is given, across every stylesheet. */
+function zIndexOf(selector: string): number {
+  const found: number[] = []
+  for (const name of sheets) {
+    postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkRules(selector, (rule) => {
+      rule.walkDecls('z-index', (decl) => {
+        found.push(Number(decl.value))
+      })
+    })
+  }
+  // A selector with no z-index, or with two, makes the comparison meaningless
+  // rather than false, and a comparison against nothing would pass quietly.
+  expect(found, `${selector} should declare exactly one z-index`).toHaveLength(1)
+  return found[0] ?? Number.NaN
+}
