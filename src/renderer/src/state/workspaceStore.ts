@@ -14,6 +14,8 @@ import type {
   Project,
   RelaySetting,
   TeammatePresence,
+  TeamworkPublish,
+  TeamworkPublishPlan,
   TeamworkStatus,
   Terminal,
   Worktree,
@@ -25,6 +27,7 @@ import type {
 } from '@shared/entities'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
 import { awaitWorktreeReady } from './awaitWorktreeReady'
+import { relayUrlFromOutput } from '../teamwork/startTeamwork'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import {
@@ -77,6 +80,35 @@ export type PaneSearch = { terminalId: string; token: number }
  * Keyed the way the panel's own input is, so it can be handed over as it is.
  */
 export type TeamworkReadErrors = { list?: string; relay?: string; status?: string }
+
+/**
+ * A relay deploy running in a pane in this window.
+ *
+ * The pane is an ordinary terminal owned by the runtime, created under an id of
+ * its own so it belongs to the project rather than to whichever worktree
+ * happened to be open — `.teamree` is in the primary checkout, and a worktree's
+ * pane is in the wrong directory for this. Nothing restores it on the next
+ * launch, which is right: a finished deploy is not a pane anybody wants back.
+ */
+export type RelayDeploy = {
+  terminalId: string
+  /** The wss:// URL the deploy printed, once it has printed one. */
+  url: string | null
+  /** False once the command has exited; the pane stays until it is closed. */
+  running: boolean
+}
+
+/**
+ * The worktree id a project's teamwork pane is created under.
+ *
+ * Namespaced so it can never collide with a real worktree's, and deliberately
+ * not a real one: this pane is about the project's primary checkout, which no
+ * worktree row owns. The runtime drops a stored pane whose worktree it cannot
+ * resolve, so nothing is left behind by it on the next launch.
+ */
+export function teamworkPaneWorktreeId(projectId: string): string {
+  return `teamwork:${projectId}`
+}
 
 type WorkspaceState = {
   connection: ConnectionState
@@ -148,6 +180,38 @@ type WorkspaceState = {
    * is about, not in a corner of the window.
    */
   relayError: string | null
+  /** True while `origin` is being written, so the button can say so. */
+  originPending: boolean
+  /**
+   * Why the last attempt to set `origin` was refused, or null.
+   *
+   * git's own words when git refused, and kept beside the field for the reason
+   * every other refusal here is: it is an instruction about what is in the box.
+   */
+  originError: string | null
+  /**
+   * The relay deploy running in a pane in this window, by project id.
+   *
+   * One per project, because a second deploy of the same relay is never what
+   * somebody meant. The pane is a real terminal owned by the runtime; what is
+   * kept here is which one it is, whether it is still running, and the wss://
+   * URL it printed once it has printed one.
+   */
+  relayDeploys: Record<string, RelayDeploy>
+  /**
+   * What committing and pushing the two files would do, by project id.
+   *
+   * Read before the button is pressed rather than after, because the button is
+   * outward-facing and has to say what it will do — and read from the runtime
+   * rather than assembled here, because the branch and the upstream are git's
+   * answers.
+   */
+  publishPlans: Record<string, TeamworkPublishPlan>
+  publishPending: boolean
+  /** Why the last attempt could not be made at all, or null. */
+  publishError: string | null
+  /** What the last attempt did, by project id — including a push that failed. */
+  publishResults: Record<string, TeamworkPublish>
   /**
    * Whether teamwork is running for each project, by project id.
    *
@@ -305,6 +369,21 @@ type WorkspaceState = {
    * stops: pushing it is what makes it the team's.
    */
   setRelay: (projectId: string, url: string) => Promise<void>
+  /**
+   * Points this checkout's `origin` at a URL, and re-reads the status so the
+   * step that was blocked goes green without a restart.
+   */
+  setOrigin: (projectId: string, url: string) => Promise<void>
+  /** Runs the shipped relay deploy in a pane in this window. */
+  startRelayDeploy: (projectId: string) => Promise<void>
+  /** Closes that pane, killing the command if it is still running. */
+  closeRelayDeploy: (projectId: string) => Promise<void>
+  /** Records what the deploy pane has printed so far, and whether it is still up. */
+  noteRelayDeploy: (projectId: string, output: string, running: boolean) => void
+  /** Reads what the commit-and-push button would do. */
+  loadPublishPlan: (projectId: string) => Promise<void>
+  /** Stages the two files, commits them, and pushes. Never more than those files. */
+  publishTeamwork: (projectId: string) => Promise<void>
   /**
    * Writes this installation's key into the project. It does not commit and
    * does not push, and the dialog says so: doing either for somebody would hide
@@ -779,6 +858,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     relays: {},
     relayPending: false,
     relayError: null,
+    originPending: false,
+    originError: null,
+    relayDeploys: {},
+    publishPlans: {},
+    publishPending: false,
+    publishError: null,
+    publishResults: {},
     teamwork: {},
     teammates: {},
     watchers: {},
@@ -1353,6 +1439,110 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         set({ membersError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ membersPending: false })
+      }
+    },
+
+    async setOrigin(projectId, url) {
+      set({ originPending: true, originError: null })
+      try {
+        const result = await runtimeClient.call('teamwork.setOrigin', { projectId, url })
+        // The status caches the project key against a stamp of git's config,
+        // and that stamp has just moved: this read is what turns the blocker
+        // green without anybody restarting the app.
+        await get().loadTeamwork(projectId)
+        await get().loadPublishPlan(projectId)
+        notify(
+          result.replaced
+            ? `origin now points at ${result.url}.`
+            : `Added origin ${result.url}. Your teammates’ checkouts have to name the same repository.`,
+          'info'
+        )
+      } catch (error) {
+        // Beside the field, like every other refusal here: what git said about
+        // a URL is only useful next to the box that URL is in.
+        set({ originError: error instanceof Error ? error.message : String(error) })
+      } finally {
+        set({ originPending: false })
+      }
+    },
+
+    async startRelayDeploy(projectId) {
+      const project = get().projects.find((entry) => entry.id === projectId)
+      const command = get().relays[projectId]?.deploy.command
+      // Both of these are already why the button is disabled. Checked again
+      // because a store action is reachable from more than one button.
+      if (!project || !command || get().relayDeploys[projectId]) return
+      try {
+        const terminal = await runtimeClient.call('terminal.create', {
+          worktreeId: teamworkPaneWorktreeId(projectId),
+          cwd: project.path,
+          command
+        })
+        set((state) => ({
+          terminals: { ...state.terminals, [terminal.id]: terminal },
+          relayDeploys: { ...state.relayDeploys, [projectId]: { terminalId: terminal.id, url: null, running: true } }
+        }))
+      } catch (error) {
+        failed('Could not start the relay deploy')(error)
+      }
+    },
+
+    async closeRelayDeploy(projectId) {
+      const deploy = get().relayDeploys[projectId]
+      if (!deploy) return
+      set((state) => {
+        const { [projectId]: _closed, ...rest } = state.relayDeploys
+        return { relayDeploys: rest }
+      })
+      await runtimeClient.call('terminal.close', { terminalId: deploy.terminalId }).catch(() => undefined)
+    },
+
+    noteRelayDeploy(projectId, output, running) {
+      const deploy = get().relayDeploys[projectId]
+      if (!deploy) return
+      const url = relayUrlFromOutput(output)
+      if (deploy.url === url && deploy.running === running) return
+      set((state) => ({
+        relayDeploys: { ...state.relayDeploys, [projectId]: { ...deploy, url, running } }
+      }))
+    },
+
+    async loadPublishPlan(projectId) {
+      try {
+        const plan = await runtimeClient.call('teamwork.publishPlan', { projectId })
+        set((state) => ({ publishPlans: { ...state.publishPlans, [projectId]: plan } }))
+      } catch (error) {
+        // Not a notice: the panel shows the button disabled with nothing to say
+        // about it, and a toast about a plan nobody asked for is noise. The
+        // read is retried every time the panel is opened.
+        set({ publishError: error instanceof Error ? error.message : String(error) })
+      }
+    },
+
+    async publishTeamwork(projectId) {
+      if (get().publishPending) return
+      set({ publishPending: true, publishError: null })
+      try {
+        const result = await runtimeClient.call('teamwork.publish', { projectId })
+        set((state) => ({ publishResults: { ...state.publishResults, [projectId]: result } }))
+        // Said as a notice as well as in the panel, because this is the one act
+        // here that leaves the machine and a reader may be looking elsewhere.
+        notify(
+          result.push.ok
+            ? result.push.alreadyUpToDate
+              ? `${result.remote} already had ${result.branch}.`
+              : `Pushed ${result.branch} to ${result.remote}. Your team can reach this machine now.`
+            : `${
+                result.commit === null ? 'Nothing to commit, and the' : 'Committed, but the'
+              } push was refused: ${result.push.advice}`,
+          result.push.ok ? 'info' : 'error'
+        )
+      } catch (error) {
+        set({ publishError: error instanceof Error ? error.message : String(error) })
+      } finally {
+        set({ publishPending: false })
+        await get().loadPublishPlan(projectId)
+        await get().loadMembers(projectId)
       }
     },
 

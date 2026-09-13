@@ -10,9 +10,13 @@ name: ci
 # commit is checked twice. A full run packages an Electron app; it is worth
 # spending once and not worth spending twice.
 #
-# Tags are absent on purpose. `release.yml` runs on those, and it calls
-# `build.yml` exactly as this does, so a tag matching here too would build
-# everything twice over and publish from only one of the two runs.
+# Tags are absent on purpose, and so is any claim that this runs at all: no
+# Actions run in this repository has ever executed a step. Every one ends in six
+# or seven seconds with the annotation "The job was not started because recent
+# account payments have failed or your spending limit needs to be increased."
+# This file is kept as the description of the checks a maintainer runs by hand —
+# `npm run release` runs the same sequence — and it will start working the day a
+# runner can be provisioned, without being rewritten.
 on:
   push:
     branches: [main]

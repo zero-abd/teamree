@@ -9,10 +9,11 @@
 //
 // Two things it deliberately will not do:
 //
-// **It does not claim the push happened.** teamree writes files and stops, and
-// nothing in the window can see whether a commit exists, so step four is marked
-// as unchecked rather than guessed at. A tick there would be the app claiming
-// the one act it has refused to perform.
+// **It does not claim the push happened by itself.** The panel can now make
+// that commit and send it, on a button that says what it will do first — but
+// until somebody presses it, nothing in the window can see whether the files
+// are in the repository, so step four is marked as unchecked rather than
+// guessed at. A tick there would be the app claiming an act nobody performed.
 //
 // **It does not fold "no origin" into "no relay".** The runtime's
 // `disabledReason` names the first thing to fix, which for a bare project is
@@ -20,8 +21,17 @@
 // set, because the project's identity is a hash of the normalised origin. That
 // is why `TeamworkStatus` reports the two separately and why this reads both.
 
-import type { Member, MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
+import type {
+  Member,
+  MemberList,
+  PeerLink,
+  RelaySetting,
+  TeamworkPublish,
+  TeamworkPublishPlan,
+  TeamworkStatus
+} from '@shared/entities'
 import { sanitiseHandle } from '@shared/handle'
+import { checkOriginUrl } from '@shared/originUrl'
 import { parseRelayUrl } from '@shared/relayUrl'
 
 export type StepId = 'identity' | 'key' | 'relay' | 'push' | 'connected'
@@ -130,24 +140,37 @@ export const KEY_GRANT_WARNING = {
 } as const
 
 /**
- * Who chooses a relay, and where the commands below are run.
+ * Who does this at all, said once above the button.
  *
- * The two halves of that second question are not the same, and saying so is the
- * point of this paragraph. The Worker deploy ships inside teamree and runs from
- * any directory; the container options need a clone, because the Dockerfile is
- * in one. Getting this the wrong way round is not a hypothetical: it is the
- * failure that prompted the work — a panel that said `cd relay` to somebody
- * reading it inside an installed app, who made an empty `relay/` directory in
- * their own project and got a missing-package-file error out of npm, twice.
- * `relay/README.md` is the authority on both halves, and this is said once here
- * rather than in each of the commands, which is where the options would
- * otherwise stop being copyable.
+ * Everything else that used to be here — which options exist, what a Durable
+ * Object costs, why `cd relay` is wrong inside an installed app — is either the
+ * button's own job now or `relay/README.md`'s. The panel was several paragraphs
+ * deep before a reader reached anything they could press, and that was the
+ * complaint.
  */
 export const RELAY_LEAD =
-  'If somebody on your team has already stood a relay up, you do not choose: git pull, and it arrives in ' +
-  '.teamree/relay. This is for whoever is standing one up. teamree never starts a relay itself — it dials ' +
-  'a URL, and standing one up happens in a terminal. The Worker deploy below ships with teamree and needs no ' +
-  'clone; the container options do, because the Dockerfile lives in a clone of the teamree repository.'
+  'Only whoever is standing the relay up does this. Everybody else pulls, and the URL arrives in .teamree/relay.'
+
+/**
+ * The deploy, in the fewest words that are still true.
+ *
+ * It is a button now, and the button runs the command in a pane in this window
+ * rather than handing it over to be pasted into Terminal.app. Two facts belong
+ * beside it and nothing else does: whose account it goes to, and that a browser
+ * opens the first time. `relay/README.md` has the rest — what it costs, what a
+ * Durable Object is, and every other way to get a relay.
+ */
+export const RELAY_DEPLOY = {
+  button: 'Deploy a relay',
+  what: 'One command, to your team’s own Cloudflare account. teamree hosts nothing and runs nothing for you.',
+  browser: 'A browser opens once, for the Cloudflare sign-in. Nothing is deployed until you are signed in.',
+  /** Said while it runs, because somebody watching a pane deserves to know what finishing looks like. */
+  watching: 'It prints a wss:// URL when it finishes, and teamree offers to write that into the repository.',
+  /** The label on the button that takes the URL the deploy printed. */
+  use: 'Use this relay URL',
+  /** Above the command itself, kept for anybody who would rather run it themselves. */
+  manual: 'Or run it yourself:'
+} as const
 
 /**
  * The label on the disclosure that holds the options nobody should have to read.
@@ -159,8 +182,9 @@ export const MORE_RELAYS_BUTTON = 'Other ways to get a relay'
 
 /** Said once, above the folded options, so opening it is an informed choice. */
 export const MORE_RELAYS_LEAD =
-  'Neither of these is better than the Worker for a team that has no relay yet. They are here for a team that ' +
-  'already has the network or the server, and would rather not add a Cloudflare account to it.'
+  'None of these is better than the button above for a team that has no relay yet. They are here for a team that ' +
+  'already has the network, the server, or a reason not to add a Cloudflare account. Each needs a clone of the ' +
+  'teamree repository, because the Dockerfile is in one.'
 
 /**
  * Where the resulting URL belongs, which is the part of this decision that is
@@ -174,26 +198,22 @@ export const MORE_RELAYS_LEAD =
 export type RelayKeep = 'commit' | 'override'
 
 /**
- * How prominent an option is, which is the whole of what was wrong here.
+ * How prominent an option is.
  *
- * Four ways to get a relay were listed as equals, and a list of four equals is
- * a decision handed to somebody who has no way of taking it. `relay/README.md`
- * has always said "take the Worker unless you have a reason not to", so the
- * panel now says that too: one recommendation, one fallback for trying this out
- * this afternoon, and the two that are somebody else's infrastructure folded
- * away behind a disclosure rather than deleted — a team that already runs a box
- * on a VPN still needs the commands.
+ * There is no `lead` any more, because the lead is a button: the Worker deploy
+ * ships inside teamree and this panel runs it, so listing it again as one of
+ * four equals would be the wall of choices all over again. What is left is
+ * genuinely "other ways", folded away, with the one worth trying this afternoon
+ * first.
  */
 export type RelayTier =
-  /** The answer, unless you know why it is not. Exactly one option is this. */
-  | 'lead'
-  /** The one alternative worth putting in front of somebody unprompted. */
+  /** The one alternative worth meeting first, inside the disclosure. */
   | 'fallback'
-  /** Real, documented, and behind a disclosure. */
+  /** Real, documented, and further down. */
   | 'more'
 
 export type RelayOption = {
-  id: 'worker' | 'tunnel' | 'mesh' | 'vps'
+  id: 'tunnel' | 'mesh' | 'vps'
   tier: RelayTier
   name: string
   /** What it is, and who it is right for. */
@@ -208,41 +228,15 @@ export type RelayOption = {
 }
 
 /**
- * Every way a team actually gets a relay, with what each costs, in the order
- * somebody should meet them.
+ * Every other way a team gets a relay, in the order somebody should meet them.
  *
- * Presented rather than defaulted: a bare URL field assumes the person already
- * knows what to paste, and the one thing certainly true of somebody opening
- * this panel for the first time is that they do not. But presented in rank —
- * see `RelayTier`. The facts are `relay/README.md`'s; this is that document's
- * decision table with the part teamree cares about — whether the address is
- * stable enough to commit — made explicit.
+ * The facts are `relay/README.md`'s; this is that document's decision table
+ * with the part teamree cares about — whether the address is stable enough to
+ * commit — made explicit. It is shorter than it was because the option that
+ * needed the most explaining is now a button, and because a panel is not the
+ * place to re-state a README.
  */
 export const RELAY_OPTIONS: readonly RelayOption[] = [
-  {
-    id: 'worker',
-    tier: 'lead',
-    name: 'Deploy the Worker to your team’s own Cloudflare account',
-    what:
-      'Start here unless you have a reason not to. It is one command, there is nothing to babysit, and it works ' +
-      'from anywhere because both machines dial out to it.',
-    commands: '/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy',
-    effort:
-      'One command, once, run from any directory: it writes the Worker project into ~/teamree-relay and deploys ' +
-      'from there. The path above is the copy that ships inside the installed app, which is where you are reading ' +
-      'this; from a clone of teamree the same command is relay/teamree-relay deploy. Needs a Cloudflare account ' +
-      'and Node 20 or newer, and there are no resource ids to fill in.',
-    money:
-      'Durable Objects have been on the Workers free plan since 7 April 2025 for classes on the SQLite backend, ' +
-      'which this relay’s wrangler.jsonc already declares — so a small team is very likely free. relay/README.md ' +
-      'is explicit that it has not re-verified today’s exact free-tier figures: read them on Cloudflare’s Durable ' +
-      'Objects pricing page before a large team lives in this all day.',
-    keep: 'commit',
-    address:
-      'It prints wss://teamree-relay.<your-subdomain>.workers.dev/v1/relay, which is the line to paste below. If ' +
-      'you have only the https:// host Wrangler printed, paste that instead — teamree refuses it rather than ' +
-      'guessing, and offers you the corrected URL.'
-  },
   {
     id: 'tunnel',
     tier: 'fallback',
@@ -257,9 +251,8 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
     money: 'Free, and up only for as long as the tunnel and this machine are.',
     keep: 'override',
     address:
-      'The tunnel prints an https:// URL, and it is ephemeral: it changes every time the tunnel restarts and dies ' +
-      'with it. Do not commit it. Set TEAMREE_RELAY_URL to the wss:// form, on both machines, in the terminal each ' +
-      'one starts teamree from — an app opened from Finder or the dock inherits no shell environment.'
+      'The tunnel prints an ephemeral https:// URL that dies with it. Do not commit it: set TEAMREE_RELAY_URL to ' +
+      'the wss:// form on both machines instead.'
   },
   {
     id: 'mesh',
@@ -270,9 +263,7 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
       'WireGuard. Nothing is exposed publicly. Good if your team already has the network.',
     commands:
       'cd relay\ndocker build -t teamree-relay .\ndocker run -d -p 8787:8787 --restart unless-stopped teamree-relay',
-    effort:
-      'Minutes if the network already exists. If it does not, the network is the work, and a relay on a laptop ' +
-      're-inherits the NAT problem a relay exists to solve.',
+    effort: 'Minutes if the network already exists. If it does not, the network is the work.',
     money: 'Whatever the box costs, which is usually nothing you are not already paying.',
     keep: 'commit',
     address: 'ws://<that machine>:8787/v1/relay, or wss:// once something is terminating TLS in front of it.'
@@ -293,6 +284,59 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
     address: 'wss://<your hostname>/v1/relay'
   }
 ] as const
+
+/**
+ * The `wss://` line a finished deploy printed, out of everything the pane has
+ * said.
+ *
+ * The last one wins: a person who deploys twice in one pane means the second.
+ * Read from the pane's own scrollback rather than from anything the deploy is
+ * asked to report, because the deploy is a program in a terminal and this is
+ * the only thing it hands back.
+ */
+export function relayUrlFromOutput(output: string): string | null {
+  const found = [...output.matchAll(/wss:\/\/[^\s"'<>)\]]+/g)].map((match) => match[0])
+  for (let index = found.length - 1; index >= 0; index -= 1) {
+    const candidate = found[index]
+    if (candidate === undefined) continue
+    const parsed = parseRelayUrl(candidate)
+    if (parsed.ok) return parsed.url
+  }
+  return null
+}
+
+/**
+ * The words on the button that makes this the team's, and what it will do.
+ *
+ * Named here because the panel and its tests both have to agree about what it
+ * is called: a button that pushes somebody's repository is not a control whose
+ * label may drift out from under the documentation that tells people to use it.
+ */
+export const PUBLISH_BUTTON = 'Commit and push'
+
+/** A relay deploy running in a pane in this window, as the panel needs to see it. */
+export type RelayDeployState = {
+  /** The pane the command is running in. */
+  terminalId: string
+  /** The wss:// URL the deploy printed, once it has printed one. */
+  url: string | null
+  /** False once the command has exited; the pane stays until it is closed. */
+  running: boolean
+}
+
+/** Whether the origin button is busy, and why it was last refused. */
+export type OriginState = { pending: boolean; error: string | null }
+
+/** Everything the commit-and-push button needs to describe itself and report back. */
+export type PublishState = {
+  /** What the runtime says the button would do. Undefined until it has been read. */
+  plan: TeamworkPublishPlan | undefined
+  pending: boolean
+  /** Why the attempt could not even be made — a commit git refused, say. */
+  error: string | null
+  /** What the last attempt did, including a push that failed after a commit that did not. */
+  result: TeamworkPublish | undefined
+}
 
 /** What to commit, and the commands that do it. Null when nothing is written. */
 export type PushPlan = {
@@ -362,6 +406,34 @@ export function checkRelayDraft(raw: string): RelayDraftCheck {
   if (parsed.ok) return { state: 'ok', url: parsed.url }
   return { state: 'bad', reason: sentence(parsed.reason), suggestion: parsed.suggestion ?? null }
 }
+
+export type OriginDraftCheck = { state: 'empty' } | { state: 'ok'; url: string } | { state: 'bad'; reason: string }
+
+/**
+ * The origin field's own verdict, before git is run.
+ *
+ * The same grammar the runtime refuses with — `checkOriginUrl` is shared —
+ * because the mistake everybody makes here is typing a path, and being told
+ * that a round trip later reads as the button being broken rather than the
+ * answer being the wrong kind of thing.
+ */
+export function checkOriginDraft(raw: string): OriginDraftCheck {
+  if (raw.trim() === '') return { state: 'empty' }
+  const checked = checkOriginUrl(raw)
+  return checked.ok ? { state: 'ok', url: checked.url } : { state: 'bad', reason: sentence(checked.reason) }
+}
+
+/**
+ * Why a path will not do, for the disclosure beside the field.
+ *
+ * It used to be three sentences in front of everybody who opened the panel,
+ * including the ones whose origin was fine. It is the answer to one question —
+ * "why did it refuse my directory?" — so it is where a question is asked.
+ */
+export const ORIGIN_DETAIL =
+  'Two checkouts are the same project when the hash of their normalised origin matches, and a path on this disk ' +
+  'is not something your teammates can clone. ssh against https, a port and a trailing .git are all normalised ' +
+  'away, so you need not match each other exactly. docs/teamwork.md has the rest.'
 
 export function startTeamworkFlow(input: StartTeamworkInput): StartTeamworkFlow {
   const steps = [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)]
@@ -521,9 +593,9 @@ function pushStep(input: StartTeamworkInput): StartTeamworkStep {
     title,
     mark: 'unchecked',
     summary:
-      `${listOf(plan.files)} ${plan.files.length === 1 ? 'is' : 'are'} in this checkout. teamree does not check ` +
-      'whether you have committed them and will not push for you: being able to push that file is the whole of ' +
-      'what membership means.'
+      `${listOf(plan.files)} ${plan.files.length === 1 ? 'is' : 'are'} in this checkout and mean nothing to anybody ` +
+      'else until they are pushed. teamree cannot see whether you have done that, so this step never ticks itself: ' +
+      'the button below says what it will commit and where it will send it before it does either.'
   }
 }
 
@@ -636,22 +708,15 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
 }
 
 /**
- * Why a checkout with no usable `origin` cannot take part, and the one thing to
- * do about it.
+ * Why a checkout with no usable `origin` cannot take part.
  *
- * The runtime's reason says what is wrong. It does not say what to type, and a
- * person reading "teamree cannot tell it is the same repository your teammates
- * have" reasonably tries a path on their disk next — which is the other half of
- * this failure, because the identity is a hash of the normalised remote and a
- * path is not one.
+ * One sentence, because the fix is now a field and a button directly under it
+ * rather than a command to go and type somewhere else. Why a path will not do
+ * is in `ORIGIN_DETAIL`, behind the disclosure beside that field, where it is
+ * read by the people who need it and nobody else.
  */
 function originBlocker(reason: string): string {
-  return (
-    `${sentence(reason)} Add the remote you and your teammates both cloned — git remote add origin <url> — and ` +
-    'note that it has to be that URL rather than a path on this disk: two checkouts are the same project when ' +
-    'the hash of their normalised origin matches, and a filesystem path is not a URL. ssh against https, a port ' +
-    'or a trailing .git are all normalised away, so you need not match each other exactly.'
-  )
+  return `${sentence(reason)} Add the URL you and your teammates both cloned — a URL, not a path on this disk.`
 }
 
 function relayLabel(status: TeamworkStatus): string {

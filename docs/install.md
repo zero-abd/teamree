@@ -4,6 +4,12 @@ This is for somebody who has downloaded a build rather than cloned the
 repository. If you want to run it from source, the README covers that in two
 commands and none of this applies.
 
+**As of this writing nothing has been published**: the releases page is empty,
+and the only way to get teamree is to build it. This document describes what a
+download will be when there is one, and it is checked against real packaged
+builds rather than written from memory — but if you are here because you were
+sent a link, and the link goes nowhere, that is why.
+
 **There is one download: `teamree-<version>.dmg`**, plus a `SHA256SUMS.txt`
 beside it. It is a universal build, so it runs on Apple Silicon and on Intel
 and there is nothing to choose between. If you have wondered which Mac you
@@ -24,10 +30,15 @@ they are on the screen.
 teamree has no Apple Developer certificate behind it and no Windows
 code-signing certificate. Those are commercial products — an Apple Developer
 membership is an annual fee and an identity check, a Windows certificate is the
-same from a different vendor — and this project has neither, deliberately. That
-is not going to change, so what follows is the permanent answer rather than a
-workaround for something being fixed later. macOS and Windows both notice, and
-both say so.
+same from a different vendor — and this project has neither today.
+
+Whether it ever does is somebody's decision rather than a settled one: the
+packaging will sign and notarize a macOS build the moment a certificate is put
+in front of it (`docs/releasing.md` in the repository is the checklist), and
+nobody has done that. So treat what follows as the answer for every build that
+exists so far, not as a promise about every build there will ever be. A signed
+release would say so in its own notes and would not need any of this. macOS and
+Windows both notice an unsigned one, and both say so.
 
 It is worth being exact about what they are saying, because the wording is
 alarming and the meaning is narrow. Neither system has examined teamree and
@@ -78,9 +89,15 @@ marked depends on how the app reached you. Dragging it out of the `.dmg` marks
 the bundle; anything that unpacks it file by file — a re-zipped copy passed to a
 colleague, an AirDrop — marks what is inside it too. Clearing only the bundle
 would work for the download and leave those stopped, with no hint that the
-command had done half its job. This is checked rather than asserted: CI
-quarantines a real packaged build both ways and runs the command above, read out
-of this file, so the instruction cannot rot into being wrong.
+command had done half its job.
+
+This is checked rather than asserted. `npm run install:verify` in the repository
+installs a real packaged build at the path named above, quarantines it both ways
+a download arrives, and runs the command in this document — read out of this
+file, so the instruction cannot rot into being wrong while the check stays green.
+It last ran in CI on 13 September 2026; GitHub has provisioned no runner for this
+repository since, so it is a command a maintainer runs rather than something that
+happens on every commit.
 
 There is a route through the interface as well, but where it is depends on your
 macOS version, which is worth knowing before you go hunting for it. Through

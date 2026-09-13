@@ -29,6 +29,15 @@ export function badRelayUrl(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.InvalidParams, message)
 }
 
+/**
+ * What was typed is not an origin. Separate from the relay's refusal because
+ * the mistake is a different one: a path on this disk is a perfectly good git
+ * remote and a useless project identity, and the sentence has to say so.
+ */
+export function badOriginUrl(message: string): TeamworkError {
+  return new TeamworkError(ErrorCode.InvalidParams, message)
+}
+
 /** An id that is not shaped like anything this runtime hands out. */
 export function badPaneId(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.InvalidParams, message)

@@ -52,6 +52,7 @@ const noRelay = (): RelaySetting => ({
     problem: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
   },
   override: { name: 'TEAMREE_RELAY_URL', value: null },
+  deploy: { command: '/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy', reason: null },
   readAt: 0
 })
 
@@ -104,6 +105,14 @@ function render(overrides: Partial<TeamworkStepsProps> = {}): string {
     onClearMembersError: () => {},
     onSetRelay: () => {},
     onRetry: () => {},
+    origin: { pending: false, error: null },
+    onSetOrigin: () => {},
+    deploy: undefined,
+    onDeployRelay: () => {},
+    onCloseDeploy: () => {},
+    renderDeployPane: () => null,
+    publish: { plan: undefined, pending: false, error: null, result: undefined },
+    onPublish: () => {},
     ...overrides
   }
   return renderToStaticMarkup(<TeamworkSteps {...props} />)
@@ -237,31 +246,40 @@ describe('each step says whether it is done', () => {
 })
 
 describe('choosing a relay', () => {
-  // Four ways presented as equals is a decision handed to the one person in the
-  // room least able to take it — and `relay/README.md` has always said which
-  // one to take. Two are on the page; the rest are a button away.
-  it('leads with the Worker and keeps one fallback, with their costs', () => {
+  // A wall of four equals was a decision handed to the person least able to
+  // take it, and several paragraphs of Cloudflare stood between a reader and
+  // anything they could press. The answer is a button, and everything else is
+  // a disclosure away.
+  it('leads with the button, and the command the runtime says this build carries', () => {
     const shown = text(render())
-    expect(shown).toContain('Deploy the Worker to your team’s own Cloudflare account')
-    expect(shown).toContain('Recommended')
-    expect(shown).toContain('A tunnel to a relay on your own machine')
-    expect(shown).toContain('/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy')
-    expect(shown).toContain('cloudflared tunnel --url http://localhost:8787')
-    expect(shown).toMatch(/Effort/)
-    expect(shown).toMatch(/Money/)
+    expect(shown).toContain('Deploy a relay')
+    expect(shown).toContain('/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy')
+    expect(shown).toContain('A browser opens once, for the Cloudflare sign-in.')
   })
 
-  it('does not put the other two in front of anybody who has not asked for them', () => {
+  it('puts no other option in front of anybody who has not asked for one', () => {
     const shown = text(render())
+    expect(shown).not.toContain('A tunnel to a relay on your own machine')
     expect(shown).not.toContain('A mesh VPN, or a box on the LAN')
     expect(shown).not.toContain('A VPS you rent')
     expect(shown).toContain('Other ways to get a relay')
   })
 
-  it('says which addresses are stable enough to commit and which belong in the override', () => {
+  // The paragraphs the feedback named: pricing, what a normalised origin hash
+  // is, and the note about an override a Finder-launched app cannot inherit.
+  // Each is answerable; none of them is a thing to wade through.
+  it('leaves the reasoning to relay/README.md rather than printing it', () => {
     const shown = text(render())
-    expect(shown).toContain('Stable enough to commit: paste it below and push .teamree/relay.')
-    expect(shown).toContain('Too short-lived to commit: use TEAMREE_RELAY_URL instead')
+    expect(shown).not.toMatch(/Durable Objects/)
+    expect(shown).not.toMatch(/free plan/)
+    expect(shown).not.toMatch(/normalised/)
+    expect(shown).not.toMatch(/does not inherit your shell/)
+  })
+
+  it('says this build carries no relay, rather than offering a button that cannot work', () => {
+    const shown = text(render({ relay: { ...noRelay(), deploy: { command: null, reason: 'no relay in this build' } } }))
+    expect(shown).toContain('no relay in this build')
+    expect(shown).not.toContain('teamree-relay deploy')
   })
 
   // Somebody joining a team that already has a relay has no decision to make:
@@ -269,17 +287,13 @@ describe('choosing a relay', () => {
   // chosen is noise at the exact moment they want to know whether it worked.
   it('shows none of that to somebody whose team already has one', () => {
     const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
-    expect(shown).not.toContain('A VPS you rent')
-    expect(shown).not.toContain('npm run deploy')
+    expect(shown).not.toContain('Deploy a relay')
+    expect(shown).not.toContain('Other ways to get a relay')
     expect(shown).toContain('Change the relay for this project')
   })
 
-  it('says teamree never starts a relay itself', () => {
-    expect(text(render())).toMatch(/teamree never starts a relay itself/)
-  })
-
-  it('answers “I set TEAMREE_RELAY_URL and nothing happened” even when it is unset', () => {
-    expect(text(render())).toMatch(/No\s+TEAMREE_RELAY_URL\s+in this app’s environment/)
+  it('never suggests anybody but the team hosts the relay', () => {
+    expect(text(render())).toMatch(/teamree hosts nothing and runs nothing for you/)
   })
 })
 
@@ -294,12 +308,12 @@ describe('a checkout with no origin', () => {
 
   // The alternative is a step that sits at "not connected" for ever while the
   // person checks their wifi, their relay and their teammate's laptop.
-  it('says so at the top, and names the command rather than showing a dead step', () => {
+  it('says so at the top, and puts the field that fixes it there too', () => {
     const shown = text(render({ status: noOrigin }))
     expect(shown).toContain('This checkout cannot take part yet.')
     expect(shown).toMatch(/no origin remote/)
-    expect(shown).toMatch(/git remote add origin/)
-    expect(shown).toMatch(/a filesystem path is not a URL/)
+    expect(shown).toContain('Origin URL')
+    expect(shown).toContain('Add origin')
   })
 
   it('marks the connected step blocked, in a word', () => {

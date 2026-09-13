@@ -19,9 +19,12 @@
 # where `npm ci` compiles one, so a Linux artifact built anywhere else would
 # contain no working PTY at all.
 #
-# Nothing here is signed. Signing needs secrets a fork cannot have; see the
-# comments in electron-builder.yml for what a maintainer adds, and pass them to
-# the packaging step as environment variables.
+# Nothing here is signed. Signing needs secrets a fork cannot have. The
+# `Package` step below picks them up from the environment on its own — see
+# `docs/releasing.md` for every variable and `scripts/mac-signing.mjs` for what
+# it does with them — so switching it on here is adding secrets, not steps.
+#
+# None of this workflow has ever run: see the comment in `ci.yml`.
 name: build
 
 on:

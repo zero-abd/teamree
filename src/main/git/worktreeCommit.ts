@@ -115,7 +115,11 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
  * say, and a tool that picks one for them has forged the history of the
  * repository rather than helped.
  */
-async function requireCommitIdentity(runner: GitRunner, worktreePath: string, signal?: AbortSignal): Promise<void> {
+export async function requireCommitIdentity(
+  runner: GitRunner,
+  worktreePath: string,
+  signal?: AbortSignal
+): Promise<void> {
   const { exitCode } = await runner.tryRun({
     args: ['var', 'GIT_AUTHOR_IDENT'],
     cwd: worktreePath,

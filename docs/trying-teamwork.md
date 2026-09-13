@@ -144,6 +144,13 @@ care of the differences that do not matter — ssh against https, a port, a
 trailing `.git`, the case of the host — so one of you cloning over ssh and the
 other over https is fine.
 
+If you open **Start teamwork** on a checkout that has no usable origin, the
+panel says so at the top and puts an **Origin URL** field and an **Add origin**
+button directly under the sentence, so the fix is where the problem is reported
+rather than in another window. It refuses a path on this disk while you are
+still typing, for the reason above: a path is a perfectly good git remote and a
+useless project identity, because nobody else can clone it.
+
 **Joiner**:
 
 ```sh
@@ -236,15 +243,25 @@ connected, visibly, in a diff.
 
 **Whoever set the relay up** does it in the app, in the same **Start teamwork**
 panel step 4 uses — the **Teamwork** button in the project header opens it, and
-step 3 of it is the relay. If you have not stood one up yet, that step gives you
-the one command above and names the single fallback, with what each costs and
-which of them produces an address stable enough to commit. Paste the URL into
-**Set the relay for this project** and press **Write relay file**. That writes `.teamree/relay` — the same file, with the
+step 3 of it is the relay.
+
+That step leads with **Deploy a relay**, which runs the deploy that ships inside
+teamree in a terminal pane inside the window: you watch it happen rather than
+copying a command into Terminal.app, a browser opens once for the Cloudflare
+sign-in, and when it finishes teamree reads the `wss://` URL it printed and
+offers **Use this relay URL**. The command itself is still there, one disclosure
+down, for anybody who would rather run it themselves — and the button is
+disabled with a sentence when the build in front of you carries no relay
+project. teamree still runs no relay of its own: it runs a deploy to your team's
+own Cloudflare account, and nobody hosts one for you.
+
+If you already have a URL, paste it into **Or paste a relay URL** and press
+**Write relay file**. That writes `.teamree/relay` — the same file, with the
 same comment header — and stops there, exactly as adding your key does. The
 panel then names both files it has written and the one commit that covers them,
 which is step 4's commit: you can do this step and the next one and push once.
 The panel accepts any `ws://` or `wss://` URL — a deployed Worker, a tunnel, a
-Tailscale address, a box on the LAN — and it never starts a relay itself.
+Tailscale address, a box on the LAN.
 
 Blank lines and `#` comments are skipped, the same way the member files' are;
 the first line that is neither is the URL. It must be `ws://` or `wss://`, and
@@ -316,16 +333,23 @@ met, and it is obeyed without comment. The only control is a person reading the
 diff, so if your team wants this watched, watch the path it happens on:
 `.teamree/members/`, in whatever review your repository already has.
 
-**Then commit it and push it, and this is the step people forget.** The app
-writes the file and stops. It does not stage it, commit it or push it — not
-because that would be hard, but because doing it for you would hide the only
-step that means anything. A key nobody pushed is not membership; a key the app
-pushed on your behalf would be a claim you never made. Until your key is on the
-roster your checkout can see, the project header says **Your key is not here**
-and names this step, rather than counting teammates who cannot reach you.
+**Then commit it and push it, and this is the step people forget.** Adding the
+key writes the file and stops; getting it into the repository is a separate,
+deliberate act, because a key nobody pushed is not membership. Until your key is
+on the roster your checkout can see, the project header says **Your key is not
+here** and names this step, rather than counting teammates who cannot reach you.
 
-The panel prints these underneath, naming every file it has written — so if you
-also set the relay in step 3, this one commit carries both:
+Step 4 of the panel is now a button for it. Before you press it, it names
+exactly what it will do — the files it will stage, the commit message, the
+remote and the branch, and whether this push is what sets the upstream — and it
+stages those two paths and nothing else, so work you had already staged for a
+commit of your own is left where it was. When git refuses, you get git's own
+words in full alongside one sentence about what to do: a rejected
+non-fast-forward, a branch with no upstream and a remote you cannot write to all
+read as themselves rather than as "push failed".
+
+The commands are still there, one disclosure down, if you would rather — so if
+you also set the relay in step 3, this one commit carries both:
 
 ```sh
 cd ~/teamree-example

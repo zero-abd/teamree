@@ -341,6 +341,32 @@
   color: var(--warning);
 }
 
+.steps__blocker-lead {
+  margin-bottom: var(--s2);
+}
+
+/* The field and button that fix it, directly under the sentence that says what
+   is wrong. It used to be a shell command to go and run elsewhere. */
+.origin-fix {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  align-items: flex-start;
+}
+
+.disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  align-items: flex-start;
+}
+
+.disclosure__body {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
 .steps__list {
   display: flex;
   flex-direction: column;
@@ -606,6 +632,135 @@
 
 .relay-option__keep--override {
   color: var(--warning);
+}
+
+/* The deploy: a button first, and everything that used to be in front of it
+   either behind a disclosure or in relay/README.md. */
+.relay-deploy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  align-items: flex-start;
+  padding: var(--s3);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+}
+
+.relay-deploy__what {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.relay-deploy__note {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+/* Why the button is grey, always beside it: a disabled control whose reason
+   nobody can read is the same as one that does nothing. */
+.relay-deploy__blocked {
+  color: var(--warning);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.relay-deploy__manual summary {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.relay-deploy__pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  align-self: stretch;
+}
+
+.relay-deploy__found {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+/* A real pane, letterboxed into the step. Tall enough to read a deploy's
+   output without scrolling it away. */
+.relay-deploy__terminal {
+  position: relative;
+  height: 22rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+}
+
+/* Exactly what the button will do, above the button. */
+.push__plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s2);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.push__plan div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+.push__plan dt {
+  min-width: 9rem;
+  color: var(--fg-muted);
+}
+
+.push__plan dd {
+  flex: 1 1 12rem;
+  color: var(--fg);
+}
+
+.push__blocked,
+.push__error {
+  color: var(--warning);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.push__result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+/* git's own words, whole and unparaphrased: the paraphrase is not what anybody
+   can search for. */
+.push__git {
+  padding: var(--s2);
+  overflow-x: auto;
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+}
+
+.push__manual summary {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
 }
 
 .push__files {

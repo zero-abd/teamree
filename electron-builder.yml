@@ -1,8 +1,10 @@
 # Packaging for the three desktop platforms. Run it through the npm scripts
 # (`npm run package:mac`, `:win`, `:linux`) so the app is rebuilt first.
 #
-# Code signing is deliberately NOT configured here; see the `mac:` and `win:`
-# blocks for exactly what a maintainer has to supply to turn it on.
+# Code signing is off by default and switched on by the environment, not by an
+# edit here: `npm run package:mac` reads a documented set of variables and
+# overrides the three `mac:` settings below when they are all present. See
+# `docs/releasing.md`, and the `win:` block for the Windows equivalent.
 appId: dev.teamree.app
 
 # Lower-case on purpose. Electron derives `app.getPath('userData')` from the app
@@ -206,15 +208,21 @@ mac:
   # ad-hoc signed to be runnable at all. It is not distributable: another
   # machine will still see an unidentified developer.
   #
-  # To produce a distributable macOS build, a maintainer supplies:
-  #   - a Developer ID Application certificate, as CSC_LINK (base64 .p12 or a
-  #     file path) plus CSC_KEY_PASSWORD
-  #   - an App Store Connect API key (APPLE_API_KEY, APPLE_API_KEY_ID,
-  #     APPLE_API_ISSUER) or APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID
-  # and then runs, with no change to this file:
-  #   npm run package:mac -- \
-  #     -c.mac.identity="Developer ID Application: Example Inc (TEAMID)" \
-  #     -c.mac.hardenedRuntime=true -c.mac.notarize=true
+  # These three are the unsigned defaults, and they are overridden rather than
+  # edited. `npm run package:mac` runs scripts/package-mac.mjs, which reads the
+  # environment and passes `-c.mac.identity=...`, `-c.mac.hardenedRuntime=true`
+  # and `-c.mac.notarize=true` when a complete set of credentials is there —
+  # so signing is an environment, not a diff, and an unsigned build stays
+  # byte-for-byte the build it was.
+  #
+  # The set is: APPLE_SIGNING_IDENTITY, the certificate as CSC_LINK (base64
+  # .p12 or a file path) plus CSC_KEY_PASSWORD unless it is already in the login
+  # keychain, and either APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER or
+  # APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID for the notary
+  # service. Half a set is refused before the build rather than quietly
+  # producing an unsigned artifact. `docs/releasing.md` is the whole account,
+  # including which steps of it nobody has been able to verify.
+  #
   # Notarization requires the hardened runtime, which is why the two move
   # together, and build/entitlements.mac.plist is already written for it.
   identity: '-'

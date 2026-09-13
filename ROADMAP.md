@@ -335,8 +335,8 @@ recorded so none of them is discovered by surprise later.
   architecture it was packed on opens no terminal on half the Macs it claims to
   support.
 - **macOS is the supported platform. Windows and Linux are not, for now.** That is a
-  decision rather than a gap waiting to close: CI builds macOS only, and nobody should
-  pick this up expecting to finish it. What was learned before narrowing is kept
+  decision rather than a gap waiting to close: macOS is the only platform packaged or
+  published, and nobody should pick this up expecting to finish it. What was learned before narrowing is kept
   because it is true. Linux was packaged and launched for real — `npm ci` compiles
   node-pty, both the AppImage and the `.deb` are produced, and the packaged app was
   launched headless, driven through the CLI it ships, and made to spawn a real PTY,
@@ -350,10 +350,20 @@ recorded so none of them is discovered by surprise later.
   deleted lines away from building again. The platform-specific code and the
   Windows-conditional workflow steps are all still present, so putting a platform back
   is adding a block to the matrix rather than a rewrite.
-- **CI runs, and macOS is green.** It runs typecheck, lint, format, the relay's own
-  suite, the full suite, the build, the headless smoke test, the package and the
-  packaged-app check — the one that launches the artifact and drives it — and macOS
-  passes all of it and uploads a build. Its first four runs all failed, each for a real
+- **CI ran, was green, and no longer starts at all.** Recorded in that order because
+  both halves are true and the second one is what matters today. The workflow runs
+  typecheck, lint, format, the relay's own suite, the full suite, the build, the
+  headless smoke test, the package and the packaged-app check — the one that launches
+  the artifact and drives it — and macOS passed all of it and uploaded a build. The
+  last run that executed any step finished at about 05:42 UTC on 13 September 2026;
+  the last fully green one was about sixteen minutes before that. Every run since — well over a
+  hundred — has ended in six to nine seconds with no steps, no logs and one annotation:
+  *"The job was not started because recent account payments have failed or your
+  spending limit needs to be increased."* GitHub is declining to provision a runner, so
+  the red cross beside recent commits is not a failing build; nothing ran. Until that
+  is settled the gate is `npm test` and `npm run release` on a maintainer's Mac, and
+  `.github/workflows/*` is a description of checks rather than a thing that happens.
+  Its first four runs all failed, each for a real
   reason that a developer machine had been hiding: a stale CLI build, a configured git
   identity, LF line endings, and a sandbox helper that only needs its permissions fixed
   on a runner.
@@ -397,20 +407,40 @@ recorded so none of them is discovered by surprise later.
   checked by actionlint with shellcheck behind it and are clean, which means the first
   run will not die on a syntax error, an unknown action input or a shell mistake in a
   `run:` block — it does not mean the jobs pass.
-- **No release has ever been published.** `release.yml` builds on a `v*` tag through
-  the same workflow CI uses, collects the one runner's `.dmg`, writes
-  `SHA256SUMS.txt` and attaches both to a GitHub release, with notes that say it
-  is for macOS and nothing else. It has never been fired.
-  The parts that can be checked without GitHub have been: the workflow parses and
-  lints, and the note-writing and checksum steps were run here against stand-in files
-  and produce what they claim to. What has not been checked is everything that needs
-  the platform — whether the artifact upload and download hand the files between jobs
-  as expected, and whether `gh release create` behaves as read. One of those is worth
-  settling before a tag rather than after a three-quarter-hour build: publishing needs
-  `contents: write`, which the workflow asks for, and a repository whose Actions
-  workflow-permissions setting is read-only overrides it and fails the last step with
-  a 403. Until a tag is pushed, this is a pipeline that has been reasoned through, not
-  one that has run.
+- **No release has ever been published, and the release pipeline is now local.**
+  `release.yml` was written to build on a `v*` tag through the same workflow CI uses
+  and attach the `.dmg` and a `SHA256SUMS.txt` to a GitHub release. It has never fired,
+  and with no runner being provisioned it cannot; its tag trigger has been removed so
+  that a tag does not hang a red cross off a release that was built correctly by hand.
+  The workflow is kept, still runnable by hand, and its comment says what to put back.
+
+  What replaces it is `npm run release` — `scripts/release.mjs` — which runs the same
+  sequence on a maintainer's Mac and refuses on a dirty tree, a tag that does not name
+  the version in `package.json`, a `HEAD` that is not on `origin`, a release that
+  already exists, or a `gh` that is not signed in. It adds one check the workflow never
+  got to run: the packaged-app check against the copy inside the mounted `.dmg`, which
+  is the file that actually leaves here. `docs/releasing.md` is the account of it, and
+  `tests/release/` covers the refusals. `npm run release:dry-run` has been run end to
+  end on a Mac, through every gate, and stops before creating anything. What is still
+  unobserved is the publishing itself: `gh release create` has never run for this
+  repository, and the first real release is also the first test of it.
+- **The shipped relay command does nothing, silently, when it is reached through a
+  symlinked path.** `relay/bin/teamree-relay.mjs` decides whether it is the program
+  being run with
+  `pathToFileURL(process.argv[1]).href === import.meta.url`. `import.meta.url` is
+  resolved through symlinks and `process.argv[1]` is not, so through a path
+  containing one the two differ, `main()` is never called, and the command exits 0
+  having printed nothing and written nothing. Found by running `package:verify`
+  against the copy inside a `.dmg` mounted under `os.tmpdir()` — which on macOS is
+  `/var/folders/...`, and `/var` is a symlink to `/private/var`. Running the same
+  file through its `/private/var/...` spelling writes the project correctly.
+
+  Not a release blocker, which is why it is recorded rather than fixed here: the
+  paths a user actually reaches it through — `/Applications`, and `/Volumes` for a
+  mounted image — are real directories, and CI's `$RUNNER_TEMP` is one too. It is a
+  one-line fix (compare realpaths rather than URLs) and it is a trap for anything
+  that invokes the command from a temporary directory, which is what
+  `scripts/release.mjs` now works around by mounting at a resolved path.
 - **The Intel half of the universal app has never been executed.** A universal `.dmg`
   carries node-pty twice, once per architecture, and the packaged-app check runs the
   app — so it exercises whichever architecture the runner is, which on `macos-latest`
@@ -421,12 +451,20 @@ recorded so none of them is discovered by surprise later.
   Intel Mac would open no terminal, which for this app is the whole app. Closing this
   needs an Intel Mac, or `arch -x86_64` on an Apple Silicon one with Rosetta
   installed.
-- **Nothing is signed. That is a decision, not a task waiting to be done.** There is
-  no Apple Developer certificate and no Windows code-signing certificate, and none is
-  being bought, so macOS refuses the app as being from an unverified developer and
-  Windows shows a SmartScreen panel. It is still the first thing a new user meets,
-  which is why it is recorded here — but nobody should pick this entry up expecting to
-  close it. Both warnings are documented rather than left to be discovered, in `docs/install.md` and in the notes
+- **Nothing is signed, and the blank is now filled in rather than closed.** There is
+  no Apple Developer certificate and no Windows code-signing certificate, so macOS
+  refuses the app as being from an unverified developer and Windows shows a SmartScreen
+  panel. It is still the first thing a new user meets. What changed is that buying one
+  is now the whole of the work: `npm run package:mac` reads a documented set of
+  environment variables and, given a complete set, signs with a Developer ID and
+  notarizes; given none it produces exactly the unsigned build it always did; given
+  half a set it refuses by name. `docs/releasing.md` lists every variable, the command,
+  how to verify the result — and, explicitly, which of those steps nobody has been able
+  to run, because nobody involved has a certificate. Two things about that path *are*
+  verified, both by making electron-builder fail on purpose: it rejects the identity
+  spelling `security find-identity` prints, and it ad-hoc signs and exits zero when it
+  cannot find the identity it was given, which is why the packaging reads the signature
+  back off the bundle afterwards. Both warnings are documented rather than left to be discovered, in `docs/install.md` and in the notes
   every release carries, with what each warning does and does not mean and the exact
   way past it. A published checksum is the substitute for the integrity half of a
   signature. There is no substitute for the identity half: a colleague's confidence
@@ -434,8 +472,9 @@ recorded so none of them is discovered by surprise later.
   operating system can tell them. One half of the macOS instructions is now checked
   rather than asserted: `npm run install:verify` reads the quarantine command out of
   `docs/install.md`, installs a real packaged bundle at the path the document names,
-  quarantines it both ways a download arrives and runs that command verbatim, and CI
-  runs it on the macOS leg. The other half is not. The dialogs, the **Open Anyway**
+  quarantines it both ways a download arrives and runs that command verbatim; CI ran it
+  on the macOS leg while it still ran, and it is a command a maintainer runs now. The
+  other half is not. The dialogs, the **Open Anyway**
   route through System Settings and the macOS-version differences around it are
   written from Apple's behaviour and the ad-hoc signing the build already does, and
   have not been walked through on a Mac at this commit.

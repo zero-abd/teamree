@@ -138,7 +138,13 @@ describe('dispatcher', () => {
       // agreement and the write log never leaves this machine.
       'teamwork.mute',
       'teamwork.presence',
+      // Local, and emphatically not peer-reachable: these three write to the
+      // repository this machine owns — a remote, a commit, a push — and the
+      // peer allow-list admits none of them.
+      'teamwork.publish',
+      'teamwork.publishPlan',
       'teamwork.relay',
+      'teamwork.setOrigin',
       'teamwork.setRelay',
       'teamwork.status',
       // Local, not peer-reachable. `teamwork.watch` and `teamwork.type` are

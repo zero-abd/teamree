@@ -12,22 +12,37 @@ milestones have landed, the relay in `relay/` ships with the repository, and
 `docs/trying-teamwork.md` walks two people through it — including the one thing
 still untested, which is two Macs in two places.
 
-Releases are macOS only: one unsigned universal `.dmg`. CI has packaged it,
-launched it and opened a real terminal inside it. Nothing has been published —
-no tag has been pushed and `release.yml` has never run. The Linux packaging has
-been built and launched; the Windows packaging never has, and `npm run
-package:win` cannot succeed as configured (see "Packaged builds"). The known
-gaps are in `ROADMAP.md`, recorded rather than discovered.
+Releases are macOS only: one unsigned universal `.dmg`. **Nothing has been
+published yet** — there is no releases page to send anybody to, and the first
+release is a command somebody has to run. It is one command:
+`npm run release`, which is [`docs/releasing.md`](docs/releasing.md).
+
+**GitHub Actions no longer runs here.** It did, earlier on the same day this was
+written: the last run that executed any step finished at about 05:42 UTC on 13
+September 2026, and the last fully green one — about sixteen minutes before that
+— packaged the app, launched it and opened a real terminal inside it. Every run since — well over a hundred of them — has
+ended after six or seven seconds with no steps, no logs and the annotation *"The
+job was not started because recent account payments have failed or your spending
+limit needs to be increased."* So the red cross next to recent commits means
+GitHub declined to start a machine, not that anything failed. The workflows are
+kept and will work again when a runner can be provisioned; until then the gate
+is `npm test` and `npm run release` on a maintainer's Mac.
+
+The Linux packaging was built and launched in CI before the matrix narrowed to
+macOS; the Windows packaging never has been, and `npm run package:win` cannot
+succeed as configured (see "Packaged builds"). The known gaps are in
+`ROADMAP.md`, recorded rather than discovered.
 
 ## Installing a build
 
-If somebody sent you a link rather than a checkout, the download is on the
-releases page — one universal macOS `.dmg` — and
-**[`docs/install.md`](docs/install.md) is the thing to read first**. Not because
-installing is hard; it is a drag to Applications. It is because the build is not
-signed, so macOS will stop you with a warning the first time. That document
+There are no published builds yet: the releases page is empty, and the way to
+run teamree today is from a checkout, two commands below. When there is one, it
+will be a single universal macOS `.dmg` on the releases page, and
+**[`docs/install.md`](docs/install.md) will be the thing to read first**. Not
+because installing is hard; it is a drag to Applications. It is because an
+unsigned build makes macOS stop you with a warning the first time. That document
 explains what the warning is actually saying, what it is not saying, and the
-exact way past it. Every release carries the checksums that stand in for the
+exact way past it, and every release carries the checksums that stand in for the
 signature.
 
 ## What it does
@@ -161,9 +176,11 @@ running less than it claims. `TEAMREE_SKIP_RELAY_TESTS=1` is the way to say you
 meant it. Building it is `cd relay && npm ci && npm run build`, which is what the
 refusal says too.
 
-`npm run typecheck`, `npm run lint` and `npm run format:check` are what CI
-checks, on a single macOS runner, alongside the relay's own suite, the build, the
-smoke test, the packaged app, and the app inside the `.dmg` that is published.
+`npm run typecheck`, `npm run lint` and `npm run format:check` are the rest of
+the gate. All of them, plus the relay's own suite, the build, the smoke test, the
+packaged app and the app inside the `.dmg`, are what `npm run release` runs in
+one sequence before it will publish anything — which is where they are actually
+run, since no runner is provisioned for this repository.
 
 ## Trying teamwork
 
@@ -187,10 +204,10 @@ two Macs in two places. `docs/teamwork.md` is why it is built this way, and
 Packaging is electron-builder, configured in `electron-builder.yml`. Every command
 rebuilds the app first, so a package is never made from stale output.
 
-Only the macOS command is built by CI and only its artifact is released. The
-other two are kept configured and are described here as what the configuration
-produces, not as something that has been seen to work lately — `ROADMAP.md` is
-exact about which of them has ever been launched.
+Only the macOS artifact is released. The other two are kept configured and are
+described here as what the configuration produces, not as something that has been
+seen to work lately — `ROADMAP.md` is exact about which of them has ever been
+launched.
 
 | Platform | Command | Artifacts in `dist/` |
 | --- | --- | --- |
@@ -208,14 +225,17 @@ Two more, for working on packaging itself:
   native binary outside the asar, plus an executable `spawn-helper` on macOS and
   two backends and a ConPTY sidecar on Windows, and only spawning a shell proves
   all of that survived packaging. It takes a path, so it can be pointed at an
-  app anywhere — CI points it at the copy inside the mounted `.dmg` as well as
-  at the unpacked one.
+  app anywhere. `npm run release` points it at the copy inside the mounted
+  `.dmg` as well as at the unpacked one, because the image is what leaves here
+  and everything upstream of it has only looked at a directory. `build.yml` has a
+  step that does the same, which has never run: it was added after the last time
+  a runner started.
 
   On a universal build it also checks both architectures' `node-pty` binaries
   statically — present, executable, and a Mach-O for the architecture whose
   directory they are in. It can only *run* one of them, which is whichever the
   machine is. The Intel half of a universal build has never been executed by
-  anything, here or in CI; closing that needs an Intel Mac, or an Apple Silicon
+  anything, here or in CI while it ran; closing that needs an Intel Mac, or an Apple Silicon
   one with Rosetta and the app launched under `arch -x86_64`.
 
 `npm run package:win` is in the table because the configuration is still there,
@@ -238,27 +258,31 @@ pass `--no-sandbox` themselves, so a container needs no special invocation.
 Each platform's artifact must be built on that platform. `node-pty` publishes
 prebuilt binaries for macOS and Windows but none for Linux, where `npm install`
 compiles one — so a Linux package built anywhere else would contain no working
-terminal at all. `.github/workflows/build.yml` runs every check and the one
+terminal at all. `.github/workflows/build.yml` describes every check and the one
 build this project publishes, on a single macOS runner; both `ci.yml` and
-`release.yml` call it rather than restating it. Its matrix has one entry, kept
-in that shape so that adding a platform back is a block rather than a rewrite.
+`release.yml` call it rather than restating it, and none of the three can run
+until a runner can be provisioned. Its matrix has one entry, kept in that shape
+so that adding a platform back is a block rather than a rewrite.
 
 The app icon is generated, not drawn by hand: `npm run icons` rewrites
 `build/icon.png`, `build/icon.icns`, `build/icon.ico` and `build/icons/`.
 
 ### Signing
 
-Local builds are **unsigned**, and the configuration says so deliberately rather
-than half-configuring it. macOS builds are ad-hoc signed, which is the minimum
-Apple Silicon needs to launch a binary at all; other machines will still see an
-unidentified developer, and Windows will still show SmartScreen.
+Builds are **unsigned** unless a certificate is in the environment. macOS builds
+are ad-hoc signed, which is the minimum Apple Silicon needs to launch a binary at
+all; another machine still sees an unidentified developer, and Windows still
+shows SmartScreen.
 
-To produce distributable builds, a maintainer supplies their own credentials —
-a Developer ID certificate and an App Store Connect key for macOS, a
-code-signing certificate for Windows. The exact environment variables and the
-one-line flag change are written down in `electron-builder.yml`, next to the
-settings they switch on; `build/entitlements.mac.plist` is already filled in for
-a hardened-runtime, notarized build.
+Switching that on is an environment, not a diff. `npm run package:mac` reads a
+documented set of variables and, when a complete set is there, signs with a
+Developer ID and notarizes; with none of them it produces exactly the unsigned
+build it always did; with half of them it refuses by name rather than quietly
+handing back an unsigned artifact.
+**[`docs/releasing.md`](docs/releasing.md) is the checklist** — what to obtain
+from Apple, every variable, the command, and how to verify the result. It is also
+explicit about which of those steps nobody has been able to verify, because
+nobody involved has a Developer ID certificate.
 
 Until somebody does that, every download is an unsigned one, and the person on
 the other end meets a warning rather than an app.
@@ -290,28 +314,28 @@ If the app is not running, the CLI says so and exits 3 rather than hanging.
 
 ## Releases
 
-`.github/workflows/release.yml` turns a `v*` tag into a download. It does not
-build it itself: it calls `.github/workflows/build.yml`, the same workflow
-`ci.yml` calls on every pull request, so what gets published has been through
-typecheck, lint, format, the full suite, the smoke test, and the packaged-app
-check twice — once against the unpacked app, and once against the copy inside
-the mounted `.dmg`, which is the file that actually leaves the building. A
-release pipeline of its own would be a second, shorter sequence that nobody
-reads the output of, and the check it would be tempting to leave out —
-launching the artifact and spawning a PTY in it — is the only one that can tell
-a package that built from a package that works.
+There are none yet. The first one is a command, and it is run from a maintainer's
+Mac rather than by GitHub:
 
-The job then attaches the `.dmg` to the release along with a `SHA256SUMS.txt`,
-and writes notes that say plainly that nothing is signed and what macOS will do
-about that. Unsigned software that arrives without explaining itself gets
-clicked through or thrown away, and neither is what you want from somebody
-trying it for the first time.
+```sh
+npm run release:dry-run     # every gate, and then stops
+npm run release             # the same, and then publishes
+```
 
-Nothing has been released yet. No tag has been pushed and this workflow has
-never run, so its first run is also the first test of the parts that need
-GitHub: the artifact handoff between the two jobs, and `gh release create`. One
-of those is worth settling beforehand rather than at the end of a
-three-quarter-hour build. Publishing needs `contents: write`, which the workflow
-asks for — but a repository whose **Settings → Actions → General → Workflow
-permissions** is set to read-only overrides that, and the failure looks like a
-403 from `gh` after everything else has passed.
+`scripts/release.mjs` refuses before it spends a minute on anything — a dirty
+tree, a tag that does not name the version in `package.json`, a `HEAD` that is
+not on `origin`, a release that already exists, a `gh` that is not signed in —
+and then runs typecheck, format, lint, the relay build, the full suite, the
+build, the smoke test, `package:mac`, the packaged-app check, the same check
+against the copy inside the mounted `.dmg`, and a report on what a Mac that
+downloaded the file would say about its signature. Any one of them stops it. It
+then prints exactly what it is about to publish, and asks you to type the tag.
+The release carries the `.dmg`, a `SHA256SUMS.txt`, and notes written from the
+signature actually on the build.
+**[`docs/releasing.md`](docs/releasing.md)** is the full account.
+
+`.github/workflows/release.yml` was meant to do this from a `v*` tag and has
+never run, because no runner is provisioned for this repository (see "Status").
+Its tag trigger has been removed rather than left to hang a red cross off a
+release that was built correctly by hand; the workflow is kept, still runnable by
+hand, and its comment says exactly what to put back when Actions works again.

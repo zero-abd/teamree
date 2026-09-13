@@ -418,6 +418,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
           : null,
       onDisk: { url, problem: null },
       override: { name: 'TEAMREE_RELAY_URL', value: null },
+      // The seeded runtime has no app bundle to carry a relay project, and
+      // saying so is the honest answer: the deploy button is disabled here,
+      // with a sentence, rather than offering to run a command that is not
+      // there.
+      deploy: { command: null, reason: 'the seeded runtime carries no relay project to deploy' },
       readAt: Date.now()
     }
   }
@@ -690,6 +695,26 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
 
     'teamwork.relay': ({ projectId }) => relaySetting(projectId),
+    // Refused rather than faked. The seeded runtime has no repository behind
+    // it, so a demo that claimed to have set a remote or made a commit would be
+    // the one thing a demo must never be: a lie about somebody's git history.
+    'teamwork.setOrigin': () => {
+      throw new Error('the seeded runtime has no repository to add a remote to')
+    },
+    'teamwork.publishPlan': ({ projectId }) => ({
+      projectId,
+      files: [],
+      message: 'Set up teamwork',
+      remote: 'origin',
+      branch: null,
+      upstream: null,
+      committed: false,
+      blocker: 'The seeded runtime has no repository, so there is nothing to commit or push.',
+      readAt: Date.now()
+    }),
+    'teamwork.publish': () => {
+      throw new Error('the seeded runtime has no repository to commit to')
+    },
     'teamwork.setRelay': ({ projectId, url }) => {
       relays.set(projectId, url)
       announce({ type: 'members' })

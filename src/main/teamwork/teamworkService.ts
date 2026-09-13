@@ -15,14 +15,35 @@
 // fact a team has to agree on, it lives in the same directory, and setting it
 // writes `.teamree/relay` and stops — so the two of them are one commit rather
 // than one button and one heredoc.
+//
+// `publish` is that commit, and it does not weaken any of the above: it is a
+// separate call, made only when somebody presses a button that has already told
+// them the files, the message, the remote and the branch. The distinction that
+// matters was never "the app must not push" — it was "the app must not push
+// without you having said so", and a panel that hands out shell commands is not
+// a better way of asking. `setOrigin` is there for the same reason: the
+// identity of a project is a hash of its normalised origin, and a checkout
+// without one cannot take part however much of the rest is done.
 
 import { mkdir, open } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import type { MemberIdentity, MemberList, Project, RelaySetting } from '../../shared/entities'
+import type {
+  MemberIdentity,
+  MemberList,
+  Project,
+  RelaySetting,
+  TeamworkOrigin,
+  TeamworkPublish,
+  TeamworkPublishPlan
+} from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
+import { checkOriginUrl } from '../../shared/originUrl'
 import { createGitRunner, type GitRunner } from '../git/gitProcess'
+import { ErrorCode } from '../../shared/protocol'
 import { notFound } from '../runtime/runtimeError'
-import { badHandle, badRelayUrl, rosterConflict } from './errors'
+import { badHandle, badOriginUrl, badRelayUrl, rosterConflict, TeamworkError } from './errors'
+import { publish, readPublishPlan } from './publish'
+import { shippedRelayCommand } from './relayCommand'
 import { resolveHandle } from './handle'
 import { loadIdentity } from './identity'
 import { formatMemberFile } from './memberFile'
@@ -66,6 +87,12 @@ export type TeamworkServiceOptions = {
    * lets a window notice a join made from anywhere else.
    */
   onRosterChange?: () => void
+  /**
+   * Where the relay project this build carries is, as the panel's deploy button
+   * needs it. Passed in so a test can say what is on disk; the default reads
+   * the two real places — a packaged app's resources, and the checkout.
+   */
+  relayDeploy?: () => RelaySetting['deploy']
 }
 
 export class TeamworkService {
@@ -76,6 +103,7 @@ export class TeamworkService {
   readonly #env: NodeJS.ProcessEnv
   readonly #watching: (projectId: string) => boolean
   readonly #onRosterChange: (() => void) | undefined
+  readonly #relayDeploy: () => RelaySetting['deploy']
   /**
    * What the roster looked like the last time this service read one, per
    * project.
@@ -94,6 +122,9 @@ export class TeamworkService {
     this.#env = options.env ?? process.env
     this.#watching = options.watching ?? ((): boolean => false)
     this.#onRosterChange = options.onRosterChange
+    this.#relayDeploy =
+      options.relayDeploy ??
+      ((): RelaySetting['deploy'] => shippedRelayCommand({ resourcesPath: process.resourcesPath, cwd: process.cwd() }))
   }
 
   async listMembers(params: ParamsOf<'members.list'>): Promise<MemberList> {
@@ -181,6 +212,95 @@ export class TeamworkService {
     return this.#describeRelay(project)
   }
 
+  /**
+   * Points this checkout's `origin` at the URL everybody cloned.
+   *
+   * The panel used to print `git remote add origin <url>` and leave. That is
+   * one command in a directory the app knows and the user has to find, and it
+   * is the first thing in the flow that cannot be done from the window — so it
+   * is here, refusing exactly what the project key would refuse, in the same
+   * sentence.
+   *
+   * A remote that is already there is replaced rather than refused. The whole
+   * reason somebody reaches this is a checkout whose origin teamree cannot
+   * compare, and "there is already an origin" would be the app naming the
+   * problem and declining to fix it. What it did is reported, so nothing is
+   * quiet about having overwritten a setting.
+   */
+  async setOrigin(params: ParamsOf<'teamwork.setOrigin'>): Promise<TeamworkOrigin> {
+    const project = this.#project(params.projectId)
+    const checked = checkOriginUrl(params.url)
+    if (!checked.ok) throw badOriginUrl(`that is not an origin teamree can use: ${checked.reason}`)
+
+    const existing = await this.#runner.tryRun({
+      args: ['remote', 'get-url', 'origin'],
+      cwd: project.path,
+      readOnly: true
+    })
+    const replaced = existing.exitCode === 0
+    const result = await this.#runner.tryRun({
+      args: ['remote', replaced ? 'set-url' : 'add', 'origin', checked.url],
+      cwd: project.path
+    })
+    if (result.exitCode !== 0) {
+      // git's own words, because every one of them here names something only
+      // git knows: a repository that is not there, a config it cannot write.
+      throw new TeamworkError(ErrorCode.GitFailed, result.stderr.trim() || `git exited ${result.exitCode}`)
+    }
+
+    // The status is cached against a stamp of git's config file, and this just
+    // moved it; saying so is what makes the step go green without a restart.
+    this.#onRosterChange?.()
+    return { projectId: project.id, remote: 'origin', url: checked.url, replaced }
+  }
+
+  /** What `publish` would do, so the button can say it before it does it. */
+  async publishPlan(params: ParamsOf<'teamwork.publishPlan'>): Promise<TeamworkPublishPlan> {
+    const project = this.#project(params.projectId)
+    return readPublishPlan(this.#runner, await this.#publishTarget(project))
+  }
+
+  /** Stages the two files, commits them, and pushes. Never more than those files. */
+  async publish(params: ParamsOf<'teamwork.publish'>): Promise<TeamworkPublish> {
+    const project = this.#project(params.projectId)
+    const target = await this.#publishTarget(project)
+    const result = await publish(this.#runner, {
+      ...target,
+      ...(params.message === undefined ? {} : { message: params.message })
+    })
+    // The roster did not change, but what the repository holds did, and the
+    // links are rebuilt against a relay that has just become the team's.
+    this.#onRosterChange?.()
+    return result
+  }
+
+  /**
+   * The two files teamwork writes, and the message that carries them.
+   *
+   * Named from what is on disk rather than from what was asked for: a key
+   * written on another machine and pulled in is already committed, and a relay
+   * that is only in the environment is not a file at all.
+   */
+  async #publishTarget(project: Project): Promise<{
+    projectId: string
+    projectPath: string
+    files: string[]
+    message: string
+  }> {
+    const roster = await readRoster(project.path)
+    const identity = await loadIdentity(this.#dataDir)
+    const mine = roster.entries.find((entry) => entry.publicKey === identity.publicKey)?.file ?? null
+    const relay = await readRelayFile(project.path)
+    const theirs = relay.ok ? RELAY_FILE_NAME : null
+    const files = [mine, theirs].filter((file): file is string => file !== null)
+    return {
+      projectId: project.id,
+      projectPath: project.path,
+      files,
+      message: mine === null ? 'Meet on our relay' : theirs === null ? 'Add my key to the team' : 'Set up teamwork'
+    }
+  }
+
   #project(projectId: string): Project {
     const project = this.#store.getProject(projectId)
     if (!project) throw notFound(`no project with id ${projectId}`)
@@ -219,6 +339,7 @@ export class TeamworkService {
       ...effective,
       onDisk,
       override: { name: RELAY_URL_ENV, value: override },
+      deploy: this.#relayDeploy(),
       readAt: this.#now()
     }
   }

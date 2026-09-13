@@ -5,50 +5,61 @@
 // the next thing is, so doing it meant following `docs/trying-teamwork.md` with
 // a terminal in the other hand. The steps here are that runbook's 3, 4 and 5.
 //
-// Three things the panel refuses to do, each of them a decision rather than an
-// omission:
+// Every step here is a button now, and that is the change. It used to hand out
+// shell commands: `git remote add origin <url>` to run somewhere else, a deploy
+// to paste into Terminal.app, and a `git add && git commit && git push` block
+// to copy. An app that runs PTYs for a living and owns git should not be doing
+// that, and somebody said so.
 //
-// **It does not commit or push.** It writes files and stops. Being able to push
-// that file is the entire definition of membership, and an app that pushed on
-// somebody's behalf would be making a claim they never made.
+// What that does *not* change is consent, so each of the three is built the
+// same way:
 //
-// **It does not run a relay.** It accepts a URL. Standing a relay up is a
-// decision about somebody's Cloudflare account or somebody's box, taken in a
-// terminal, and an app that started a container would be taking it for them.
+// **Nothing acts silently.** The origin field says what URL it will set; the
+// deploy runs in a pane in this window where it can be watched; the push names
+// the files, the message, the remote and the branch before it is pressed, and
+// then reports what git said in git's own words.
 //
-// **It does not pick a relay for you either.** A bare URL field assumes the
-// person already knows what to paste, and the one thing certainly true of
-// somebody opening this for the first time is that they do not. What it does
-// now is rank: one recommendation, one fallback, and the two that are somebody
-// else's infrastructure behind a disclosure. Four options presented as equals
-// was a decision handed to the one person in the room least able to take it.
+// **Nothing is enabled that cannot work.** A missing relay in this build, a
+// detached HEAD, a repository with no origin, a git with no identity: each is a
+// disabled control and one sentence naming the fix, rather than a button that
+// fails when it is pressed.
 //
-// The roster, the relay panel and the push commands were already here; they are
-// the same panels, under the steps that say why each one matters.
+// **teamree still runs no relay.** It runs the deploy that puts one on the
+// team's own Cloudflare account, and it says so. There is no hosted relay and
+// this project deliberately has none.
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import {
   UNWATCHED_TEAMREE_LAG,
   type Member,
   type MemberList,
   type PeerLink,
   type RelaySetting,
+  type TeamworkPublish,
+  type TeamworkPublishPlan,
   type TeamworkStatus
 } from '@shared/entities'
 import {
   ADD_KEY_BUTTON,
+  checkOriginDraft,
   checkRelayDraft,
   KEY_GRANT_WARNING,
   memberFilePreview,
-  pushPlan,
   MORE_RELAYS_BUTTON,
   MORE_RELAYS_LEAD,
+  ORIGIN_DETAIL,
+  PUBLISH_BUTTON,
+  pushPlan,
+  RELAY_DEPLOY,
   RELAY_LEAD,
   RELAY_OPTIONS,
-  type RelayOption,
   shortKey,
   startTeamworkFlow,
+  type OriginState,
+  type PublishState,
+  type RelayDeployState,
   type RelayDraftCheck,
+  type RelayOption,
   type StartTeamworkRead,
   type StartTeamworkReadErrors,
   type StartTeamworkStep,
@@ -79,6 +90,34 @@ export type TeamworkStepsProps = {
   onSetRelay: (url: string) => void
   /** Asks for one of the three reads again, from the step that reported it. */
   onRetry: (read: StartTeamworkRead) => void
+
+  /** Whether the origin button is busy, and what git last said when it refused. */
+  origin: OriginState
+  /** Points this checkout's `origin` at a URL. Validated before it is called. */
+  onSetOrigin: (url: string) => void
+
+  /** The deploy running in a pane in this window, or undefined when none is. */
+  deploy: RelayDeployState | undefined
+  /**
+   * Starts the deploy in a pane. Never offered when the build carries no relay:
+   * `relay.deploy.command` is null then, and the button is disabled with the
+   * runtime's own sentence beside it.
+   */
+  onDeployRelay: () => void
+  /** Closes the deploy pane. */
+  onCloseDeploy: () => void
+  /**
+   * Renders the pane itself.
+   *
+   * A slot rather than the component, because the component is xterm and this
+   * file is otherwise a pure function of its props — which is what lets the
+   * whole of what it says be rendered in a test without a canvas.
+   */
+  renderDeployPane: (terminalId: string) => React.ReactNode
+
+  /** What the commit-and-push button would do, is doing, and last did. */
+  publish: PublishState
+  onPublish: () => void
 }
 
 /** A glyph for the eye; `MARK_WORDS` is what is actually read out. */
@@ -110,9 +149,14 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
   return (
     <div className="steps">
       {flow.blocker === null ? null : (
-        <p className="steps__blocker">
-          <strong>This checkout cannot take part yet.</strong> {flow.blocker}
-        </p>
+        <div className="steps__blocker">
+          <p className="steps__blocker-lead">
+            <strong>This checkout cannot take part yet.</strong> {flow.blocker}
+          </p>
+          {props.status?.origin.ok === false ? (
+            <OriginFix origin={props.origin} onSetOrigin={props.onSetOrigin} />
+          ) : null}
+        </div>
       )}
       <ol className="steps__list">
         {flow.steps.map((step, index) => (
@@ -161,16 +205,29 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
       return (
         <RelayBody
           relay={props.relay}
-          // The four options are a decision, and the override is that decision
-          // taken: showing them again is a wall of choices about a chosen thing.
+          // The options are a decision, and a relay already chosen is that
+          // decision taken: offering them again is a wall of choices about a
+          // thing that has been chosen.
           options={step.mark !== 'done' && step.mark !== 'this-run'}
           pending={props.relayPending}
           error={props.relayError}
           onSet={props.onSetRelay}
+          deploy={props.deploy}
+          onDeploy={props.onDeployRelay}
+          onCloseDeploy={props.onCloseDeploy}
+          renderDeployPane={props.renderDeployPane}
         />
       )
     case 'push':
-      return <PushBody list={props.list} relay={props.relay} projectPath={props.projectPath} />
+      return (
+        <PushBody
+          list={props.list}
+          relay={props.relay}
+          projectPath={props.projectPath}
+          publish={props.publish}
+          onPublish={props.onPublish}
+        />
+      )
     case 'connected':
       if (props.status === undefined && props.readErrors.status !== undefined) {
         return <ReadFailure onRetry={() => props.onRetry('status')} />
@@ -299,22 +356,102 @@ function hintFor(list: MemberList, typed: string, file: string | null): string {
 }
 
 /**
- * The relay: what is in effect, what the environment said, the four ways to
- * get one when there is none, and the field that writes the file.
+ * The remote everybody cloned, as a field and a button.
+ *
+ * This was `git remote add origin <url>` printed in a panel, in an app that
+ * owns git and knows exactly which directory the command belongs in. The
+ * refusal is reached while somebody is still typing, because the wrong answer
+ * here is not a typo — it is a path on this disk, which is a perfectly good git
+ * remote and a useless project identity, and finding that out after a round
+ * trip reads as the button being broken.
+ */
+function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: (url: string) => void }) {
+  const [draft, setDraft] = useState('')
+  const [why, setWhy] = useState(false)
+  // The hint is a description rather than part of the name: a label that
+  // swallowed it would have a screen reader announce a paragraph every time the
+  // field took focus, and the field is called "Origin URL".
+  const hint = useId()
+  const check = checkOriginDraft(draft)
+  // What the field itself refused beats what git last said: the reader is
+  // typing, and the older message is about a URL that is no longer in the box.
+  const refusal = check.state === 'bad' ? check.reason : draft.trim() === '' ? origin.error : null
+
+  const submit = (event: React.FormEvent): void => {
+    event.preventDefault()
+    if (check.state === 'ok') onSetOrigin(check.url)
+  }
+
+  return (
+    <form className="origin-fix" onSubmit={submit}>
+      <label className="field">
+        <span className="field__label">Origin URL</span>
+        <input
+          className="field__input field__input--mono"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="https://github.com/you/repo.git"
+          aria-invalid={refusal !== null}
+          aria-describedby={hint}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </label>
+      <span className="field__hint" id={hint}>
+        Runs <code>git remote add origin</code> in this checkout. It has to be a URL: your teammates clone it too.
+      </span>
+      {refusal === null ? null : <p className="field__error">{refusal}</p>}
+      <button type="submit" className="button button--primary" disabled={origin.pending || check.state !== 'ok'}>
+        {origin.pending ? 'Adding…' : 'Add origin'}
+      </button>
+      <div className="disclosure">
+        <button
+          type="button"
+          className="button button--small"
+          aria-expanded={why}
+          onClick={() => setWhy((open) => !open)}
+        >
+          <span className="disclosure__caret" aria-hidden="true">
+            {why ? '▾' : '▸'}
+          </span>
+          Why a path will not do
+        </button>
+        {why ? <p className="disclosure__body">{ORIGIN_DETAIL}</p> : null}
+      </div>
+    </form>
+  )
+}
+
+/**
+ * The relay: the button that stands one up, the field that writes one down,
+ * and — folded away — every other way to get one.
+ *
+ * The order is the change. The deploy used to be several paragraphs of
+ * Cloudflare, Durable Object pricing and what `cd relay` means before anything
+ * pressable; now it is a button first, with the reasoning behind a disclosure
+ * and the rest in `relay/README.md`.
  */
 function RelayBody({
   relay,
   options,
   pending,
   error,
-  onSet
+  onSet,
+  deploy,
+  onDeploy,
+  onCloseDeploy,
+  renderDeployPane
 }: {
   relay: RelaySetting
-  /** Whether the four ways to get a relay are still a decision to make. */
+  /** Whether the other ways to get a relay are still a decision to make. */
   options: boolean
   pending: boolean
   error: string | null
   onSet: (url: string) => void
+  deploy: RelayDeployState | undefined
+  onDeploy: () => void
+  onCloseDeploy: () => void
+  renderDeployPane: (terminalId: string) => React.ReactNode
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const check = checkRelayDraft(draft)
@@ -334,12 +471,21 @@ function RelayBody({
           </span>
         </p>
       )}
-      <Override relay={relay} />
-      {options ? <RelayOptions /> : null}
+      {options ? (
+        <RelayDeploy
+          relay={relay}
+          deploy={deploy}
+          onDeploy={onDeploy}
+          onCloseDeploy={onCloseDeploy}
+          onUse={onSet}
+          pending={pending}
+          renderDeployPane={renderDeployPane}
+        />
+      ) : null}
       <form className="members__relay" onSubmit={submit}>
         <label className="field">
           <span className="field__label">
-            {relay.onDisk.url === null ? 'Set the relay for this project' : 'Change the relay for this project'}
+            {relay.onDisk.url === null ? 'Or paste a relay URL' : 'Change the relay for this project'}
           </span>
           <input
             className="field__input field__input--mono"
@@ -350,8 +496,8 @@ function RelayBody({
             spellCheck={false}
           />
           <span className="field__hint">
-            Whoever stood the relay up pastes its URL here once. Everybody else gets it from the repository.{' '}
-            {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>, and stops there.
+            {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>, and stops there. Everybody
+            else gets it from the repository.
           </span>
         </label>
         {check.state === 'bad' ? <RelayRefusal check={check} onUse={setDraft} /> : null}
@@ -360,6 +506,84 @@ function RelayBody({
           {pending ? 'Writing…' : 'Write relay file'}
         </button>
       </form>
+      {options ? <RelayOptions /> : null}
+      <Override relay={relay} />
+    </div>
+  )
+}
+
+/**
+ * The deploy, as a button and a pane rather than a command to take elsewhere.
+ *
+ * Three things it will not do. It will not pretend to be enabled when this
+ * build carries no relay — the runtime says so and the sentence is the
+ * runtime's. It will not hide the command, because somebody will always want to
+ * run it themselves and that is a legitimate answer. And it will not write the
+ * URL the deploy printed into the repository on its own: the URL is offered on
+ * a button, because a relay is a team-wide fact and a fact is somebody's to
+ * assert.
+ */
+function RelayDeploy({
+  relay,
+  deploy,
+  onDeploy,
+  onCloseDeploy,
+  onUse,
+  pending,
+  renderDeployPane
+}: {
+  relay: RelaySetting
+  deploy: RelayDeployState | undefined
+  onDeploy: () => void
+  onCloseDeploy: () => void
+  onUse: (url: string) => void
+  pending: boolean
+  renderDeployPane: (terminalId: string) => React.ReactNode
+}): React.JSX.Element {
+  const { command, reason } = relay.deploy
+  return (
+    <div className="relay-deploy">
+      <p className="relay-options__lead">{RELAY_LEAD}</p>
+      <p className="relay-deploy__what">{RELAY_DEPLOY.what}</p>
+      <button
+        type="button"
+        className="button button--primary"
+        disabled={command === null || deploy !== undefined}
+        onClick={onDeploy}
+      >
+        {RELAY_DEPLOY.button}
+      </button>
+      {/* Why it cannot be pressed, always beside it: a control that is grey for
+          a reason nobody can read is the same as one that does nothing. */}
+      {command === null ? <p className="relay-deploy__blocked">{reason}</p> : null}
+      <p className="relay-deploy__note">{deploy === undefined ? RELAY_DEPLOY.browser : RELAY_DEPLOY.watching}</p>
+      {command === null ? null : (
+        <details className="relay-deploy__manual">
+          <summary>{RELAY_DEPLOY.manual}</summary>
+          <pre className="relay-option__commands">{command}</pre>
+        </details>
+      )}
+      {deploy === undefined ? null : (
+        <div className="relay-deploy__pane">
+          {deploy.url === null ? null : (
+            <p className="relay-deploy__found">
+              The deploy printed <code>{deploy.url}</code>.{' '}
+              <button
+                type="button"
+                className="button button--primary button--small"
+                disabled={pending}
+                onClick={() => onUse(deploy.url as string)}
+              >
+                {RELAY_DEPLOY.use}
+              </button>
+            </p>
+          )}
+          <div className="relay-deploy__terminal">{renderDeployPane(deploy.terminalId)}</div>
+          <button type="button" className="button button--small" onClick={onCloseDeploy}>
+            {deploy.running ? 'Stop and close this pane' : 'Close this pane'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -393,34 +617,23 @@ function RelayRefusal({
 }
 
 /**
- * How a team gets a relay: the one to take, the one to fall back on, and a way
- * to reach the rest without having to read them.
+ * Every other way to get a relay, behind one button.
  *
- * Shown only to somebody who has none, because a joiner has no decision to
- * make: their relay arrives in the repository, and this is a wall of choices
- * about a thing already chosen. And ranked rather than listed, because the wall
- * was the problem — `relay/README.md` has always said to take the Worker unless
- * you have a reason not to, and a panel that showed four equals was refusing to
- * pass that sentence on.
+ * All of them, now, and none of them in front of anybody by default. The
+ * recommendation stopped being an item in a list the moment it became a button,
+ * and what is left is genuinely for a team that already has the network or the
+ * server — which is a question somebody asks rather than a wall they should
+ * have to read past.
  *
- * The folded two are a button with `aria-expanded` rather than a `details`
- * element: what is inside is not rendered until it is asked for, so it is
- * absent from the page rather than merely hidden, and nothing can read out or
- * tab into an option nobody opened.
+ * A button with `aria-expanded` rather than a `details` element: what is inside
+ * is not rendered until it is asked for, so it is absent from the page rather
+ * than merely hidden, and nothing can read out or tab into an option nobody
+ * opened.
  */
 function RelayOptions(): React.JSX.Element {
   const [showMore, setShowMore] = useState(false)
-  const lead = RELAY_OPTIONS.filter((option) => option.tier !== 'more')
-  const more = RELAY_OPTIONS.filter((option) => option.tier === 'more')
-
   return (
     <div className="relay-options">
-      <p className="relay-options__lead">{RELAY_LEAD}</p>
-      <ul className="relay-options__list">
-        {lead.map((option) => (
-          <RelayOptionCard key={option.id} option={option} />
-        ))}
-      </ul>
       <div className="relay-options__more">
         <button
           type="button"
@@ -437,7 +650,7 @@ function RelayOptions(): React.JSX.Element {
           <>
             <p className="relay-options__lead">{MORE_RELAYS_LEAD}</p>
             <ul className="relay-options__list">
-              {more.map((option) => (
+              {RELAY_OPTIONS.map((option) => (
                 <RelayOptionCard key={option.id} option={option} />
               ))}
             </ul>
@@ -452,10 +665,7 @@ function RelayOptions(): React.JSX.Element {
 function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element {
   return (
     <li className={`relay-option relay-option--${option.tier}`}>
-      <p className="relay-option__name">
-        {option.name}
-        {option.tier === 'lead' ? <span className="relay-option__tier">Recommended</span> : null}
-      </p>
+      <p className="relay-option__name">{option.name}</p>
       <p className="relay-option__what">{option.what}</p>
       <pre className="relay-option__commands">{option.commands}</pre>
       <dl className="relay-option__costs">
@@ -474,7 +684,7 @@ function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element
       </dl>
       <p className={`relay-option__keep relay-option__keep--${option.keep}`}>
         {option.keep === 'commit'
-          ? 'Stable enough to commit: paste it below and push .teamree/relay.'
+          ? 'Stable enough to commit: paste it above and push .teamree/relay.'
           : 'Too short-lived to commit: use TEAMREE_RELAY_URL instead, and leave .teamree/relay alone.'}
       </p>
     </li>
@@ -482,21 +692,39 @@ function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element
 }
 
 /**
- * What the environment said, including when it said nothing.
+ * What the environment said, when it said anything.
  *
- * "I set TEAMREE_RELAY_URL and nothing happened" is a predictable question on
- * macOS, where an app opened from Finder or the dock inherits none of a
- * shell's environment. The app cannot fix that — it is how the platform starts
- * programs — but it can say whether it saw an override at all, which is the one
- * thing nobody outside the process can check.
+ * An override that is set is a live fact about what this run is dialling and
+ * outranks the file, so it is on screen. The paragraph for the *absence* of one
+ * is the answer to "I set TEAMREE_RELAY_URL and nothing happened" — a real
+ * question on macOS, where an app opened from Finder inherits no shell
+ * environment — and an answer is a thing to have available, not a thing to put
+ * in front of everybody who ever opens this panel.
  */
 function Override({ relay }: { relay: RelaySetting }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
   if (relay.override.value === null) {
     return (
-      <p className="members__relay-note">
-        No <code>{relay.override.name}</code> in this app’s environment. An app opened from Finder or the dock does not
-        inherit your shell’s, so that override only applies when teamree is started from a terminal that has it set.
-      </p>
+      <div className="disclosure">
+        <button
+          type="button"
+          className="button button--small"
+          aria-expanded={open}
+          onClick={() => setOpen((shown) => !shown)}
+        >
+          <span className="disclosure__caret" aria-hidden="true">
+            {open ? '▾' : '▸'}
+          </span>
+          I set {relay.override.name} and nothing happened
+        </button>
+        {open ? (
+          <p className="disclosure__body">
+            There is no <code>{relay.override.name}</code> in this app’s environment. An app opened from Finder or the
+            dock does not inherit your shell’s, so that override only applies when teamree is started from a terminal
+            that has it set.
+          </p>
+        ) : null}
+      </div>
     )
   }
   return (
@@ -514,34 +742,154 @@ function Override({ relay }: { relay: RelaySetting }): React.JSX.Element {
   )
 }
 
-/** The exact files that were written, and the one commit that carries them. */
+/**
+ * The commit that makes both files the team's, said in full before it is made.
+ *
+ * This is the outward-facing one — it writes history into somebody's repository
+ * and sends it to a remote they share — so the plan is on screen above the
+ * button rather than behind a confirmation nobody reads: the files, the message,
+ * the remote, the branch, and whether this push is what sets the upstream. The
+ * runtime answers all five, because the branch and the upstream are git's facts
+ * and a panel that guessed them would be describing a different push.
+ */
 function PushBody({
   list,
   relay,
-  projectPath
+  projectPath,
+  publish,
+  onPublish
 }: {
   list: MemberList | undefined
   relay: RelaySetting | undefined
   projectPath: string | undefined
+  publish: PublishState
+  onPublish: () => void
 }): React.JSX.Element | null {
-  const plan = pushPlan(list, relay, projectPath)
-  if (plan === null) return null
+  const local = pushPlan(list, relay, projectPath)
+  const { plan } = publish
+  // The files come from what is on disk rather than from the plan, and the plan
+  // supplies what only git knows. The two are read at different moments — the
+  // roster is watched, the plan is asked for — and the one that can be a moment
+  // behind must not be what decides whether this step has anything in it.
+  const files = local?.files ?? plan?.files ?? []
+  if (files.length === 0) return null
+
   return (
     <div className="step__body">
-      <ul className="push__files">
-        {plan.files.map((file) => (
-          <li key={file}>
-            <code>{file}</code>
-          </li>
-        ))}
-      </ul>
-      <pre className="members__push-commands">{plan.commands}</pre>
-      <p className="members__caveat">
-        If your teammate pushes at the same moment, the second push is rejected with “fetch first”. That is not a merge
-        conflict — you added different files and git merges them without an opinion — so the answer is{' '}
-        <code>git pull --rebase &amp;&amp; git push</code>, never a force.
-      </p>
+      {plan === undefined ? (
+        <p className="push__plan">Reading what this would commit…</p>
+      ) : (
+        <PublishPlan plan={plan} files={files} />
+      )}
+      {plan?.blocker == null ? null : <p className="push__blocked">{plan.blocker}</p>}
+      <button
+        type="button"
+        className="button button--primary"
+        disabled={publish.pending || plan === undefined || plan.blocker !== null}
+        onClick={onPublish}
+      >
+        {publish.pending ? 'Pushing…' : PUBLISH_BUTTON}
+      </button>
+      {publish.error === null ? null : <p className="push__error">{publish.error}</p>}
+      {publish.result === undefined ? null : <PublishResult result={publish.result} />}
+      {local === null ? null : (
+        <details className="push__manual">
+          <summary>Or run it yourself:</summary>
+          <pre className="members__push-commands">{local.commands}</pre>
+        </details>
+      )}
     </div>
+  )
+}
+
+/** Exactly what the button will do, in the four facts it is made of. */
+function PublishPlan({ plan, files }: { plan: TeamworkPublishPlan; files: string[] }): React.JSX.Element {
+  return (
+    <dl className="push__plan">
+      <div>
+        <dt>Files</dt>
+        <dd>
+          <ul className="push__files">
+            {files.map((file) => (
+              <li key={file}>
+                <code>{file}</code>
+              </li>
+            ))}
+          </ul>
+        </dd>
+      </div>
+      <div>
+        <dt>Commit message</dt>
+        <dd>{plan.message}</dd>
+      </div>
+      <div>
+        <dt>Branch</dt>
+        <dd>{plan.branch ?? 'none — this checkout is not on a branch'}</dd>
+      </div>
+      <div>
+        <dt>Pushes to</dt>
+        <dd>
+          {plan.remote}
+          {plan.upstream === null
+            ? `, which ${plan.branch ?? 'this branch'} does not track yet — this push would set it`
+            : ` (${plan.upstream})`}
+        </dd>
+      </div>
+      {plan.committed ? (
+        <div>
+          <dt>Already committed</dt>
+          <dd>Nothing new to commit; this would push what is already here.</dd>
+        </div>
+      ) : null}
+    </dl>
+  )
+}
+
+/**
+ * What actually happened, in both halves.
+ *
+ * A commit that landed and a push that was refused is the ordinary way this
+ * goes wrong — a teammate pushed first — and git's own words are printed whole
+ * rather than paraphrased, because the paraphrase is not what anybody can
+ * search for and the advice under it is teamree's opinion rather than git's.
+ */
+function PublishResult({ result }: { result: TeamworkPublish }): React.JSX.Element {
+  return (
+    <div className="push__result">
+      <p>
+        {result.commit === null
+          ? 'Nothing new to commit.'
+          : `Committed ${result.commit.shortSha} — “${result.commit.message}”.`}
+      </p>
+      {result.push.ok ? (
+        <p>
+          {result.push.alreadyUpToDate
+            ? `${result.remote} already had ${result.branch}.`
+            : `Pushed ${result.branch} to ${result.remote}.`}
+          {result.push.setUpstream ? ` It now tracks ${result.push.upstream}.` : ''}
+        </p>
+      ) : (
+        <>
+          {/* Only when it adds something. For a refusal teamree has no opinion
+              about, the advice is git's own first line and printing it twice
+              makes the page look like it is repeating itself. */}
+          {result.push.advice === firstLineOf(result.push.error) ? null : (
+            <p className="push__error">{result.push.advice}</p>
+          )}
+          <pre className="push__git">{result.push.error}</pre>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** The first line git actually said, ignoring the `To <url>` banner around it. */
+function firstLineOf(text: string): string {
+  return (
+    text
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.length > 0 && !line.startsWith('To ')) ?? ''
   )
 }
 

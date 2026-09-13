@@ -43,9 +43,16 @@ function withoutEmail(inner: GitRunner): GitRunner {
 }
 
 async function wire(
-  options: { email?: string | null; env?: NodeJS.ProcessEnv; watching?: boolean } = {}
+  options: {
+    email?: string | null
+    env?: NodeJS.ProcessEnv
+    watching?: boolean
+    /** Gives the checkout a bare `origin` on disk, as a clone would have. */
+    withRemote?: boolean
+    relayDeploy?: { command: string; reason: null } | { command: null; reason: string }
+  } = {}
 ): Promise<Harness> {
-  const repo = await createTempRepo()
+  const repo = await createTempRepo(options.withRemote ? { withRemote: true } : {})
   repos.push(repo)
   if (typeof options.email === 'string') await repo.git(['config', 'user.email', options.email])
   const runner = options.email === null ? withoutEmail(repo.runner) : repo.runner
@@ -65,6 +72,7 @@ async function wire(
       now: () => Date.parse('2026-09-13T10:00:00Z'),
       env: options.env ?? {},
       watching: () => options.watching ?? false,
+      relayDeploy: () => options.relayDeploy ?? { command: '/somewhere/relay/teamree-relay deploy', reason: null },
       onRosterChange: () => {
         harness.changes += 1
       }
@@ -314,5 +322,185 @@ describe('the relay a project meets on', () => {
     expect(setting.url).toBe('ws://127.0.0.1:8787/v1/relay')
     expect(setting.source).toBe('environment')
     expect(setting.onDisk.url).toBe('wss://relay.example/v1/relay')
+  })
+})
+
+// --- the three things that used to be shell commands in a panel -------------
+
+describe('adding the origin remote', () => {
+  it('sets it, and says it added rather than replaced one', async () => {
+    const { service, project, repo } = await wire({ email: 'ada@example.com' })
+
+    const result = await service.setOrigin({ projectId: project.id, url: 'https://github.com/ada/pager.git' })
+
+    expect(result).toMatchObject({ remote: 'origin', url: 'https://github.com/ada/pager.git', replaced: false })
+    expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('https://github.com/ada/pager.git')
+  })
+
+  // The whole reason somebody reaches this is an origin teamree cannot compare.
+  // "There is already an origin" would be the app naming the problem and
+  // declining to fix it — so it replaces, and says so.
+  it('replaces one that is already there, and reports that it did', async () => {
+    const { service, project, repo } = await wire({ withRemote: true })
+
+    const result = await service.setOrigin({ projectId: project.id, url: 'ssh://git@example.com/ada/pager.git' })
+
+    expect(result.replaced).toBe(true)
+    expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('ssh://git@example.com/ada/pager.git')
+  })
+
+  // A path is a perfectly good git remote and a useless project identity,
+  // because nobody else can clone it. Refused before git is ever run.
+  it('refuses a path on this disk, and touches nothing', async () => {
+    const { service, project, repo } = await wire()
+
+    await expect(service.setOrigin({ projectId: project.id, url: '/Users/ada/code/pager' })).rejects.toThrow(
+      /path on this disk/
+    )
+    expect(await repo.git(['remote'])).toBe('')
+  })
+
+  it('refuses anything with no host in it', async () => {
+    const { service, project } = await wire()
+    await expect(service.setOrigin({ projectId: project.id, url: 'pager' })).rejects.toThrow(/not a URL with a host/)
+  })
+
+  // The step goes green without a restart because the status is re-read, and it
+  // is re-read because something told the window that `.teamree` moved.
+  it('announces the change, so the blocked step is asked about again', async () => {
+    const harness = await wire()
+    const before = harness.changes
+
+    await harness.service.setOrigin({ projectId: harness.project.id, url: 'https://example.com/ada/pager.git' })
+
+    expect(harness.changes).toBe(before + 1)
+  })
+})
+
+describe('what committing and pushing would do', () => {
+  it('names nothing to do when neither file has been written', async () => {
+    const { service, project } = await wire({ withRemote: true })
+
+    const plan = await service.publishPlan({ projectId: project.id })
+
+    expect(plan.files).toEqual([])
+    expect(plan.blocker).toMatch(/nothing to push yet/)
+  })
+
+  it('names the files, the message, the remote and the branch', async () => {
+    const harness = await wire({ email: 'ada@example.com', withRemote: true })
+    await harness.service.joinProject({ projectId: harness.project.id })
+    await harness.service.setRelay({ projectId: harness.project.id, url: 'wss://relay.example/v1/relay' })
+
+    const plan = await harness.service.publishPlan({ projectId: harness.project.id })
+
+    expect(plan.files).toEqual(['.teamree/members/ada.pub', '.teamree/relay'])
+    expect(plan.message).toBe('Set up teamwork')
+    expect(plan.remote).toBe('origin')
+    expect(plan.branch).toBe('main')
+    expect(plan.committed).toBe(false)
+    expect(plan.blocker).toBeNull()
+  })
+
+  // A button that looks live and then explains itself only once it is pressed
+  // is the thing this whole change exists to remove.
+  it('says a repository with no remote cannot push, and names where to fix it', async () => {
+    const harness = await wire({ email: 'ada@example.com' })
+    await harness.service.joinProject({ projectId: harness.project.id })
+
+    const plan = await harness.service.publishPlan({ projectId: harness.project.id })
+
+    expect(plan.blocker).toMatch(/no origin remote/)
+  })
+})
+
+describe('committing and pushing', () => {
+  it('commits exactly the two files and sends them, naming what the branch tracks', async () => {
+    const harness = await wire({ email: 'ada@example.com', withRemote: true })
+    await harness.service.joinProject({ projectId: harness.project.id })
+    await harness.service.setRelay({ projectId: harness.project.id, url: 'wss://relay.example/v1/relay' })
+
+    const result = await harness.service.publish({ projectId: harness.project.id })
+
+    expect(result.commit).not.toBeNull()
+    expect(result.push).toMatchObject({ ok: true, upstream: 'origin/main' })
+    const committed = await harness.repo.git(['show', '--name-only', '--format=', 'HEAD'])
+    expect(committed.split('\n').sort()).toEqual(['.teamree/members/ada.pub', '.teamree/relay'])
+  })
+
+  // `git add -A` would sweep somebody's half-finished work into a commit they
+  // never asked for. The paths are named, and the commit is path-limited too.
+  it('leaves everything else exactly where it was, staged or not', async () => {
+    const harness = await wire({ email: 'ada@example.com', withRemote: true })
+    await harness.service.joinProject({ projectId: harness.project.id })
+    await harness.repo.write('mine.txt', 'work in progress\n')
+    await harness.repo.git(['add', 'mine.txt'])
+
+    await harness.service.publish({ projectId: harness.project.id })
+
+    const committed = await harness.repo.git(['show', '--name-only', '--format=', 'HEAD'])
+    expect(committed.split('\n')).toEqual(['.teamree/members/ada.pub'])
+    expect(await harness.repo.git(['diff', '--cached', '--name-only'])).toBe('mine.txt')
+  })
+
+  // A commit that landed and a push that was refused is the ordinary way this
+  // goes wrong, and calling the whole thing a failure would leave somebody
+  // believing no commit exists.
+  it('reports the commit and git’s own words when the push is refused', async () => {
+    const harness = await wire({ email: 'ada@example.com', withRemote: true })
+    await harness.service.joinProject({ projectId: harness.project.id })
+    // A remote that is not there at all: git refuses, and what it says about it
+    // is the only thing worth printing.
+    await harness.repo.git(['remote', 'set-url', 'origin', path.join(harness.repo.base, 'not-a-repo')])
+
+    const result = await harness.service.publish({ projectId: harness.project.id })
+
+    expect(result.commit).not.toBeNull()
+    expect(result.push.ok).toBe(false)
+    if (!result.push.ok) {
+      expect(result.push.error).not.toBe('')
+      expect(result.push.advice).not.toBe('')
+    }
+  })
+
+  it('pushes without committing again when the files are already committed', async () => {
+    const harness = await wire({ email: 'ada@example.com', withRemote: true })
+    await harness.service.joinProject({ projectId: harness.project.id })
+    await harness.service.publish({ projectId: harness.project.id })
+
+    const again = await harness.service.publish({ projectId: harness.project.id })
+
+    expect(again.commit).toBeNull()
+    expect(again.push).toMatchObject({ ok: true, alreadyUpToDate: true })
+  })
+
+  it('refuses before touching anything when the plan said it could not be done', async () => {
+    const harness = await wire({ email: 'ada@example.com' })
+    await harness.service.joinProject({ projectId: harness.project.id })
+
+    await expect(harness.service.publish({ projectId: harness.project.id })).rejects.toThrow(/no origin remote/)
+    expect(await harness.repo.git(['status', '--porcelain'])).toMatch(/\.teamree/)
+  })
+})
+
+describe('the command that stands a relay up', () => {
+  it('is reported beside the relay, so the panel need not guess at a path', async () => {
+    const { service, project } = await wire()
+
+    const relay = await service.readRelay({ projectId: project.id })
+
+    expect(relay.deploy).toEqual({ command: '/somewhere/relay/teamree-relay deploy', reason: null })
+  })
+
+  // A disabled button whose reason nobody can read is the same as one that does
+  // nothing, so the reason travels with the absence.
+  it('says why there is none, when this build carries none', async () => {
+    const { service, project } = await wire({
+      relayDeploy: { command: null, reason: 'this build does not carry the relay project' }
+    })
+
+    const relay = await service.readRelay({ projectId: project.id })
+
+    expect(relay.deploy).toEqual({ command: null, reason: 'this build does not carry the relay project' })
   })
 })

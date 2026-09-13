@@ -18,6 +18,9 @@ import type {
   RuntimeStatus,
   StartPointList,
   TeammatePresence,
+  TeamworkOrigin,
+  TeamworkPublish,
+  TeamworkPublishPlan,
   TeamworkStatus,
   Terminal,
   Worktree,
@@ -195,6 +198,8 @@ export const Params = {
    * It writes the file and stops there: it does not stage, commit or push.
    * Getting the file into the repository is the user's, and it has to be,
    * because being able to push it is the whole of what membership means.
+   * `teamwork.publish` is that second act, on its own button, after it has said
+   * what it will do — deliberately a separate call and not a flag on this one.
    */
   membersJoin: z.object({
     projectId: z.string().min(1),
@@ -216,6 +221,44 @@ export const Params = {
    * WebSocket one is refused with what to type instead rather than guessed at.
    */
   teamworkSetRelay: z.object({ projectId: z.string().min(1), url: z.string().min(1) }),
+
+  /**
+   * Points this checkout's `origin` at the URL everybody cloned.
+   *
+   * The one piece of setup that used to be a shell command in a panel. It is
+   * here rather than left to the user because the identity of a project is the
+   * hash of its normalised origin, so a checkout without one cannot take part
+   * however much of the rest is done — and `git remote add origin <url>` typed
+   * into the wrong directory is a thing that happens.
+   *
+   * A URL, and never a path: a path on this disk is a perfectly good git remote
+   * and a useless project identity, because nobody else can clone it. Refused
+   * with that sentence rather than accepted and left to fail later.
+   */
+  teamworkSetOrigin: z.object({ projectId: z.string().min(1), url: z.string().min(1) }),
+
+  /**
+   * What `teamwork.publish` would do, so it can be said before it is done.
+   *
+   * Read separately from the act because the act is outward-facing: it makes a
+   * commit in somebody's repository and sends it to a remote, and a button that
+   * did that without first naming the files, the message, the remote and the
+   * branch would be taking a decision on their behalf.
+   */
+  teamworkPublishPlan: z.object({ projectId: z.string().min(1) }),
+  /**
+   * Stages the two files teamwork needs, commits them, and pushes.
+   *
+   * Exactly the files `teamwork.publishPlan` named and nothing else: it is
+   * `git add` with paths, never `git add -A`, so a repository full of somebody's
+   * work in progress cannot be swept into a commit they did not ask for. It
+   * never forces, for the same reason `worktree.push` does not.
+   */
+  teamworkPublish: z.object({
+    projectId: z.string().min(1),
+    /** Overrides the message the plan proposed. */
+    message: z.string().min(1).optional()
+  }),
 
   /**
    * Whether teamwork is running for a project, and how each link is going.
@@ -402,6 +445,9 @@ export type MethodContract = {
 
   'teamwork.relay': { params: z.infer<typeof Params.teamworkRelay>; result: RelaySetting }
   'teamwork.setRelay': { params: z.infer<typeof Params.teamworkSetRelay>; result: RelaySetting }
+  'teamwork.setOrigin': { params: z.infer<typeof Params.teamworkSetOrigin>; result: TeamworkOrigin }
+  'teamwork.publishPlan': { params: z.infer<typeof Params.teamworkPublishPlan>; result: TeamworkPublishPlan }
+  'teamwork.publish': { params: z.infer<typeof Params.teamworkPublish>; result: TeamworkPublish }
   'teamwork.status': { params: z.infer<typeof Params.teamworkStatus>; result: TeamworkStatus }
   'teamwork.presence': { params: z.infer<typeof Params.teamworkPresence>; result: TeammatePresence }
   'teamwork.watch': {

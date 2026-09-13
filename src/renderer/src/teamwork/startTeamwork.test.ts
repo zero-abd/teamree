@@ -9,11 +9,16 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
 import {
+  checkOriginDraft,
   checkRelayDraft,
   memberFilePreview,
+  MORE_RELAYS_LEAD,
+  ORIGIN_DETAIL,
   pushPlan,
+  RELAY_DEPLOY,
   RELAY_LEAD,
   RELAY_OPTIONS,
+  relayUrlFromOutput,
   startTeamworkFlow,
   type StartTeamworkInput,
   type StepId
@@ -61,6 +66,7 @@ function relay(overrides: Partial<RelaySetting> = {}): RelaySetting {
       problem: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
     },
     override: { name: 'TEAMREE_RELAY_URL', value: null },
+    deploy: { command: '/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy', reason: null },
     readAt: 0,
     ...overrides
   }
@@ -179,18 +185,19 @@ describe('step 3, the team’s relay', () => {
     expect(overridden.summary).toMatch(/per-machine and dies with this process/)
   })
 
-  it('ranks them rather than listing them, with exactly one to take and one to fall back on', () => {
-    expect(RELAY_OPTIONS.map((option) => option.tier)).toEqual(['lead', 'fallback', 'more', 'more'])
-    expect(RELAY_OPTIONS.filter((option) => option.tier === 'lead').map((option) => option.id)).toEqual(['worker'])
+  // The recommendation stopped being one of four equals the moment it became a
+  // button, so what is left in this list is genuinely "other ways" — and every
+  // one of them is behind a disclosure.
+  it('lists only the ways that are not the button, quickest to try first', () => {
+    expect(RELAY_OPTIONS.map((option) => option.id)).toEqual(['tunnel', 'mesh', 'vps'])
+    expect(RELAY_OPTIONS.map((option) => option.tier)).toEqual(['fallback', 'more', 'more'])
   })
 
-  it('offers four ways to get one, each saying whether its address is stable enough to commit', () => {
-    expect(RELAY_OPTIONS.map((option) => option.id)).toEqual(['worker', 'tunnel', 'mesh', 'vps'])
+  it('says of each whether its address is stable enough to commit', () => {
     // The tunnel is the one that must not be committed: it changes every time
     // it restarts, and a dead URL in a diff is worse than no URL.
     expect(RELAY_OPTIONS.find((option) => option.id === 'tunnel')?.keep).toBe('override')
     expect(RELAY_OPTIONS.filter((option) => option.keep === 'commit').map((option) => option.id)).toEqual([
-      'worker',
       'mesh',
       'vps'
     ])
@@ -201,35 +208,88 @@ describe('step 3, the team’s relay', () => {
     }
   })
 
-  // Where the commands run stopped being one answer: the Worker deploy ships
-  // inside teamree and needs no clone, and the container ones cannot work
-  // without one because the Dockerfile is in it. A panel that gave the old
-  // single answer would send half its readers to a directory they do not have,
-  // so the two halves are checked against the document that owns them.
-  it('says where the commands run, in the panel and in relay/README.md', () => {
+  // Every option left in the list needs a clone, because the Dockerfile is in
+  // one — and the one that does not is the button, whose command the runtime
+  // reports rather than this file guessing at it. A panel that gave the old
+  // single answer sent half its readers to a directory they do not have.
+  it('says where these commands run, and agrees with relay/README.md that it is a clone', () => {
     const readme = readFileSync(new URL('../../../../relay/README.md', import.meta.url), 'utf8')
-
-    // The copy inside the installed app, because that is where somebody is
-    // reading this. Telling them to cd into a directory the app does not have
-    // is the failure this whole panel exists downstream of.
-    const worker = RELAY_OPTIONS.find((option) => option.id === 'worker')!
-    expect(worker.commands).toBe('/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy')
-    expect(readme).toContain(worker.commands)
-    expect(worker.effort).toMatch(/from a clone of teamree the same command is relay\/teamree-relay deploy/)
-    expect(RELAY_LEAD).toMatch(/ships with teamree and needs no\s+clone/)
-    expect(readme).toMatch(/no clone of this repository/i)
-
-    for (const option of RELAY_OPTIONS.filter((entry) => entry.id !== 'worker')) {
-      expect(option.commands.startsWith('cd relay')).toBe(true)
-    }
-    expect(RELAY_LEAD).toMatch(/clone of the teamree repository/)
+    for (const option of RELAY_OPTIONS) expect(option.commands.startsWith('cd relay')).toBe(true)
+    expect(MORE_RELAYS_LEAD).toMatch(/clone of the\s+teamree repository/)
     expect(readme).toMatch(/does need a clone of this repository/)
   })
 
-  it('does not promise the Worker is free, because relay/README.md does not', () => {
-    const worker = RELAY_OPTIONS.find((option) => option.id === 'worker')!
-    expect(worker.money).toMatch(/very likely free/)
-    expect(worker.money).toMatch(/has not re-verified/)
+  // The command is the runtime's answer now, because it is different in a
+  // checkout and in an installed app; what stays here is only that the deploy
+  // is described as going to the team's own account and hosting nothing.
+  it('never suggests teamree hosts a relay for anybody', () => {
+    expect(RELAY_DEPLOY.what).toMatch(/own Cloudflare account/)
+    expect(RELAY_DEPLOY.what).toMatch(/teamree hosts nothing/)
+    expect(RELAY_DEPLOY.browser).toMatch(/A browser opens once/)
+  })
+
+  it('does not promise the Worker is free, and no longer argues the point in the panel', () => {
+    const readme = readFileSync(new URL('../../../../relay/README.md', import.meta.url), 'utf8')
+    // The pricing paragraph was several lines in front of the button. It is a
+    // thing to look up, and relay/README.md is where it is looked up.
+    expect(`${RELAY_LEAD} ${RELAY_DEPLOY.what} ${RELAY_DEPLOY.browser}`).not.toMatch(/free/i)
+    expect(readme).toMatch(/pricing/i)
+  })
+})
+
+describe('the wss:// URL a finished deploy printed', () => {
+  it('is read out of what the pane has said', () => {
+    expect(
+      relayUrlFromOutput(
+        'teamree-relay: deployed. Your relay endpoint is\n\n    wss://teamree-relay.ada.workers.dev/v1/relay\n'
+      )
+    ).toBe('wss://teamree-relay.ada.workers.dev/v1/relay')
+  })
+
+  // Somebody who deploys twice in one pane means the second one.
+  it('takes the last one when a pane holds more than one deploy', () => {
+    expect(relayUrlFromOutput('wss://one.example/v1/relay ... later ... wss://two.example/v1/relay')).toBe(
+      'wss://two.example/v1/relay'
+    )
+  })
+
+  it('is null when nothing in the pane is a relay URL', () => {
+    expect(relayUrlFromOutput('Authenticating with Cloudflare... https://dash.cloudflare.com')).toBeNull()
+  })
+})
+
+describe('the origin field’s verdict on what has been typed', () => {
+  it('accepts the URL forms two people cloning one repository actually use', () => {
+    expect(checkOriginDraft('https://github.com/ada/pager.git')).toEqual({
+      state: 'ok',
+      url: 'https://github.com/ada/pager.git'
+    })
+    expect(checkOriginDraft(' git@github.com:ada/pager.git ')).toEqual({
+      state: 'ok',
+      url: 'git@github.com:ada/pager.git'
+    })
+  })
+
+  // The one refusal somebody will actually hit, and the reason it is a sentence
+  // rather than a code: a path is a perfectly good git remote and a useless
+  // project identity, because nobody else can clone it.
+  it('refuses a path on this disk, and says why rather than only that', () => {
+    const refused = checkOriginDraft('/Users/ada/code/pager')
+    expect(refused.state).toBe('bad')
+    expect(refused).toMatchObject({ reason: expect.stringMatching(/path on this disk/) })
+    expect(checkOriginDraft('../pager').state).toBe('bad')
+    expect(checkOriginDraft('file:///Users/ada/code/pager').state).toBe('bad')
+  })
+
+  it('refuses anything with no host in it', () => {
+    expect(checkOriginDraft('pager')).toEqual({
+      state: 'bad',
+      reason: 'That is not a URL with a host in it, like https://github.com/you/repo.git.'
+    })
+  })
+
+  it('says nothing at all about an empty field', () => {
+    expect(checkOriginDraft('   ')).toEqual({ state: 'empty' })
   })
 })
 
@@ -276,12 +336,14 @@ describe('step 4, commit and push', () => {
     expect(pushPlan(fresh.list, fresh.relay, PROJECT_PATH)).toBeNull()
   })
 
-  // A tick here would be the app claiming the one act it deliberately refuses
-  // to perform. It has no way to see a commit and says so instead.
+  // A tick here would be the app claiming something it cannot see. There is a
+  // button for the act now, and pressing it is still not a thing the panel can
+  // observe afterwards: nothing in the window reads the repository's history.
   it('is never marked done, because teamree cannot see a commit', () => {
     const owed = step(written, 'push')
     expect(owed.mark).toBe('unchecked')
-    expect(owed.summary).toMatch(/does not check/)
+    expect(owed.summary).toMatch(/cannot see whether you have done that/)
+    expect(owed.summary).toMatch(/says what it will commit and where it will send it/)
   })
 
   it('names both files and one commit that carries them', () => {
@@ -375,16 +437,21 @@ describe('a checkout with no origin', () => {
     expect(flow.blocker).toMatch(/no origin remote/)
   })
 
-  it('names the command to run, and that a path on this disk is not one', () => {
+  // One sentence, because the fix is a field and a button under it now rather
+  // than a command to go and type somewhere else. The paragraph that explained
+  // normalised origin hashes is behind a disclosure beside that field.
+  it('says what to add in one sentence, and keeps the explanation for whoever asks', () => {
     const flow = startTeamworkFlow({ ...fresh, status: noOrigin })
-    expect(flow.blocker).toMatch(/git remote add origin/)
-    expect(flow.blocker).toMatch(/a filesystem path is not a URL/)
+    expect(flow.blocker).toMatch(/Add the URL you and your teammates both cloned/)
+    expect(flow.blocker).toMatch(/not a path on this disk/)
+    expect(flow.blocker).not.toMatch(/normalised/)
+    expect(ORIGIN_DETAIL).toMatch(/normalised origin/)
   })
 
   it('blocks the connected step rather than showing it as merely not done', () => {
     const blocked = step({ ...written, status: noOrigin }, 'connected')
     expect(blocked.mark).toBe('blocked')
-    expect(blocked.summary).toMatch(/git remote add origin/)
+    expect(blocked.summary).toMatch(/Add the URL you and your teammates both cloned/)
   })
 
   it('carries the runtime’s other origin refusal too, for a remote that is not comparable', () => {

@@ -18,7 +18,15 @@ import type { ParamsOf, ResultOf } from '../../shared/methods'
 import type { MethodRegistry } from '../runtime/methodRegistry'
 import type { TeamworkService } from './teamworkService'
 
-export const TEAMWORK_METHODS = ['members.list', 'members.join', 'teamwork.relay', 'teamwork.setRelay'] as const
+export const TEAMWORK_METHODS = [
+  'members.list',
+  'members.join',
+  'teamwork.relay',
+  'teamwork.setRelay',
+  'teamwork.setOrigin',
+  'teamwork.publishPlan',
+  'teamwork.publish'
+] as const
 
 export type TeamworkMethodName = (typeof TEAMWORK_METHODS)[number]
 
@@ -31,7 +39,10 @@ export function createTeamworkHandlers(service: TeamworkService): TeamworkHandle
     'members.list': (params) => service.listMembers(params),
     'members.join': (params) => service.joinProject(params),
     'teamwork.relay': (params) => service.readRelay(params),
-    'teamwork.setRelay': (params) => service.setRelay(params)
+    'teamwork.setRelay': (params) => service.setRelay(params),
+    'teamwork.setOrigin': (params) => service.setOrigin(params),
+    'teamwork.publishPlan': (params) => service.publishPlan(params),
+    'teamwork.publish': (params) => service.publish(params)
   }
 }
 
@@ -41,5 +52,8 @@ export function registerTeamworkHandlers(registry: MethodRegistry, service: Team
   registry.register('members.join', Params.membersJoin, handlers['members.join'])
   registry.register('teamwork.relay', Params.teamworkRelay, handlers['teamwork.relay'])
   registry.register('teamwork.setRelay', Params.teamworkSetRelay, handlers['teamwork.setRelay'])
+  registry.register('teamwork.setOrigin', Params.teamworkSetOrigin, handlers['teamwork.setOrigin'])
+  registry.register('teamwork.publishPlan', Params.teamworkPublishPlan, handlers['teamwork.publishPlan'])
+  registry.register('teamwork.publish', Params.teamworkPublish, handlers['teamwork.publish'])
   return service
 }

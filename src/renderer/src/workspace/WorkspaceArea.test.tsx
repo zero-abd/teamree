@@ -14,7 +14,7 @@
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Layout, Project, Worktree, WorktreeStatus } from '@shared/entities'
+import type { Layout, Project, TeamworkStatus, Worktree, WorktreeStatus } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -72,6 +72,20 @@ const status = (overrides: Partial<WorktreeStatus> = {}): WorktreeStatus => ({
   conflicted: 0,
   readAt: 0,
   ...overrides
+})
+
+/** Teamwork running in `p1`: a relay is set, the origin matches, the key is in. */
+const teamworkUp = (overrides: Partial<TeamworkStatus> = {}): Record<string, TeamworkStatus> => ({
+  p1: {
+    projectId: 'p1',
+    relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
+    disabledReason: null,
+    origin: { ok: true },
+    enrolled: true,
+    links: [{ publicKey: 'k', handle: 'bo', phase: 'connected', since: 0, attempts: 1 }],
+    readAt: 0,
+    ...overrides
+  }
 })
 
 const openDialog = vi.fn()
@@ -173,6 +187,45 @@ describe('when there is nothing open', () => {
     expect(openWorktree).toHaveBeenCalledWith('w1')
     fireEvent.click(screen.getByRole('button', { name: 'Start teamwork' }))
     expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p1')
+  })
+
+  // Seen on a packaged build talking to a deployed relay: the project header in
+  // the same window said "1 connected", and this card told the connected member
+  // to put their key in and pick a relay. Both were already done — which is
+  // what `disabledReason === null` and `enrolled` mean.
+  it('does not tell somebody to set teamwork up in a project where it is already running', () => {
+    seed({ projects: [project], worktrees: [worktree()], teamwork: teamworkUp() })
+    mount()
+    const button = screen.getByRole('button', { name: 'Teamwork' })
+    const described = document.getElementById(button.getAttribute('aria-describedby') ?? '')
+    expect(described?.textContent).toBe(
+      'Teamwork is already on in pager. Open it to see who is connected, and who may read and type into these panes.'
+    )
+    fireEvent.click(button)
+    expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p1')
+  })
+
+  // The two halves of the old sentence are two separate facts, and either one
+  // being untrue still leaves something to do. A checkout whose relay is set
+  // but whose key was never pushed is the case the runbook warns about, and it
+  // must keep the offer rather than claim teamwork is on.
+  it('keeps the offer when this machine’s own key is not in the checkout', () => {
+    seed({ projects: [project], worktrees: [worktree()], teamwork: teamworkUp({ enrolled: false }) })
+    mount()
+    const button = screen.getByRole('button', { name: 'Start teamwork' })
+    const described = document.getElementById(button.getAttribute('aria-describedby') ?? '')
+    expect(described?.textContent).toBe(
+      'Put your key in pager and pick a relay, so a teammate can see these panes and type into them.'
+    )
+  })
+
+  // An answer nobody has yet is not an answer. Until teamwork has been read for
+  // this project, the card says the thing that is true of a project nobody has
+  // set up, because that is overwhelmingly the case it is there for.
+  it('keeps the offer while teamwork has not been read for the project', () => {
+    seed({ projects: [project], worktrees: [worktree()] })
+    mount()
+    expect(screen.getByRole('button', { name: 'Start teamwork' })).toBeTruthy()
   })
 
   it('says which worktree the terminal would open in, rather than making somebody guess', () => {

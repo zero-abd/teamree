@@ -427,7 +427,75 @@ export type RelaySetting = {
     /** Null when this process has no such variable — which is what Finder does. */
     value: string | null
   }
+  /**
+   * The one command that stands a relay up, as *this* installation can run it.
+   *
+   * Reported rather than written into the panel, because the answer is
+   * different in a checkout and in an installed app and a panel that guessed
+   * would print a path that is not there. `command` is null when this build
+   * carries no relay at all, and `reason` then says so in one sentence — which
+   * is what lets the button be disabled honestly instead of failing when it is
+   * pressed.
+   */
+  deploy: { command: string; reason: null } | { command: null; reason: string }
   readAt: number
+}
+
+/**
+ * What one commit would carry, said before it is made.
+ *
+ * This is the whole of the confirmation the push button owes somebody: the
+ * files, the message, the remote and the branch. It is read from the runtime
+ * rather than assembled in the window, because the branch and the upstream are
+ * git's answers and a panel that guessed them would be describing a push it is
+ * not about to make.
+ */
+export type TeamworkPublishPlan = {
+  projectId: string
+  /** Paths relative to the project root, exactly as they will be staged. */
+  files: string[]
+  message: string
+  remote: string
+  /** Null when HEAD is detached, which `blocker` then explains. */
+  branch: string | null
+  /** What the branch tracks now; null when this push would be what sets it. */
+  upstream: string | null
+  /** Whether the files are already committed, so the push would send nothing new. */
+  committed: boolean
+  /** Why this cannot be done at all, in words to act on. Null when it can. */
+  blocker: string | null
+  readAt: number
+}
+
+/**
+ * What the one button actually did, in the two halves it can half-fail in.
+ *
+ * A commit that landed and a push that was refused is the ordinary outcome of a
+ * teammate having pushed first, and reporting it as one failure would leave
+ * somebody believing they had made no commit. So the commit is reported either
+ * way and the push carries its own verdict.
+ */
+export type TeamworkPublish = {
+  projectId: string
+  files: string[]
+  /** Null when everything was already committed and this made no new commit. */
+  commit: { sha: string; shortSha: string; message: string } | null
+  remote: string
+  branch: string
+  push:
+    | { ok: true; upstream: string; setUpstream: boolean; alreadyUpToDate: boolean }
+    /** `error` is git's own words, whole; `advice` is the one thing to do next. */
+    | { ok: false; error: string; advice: string }
+  at: number
+}
+
+/** What adding the `origin` remote did, as it actually went. */
+export type TeamworkOrigin = {
+  projectId: string
+  remote: string
+  url: string
+  /** True when a remote was already there and this replaced its URL. */
+  replaced: boolean
 }
 
 export type RuntimeStatus = {

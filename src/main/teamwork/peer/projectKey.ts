@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import type { GitRunner } from '../../git/gitProcess'
+import { normaliseRemote } from '../../../shared/originUrl'
 
 /** Domain separation, so this hash can never be mistaken for another one. */
 const KEY_PREFIX = 'teamree/project/v1\n'
@@ -31,37 +32,11 @@ export type ProjectKeyResult =
 /**
  * The remote's identity, spelled one way.
  *
- * Two people clone the same repository over ssh and https and mean the same
- * thing, so scheme, credentials, port, a trailing `.git` and case in the host
- * are all normalised away. What is left is host and path, which is what two
- * clones of one repository agree on.
+ * The rule itself is in `@shared/originUrl`, because the panel that offers to
+ * add an origin has to refuse exactly what this would refuse, and re-exported
+ * here because this module is where the rest of the runtime looks for it.
  */
-export function normaliseRemote(remote: string): string | undefined {
-  const trimmed = remote.trim()
-  if (!trimmed) return undefined
-
-  const scp = /^(?:[^@/]+@)?([^/:]+):(?!\/\/)(.+)$/.exec(trimmed)
-  const [host, path] = scp
-    ? [scp[1] ?? '', scp[2] ?? '']
-    : (() => {
-        try {
-          const url = new URL(trimmed)
-          return [url.hostname, url.pathname]
-        } catch {
-          return [undefined, undefined]
-        }
-      })()
-
-  if (host === undefined || path === undefined) return undefined
-  const cleanHost = host.toLowerCase()
-  const cleanPath = path
-    .replace(/^\/+/, '')
-    .replace(/\/+$/, '')
-    .replace(/\.git$/i, '')
-    .toLowerCase()
-  if (!cleanHost || !cleanPath) return undefined
-  return `${cleanHost}/${cleanPath}`
-}
+export { normaliseRemote } from '../../../shared/originUrl'
 
 export function projectKeyFor(normalisedRemote: string): string {
   return createHash('sha256').update(KEY_PREFIX).update(normalisedRemote, 'utf8').digest('hex')

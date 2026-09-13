@@ -9,13 +9,35 @@
 # that skipped that would be publishing an app nobody had started.
 name: release
 
+# There is deliberately no `push: tags` trigger here any more, and the reason is
+# not a preference. No GitHub Actions run in this repository has ever executed a
+# step: every one of them ends after six or seven seconds with no logs and the
+# annotation
+#
+#   "The job was not started because recent account payments have failed or your
+#    spending limit needs to be increased."
+#
+# No runner is provisioned, so this workflow cannot build anything. A tag pushed
+# while it triggered on tags would produce nothing, take no action, and hang a
+# red cross off the release — which is a worse first impression than having no
+# automation at all, because it looks like the build failed rather than like it
+# never ran.
+#
+# So releases are cut from a maintainer's Mac instead: `npm run release`, which
+# is `scripts/release.mjs` and runs every gate below in one sequence. README's
+# "Releases" section and `docs/releasing.md` are the account of it.
+#
+# To bring this back once a runner can be provisioned, add
+#
+#   push:
+#     tags: ['v*']
+#
+# above `workflow_dispatch` and delete this comment. Nothing else here needs to
+# change; the `guard` job already refuses to publish from anything but a tag.
 on:
-  push:
-    tags: ['v*']
-  # Re-runnable by hand against a tag, for the case where publishing failed
-  # after the build succeeded. Select the tag as the ref; the `guard` job below
-  # refuses a branch, before the build rather than after it, rather than cutting
-  # a release named after one.
+  # Runnable by hand against a tag. Select the tag as the ref; the `guard` job
+  # below refuses a branch, before the build rather than after it, rather than
+  # cutting a release named after one.
   workflow_dispatch:
 
 permissions:
@@ -113,9 +135,10 @@ jobs:
             echo
             echo "## Nothing here is signed"
             echo
-            echo "There is no Apple Developer certificate behind this build, and there is not"
-            echo "going to be one. macOS will say so, in wording that sounds worse than what it"
-            echo "means: the complaint is that nobody has paid a vendor to vouch for the file,"
+            echo "There is no Apple Developer certificate behind this build. Signing is a"
+            echo "filled-in blank rather than a plan — docs/releasing.md names every variable —"
+            echo "but this run had none. macOS will say so, in wording that sounds worse than"
+            echo "what it means: the complaint is that nobody has paid a vendor to vouch for it,"
             echo "not that anything was found wrong with it. It has not inspected the app, and"
             echo "it is not telling you the app is harmful."
             echo

@@ -5,6 +5,7 @@ import { Dashboard } from '../dashboard/Dashboard'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { PaneTree } from '../panes/PaneTree'
+import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 import { TeamworkView } from '../teamwork/TeamworkView'
 import { ChangesPanel } from './ChangesPanel'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -50,6 +51,7 @@ export function WorkspaceArea({
   const openWorktree = useWorkspaceStore((state) => state.openWorktree)
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
+  const teamwork = useWorkspaceStore((state) => state.teamwork)
 
   // Where "open a terminal" would go, and whose teamwork "start teamwork"
   // would set up. Both are read before the early returns below, because hooks
@@ -58,6 +60,24 @@ export function WorkspaceArea({
   const teamworkProject = worktree
     ? projects.find((project) => project.id === worktree.projectId)
     : (projects.find((project) => project.id === target?.projectId) ?? projects[0])
+
+  /**
+   * Whether teamwork is already running in the project this card is about.
+   *
+   * The card below used to say "put your key in <project> and pick a relay"
+   * whatever the answer, which is the one sentence that cannot be true here:
+   * `disabledReason === null` means the relay is configured and the origin
+   * matches, and `enrolled` means this machine's own key is in the checkout —
+   * the two things the sentence asks for. Seen on a packaged build whose own
+   * project header said "1 connected" in the same window: the app told a
+   * connected member to go and do what they had already done, on the empty
+   * state they are most likely to be looking at while they wait for a
+   * teammate. An absent status is not an answer, so it keeps the old copy.
+   */
+  const teamworkRunning =
+    teamworkProject !== undefined &&
+    teamwork[teamworkProject.id]?.disabledReason === null &&
+    teamwork[teamworkProject.id]?.enrolled === true
 
   // Open the tab first and put the pane in it second: the pane is the thing
   // asked for, and it has to appear somewhere the person is looking.
@@ -179,12 +199,14 @@ export function WorkspaceArea({
                   if (teamworkProject) openTeamwork(teamworkProject.id)
                 }}
               >
-                Start teamwork
+                {teamworkRunning ? TEAMWORK_BUTTON_LABEL : 'Start teamwork'}
               </button>
               <p className="starter__note" id="starter-teamwork">
                 {teamworkProject === undefined
                   ? 'Teamwork is set up per repository, and there is none here yet.'
-                  : `Put your key in ${teamworkProject.name} and pick a relay, so a teammate can see these panes and type into them.`}
+                  : teamworkRunning
+                    ? `Teamwork is already on in ${teamworkProject.name}. Open it to see who is connected, and who may read and type into these panes.`
+                    : `Put your key in ${teamworkProject.name} and pick a relay, so a teammate can see these panes and type into them.`}
               </p>
             </div>
           </div>
