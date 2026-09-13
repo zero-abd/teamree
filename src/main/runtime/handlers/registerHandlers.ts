@@ -21,8 +21,10 @@
 // (see workspaceEventSources.ts). Publishing at the service, not at a transport,
 // is what lets a GUI subscriber see a mutation the CLI made.
 
+import { dirname } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
 import { GitService, registerGitHandlers } from '../../git'
+import { registerTeamworkHandlers, TeamworkService } from '../../teamwork'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import type { TerminalService } from '../../terminals/method-handlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
@@ -89,6 +91,22 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   // Git status has no call behind it, so file changes are the only thing that
   // can keep it honest between one command and the next.
   const worktreeFiles = publishWorktreeFileEvents(git, workspaceEvents)
+
+  // The private key belongs beside the workspace file, in the app's own data
+  // directory, and never anywhere under a repository. That directory is not on
+  // the runtime context, but the store's path is exactly it plus a file name,
+  // and the store is already the authority on where this app keeps things.
+  registerTeamworkHandlers(
+    registry,
+    new TeamworkService({
+      store: registry.context.store,
+      dataDir: dirname(registry.context.store.filePath),
+      // Joining writes a file that no watcher covers — `.teamree/members` lives
+      // in the primary checkout, which nothing here watches — so the service is
+      // the only thing that can say the roster moved.
+      onRosterChange: () => workspaceEvents.emit({ type: 'members' })
+    })
+  )
 
   return { terminals, git, worktreeFiles }
 }

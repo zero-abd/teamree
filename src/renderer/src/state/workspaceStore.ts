@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import type {
   InstalledAgent,
   Layout,
+  MemberList,
   PaneNode,
   Project,
   Terminal,
@@ -30,6 +31,7 @@ import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type Re
 
 export type DialogState =
   | { kind: 'add-project' }
+  | { kind: 'members'; projectId: string }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
   /** Raised only when git has already refused: there is work here to lose. */
@@ -83,6 +85,14 @@ type WorkspaceState = {
   stagedPaths: string[]
   committing: boolean
   pushing: boolean
+  /**
+   * Each project's roster, by project id, for the ones somebody has looked at.
+   * Read on demand rather than at bootstrap: a roster is a directory read per
+   * project, and most windows never open one.
+   */
+  members: Record<string, MemberList>
+  /** True while a roster is being read or written, so the dialog can say so. */
+  membersPending: boolean
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
   /** True once the probe has answered, however it answered. Until then an
@@ -148,6 +158,15 @@ type WorkspaceState = {
   pushActiveWorktree: () => Promise<void>
   /** Opens a pane already running one of the agents found on this machine. */
   startAgent: (command: string) => Promise<void>
+
+  /** Reads one project's roster. */
+  loadMembers: (projectId: string) => Promise<void>
+  /**
+   * Writes this installation's key into the project. It does not commit and
+   * does not push, and the dialog says so: doing either for somebody would hide
+   * the only step that makes the key mean anything.
+   */
+  joinProject: (projectId: string, handle?: string) => Promise<void>
 
   toggleProject: (projectId: string) => void
   toggleDashboard: () => void
@@ -347,6 +366,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const reads: Promise<unknown>[] = []
     if (targets.projects) reads.push(refreshProjects())
     if (targets.terminals) reads.push(refreshTerminals())
+    if (targets.members) reads.push(refreshMembers())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
       reads.push(
@@ -371,6 +391,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (!changesOpen || !activeWorktreeId || !readable.includes(activeWorktreeId)) return
     await Promise.all([refreshChanges(activeWorktreeId), refreshLog(activeWorktreeId)])
     if (selectedChangePath !== null) await refreshDiff(activeWorktreeId, selectedChangePath)
+  }
+
+  /**
+   * Re-reads the rosters this window is already holding.
+   *
+   * The `members` event names no project, so this is the widest a roster
+   * refetch ever gets — and it is still only the ones somebody has opened,
+   * because nothing puts a roster in the map until they do.
+   */
+  const refreshMembers = async (): Promise<void> => {
+    const projectIds = Object.keys(get().members)
+    if (projectIds.length === 0) return
+    const lists = await Promise.all(
+      // One unreadable roster must not cost the others theirs.
+      projectIds.map((projectId) => runtimeClient.call('members.list', { projectId }).catch(() => null))
+    )
+    set((state) => ({
+      members: lists.reduce((map, list) => (list ? { ...map, [list.projectId]: list } : map), { ...state.members })
+    }))
   }
 
   const refresher = createWorkspaceRefresher({
@@ -412,6 +451,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     layouts: {},
 
     mergePreviews: {},
+    members: {},
+    membersPending: false,
     changesOpen: false,
     changes: {},
     logs: {},
@@ -789,6 +830,34 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         await refresher.flush()
       } catch (error) {
         failed('Could not start the agent')(error)
+      }
+    },
+
+    async loadMembers(projectId) {
+      set({ membersPending: true })
+      try {
+        const list = await runtimeClient.call('members.list', { projectId })
+        set((state) => ({ members: { ...state.members, [projectId]: list } }))
+      } catch (error) {
+        failed('Could not read the members of this project')(error)
+      } finally {
+        set({ membersPending: false })
+      }
+    },
+
+    async joinProject(projectId, handle) {
+      set({ membersPending: true })
+      try {
+        const list = await runtimeClient.call('members.join', handle ? { projectId, handle } : { projectId })
+        set((state) => ({ members: { ...state.members, [projectId]: list } }))
+        // Said as a notice as well as in the dialog, because the file being
+        // written is the smaller half of what just happened: until it is
+        // committed and pushed, nobody else can see it.
+        if (list.selfFile) notify(`Wrote ${list.selfFile}. Commit and push it to join.`, 'info')
+      } catch (error) {
+        failed('Could not add you to this project')(error)
+      } finally {
+        set({ membersPending: false })
       }
     },
 

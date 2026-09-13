@@ -6,6 +6,7 @@ import { z } from 'zod'
 import type {
   InstalledAgent,
   Layout,
+  MemberList,
   PaneNode,
   Project,
   RuntimeStatus,
@@ -96,6 +97,24 @@ export const Params = {
   /** Coding agents found on PATH, so a pane can start one without being told. */
   agentList: z.object({}),
 
+  /**
+   * Everyone whose public key is committed to the project, and who this
+   * installation is next to them.
+   */
+  membersList: z.object({ projectId: z.string().min(1) }),
+  /**
+   * Writes this installation's public key into the project's roster.
+   *
+   * It writes the file and stops there: it does not stage, commit or push.
+   * Getting the file into the repository is the user's, and it has to be,
+   * because being able to push it is the whole of what membership means.
+   */
+  membersJoin: z.object({
+    projectId: z.string().min(1),
+    /** Overrides the handle derived from git's configured email. */
+    handle: z.string().min(1).optional()
+  }),
+
   terminalList: z.object({ worktreeId: z.string().min(1).optional() }),
   terminalCreate: z.object({
     worktreeId: z.string().min(1),
@@ -168,6 +187,9 @@ export type MethodContract = {
 
   'agent.list': { params: z.infer<typeof Params.agentList>; result: InstalledAgent[] }
 
+  'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
+  'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }
+
   'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
   'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }
   'terminal.write': { params: z.infer<typeof Params.terminalWrite>; result: { written: true } }
@@ -198,6 +220,14 @@ export type WorkspaceEvent =
   | { type: 'projects' }
   | { type: 'worktrees' }
   | { type: 'terminals' }
+  /**
+   * A project's roster changed on disk. Deliberately carries no project id:
+   * events are coalesced by their key, and an id would have to appear in that
+   * key for two projects' changes to survive one burst. A roster is a directory
+   * read, so re-reading the few a window is showing costs less than the
+   * bookkeeping to narrow it.
+   */
+  | { type: 'members' }
   | { type: 'layout'; worktreeId: string }
   | { type: 'terminalExited'; terminalId: string; exitCode: number }
 

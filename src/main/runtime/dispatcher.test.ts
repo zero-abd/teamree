@@ -116,6 +116,8 @@ describe('dispatcher', () => {
       'agent.list',
       'layout.get',
       'layout.set',
+      'members.join',
+      'members.list',
       'project.add',
       'project.list',
       'project.remove',

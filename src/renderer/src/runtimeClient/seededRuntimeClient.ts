@@ -5,6 +5,8 @@
 
 import type {
   Layout,
+  Member,
+  MemberList,
   PaneNode,
   Project,
   StartPoint,
@@ -51,6 +53,14 @@ const SEEDED_PATHS = [
   'scripts/reindex.mjs',
   'src/server/handlers.ts'
 ]
+
+/** The demo's own identity. Invented, like everything else in this file. */
+const SEEDED_HANDLE = 'you'
+const SEEDED_PUBLIC_KEY = 'EA3VNMgROVtL/oUJhTmpENptwwkAWhc1HD2SIqJTHE4='
+
+function seededMember(handle: string, publicKey: string, addedAt: string): Member {
+  return { handle, publicKey, addedAt, file: `.teamree/members/${handle}.pub`, isSelf: false }
+}
 
 /**
  * Changed paths made up to match a worktree's counters, so the list and the
@@ -101,6 +111,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
   const statuses = new Map<string, WorktreeStatus>()
   const terminals = new Map<string, FakeTerminal>()
   const layouts = new Map<string, Layout>()
+  /** Rosters by project id, so joining one in the demo really does add a row. */
+  const rosters = new Map<string, Member[]>()
 
   let connection: ConnectionState = { phase: 'connecting', detail: 'Starting runtime' }
   const connectionListeners = new Set<(state: ConnectionState) => void>()
@@ -194,6 +206,15 @@ export function createSeededRuntimeClient(): RuntimeClient {
 
   const atlas = seedProject('atlas', '/Users/dev/code/atlas', 'origin/main')
   const ledger = seedProject('ledger-api', '/Users/dev/code/ledger-api', 'origin/trunk')
+
+  // One project the demo's own key is already in, one it is not, because the
+  // difference between those two is the whole of what this dialog shows.
+  rosters.set(atlas.id, [
+    seededMember('ada', 'PkQtFYttlX7oLD8c/tYpNlHWLIflye3t6tMGm0I4iRk=', '2026-04-02'),
+    seededMember('grace', 'tOZqe8RgnJt2KzVOWEfPkfYHQpB1i0Jt7Ojb9vDfjW4=', '2026-05-19'),
+    { ...seededMember('you', SEEDED_PUBLIC_KEY, '2026-08-27'), isSelf: true }
+  ])
+  rosters.set(ledger.id, [seededMember('grace', 'tOZqe8RgnJt2KzVOWEfPkfYHQpB1i0Jt7Ojb9vDfjW4=', '2026-06-11')])
 
   const search = seedWorktree(atlas, 'incremental search index', 'task/incremental-search', 'ready')
   const themes = seedWorktree(atlas, 'theme tokens pass', 'task/theme-tokens', 'ready')
@@ -296,6 +317,22 @@ export function createSeededRuntimeClient(): RuntimeClient {
   }
 
   finishCreation(flaky.id, false)
+
+  const memberList = (projectId: string): MemberList => {
+    const project = required(projects.get(projectId), 'project')
+    const members = rosters.get(projectId) ?? []
+    const mine = members.find((member) => member.isSelf)
+    const handle = mine?.handle ?? SEEDED_HANDLE
+    return {
+      projectId: project.id,
+      members,
+      problems: [],
+      self: { handle, publicKey: SEEDED_PUBLIC_KEY },
+      selfFile: `.teamree/members/${handle}.pub`,
+      enrolled: mine !== undefined,
+      readAt: Date.now()
+    }
+  }
 
   // --- method dispatch ------------------------------------------------------
 
@@ -535,6 +572,20 @@ export function createSeededRuntimeClient(): RuntimeClient {
         truncated: false,
         readAt: Date.now()
       }
+    },
+
+    'members.list': ({ projectId }) => memberList(projectId),
+    'members.join': ({ projectId, handle }) => {
+      const roster = rosters.get(projectId) ?? []
+      if (!roster.some((member) => member.isSelf)) {
+        const name = handle ?? SEEDED_HANDLE
+        rosters.set(projectId, [
+          ...roster,
+          { ...seededMember(name, SEEDED_PUBLIC_KEY, new Date().toISOString().slice(0, 10)), isSelf: true }
+        ])
+        announce({ type: 'members' })
+      }
+      return memberList(projectId)
     },
 
     'agent.list': () => [

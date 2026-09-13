@@ -113,7 +113,17 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                   </svg>
                 </button>
               </div>
-              <p className="project__base">{project.baseRef}</p>
+              <div className="project__meta">
+                <p className="project__base">{project.baseRef}</p>
+                <button
+                  type="button"
+                  className="project__members"
+                  title={`Members of ${project.name}`}
+                  onClick={() => openDialog({ kind: 'members', projectId: project.id })}
+                >
+                  Members
+                </button>
+              </div>
 
               {isCollapsed ? null : (
                 <ul className="project__worktrees">

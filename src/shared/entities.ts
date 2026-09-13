@@ -279,6 +279,74 @@ export type InstalledAgent = {
   binary: string
 }
 
+/**
+ * Who this installation is, as the roster records it.
+ *
+ * The public key is the identity; the handle is only what it is filed and
+ * displayed under. There is no account behind either — push access to the
+ * repository is what makes a key membership.
+ */
+export type MemberIdentity = {
+  /**
+   * Filename stem under `.teamree/members`, and how the app names this person.
+   *
+   * Null when none could be worked out and none was given, because git has no
+   * configured email to take one from. The key is still this machine's; only
+   * its name is missing, and the user is asked for one.
+   */
+  handle: string | null
+  /** Base64 of the 32-byte X25519 public key. The private half never leaves the machine. */
+  publicKey: string
+}
+
+/** One member of a project: a public key committed to the repository. */
+export type Member = {
+  handle: string
+  publicKey: string
+  /** ISO 8601 date the key was added, exactly as the file records it. */
+  addedAt: string
+  /** Path relative to the project root, so the file can be found in a diff. */
+  file: string
+  /** True when this entry is this installation's own key. */
+  isSelf: boolean
+}
+
+/**
+ * A file under `.teamree/members` that could not be read as a member.
+ *
+ * Reported rather than thrown. One unreadable file is somebody's typo, and a
+ * roster that refused to list nine good members because of it would read as
+ * "there is no team here", which is the one thing it must never wrongly say.
+ */
+export type MemberProblem = {
+  /** Path relative to the project root. */
+  file: string
+  /** What is wrong with it, in words somebody can act on. */
+  reason: string
+}
+
+/** A project's roster, as of one read. */
+export type MemberList = {
+  projectId: string
+  /** Sorted by handle, so two reads of one team compare cleanly. */
+  members: Member[]
+  problems: MemberProblem[]
+  /** Who this installation is, whether or not it is in `members` yet. */
+  self: MemberIdentity
+  /**
+   * Where joining would write, relative to the project root. Null when no
+   * handle could be worked out, because then there is no filename to name.
+   */
+  selfFile: string | null
+  /**
+   * True when this installation's public key is in the roster. Keyed on the
+   * key rather than the handle: the key is the identity, and somebody who
+   * renamed their file is still the same person.
+   */
+  enrolled: boolean
+  readAt: number
+}
+
 export type RuntimeStatus = {
   version: string
   /** Socket path or named pipe the runtime is listening on. */
