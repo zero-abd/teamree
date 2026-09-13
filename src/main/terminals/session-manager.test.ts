@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Layout, Terminal } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
@@ -5,7 +8,7 @@ import type { TerminalEvent } from '../../shared/methods'
 import { createTerminalService, registerTerminalHandlers } from './method-handlers'
 import type { MethodRegistry, StreamChannel, TerminalService } from './method-handlers'
 import { isProcessAlive } from './process-tree'
-import { canSpawnPty, waitUntil } from './pty-test-support'
+import { canSpawnPty, printThenExit, waitUntil, writeProcessTreeProbe } from './pty-test-support'
 import { isTerminalServiceError } from './service-error'
 
 // Driven through the handler surface the runtime will call, over real PTYs, so
@@ -15,6 +18,7 @@ const TEST_TIMEOUT_MS = 20_000
 
 const WORKTREE = 'wt_alpha'
 const services: TerminalService[] = []
+const scratchDirs: string[] = []
 const published: Array<{ subscription: string; event: TerminalEvent }> = []
 
 function newService(): TerminalService {
@@ -26,13 +30,22 @@ function newService(): TerminalService {
   return service
 }
 
-function newTerminal(service: TerminalService, command = 'cat'): Promise<Terminal> {
-  return service.handlers['terminal.create']({ worktreeId: WORKTREE, shell: '/bin/sh', command })
+/**
+ * A pane on this platform's own shell. With no command that is an interactive
+ * shell, which is what every test here that is not about a command wants: it
+ * stays open, and the pty echoes what is typed into it, on Windows as on unix.
+ */
+function newTerminal(service: TerminalService, command?: string): Promise<Terminal> {
+  return service.handlers['terminal.create']({
+    worktreeId: WORKTREE,
+    ...(command === undefined ? {} : { command })
+  })
 }
 
 afterEach(async () => {
   published.length = 0
   await Promise.all(services.splice(0).map((service) => service.shutdown()))
+  await Promise.all(scratchDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
 describePty('terminal handlers', () => {
@@ -60,12 +73,7 @@ describePty('terminal handlers', () => {
     async () => {
       const service = newService()
       const mine = await newTerminal(service)
-      await service.handlers['terminal.create']({
-        worktreeId: 'wt_other',
-        shell: '/bin/sh',
-        command: 'cat',
-        cwd: process.cwd()
-      })
+      await service.handlers['terminal.create']({ worktreeId: 'wt_other', cwd: process.cwd() })
 
       const scoped = await service.handlers['terminal.list']({ worktreeId: WORKTREE })
       expect(scoped.map((terminal) => terminal.id)).toEqual([mine.id])
@@ -113,8 +121,7 @@ describePty('terminal handlers', () => {
       const first = await newTerminal(service)
       const { terminal: second, layout } = await service.handlers['terminal.split']({
         terminalId: first.id,
-        direction: 'row',
-        command: 'cat'
+        direction: 'row'
       })
 
       expect(second.worktreeId).toBe(WORKTREE)
@@ -174,7 +181,7 @@ describePty('terminal handlers', () => {
     'streams data and exit to a subscriber, and stops on unsubscribe',
     async () => {
       const service = newService()
-      const terminal = await newTerminal(service, 'echo streamed; exit 3')
+      const terminal = await newTerminal(service, printThenExit('streamed', 3))
       const { subscription } = await service.handlers['terminal.subscribe']({ terminalId: terminal.id })
 
       await waitUntil(
@@ -223,11 +230,7 @@ describePty('terminal handlers', () => {
       })
       services.push(service)
 
-      const terminal = await service.handlers['terminal.create']({
-        worktreeId: WORKTREE,
-        shell: '/bin/sh',
-        command: 'cat'
-      })
+      const terminal = await service.handlers['terminal.create']({ worktreeId: WORKTREE })
       const result = await service.handlers['terminal.subscribe'](
         { terminalId: terminal.id },
         { connectionId: 'conn-1' }
@@ -299,7 +302,9 @@ describePty('terminal handlers', () => {
     'kills every process tree on shutdown',
     async () => {
       const service = newService()
-      const terminal = await newTerminal(service, 'sleep 120 & echo child:$!; wait')
+      const scratch = await mkdtemp(path.join(os.tmpdir(), 'teamree-process-tree-'))
+      scratchDirs.push(scratch)
+      const terminal = await newTerminal(service, await writeProcessTreeProbe(scratch))
       const { subscription } = await service.handlers['terminal.subscribe']({ terminalId: terminal.id })
       expect(subscription).toMatch(/^sub_/)
 

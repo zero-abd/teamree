@@ -111,20 +111,31 @@ describePty('restoring terminals across a restart', () => {
    * not installed anywhere this suite runs, and what is under test is which
    * command line gets built — which this shows directly.
    */
-  async function fakeAgent(name: string): Promise<{ checkout: string; binary: string }> {
+  async function fakeAgent(name: string): Promise<{ checkout: string; launch: string }> {
     const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-restore-'))
     created.push(base)
     const checkout = path.join(base, 'checkout')
     const bin = path.join(base, 'bin')
     await mkdir(checkout, { recursive: true })
     await mkdir(bin, { recursive: true })
-    const binary = path.join(bin, name)
+    // Windows decides what is executable by the extension, which the app
+    // strips off again before matching an agent by name; unix decides by the
+    // bit, and by the interpreter on the first line.
+    const windows = process.platform === 'win32'
+    const binary = path.join(bin, windows ? `${name}.cmd` : name)
     // It stays running, the way a real agent does. A stub that exits at once
     // would have the tests typing into a closed pty, which node-pty logs about
     // and which is not what any of them are here to check.
-    await writeFile(binary, '#!/bin/sh\necho "AGENT ARGS: $@"\nsleep 30\n', 'utf8')
-    await chmod(binary, 0o755)
-    return { checkout, binary }
+    if (windows) {
+      await writeFile(binary, '@echo off\r\necho AGENT ARGS: %*\r\nping -n 31 127.0.0.1 >nul\r\n', 'utf8')
+    } else {
+      await writeFile(binary, '#!/bin/sh\necho "AGENT ARGS: $@"\nsleep 30\n', 'utf8')
+      await chmod(binary, 0o755)
+    }
+    // Quoted, because a Windows path is mostly backslashes and both readers of
+    // this string — the shell that runs it, and the tokenizer that has to find
+    // the agent's name in command position — would take those for escapes.
+    return { checkout, launch: `"${binary}"` }
   }
 
   function manager(repositories: LayoutRepository & SessionRepository, checkout: string): TerminalSessionManager {
@@ -138,11 +149,11 @@ describePty('restoring terminals across a restart', () => {
   }
 
   it('gives an agent a session id, then hands the same id back after a restart', async () => {
-    const { checkout, binary } = await fakeAgent('claude')
+    const { checkout, launch } = await fakeAgent('claude')
     const repositories = createRepositories()
 
     const first = manager(repositories, checkout)
-    const opened = first.create({ worktreeId: 'wt_1', command: binary })
+    const opened = first.create({ worktreeId: 'wt_1', command: launch })
     await waitUntil(() => first.read(opened.id).includes('AGENT ARGS:'), 'the agent to print its arguments')
 
     const launched = first.read(opened.id)
@@ -198,11 +209,11 @@ describePty('restoring terminals across a restart', () => {
   }, 20_000)
 
   it('says how each pane got here, and stops saying it once the user types', async () => {
-    const { checkout, binary } = await fakeAgent('claude')
+    const { checkout, launch } = await fakeAgent('claude')
     const repositories = createRepositories()
 
     const first = manager(repositories, checkout)
-    const agentPane = first.create({ worktreeId: 'wt_1', command: binary })
+    const agentPane = first.create({ worktreeId: 'wt_1', command: launch })
     const plainPane = first.create({ worktreeId: 'wt_1', command: 'echo hello' })
     // A pane opened now is not a restored one, whatever else is true of it.
     expect(first.list('wt_1').every((terminal) => terminal.restored === undefined)).toBe(true)
@@ -225,11 +236,11 @@ describePty('restoring terminals across a restart', () => {
   }, 20_000)
 
   it('forgets a pane the user closed, so a restart does not reopen it', async () => {
-    const { checkout, binary } = await fakeAgent('claude')
+    const { checkout, launch } = await fakeAgent('claude')
     const repositories = createRepositories()
 
     const first = manager(repositories, checkout)
-    const opened = first.create({ worktreeId: 'wt_1', command: binary })
+    const opened = first.create({ worktreeId: 'wt_1', command: launch })
     await first.close(opened.id)
     expect(repositories.listTerminals()).toEqual([])
     await first.shutdown()
@@ -240,11 +251,11 @@ describePty('restoring terminals across a restart', () => {
   }, 20_000)
 
   it('leaves behind a terminal whose worktree is no longer there', async () => {
-    const { checkout, binary } = await fakeAgent('claude')
+    const { checkout, launch } = await fakeAgent('claude')
     const repositories = createRepositories()
 
     const first = manager(repositories, checkout)
-    first.create({ worktreeId: 'wt_1', command: binary })
+    first.create({ worktreeId: 'wt_1', command: launch })
     await first.shutdown()
 
     // A manager that knows nothing about wt_1: the worktree was removed while

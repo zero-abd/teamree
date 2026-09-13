@@ -4,6 +4,7 @@
 // leaking PTY listeners across days of use.
 
 import type { StreamEvent } from '../../shared/protocol'
+import { internal } from './runtimeError'
 
 /** Where stream frames for one connection are written. */
 export type FrameSink = (frame: StreamEvent) => void
@@ -58,7 +59,14 @@ export class SubscriptionHub {
    */
   subscribe(connectionId: string, source: SubscriptionSource): string {
     const connection = this.connections.get(connectionId)
-    if (!connection) throw new Error(`unknown connection: ${connectionId}`)
+    // `internal` on purpose, and chosen here rather than inherited from the
+    // dispatcher's catch-all. Every connection id a handler can present was
+    // minted by the transport when the socket or the window opened, so an id
+    // this hub does not know is not a caller's mistake to correct — it is the
+    // transport having failed to register, or having torn the connection down
+    // while a subscribe was in flight. There is no client-side remedy to point
+    // at, and no narrower code would describe it honestly.
+    if (!connection) throw internal(`unknown connection: ${connectionId}`)
 
     this.counter += 1
     const subscriptionId = `sub_${this.counter}`

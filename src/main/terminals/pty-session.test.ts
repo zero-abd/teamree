@@ -1,9 +1,14 @@
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { TerminalEvent } from '../../shared/methods'
+import { ErrorCode } from '../../shared/protocol'
 import { isProcessAlive } from './process-tree'
 import { PtySession } from './pty-session'
 import type { PtySessionInit } from './pty-session'
 import { canSpawnPty, waitUntil } from './pty-test-support'
+import { isTerminalServiceError } from './service-error'
+import { SHELL_UNRUNNABLE } from './shell-environment'
 
 // Real PTYs, no mocks: the interesting failures here are all in the native layer
 // and in how a shell reacts to signals, and a fake would reproduce neither.
@@ -43,6 +48,25 @@ afterEach(async () => {
 })
 
 describePty('PtySession', () => {
+  it('says the shell could not be started, rather than opening a pane that vanishes', () => {
+    const missing = path.join(os.tmpdir(), 'teamree-no-such-shell')
+
+    let thrown: unknown
+    try {
+      // Windows refuses this inside node-pty's spawn. POSIX does not refuse it
+      // at all: the fork succeeds, the exec fails in the child, and the pane
+      // opens and disappears a moment later with the reason going nowhere. The
+      // caller has to hear the same thing on both.
+      start({ shell: missing, command: 'echo never' })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(isTerminalServiceError(thrown)).toBe(true)
+    expect(isTerminalServiceError(thrown) ? thrown.code : undefined).toBe(ErrorCode.TerminalFailed)
+    expect((thrown as Error).message).toBe(`failed to start ${missing}: ${SHELL_UNRUNNABLE}`)
+  })
+
   it(
     'spawns a command and captures its output',
     async () => {
