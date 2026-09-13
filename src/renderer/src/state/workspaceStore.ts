@@ -4,6 +4,8 @@
 
 import { create } from 'zustand'
 import type {
+  CliInstall,
+  CliStatus,
   InstalledAgent,
   Layout,
   MemberList,
@@ -35,7 +37,8 @@ import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type Re
 
 export type DialogState =
   | { kind: 'add-project' }
-  | { kind: 'members'; projectId: string }
+  | { kind: 'install-cli' }
+  | { kind: 'start-teamwork'; projectId: string }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
   /** Raised only when the runtime has already refused: there is something here to lose. */
@@ -114,6 +117,17 @@ type WorkspaceState = {
   /** True while a roster is being read or written, so the dialog can say so. */
   membersPending: boolean
   /**
+   * Why the last attempt to add this machine's key was refused, or null.
+   *
+   * Kept here rather than raised as a notice, for the reason `relayError` is:
+   * every one of these refusals is an instruction about the handle box — "that
+   * name is already somebody else's key; choose another" — and an instruction
+   * about a field is only useful beside the field. It was worse than that
+   * before the notice layer was raised above the modal scrim, because the
+   * sentence was painted underneath the dialog and the user saw nothing at all.
+   */
+  membersError: string | null
+  /**
    * Each project's relay, for the ones somebody has looked at. Read beside the
    * roster because the two are the same fact about a team: who is on it, and
    * where they meet.
@@ -145,6 +159,25 @@ type WorkspaceState = {
    * for the same reason: somebody's link moved, or somebody opened a pane.
    */
   watchers: Record<string, PaneWatchers>
+  /**
+   * Where this app's CLI is and what is at the path it would be linked to.
+   *
+   * Probed once at startup beside the agents, and for the same reason: it is
+   * cheap, it decides which buttons are worth offering, and null means "not
+   * asked yet" rather than "nothing there".
+   */
+  cli: CliStatus | null
+  cliPending: boolean
+  /** What the last install did, kept so the panel can say it afterwards. */
+  cliInstall: CliInstall | null
+  /**
+   * Why the last attempt was refused, or null.
+   *
+   * Kept in the dialog rather than raised as a notice, like the relay's: the
+   * refusals here are "there is a file in the way" and "no password was given",
+   * and both belong next to the button that will be pressed again.
+   */
+  cliError: string | null
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
   /** True once the probe has answered, however it answered. Until then an
@@ -211,10 +244,35 @@ type WorkspaceState = {
   /** Opens a pane already running one of the agents found on this machine. */
   startAgent: (command: string) => Promise<void>
 
+  /** Reads where the CLI is and what is at its destination. */
+  loadCli: () => Promise<void>
+  /**
+   * Links the CLI into /usr/local/bin, asking for an administrator password
+   * only if that directory cannot be written without one.
+   */
+  installCli: () => Promise<void>
+  /**
+   * Records that this installation has been asked, so the offer teamree makes
+   * by itself on first run is made once. Both buttons on that card come here:
+   * declining is an answer, and accepting is an answer that also opens the
+   * panel.
+   */
+  dismissCliPrompt: () => Promise<void>
+
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
+  /** Drops the last join refusal, for the keystroke that answers it. */
+  clearMembersError: () => void
   /** Reads where one project's relay is recorded, and what each place said. */
   loadRelay: (projectId: string) => Promise<void>
+  /**
+   * Re-reads whether teamwork is running for one project.
+   *
+   * The setup panel shows the links themselves, so it asks on open rather than
+   * waiting for the next change event: a panel whose last step is "connected"
+   * and whose answer is a minute old is a panel people press Close and reopen.
+   */
+  loadTeamwork: (projectId: string) => Promise<void>
   /**
    * Writes the relay into the repository. Like joining, it writes the file and
    * stops: pushing it is what makes it the team's.
@@ -601,6 +659,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     mergePreviews: {},
     members: {},
     membersPending: false,
+    membersError: null,
     relays: {},
     relayPending: false,
     relayError: null,
@@ -614,6 +673,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     stagedPaths: [],
     committing: false,
     pushing: false,
+    cli: null,
+    cliPending: false,
+    cliInstall: null,
+    cliError: null,
     agents: [],
     agentsProbed: false,
     diff: null,
@@ -648,6 +711,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           .call('agent.list', {})
           .then((agents) => set({ agents, agentsProbed: true }))
           .catch(() => set({ agents: [], agentsProbed: true }))
+        // Asked on the same terms: one cheap read, never fatal, and it decides
+        // whether the sidebar has anything to offer about the CLI at all.
+        void runtimeClient
+          .call('cli.status', {})
+          .then((cli) => set({ cli }))
+          .catch(() => {})
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
         await refresher.flush()
@@ -1007,8 +1076,53 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    async loadCli() {
+      set({ cliPending: true })
+      try {
+        set({ cli: await runtimeClient.call('cli.status', {}) })
+      } catch (error) {
+        failed('Could not work out where the teamree CLI is')(error)
+      } finally {
+        set({ cliPending: false })
+      }
+    },
+
+    async installCli() {
+      set({ cliPending: true, cliError: null })
+      try {
+        const install = await runtimeClient.call('cli.install', {})
+        // The runtime resolved the link before answering, so its status is the
+        // read-back rather than a guess, and there is nothing left to re-read.
+        set({ cliInstall: install, cli: install.status })
+      } catch (error) {
+        set({ cliError: error instanceof Error ? error.message : String(error) })
+        // What is at the destination may be exactly why it was refused, so the
+        // panel is re-read: "there is a file there" has to survive the refusal.
+        await get().loadCli()
+      } finally {
+        set({ cliPending: false })
+      }
+    },
+
+    async dismissCliPrompt() {
+      // Optimistic, because the card must go the instant it is answered: a
+      // question that lingers while a round trip completes is a question the
+      // user answers twice. The runtime's reply replaces the guess.
+      const current = get().cli
+      if (current && current.askedAt === null) set({ cli: { ...current, askedAt: Date.now() } })
+      try {
+        set({ cli: await runtimeClient.call('cli.dismissPrompt', {}) })
+      } catch (error) {
+        // Worth a notice rather than a shrug: an answer that was not written
+        // down is an answer that will be asked for again on the next launch.
+        failed('Could not record that teamree asked about putting its CLI on your PATH')(error)
+      }
+    },
+
     async loadMembers(projectId) {
-      set({ membersPending: true })
+      // A refusal is about one attempt at one project, so re-opening the panel
+      // must not show somebody else's.
+      set({ membersPending: true, membersError: null })
       try {
         const list = await runtimeClient.call('members.list', { projectId })
         set((state) => ({ members: { ...state.members, [projectId]: list } }))
@@ -1033,6 +1147,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    async loadTeamwork(projectId) {
+      try {
+        const status = await runtimeClient.call('teamwork.status', { projectId })
+        set((state) => ({ teamwork: { ...state.teamwork, [status.projectId]: status } }))
+      } catch (error) {
+        failed('Could not read whether teamwork is running here')(error)
+      }
+    },
+
     async setRelay(projectId, url) {
       set({ relayPending: true, relayError: null })
       try {
@@ -1051,7 +1174,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async joinProject(projectId, handle) {
-      set({ membersPending: true })
+      set({ membersPending: true, membersError: null })
       try {
         const list = await runtimeClient.call('members.join', handle ? { projectId, handle } : { projectId })
         set((state) => ({ members: { ...state.members, [projectId]: list } }))
@@ -1060,10 +1183,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // committed and pushed, nobody else can see it.
         if (list.selfFile) notify(`Wrote ${list.selfFile}. Commit and push it to join.`, 'info')
       } catch (error) {
-        failed('Could not add you to this project')(error)
+        // Kept in the panel rather than raised as a notice, exactly as a
+        // refused relay URL is: the runtime's refusals here all end in "choose
+        // another handle", which is an instruction about the box the cursor is
+        // in and belongs under it.
+        set({ membersError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ membersPending: false })
       }
+    },
+
+    clearMembersError() {
+      if (get().membersError !== null) set({ membersError: null })
     },
 
     async pushActiveWorktree() {

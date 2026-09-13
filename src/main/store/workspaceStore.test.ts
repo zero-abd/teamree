@@ -210,4 +210,38 @@ describe('workspace store', () => {
     expect(store.removeProject('p1')).toBe(false)
     expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [], terminals: [] })
   })
+  // A question asked once has to stay asked across a quit, or "ask once" means
+  // "ask once per launch" — which is the thing this exists to avoid.
+  describe('one-time questions', () => {
+    it('has asked nothing on a fresh installation', async () => {
+      const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+      expect(store.askedAt('installCli')).toBeUndefined()
+    })
+
+    it('remembers the answer across a restart', async () => {
+      const path = join(directory, 'workspace.json')
+      const store = await WorkspaceStore.open(path)
+      store.markAsked('installCli', 1700000000000)
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(path)
+      expect(reopened.askedAt('installCli')).toBe(1700000000000)
+    })
+
+    it('keeps the first answer rather than moving the date on every launch', async () => {
+      const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+      store.markAsked('installCli', 1700000000000)
+      store.markAsked('installCli', 1800000000000)
+      expect(store.askedAt('installCli')).toBe(1700000000000)
+    })
+
+    it('survives a file that has never heard of it, and one that has it wrong', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(path, JSON.stringify({ version: 1, projects: [project] }), 'utf8')
+      expect((await WorkspaceStore.open(path)).askedAt('installCli')).toBeUndefined()
+
+      await writeFile(path, JSON.stringify({ version: 1, asked: { installCli: 'yesterday' } }), 'utf8')
+      expect((await WorkspaceStore.open(path)).askedAt('installCli')).toBeUndefined()
+    })
+  })
 })

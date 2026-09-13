@@ -58,7 +58,7 @@ describe('a sender that never completes a frame', () => {
   // member of the roster could send it.
   it('costs about the same for fifty megabytes as for one', () => {
     const chunk = 'x'.repeat(64 * 1024)
-    const time = (megabytes: number): number => {
+    const once = (megabytes: number): number => {
       const decode = createFrameDecoder(1024 * 1024 * 1024)
       const pushes = Math.round((megabytes * 1024 * 1024) / chunk.length)
       const started = performance.now()
@@ -66,13 +66,24 @@ describe('a sender that never completes a frame', () => {
       return performance.now() - started
     }
 
-    const small = time(4)
-    const large = time(32)
+    // The suite runs many files at once, so any single reading includes however
+    // much CPU the scheduler gave someone else. The fastest of several runs is
+    // the one least polluted by that, which is why this takes a minimum rather
+    // than an average: an average moves with the load, a minimum does not.
+    const fastest = (megabytes: number): number => {
+      let best = Number.POSITIVE_INFINITY
+      for (let attempt = 0; attempt < 5; attempt += 1) best = Math.min(best, once(megabytes))
+      return best
+    }
 
-    // Eight times the input for well under eight times the work. Quadratic
-    // would be sixty-four; the bound is loose because a test asserting a
-    // constant factor on shared hardware is a test that fails for the weather.
-    expect(large).toBeLessThan(Math.max(small, 1) * 16)
+    const small = fastest(4)
+    const large = fastest(32)
+
+    // Eight times the input. Linear lands near eight, quadratic near sixty-four,
+    // and the gap between those is wide enough that a loose bound still tells
+    // the two apart. Comparing two measurements taken the same way keeps this a
+    // ratio rather than a wall-clock budget that a slow machine would fail.
+    expect(large / Math.max(small, 0.05)).toBeLessThan(24)
   })
 
   it('gives up rather than buffering without end', () => {

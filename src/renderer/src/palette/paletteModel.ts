@@ -15,6 +15,7 @@ export type PaletteAction =
   | 'toggle-sidebar'
   | 'open-dashboard'
   | 'add-project'
+  | 'install-cli'
 
 export type PaletteItem =
   /** Jump to a worktree. */
@@ -78,7 +79,12 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
     keywords: 'agents dashboard overview attention waiting failed working everywhere'
   },
   { id: 'toggle-sidebar', label: 'Toggle sidebar', keywords: 'hide show projects' },
-  { id: 'add-project', label: 'Add project', keywords: 'repository repo folder clone' }
+  { id: 'add-project', label: 'Add project', keywords: 'repository repo folder clone' },
+  {
+    id: 'install-cli',
+    label: 'Put teamree on my PATH',
+    keywords: 'cli command line terminal install link symlink usr local bin path agent'
+  }
 ]
 
 /**

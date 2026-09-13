@@ -83,6 +83,9 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
       case 'add-project':
         store.openDialog({ kind: 'add-project' })
         break
+      case 'install-cli':
+        store.openDialog({ kind: 'install-cli' })
+        break
     }
   }
 

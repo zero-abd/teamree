@@ -5,6 +5,7 @@ import { parseArgs, type FlagSpec, type ParsedArgs } from './argv.js'
 import { GLOBAL_FLAGS, type CommandSpec } from './command-spec.js'
 import { UsageError } from './exit.js'
 import { agentCommands } from './commands/agent.js'
+import { cliCommands } from './commands/cli.js'
 import { projectCommands } from './commands/project.js'
 import { statusCommands } from './commands/status.js'
 import { terminalCommands } from './commands/terminal.js'
@@ -15,7 +16,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   ...projectCommands,
   ...worktreeCommands,
   ...terminalCommands,
-  ...agentCommands
+  ...agentCommands,
+  ...cliCommands
 ]
 
 /** Top-level nouns that group subcommands, in declaration order. */

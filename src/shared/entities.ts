@@ -546,6 +546,17 @@ export type TeamworkStatus = {
   /** Why teamwork is not running here, or null when it is. */
   disabledReason: string | null
   /**
+   * Whether this checkout has an `origin` teamree can match against a
+   * teammate's, and why not when it has not.
+   *
+   * Reported beside `disabledReason` rather than folded into it because the two
+   * answer different questions. `disabledReason` names the first thing to fix,
+   * and for a project with neither a relay nor an origin that is the relay — so
+   * a setup flow reading only that would offer a relay field for a checkout
+   * where no relay can ever help, and never say why.
+   */
+  origin: { ok: true } | { ok: false; reason: string }
+  /**
    * Whether this machine's own key is on the roster this checkout holds.
    *
    * False is the one cause of silence that is entirely this end's: every link
@@ -731,4 +742,93 @@ export type TeammatePresence = {
   /** Every teammate on this project's roster, those never heard from included. */
   teammates: TeammateStanding[]
   readAt: number
+}
+
+/**
+ * What is sitting at the path the CLI would be linked to.
+ *
+ * `elsewhere` is the one worth keeping apart from the rest. A link that already
+ * exists and leads to a *different* teamree — an older copy still in
+ * ~/Downloads, a second build — is the failure nobody diagnoses on their own:
+ * the command is on PATH, it runs, and it drives an app that is not this one.
+ */
+export type CliLinkState =
+  /** A symlink that lands on this app's own CLI. There is nothing to do. */
+  | 'linked'
+  /** A symlink that lands somewhere else. `resolved` says where. */
+  | 'elsewhere'
+  /** A regular file. Somebody's binary, and teamree will not delete it. */
+  | 'file'
+  /** A directory, which is stranger still and equally not ours to remove. */
+  | 'directory'
+  | 'absent'
+
+/**
+ * How the destination directory reaches a shell's PATH.
+ *
+ * Two sources because an app opened from Finder inherits none of a shell's
+ * environment, so this process's own PATH is evidence of one thing only — that
+ * the directory is on it. `login` is `/etc/paths`, which `path_helper` puts on
+ * every login shell's PATH, and is what makes "/usr/local/bin is on your PATH"
+ * a true statement about the terminal the user will actually type in.
+ */
+export type CliPathSource = 'environment' | 'login'
+
+/** Where the CLI is, what is at its destination, and what linking will cost. */
+export type CliStatus = {
+  /**
+   * Whether this app can do the linking itself. macOS only: everything below is
+   * still answered elsewhere, so the window can say what to type instead of
+   * offering a button that cannot work.
+   */
+  installable: boolean
+  platform: NodeJS.Platform
+  /** The CLI inside this app, or null when this build has none to link. */
+  source: string | null
+  /**
+   * Whether that CLI is the one inside a packaged app rather than one found in
+   * a source checkout.
+   *
+   * The difference matters to exactly one caller: the offer made unprompted on
+   * first run. A checkout's CLI is a fine thing to link by hand and a bad thing
+   * to be asked about on every `npm run dev`, and a link into a checkout breaks
+   * the moment that checkout moves.
+   */
+  packaged: boolean
+  /** The link itself. */
+  destination: string
+  /** The directory holding it — the thing that has to be writable. */
+  directory: string
+  state: CliLinkState
+  /** Where what is at the destination actually lands. Null when nothing is there. */
+  resolved: string | null
+  /** Whether writing the link will ask for an administrator password. */
+  needsAdministrator: boolean
+  /** Null when nothing this app can read says the directory is on PATH. */
+  onPath: CliPathSource | null
+  /**
+   * When this installation was asked whether to do this, or null if it never
+   * has been.
+   *
+   * The record of a question, not of an outcome: declining is an answer and it
+   * has to stick, or "asked once" becomes "asked once a launch" — which is how
+   * a prompt teaches people to dismiss it unread.
+   */
+  askedAt: number | null
+  readAt: number
+}
+
+/** What `cli.install` did, told precisely enough to be repeated back. */
+export type CliInstall = {
+  outcome: /** The link was already right. Pressing the button twice is not an error. */
+    | 'already-linked'
+    | 'linked'
+    /** A symlink to something else was replaced; `replaced` says what it was. */
+    | 'replaced'
+  /** Where the link used to lead, when it led anywhere. */
+  replaced: string | null
+  /** Whether a password was asked for. */
+  administrator: boolean
+  /** Read back after the link was made, by resolving it. */
+  status: CliStatus
 }

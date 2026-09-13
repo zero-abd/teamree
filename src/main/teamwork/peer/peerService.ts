@@ -126,6 +126,12 @@ type ProjectFacts = {
   enrolled: boolean
   /** Why teamwork is not running for this project, or null when it is. */
   disabledReason: string | null
+  /**
+   * Whether `origin` gave a key, kept apart from `disabledReason` because a
+   * project can be missing both a relay and an origin and only one of those
+   * gets named as the first thing to fix.
+   */
+  origin: { ok: true } | { ok: false; reason: string }
 }
 
 type LinkRecord = {
@@ -377,6 +383,7 @@ export class PeerService {
       projectId: facts.projectId,
       relay: facts.relay,
       disabledReason: facts.disabledReason,
+      origin: facts.origin,
       enrolled: facts.enrolled,
       links,
       readAt: this.#scheduler.now()
@@ -437,7 +444,10 @@ export class PeerService {
             // Namespaced, because a teammate's worktree id is theirs and two
             // installations can and do generate the same one.
             id: `peer:${publicKey.slice(0, 12)}:${worktree.id}`,
-            panes: worktree.panes.map((pane) => ({ ...pane, id: `peer:${publicKey.slice(0, 12)}:${pane.id}` })),
+            panes: worktree.panes.map((pane) => ({
+              ...pane,
+              id: `peer:${publicKey.slice(0, 12)}:${pane.id}`
+            })),
             handle,
             publicKey,
             heardAt: entry.heardAt,
@@ -644,10 +654,18 @@ export class PeerService {
     }
     const project = this.#projectForPeer(peer)
     if (!project) {
-      return { ok: false, code: ErrorCode.NotFound, message: 'you are not on this project’s roster' }
+      return {
+        ok: false,
+        code: ErrorCode.NotFound,
+        message: 'you are not on this project’s roster'
+      }
     }
     if (!this.#paneOf(project.projectId, terminalId)) {
-      return { ok: false, code: ErrorCode.NotFound, message: `there is no pane ${terminalId} in this project` }
+      return {
+        ok: false,
+        code: ErrorCode.NotFound,
+        message: `there is no pane ${terminalId} in this project`
+      }
     }
     return { ok: true }
   }
@@ -667,7 +685,13 @@ export class PeerService {
     }
 
     const handle = this.#handleFor(peer.publicKey) ?? peer.publicKey.slice(0, 8)
-    const stamp = { at, handle, publicKey: peer.publicKey, projectId: '', terminalId: write.terminalId }
+    const stamp = {
+      at,
+      handle,
+      publicKey: peer.publicKey,
+      projectId: '',
+      terminalId: write.terminalId
+    }
 
     const project = this.#projectForPeer(peer)
     if (!project) {
@@ -850,7 +874,13 @@ export class PeerService {
     this.#heard.set(linkId, { publicKey, presence, heardAt, live: true })
     const [project] = presence.projects
     if (projectKey !== undefined && project) {
-      this.#cache?.put({ publicKey, projectKey, handle: presence.handle, heardAt, worktrees: project.worktrees })
+      this.#cache?.put({
+        publicKey,
+        projectKey,
+        handle: presence.handle,
+        heardAt,
+        worktrees: project.worktrees
+      })
     }
     this.#options.onChange()
   }
@@ -1079,6 +1109,7 @@ export class PeerService {
       relay: relay.configured ? relay.location : null,
       enrolled: roster.entries.some((entry) => entry.publicKey === identityKey),
       disabledReason: null,
+      origin: key.ok ? { ok: true } : { ok: false, reason: key.reason },
       handles
     }
 
