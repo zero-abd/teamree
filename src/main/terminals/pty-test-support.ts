@@ -31,7 +31,9 @@ export function canSpawnPty(): boolean {
       env: { ...process.env } as Record<string, string>
     })
     try {
-      probe.kill()
+      // The probe command exits itself. On Windows, killing it races ConPTY's
+      // startup and tries to attach a helper to an already closed console.
+      if (process.platform !== 'win32') probe.kill()
     } catch {
       // Already exited; the fork itself is what was being proved.
     }

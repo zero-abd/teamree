@@ -148,8 +148,10 @@ child.on('exit', (code, signal) => (exited = { code, signal }))
 // Worktree checkouts are created under the user's home, not under the scratch
 // directory, so they have to be handed back before the app goes away.
 let createdWorktree = null
+let createdTerminal = null
 
 function cleanup() {
+  if (createdTerminal && !exited) cliQuiet('terminal', 'close', createdTerminal.id)
   if (createdWorktree && !exited) {
     try {
       cliQuiet('worktree', 'remove', createdWorktree.id, '--force', '--delete-branch')
@@ -261,6 +263,7 @@ ok(`worktree ${worktree.id} (${worktree.branch}) at ${worktree.path}`)
 // ------------------------------------------------------------ the real PTY --
 
 const terminal = cliJson('terminal', 'create', '--worktree', worktree.id).data
+createdTerminal = terminal
 ok(`PTY spawned inside the packaged app: ${terminal.id}, shell ${terminal.shell}, cwd ${terminal.cwd}`)
 
 cli('terminal', 'send', terminal.id, '--text', `echo ${MARKER}`, '--enter')

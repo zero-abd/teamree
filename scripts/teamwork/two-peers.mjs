@@ -109,19 +109,14 @@ async function startPeer({ root, origin, handle, log }) {
 
   const identity = generateIdentity(handle)
 
-  // The host is a `.mjs` that imports TypeScript, so it needs a loader; tsx is
-  // what the acceptance suite already uses for exactly this. Reached through npx
-  // for the same reason it is there: so a clean checkout needs no extra step.
-  //
-  // `detached` is not optional here. npx puts two wrapper processes between us
-  // and the runtime, and a signal sent to the wrapper is not passed down — the
-  // runtime survives, holding its socket, and the next run inherits a stale
-  // endpoint whose owner is still alive. Detaching makes the child a process
-  // group leader so the whole tree can be signalled at once.
-  const child = spawn('npx', ['tsx', RUNTIME_HOST], {
+  // Use the installed TypeScript loader directly, including on Windows where
+  // npx is a batch file. IPC permits graceful shutdown on both platforms;
+  // a POSIX process group remains available for forced cleanup.
+  const child = spawn(process.execPath, ['--import', 'tsx', RUNTIME_HOST], {
     env: { ...process.env, TEAMREE_USER_DATA_DIR: userDataDir, TEAMREE_TEST_VERSION: `0.0.0-${handle}` },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: process.platform !== 'win32'
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    detached: process.platform !== 'win32',
+    windowsHide: true
   })
 
   const output = []
@@ -213,11 +208,11 @@ class Peer {
     if (this.child.exitCode !== null || this.child.signalCode !== null) return
 
     const ended = new Promise((resolve) => this.child.once('exit', resolve))
-    // SIGTERM asks the runtime to shut its PTYs down in order and to take its
-    // discovery file and socket with it, which is the path worth exercising.
-    // SIGKILL is the backstop, not the plan: a harness that always killed would
-    // never notice the day clean shutdown started hanging.
-    killTree(this.child, 'SIGTERM')
+    // Ask the runtime to release its PTYs, discovery file and endpoint through
+    // IPC. Windows cannot deliver a catchable SIGTERM. Forced tree termination
+    // remains the backstop if graceful shutdown stops responding.
+    if (this.child.connected) this.child.send('stop')
+    else killTree(this.child, 'SIGTERM')
     const ordered = await Promise.race([ended.then(() => true), sleep(5000).then(() => false)])
     if (!ordered) {
       killTree(this.child, 'SIGKILL')
@@ -312,7 +307,7 @@ function killTree(child, signal) {
   if (child.pid === undefined) return
   try {
     if (process.platform === 'win32') {
-      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
       return
     }
     process.kill(-child.pid, signal)

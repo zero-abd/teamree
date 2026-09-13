@@ -63,14 +63,22 @@ async function fakeAgent(): Promise<{ checkout: string; binary: string; stopFile
   await mkdir(checkout, { recursive: true })
   await mkdir(bin, { recursive: true })
   const stopFile = join(base, 'stop')
-  const binary = join(bin, 'claude')
+  const binary = join(bin, process.platform === 'win32' ? 'claude.cmd' : 'claude')
+  const script = join(bin, 'agent.cjs')
+  await writeFile(
+    script,
+    `const { existsSync } = require('node:fs')\nconsole.log('READY')\n` +
+      `setInterval(() => { if (existsSync(${JSON.stringify(stopFile)})) process.exit(${EXIT_CODE}) }, 50)\n`
+  )
   await writeFile(
     binary,
-    `#!/bin/sh\necho READY\nwhile [ ! -f ${stopFile} ]; do sleep 0.05; done\nexit ${EXIT_CODE}\n`,
+    process.platform === 'win32'
+      ? `@echo off\r\n"${process.execPath}" "${script}"\r\nexit /b %ERRORLEVEL%\r\n`
+      : `#!/bin/sh\nexec "${process.execPath}" "${script}"\n`,
     'utf8'
   )
   await chmod(binary, 0o755)
-  return { checkout, binary, stopFile }
+  return { checkout, binary: `"${binary}"`, stopFile }
 }
 
 /** The runtime as registerHandlers builds it, with one pane already recorded. */

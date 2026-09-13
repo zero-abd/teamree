@@ -53,7 +53,7 @@ export type RegisteredAreas = {
   peers: PeerService
 }
 
-export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
+export function registerHandlers(registry: MethodRegistry, options: { worktreesRoot?: string } = {}): RegisteredAreas {
   registerPlaceholderHandlers(registry)
   registerStatusHandler(registry)
   registerUnsubscribeHandler(registry)
@@ -84,7 +84,7 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   // reaches the workspace stream whichever transport asked for it.
   publishTerminalEvents(registry, terminals, workspaceEvents)
 
-  const git = new GitService({ store: registry.context.store })
+  const git = new GitService({ store: registry.context.store, worktreesRoot: options.worktreesRoot })
   // A create interrupted by a quit can never resume, so it is marked failed and
   // offered as a retry rather than left stuck in `creating`.
   git.reviveRestoredRecords()

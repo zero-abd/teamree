@@ -7,11 +7,10 @@ git worktree, and keep track of all of them in one window.
 
 ## Status
 
-Single-user and working. Runs from source with `npm run dev`, and packages for
-macOS, Windows and Linux — though only macOS and Linux have actually been built
-and launched; the Windows installer has never been made. See the known gaps in
-`ROADMAP.md`, which are recorded rather than discovered. Team features come
-after this works.
+Runs from source with `npm run dev`, and packages for macOS, Windows and Linux.
+Windows x64 is built and tested, including the packaged app's CLI and real
+terminal. CI builds installers on macOS and Windows. See `ROADMAP.md` for
+remaining feature gaps.
 
 ## Installing a build
 
@@ -86,9 +85,14 @@ npm install
 npm run dev
 ```
 
+On Windows, install Node.js 22 and Git for Windows with `git` available on PATH,
+then run these commands in PowerShell or Command Prompt. Panes use `ComSpec`
+(normally Command Prompt) by default. Install any agent CLIs you want to use
+and make them available on PATH before starting the app.
+
 `npm test` runs the suite, including an acceptance pass that drives a real
 runtime over the real socket. `npm run typecheck`, `npm run lint` and
-`npm run format:check` are what CI checks, on all three platforms, alongside the
+`npm run format:check` are what CI checks, on macOS and Windows, alongside the
 build, the smoke test and the packaged artifact.
 
 ## Trying teamwork

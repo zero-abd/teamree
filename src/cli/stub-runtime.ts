@@ -40,6 +40,7 @@ let counter = 0
 
 export function stubEndpointPath(): string {
   counter += 1
+  if (process.platform === 'win32') return `\\\\.\\pipe\\tmr-stub-${process.pid}-${counter}`
   return join(tmpdir(), `tmr-stub-${process.pid}-${counter}.sock`)
 }
 

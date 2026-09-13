@@ -248,7 +248,9 @@ export class PtySession {
     }
 
     try {
-      this.pty.kill()
+      // ConPTY already releases its handles on exit. Killing it again starts
+      // node-pty's console enumeration helper against a process that is gone.
+      if (this.platform !== 'win32' || this.running) this.pty.kill()
     } catch {
       // Already reaped; the handle has nothing left to signal.
     }

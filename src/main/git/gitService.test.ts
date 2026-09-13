@@ -137,7 +137,7 @@ describe('worktree.create', () => {
     // git prints forward slashes on every platform, and a worktree's recorded
     // path is joined the host's way — so on Windows these are the same place
     // spelled two ways, and only the canonical form compares.
-    expect(listed).toContain(canonicalPath(ready.path))
+    expect(listed).toContain(canonicalPath(ready.path).split(path.sep).join('/'))
 
     expect(seen.map((event) => event.type)).toEqual(['worktree.created', 'worktree.updated'])
     const last = seen.at(-1)

@@ -42,16 +42,7 @@ jobs:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    # macOS only, deliberately, and the matrix is kept so adding a platform back
-    # is one block rather than a rewrite.
-    #
-    # Windows and Linux both ran here and both were worth running: between them
-    # they found a missing build step, an absent git identity, CRLF checkouts, an
-    # unsigned sandbox helper, a dozen tests that had only ever run on Linux, and
-    # one real defect where agent discovery followed the host instead of the
-    # platform it was told about. Linux reached green. Windows was still turning
-    # up a new POSIX assumption every run, and the cost of chasing them stopped
-    # being worth it against shipping the one platform this is going to.
+    # Native runners exercise each platform's shells, IPC and packaged PTY.
     strategy:
       fail-fast: false
       matrix:
@@ -62,6 +53,11 @@ jobs:
             artifacts: |
               dist/*.dmg
               dist/*.zip
+          - label: Windows (x64)
+            os: windows-latest
+            package: package:win
+            artifacts: |
+              dist/*-setup-x64.exe
 
     steps:
       - uses: actions/checkout@v5

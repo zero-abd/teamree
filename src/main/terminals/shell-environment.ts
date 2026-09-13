@@ -8,7 +8,7 @@
 // deliberately rather than passed through.
 
 import { accessSync, constants, statSync } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { posix, resolve } from 'node:path'
 
 /** Advertised terminal type. xterm.js implements this set. */
 export const TERMINAL_TYPE = 'xterm-256color'
@@ -255,11 +255,13 @@ export function buildTerminalEnv(
 /** Lowercase shell name without directory or .exe, e.g. "zsh", "cmd", "pwsh". */
 export function shellName(shell: string, platform: NodeJS.Platform = process.platform): string {
   if (platform !== 'win32')
-    return basename(shell)
+    return posix
+      .basename(shell)
       .replace(/\.exe$/i, '')
       .toLowerCase()
   // Windows accepts either separator, and the extension is never part of the name.
-  return basename(shell.replace(/\\/g, '/'))
+  return posix
+    .basename(shell.replace(/\\/g, '/'))
     .replace(/\.(exe|cmd|bat|com)$/i, '')
     .toLowerCase()
 }

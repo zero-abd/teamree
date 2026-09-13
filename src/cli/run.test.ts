@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ExitCode } from './exit.js'
 import type { Streams } from './output.js'
@@ -341,7 +341,7 @@ describe('selectors and flags reach the runtime', () => {
   it('resolves project add paths against the cwd', async () => {
     const cli = await harness()
     await cli.run(['project', 'add', './sub'])
-    expect(cli.stub.received.at(-1)).toMatchObject({ method: 'project.add', params: { path: '/work/sub' } })
+    expect(cli.stub.received.at(-1)).toMatchObject({ method: 'project.add', params: { path: resolve('/work', 'sub') } })
   })
 
   it('appends a carriage return only with --enter', async () => {

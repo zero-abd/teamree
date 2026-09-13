@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Project, Terminal, Worktree, WorktreeChanges, WorktreeDiff, WorktreeStatus } from '../src/shared/entities'
+import { killProcessTree } from '../src/main/terminals/process-tree'
 
 const CLI = join(process.cwd(), 'out/cli/index.js')
 const HOST = join(process.cwd(), 'scripts/acceptance-host.mjs')
@@ -52,14 +53,14 @@ beforeAll(async () => {
   git(['add', '.'], repoPath)
   git(['commit', '-m', 'initial'], repoPath)
 
-  // Its own process group, because `npx` puts two wrapper processes between us
-  // and the runtime and does not pass a signal down to it. Killing the wrapper
-  // left the runtime alive holding its socket, its discovery file and an inotify
-  // instance — two orphans per run, and this suite runs often. They accumulated
-  // until the per-user inotify limit was exhausted and every filesystem-watch
-  // test on the machine began failing for reasons that had nothing to do with
-  // the watcher.
-  host = spawn('npx', ['tsx', HOST], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+  // Run the installed loader directly. POSIX gets a process group for teardown;
+  // Windows uses taskkill to reach the runtime and its terminal children.
+  host = spawn(process.execPath, ['--import', 'tsx', HOST], {
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+    windowsHide: true
+  })
 
   const discovery = join(userDataDir, 'runtime.json')
   for (let attempt = 0; attempt < 160 && !existsSync(discovery); attempt += 1) await sleep(250)
@@ -67,13 +68,9 @@ beforeAll(async () => {
 }, 90_000)
 
 afterAll(async () => {
-  // Negative pid: signal the whole group, so the runtime goes with the wrapper.
+  // Release the entire process tree before deleting its temporary checkouts.
   if (host?.pid !== undefined) {
-    try {
-      process.kill(-host.pid, 'SIGTERM')
-    } catch {
-      // Already gone, which is the outcome this wanted anyway.
-    }
+    await killProcessTree(host.pid)
   }
   await sleep(500)
   rmSync(root, { recursive: true, force: true })
@@ -182,7 +179,7 @@ describe('milestone 1 acceptance', () => {
       'send',
       terminal.id,
       '--text',
-      'echo TEAMREE_MARKER_OK; git rev-parse --abbrev-ref HEAD',
+      'echo TEAMREE_MARKER_OK && git rev-parse --abbrev-ref HEAD',
       '--enter'
     ])
     await sleep(3000)
@@ -214,7 +211,7 @@ describe('milestone 1 acceptance', () => {
       '--worktree',
       worktree.id,
       '--command',
-      'sh -c "sleep 1; echo BUILD_DONE; exit 3"'
+      process.platform === 'win32' ? 'echo BUILD_DONE& exit 3' : 'echo BUILD_DONE; exit 3'
     ])
     expect(result.exitCode).toBe(3)
     expect(result.output).toContain('BUILD_DONE')
@@ -229,6 +226,11 @@ describe('milestone 1 acceptance', () => {
   }, 60_000)
 
   it('removes a worktree and its branch', () => {
+    // Windows holds a shell's working directory open. Match the UI flow by
+    // closing the worktree's panes before removing its checkout.
+    for (const pane of cli<Terminal[]>(['terminal', 'list'])) {
+      if (pane.worktreeId === worktree.id) cli(['terminal', 'close', pane.id])
+    }
     cli(['worktree', 'remove', worktree.id, '--force', '--delete-branch'])
     const remaining = cli<Worktree[]>(['worktree', 'list'])
     expect(remaining.find((row) => row.id === worktree.id)).toBeUndefined()

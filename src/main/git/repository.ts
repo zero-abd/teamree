@@ -6,6 +6,7 @@ import path from 'node:path'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
+import { canonicalPath } from './pathIdentity'
 
 export type RepositoryInfo = {
   /** Work-tree root, or the git dir for a bare repo. */
@@ -47,7 +48,7 @@ export async function inspectRepository(runner: GitRunner, directory: string): P
     throw new GitServiceError(ErrorCode.InvalidParams, `could not locate the repository root for "${directory}"`)
   }
 
-  return { root, bare, defaultName: repositoryName(root) }
+  return { root: canonicalPath(root), bare, defaultName: repositoryName(root) }
 }
 
 function repositoryName(root: string): string {

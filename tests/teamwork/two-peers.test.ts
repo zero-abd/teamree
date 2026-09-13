@@ -110,7 +110,10 @@ describe('two peers on one machine', () => {
 
     // The example earns its place here: an agent started in a worktree of it has
     // something to run that says something. An empty fixture proves nothing.
-    const suite = execFileSync('npm', ['test'], { cwd: worktree.path, encoding: 'utf8' })
+    const suite = execFileSync(process.execPath, ['--test', '--test-reporter=tap'], {
+      cwd: worktree.path,
+      encoding: 'utf8'
+    })
     expect(suite).toMatch(/# fail 0/)
   }, 90_000)
 

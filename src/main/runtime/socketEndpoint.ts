@@ -3,7 +3,7 @@
 
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { posix } from 'node:path'
 
 /**
  * sockaddr_un.sun_path holds 104 bytes on macOS and 108 on Linux, and the kernel
@@ -38,7 +38,11 @@ export function resolveEndpoint(
   const fileName = `teamree-${key}.sock`
   // TMPDIR itself can be long (macOS puts it under /var/folders/...), so the
   // last resort is the one directory POSIX guarantees is short.
-  const candidates = [join(userDataDir, 'runtime.sock'), join(options.tmpDir ?? tmpdir(), fileName), `/tmp/${fileName}`]
+  const candidates = [
+    posix.join(userDataDir, 'runtime.sock'),
+    posix.join(options.tmpDir ?? tmpdir(), fileName),
+    `/tmp/${fileName}`
+  ]
   return candidates.find(fitsUnixSocketPath) ?? (candidates[candidates.length - 1] as string)
 }
 

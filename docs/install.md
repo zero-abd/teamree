@@ -122,10 +122,10 @@ an unsigned one never accumulates any, because there is no stable identity to
 accumulate it against. So this panel will appear for every release, for
 everyone, indefinitely. It is not a sign that something has changed.
 
-Being straight about the state of this platform: teamree's Windows packaging is
-configured and has never been built or launched by anybody. The installer above
-describes what the configuration produces, not something that has been seen to
-work. `ROADMAP.md` keeps the honest account of what has and has not been run.
+The Windows x64 installer is built in CI. The packaged-app check launches the
+app, connects its bundled CLI over a named pipe, creates a worktree and runs a
+command in a real terminal. Git for Windows must be installed and available on
+PATH; installed builds do not require a separate Node.js runtime.
 
 ## Linux
 
@@ -202,6 +202,8 @@ $cli = "$env:LOCALAPPDATA\Programs\teamree\resources\cli"
 
 Open a new terminal afterwards. `teamree.cmd` is what `cmd.exe` resolves and
 `teamree.ps1` is what PowerShell resolves; both are in that directory.
+If PowerShell's execution policy blocks the script, use `teamree.cmd status`
+explicitly; no execution-policy change is needed.
 
 Then, with the app running:
 

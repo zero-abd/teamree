@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { posix, win32 } from 'node:path'
 import { z } from 'zod'
 import { PROTOCOL_VERSION } from '../shared/protocol.js'
 import { CliError, ExitCode, NoRuntimeError } from './exit.js'
@@ -87,6 +87,7 @@ export function isProcessAlive(pid: number): boolean {
 
 /** The per-OS directory Electron hands the app for its own state. */
 export function userDataDir(host: Pick<DiscoveryHost, 'platform' | 'env' | 'home'>): string {
+  const { join } = host.platform === 'win32' ? win32 : posix
   const override = host.env['TEAMREE_USER_DATA_DIR']
   if (override) return override
   if (host.platform === 'darwin') return join(host.home, 'Library', 'Application Support', APP_DIR_NAME)
@@ -98,6 +99,7 @@ export function userDataDir(host: Pick<DiscoveryHost, 'platform' | 'env' | 'home
 }
 
 export function discoveryPath(host: Pick<DiscoveryHost, 'platform' | 'env' | 'home'>): string {
+  const { join } = host.platform === 'win32' ? win32 : posix
   return host.env['TEAMREE_RUNTIME_FILE'] ?? join(userDataDir(host), DISCOVERY_FILE_NAME)
 }
 

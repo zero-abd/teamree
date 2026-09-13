@@ -17,6 +17,8 @@ export const WORKSPACE_FILE_NAME = 'workspace.json'
 
 export type RuntimeOptions = {
   userDataDir: string
+  /** Optional checkout root, useful for isolated runtime hosts. */
+  worktreesRoot?: string
   version: string
   /** Off for harnesses that only need the dispatcher. */
   serveCli?: boolean
@@ -46,7 +48,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const subscriptions = new SubscriptionHub()
   const context = createRuntimeContext({ version, store, subscriptions })
   const registry = new MethodRegistry(context)
-  const areas = registerHandlers(registry)
+  const areas = registerHandlers(registry, { worktreesRoot: options.worktreesRoot })
   const dispatch = createDispatcher(registry)
 
   // After the dispatcher, and deliberately: a teammate reaching a registry that

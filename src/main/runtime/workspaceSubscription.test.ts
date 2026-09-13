@@ -430,8 +430,7 @@ describePty('workspace stream terminal producers', () => {
 
       const terminal = await app.call<{ id: string }>('c1', 'terminal.create', {
         worktreeId: WORKTREE,
-        shell: testShell(),
-        command: 'cat'
+        shell: testShell()
       })
       await watcher.waitFor(has('terminals'), 'the terminal invalidation')
       expect(watcher.events).toContainEqual({ type: 'layout', worktreeId: WORKTREE })
@@ -439,8 +438,7 @@ describePty('workspace stream terminal producers', () => {
       watcher.clear()
       const split = await app.call<{ terminal: { id: string } }>('c1', 'terminal.split', {
         terminalId: terminal.id,
-        direction: 'row',
-        command: 'cat'
+        direction: 'row'
       })
       await watcher.waitFor(has('terminals'), 'the invalidation for the split pane')
       expect(watcher.events).toContainEqual({ type: 'layout', worktreeId: WORKTREE })

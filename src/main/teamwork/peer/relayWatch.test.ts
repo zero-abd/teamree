@@ -25,6 +25,12 @@ import { MethodRegistry } from '../../runtime/methodRegistry'
 import { createRuntimeContext } from '../../runtime/runtimeContext'
 import { SubscriptionHub } from '../../runtime/subscriptionHub'
 import { canSpawnPty } from '../../terminals/pty-test-support'
+
+// Raw input disables the terminal's own echo on both ConPTY and Unix PTYs.
+// Ctrl-D ends the process explicitly so Windows does not need Unix EOF rules.
+function echoCommand(exitCode = 0): string {
+  return `"${process.execPath}" -e "process.stdin.setRawMode(true); process.stdin.on('data', data => { if (data.includes(4)) process.exit(${exitCode}); process.stdout.write(data) })"`
+}
 import { loadIdentity, loadStaticPrivateKey } from '../identity'
 import { createPeerLink, type LinkScheduler, type PeerLink } from './peerLink'
 import {
@@ -244,7 +250,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     // turned off so what arrives is exactly what the test asked for.
     const created = await bob.terminals?.handlers['terminal.create']({
       worktreeId: 'wt_b1',
-      command: 'stty -echo 2>/dev/null; cat'
+      command: echoCommand()
     })
     terminalId = created?.id ?? ''
     // The namespace `teamwork.presence` puts on a teammate's ids, rebuilt here
@@ -452,7 +458,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
   it('tells a watcher the pane exited rather than leaving them on a window that stopped', async () => {
     // It ends when its input does, so the exit happens while somebody is
     // already reading rather than before they arrive.
-    const mortal = await openPane('stty -echo 2>/dev/null; cat; exit 7')
+    const mortal = await openPane(echoCommand(7))
 
     const window = openWindow(alice, 'window_exit')
     const opened = await aliceWatch(mortal.paneId, 'window_exit')
@@ -470,7 +476,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
   })
 
   it('tells a watcher when the owner closes the pane out from under them', async () => {
-    const doomed = await openPane('stty -echo 2>/dev/null; cat')
+    const doomed = await openPane(echoCommand())
 
     const window = openWindow(alice, 'window_closed')
     const opened = await aliceWatch(doomed.paneId, 'window_closed')

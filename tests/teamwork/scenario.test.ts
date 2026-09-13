@@ -29,7 +29,7 @@ import { startTwoPeers } from '../../scripts/teamwork/two-peers.mjs'
  * `docs/teamwork.md` describes a teammate rescuing — "a teammate who can see
  * your agent stuck on a question can answer it".
  */
-const STUCK_AGENT = 'printf "Which task should I take? "; read answer; printf "\\ntaking task %s\\n" "$answer"'
+const STUCK_AGENT = `"${process.execPath}" -e "require('node:readline').createInterface({input:process.stdin,output:process.stdout}).question('Which task should I take? ', answer => { console.log('taking task ' + answer); process.exit(0) })"`
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -125,7 +125,7 @@ describe('act I — on the leader’s machine, today', () => {
       seen.push(event.type)
     })
     try {
-      await peers.leader.call('terminal.create', { worktreeId: worktree.id, command: 'true' })
+      await peers.leader.call('terminal.create', { worktreeId: worktree.id, command: 'exit 0' })
       for (let attempt = 0; attempt < 50 && !seen.includes('terminals'); attempt += 1) await sleep(100)
       expect(seen).toContain('terminals')
     } finally {

@@ -312,18 +312,10 @@ recorded so none of them is discovered by surprise later.
   command is never re-issued unless it resumes something, so a pane left on a deploy
   or a migration comes back as a shell rather than running it twice. Keeping the
   process itself alive would mean moving PTYs into a daemon that outlives the app.
-- **macOS is the supported platform. Windows and Linux are not, for now.** That is a
-  decision rather than a gap waiting to close: CI builds macOS only, and nobody should
-  pick this up expecting to finish it. What was learned before narrowing is kept
-  because it is true. Linux was packaged and launched for real — `npm ci` compiles
-  node-pty, both the AppImage and the `.deb` are produced, and the packaged app was
-  launched headless, driven through the CLI it ships, and made to spawn a real PTY,
-  three times over: as the unpacked tree, as the AppImage's payload, and as a `.deb`
-  installed with `dpkg`. It reached green in CI. Windows never did — it was still
-  turning up a fresh POSIX assumption on every run — and the Windows installer has
-  never been built nor the app started there. The platform-specific code and the
-  Windows-conditional workflow steps are all still present, so putting a platform back
-  is adding a block to the matrix rather than a rewrite.
+- **macOS and Windows x64 are supported.** Windows is back in the CI matrix.
+  Its installer has been built locally, and the packaged app has been launched,
+  driven through its bundled CLI over a named pipe, and made to spawn a real PTY.
+  Linux packaging remains configured but is not currently in the CI matrix.
 - **CI runs, and macOS is green.** It runs typecheck, lint, format, the relay's own
   suite, the full suite, the build, the headless smoke test, the package and the
   packaged-app check — the one that launches the artifact and drives it — and macOS
@@ -411,27 +403,13 @@ recorded so none of them is discovered by surprise later.
   nobody arriving, forever, with nothing anywhere saying why. The relay cannot help —
   it sees opaque tokens by design — but a client that has been waiting across two
   epoch rollovers knows enough to say which two things to check.
-- **A path is stored two ways.** A project's path is canonical — resolved, with its
-  separators normalised — and a worktree's is joined the host's way, so on Windows the
-  same location is spelled `C:/x/y` in one record and `C:\x\y` in another. Nothing is
-  known to break: every comparison goes through `pathKey`/`samePath`, which normalises
-  first, and git prints forward slashes on every platform regardless. It is recorded
-  because two spellings of one thing in one data model is how a later comparison gets
-  written without them, and because it was found by a test asserting equality rather
-  than by anything going wrong.
-- **Windows behaviour is reasoned, not observed.** Narrower than it was, and not
-  closed. Command-line encoding is now checked exhaustively rather than by example:
-  every argument up to four characters over the alphabet that drives the rules, and
-  every pair of arguments up to two, round-trips through a reference
-  `CommandLineToArgvW` parser, and the `cmd.exe` tail is checked against cmd's
-  documented `/S` rule. That proves the encoder agrees with the parsers it is written
-  for. It does not prove a live ConPTY agrees with either, because there is no
-  Windows here to ask. The process-tree kill is still untested on Windows: taskkill
-  is driven through an injected host, so the decisions around it are asserted, but no
-  real taskkill has ever run. The POSIX equivalent is tested for real. Packaging at
-  least fails loudly there now — the afterPack hook refuses a build whose node-pty is
-  missing `conpty.node`, `pty.node`, `winpty.dll`, `winpty-agent.exe` or the bundled
-  ConPTY sidecar, rather than shipping an app whose first terminal never opens.
+- **Project paths now use the host's canonical separators.** Git's forward-slash
+  output is normalised before storing a project. Comparisons still use
+  `pathKey`/`samePath` so older records and worktree inventory remain compatible.
+- **Windows behaviour is exercised locally and in CI.** Real named pipes, ConPTY
+  sessions, process-tree cleanup, acceptance scenarios and relay-backed pane watches
+  run on Windows. The installer verification checks both native PTY backends and
+  their sidecars before opening a shell in the packaged app.
 - **The Windows CLI launcher is a batch shim**, not a native executable.
 - **A chatty command keeps its tail on POSIX; Windows is unproven.** The loss was
   node-pty's reader stopping short of the end: the `tty.ReadStream` over the pty
