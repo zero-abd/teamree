@@ -347,6 +347,95 @@ describe('WorktreeWatcher', () => {
     expect(degraded).toHaveLength(1)
   })
 
+  // Degraded is a state to recover from, not a verdict. The usual cause is this
+  // machine running out of inotify instances, which a handful of editors and
+  // test runners reach between them — and which passes the moment one of them
+  // exits. Recording it once and never looking again left the worktree
+  // uncovered for the life of the process, still showing numbers.
+  it('picks the working tree back up on the next sync once watches are available again', () => {
+    const fake = createFakeWatch()
+    const degraded: WatchDegraded[] = []
+    fake.throwOn((target, recursive) => recursive && !target.endsWith('.git-dir'))
+    const watcher = new WorktreeWatcher({
+      onChange: () => {},
+      watch: fake.watch,
+      resolveGitDir: (checkout) => path.join(checkout, '.git-dir'),
+      onDegraded: (event) => degraded.push(event)
+    })
+    watcher.sync([worktree('a')])
+    expect(watcher.watchesWorkingTree('a')).toBe(false)
+
+    // The user closes an editor, and the ceiling is no longer reached.
+    fake.throwOn(() => false)
+    watcher.sync([worktree('a')])
+
+    expect(watcher.watchesWorkingTree('a')).toBe(true)
+    expect(watcher.degradedIds).toEqual([])
+    expect(fake.targets()).toContain('/checkouts/a')
+    // And still said once: the retries behind the report are not news.
+    expect(degraded).toHaveLength(1)
+  })
+
+  it('keeps retrying a watch that died mid-flight, without anything else calling sync', () => {
+    const fake = createFakeWatch()
+    const clock = createClock()
+    const retryClock = createClock()
+    const watcher = new WorktreeWatcher({
+      onChange: () => {},
+      watch: fake.watch,
+      resolveGitDir: () => undefined,
+      onDegraded: () => {},
+      now: clock.now,
+      schedule: clock.schedule,
+      retry: retryClock.schedule,
+      retryFromMs: 2_000
+    })
+    watcher.sync([worktree('a')])
+
+    // inotify runs out while the app is running. Nothing calls sync after this:
+    // the watch set only moves on a git event, and a machine under watch
+    // pressure is not one that is creating worktrees.
+    fake.fail('/checkouts/a', enospc())
+    expect(watcher.degradedIds).toEqual(['a'])
+
+    // Still out of watches: the retry fails and backs off rather than giving up.
+    fake.throwOn(() => true)
+    retryClock.advance(2_000)
+    expect(watcher.degradedIds).toEqual(['a'])
+
+    fake.throwOn(() => false)
+    retryClock.advance(60_000)
+
+    expect(watcher.watchesWorkingTree('a')).toBe(true)
+    expect(watcher.degradedIds).toEqual([])
+    watcher.close()
+  })
+
+  it('reports once a degraded worktree is covered again, because the chips went stale meanwhile', () => {
+    const fake = createFakeWatch()
+    const clock = createClock()
+    fake.throwOn((target, recursive) => recursive && !target.endsWith('.git-dir'))
+    let reports = 0
+    const watcher = new WorktreeWatcher({
+      onChange: () => {
+        reports += 1
+      },
+      watch: fake.watch,
+      resolveGitDir: (checkout) => path.join(checkout, '.git-dir'),
+      onDegraded: () => {},
+      now: clock.now,
+      schedule: clock.schedule
+    })
+    watcher.sync([worktree('a')])
+    expect(reports).toBe(0)
+
+    fake.throwOn(() => false)
+    watcher.sync([worktree('a')])
+    clock.advance(1_000)
+
+    expect(reports).toBe(1)
+  })
+
   it('retries next sync when nothing could be watched at all', () => {
     const fake = createFakeWatch()
     fake.throwOn(() => true)
