@@ -9,16 +9,19 @@
 //
 // These are pure functions over a plain object rather than tests that drive git
 // and gh, deliberately: the alternative is a suite that cuts releases.
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   GATES,
   STABLE_DMG_NAME,
   checksumLine,
   expectedTag,
+  highlightsPath,
   isPrerelease,
   parseReleaseArgs,
   planLines,
   preflightRefusals,
+  readHighlights,
   releaseNotes,
   tagAgreement
 } from '../../scripts/release.mjs'
@@ -33,6 +36,7 @@ function ready(overrides: Record<string, unknown> = {}) {
     version: '0.1.0',
     head: HEAD,
     dirty: '',
+    highlights: '## What changed since 0.0.9\n\nSomething somebody would want to know.',
     relayInstalled: true,
     ghAuthenticated: true,
     repo: 'owner/teamree',
@@ -86,6 +90,15 @@ describe('what stops a release before any of it runs', () => {
     expect(refusal).toContain('not clean')
     expect(refusal).toContain('src/main/index.ts')
     expect(refusal).toContain('scratch.txt')
+  })
+
+  // The one refusal about the page rather than about the build. A release whose
+  // notes nobody wrote looks, on the releases page, exactly like one whose notes
+  // somebody wrote — there is no gap in it to notice — so the absence has to be
+  // caught here or not at all.
+  it('refuses a version nothing describes, and names the file to write', () => {
+    const refusals = preflightRefusals(ready({ version: '0.4.0', tag: 'v0.4.0', highlights: null }))
+    expect(refusals.join()).toContain('docs/release-notes/0.4.0.md')
   })
 
   it('refuses when the relay is not installed, because the peer tests would skip', () => {
@@ -179,6 +192,29 @@ describe('the gates', () => {
   })
 })
 
+// The version in package.json is the only source of truth for what is being
+// released, and this is the one thing that has to move with it. Checked in the
+// suite rather than only at release time so that the bump and the notes land in
+// the same change: `npm run release` would refuse a version nothing describes,
+// but it would refuse it on a Mac, minutes into a sequence, to somebody who
+// thought they were cutting a release.
+describe('every version this package has been is described', () => {
+  const version = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version as string
+
+  it(`has notes for ${version} at ${highlightsPath(version)}`, () => {
+    const highlights = readHighlights(version)
+    expect(highlights, `write ${highlightsPath(version)}`).not.toBeNull()
+    // Long enough to be an account of something. A file holding a heading and
+    // nothing under it would satisfy "not null" and tell a downloader nothing.
+    expect((highlights as string).length).toBeGreaterThan(200)
+  })
+
+  it('is read per version, so a candidate uses the notes of the version it is for', () => {
+    expect(highlightsPath('0.2.0')).toBe('docs/release-notes/0.2.0.md')
+    expect(readHighlights('0.0.0-never-released')).toBeNull()
+  })
+})
+
 describe('the notes the release carries', () => {
   const checksums = checksumLine('a'.repeat(64), 'teamree-0.1.0.dmg')
 
@@ -199,6 +235,30 @@ describe('the notes the release carries', () => {
     const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'developer-id' })
     expect(notes).toContain('Signed and notarized')
     expect(notes).not.toContain('xattr')
+  })
+
+  // Above the signing section, because the update card in the window shows this
+  // body as text and cuts it at a length: what is at the top is what somebody
+  // running the old build reads, and the Gatekeeper paragraph is the same in
+  // every release and in docs/install.md besides.
+  it('puts what changed at the top, before the paragraph every release shares', () => {
+    const notes = releaseNotes({
+      tag: 'v0.2.0',
+      repo: 'owner/teamree',
+      checksums,
+      kind: 'adhoc',
+      highlights: '## What changed since 0.1.2\n\nA teammate cannot type into your pane unasked.'
+    })
+    expect(notes).toContain('A teammate cannot type into your pane unasked.')
+    expect(notes.indexOf('What changed since 0.1.2')).toBeLessThan(notes.indexOf('Nothing here is signed'))
+  })
+
+  // scripts/verify-quarantine-advice.mjs calls it this way, to read the
+  // quarantine command back out of a body it does not care about the rest of.
+  it('is still a whole set of notes when no highlights are handed to it', () => {
+    const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'adhoc' })
+    expect(notes).toContain('xattr -dr com.apple.quarantine /Applications/teamree.app')
+    expect(notes).toContain(checksums)
   })
 
   it('links the install document at the tag being released, not at a branch', () => {

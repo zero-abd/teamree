@@ -4,25 +4,27 @@ This is for somebody who has downloaded a build rather than cloned the
 repository. If you want to run it from source, the README covers that in two
 commands and none of this applies.
 
-**v0.1.0 is published.** The download is here, and it needs no GitHub account:
+The latest build is here, and it needs no GitHub account:
 
-**<https://github.com/zero-abd/teamree/releases/latest/download/teamree-0.1.0.dmg>**
+**<https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg>**
 
 The releases page itself is
-<https://github.com/zero-abd/teamree/releases/latest>, and everything below was
-walked through against that exact file, on macOS 26, by somebody who had not
-installed it before. Where this document quotes a warning, the words are the
-ones that were on the screen.
+<https://github.com/zero-abd/teamree/releases/latest>, and it is where the notes
+for whatever version that is live. Everything below was walked through against a
+real download, on macOS 26, by somebody who had not installed it before. Where
+this document quotes a warning, the words are the ones that were on the screen.
 
-**There is one download: `teamree-<version>.dmg`**, plus a `SHA256SUMS.txt`
-beside it. It is a universal build, so it runs on Apple Silicon and on Intel
-and there is nothing to choose between. If you have wondered which Mac you
-have, you do not need to find out.
+**Every release publishes one disk image under two names**, plus a
+`SHA256SUMS.txt` beside it. `teamree-<version>.dmg` is for linking a particular
+release; `teamree-mac-universal.dmg` is the same bytes under a name with no
+version in it, and it is the one the link above uses — a versioned name resolves
+to the newest release and then 404s on a file name that release does not carry,
+which is a link that breaks on the day it is busiest and looks healthy until
+then.
 
-One thing to know before the next release rather than after it: the file name
-carries the version, so the link above stops working the day v0.2.0 is
-published — it resolves to the new release and then 404s on the old file name.
-The releases page link never goes stale.
+It is a universal build, so it runs on Apple Silicon and on Intel and there is
+nothing to choose between. If you have wondered which Mac you have, you do not
+need to find out.
 
 **Releases are macOS only.** That is a decision rather than a gap: the Windows
 and Linux packaging is still configured and the sections below still describe
@@ -64,19 +66,17 @@ release publishes them. Before you install, compare:
 
 ```sh
 cd ~/Downloads
-curl -LO https://github.com/zero-abd/teamree/releases/latest/download/SHA256SUMS.txt
-shasum -a 256 -c SHA256SUMS.txt
+shasum -a 256 teamree-mac-universal.dmg
 ```
 
-That prints `teamree-0.1.0.dmg: OK`. For v0.1.0 the line it is checking against
-is:
+Then compare what that prints against the line naming the same file in the
+release's `SHA256SUMS.txt`, which is on the releases page and also quoted in the
+release's own notes. Checking the whole file at once with `shasum -c` reports
+one line as missing rather than as wrong: the release lists the image twice,
+under both of its names, and you have downloaded one of them.
 
-```
-ccf09c74af6ba75a032fee58b11dc578ece77dd3ec38401328fe34a8131bf8d2  teamree-0.1.0.dmg
-```
-
-If they agree, the file you have is the file the build produced. If they do not,
-stop — and that is the case the signature would have caught too.
+If the hash agrees, the file you have is the file the build produced. If it does
+not, stop — and that is the case the signature would have caught too.
 
 One trap if you are working in a clone of this repository: `dist/` holds
 whatever you last built locally, and a local build is *not* byte-identical to

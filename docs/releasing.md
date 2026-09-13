@@ -51,7 +51,7 @@ npm run release:dry-run      # everything except the tag and the release
 npm run release              # the same, and then publishes
 ```
 
-Both default to the tag that matches `package.json` — `v0.1.0` today. To cut a
+Both default to the tag that matches `package.json` — `v0.2.0` today. To cut a
 candidate, or any other tag, name it:
 
 ```sh
@@ -73,6 +73,10 @@ of them are reported at once rather than one per attempt:
   candidate is a candidate *for* that version.
 - **the tag is not a release tag** — `0.1.0`, `latest`, `release-1` are all
   refused.
+- **nothing describes the version** — `docs/release-notes/<version>.md` has to
+  exist and say what changed. A release nobody wrote notes for looks exactly
+  like one somebody did: the body still explains Gatekeeper and still carries
+  the checksums, and there is no gap on the page for anybody to notice.
 - **`relay/node_modules` is missing** — the relay would not build, and the peer
   tests would skip. Run `cd relay && npm ci`.
 - **`gh` is not authenticated** — checked up front, and on a dry run too. It is
@@ -114,6 +118,34 @@ and the copy inside it is put through the same check.
 say, which is the one thing the building machine cannot find out by opening it:
 a local build carries no `com.apple.quarantine` attribute, so Gatekeeper never
 looks at it here.
+
+### The notes
+
+A release body is two things joined. Most of it is generated from what was
+actually built — the Gatekeeper paragraph is chosen by reading the signature off
+the bundle about to be published, and the checksums are of the file that will be
+uploaded — so a release cannot claim to be signed because the last one was, or
+apologise for being unsigned after somebody has signed it.
+
+The part no machine can write is what changed, and that is a file:
+`docs/release-notes/<version>.md`, keyed by the version in `package.json`. One
+file per version rather than one growing changelog, because what the release
+body carries is the file *at that tag*, and a link into a changelog would send
+somebody who downloaded 0.2.0 to the section about whatever shipped later. A
+candidate uses the notes of the version it is a candidate for: `v0.2.0-rc.1`
+reads `0.2.0.md`.
+
+Write it for somebody who is going to download the build and use it — what is
+different for them, in sentences. It goes above the signing section, and that
+order is not cosmetic: the update card in the window renders the body as text
+and cuts it at four thousand characters, so the top of this file is what a
+person still running the old build actually reads, and the Gatekeeper paragraph
+is in every release and in [`install.md`](install.md) besides.
+
+Two things ask for it, deliberately at different distances. `npm test` fails
+when the version in `package.json` has no notes, which is what keeps the bump
+and the notes in the same change; `npm run release` refuses for the same reason,
+which is what catches a version bumped somewhere the suite was not run.
 
 ### Then it says what it is about to do
 
