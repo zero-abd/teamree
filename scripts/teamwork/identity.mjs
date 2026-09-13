@@ -1,26 +1,21 @@
-// Identities for the two-peer harness.
+// Reading the roster, from outside the app.
 //
-// ═══ SEAM ═══
-// Milestone A owns identity for real: the app generates its keypair on first
-// run, keeps the private half on the machine, and writes the public half to
-// `.teamree/members/<handle>.pub`. None of that exists yet.
+// The harness used to mint keypairs here and write the member files itself,
+// which was right while identity was unbuilt and became a lie the moment it
+// landed: the app generates its keypair on first run and keeps the private
+// half in its own data directory, so a roster full of keys the app has never
+// heard of authenticates nobody and every handshake fails for a reason no
+// assertion would explain. The harness now asks each runtime who it is and
+// joins through `members.join`, and what is left here is the other half — the
+// directory, read from outside the process that wrote it.
 //
-// What this module does is mint a keypair itself, so the harness can stand two
-// distinguishable peers up today. It depends on exactly two things
-// `docs/teamwork.md` actually specifies — that the key is X25519, and that the
-// public half lives at `.teamree/members/<handle>.pub` — and on one thing it
-// does not: how the bytes of that file are spelled.
-//
-// When milestone A lands:
-//   - `generateIdentity` should be replaced by asking the runtime for the
-//     identity it already has, and the private key below should be deleted
-//     rather than moved, because a harness that mints keys the app does not
-//     know about will pass while proving nothing.
-//   - If milestone A chose a different on-disk encoding, `PUBLIC_KEY_ENCODING`
-//     and the two functions under it are the only places that need to change.
+// One keypair is still minted, and only for `tests/teamwork/harnessKeyFormat`:
+// the format lives twice, in TypeScript and in the reader below, because the
+// harness is plain ESM and runs without a build step. No private half comes
+// back from it, because nothing here has any business holding one.
 
 import { generateKeyPairSync } from 'node:crypto'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 /** Where the roster lives, per docs/teamwork.md. */
@@ -55,30 +50,32 @@ export function assertHandle(handle) {
 }
 
 /**
- * Mints one X25519 identity.
+ * Mints one X25519 public key, to write a member file with and read it back.
+ *
+ * The private half is generated and dropped on the floor. It is not needed to
+ * prove a format and holding it would make this the second place in the
+ * project that can hold a secret.
  *
  * @param {string} handle
- * @returns {{ handle: string, publicKey: string, privateKey: string }}
+ * @returns {{ handle: string, publicKey: string }}
  */
 export function generateIdentity(handle) {
   assertHandle(handle)
-  const { publicKey, privateKey } = generateKeyPairSync('x25519')
+  const { publicKey } = generateKeyPairSync('x25519')
   // The last 32 bytes of the SPKI encoding are the raw key; the 12 before them
   // are a fixed RFC 8410 prefix. node has no raw export, and the app's own
   // identity module takes the same slice.
   const raw = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)
-  return {
-    handle,
-    publicKey: raw.toString('base64'),
-    privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
-  }
+  return { handle, publicKey: raw.toString('base64') }
 }
 
 /**
  * The bytes of one member file, byte for byte what the app writes.
  *
  * Duplicated rather than imported because this harness is plain ESM and the
- * authority is TypeScript. The duplication is held honest by a test that parses
+ * authority is TypeScript. Nothing here writes one any more — the app does,
+ * through `members.join` — but the reader below has to agree with the writer
+ * about the format, and the duplication is held honest by a test that parses
  * this output with the app's own parser.
  */
 export function memberFileText(identity, addedAt = new Date().toISOString().slice(0, 10)) {
@@ -105,19 +102,6 @@ export function memberKeyPath(repoPath, handle) {
 }
 
 /**
- * Writes one member's public key into a checkout. Deliberately does not commit
- * or push: getting the key into the repository is the step the runbook makes a
- * person do on purpose, and a harness that did it silently would hide the one
- * thing most likely to be forgotten.
- */
-export async function writeMemberKey(repoPath, identity) {
-  const path = memberKeyPath(repoPath, identity.handle)
-  await mkdir(join(repoPath, MEMBERS_DIR), { recursive: true })
-  await writeFile(path, memberFileText(identity))
-  return path
-}
-
-/**
  * The public key out of one member file, or null if it does not hold exactly
  * one well-formed `key:` line. Mirrors the app's parser closely enough for the
  * harness's purposes; `tests/teamwork/harnessKeyFormat.test.ts` is what keeps
@@ -138,9 +122,10 @@ function readKeyLine(text) {
  * Reads the roster out of a checkout: every `<handle>.pub` under
  * `.teamree/members/`, sorted, with anything else in the directory ignored.
  *
- * This is the harness's own reading of the roster, used to assert that a key
- * actually arrived. Milestone A will have its own, and when it does this should
- * defer to it rather than agreeing with it by coincidence.
+ * Deliberately not the app's reader. This is what a person gets by listing the
+ * directory, and the whole of what the runbook tells two people to compare — so
+ * a test that asserted a key arrived using the same code that put it there
+ * would be agreeing with itself.
  */
 export async function readRoster(repoPath) {
   let names
