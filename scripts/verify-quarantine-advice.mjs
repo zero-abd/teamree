@@ -129,17 +129,17 @@ const QUARANTINE = 'com.apple.quarantine'
 // keys on.
 const FLAGS = '0081;00000000;Safari;'
 
-// The two shapes a download actually arrives in, because this project ships
-// both and they are not marked the same way.
+// The two shapes an app arrives in, which are not marked the same way.
 //
-// Dragging an app out of a mounted `.dmg` marks the bundle it copies. Expanding
-// a `.zip` marks every file that comes out of it. So an instruction that clears
-// only the bundle directory is enough for one of our two artifacts and leaves
-// the other quarantined — which is the failure worth having a check for, since
-// whoever wrote the instruction almost certainly tested it with the `.dmg`.
+// Dragging one out of a mounted `.dmg` marks the bundle it copies. Anything
+// that unpacks it file by file — a re-zipped copy handed to a colleague, an
+// AirDrop — marks every file inside it. Only the first is what we publish, and
+// that is exactly why the second is checked: whoever writes this instruction
+// will test it the way they downloaded it, and an instruction that half works
+// is worse than one that fails, because it fails silently.
 const SHAPES = [
   { name: 'a .dmg dragged to Applications', recursive: false },
-  { name: 'a .zip expanded by the browser', recursive: true }
+  { name: 'an unpacked copy, marked file by file', recursive: true }
 ]
 
 /**

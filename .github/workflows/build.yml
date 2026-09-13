@@ -56,12 +56,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - label: macOS (arm64 + x64)
+          - label: macOS (universal)
             os: macos-latest
             package: package:mac
-            artifacts: |
-              dist/*.dmg
-              dist/*.zip
+            # One file, and `if-no-files-found: error` below means a build that
+            # stops producing it fails here rather than publishing nothing.
+            artifacts: dist/*.dmg
 
     steps:
       - uses: actions/checkout@v5

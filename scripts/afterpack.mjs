@@ -54,19 +54,32 @@ export default async function afterPack(context) {
   }
 
   // --- only this platform's prebuilt binaries are worth shipping ------------
+  //
+  // Platform, not architecture, and that distinction is load-bearing now that
+  // macOS ships as a single universal artifact. A universal app runs on Apple
+  // Silicon and on Intel, so it has to carry node-pty for both: `node-gyp-build`
+  // resolves `prebuilds/darwin-<arch>` from `process.arch` at run time, so an
+  // app pruned to the architecture it happened to be packed on would open no
+  // terminal at all on half the Macs it claims to support.
+  //
+  // It also makes the merge possible. electron-builder packs each architecture
+  // separately and lipos the results, and two trees that disagree about which
+  // prebuild directory exists are two trees that cannot be merged into one
+  // asar. Keeping every darwin prebuild in both makes them identical.
   const prebuilds = join(pty, 'prebuilds')
   const wanted = `${electronPlatformName}-${arch}`
+  const keep = (entry) => entry === wanted || entry.startsWith(`${electronPlatformName}-`)
   let pruned = 0
   let prunedBytes = 0
   if (existsSync(prebuilds)) {
     for (const entry of readdirSync(prebuilds)) {
-      if (entry === wanted) continue
+      if (keep(entry)) continue
       const path = join(prebuilds, entry)
       prunedBytes += directorySize(path)
       rmSync(path, { recursive: true, force: true })
       pruned += 1
     }
-    if (pruned) log(`dropped ${pruned} foreign prebuild set(s), ${megabytes(prunedBytes)}`)
+    if (pruned) log(`dropped ${pruned} foreign-platform prebuild set(s), ${megabytes(prunedBytes)}`)
   }
 
   // --- the native module has to exist for the target -----------------------

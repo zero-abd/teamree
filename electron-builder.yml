@@ -79,13 +79,19 @@ mac:
   category: public.app-category.developer-tools
   icon: build/icon.icns
   darkModeSupport: true
-  # Both mac targets name the architecture; the default leaves it off x64.
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  # One download, and therefore no architecture in the name: a universal build
+  # runs on Apple Silicon and on Intel, so there is nothing for somebody to pick
+  # and nothing for them to pick wrong. A menu of four files is a menu three of
+  # whose entries are a mistake waiting to be made by the person least able to
+  # tell — which is anybody who has not thought about what is inside their Mac.
+  #
+  # The cost is honest and it is size: the app carries both architectures. That
+  # buys a download nobody has to think about, and thinking about it is the only
+  # thing the split ever saved.
+  artifactName: ${productName}-${version}.${ext}
   target:
     - target: dmg
-      arch: [arm64, x64]
-    - target: zip
-      arch: [arm64, x64]
+      arch: [universal]
   # Ad-hoc signature. Apple Silicon refuses to launch a Mach-O binary with no
   # signature at all, and electron-builder invalidates the one Electron ships as
   # soon as it rewrites the bundle — so an unsigned build still has to be

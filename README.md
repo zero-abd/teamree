@@ -115,7 +115,7 @@ rebuilds the app first, so a package is never made from stale output.
 
 | Platform | Command | Artifacts in `dist/` |
 | --- | --- | --- |
-| macOS | `npm run package:mac` | `teamree-<version>-arm64.dmg`, `-x64.dmg`, and a `.zip` per architecture |
+| macOS | `npm run package:mac` | `teamree-<version>.dmg`, universal (Apple Silicon and Intel in one file) |
 | Windows | `npm run package:win` | `teamree-<version>-setup-x64.exe` (NSIS) |
 | Linux | `npm run package:linux` | `teamree-<version>-x86_64.AppImage`, `teamree_<version>_amd64.deb` |
 | The one you are on | `npm run package` | as above, for the host platform |

@@ -4,21 +4,16 @@ This is for somebody who has downloaded a build rather than cloned the
 repository. If you want to run it from source, the README covers that in two
 commands and none of this applies.
 
+**There is one download: `teamree-<version>.dmg`**, plus a `SHA256SUMS.txt`
+beside it. It is a universal build, so it runs on Apple Silicon and on Intel
+and there is nothing to choose between. If you have wondered which Mac you
+have, you do not need to find out.
+
 **Releases are macOS only.** That is a decision rather than a gap: the Windows
 and Linux packaging is still configured and the sections below still describe
-it, but nobody builds or publishes either, so a release page has these files on
-it and no others.
-
-| Platform | File |
-| --- | --- |
-| macOS, Apple Silicon | `teamree-<version>-arm64.dmg` |
-| macOS, Intel | `teamree-<version>-x64.dmg` |
-
-A `.zip` of each is published beside them, for anyone who would rather not
-mount a disk image, along with a `SHA256SUMS.txt` covering all four.
-
-On Windows or Linux, run it from source — the README covers that in two
-commands, and it is the same application.
+what it would produce, but nobody builds or publishes either. On Windows or
+Linux, run it from source — the README covers that in two commands, and it is
+the same application.
 
 ## Nothing here is signed
 
@@ -48,7 +43,7 @@ checksum gives you the same guarantee by a different route, which is why every
 release publishes them. Before you install, compare:
 
 ```sh
-shasum -a 256 teamree-0.0.1-arm64.dmg
+shasum -a 256 teamree-0.0.1.dmg
 ```
 
 against the matching line in `SHA256SUMS.txt` on the release. If they agree, the
@@ -78,12 +73,14 @@ xattr -dr com.apple.quarantine /Applications/teamree.app
 
 Open it normally after that and it will not ask again.
 
-`-r` because an app bundle is a directory tree and the two artifacts are marked
-differently: dragging out of the `.dmg` marks the bundle, while expanding the
-`.zip` marks every file inside it. Clearing only the bundle would work for one
-of them and leave the other stopped. This is checked rather than asserted — CI
-quarantines a real packaged build both ways and runs the command above, read
-out of this file, so the instruction cannot rot into being wrong.
+`-r` because an app bundle is a directory tree, and how much of that tree gets
+marked depends on how the app reached you. Dragging it out of the `.dmg` marks
+the bundle; anything that unpacks it file by file — a re-zipped copy passed to a
+colleague, an AirDrop — marks what is inside it too. Clearing only the bundle
+would work for the download and leave those stopped, with no hint that the
+command had done half its job. This is checked rather than asserted: CI
+quarantines a real packaged build both ways and runs the command above, read out
+of this file, so the instruction cannot rot into being wrong.
 
 There is a route through the interface as well, but where it is depends on your
 macOS version, which is worth knowing before you go hunting for it. Through

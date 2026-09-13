@@ -323,6 +323,15 @@ recorded so none of them is discovered by surprise later.
   command is never re-issued unless it resumes something, so a pane left on a deploy
   or a migration comes back as a shell rather than running it twice. Keeping the
   process itself alive would mean moving PTYs into a daemon that outlives the app.
+- **One download, universal, unsigned.** A decision, recorded so nobody
+  "fixes" it back: macOS ships as a single `teamree-<version>.dmg` carrying both
+  architectures rather than a menu of four files. The cost is size and it is
+  worth paying — three of those four entries were a mistake waiting to be made
+  by whoever had never thought about what is inside their Mac. node-pty is
+  shipped for both architectures for the same reason, since `node-gyp-build`
+  resolves its binary from `process.arch` at run time and an app pruned to the
+  architecture it was packed on opens no terminal on half the Macs it claims to
+  support.
 - **macOS is the supported platform. Windows and Linux are not, for now.** That is a
   decision rather than a gap waiting to close: CI builds macOS only, and nobody should
   pick this up expecting to finish it. What was learned before narrowing is kept
