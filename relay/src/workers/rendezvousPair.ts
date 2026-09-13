@@ -169,7 +169,12 @@ export class RendezvousPair {
     }
     for (const session of live.sessions.values()) session.sweep(now)
     this.persist(live.sessions)
-    await this.armAlarm()
+    // Only while there is still something to sweep. An alarm that re-armed
+    // unconditionally would wake this object every interval for as long as the
+    // account exists, once for every rendezvous anybody ever used, long after
+    // the two peers went home — and the bill for that goes to a team, not to
+    // us. A peer that comes back arms it again on the way in.
+    if (this.occupied() > 0) await this.armAlarm()
   }
 
   /**
@@ -218,12 +223,15 @@ export class RendezvousPair {
   }
 
   /**
-   * Sockets that still have a session on them. A peer that was just displaced
-   * stays attached for the moment between being told and its close arriving, and
-   * it must not hold a slot against the connection that displaced it. A socket
-   * whose attachment cannot be read is counted: the object cannot tell whether
-   * it is finished, and guessing in the other direction is what would let the
-   * cap be walked past.
+   * Sockets that still have a session on them: what the admission cap is spent
+   * against, and what the alarm asks before deciding it is still needed.
+   *
+   * A peer that was just displaced stays attached for the moment between being
+   * told and its close arriving, and it must not hold a slot against the
+   * connection that displaced it. A socket whose attachment cannot be read is
+   * counted: the object cannot tell whether it is finished, and guessing in the
+   * other direction is what would let the cap be walked past and what would
+   * leave a live connection with nothing checking its deadlines.
    */
   private occupied(): number {
     let held = 0
