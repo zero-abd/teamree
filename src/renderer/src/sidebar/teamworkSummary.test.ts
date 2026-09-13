@@ -21,6 +21,9 @@ function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
   }
 }
 
+/** This machine's clock, as the sidebar's own tick hands it in. */
+const NOW = 1_700_000_000_000
+
 const link = (overrides: Partial<PeerLink> = {}): PeerLink => ({
   publicKey: 'k',
   handle: 'priya',
@@ -34,21 +37,21 @@ describe('what the project header says about teamwork', () => {
   it('says nothing at all before it has asked', () => {
     // An absent answer is not an answer. Rendering one as "off" would have the
     // app state something it has not established.
-    expect(teamworkSummary(undefined)).toBeNull()
+    expect(teamworkSummary(undefined, NOW)).toBeNull()
   })
 
   it('reads a project with no relay as something to set up, not something broken', () => {
-    const summary = teamworkSummary(status({ disabledReason: 'no .teamree/relay in this project' }))
+    const summary = teamworkSummary(status({ disabledReason: 'no .teamree/relay in this project' }), NOW)
     expect(summary).toMatchObject({ tone: 'off', label: 'Teamwork off' })
     expect(summary?.detail).toContain('.teamree/relay')
   })
 
   it('distinguishes a relay it cannot reach from a teammate who is not connected', () => {
-    const unreachable = teamworkSummary(status({ links: [link({ phase: 'unreachable' })] }))
+    const unreachable = teamworkSummary(status({ links: [link({ phase: 'unreachable' })] }), NOW)
     expect(unreachable).toMatchObject({ tone: 'problem', label: 'Relay unreachable' })
     // This one is somebody else's laptop, and saying "unreachable" would send
     // the reader to check their own network.
-    const away = teamworkSummary(status({ links: [link({ phase: 'waiting' })] }))
+    const away = teamworkSummary(status({ links: [link({ phase: 'waiting' })] }), NOW)
     expect(away).toMatchObject({ tone: 'pending', label: 'Nobody connected' })
   })
 
@@ -61,10 +64,35 @@ describe('what the project header says about teamwork', () => {
         links: [
           link({ phase: 'connecting', detail: 'this machine was asleep, so nothing is known about your teammate' })
         ]
-      })
+      }),
+      NOW
     )
     expect(summary).toMatchObject({ tone: 'pending', label: 'Connecting…' })
     expect(summary?.detail).toContain('this machine was asleep')
+  })
+
+  it('gives a connected link both of the things it knows, not whichever was written last', () => {
+    // The two facts a line under this header can carry are independent: what
+    // the link has to say for itself, and how long since anything arrived. A
+    // link can be connecting *because this machine woke* and a link can be
+    // four minutes silent, and neither sentence is a substitute for the other.
+    const woke = teamworkSummary(
+      status({
+        links: [
+          link({
+            phase: 'connecting',
+            detail: 'this machine was asleep, so nothing is known about your teammate',
+            lastHeardAt: NOW - 240_000
+          })
+        ]
+      }),
+      NOW
+    )
+    expect(woke?.detail).toContain('priya: this machine was asleep, so nothing is known about your teammate')
+    expect(woke?.detail).toContain('last heard 4m ago')
+    // And the phase is still what a link with nothing else to say falls back on.
+    const plain = teamworkSummary(status({ links: [link({ lastHeardAt: NOW - 240_000 })] }), NOW)
+    expect(plain?.detail).toBe('priya: connected, last heard 4m ago')
   })
 
   it('carries what a link that has waited too long has to say, under the same label', () => {
@@ -80,7 +108,8 @@ describe('what the project header says about teamwork', () => {
             detail: 'nobody has answered on this rendezvous across two hourly rotations'
           })
         ]
-      })
+      }),
+      NOW
     )
     expect(summary).toMatchObject({ tone: 'pending', label: 'Nobody connected' })
     expect(summary?.detail).toContain('marcus: nobody has answered on this rendezvous')
@@ -97,7 +126,8 @@ describe('what the project header says about teamwork', () => {
             detail: 'the peer static key is not on the roster'
           })
         ]
-      })
+      }),
+      NOW
     )
     expect(summary?.tone).toBe('problem')
     expect(summary?.label).toBe('Handshake failed')
@@ -106,9 +136,43 @@ describe('what the project header says about teamwork', () => {
 
   it('counts who is up and who is away without calling the away ones a fault', () => {
     const summary = teamworkSummary(
-      status({ links: [link({ handle: 'priya' }), link({ handle: 'marcus', phase: 'waiting' })] })
+      status({ links: [link({ handle: 'priya' }), link({ handle: 'marcus', phase: 'waiting' })] }),
+      NOW
     )
     expect(summary).toMatchObject({ tone: 'live', label: '1 connected · 1 away' })
+  })
+
+  it('says how long a connected link has been silent, once that is longer than silence ordinarily lasts', () => {
+    // The residue of the five-minute lie. The link is up and the phase says so
+    // truthfully; what "connected" cannot say on its own is that nothing has
+    // arrived over it for four of the five minutes it has before it is torn
+    // down. The link only carries `lastHeardAt` once that is worth saying, so
+    // the header has nothing to add about a teammate who is talking.
+    const talking = teamworkSummary(status({ links: [link({ handle: 'priya' })] }), NOW)
+    expect(talking?.label).toBe('1 connected')
+
+    const silent = teamworkSummary(status({ links: [link({ handle: 'priya', lastHeardAt: NOW - 245_000 })] }), NOW)
+    expect(silent).toMatchObject({ tone: 'live', label: '1 connected · last heard 4m ago' })
+    expect(silent?.detail).toContain('priya: connected, last heard 4m ago')
+
+    // Rounded down, like every other age in this sidebar, so a silence is
+    // never flattered into being shorter than it is.
+    const nearly = teamworkSummary(status({ links: [link({ handle: 'priya', lastHeardAt: NOW - 299_000 })] }), NOW)
+    expect(nearly?.label).toBe('1 connected · last heard 4m ago')
+
+    // The worst silence among the links that are up, beside the count of the
+    // ones that are not — two different facts, and the header keeps both.
+    const mixed = teamworkSummary(
+      status({
+        links: [
+          link({ handle: 'priya', lastHeardAt: NOW - 190_000 }),
+          link({ handle: 'ana', lastHeardAt: NOW - 260_000 }),
+          link({ handle: 'marcus', phase: 'waiting' })
+        ]
+      }),
+      NOW
+    )
+    expect(mixed?.label).toBe('2 connected · 1 away · last heard 4m ago')
   })
 
   it('names the one cause that is this machine, rather than blaming the teammate', () => {
@@ -116,7 +180,10 @@ describe('what the project header says about teamwork', () => {
     // a rendezvous their machine has no key to compute. It waits forever, and
     // the phase alone would say "Nobody connected" — sending the reader to a
     // machine that is doing nothing wrong.
-    const summary = teamworkSummary(status({ enrolled: false, links: [link({ handle: 'ana', phase: 'waiting' })] }))
+    const summary = teamworkSummary(
+      status({ enrolled: false, links: [link({ handle: 'ana', phase: 'waiting' })] }),
+      NOW
+    )
     expect(summary).toMatchObject({ tone: 'off', label: 'Your key is not here' })
     expect(summary?.detail).toContain('.teamree/members')
     expect(summary?.detail).toContain('commit and push')
@@ -127,7 +194,7 @@ describe('what the project header says about teamwork', () => {
     // Members dialog that the Start teamwork panel replaced. Both names now come
     // from the components that draw them, so the tooltip cannot name a control
     // that is not there — nor go on naming one that has been renamed.
-    const detail = teamworkSummary(status({ enrolled: false }))?.detail
+    const detail = teamworkSummary(status({ enrolled: false }), NOW)?.detail
     expect(detail).toContain(TEAMWORK_BUTTON_LABEL)
     expect(detail).toContain(ADD_KEY_BUTTON)
   })
@@ -135,12 +202,15 @@ describe('what the project header says about teamwork', () => {
   it('still says which thing is not set up at all before it says whose key is missing', () => {
     // "No relay here" is the earlier thing to fix, and it is the one the
     // roster read could not get past.
-    const summary = teamworkSummary(status({ enrolled: false, disabledReason: 'no .teamree/relay in this project' }))
+    const summary = teamworkSummary(
+      status({ enrolled: false, disabledReason: 'no .teamree/relay in this project' }),
+      NOW
+    )
     expect(summary).toMatchObject({ tone: 'off', label: 'Teamwork off' })
   })
 
   it('says an empty roster is an empty roster, not a connection problem', () => {
-    expect(teamworkSummary(status({ links: [] }))).toMatchObject({
+    expect(teamworkSummary(status({ links: [] }), NOW)).toMatchObject({
       tone: 'off',
       label: 'No teammates'
     })
@@ -151,10 +221,11 @@ describe('what the project header says about teamwork', () => {
       status({
         relay: { url: 'ws://127.0.0.1:8787/v1/relay', source: 'environment' },
         links: [link({ phase: 'unreachable' })]
-      })
+      }),
+      NOW
     )
     expect(fromEnv?.detail).toContain('from the environment')
-    const fromRepo = teamworkSummary(status({ links: [link({ phase: 'unreachable' })] }))
+    const fromRepo = teamworkSummary(status({ links: [link({ phase: 'unreachable' })] }), NOW)
     expect(fromRepo?.detail).toContain('.teamree/relay')
   })
 })

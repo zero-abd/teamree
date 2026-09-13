@@ -372,7 +372,13 @@ export type MethodContract = {
   'worktree.list': { params: z.infer<typeof Params.worktreeList>; result: Worktree[] }
   'worktree.get': { params: z.infer<typeof Params.worktreeGet>; result: Worktree }
   'worktree.create': { params: z.infer<typeof Params.worktreeCreate>; result: Worktree }
-  'worktree.remove': { params: z.infer<typeof Params.worktreeRemove>; result: { removed: true } }
+  // `checkoutLeftAt` is set when the row was dropped but the directory was
+  // not: git had never heard of the checkout, or refused to read it. The files
+  // are all still there, and this is the last thing that knows where.
+  'worktree.remove': {
+    params: z.infer<typeof Params.worktreeRemove>
+    result: { removed: true; checkoutLeftAt?: string }
+  }
   'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }

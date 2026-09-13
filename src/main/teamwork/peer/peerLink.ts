@@ -113,6 +113,28 @@ export const SILENCE_TIMEOUT_MS = KEEPALIVE_MS * 2.5
 export const SILENT_PEER_DETAIL = 'your teammate’s machine stopped answering'
 
 /**
+ * How long a confirmed link may hear nothing before the window is told the age
+ * of that silence.
+ *
+ * One and a half keepalives, and the half is the whole of the argument. One
+ * interval is what an ordinary gap *is* — a healthy peer's frames arrive
+ * exactly that far apart — so the threshold has to sit past it or every link
+ * on the team announces a silence in the instant before each keepalive lands,
+ * on nothing but scheduling jitter and a round trip. The half is the same
+ * margin `SILENCE_TIMEOUT_MS` puts between the one-loss gap and the two-loss
+ * gap, borrowed here for the same reason, and it would take sixty seconds of
+ * drift to cross.
+ *
+ * It sits beside the interval it is derived from rather than wherever the age
+ * gets drawn, so there is one threshold in the app and not two that can stop
+ * agreeing. Between it and the deadline above there are two minutes: a reader
+ * sees `3m`, then `4m`, and then the link is over and says so instead. Those
+ * minutes used to read as `connected` and nothing else, which was the residue
+ * of the lie the deadline shortened.
+ */
+export const LINK_QUIET_AFTER_MS = KEEPALIVE_MS * 1.5
+
+/**
  * What the same deadline may say when this machine is the one that was away.
  *
  * A lid closed here suspends the timers and steps the wall clock, so the
@@ -332,7 +354,16 @@ export type PeerLinkOptions = {
   dispatch: Dispatcher
   subscriptions: SubscriptionHub
   scheduler: LinkScheduler
-  /** Called whenever the phase or its detail changes, never on a repeat. */
+  /**
+   * Called whenever the phase, its detail, or the age of the link's silence
+   * changes — never on a repeat.
+   *
+   * The third of those is why this is not simply "the phase changed". Nobody
+   * downstream re-reads a link on a timer, so a status that is never sent is a
+   * status that is never drawn, and both the moment silence becomes worth
+   * saying and the moment it stops being are changes a reader has to be told
+   * about.
+   */
   onStatusChange: (status: PeerLinkStatus) => void
   /**
    * A snapshot this teammate pushed, exactly as it decrypted.
@@ -480,6 +511,15 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   let stalledThisAttempt = false
   /** Scoped to one session: has anything from the far end ever decrypted? */
   let confirmed = false
+  /**
+   * Scoped to one session: has the silence outlasted `LINK_QUIET_AFTER_MS`?
+   *
+   * Held rather than worked out when the status is read, because it is the
+   * *crossing* that has to be announced. A reader who is only ever handed a
+   * link when something about it changes would otherwise go on showing the
+   * last thing it was handed.
+   */
+  let quiet = false
   /** When that happened, so a session can be asked how long it lasted. */
   let confirmedAt: number | undefined
   /** Streams this side opened on the teammate, by subscription id. */
@@ -508,6 +548,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   let cancelTimer: (() => void) | undefined
   let cancelKeepalive: (() => void) | undefined
   let cancelSilenceDeadline: (() => void) | undefined
+  let cancelQuietWatch: (() => void) | undefined
   let cancelHandshakeDeadline: (() => void) | undefined
   let cancelEpochWatch: (() => void) | undefined
   /** The most recently armed deadline, kept so a closure can be asked about it. */
@@ -522,6 +563,20 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       attempts
     }
     if (detail !== undefined) status.detail = detail
+    // Only while the link is up, and only once the silence has outlasted
+    // `LINK_QUIET_AFTER_MS`. The length of the silence is the transport's own
+    // measurement — the one the deadline reads, so the window and the teardown
+    // quote one number — and it is measured on a clock this machine going to
+    // sleep cannot move.
+    //
+    // It reaches the window as a stamp rather than as that length because the
+    // sidebar ticks on its own clock and is only handed a link when something
+    // about it changes: an age it works out for itself goes on being right
+    // while nothing is sent to it again. Subtracting a monotonic duration from
+    // the wall clock *now* is what turns one into the other, and it is done
+    // here, at the instant the two agree, rather than by keeping a wall-clock
+    // stamp from before a sleep that would have aged by the whole of it.
+    if (quiet && transport) status.lastHeardAt = options.scheduler.now() - transport.quietForMs
     return status
   }
 
@@ -580,12 +635,14 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     cancelTimer?.()
     cancelKeepalive?.()
     cancelSilenceDeadline?.()
+    cancelQuietWatch?.()
     cancelHandshakeDeadline?.()
     cancelEpochWatch?.()
     outstanding = undefined
     cancelTimer = undefined
     cancelKeepalive = undefined
     cancelSilenceDeadline = undefined
+    cancelQuietWatch = undefined
     cancelHandshakeDeadline = undefined
     cancelEpochWatch = undefined
   }
@@ -839,6 +896,44 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     })
   }
 
+  /**
+   * When the silence becomes worth a number, on the same re-arming one-shot the
+   * deadline above uses.
+   *
+   * For the same reason, too: folding this into the keepalive's repeating tick
+   * would put the crossing anywhere in the two minutes after it happened, and
+   * the point of saying "last heard 3m ago" is that it is 3m. Once it has
+   * fired there is nothing left for a timer to find — the silence only grows,
+   * and the reader adds the growth itself from a timestamp — so the watch is
+   * re-armed by the frame that ends it rather than kept running.
+   */
+  const armQuietWatch = (delayMs: number): void => {
+    cancelQuietWatch = setDeadline(delayMs, (interrupted) => {
+      cancelQuietWatch = undefined
+      const active = transport
+      if (!active) return
+      // "Last heard 4m ago" is a sentence about the teammate, so it is owed the
+      // same check every other deadline here makes: a window this process did
+      // not run through measured this machine's sleep and not their silence.
+      // On the far side of a wake there is no age to show, because there is no
+      // confirmed link to show it on.
+      if (interrupted) {
+        wake()
+        return
+      }
+      const quietFor = active.quietForMs
+      if (quietFor < LINK_QUIET_AFTER_MS) {
+        armQuietWatch(LINK_QUIET_AFTER_MS - quietFor)
+        return
+      }
+      quiet = true
+      // Said directly rather than through `moveTo`: the phase has not moved
+      // and must not appear to have. This is the same connected link, now
+      // carrying the age of its own silence.
+      options.onStatusChange(snapshot())
+    })
+  }
+
   const rejectHandshake = (local: string): void => {
     // Local only. The peer gets a closed socket and nothing else.
     refusedThisAttempt = true
@@ -1088,6 +1183,10 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // supplies: sending one costs nothing and proves nothing, so this is what
     // requires one to come back.
     armSilenceDeadline(SILENCE_TIMEOUT_MS)
+    // And the part of the same silence that is worth saying out loud before it
+    // is fatal. The transport opens its quiet window when it is built, so this
+    // starts from the moment the session did.
+    armQuietWatch(LINK_QUIET_AFTER_MS)
     // The round trip that confirms the keys, made of a frame the relay's idle
     // deadline wanted anyway. The peer's own keepalive confirms us to them.
     transport.keepalive()
@@ -1108,6 +1207,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     wakePending = false
     confirmed = false
     confirmedAt = undefined
+    quiet = false
     // Carried into the reconnect, because it is still true until somebody
     // answers: this machine slept and nothing has been heard since.
     moveTo('connecting', sleptWithoutAnswer ? WOKE_DETAIL : undefined)
@@ -1175,6 +1275,15 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
             return
           }
           transport?.receive(payload)
+          // The end of a silence is an arrival, not a deadline, so it is
+          // noticed here. A window still showing "last heard 4m ago" for a
+          // teammate who answered a second ago would be the same untruth this
+          // number exists to remove, pointed the other way.
+          if (quiet && transport && transport.quietForMs < LINK_QUIET_AFTER_MS) {
+            quiet = false
+            options.onStatusChange(snapshot())
+            armQuietWatch(LINK_QUIET_AFTER_MS)
+          }
         },
         onClosed: (closure) => {
           // A socket the link walked away from can still deliver its close, and
