@@ -1,10 +1,14 @@
 # Short, shareable aliases.
 #
-# NOTE, and this is the trap: `latest` resolves the RELEASE, not the asset name.
-# `latest/download/teamree-0.1.0.dmg` therefore keeps pointing at a file called
-# teamree-0.1.0.dmg, and 404s the moment v0.2.0 ships. The filename below MUST be
-# bumped with every release. `grep -rn '0\.1\.0' site/public` lists every place
-# the version appears; the SHA-256 and the "192 MiB" size in index.html need
-# changing too and the grep will not find those.
-/download/mac  https://github.com/zero-abd/teamree/releases/latest/download/teamree-0.1.0.dmg  302
+# The asset name carries no version, so `latest/download/` genuinely does follow
+# the newest release and these rules survive a version bump untouched. That is
+# the whole reason for the version-free name: an earlier form of this file
+# pointed at `teamree-0.1.0.dmg`, and because `latest` resolves the RELEASE and
+# not the asset name, it would have 404'd the day v0.2.0 shipped -- while the
+# page's own button kept working, which is the worse failure, because nobody
+# thinks to test the alias.
+#
+# Keep this in step with the download button in index.html. If the asset is ever
+# renamed again, this line and the button are the two places to change.
+/download/mac  https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg  302
 /download      https://github.com/zero-abd/teamree/releases/latest  302

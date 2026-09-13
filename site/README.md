@@ -80,20 +80,31 @@ to that preference while the page is open is honoured too.
 The button links to
 
 ```
-https://github.com/zero-abd/teamree/releases/latest/download/teamree-0.1.0.dmg
+https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg
 ```
 
-`latest` resolves to whatever release is current, so this survives a new release
-only as long as the version in the file name is bumped with it — the `latest`
-path does **not** wildcard the asset name. `grep -rn "0\.1\.0" site/public` lists
-every place that needs changing; at the time of writing that is two `href`s, two
-size lines, the `shasum` example, the hero eyebrow, the status heading, and the
-alias in `_redirects`.
+The file name carries no version, which is the point: `latest` resolves the
+release but **not** the asset name, so a versioned name would 404 the day the
+next release ships rather than falling back. Verified resolving 302 → 302 → 200
+at 201,721,718 bytes.
 
-The page also shows the SHA-256 of the published `.dmg`, labelled with the
-version so a stale one is visibly stale. For v0.1.0 that is
+Two things about the v0.1.0 release are worth knowing before the next one:
+
+- It carries the same `.dmg` **twice**, as `teamree-0.1.0.dmg` and as
+  `teamree-mac-universal.dmg`. Both resolve. Future releases should publish the
+  version-free name; the versioned one exists because the rename happened after
+  the release was cut.
+- `SHA256SUMS.txt` lists only the **versioned** name, so a reader who downloads
+  `teamree-mac-universal.dmg` finds no line matching their file. The page works
+  around this by printing the digest itself and pointing at that rather than at
+  "the matching line". If a future release regenerates the sums file under the
+  version-free name, that wording can go back to being simpler.
+
+The page prints the SHA-256 of the published `.dmg`, labelled with the version so
+a stale one is visibly stale. For v0.1.0 that is
 `ccf09c74af6ba75a032fee58b11dc578ece77dd3ec38401328fe34a8131bf8d2`, which matches
-the `SHA256SUMS.txt` published beside it.
+`SHA256SUMS.txt`. That digest and the "192 MiB" size are the two things a release
+bump must touch that a `grep` for the version number will not find.
 
 ## Claims the page makes
 
@@ -124,6 +135,15 @@ written from memory, and three were cut because they did not survive it:
 - **"Windows comes later"** was cut. `ROADMAP.md` is explicit that macOS-only is
   a decision rather than a gap waiting to close, and that the Windows packaging
   has never been built or launched by anybody.
+
+What on the install path has actually been observed, as opposed to read off a
+string table, is stated on the page itself in the caption under the System
+Settings paragraph. Short version: the `xattr` command was run against this
+build and watched to work; the dialog was quoted off the screen; **Done** was
+pressed on it and dismissed it. The System Settings → Privacy & Security route
+has still never been clicked through — an attempt was made and defeated by other
+agents driving the same display — so it stays marked as the unverified one. If
+anyone ever walks that pane for real, the caption can shrink to a sentence.
 
 The Gatekeeper section quotes the macOS 26 dialog — **"teamree" Not Opened** /
 *Apple could not verify "teamree" is free of malware…*, buttons **Move to Trash**
