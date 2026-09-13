@@ -7,8 +7,8 @@
 name: ci
 
 # A branch is covered by its pull request and the trunk by its pushes, so no
-# commit is checked twice. A full run is three runners each packaging an
-# Electron app; it is worth spending once and not worth spending twice.
+# commit is checked twice. A full run packages an Electron app; it is worth
+# spending once and not worth spending twice.
 #
 # Tags are absent on purpose. `release.yml` runs on those, and it calls
 # `build.yml` exactly as this does, so a tag matching here too would build
@@ -22,7 +22,7 @@ on:
 permissions:
   contents: read
 
-# A branch only needs its newest commit checked; three runners per superseded
+# A branch only needs its newest commit checked; a packaging run per superseded
 # push is a lot of machine time to spend on an answer nobody will read.
 concurrency:
   group: ci-${{ github.ref }}

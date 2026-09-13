@@ -1,4 +1,4 @@
-# Every check this project has, on every platform it ships to.
+# Every check this project has, on the one platform it ships to.
 #
 # This is the whole of it, and it is a reusable workflow rather than a job so
 # that `ci.yml` and `release.yml` run the same steps rather than two copies that
@@ -12,10 +12,12 @@
 # the cheap checks out would put the expensive, informative half behind a tag
 # and leave it unrun, which is how it got into that state.
 #
-# Each platform is packaged on its own runner out of necessity. node-pty is a
-# native module: it ships prebuilt binaries for macOS and Windows but none for
-# Linux, where `npm ci` compiles one — so a Linux artifact built anywhere else
-# would contain no working PTY at all.
+# One runner, because one platform is published. The matrix is kept for the
+# shape of it: a platform added back is a block here rather than a rewrite, and
+# each one would need its own runner out of necessity. node-pty is a native
+# module — it ships prebuilt binaries for macOS and Windows but none for Linux,
+# where `npm ci` compiles one, so a Linux artifact built anywhere else would
+# contain no working PTY at all.
 #
 # Nothing here is signed. Signing needs secrets a fork cannot have; see the
 # comments in electron-builder.yml for what a maintainer adds, and pass them to
@@ -198,6 +200,44 @@ jobs:
       # download arrives, and runs the command read out of the document itself.
       - name: Verify the install instructions
         run: npm run install:verify
+
+      # Everything above checks `dist/mac-universal/teamree.app` — the unpacked
+      # tree. What a person downloads is the `.dmg`, which is built afterwards,
+      # out of the same tree but through hdiutil, an HFS+ image and a
+      # compressor. None of that had ever been opened by anything: CI's only
+      # interaction with the published file was uploading it, so an image that
+      # would not mount, or that carried a short copy of the app, would have
+      # been found first by whoever downloaded it.
+      #
+      # Mounted at a path of our choosing rather than wherever /Volumes puts it,
+      # so the path below is known instead of guessed from the volume name.
+      - name: Mount the .dmg that is published
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          found=$(find dist -maxdepth 1 -name '*.dmg' | sort)
+          count=$(printf '%s' "$found" | grep -c . || true)
+          if [ "$count" != "1" ]; then
+            echo "build: expected exactly one .dmg in dist/, found $count." >&2
+            ls -l dist >&2
+            exit 1
+          fi
+          echo "build: mounting $found"
+          mkdir -p "$RUNNER_TEMP/dmg"
+          hdiutil attach "$found" -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg"
+          ls -l "$RUNNER_TEMP/dmg"
+
+      # The same check as above, against the copy inside the image. The script
+      # takes an explicit path for exactly this.
+      - name: Verify the app inside the .dmg
+        if: runner.os == 'macOS'
+        run: node scripts/verify-package.mjs "$RUNNER_TEMP/dmg/teamree.app"
+
+      # `always()`, so that a failed verification above is the failure this run
+      # reports rather than a later one about a volume still attached.
+      - name: Unmount it
+        if: always() && runner.os == 'macOS'
+        run: hdiutil detach "$RUNNER_TEMP/dmg" || true
 
       - uses: actions/upload-artifact@v4
         with:
