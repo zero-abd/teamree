@@ -12,7 +12,7 @@ on:
   push:
     tags: ['v*']
   # Re-runnable by hand against a tag, for the case where publishing failed
-  # after a three-runner build succeeded. Select the tag as the ref; the job
+  # after the build succeeded. Select the tag as the ref; the job
   # refuses a branch rather than cutting a release named after one.
   workflow_dispatch:
 
@@ -48,9 +48,10 @@ jobs:
             exit 1
           fi
 
-      # `merge-multiple` flattens the three per-runner uploads into one
-      # directory. Each upload's paths are already relative to `dist/`, so the
-      # installers land side by side with no nesting to strip.
+      # `merge-multiple` flattens the per-runner uploads into one directory.
+      # Each upload's paths are already relative to `dist/`, so the installers
+      # land side by side with no nesting to strip. One runner ships today; the
+      # pattern is kept because the build matrix is.
       - uses: actions/download-artifact@v4
         with:
           pattern: teamree-*
@@ -103,7 +104,7 @@ jobs:
             echo "verified\". Move the app to \`/Applications\`, then run once:"
             echo
             echo '```sh'
-            echo 'xattr -d com.apple.quarantine /Applications/teamree.app'
+            echo 'xattr -dr com.apple.quarantine /Applications/teamree.app'
             echo '```'
             echo
             echo "The full story — why each warning appears, what it does and does not mean,"

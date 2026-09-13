@@ -4,16 +4,21 @@ This is for somebody who has downloaded a build rather than cloned the
 repository. If you want to run it from source, the README covers that in two
 commands and none of this applies.
 
-Every release carries an installer per platform and a `SHA256SUMS.txt` beside
-them. Take the one for your machine.
+**Releases are macOS only.** That is a decision rather than a gap: the Windows
+and Linux packaging is still configured and the sections below still describe
+it, but nobody builds or publishes either, so a release page has these files on
+it and no others.
 
 | Platform | File |
 | --- | --- |
 | macOS, Apple Silicon | `teamree-<version>-arm64.dmg` |
 | macOS, Intel | `teamree-<version>-x64.dmg` |
-| Windows | `teamree-<version>-setup-x64.exe` |
-| Linux, `.deb` systems | `teamree_<version>_amd64.deb` |
-| Linux, anything else | `teamree-<version>-x86_64.AppImage` |
+
+A `.zip` of each is published beside them, for anyone who would rather not
+mount a disk image, along with a `SHA256SUMS.txt` covering all four.
+
+On Windows or Linux, run it from source — the README covers that in two
+commands, and it is the same application.
 
 ## Nothing here is signed
 
@@ -43,13 +48,7 @@ checksum gives you the same guarantee by a different route, which is why every
 release publishes them. Before you install, compare:
 
 ```sh
-# macOS and Linux
-shasum -a 256 teamree-0.0.1-x86_64.AppImage
-```
-
-```powershell
-# Windows
-Get-FileHash .\teamree-0.0.1-setup-x64.exe -Algorithm SHA256
+shasum -a 256 teamree-0.0.1-arm64.dmg
 ```
 
 against the matching line in `SHA256SUMS.txt` on the release. If they agree, the
@@ -74,10 +73,17 @@ there. Removing the attribute tells macOS this file is one you put there on
 purpose:
 
 ```sh
-xattr -d com.apple.quarantine /Applications/teamree.app
+xattr -dr com.apple.quarantine /Applications/teamree.app
 ```
 
 Open it normally after that and it will not ask again.
+
+`-r` because an app bundle is a directory tree and the two artifacts are marked
+differently: dragging out of the `.dmg` marks the bundle, while expanding the
+`.zip` marks every file inside it. Clearing only the bundle would work for one
+of them and leave the other stopped. This is checked rather than asserted — CI
+quarantines a real packaged build both ways and runs the command above, read
+out of this file, so the instruction cannot rot into being wrong.
 
 There is a route through the interface as well, but where it is depends on your
 macOS version, which is worth knowing before you go hunting for it. Through
@@ -97,6 +103,10 @@ make the app distributable in Apple's sense. You will still see the warning
 above.
 
 ## Windows
+
+Nothing publishes this installer today; the section is kept because the
+packaging is kept, and describes what it would produce. To run teamree on
+Windows now, build from source.
 
 Run `teamree-<version>-setup-x64.exe`. It installs per-user, into
 `%LOCALAPPDATA%\Programs\teamree`, and asks no administrator password.
@@ -128,6 +138,11 @@ describes what the configuration produces, not something that has been seen to
 work. `ROADMAP.md` keeps the honest account of what has and has not been run.
 
 ## Linux
+
+Nothing publishes these packages today either, and the same applies: the
+section describes the configured packaging, and building from source is the way
+to run teamree on Linux now. Unlike Windows, this packaging has been built and
+launched for real in CI.
 
 Nothing warns you about anything here; neither of the mechanisms above exists.
 

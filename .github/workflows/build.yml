@@ -192,6 +192,13 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum npm run package:verify
 
+      # The install instructions are the last thing between a packaged build and
+      # somebody using it, and they were prose nobody had run. This installs the
+      # real bundle at the path the document names, quarantines it both ways a
+      # download arrives, and runs the command read out of the document itself.
+      - name: Verify the install instructions
+        run: npm run install:verify
+
       - uses: actions/upload-artifact@v4
         with:
           name: teamree-${{ runner.os }}
