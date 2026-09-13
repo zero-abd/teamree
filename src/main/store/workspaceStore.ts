@@ -14,6 +14,7 @@ import {
   parseWorkspaceDocument,
   type AskedQuestion,
   type AskedQuestions,
+  type StandingConsentRecord,
   type UpdateRecord,
   type WorkspaceDocument
 } from './workspaceDocument'
@@ -87,6 +88,8 @@ export class WorkspaceStore {
   private readonly layouts = new Map<string, Layout>()
   private readonly terminals = new Map<string, TerminalRecord>()
   private readonly mutedTerminals = new Set<string>()
+  /** Standing permissions, keyed the way `consentKey` spells one out. */
+  private readonly standingConsent = new Map<string, StandingConsentRecord>()
   private asked: AskedQuestions = {}
   private appearance: Appearance = DEFAULT_APPEARANCE
   private updates: UpdateRecord = {}
@@ -112,6 +115,9 @@ export class WorkspaceStore {
     for (const layout of document.layouts) this.layouts.set(layout.worktreeId, layout)
     for (const terminal of document.terminals) this.terminals.set(terminal.id, terminal)
     for (const terminalId of document.mutedTerminals) this.mutedTerminals.add(terminalId)
+    for (const grant of document.standingConsent) {
+      this.standingConsent.set(consentKey(grant.terminalId, grant.publicKey), grant)
+    }
     this.asked = document.asked
     this.appearance = document.appearance
     this.updates = document.updates
@@ -243,8 +249,36 @@ export class WorkspaceStore {
     // is not a pane the owner is still silencing, and keying the two together
     // is what makes a mute durable without anything ever having to be swept.
     const unmuted = this.mutedTerminals.delete(terminalId)
-    if (removed || unmuted) this.persist()
+    // And the permissions, for exactly the same reason. A pane that has been
+    // closed is not a pane anybody still has permission to type in, and keying
+    // the two together is what makes a grant durable without anything ever
+    // having to be swept.
+    let forgotten = false
+    for (const [key, grant] of this.standingConsent) {
+      if (grant.terminalId !== terminalId) continue
+      this.standingConsent.delete(key)
+      forgotten = true
+    }
+    if (removed || unmuted || forgotten) this.persist()
     return removed
+  }
+
+  /**
+   * Standing permissions as they stand between runs.
+   *
+   * Read once at startup by the peer service, which judges every keystroke from
+   * its own copy: the answer has to be instant, and a file read is not.
+   */
+  listStandingConsent(): StandingConsentRecord[] {
+    return [...this.standingConsent.values()]
+  }
+
+  /** `since` records it; `null` takes it back. */
+  setStandingConsent(terminalId: string, publicKey: string, since: number | null): void {
+    const key = consentKey(terminalId, publicKey)
+    const changed = since === null ? this.standingConsent.delete(key) : this.standingConsent.get(key)?.since !== since
+    if (since !== null) this.standingConsent.set(key, { terminalId, publicKey, since })
+    if (changed) this.persist()
   }
 
   /**
@@ -423,11 +457,22 @@ export class WorkspaceStore {
       ...emptyWorkspaceDocument(),
       ...this.snapshot(),
       mutedTerminals: this.listMutedTerminals(),
+      standingConsent: this.listStandingConsent(),
       asked: this.asked,
       appearance: this.appearance,
       updates: this.updates
     }
   }
+}
+
+/**
+ * One pane, one teammate. Both halves, because a permission that named only the
+ * pane would be "anyone may type here" — the default the prompt exists to
+ * remove — and one that named only the person would be a permission nobody was
+ * asked for.
+ */
+function consentKey(terminalId: string, publicKey: string): string {
+  return `${terminalId}\u0000${publicKey}`
 }
 
 /**

@@ -26,9 +26,11 @@ import {
   createFakeRelay,
   createManualScheduler,
   createPeerRuntime,
+  decided,
   makeProjectDir,
   project,
   remoteRunner,
+  standingConsent,
   terminal,
   worktree,
   type PeerRuntime
@@ -87,6 +89,11 @@ describe('a teammate is named by the roster of the project they reached this mac
       scheduler,
       env: { TEAMREE_RELAY_URL: RELAY_URL },
       dataDir: ownerData,
+      // The owner settled this pane for Mallory some time before: these tests
+      // are about which roster names her, not about the prompt, and driving
+      // the prompt through first would put the subject of every one of them
+      // behind a step belonging to a different test.
+      consent: standingConsent([{ terminalId: 't_a1', publicKey: malloryKey }]),
       runner: remoteRunner({ [elsewhere]: ORIGIN_Z, [shared]: ORIGIN_A }),
       workspace: {
         projects: [project('p_z', elsewhere), project('p_a', shared)],
@@ -112,11 +119,9 @@ describe('a teammate is named by the roster of the project they reached this mac
 
   it('attributes her keystroke to her name on this project, live and in the log', async () => {
     const { runtime, malloryKey } = await twoRosters()
-    const verdict = runtime.service.remoteWrite(linkIdFor(malloryKey, KEY_A), {
-      terminalId: 't_a1',
-      data: 'ls\n',
-      bytes: 3
-    })
+    const verdict = decided(
+      runtime.service.remoteWrite(linkIdFor(malloryKey, KEY_A), { terminalId: 't_a1', data: 'ls\n', bytes: 3 })
+    )
 
     expect(verdict.ok).toBe(true)
     expect(typistsOn(runtime, 'p_a', 't_a1').map((row) => row.handle)).toEqual(['mallory'])
@@ -153,6 +158,12 @@ describe('the same repository checked out twice is one team and two projects', (
       scheduler,
       env: { TEAMREE_RELAY_URL: RELAY_URL },
       dataDir: ownerData,
+      // Both of the owner's own panes are already Alice's to type in, so what
+      // these tests exercise is the scoping rather than the asking.
+      consent: standingConsent([
+        { terminalId: 't1', publicKey: aliceKey },
+        { terminalId: 't2', publicKey: aliceKey }
+      ]),
       runner: remoteRunner({ [cloneA]: ORIGIN_A, [cloneB]: ORIGIN_A, [private_]: ORIGIN_Z }),
       workspace: {
         projects: [project('p_main', cloneA), project('p_review', cloneB), project('p_private', private_)],
@@ -235,6 +246,9 @@ describe('a refused keystroke leaves no mark on a project its sender is not on',
       scheduler,
       env: { TEAMREE_RELAY_URL: RELAY_URL },
       dataDir: ownerData,
+      // Settled beforehand for the one pane she is allowed on, so the flood
+      // below is measured against a record that really exists.
+      consent: standingConsent([{ terminalId: 't_a1', publicKey: malloryKey }]),
       runner: remoteRunner({ [shared]: ORIGIN_A, [alone]: ORIGIN_Z }),
       workspace: {
         projects: [project('p_a', shared), project('p_b', alone)],
@@ -253,7 +267,7 @@ describe('a refused keystroke leaves no mark on a project its sender is not on',
 
   it('does not put her name on a pane of another project she merely named', async () => {
     const { runtime, linkId } = await malloryOnOneProject()
-    const verdict = runtime.service.remoteWrite(linkId, { terminalId: 't_secret_b', data: 'x', bytes: 1 })
+    const verdict = decided(runtime.service.remoteWrite(linkId, { terminalId: 't_secret_b', data: 'x', bytes: 1 }))
     expect(verdict.ok).toBe(false)
 
     // The owner's window for the other project must have nothing to show: a

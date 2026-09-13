@@ -89,6 +89,14 @@
   color: var(--warning);
 }
 
+/* Waiting is not refusal, so it is not the refusal colour. Nothing has gone
+   wrong yet — the keystrokes are sitting on somebody else's machine unanswered,
+   and this says so without claiming to know why. */
+.watch__typing--held {
+  border-color: var(--info);
+  color: var(--info);
+}
+
 /* The bars. Whatever is left over around the owner's picture is this ground,
    deliberately darker than the terminal's own so the edge of what they can see
    is visible rather than implied. */

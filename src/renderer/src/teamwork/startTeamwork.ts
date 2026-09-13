@@ -166,25 +166,35 @@ export const ADD_KEY_BUTTON = 'Add my key'
  * button that adds one and not in a footnote.
  *
  * `docs/teamwork.md` is explicit that this is remote code execution by design,
- * and equally explicit that what makes it survivable is not a permission model
- * — which would be a lie at this granularity — but that none of it can be done
- * invisibly. Both halves are here. The warning without the mitigations reads as
- * "do not use this feature"; the mitigations without the warning are a sales
- * pitch.
+ * and equally explicit about the two things that make it survivable: their
+ * keystrokes wait for you, and none of it can be done invisibly. Both halves
+ * are here, and so is the warning they sit under. The warning without the
+ * mitigations reads as "do not use this feature"; the mitigations without the
+ * warning are a sales pitch.
+ *
+ * The first mitigation is deliberately not written as a promise of safety. A
+ * prompt catches a colleague's mistake, which is what nearly every bad
+ * keystroke is; it does not catch somebody who should not be on the roster,
+ * because allowing them is one click and after it they can run anything. Saying
+ * otherwise here would be the sales pitch.
  */
 export const KEY_GRANT_WARNING = {
   head: 'A key in .teamree/members/ can run commands on this machine, as you.',
   body:
     'That is the feature: a teammate who can see your agent stuck on a question can type the answer into it. ' +
-    'Anyone on this roster can type into any pane here, and typing into a pane is running arbitrary commands ' +
-    'as you.',
+    'Anyone on this roster can ask to type into any pane here, and typing into a pane is running arbitrary ' +
+    'commands as you.',
   mitigations: [
+    'Their keystrokes wait: you are shown who, which pane and what, and nothing runs until you allow it.',
+    'You can allow once, for this session, or from now on in that pane — and lift it again whenever you like.',
     'A pane that is being watched says so, and by whom.',
     'Typing is attributed live: the pane names who is typing while they type.',
-    'Every remote write is recorded on this machine, with who and when.',
+    'Every remote write is recorded on this machine, with who and when — including the ones you refused.',
     'Mute is instant, per-pane, and yours — not a negotiation.'
   ],
-  close: 'Add the keys of people you would hand an unlocked laptop to, because that is what you are doing.'
+  close:
+    'Being asked catches a mistake, not somebody you should not have added: once you allow them they can run ' +
+    'anything. Add the keys of people you would hand an unlocked laptop to.'
 } as const
 
 /**

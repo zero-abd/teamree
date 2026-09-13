@@ -45,15 +45,28 @@ worth a minute before you start.
 > Teamwork is remote code execution, deliberately. A person whose key is in
 > `.teamree/members/` can type into a pane on your machine, which means running
 > arbitrary commands as you. That is the feature — a teammate who can see your
-> agent stuck on a question can answer it — and what makes it survivable is not
-> a permission model, which would be a lie at this granularity, but that it
-> cannot be done invisibly: the pane says it is being watched and by whom,
-> typing is attributed live, every remote write is recorded on your machine
-> with who and when, and mute is instant, per-pane and yours alone.
+> agent stuck on a question can answer it — and two things make it survivable.
+>
+> The first is that **it waits for you.** A teammate's keystrokes are held on
+> your machine until you have been shown who is asking, which pane, and the
+> bytes themselves, and have answered: allow once, allow for this session, allow
+> them in that pane from now on, or refuse. A request nobody answers expires
+> after a minute and the teammate is told so. Muting a pane answers the question
+> before it is asked, and lifts every permission on it.
+>
+> The second is that **none of it can be done invisibly**: the pane says it is
+> being watched and by whom, typing is attributed live, every remote write your
+> machine decided about is recorded with who and when — including the ones you
+> refused — and mute is instant, per-pane and yours alone.
+>
+> The prompt catches accidents, which is what almost every bad keystroke is. It
+> is not a wall against somebody you should not have added: once you allow them,
+> they can run anything.
 >
 > So adding a key to this repository is not a formality and no longer grants
 > only a view of worktree names. Add the keys of people you would hand an
-> unlocked laptop to, because that is now exactly what you are doing.
+> unlocked laptop to — you will be asked before their first keystroke runs, and
+> "always allow" is one click away from handing it over for good.
 >
 > Your own identity is inside that grant. `identity.key` is an ordinary file
 > owned by the same account every pane runs as, so a teammate typing into a

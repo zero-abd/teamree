@@ -54,6 +54,7 @@ import {
   fixedRemoteRunner,
   makeProjectDir,
   project,
+  standingConsent,
   terminal,
   worktree,
   type PeerRuntime
@@ -103,6 +104,11 @@ async function victim(): Promise<Victim> {
     env: { TEAMREE_RELAY_URL: RELAY_URL },
     runner: fixedRemoteRunner(ORIGIN),
     dataDir: aliceData,
+    // Alice has already told her machine that Mallory may type in this pane —
+    // which is exactly the state the key-grant warning is about. These tests
+    // are about what the record survives, not about the asking, and a
+    // keystroke held for a prompt is a keystroke that never reaches the log.
+    consent: standingConsent([{ terminalId: 't_a1', publicKey: mallory }]),
     workspace: {
       projects: [project('p_alice', projectPath)],
       worktrees: [worktree('wt_a1', 'p_alice', 'search ranking', 'feat/ranking')],

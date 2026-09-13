@@ -1038,19 +1038,21 @@ demo:video:parked -->
         panes is doing and type into it.
       </p>
       <p>
-        <strong>Adding a teammate's key lets them run commands on your machine, as you.</strong>
-        A public key committed to <code>.teamree/members/</code> is a standing permission for
-        as long as it is in the repository, and there is no per-request grant to approve. It is
-        built so that it cannot be used invisibly: the pane says it is being watched and by
-        whom, typing is attributed live, and every remote write is recorded on your machine
-        with who and when. Mute is instant and yours, but it
-        is a per-pane opt-out after the fact rather than a gate before it. Add the keys of
-        people you would hand an unlocked laptop to.
+        <strong>Adding a teammate's key lets them ask to run commands on your machine, as
+        you.</strong> Their keystrokes are held until you have been shown who is asking, which
+        pane, and the bytes themselves &mdash; then you allow them once, for the session, from
+        now on in that pane, or not at all. Anything nobody answers expires, and they are told
+        so. It is also built so that none of it can be used invisibly: the pane says it is being
+        watched and by whom, typing is attributed live, and every remote write is recorded on
+        your machine with who and when. Mute is instant and yours, and answers the question
+        before it is asked. The prompt catches accidents; once you allow somebody, they can run
+        anything. Add the keys of people you would hand an unlocked laptop to.
       </p>
       <p>
         Every guard sits at the owner&rsquo;s end: their machine refuses unless your key is on
-        the roster, refuses outright when they have muted the pane, caps one write, and records
-        who typed how much into which pane in a log that survives a restart.
+        the roster, refuses outright when they have muted the pane, holds the keystroke until
+        they have read it and allowed it, caps one write, and records who typed how much into
+        which pane in a log that survives a restart.
       </p>
       <p>
         <strong>Built, not weathered.</strong> All five stages have landed &mdash; identity, the

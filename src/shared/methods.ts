@@ -9,6 +9,7 @@ import type {
   InstalledAgent,
   Layout,
   MemberList,
+  PaneConsent,
   PaneNode,
   PaneWatchers,
   PeerPresence,
@@ -350,6 +351,42 @@ export const Params = {
   /** Who is reading and typing into this machine's panes, right now, in one project. */
   teamworkWatchers: z.object({ projectId: z.string().min(1) }),
   /**
+   * Whose keystrokes are waiting on the owner in one project, and which
+   * teammates already have a standing permission there.
+   *
+   * Read on the same invalidation everything else in teamwork is: a request
+   * appearing, growing, being answered or expiring all move the same
+   * `teammates` event, because the window that has to put the question on
+   * screen is the window that is already listening for it.
+   */
+  teamworkRequests: z.object({ projectId: z.string().min(1) }),
+  /**
+   * The owner's answer to one held burst.
+   *
+   * `through` is how many of the burst's keystrokes the owner was actually
+   * shown. It matters only for `once`, and it matters there absolutely: a burst
+   * grows while the prompt is up, so a decision taken about four keystrokes
+   * must not admit the fourteen that are held by the time the click lands. The
+   * window sends the count it drew; anything still held after that stays held
+   * and asks again. Omitted, the answer covers everything waiting — which is
+   * the right default for a CLI, where the list was printed and answered in one
+   * breath, and the wrong one for a screen somebody is reading.
+   */
+  teamworkDecide: z.object({
+    requestId: z.string().min(1),
+    decision: z.enum(['once', 'session', 'always', 'deny']),
+    through: z.number().int().positive().optional()
+  }),
+  /**
+   * Takes back a standing permission.
+   *
+   * The owner's alone, like the mute, and for the same reason: a permission
+   * that needed the other side's agreement to end would not be a permission,
+   * it would be a contract. It takes effect on the next keystroke, which is
+   * every keystroke that has not already been written.
+   */
+  teamworkRevoke: z.object({ terminalId: z.string().min(1), publicKey: z.string().min(1) }),
+  /**
    * Stops, or restarts, remote keystrokes reaching one of *this machine's*
    * panes.
    *
@@ -549,6 +586,10 @@ export type MethodContract = {
   }
   'teamwork.type': { params: z.infer<typeof Params.teamworkType>; result: { written: true } }
   'teamwork.watchers': { params: z.infer<typeof Params.teamworkWatchers>; result: PaneWatchers }
+  'teamwork.requests': { params: z.infer<typeof Params.teamworkRequests>; result: PaneConsent }
+  /** Answers with the pane's project, so the caller sees the queue it just shortened. */
+  'teamwork.decide': { params: z.infer<typeof Params.teamworkDecide>; result: PaneConsent }
+  'teamwork.revoke': { params: z.infer<typeof Params.teamworkRevoke>; result: PaneConsent }
   /** Answers with the pane's project, so the caller sees the mute it just set. */
   'teamwork.mute': { params: z.infer<typeof Params.teamworkMute>; result: PaneWatchers }
   'teamwork.writeLog': { params: z.infer<typeof Params.teamworkWriteLog>; result: RemoteWriteLog }

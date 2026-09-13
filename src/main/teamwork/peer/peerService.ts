@@ -31,7 +31,11 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { z } from 'zod'
 import {
+  CONSENT_WINDOW_MS,
   TYPING_WINDOW_MS,
+  type ConsentGrant,
+  type ConsentScope,
+  type PaneConsent,
   type PaneTypist,
   type PaneWatcher,
   type PaneWatchers,
@@ -41,6 +45,7 @@ import {
   type PeerProject,
   type PeerWorktree,
   type Project,
+  type ConsentRequest,
   type RemoteWrite,
   type RemoteWriteLog,
   type RemoteWriteOutcome,
@@ -60,6 +65,7 @@ import {
   PANE_CLOSED,
   PeerCallError,
   type RemoteReadVerdict,
+  type RemoteWriteDecision,
   type RemoteWriteRequest,
   type RemoteWriteVerdict
 } from '../../runtime/peerTransport'
@@ -77,6 +83,7 @@ import {
 import { AGENT_KINDS } from '../../terminals/agent-command'
 import { badPaneId, TeamworkError } from '../errors'
 import { createRemoteWriteLog, returnsIn, type RemoteWriteRecorder } from './writeLog'
+import { previewOf } from './writePreview'
 import { loadIdentity, loadStaticPrivateKey } from '../identity'
 import { readRoster } from '../roster'
 import { watchPane } from './paneWatch'
@@ -140,6 +147,17 @@ export type PeerServiceOptions = {
    * which is what a test that is not about restarts wants.
    */
   mutes?: MuteStore
+  /**
+   * Where the owner's standing permissions live between runs.
+   *
+   * The same bargain as the mutes above and the same reasoning: "always allow
+   * ana on this pane" is a decision the owner took once, and a decision that
+   * quietly lapsed at the next restart would be one they were never told they
+   * had lost. Left out, an `always` grant lasts as long as the runtime — which
+   * makes it a `session` grant wearing the wrong name, and is what a test that
+   * is not about restarts wants.
+   */
+  consent?: ConsentStore
   /** Publishes `{ type: 'teammates' }` so the window re-reads. */
   onChange: () => void
   onError?: (error: unknown) => void
@@ -152,6 +170,26 @@ export type PeerServiceOptions = {
 export type MuteStore = {
   list: () => readonly string[]
   set: (terminalId: string, muted: boolean) => void
+}
+
+/**
+ * The durable half of an `always` grant, kept beside the terminal records for
+ * exactly the reason a mute is: the permission is about one pane, so it is
+ * dropped by the same removal that drops the pane, and there is nothing to
+ * sweep at startup.
+ *
+ * A pair rather than an id, because this permission is about a person as well
+ * as a pane. "Anyone may type here" is the thing the prompt exists to stop
+ * being the default, and a grant that named only the pane would put it back.
+ */
+export type ConsentStore = {
+  list: () => readonly { terminalId: string; publicKey: string; since: number }[]
+  /**
+   * `since` is when the owner gave it, and `null` takes it back. A time rather
+   * than a flag because the owner is owed the date: a permission whose age
+   * nothing knows is one nobody can weigh up when they come to review it.
+   */
+  set: (terminalId: string, publicKey: string, since: number | null) => void
 }
 
 type ProjectFacts = {
@@ -292,6 +330,39 @@ export class PeerService {
    * goes when that record does.
    */
   readonly #muted = new Set<string>()
+  /**
+   * Standing permissions, by pane and by the teammate they are for.
+   *
+   * The other side of the mute, and held in memory for the same reason: a
+   * keystroke is judged against it in one synchronous task, and a file read is
+   * not. `always` grants are written through to `options.consent`; `session`
+   * grants are not, because their whole definition is that they end when this
+   * runtime or that link does.
+   */
+  readonly #standing = new Map<string, StandingGrant>()
+  /**
+   * Keystrokes held at one of this machine's panes, waiting for the owner.
+   *
+   * NOTHING IN HERE HAS RUN, and that is the invariant the whole of this
+   * feature rests on: a write reaches the pty from exactly one place — the
+   * verdict returned into the task that dispatches it — and a held write has
+   * not been given one. The bytes sit in this map, in this process's memory,
+   * with the pty none the wiser.
+   */
+  readonly #pending = new Map<string, PendingRequest>()
+  /**
+   * Which request a teammate's next keystroke at a pane should join, by
+   * `#consentKey`.
+   *
+   * One per teammate per pane, which is what makes a burst one question. A
+   * person typing `npm test` sends eight keystrokes, and eight prompts is a
+   * prompt nobody reads — and a prompt nobody reads is a prompt everybody
+   * clicks through, which would be worse than no prompt at all.
+   */
+  readonly #pendingByPane = new Map<string, string>()
+  #requestSeq = 0
+  /** When the window was last told a request grew, so a burst is not a flood. */
+  #requestsToldAt = 0
   readonly #log: RemoteWriteRecorder
 
   #cache: TeammateCache | undefined
@@ -306,6 +377,8 @@ export class PeerService {
   /** When the window was last told about typing, so a burst is not a flood of reads. */
   #typingToldAt = 0
   #cancelTypingIdle: (() => void) | undefined
+  /** The same, for a held burst that is still growing while the owner reads it. */
+  #cancelRequestsIdle: (() => void) | undefined
 
   constructor(options: PeerServiceOptions) {
     this.#options = options
@@ -334,6 +407,18 @@ export class PeerService {
     // Before anything can be typed at, so the first keystroke of the session
     // meets the decision the owner made in the last one.
     for (const terminalId of this.#options.mutes?.list() ?? []) this.#muted.add(terminalId)
+    // And the permissions beside them, for the same reason and at the same
+    // moment: the first keystroke of this session meets every decision the
+    // owner has already taken, rather than asking them again for one they made
+    // last week.
+    for (const grant of this.#options.consent?.list() ?? []) {
+      this.#standing.set(consentKeyOf(grant.terminalId, grant.publicKey), {
+        terminalId: grant.terminalId,
+        publicKey: grant.publicKey,
+        scope: 'always',
+        since: grant.since
+      })
+    }
     // Before the links, so the sidebar has last night's picture from the first
     // frame it paints rather than after the first teammate answers.
     this.#cache ??=
@@ -373,6 +458,19 @@ export class PeerService {
     this.#cancelTypingIdle = undefined
     this.#flushEveryUnaimed()
     this.#unaimed.clear()
+    // Nobody is going to answer these now, and a held keystroke that nothing
+    // ever settles is the failure this whole path exists to make impossible.
+    // Said as an expiry rather than as a denial, because the owner did not
+    // decide anything: their runtime went away underneath the question.
+    for (const request of [...this.#pending.values()]) {
+      this.#settle(request, request.held.length, 'expired', 'this runtime stopped while the owner was being asked')
+    }
+    // A session grant lasts as long as this runtime, which is exactly what this
+    // is the end of. The durable ones stay: they are in a file, and they are
+    // read back by the next `start`.
+    for (const [key, grant] of [...this.#standing]) {
+      if (grant.scope === 'session') this.#standing.delete(key)
+    }
     for (const record of this.#links.values()) record.link.stop()
     this.#links.clear()
     this.#peerByConnection.clear()
@@ -420,6 +518,10 @@ export class PeerService {
       const want = wanted.get(linkId)
       // A relay that moved is a different link, not the same one reconnecting.
       if (want && want.relayUrl === record.relayUrl) continue
+      // Read before it is dropped, because a link that is going still has to be
+      // able to name whose it was: what the roster no longer wants is exactly
+      // the case with nothing left to look the key up in.
+      const peer = this.#peerByConnection.get(linkId)
       record.link.stop()
       this.#links.delete(linkId)
       this.#peerByConnection.delete(linkId)
@@ -447,6 +549,23 @@ export class PeerService {
         linkId,
         want ? 'the link to this teammate is being remade' : 'this teammate is no longer on the project’s roster'
       )
+      // The same two clean-ups the phase change does, for the link that is
+      // going away here rather than merely dropping. A revoked teammate must
+      // not leave a question on the owner's screen that names them, and must
+      // not leave a permission behind that a re-added key would inherit.
+      for (const request of this.#requestsFor((candidate) => candidate.linkId === linkId)) {
+        this.#settle(
+          request,
+          request.held.length,
+          'expired',
+          want ? 'the link to this teammate is being remade' : 'this teammate is no longer on the project’s roster'
+        )
+      }
+      for (const grant of this.#grantsFor(
+        (candidate) => candidate.scope === 'session' && candidate.publicKey === peer?.publicKey
+      )) {
+        this.#forget(grant)
+      }
     }
 
     if (wanted.size > 0) this.#privateKey ??= await loadStaticPrivateKey(this.#options.dataDir)
@@ -741,11 +860,120 @@ export class PeerService {
   mute(params: ParamsOf<'teamwork.mute'>): PaneWatchers {
     const projectId = this.#projectOfPane(params.terminalId)
     if (projectId === undefined) throw notFound(`no pane of this machine with id ${params.terminalId}`)
-    if (params.muted) this.#muted.add(params.terminalId)
-    else this.#muted.delete(params.terminalId)
+    if (params.muted) {
+      this.#muted.add(params.terminalId)
+      // A mute is the widest answer there is, so it answers everything narrower
+      // that was outstanding. Leaving a prompt up for a pane the owner has just
+      // silenced would put a question on screen whose every answer is already
+      // decided, and leaving a standing permission behind it would mean the
+      // mute lasted exactly as long as the next unmute.
+      for (const request of this.#requestsFor((candidate) => candidate.terminalId === params.terminalId)) {
+        this.#settle(request, request.held.length, 'muted', 'the owner has muted this pane')
+      }
+      for (const grant of this.#grantsFor((candidate) => candidate.terminalId === params.terminalId)) {
+        this.#forget(grant)
+      }
+    } else this.#muted.delete(params.terminalId)
     this.#options.mutes?.set(params.terminalId, params.muted)
     this.#options.onChange()
     return this.watchers({ projectId })
+  }
+
+  /**
+   * What is waiting on the owner in one project, and what they have already
+   * allowed.
+   *
+   * Scoped to a project like everything else here, and for the same reason: a
+   * pane id is a string, and what makes one mean somebody's pane is the project
+   * it was resolved in. A request filed against a pane of another project
+   * cannot be listed here, so it cannot be answered from here either.
+   */
+  requests(params: ParamsOf<'teamwork.requests'>): PaneConsent {
+    const facts = this.#projects.get(params.projectId)
+    if (!facts) throw notFound(`no project with id ${params.projectId}`)
+
+    const requests = [...this.#pending.values()]
+      .filter((request) => request.projectId === params.projectId)
+      .sort((a, b) => a.since - b.since || a.id.localeCompare(b.id))
+      .map((request) => describeRequest(request))
+
+    // Only for panes this project still has. A grant outlives a runtime but not
+    // its pane, and one whose pane has gone is a row the owner could not act on
+    // — the pane it names is not on their screen to be found.
+    const standing: ConsentGrant[] = [...this.#standing.values()]
+      .filter((grant) => this.#paneOf(params.projectId, grant.terminalId) !== undefined)
+      .map((grant) => ({
+        terminalId: grant.terminalId,
+        handle: this.#handleIn(facts, grant.publicKey),
+        publicKey: grant.publicKey,
+        scope: grant.scope,
+        since: grant.since
+      }))
+      .sort((a, b) => a.terminalId.localeCompare(b.terminalId) || a.handle.localeCompare(b.handle))
+
+    return { projectId: params.projectId, requests, standing, readAt: this.#scheduler.now() }
+  }
+
+  /**
+   * The owner's answer to one held burst.
+   *
+   * `through` is the length of the burst as the owner saw it, and honouring it
+   * is the whole difference between a prompt and a rubber stamp: keystrokes
+   * arrive while the question is on screen, and an "allow once" taken on four
+   * of them must not let the fourteenth through. What is left over stays held,
+   * under a new request with a fresh window, so the owner is asked about what
+   * they have not seen rather than having it ride in on an answer about
+   * something else.
+   *
+   * A standing permission is not bounded that way and does not need to be: it
+   * is not an answer about these bytes at all, it is an answer about this
+   * person and this pane.
+   */
+  decide(params: ParamsOf<'teamwork.decide'>): PaneConsent {
+    const request = this.#pending.get(params.requestId)
+    // The owner's own call, so it is answered plainly: a request that has
+    // expired or been answered from another window is a thing they can see for
+    // themselves, and there is no teammate here to be told anything.
+    if (!request) throw notFound(`no keystrokes are waiting under id ${params.requestId}`)
+    const projectId = request.projectId
+
+    if (params.decision === 'deny') {
+      this.#settle(request, request.held.length, 'denied', 'the owner did not allow this')
+      this.#options.onChange()
+      return this.requests({ projectId })
+    }
+
+    if (params.decision !== 'once') {
+      this.#grant(request, params.decision)
+      // Everything held, because a standing permission is about the person and
+      // not about the bytes: there is nothing left for the owner to have not
+      // seen once they have said "anything they type here".
+      this.#settle(request, request.held.length, 'allowed', undefined)
+      this.#options.onChange()
+      return this.requests({ projectId })
+    }
+
+    this.#settle(request, Math.min(params.through ?? request.held.length, request.held.length), 'allowed', undefined)
+    this.#options.onChange()
+    return this.requests({ projectId })
+  }
+
+  /**
+   * Takes back a standing permission.
+   *
+   * Instant and local, exactly like the mute, and it takes effect on the next
+   * keystroke — which, because the check and the pty write are in one task with
+   * nothing awaited between them, is every keystroke that has not already been
+   * written. The teammate is not told; they find out the way they found out
+   * they had permission in the first place, by typing.
+   */
+  revoke(params: ParamsOf<'teamwork.revoke'>): PaneConsent {
+    const projectId = this.#projectOfPane(params.terminalId)
+    if (projectId === undefined) throw notFound(`no pane of this machine with id ${params.terminalId}`)
+    const grant = this.#standing.get(consentKeyOf(params.terminalId, params.publicKey))
+    if (grant) this.#forget(grant)
+    this.#options.onChange()
+    return this.requests({ projectId })
   }
 
   /** The owner's record of every remote write, from their own disk. */
@@ -880,8 +1108,31 @@ export class PeerService {
    * every exit, which made `written` an entry `writeLog.ts` would have called
    * invented — and an invented entry in an audit trail is worse than a missing
    * one, because it would be believed.
+   *
+   * AND THE LAST CHECK IS THE OWNER THEMSELVES. Everything above is a question
+   * this machine can answer out of its own memory; whether a teammate may run
+   * this particular thing in this particular pane is not, unless the owner has
+   * already said so. Without a standing permission the answer is neither yes
+   * nor no but `held`: the bytes stay here, the caller's request stays open,
+   * and the owner is asked. See `#hold`.
    */
   remoteWrite(connectionId: string, write: RemoteWriteRequest): RemoteWriteVerdict {
+    return this.#judge(connectionId, write, false)
+  }
+
+  /**
+   * The judgment itself, with one extra fact: whether the owner has already
+   * answered for these bytes.
+   *
+   * `consented` is true only on the path out of `#decide`, and it skips exactly
+   * one step — the asking. Every other check is run again, at the moment the
+   * keystroke actually goes to the pty rather than at the moment it arrived, so
+   * a pane that exited, a mute applied, or a roster that dropped its sender
+   * while the question was on screen all refuse a write the owner had said yes
+   * to. Consent is permission to run; it is not a promise that running is still
+   * possible.
+   */
+  #judge(connectionId: string, write: RemoteWriteRequest, consented: boolean): RemoteWriteVerdict {
     const at = this.#scheduler.now()
     const peer = this.#peerByConnection.get(connectionId)
     if (!peer) {
@@ -980,10 +1231,18 @@ export class PeerService {
       return this.#refuse(connectionId, stamp, write, 'no-pane', 'that pane’s process has exited', found.project)
     }
 
-    // Last, and closest to the write, because it is the one that has to be
-    // freshest: a mute applied a microsecond ago stops this keystroke.
+    // Before the owner is asked, because a mute is the answer they have already
+    // given to this question and asking again would be asking them to give it
+    // twice. It stays instant and it stays silent: no prompt, no round trip,
+    // and nothing about it that a teammate gets a vote on.
     if (this.#muted.has(write.terminalId)) {
       return this.#refuse(connectionId, stamp, write, 'muted', 'the owner has muted this pane', found.project)
+    }
+
+    // Last, and closest to the write, because it is the one that has to be
+    // freshest: a permission lifted a microsecond ago holds this keystroke.
+    if (!consented && !this.#standing.has(consentKeyOf(found.pane.id, peer.publicKey))) {
+      return this.#hold(connectionId, stamp, write, found.project)
     }
 
     this.#recordWrite(connectionId, stamp, write, 'written', undefined, found.project)
@@ -1100,6 +1359,22 @@ export class PeerService {
           // And the other direction: whatever this machine was reading over
           // that link has stopped arriving, so say so rather than freezing.
           this.#endWatches(linkId, `the link to ${want.handle} dropped`)
+          // A question about keystrokes that can no longer be answered to
+          // anybody is a question the owner should not be left holding. The
+          // bytes are dropped with it, which is the safe direction: a burst
+          // that outlived its own link and ran when the link came back would be
+          // a command arriving minutes after it was typed.
+          for (const request of this.#requestsFor((candidate) => candidate.linkId === linkId)) {
+            this.#settle(request, request.held.length, 'expired', `the link to ${want.handle} dropped`)
+          }
+          // And this is what "for this session" means in the half of the phrase
+          // that is not about this runtime. A link going down ends the session
+          // it was; the next one asks again.
+          for (const grant of this.#grantsFor(
+            (candidate) => candidate.scope === 'session' && candidate.publicKey === want.publicKey
+          )) {
+            this.#forget(grant)
+          }
         }
         this.#options.onChange()
       },
@@ -1228,6 +1503,220 @@ export class PeerService {
     // because from where the teammate stands there is nothing there to type at.
     const code = outcome === 'muted' ? ErrorCode.Conflict : ErrorCode.NotFound
     return { ok: false, code, message: reason }
+  }
+
+  /**
+   * Holds a keystroke until the owner says, and gives the caller a promise
+   * rather than a verdict.
+   *
+   * The promise is what makes this safe to build on top of a transport whose
+   * verdicts are otherwise synchronous: the write does not reach the dispatcher
+   * at all until it settles, so there is no arrangement of events in which
+   * bytes reach a pty before the answer. The teammate's own request stays open
+   * across the wait — their runtime is more patient for a write than for
+   * anything else precisely so that the answer they get is the owner's and not
+   * their own stopwatch's. See `PEER_WRITE_TIMEOUT_MS`.
+   *
+   * Nothing is recorded here. A held keystroke has not happened to the pane,
+   * and an audit log that filed it would be filing an event twice: once as
+   * "held" and again as whatever it became. The owner's evidence that this is
+   * going on is the question itself, which is on their screen.
+   *
+   * The two bounds are not politeness. Every byte held is this process's memory
+   * spent on somebody else's say-so for up to a minute, so a burst that has
+   * outgrown what a person could have typed stops being held and starts being
+   * refused — with the reason, so a teammate can tell "the owner has not
+   * answered" from "the owner said no".
+   */
+  #hold(connectionId: string, stamp: WriteStamp, write: RemoteWriteRequest, project: ProjectFacts): RemoteWriteVerdict {
+    const key = consentKeyOf(stamp.terminalId, stamp.publicKey)
+    const openId = this.#pendingByPane.get(key)
+    let request = openId === undefined ? undefined : this.#pending.get(openId)
+    const joining = request !== undefined
+
+    if (request === undefined) {
+      const open = [...this.#pending.values()].filter((candidate) => candidate.linkId === connectionId).length
+      if (open >= MAX_PENDING_PER_LINK) {
+        return this.#refuse(
+          connectionId,
+          stamp,
+          write,
+          'denied',
+          `keystrokes of yours are already waiting at ${MAX_PENDING_PER_LINK} of this machine’s panes`,
+          project
+        )
+      }
+      this.#requestSeq += 1
+      request = {
+        id: `ask_${this.#requestSeq}`,
+        linkId: connectionId,
+        publicKey: stamp.publicKey,
+        handle: stamp.handle,
+        projectId: stamp.projectId,
+        terminalId: stamp.terminalId,
+        since: stamp.at,
+        at: stamp.at,
+        expiresAt: stamp.at + CONSENT_WINDOW_MS,
+        bytes: 0,
+        held: [],
+        cancelExpiry: () => {}
+      }
+      this.#openRequest(request)
+    } else if (request.held.length >= MAX_HELD_WRITES || request.bytes + write.bytes > MAX_HELD_BYTES) {
+      return this.#refuse(
+        connectionId,
+        stamp,
+        write,
+        'denied',
+        'the owner has not answered yet, and this pane is already holding as much of your typing as it will hold',
+        project
+      )
+    }
+
+    // The handle is re-read from the roster on every keystroke, exactly as the
+    // stamp is, so a request that started before somebody's roster entry was
+    // renamed is shown under the name the project uses now.
+    request.handle = stamp.handle
+    request.at = stamp.at
+    request.bytes += write.bytes
+    const held: Promise<RemoteWriteDecision> = new Promise((resolve) => {
+      // `request` is narrowed above and cannot be undefined here; the local is
+      // what keeps that true inside the closure.
+      const open = request as PendingRequest
+      open.held.push({ write, settle: resolve })
+    })
+    this.#tellWindowAboutRequests(stamp.at, !joining)
+    return { held }
+  }
+
+  /** Files a new request and starts the clock the teammate is owed an end from. */
+  #openRequest(request: PendingRequest): void {
+    this.#pending.set(request.id, request)
+    this.#pendingByPane.set(consentKeyOf(request.terminalId, request.publicKey), request.id)
+    request.cancelExpiry = this.#scheduler.setTimer(() => {
+      // Re-read rather than closed over, because a partly answered burst
+      // continues under a new id and this timer is armed again for it.
+      const open = this.#pending.get(request.id)
+      if (!open) return
+      this.#settle(
+        open,
+        open.held.length,
+        'expired',
+        `nobody answered on the owner’s machine, so this expired after ${CONSENT_WINDOW_MS / 1000} seconds`
+      )
+      this.#options.onChange()
+    }, CONSENT_WINDOW_MS)
+  }
+
+  /**
+   * Answers the front of a held burst, and leaves whatever the owner has not
+   * seen still held.
+   *
+   * Every allowed keystroke goes back through the full judgment on its way out
+   * — see `#judge` — so consent is permission and never a bypass: a pane that
+   * exited, a mute applied, or a roster that dropped its sender while the
+   * question was on screen all refuse a write the owner said yes to, and the
+   * teammate is told which. Refusals are recorded here instead, because nothing
+   * else will file them: no verdict path ever runs for a keystroke that was
+   * never dispatched.
+   */
+  #settle(request: PendingRequest, count: number, how: SettledAs, reason: string | undefined): void {
+    const taken = request.held.splice(0, count)
+    const at = this.#scheduler.now()
+    for (const item of taken) {
+      request.bytes -= item.write.bytes
+      if (how === 'allowed') {
+        item.settle(decisionOf(this.#judge(request.linkId, item.write, true)))
+        continue
+      }
+      const outcome: RemoteWriteOutcome = how === 'muted' ? 'muted' : how
+      const words = reason ?? 'the owner did not allow this'
+      this.#recordWrite(
+        request.linkId,
+        {
+          at,
+          handle: request.handle,
+          publicKey: request.publicKey,
+          projectId: request.projectId,
+          terminalId: request.terminalId,
+          known: true
+        },
+        item.write,
+        outcome,
+        words,
+        this.#projects.get(request.projectId)
+      )
+      // `conflict` for the same reason a mute gets it: the pane is in a state
+      // the owner put it in, and arguing with the machine would not help.
+      item.settle({ ok: false, code: ErrorCode.Conflict, message: words })
+    }
+
+    request.cancelExpiry()
+    this.#pending.delete(request.id)
+    const key = consentKeyOf(request.terminalId, request.publicKey)
+    if (this.#pendingByPane.get(key) === request.id) this.#pendingByPane.delete(key)
+    if (request.held.length === 0) return
+
+    // What the owner was not shown starts again as its own question, with its
+    // own id and its own minute. Reusing the answered request's id would let a
+    // second click — or a stale window still holding the old id — answer bytes
+    // that nobody has looked at.
+    this.#requestSeq += 1
+    request.id = `ask_${this.#requestSeq}`
+    request.since = at
+    request.expiresAt = at + CONSENT_WINDOW_MS
+    this.#openRequest(request)
+  }
+
+  /** Writes down a standing permission, and the durable copy when it is one. */
+  #grant(request: PendingRequest, scope: ConsentScope): void {
+    const since = this.#scheduler.now()
+    this.#standing.set(consentKeyOf(request.terminalId, request.publicKey), {
+      terminalId: request.terminalId,
+      publicKey: request.publicKey,
+      scope,
+      since
+    })
+    if (scope === 'always') this.#options.consent?.set(request.terminalId, request.publicKey, since)
+  }
+
+  /** Drops one, from memory and from the file when it was in the file. */
+  #forget(grant: StandingGrant): void {
+    this.#standing.delete(consentKeyOf(grant.terminalId, grant.publicKey))
+    if (grant.scope === 'always') this.#options.consent?.set(grant.terminalId, grant.publicKey, null)
+  }
+
+  /** Pending requests matching a predicate, copied so settling can mutate the map. */
+  #requestsFor(match: (request: PendingRequest) => boolean): PendingRequest[] {
+    return [...this.#pending.values()].filter(match)
+  }
+
+  /** The same, for standing permissions. */
+  #grantsFor(match: (grant: StandingGrant) => boolean): StandingGrant[] {
+    return [...this.#standing.values()].filter(match)
+  }
+
+  /**
+   * Wakes the window for a question rather than for a keystroke.
+   *
+   * A new request is told at once, because it is a thing on somebody's screen
+   * that was not there a moment ago. A request that is merely growing is told
+   * at the same pulse a burst of typing is, and once more when it stops — that
+   * last one matters, because the count the owner is shown is the count their
+   * "allow once" will admit, and a window that was never told would be offering
+   * to allow less than is held. Allowing less is the safe direction, and the
+   * leftovers ask again; being told is still better than relying on it.
+   */
+  #tellWindowAboutRequests(at: number, fresh: boolean): void {
+    this.#cancelRequestsIdle?.()
+    this.#cancelRequestsIdle = this.#scheduler.setTimer(() => {
+      this.#cancelRequestsIdle = undefined
+      this.#options.onChange()
+    }, TYPING_WINDOW_MS)
+
+    if (!fresh && at - this.#requestsToldAt < TYPING_PULSE_MS) return
+    this.#requestsToldAt = at
+    this.#options.onChange()
   }
 
   /**
@@ -1616,6 +2105,117 @@ type ResolvedPeerPane = {
   /** The pane's id **on the owner's machine**, never the namespaced one. */
   terminalId: string
   pane: PeerPane
+}
+
+/**
+ * How many panes of this machine one link may have keystrokes waiting at.
+ *
+ * A person answering a colleague's agent is typing at one pane, and somebody
+ * helping across three worktrees at three. Eight is past anything anybody does
+ * and a long way short of a link that has opened a question at every pane on
+ * the machine — which would be a way to fill the owner's screen with prompts
+ * from the other end of a relay.
+ */
+export const MAX_PENDING_PER_LINK = 8
+
+/**
+ * How much of one burst is held while the owner is asked.
+ *
+ * A minute of fast typing is some six hundred keystrokes, so a thousand is
+ * headroom over anything a person does; the byte cap is what actually bounds
+ * it, because a paste is sixty-four kilobytes and four of those waiting is
+ * already more than the owner is going to read. Past either, the keystroke is
+ * refused with the reason rather than held — memory spent on somebody else's
+ * say-so has to stop somewhere, and stopping silently would be the one thing
+ * this feature may not do.
+ */
+export const MAX_HELD_WRITES = 1_000
+export const MAX_HELD_BYTES = 262_144
+
+/** One teammate's held keystrokes at one pane, and the promises owed for them. */
+type PendingRequest = {
+  id: string
+  /** The link they arrived on, which is also the connection the answer is judged against. */
+  linkId: string
+  publicKey: string
+  handle: string
+  projectId: string
+  /** This machine's own pane id, from this machine's own list. */
+  terminalId: string
+  since: number
+  at: number
+  expiresAt: number
+  bytes: number
+  /** In arrival order, which is the order they will reach the pty in. */
+  held: HeldWrite[]
+  cancelExpiry: () => void
+}
+
+/** One keystroke that has not happened yet, and the caller waiting to hear. */
+type HeldWrite = {
+  write: RemoteWriteRequest
+  settle: (decision: RemoteWriteDecision) => void
+}
+
+/** How a held keystroke ended. `allowed` is the only one that reaches a pty. */
+type SettledAs = 'allowed' | 'denied' | 'expired' | 'muted'
+
+/** A standing permission as this runtime holds it. */
+type StandingGrant = {
+  terminalId: string
+  publicKey: string
+  scope: ConsentScope
+  since: number
+}
+
+/**
+ * How a permission and a held burst are keyed: one pane, one person.
+ *
+ * Both halves, always. A key that named only the pane would be "anyone may type
+ * here", which is the default this prompt exists to remove; one that named only
+ * the person would be "ana may type anywhere", which is a decision nobody was
+ * asked for. The separator is a NUL, as it is for the typists, because neither
+ * an id nor a base64 key can contain one.
+ */
+function consentKeyOf(terminalId: string, publicKey: string): string {
+  return `${terminalId}\u0000${publicKey}`
+}
+
+/** One pending request, in the shape the owner's window and the CLI read. */
+function describeRequest(request: PendingRequest): ConsentRequest {
+  const { preview, clipped } = previewOf(request.held.map((item) => item.write.data))
+  return {
+    id: request.id,
+    projectId: request.projectId,
+    terminalId: request.terminalId,
+    handle: request.handle,
+    publicKey: request.publicKey,
+    since: request.since,
+    at: request.at,
+    expiresAt: request.expiresAt,
+    writes: request.held.length,
+    bytes: request.bytes,
+    preview,
+    clipped
+  }
+}
+
+/**
+ * A verdict that has to be a decision, because it was asked for as one.
+ *
+ * `#judge` is given `consented` on this path, which is the only thing that can
+ * make it hold a write, so the branch below is unreachable. It is written out
+ * rather than cast away because the alternative is a keystroke whose promise is
+ * never settled, and "unreachable" is a claim about today's control flow rather
+ * than a property of the type.
+ */
+function decisionOf(verdict: RemoteWriteVerdict): RemoteWriteDecision {
+  if (!('held' in verdict)) return verdict
+  return {
+    ok: false,
+    code: ErrorCode.Conflict,
+    message: 'the owner’s machine held this keystroke twice, so it was not run'
+  }
 }
 
 /** Everything about a write that is known before it is judged. */

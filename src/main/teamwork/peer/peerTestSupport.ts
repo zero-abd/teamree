@@ -24,9 +24,10 @@ import { createRuntimeContext } from '../../runtime/runtimeContext'
 import { SubscriptionHub } from '../../runtime/subscriptionHub'
 import { createTerminalService, registerTerminalHandlers, type TerminalService } from '../../terminals/method-handlers'
 import { registerUnsubscribeHandler } from '../../runtime/handlers/unsubscribeHandler'
+import type { RemoteWriteDecision, RemoteWriteVerdict } from '../../runtime/peerTransport'
 import { registerPeerHandlers } from './handlers'
 import type { LinkScheduler } from './peerLink'
-import { PeerService } from './peerService'
+import { PeerService, type ConsentStore } from './peerService'
 import type { RelayDialer, RelaySocketHandlers } from './relaySocket'
 import type { WakeWatch } from './wakeWatch'
 
@@ -373,6 +374,14 @@ export type PeerRuntimeOptions = {
   runner?: GitRunner
   /** Lets a test drive the cache directly, and flush it before a restart. */
   cache?: TeammateCache
+  /**
+   * Standing permissions this machine already holds when it starts.
+   *
+   * The shape a real runtime reads out of the workspace file, so a test whose
+   * subject is something other than the prompt can say "the owner settled this
+   * last week" in one line rather than by driving the prompt through first.
+   */
+  consent?: ConsentStore
   /** Lets a test wait on a condition instead of on the clock. */
   onChange?: () => void
   /** Stands in for Electron's power monitor, which no test process has. */
@@ -485,6 +494,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     env: options.env ?? {},
     ...(options.runner ? { runner: options.runner } : {}),
     ...(options.cache ? { cache: options.cache } : {}),
+    ...(options.consent ? { consent: options.consent } : {}),
     ...(options.watchWake ? { watchWake: options.watchWake } : {}),
     onChange: () => {
       changes += 1
@@ -543,4 +553,47 @@ export function terminal(id: string, worktreeId: string, overrides: Partial<Term
     lastOutputAt: 0,
     ...overrides
   }
+}
+
+/**
+ * The owner's standing "yes" for one teammate on one pane, already in place.
+ *
+ * What a real runtime reads out of the workspace file at startup, in the shape
+ * `PeerServiceOptions.consent` wants it. `set` records what a test asked for so
+ * a test about the durable half can read it back.
+ */
+export function standingConsent(
+  grants: readonly { terminalId: string; publicKey: string }[] = []
+): ConsentStore & { written: { terminalId: string; publicKey: string; since: number | null }[] } {
+  const held = new Map(grants.map((grant) => [`${grant.terminalId}\u0000${grant.publicKey}`, { ...grant, since: 1 }]))
+  const written: { terminalId: string; publicKey: string; since: number | null }[] = []
+  return {
+    list: () => [...held.values()],
+    set: (terminalId, publicKey, since) => {
+      written.push({ terminalId, publicKey, since })
+      const key = `${terminalId}\u0000${publicKey}`
+      if (since === null) held.delete(key)
+      else held.set(key, { terminalId, publicKey, since })
+    },
+    written
+  }
+}
+
+/**
+ * A verdict a test expected the owner's machine to reach on its own.
+ *
+ * Written as a throw rather than as an assertion so that a write which is
+ * suddenly held — because somebody changed what needs asking about — fails the
+ * test that is about something else with a sentence saying so, rather than with
+ * `undefined is not true`.
+ */
+export function decided(verdict: RemoteWriteVerdict): RemoteWriteDecision {
+  if ('held' in verdict) throw new Error('this keystroke was held for the owner rather than decided')
+  return verdict
+}
+
+/** The promise a held write is owed, or a failure naming what happened instead. */
+export function heldBy(verdict: RemoteWriteVerdict): Promise<RemoteWriteDecision> {
+  if (!('held' in verdict)) throw new Error(`this keystroke was decided outright: ${JSON.stringify(verdict)}`)
+  return verdict.held
 }

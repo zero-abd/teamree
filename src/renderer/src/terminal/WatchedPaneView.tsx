@@ -13,6 +13,16 @@
 // believing they had typed into a shell two thousand miles away, which is its
 // own kind of lie and the failure this view exists to make impossible.
 //
+// **And it is a request somebody has to answer.** Unless the owner has already
+// said this teammate may type in this pane, their machine holds the bytes and
+// asks them, and nothing runs until they say. From here that looks like an
+// answer taking longer than a round trip should, so after a moment the pane
+// says exactly that — that nothing has come back and nothing has run — and says
+// it again when the wait ends, whichever way it ended. What this side is
+// deliberately *not* told is that a prompt went up: whether somebody is at that
+// keyboard right now is the owner's business, and a teammate who could tell
+// would have learned it by typing.
+//
 // **The size is the owner's.** `docs/teamwork.md` is explicit: a watcher with a
 // smaller window is letterboxed rather than resizing a pty under a program that
 // is only being read. So the emulator is built at the owner's columns and rows
@@ -69,6 +79,24 @@ const WARN = '\u001b[38;5;173m'
  */
 const REFUSAL_QUIET_MS = 3_000
 
+/**
+ * How long a keystroke may go unanswered before this view says so.
+ *
+ * Typing into somebody else's pane is a round trip, and a round trip that is
+ * merely slow is not worth a sentence. What *is* worth one is a keystroke that
+ * has stopped being a round trip and started being a question on somebody's
+ * screen: the owner's machine holds the bytes and asks them, which takes as
+ * long as a person takes.
+ *
+ * A second, because nothing legitimate takes that long and because the person
+ * typing has by then noticed that their letters are not appearing. What is said
+ * is deliberately a statement about this side's own knowledge — nothing has come
+ * back — rather than a claim about what the owner is doing. This machine is not
+ * told that a prompt went up, and it should not be: that a person is sitting at
+ * that keyboard right now is the owner's business, not the typist's.
+ */
+const HELD_NOTICE_MS = 1_000
+
 type WatchedPaneViewProps = {
   projectId: string
   /** The namespaced id `teamwork.presence` hands out, not the owner's own. */
@@ -112,6 +140,10 @@ export function WatchedPaneView({
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [state, setState] = useState<WatchState>({ phase: 'opening' })
   const [refused, setRefused] = useState<Refusal | null>(null)
+  // True while this side has sent keystrokes and heard nothing back about any
+  // of them. A fact about this window's own promises, which is the only thing
+  // it honestly knows — see `HELD_NOTICE_MS`.
+  const [holding, setHolding] = useState(false)
   const outputRef = useRef(onOutput)
   outputRef.current = onOutput
   const chordRef = useRef(isAppChord)
@@ -212,6 +244,55 @@ export function WatchedPaneView({
     }
 
     /**
+     * Keystrokes this side has sent and has heard nothing back about.
+     *
+     * Counted rather than assumed: "nothing has been answered" is a fact about
+     * this window's own promises, so the sentence it produces is true whether
+     * the owner is reading a prompt, the relay is slow, or their machine is
+     * busy. Guessing at which of those it is would be this view inventing news
+     * about somebody else's desk.
+     */
+    let waiting = 0
+    let saidHeld = false
+    let heldTimer: ReturnType<typeof setTimeout> | undefined
+
+    const sent = (): void => {
+      waiting += 1
+      if (heldTimer !== undefined) return
+      heldTimer = setTimeout(() => {
+        heldTimer = undefined
+        if (!alive || waiting === 0 || saidHeld) return
+        saidHeld = true
+        setHolding(true)
+        held.write(
+          `\r\n${DIM}[waiting: nothing you have typed has run — ${handle}’s machine has not answered yet]${RESET}\r\n`
+        )
+      }, HELD_NOTICE_MS)
+    }
+
+    /**
+     * One of those keystrokes, answered at last.
+     *
+     * The line is printed only when the wait was announced, and only when the
+     * last of them settles: a burst held together is one wait and one end to
+     * it. Said for a keystroke that landed as well as for one that did not,
+     * because a pane at a password prompt echoes nothing — without this, being
+     * allowed and being ignored would look the same from here.
+     */
+    const answered = (landed: boolean): void => {
+      waiting = Math.max(0, waiting - 1)
+      if (waiting > 0) return
+      if (heldTimer !== undefined) {
+        clearTimeout(heldTimer)
+        heldTimer = undefined
+      }
+      if (!saidHeld) return
+      saidHeld = false
+      if (alive) setHolding(false)
+      if (landed) held.write(`\r\n${DIM}[no longer held: what you typed has run]${RESET}\r\n`)
+    }
+
+    /**
      * One keystroke, on its way to somebody else's shell.
      *
      * Not awaited and not queued: the transport writes frames in the order
@@ -220,9 +301,17 @@ export function WatchedPaneView({
      * reorder nothing and drop everything a person typed while it thought.
      */
     const send = (data: string): void => {
-      void runtimeClient.call('teamwork.type', { projectId, paneId, data }).then(accepted, (error: unknown) => {
-        refuse(error instanceof Error ? error.message : String(error))
-      })
+      sent()
+      void runtimeClient.call('teamwork.type', { projectId, paneId, data }).then(
+        () => {
+          answered(true)
+          accepted()
+        },
+        (error: unknown) => {
+          answered(false)
+          refuse(error instanceof Error ? error.message : String(error))
+        }
+      )
     }
 
     /**
@@ -352,6 +441,7 @@ export function WatchedPaneView({
 
     return () => {
       alive = false
+      if (heldTimer !== undefined) clearTimeout(heldTimer)
       termRef.current = null
       refitRef.current = null
       observer?.disconnect()
@@ -396,8 +486,10 @@ export function WatchedPaneView({
   }, [focused, paneId])
 
   // One sentence, used twice: on the bar, and as the bar's title for the slot
-  // that is too narrow to show all of it.
-  const promise = `what you type runs on ${handle}’s machine, as ${handle}, with your name on it`
+  // that is too narrow to show all of it. It carries the whole of what typing
+  // here means, consent included — leaving out "once they allow it" would
+  // promise something this pane no longer does.
+  const promise = `what you type runs on ${handle}’s machine, as ${handle}, once they allow it, with your name on it`
 
   return (
     /* A pane, with the chrome every other pane has. What keeps it unmistakable
@@ -420,8 +512,14 @@ export function WatchedPaneView({
             why any of this is survivable is that nothing is ambiguous — and
             that includes being unambiguous with the person doing the typing
             about the fact that their name is on it. */}
-        <span className={`watch__typing${refused ? ' watch__typing--refused' : ''}`}>
-          {refused ? refused.reason : promise}
+        <span
+          className={`watch__typing${refused ? ' watch__typing--refused' : ''}${holding ? ' watch__typing--held' : ''}`}
+        >
+          {refused
+            ? refused.reason
+            : holding
+              ? `waiting for ${handle}’s machine — nothing you have typed has run`
+              : promise}
         </span>
         {state.phase === 'watching' ? (
           <span className="pane__meta" title="their pane’s size, which a reader never changes">

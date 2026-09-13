@@ -880,6 +880,115 @@ export type PaneWatchers = {
 }
 
 /**
+ * How long a held burst waits for the owner before it expires.
+ *
+ * A minute. Long enough that somebody who looked away from the screen still
+ * gets to answer, short enough that a teammate whose colleague has gone to
+ * lunch is told so rather than left watching a cursor that never moves.
+ *
+ * Here rather than in the service that enforces it, because the machine doing
+ * the typing has to be more patient than the machine doing the deciding: the
+ * peer call carrying a held keystroke keeps its own deadline, and if that
+ * deadline were the shorter of the two the typist would be told their teammate
+ * never answered at the very moment their teammate was about to. See
+ * `PEER_WRITE_TIMEOUT_MS` in `src/main/runtime/peerTransport.ts`, which is
+ * derived from this rather than guessed alongside it.
+ */
+export const CONSENT_WINDOW_MS = 60_000
+
+/**
+ * What the owner may answer a held burst with.
+ *
+ * `once` admits the keystrokes they were actually shown and nothing else — see
+ * `ConsentRequest.writes` for why that is a count and not a boolean. `session`
+ * and `always` are standing permissions for that teammate on that pane, and the
+ * only difference between them is how long they outlive: `session` until this
+ * runtime or that link ends, `always` until the pane does or the owner lifts it.
+ */
+export type ConsentDecision = 'once' | 'session' | 'always' | 'deny'
+
+/** How long a standing permission lasts. The two halves of `ConsentDecision`. */
+export type ConsentScope = 'session' | 'always'
+
+/**
+ * One teammate's keystrokes, held at one of this machine's panes until the
+ * owner says.
+ *
+ * A burst is one request. Somebody typing a command sends a keystroke per key,
+ * and a prompt per key would be a prompt nobody reads — so keystrokes from the
+ * same teammate at the same pane join the request that is already open, and the
+ * preview grows underneath the owner while they decide.
+ *
+ * NOTHING HERE HAS RUN. That is the whole point of the shape: the bytes are on
+ * this machine, in memory, and the pty has not seen them.
+ */
+export type ConsentRequest = {
+  id: string
+  projectId: string
+  /** This machine's own pane id, from this machine's own list. */
+  terminalId: string
+  /** What this project's roster calls them, never what they call themselves. */
+  handle: string
+  publicKey: string
+  /** The first keystroke of this burst, by the owner's clock. */
+  since: number
+  /** The most recent one, which is what makes a growing burst visible. */
+  at: number
+  /** When this stops waiting and the teammate is told it expired. */
+  expiresAt: number
+  /**
+   * How many keystrokes are held.
+   *
+   * The owner answers a count as well as a request: what they were shown is
+   * what "allow once" admits, and anything that arrived after the screen they
+   * looked at stays held and asks again. A burst that grew between the render
+   * and the click must not ride in on a decision made about something shorter.
+   */
+  writes: number
+  bytes: number
+  /**
+   * What is held, rendered so that every byte of it is visible and none of it
+   * can act.
+   *
+   * Control characters are shown in caret notation, escape sequences are shown
+   * rather than obeyed, and the characters that reorder text on screen are
+   * named instead of printed. See `src/main/teamwork/peer/writePreview.ts`: the
+   * owner is being asked to approve bytes chosen by somebody else, and a
+   * preview that rendered them would let the sender choose what the question
+   * looks like.
+   */
+  preview: string
+  /** True when more is held than the preview shows. */
+  clipped: boolean
+}
+
+/** One standing permission the owner has given, and how long it lasts. */
+export type ConsentGrant = {
+  terminalId: string
+  handle: string
+  publicKey: string
+  scope: ConsentScope
+  /** When it was given, by the owner's clock. */
+  since: number
+}
+
+/**
+ * What is waiting on the owner in one project, and what they have already
+ * decided.
+ *
+ * Both halves in one answer, for the reason the mute is reported beside the
+ * watchers: a permission the owner cannot see is a permission they cannot lift.
+ */
+export type PaneConsent = {
+  projectId: string
+  /** Oldest first, so the queue reads in the order it arrived. */
+  requests: ConsentRequest[]
+  /** Sorted by pane then handle, so two reads compare cleanly. */
+  standing: ConsentGrant[]
+  readAt: number
+}
+
+/**
  * One remote keystroke, as the owner's own record of it.
  *
  * WHAT IT DELIBERATELY DOES NOT HOLD IS THE BYTES. The argument is written out
@@ -910,8 +1019,16 @@ export type RemoteWrite = {
  * `written` is the only one where bytes reached a pty. The rest are the ways
  * this machine said no, kept apart rather than collapsed into "refused",
  * because "I muted you" and "that pane is gone" are different answers.
+ *
+ * `denied` and `expired` are the two ways a held keystroke ends without
+ * running, and they are two entries rather than one for the same reason: "I was
+ * asked and said no" and "nobody was at the keyboard" are different facts about
+ * the owner, and only the first of them is a decision. A held keystroke that is
+ * allowed is filed as `written`, once, at the moment it actually runs — there
+ * is no entry for the holding itself, because nothing happened to the pane
+ * while it was held.
  */
-export type RemoteWriteOutcome = 'written' | 'muted' | 'no-pane' | 'not-a-member' | 'too-large'
+export type RemoteWriteOutcome = 'written' | 'muted' | 'no-pane' | 'not-a-member' | 'too-large' | 'denied' | 'expired'
 
 /** The owner's record of what teammates have typed here. */
 export type RemoteWriteLog = {

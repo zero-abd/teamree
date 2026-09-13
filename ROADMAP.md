@@ -723,6 +723,56 @@ onto the method catalogue that already exists, not a new protocol.
         bounded again when it is read back, whatever wrote the file
   - [x] Reconnection reconciles: the rows on screen are never rebuilt from
         nothing, so the sidebar does not flash empty on the way to being right
+- [x] **F — The owner's consent.** A teammate's keystroke is held on the owner's
+      machine until the owner has been shown it and has answered. This reverses
+      the decision D shipped, deliberately and on request: D's argument — that a
+      permission model is a lie when everyone who can push can already run
+      anything — is about a hostile member, and the ordinary case is not
+      hostility but surprise. A colleague answering a prompt that has moved on
+      still runs as you
+  - [x] `held` is a third verdict beside yes and no, and it is a promise. The
+        request never reaches the dispatcher while it is unsettled, so a held
+        keystroke has not happened to the pane in any sense; when it settles,
+        an allowed one goes through the *whole* judgment again — roster, pane,
+        mute — because consent is permission to run and never a way round the
+        rest. The teammate's own call stays open across the wait, which is why
+        `terminal.write` alone carries a longer deadline than everything else
+  - [x] The owner is shown who, which pane, and the bytes — rendered so every
+        control character is visible and none can act. An escape sequence is
+        printed rather than obeyed, a return is a mark, and the characters that
+        reverse or hide text are named. The person being asked about does not
+        get to paint the question they are being asked about
+  - [x] **Allow once means what the owner was shown.** A burst grows while the
+        prompt is up, so the answer carries the count that was on the screen
+        that was read; what arrived after it stays held and asks again
+  - [x] A burst is one question and never one per keystroke. Nine prompts for
+        `npm test` would be a prompt nobody reads, and a prompt nobody reads is
+        worse than no prompt — it trains people to click through
+  - [x] Nothing waits forever and nothing vanishes. A request nobody answers
+        expires after a minute; allowed, refused, expired and "the link went"
+        are four sentences the person who typed is given, and one of them
+        always arrives
+  - [x] Standing permissions are per teammate per pane. "This session" ends with
+        the runtime or the link; "always" is filed beside the mute against the
+        pane's own record, so it comes back with the pane and goes when the pane
+        does. Both are listed where the mute is, because a permission the owner
+        cannot see is one they cannot lift
+  - [x] Mute still wins, still instantly, and with no prompt at all — it is that
+        question already answered. It also cancels whatever was waiting on that
+        pane and lifts every permission on it, because a permission that
+        outlived a mute would make the mute last exactly as long as the next
+        unmute
+  - [x] A pane of a project the asker is not on, and a pane id that names
+        nothing, are still answered identically and still answered at once.
+        Waiting where a refusal returns would say "this pane exists" as plainly
+        as showing it would
+  - [x] The same surface on the CLI — `team requests`, `team allow`, `team
+        deny`, `team revoke` — because a machine driven headlessly must be able
+        to answer, or its teammates simply hang for a minute
+  - [x] Tested against the relay itself with real PTYs behind it, and in the
+        two-machine scenario: the request waiting with the agent still blocked,
+        the allow releasing it, a standing permission surviving into the next
+        keystroke, and a mute answering both of them without asking
 
 ## Later
 

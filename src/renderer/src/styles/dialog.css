@@ -433,3 +433,70 @@ select.field__input {
 .button--danger:hover {
   background: color-mix(in srgb, var(--danger) 28%, transparent);
 }
+
+/* The question the owner is asked before somebody else's keystrokes run.
+   Wider and quieter than the other dialogs on purpose: the thing being read is
+   a block of text a stranger's machine chose, and it has to be legible before
+   any of the buttons underneath it mean anything. */
+.consent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.consent__meta {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* Monospace and pre-wrapped, because this is terminal input and the spacing in
+   it is part of what is being approved. `overflow-wrap: anywhere` so one very
+   long token cannot push the dialog wider than the window; `max-height` with a
+   scroll so a large paste cannot push the buttons off the bottom, which would
+   leave the owner reading a question they could not answer. */
+.consent__preview {
+  max-height: 40vh;
+  margin: 0;
+  overflow: auto;
+  padding: var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.consent__clipped {
+  margin: 0;
+  color: var(--warning);
+  font-size: var(--text-sm);
+}
+
+.consent__who {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+}
+
+/* Wrapping rather than scrolling: four answers is more than a row holds in a
+   narrow window, and a button that ran off the edge would be an answer the
+   owner could not give. */
+.consent__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s2);
+}
+
+.consent__note {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}

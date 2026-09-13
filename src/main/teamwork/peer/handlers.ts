@@ -1,9 +1,10 @@
 // THE SEAM for teamwork's live half, registered exactly like every other area.
 //
-// Nine methods and a strict split between them. `teamwork.status`,
+// Twelve methods and a strict split between them. `teamwork.status`,
 // `teamwork.presence`, `teamwork.watch`, `teamwork.type`, `teamwork.watchers`,
-// `teamwork.mute` and `teamwork.writeLog` are for whoever is sitting at this
-// machine: the window asks them over IPC, the CLI over its socket.
+// `teamwork.mute`, `teamwork.requests`, `teamwork.decide`, `teamwork.revoke`
+// and `teamwork.writeLog` are for whoever is sitting at this machine: the
+// window asks them over IPC, the CLI over its socket.
 // `peer.presence` and `peer.subscribe` are for a teammate, and are reachable
 // only over the peer transport, because `PEER_METHODS` in
 // `runtime/peerTransport.ts` is the list of what a teammate may call and those
@@ -16,10 +17,12 @@
 // allow-list admits, answered by their own terminal service, which has no idea
 // any of this exists.
 //
-// `teamwork.mute` and `teamwork.writeLog` never cross a wire at all. Both are
-// the owner's side of the bargain in `docs/teamwork.md`: what reaches my panes,
-// and what has reached them. A mute that had to be agreed with anybody would
-// not be a mute.
+// `teamwork.mute`, `teamwork.requests`, `teamwork.decide`, `teamwork.revoke`
+// and `teamwork.writeLog` never cross a wire at all. All five are the owner's
+// side of the bargain in `docs/teamwork.md`: what may reach my panes, what is
+// waiting to, and what has. A mute that had to be agreed with anybody would not
+// be a mute, and neither would a permission — which is why answering one is a
+// method a teammate cannot call even to ask about their own held keystrokes.
 //
 // They are registered here together anyway, in the one registry, because that
 // is the whole architectural claim: a teammate is another transport onto the
@@ -40,6 +43,9 @@ export const PEER_SERVICE_METHODS = [
   'teamwork.type',
   'teamwork.watchers',
   'teamwork.mute',
+  'teamwork.requests',
+  'teamwork.decide',
+  'teamwork.revoke',
   'teamwork.writeLog',
   'peer.presence',
   'peer.subscribe'
@@ -51,6 +57,7 @@ export type PeerServiceHandlers = {
   'teamwork.status': (params: ParamsOf<'teamwork.status'>) => ResultOf<'teamwork.status'>
   'teamwork.presence': (params: ParamsOf<'teamwork.presence'>) => ResultOf<'teamwork.presence'>
   'teamwork.watchers': (params: ParamsOf<'teamwork.watchers'>) => ResultOf<'teamwork.watchers'>
+  'teamwork.requests': (params: ParamsOf<'teamwork.requests'>) => ResultOf<'teamwork.requests'>
 }
 
 export function registerPeerHandlers(registry: MethodRegistry, service: PeerService): PeerService {
@@ -67,6 +74,9 @@ export function registerPeerHandlers(registry: MethodRegistry, service: PeerServ
   registry.register('teamwork.watchers', Params.teamworkWatchers, (params) => service.watchers(params))
   registry.register('teamwork.type', Params.teamworkType, (params) => service.type(params))
   registry.register('teamwork.mute', Params.teamworkMute, (params) => service.mute(params))
+  registry.register('teamwork.requests', Params.teamworkRequests, (params) => service.requests(params))
+  registry.register('teamwork.decide', Params.teamworkDecide, (params) => service.decide(params))
+  registry.register('teamwork.revoke', Params.teamworkRevoke, (params) => service.revoke(params))
   registry.register('teamwork.writeLog', Params.teamworkWriteLog, (params) => service.writeLog(params))
 
   // Resolved first, subscribed second, and in that order because the answer has

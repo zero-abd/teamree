@@ -737,6 +737,129 @@ export const teamCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['team', 'requests'],
+    summary: 'Show whose keystrokes are waiting for you, and who may already type here.',
+    details:
+      'A teammate typing in one of this machine’s panes is held until you say so. Nothing in the list below ' +
+      'has run: the bytes are on this machine, and the pane has not seen them.\n\n' +
+      'WHAT is shown exactly as it was sent, with every control character made visible — an escape sequence ' +
+      'is printed rather than obeyed, a return is a mark, and the characters that make text read backwards ' +
+      'are named. Read it before you answer it.\n\n' +
+      'A request expires on its own if nobody answers, and the teammate is told that it did. Standing ' +
+      'permissions are listed underneath, because a permission you cannot see is one you cannot lift.',
+    args: [PROJECT_ARG],
+    examples: ['teamree team requests api', 'teamree team requests api --json'],
+    run: async (context) => {
+      const project = await resolveProject(context.client, context.args[0] as string)
+      const waiting = await context.client.call('teamwork.requests', { projectId: project.id })
+      const now = Date.now()
+      const questions = formatTable(
+        ['ID', 'WHO', 'PANE', 'KEYSTROKES', 'EXPIRES', 'WHAT'],
+        waiting.requests.map((request) => [
+          request.id,
+          request.handle,
+          request.terminalId,
+          String(request.writes),
+          `${Math.max(0, Math.round((request.expiresAt - now) / 1000))}s`,
+          request.clipped ? `${request.preview} (more is held than is shown)` : request.preview
+        ]),
+        'Nobody is waiting on you.'
+      )
+      const permissions = formatTable(
+        ['PANE', 'WHO', 'SCOPE'],
+        waiting.standing.map((grant) => [grant.terminalId, grant.handle, grant.scope]),
+        'Nobody may type here without being asked first.'
+      )
+      return { data: waiting, text: `${questions}\n\n${permissions}` }
+    }
+  },
+  {
+    path: ['team', 'allow'],
+    summary: 'Let a teammate’s waiting keystrokes run.',
+    details:
+      'Without a flag this allows exactly what is waiting and nothing after it: the next keystroke asks ' +
+      'again. `--session` lets that teammate type in that pane until this runtime stops or their link ' +
+      'drops; `--always` lets them until you lift it or the pane closes, and survives a restart.\n\n' +
+      'Read `teamree team requests` first. Allowing something you have not read is the one use of this ' +
+      'command that makes the question pointless.',
+    args: [{ name: 'request', description: 'Request id from `teamree team requests`.', required: true }],
+    flags: [
+      {
+        name: 'session',
+        kind: 'boolean',
+        description: 'Allow this teammate in this pane until the runtime stops or their link drops.'
+      },
+      {
+        name: 'always',
+        kind: 'boolean',
+        description: 'Allow this teammate in this pane until you lift it or the pane closes.'
+      }
+    ],
+    examples: ['teamree team allow ask_3', 'teamree team allow ask_3 --session'],
+    run: async (context) => {
+      const requestId = context.args[0] as string
+      const session = readBoolean(context.flags, 'session') === true
+      const always = readBoolean(context.flags, 'always') === true
+      if (session && always) {
+        throw new UsageError('Choose one of --session and --always: they are two lengths of the same permission.')
+      }
+      const decision = always ? 'always' : session ? 'session' : 'once'
+      const waiting = await context.client.call('teamwork.decide', { requestId, decision })
+      return {
+        data: { requestId, decision, requests: waiting },
+        text: [
+          decision === 'once'
+            ? `Allowed ${requestId}. The next keystroke will ask again.`
+            : decision === 'session'
+              ? `Allowed ${requestId}, and this teammate may type in this pane until the runtime stops or their link drops.`
+              : `Allowed ${requestId}, and this teammate may type in this pane until you lift it with \`teamree team revoke\`.`,
+          waiting.requests.length === 0
+            ? 'Nobody else is waiting on you.'
+            : `${waiting.requests.length} other request${waiting.requests.length === 1 ? '' : 's'} still waiting.`
+        ].join('\n')
+      }
+    }
+  },
+  {
+    path: ['team', 'deny'],
+    summary: 'Refuse a teammate’s waiting keystrokes.',
+    details:
+      'The bytes are dropped on this machine and never reach the pane. The teammate is told, in their own ' +
+      'window, that you did not allow it — a keystroke that vanished without a word would leave them ' +
+      'believing they had typed into your shell.',
+    args: [{ name: 'request', description: 'Request id from `teamree team requests`.', required: true }],
+    examples: ['teamree team deny ask_3'],
+    run: async (context) => {
+      const requestId = context.args[0] as string
+      const waiting = await context.client.call('teamwork.decide', { requestId, decision: 'deny' })
+      return {
+        data: { requestId, decision: 'deny', requests: waiting },
+        text: `Refused ${requestId}. Nothing reached the pane, and they were told.`
+      }
+    }
+  },
+  {
+    path: ['team', 'revoke'],
+    summary: 'Take back a standing permission to type in one of this machine’s panes.',
+    details:
+      'Yours alone, like a mute, and it takes effect on the next keystroke. The teammate is not told; they ' +
+      'find out the way they found out they had it, by typing and being asked about.',
+    args: [
+      { name: 'terminal', description: 'Terminal id from `teamree terminal list`.', required: true },
+      { name: 'teammate', description: 'Public key from `teamree team requests --json`.', required: true }
+    ],
+    examples: ['teamree team revoke t_12 Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='],
+    run: async (context) => {
+      const terminalId = context.args[0] as string
+      const publicKey = context.args[1] as string
+      const waiting = await context.client.call('teamwork.revoke', { terminalId, publicKey })
+      return {
+        data: { terminalId, publicKey, requests: waiting },
+        text: `Lifted. They will be asked again the next time they type in ${terminalId}.`
+      }
+    }
+  },
+  {
     path: ['team', 'mute'],
     summary: 'Stop remote keystrokes reaching one of this machine’s panes.',
     details:

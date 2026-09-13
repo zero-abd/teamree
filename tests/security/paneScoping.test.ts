@@ -25,8 +25,10 @@ import {
   createManualScheduler,
   createPeerRuntime,
   makeProjectDir,
+  decided,
   project,
   remoteRunner,
+  standingConsent,
   terminal,
   worktree
 } from '../../src/main/teamwork/peer/peerTestSupport'
@@ -64,6 +66,12 @@ async function twoProjects() {
     env: { TEAMREE_RELAY_URL: RELAY_URL },
     runner: remoteRunner({ [openPath]: ORIGIN_OPEN, [secretPath]: ORIGIN_SECRET }),
     dataDir,
+    // Alice settled the shared pane for Mallory before any of this: these are
+    // probes of the scoping rules, and a keystroke held for a prompt would
+    // prove nothing about which project it was scoped to. The private pane is
+    // deliberately not settled — nothing could settle it, because Mallory is
+    // not on that project at all, which is the whole point below.
+    consent: standingConsent([{ terminalId: 't_open', publicKey: mallory }]),
     workspace: {
       projects: [project('p_open', openPath), project('p_secret', secretPath)],
       worktrees: [
@@ -93,7 +101,7 @@ describe('what a teammate on one repository’s roster can reach', () => {
   it('reads and types into a pane of the repository they share', async () => {
     const { alice, shared } = await twoProjects()
     expect(alice.service.remoteRead(shared, 't_open').ok).toBe(true)
-    expect(alice.service.remoteWrite(shared, { terminalId: 't_open', data: 'x', bytes: 1 }).ok).toBe(true)
+    expect(decided(alice.service.remoteWrite(shared, { terminalId: 't_open', data: 'x', bytes: 1 })).ok).toBe(true)
   })
 
   it('cannot read a pane of a repository it holds no key for', async () => {
@@ -107,7 +115,17 @@ describe('what a teammate on one repository’s roster can reach', () => {
 
   it('cannot type into a pane of a repository it holds no key for', async () => {
     const { alice, shared } = await twoProjects()
-    expect(alice.service.remoteWrite(shared, { terminalId: 't_secret', data: 'rm -rf /\r', bytes: 9 }).ok).toBe(false)
+    const theirs = decided(alice.service.remoteWrite(shared, { terminalId: 't_secret', data: 'rm -rf /\r', bytes: 9 }))
+    expect(theirs.ok).toBe(false)
+
+    // AND IT IS NOT HELD. The owner is never asked about a pane this teammate
+    // could not have been offered: a prompt is a fact about the pane existing,
+    // shown to the owner and — because a held write waits where a refused one
+    // returns at once — legible from the other end as well. So the answer is
+    // the refusal, immediately, and it is byte-identical to the one a pane id
+    // nobody has ever had gets.
+    const invented = decided(alice.service.remoteWrite(shared, { terminalId: 't_nothing', data: 'x', bytes: 1 }))
+    expect(theirs).toEqual(invented)
   })
 
   it('cannot reach anything by claiming the other repository’s project key', async () => {
@@ -115,19 +133,19 @@ describe('what a teammate on one repository’s roster can reach', () => {
     // No link exists for that pair, so nothing is registered under that
     // connection id — which is the refusal, and it covers both directions.
     expect(alice.service.remoteRead(forged, 't_secret').ok).toBe(false)
-    expect(alice.service.remoteWrite(forged, { terminalId: 't_secret', data: 'x', bytes: 1 }).ok).toBe(false)
+    expect(decided(alice.service.remoteWrite(forged, { terminalId: 't_secret', data: 'x', bytes: 1 })).ok).toBe(false)
   })
 
   it('is refused at the next keystroke once its key leaves the roster', async () => {
     const { alice, openPath, shared } = await twoProjects()
-    expect(alice.service.remoteWrite(shared, { terminalId: 't_open', data: 'x', bytes: 1 }).ok).toBe(true)
+    expect(decided(alice.service.remoteWrite(shared, { terminalId: 't_open', data: 'x', bytes: 1 })).ok).toBe(true)
 
     // The revocation: the key is removed from `.teamree/members` and the
     // service re-reads, which is what a `git pull` of the removal does.
     await rm(join(openPath, ...MEMBERS_DIR_SEGMENTS, `mallory${MEMBER_FILE_SUFFIX}`))
     await alice.service.reconcile()
 
-    const verdict = alice.service.remoteWrite(shared, { terminalId: 't_open', data: 'x', bytes: 1 })
+    const verdict = decided(alice.service.remoteWrite(shared, { terminalId: 't_open', data: 'x', bytes: 1 }))
     expect(verdict.ok).toBe(false)
     expect(alice.service.remoteRead(shared, 't_open').ok).toBe(false)
   })

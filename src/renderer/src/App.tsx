@@ -13,6 +13,7 @@ import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
 import { InstallCliDialog } from './dialogs/InstallCliDialog'
+import { firstQuestion, RemoteKeystrokesDialog } from './dialogs/RemoteKeystrokesDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { SidebarResizer } from './shell/SidebarResizer'
@@ -34,6 +35,12 @@ export function App(): React.JSX.Element {
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   const dialog = useWorkspaceStore((state) => state.dialog)
+  // Somebody else's keystrokes, waiting on this machine's owner. Read outside
+  // `dialog` because it is not this window's own action: a teammate raised it,
+  // it has a deadline of its own, and it must not be closed by opening
+  // something else or cleared by whatever the user was in the middle of.
+  const consent = useWorkspaceStore((state) => state.consent)
+  const asking = firstQuestion(consent)
   const notices = useWorkspaceStore((state) => state.notices)
   const dismissNotice = useWorkspaceStore((state) => state.dismissNotice)
   const appearance = useWorkspaceStore((state) => state.appearance)
@@ -121,6 +128,11 @@ export function App(): React.JSX.Element {
       {dialog?.kind === 'appearance' ? <AppearanceDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
+
+      {/* Last, so it is on top of whatever else is open. A question about bytes
+          that are about to run as this user outranks anything this user
+          themselves has half-finished. */}
+      {asking ? <RemoteKeystrokesDialog request={asking} key={asking.id} /> : null}
     </div>
   )
 }

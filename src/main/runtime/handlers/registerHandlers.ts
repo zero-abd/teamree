@@ -232,6 +232,12 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
         list: () => registry.context.store.listMutedTerminals(),
         set: (terminalId, muted) => registry.context.store.setTerminalMuted(terminalId, muted)
       },
+      // And the permissions, kept in the same file for the same reason: the
+      // owner decided once, about a pane that comes back under the id it had.
+      consent: {
+        list: () => registry.context.store.listStandingConsent(),
+        set: (terminalId, publicKey, since) => registry.context.store.setStandingConsent(terminalId, publicKey, since)
+      },
       onChange: () => workspaceEvents.emit({ type: 'teammates' }),
       // Nothing a peer does should be able to fail quietly here. A snapshot
       // refused, a watch that could not be started: none of them stop the app,
