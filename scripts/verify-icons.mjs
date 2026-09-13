@@ -340,6 +340,10 @@ function checkIcns(relativePath) {
       fail(relativePath, `is missing the \`${type}\` chunk, which macOS wants at ${expected}x${expected}.`)
     } else if (payload.length < 64) {
       fail(relativePath, `chunk \`${type}\` is only ${payload.length} bytes, which cannot be a ${expected}px icon.`)
+    } else if (pngSize(payload)) {
+      // A PNG here is the icp4/icp5 mistake wearing a different name: these two
+      // codes are ARGB, and macOS will read a PNG under them as raw pixels.
+      fail(relativePath, `chunk \`${type}\` contains a PNG. ic04 and ic05 are RLE ARGB — let iconutil write them.`)
     }
   }
 
