@@ -269,10 +269,14 @@ describe('reached through a symlink', () => {
     symlinkSync(join(import.meta.dirname, '..'), linked)
     const target = join(root, 'project')
 
-    const result = spawnSync(process.execPath, [join(linked, 'bin', 'teamree-relay.mjs'), 'deploy', target, '--dry-run'], {
-      encoding: 'utf8',
-      timeout: 120_000
-    })
+    const result = spawnSync(
+      process.execPath,
+      [join(linked, 'bin', 'teamree-relay.mjs'), 'deploy', target, '--dry-run'],
+      {
+        encoding: 'utf8',
+        timeout: 120_000
+      }
+    )
 
     expect(existsSync(join(target, 'wrangler.jsonc'))).toBe(true)
     expect(result.stdout).toContain('wrote the Worker project')
