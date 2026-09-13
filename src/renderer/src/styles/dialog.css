@@ -425,13 +425,13 @@ select.field__input {
 }
 
 .button--danger {
-  border-color: rgb(232 97 90 / 55%);
-  background: rgb(232 97 90 / 16%);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
   color: var(--danger);
 }
 
 .button--danger:hover {
-  background: rgb(232 97 90 / 26%);
+  background: color-mix(in srgb, var(--danger) 28%, transparent);
 }
 
 /* The question the owner is asked before somebody else's keystrokes run.

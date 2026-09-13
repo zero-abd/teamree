@@ -34,7 +34,8 @@ import type {
   RelaySetting,
   TeamworkOrigin,
   TeamworkPublish,
-  TeamworkPublishPlan
+  TeamworkPublishPlan,
+  TeamworkPublishProgress
 } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
 import { checkOriginUrl } from '../../shared/originUrl'
@@ -42,7 +43,7 @@ import { createGitRunner, type GitRunner } from '../git/gitProcess'
 import { ErrorCode } from '../../shared/protocol'
 import { notFound } from '../runtime/runtimeError'
 import { badHandle, badOriginUrl, badRelayUrl, rosterConflict, TeamworkError } from './errors'
-import { publish, readPublishPlan } from './publish'
+import { publish, readPublishPlan, type PublishPhase } from './publish'
 import { shippedRelayCommand } from './relayCommand'
 import { resolveHandle } from './handle'
 import { loadIdentity } from './identity'
@@ -59,6 +60,18 @@ import { memberFileName, memberFilePath, readRoster, type Roster } from './roste
 
 /** Only the sliver of the workspace store this needs, so a test can hand it one project. */
 export type ProjectSource = { getProject: (projectId: string) => Project | undefined }
+
+/** One publish, and the handle on it that makes stopping it possible. */
+type PublishRun = { controller: AbortController; progress: TeamworkPublishProgress }
+
+/**
+ * How much of git's chatter is worth keeping.
+ *
+ * Enough that the panel can show the last several lines and a reader can see
+ * the shape of what happened; far short of the hundreds of redraws a meter
+ * emits, which are the same sentence at different percentages.
+ */
+const MAX_PUBLISH_OUTPUT_LINES = 40
 
 export type TeamworkServiceOptions = {
   store: ProjectSource
@@ -113,6 +126,21 @@ export class TeamworkService {
    * compared, never served: a reader gets what is on disk now.
    */
   readonly #lastRoster = new Map<string, string>()
+
+  /**
+   * The publish that is running for each project, and what it has said.
+   *
+   * Kept here rather than handed back through the call that started it, because
+   * the whole problem being solved is that that call does not return for as
+   * long as the push takes. A record somebody else can read is what lets a
+   * window ask "what is it doing, and for how long" while the answer is still
+   * being worked out — and it is what gives `cancelPublish` something to abort.
+   *
+   * A finished run stays in the map until the next one for that project
+   * replaces it, so the panel can report how long the last one took rather than
+   * having the evidence vanish at the moment it resolves.
+   */
+  readonly #publishRuns = new Map<string, PublishRun>()
 
   constructor(options: TeamworkServiceOptions) {
     this.#store = options.store
@@ -263,15 +291,107 @@ export class TeamworkService {
   /** Stages the two files, commits them, and pushes. Never more than those files. */
   async publish(params: ParamsOf<'teamwork.publish'>): Promise<TeamworkPublish> {
     const project = this.#project(params.projectId)
+    // Two at once would be two gits fighting over one index, and the second
+    // one's progress would overwrite the first's in the record above — so the
+    // window would show one push and the repository would be having two.
+    const running = this.#publishRuns.get(project.id)
+    if (running !== undefined && running.progress.finishedAt === null) {
+      throw new TeamworkError(ErrorCode.Conflict, 'a push is already running for this project')
+    }
+
     const target = await this.#publishTarget(project)
-    const result = await publish(this.#runner, {
-      ...target,
-      ...(params.message === undefined ? {} : { message: params.message })
-    })
-    // The roster did not change, but what the repository holds did, and the
-    // links are rebuilt against a relay that has just become the team's.
-    this.#onRosterChange?.()
-    return result
+    const run = this.#startRun(project.id)
+    try {
+      const result = await publish(this.#runner, {
+        ...target,
+        ...(params.message === undefined ? {} : { message: params.message }),
+        signal: run.controller.signal,
+        onPhase: (phase) => this.#notePhase(run, phase),
+        onOutput: (line) => this.#noteOutput(run, line)
+      })
+      // The roster did not change, but what the repository holds did, and the
+      // links are rebuilt against a relay that has just become the team's.
+      this.#onRosterChange?.()
+      return result
+    } finally {
+      run.progress.phase = 'finished'
+      run.progress.finishedAt = this.#now()
+      run.progress.cancelling = false
+    }
+  }
+
+  /**
+   * What the running publish is doing, or the last one did. Null when this
+   * project has never had one.
+   *
+   * A read rather than a stream, for the reason the deploy pane is read the
+   * same way: it matters only while somebody is looking at the panel that shows
+   * it, and a subscription that has to be set up, torn down and reasoned about
+   * for a thing that lives for ten seconds is more machinery than the question
+   * deserves.
+   */
+  async publishProgress(params: ParamsOf<'teamwork.publishProgress'>): Promise<TeamworkPublishProgress | null> {
+    const project = this.#project(params.projectId)
+    const run = this.#publishRuns.get(project.id)
+    if (run === undefined) return null
+    return { ...run.progress, output: [...run.progress.output], readAt: this.#now() }
+  }
+
+  /**
+   * Stops the publish that is running, if one is.
+   *
+   * The abort kills whichever git is in front of it, and `publish` turns that
+   * into a result naming the commit that did land. Nothing is undone: a commit
+   * that exists goes on existing, because throwing away somebody's commit to
+   * tidy up after a button they pressed by mistake is a far worse surprise than
+   * a commit they can push whenever they like.
+   */
+  async cancelPublish(params: ParamsOf<'teamwork.cancelPublish'>): Promise<{ cancelled: boolean }> {
+    const project = this.#project(params.projectId)
+    const run = this.#publishRuns.get(project.id)
+    if (run === undefined || run.progress.finishedAt !== null) return { cancelled: false }
+    run.progress.cancelling = true
+    run.controller.abort()
+    return { cancelled: true }
+  }
+
+  #startRun(projectId: string): PublishRun {
+    const startedAt = this.#now()
+    const run: PublishRun = {
+      controller: new AbortController(),
+      progress: {
+        projectId,
+        phase: 'staging',
+        startedAt,
+        lastOutputAt: startedAt,
+        finishedAt: null,
+        output: [],
+        cancelling: false,
+        readAt: startedAt
+      }
+    }
+    this.#publishRuns.set(projectId, run)
+    return run
+  }
+
+  #notePhase(run: PublishRun, phase: PublishPhase): void {
+    run.progress.phase = phase
+  }
+
+  /**
+   * One line git printed.
+   *
+   * Only the tail is kept. A push of a large repository prints its meter
+   * hundreds of times, and what a panel shows is the last few lines of it — so
+   * holding every one of them would be a slowly growing string in the main
+   * process in exchange for scrollback nobody reads.
+   */
+  #noteOutput(run: PublishRun, line: string): void {
+    run.progress.lastOutputAt = this.#now()
+    run.progress.output.push(line)
+    if (run.progress.output.length > MAX_PUBLISH_OUTPUT_LINES) {
+      run.progress.output.splice(0, run.progress.output.length - MAX_PUBLISH_OUTPUT_LINES)
+    }
   }
 
   /**

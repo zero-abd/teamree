@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { applicationMenuTemplate } from './appMenu'
+import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
@@ -20,7 +21,12 @@ function createWindow(): BrowserWindow {
     ...(process.platform === 'darwin'
       ? { trafficLightPosition: { x: TRAFFIC_LIGHT_X_PX, y: TRAFFIC_LIGHT_Y_PX } }
       : {}),
-    backgroundColor: '#14161a',
+    // The ground the chosen theme is about to paint, so the frame Electron
+    // shows before the renderer has rendered anything is already the right
+    // colour. Hard-coding one meant that switching to a dark theme still opened
+    // on a flash of the old near-black, and switching to a light one opened on
+    // a flash of dark.
+    backgroundColor: windowBackground(),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       sandbox: false,
@@ -46,6 +52,17 @@ function createWindow(): BrowserWindow {
   return window
 }
 
+/**
+ * The window's backdrop, from the appearance this installation last chose.
+ *
+ * Falls back to the default theme's ground whenever the runtime is not up yet
+ * or could not read its file — which is the same ground `tokens.css` declares,
+ * so the fallback is not a guess.
+ */
+function windowBackground(): string {
+  return resolvePalette(runtime?.context.store.getAppearance() ?? DEFAULT_APPEARANCE)['bg-window']
+}
+
 let runtime: Runtime | undefined
 let stopping = false
 
@@ -65,7 +82,19 @@ if (!app.requestSingleInstanceLock()) {
     // equivalent never reaches the web contents, so that one item is what the
     // renderer's "Close pane" binding has been losing to. See appMenu.ts.
     Menu.setApplicationMenu(
-      Menu.buildFromTemplate(applicationMenuTemplate({ developing: process.env.ELECTRON_RENDERER_URL !== undefined }))
+      Menu.buildFromTemplate(
+        applicationMenuTemplate({
+          developing: process.env.ELECTRON_RENDERER_URL !== undefined,
+          // Reads `runtime` when it is clicked rather than capturing it now:
+          // the menu is installed before the runtime starts, on purpose, and a
+          // click in the second before it is up does nothing rather than
+          // throwing. The answer reaches the window over the workspace stream,
+          // which is why nothing here touches a BrowserWindow.
+          checkForUpdates: () => {
+            void runtime?.checkForUpdates().catch((error: unknown) => console.warn('[updates]', error))
+          }
+        })
+      )
     )
 
     ipcMain.handle('teamree:select-project-folder', async (event) => {
@@ -81,7 +110,13 @@ if (!app.requestSingleInstanceLock()) {
     // The runtime comes up before any window so the first render can already
     // call it, and so the CLI endpoint exists as early as possible.
     try {
-      runtime = await startRuntime({ userDataDir: app.getPath('userData'), version: APP_VERSION })
+      runtime = await startRuntime({
+        userDataDir: app.getPath('userData'),
+        version: APP_VERSION,
+        // The one way this process opens a browser, handed over explicitly so
+        // that the update check's download link is the only thing that can.
+        openExternal: (url) => shell.openExternal(url)
+      })
     } catch (error) {
       console.error('[runtime] failed to start', error)
     }

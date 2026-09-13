@@ -2,6 +2,9 @@
 
 .workspace {
   display: flex;
+  /* It fills its cell of `.workspace-split`, which is what holds the grid area
+     now that a teammate's pane can take a slot beside it. */
+  flex: 1;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
@@ -483,12 +486,12 @@
 }
 
 .patch__line--added {
-  background: rgb(87 195 138 / 12%);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
   color: var(--success);
 }
 
 .patch__line--removed {
-  background: rgb(232 97 90 / 12%);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
   color: var(--danger);
 }
 

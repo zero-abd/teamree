@@ -28,7 +28,9 @@ import { GitService, registerGitHandlers } from '../../git'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
+import { UpdateService, registerUpdateHandlers } from '../../updates'
 import type { TerminalService } from '../../terminals/method-handlers'
+import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerStatusHandler } from './statusHandler'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
@@ -57,13 +59,29 @@ export type RegisteredAreas = {
    * method does not exist when it merely does not exist yet.
    */
   peers: PeerService
+  /**
+   * The update check. It owns one timer and nothing else, which is the whole
+   * reason it is on this list: quitting must never be waiting on GitHub.
+   */
+  updates: UpdateService
 }
 
-export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
+export type RegisterHandlersOptions = {
+  /**
+   * Opens a URL in the user's browser. Absent in a runtime with no Electron
+   * around it — the acceptance host, a vitest worker — where the update check's
+   * download call then refuses rather than pretending to have opened something.
+   */
+  openExternal?: (url: string) => Promise<void>
+}
+
+export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
   registerPlaceholderHandlers(registry)
   registerStatusHandler(registry)
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)
+  // Two reads and a write against the store, with no resource behind them.
+  registerAppearanceHandlers(registry)
   const workspaceEvents = registry.context.workspaceEvents
 
   const terminals = createTerminalService({
@@ -174,6 +192,30 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
     })
   )
 
+  // One timer and no other resource, and nothing here reaches the network until
+  // it fires — `start()` is the runtime's to call, well after a window is up.
+  // The preference and the rate limit's clock go in the workspace file beside
+  // the CLI question's answer: that is where this installation's own state
+  // already lives, and one boolean does not earn a second file.
+  const updates = registerUpdateHandlers(
+    registry,
+    new UpdateService({
+      version: registry.context.version,
+      settings: {
+        read: () => registry.context.store.updateSettings(),
+        setAutomatic: (automatic) => registry.context.store.setUpdateAutomatic(automatic),
+        recordAttempt: (at) => registry.context.store.recordUpdateCheck(at),
+        rememberLatest: (version) => registry.context.store.rememberLatestVersion(version)
+      },
+      openExternal: options.openExternal,
+      // A window hears about a check it did not start — the one half a minute
+      // after launch, and the one behind the macOS app menu — the same way it
+      // hears about a worktree the CLI made: the runtime says something moved
+      // and the client re-reads it.
+      onChange: () => workspaceEvents.emit({ type: 'updates' })
+    })
+  )
+
   const peers = registerPeerHandlers(
     registry,
     new PeerService({
@@ -225,7 +267,7 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
     peers.notifyWorkspaceChanged()
   })
 
-  return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers }
+  return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers, updates }
 }
 
 /**

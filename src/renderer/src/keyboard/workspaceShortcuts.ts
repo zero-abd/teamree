@@ -15,6 +15,7 @@ export type WorkspaceCommand =
   | 'open-palette'
   | 'find-in-pane'
   | 'open-dashboard'
+  | 'open-appearance'
 
 export type WorkspaceShortcut = {
   command: WorkspaceCommand
@@ -32,7 +33,12 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'focus-next-pane', chord: { key: ']' }, title: 'Focus next pane' },
   { command: 'open-palette', chord: { key: 'k' }, title: 'Go to worktree or command' },
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in pane' },
-  { command: 'open-dashboard', chord: { key: 'e' }, title: 'Every pane, by what needs you' }
+  { command: 'open-dashboard', chord: { key: 'e' }, title: 'Every pane, by what needs you' },
+  // Comma, because on this platform that is where settings live and nobody has
+  // to be told. It is not in the application menu — see appMenu.ts, which
+  // carries Electron's own roles and nothing invented — so the key reaches the
+  // renderer rather than being eaten by a menu equivalent.
+  { command: 'open-appearance', chord: { key: ',' }, title: 'Appearance' }
 ]
 
 export function commandForEvent(

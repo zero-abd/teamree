@@ -40,6 +40,13 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
           void store.splitFocusedPane('column')
           break
         case 'close-pane': {
+          // A teammate's pane closes with the same chord as your own, and for
+          // this one closing is the whole of stopping the watch: the pane is
+          // the subscription, and nothing flows once it is gone.
+          if (store.focusedWatchId !== null) {
+            store.closeWatchedPane(store.focusedWatchId)
+            break
+          }
           const layout = store.activeWorktreeId ? store.layouts[store.activeWorktreeId] : undefined
           if (layout?.focusedTerminalId) void store.closeTerminal(layout.focusedTerminalId)
           break
@@ -67,6 +74,9 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
           break
         case 'open-dashboard':
           store.toggleDashboard()
+          break
+        case 'open-appearance':
+          store.openDialog({ kind: 'appearance' })
           break
       }
     }

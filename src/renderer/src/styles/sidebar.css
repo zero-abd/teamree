@@ -86,6 +86,13 @@
   cursor: default;
 }
 
+/* A chord on a rail entry sits at the far end of the row, the way it does on
+   the search button above: the label is what is read, the key is what is
+   reached for later. */
+.rail__link kbd {
+  margin-left: auto;
+}
+
 /* Where you are. Said in `aria-current` first; this is the same fact for eyes
    that are not reading the accessibility tree. */
 .rail__link--current {
@@ -240,7 +247,7 @@
 
 .teamwork--live {
   color: var(--success);
-  background: rgb(87 195 138 / 12%);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
 }
 
 .teamwork--pending {
@@ -256,7 +263,7 @@
 
 .teamwork--problem {
   color: var(--danger);
-  background: rgb(232 97 90 / 12%);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 /* The count of a teammate's worktrees, beside the count of your own. Separate
@@ -398,7 +405,7 @@
 }
 
 .worktree__tag--failed {
-  background: rgb(232 97 90 / 14%);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
 }
 
@@ -468,9 +475,9 @@
   gap: var(--s2);
   margin: 0 var(--s2) var(--s2) 28px;
   padding: var(--s2);
-  border: 1px solid rgb(232 97 90 / 26%);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   border-radius: var(--r2);
-  background: rgb(232 97 90 / 8%);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 .worktree__error {
@@ -531,10 +538,13 @@
 }
 
 /* The chips beside it could not be confirmed. Not a warning — nothing is wrong
-   with the repository, the app simply cannot see it — so this is dimmer than
-   the counts rather than louder, and the counts keep their own colour. */
+   with the repository, the app simply cannot see it — so it is set apart from
+   the counts rather than made louder, and the counts keep their own colour.
+
+   Set apart by the italic alone. It used to be faded as well, which took an
+   ink already sitting on the contrast floor under it: the one row on screen
+   that is admitting to uncertainty is the wrong row to make hard to read. */
 .gitchip--unconfirmed {
-  opacity: 0.7;
   font-style: italic;
 }
 
@@ -563,7 +573,7 @@
 }
 
 .worktree__merge--conflicts {
-  background: rgb(214 162 74 / 16%);
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
   color: var(--warning);
 }
 
@@ -713,7 +723,7 @@
   margin-left: var(--s4);
   border-left: 2px solid var(--teammate-line);
   border-radius: 0 var(--r2) var(--r2) 0;
-  background: rgb(139 140 247 / 5%);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 
 .worktree__open--teammate {
@@ -763,8 +773,13 @@
   background: transparent;
 }
 
-.worktree--stale .worktree__open--teammate {
-  opacity: 0.72;
+/* A remembered row is told apart by the dashed edge above and by the age
+   printed at the end of it, both of which survive being read. Fading the row
+   as well put a teammate's branch name under the AA floor — which is to say
+   the app said "this is old" by making it hard to find out what it was. */
+.worktree--stale .worktree__name,
+.worktree--stale .worktree__branch {
+  color: var(--fg-muted);
 }
 
 /* One line, not a row each: a teammate never heard from has no worktrees to

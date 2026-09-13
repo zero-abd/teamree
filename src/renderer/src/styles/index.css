@@ -10,6 +10,8 @@
 @import './panes.css';
 @import './watch.css';
 @import './dialog.css';
+@import './appearance.css';
 @import './members.css';
 @import './cli.css';
+@import './updates.css';
 @import './statusbar.css';

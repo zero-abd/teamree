@@ -25,7 +25,9 @@ export const TEAMWORK_METHODS = [
   'teamwork.setRelay',
   'teamwork.setOrigin',
   'teamwork.publishPlan',
-  'teamwork.publish'
+  'teamwork.publish',
+  'teamwork.publishProgress',
+  'teamwork.cancelPublish'
 ] as const
 
 export type TeamworkMethodName = (typeof TEAMWORK_METHODS)[number]
@@ -42,7 +44,9 @@ export function createTeamworkHandlers(service: TeamworkService): TeamworkHandle
     'teamwork.setRelay': (params) => service.setRelay(params),
     'teamwork.setOrigin': (params) => service.setOrigin(params),
     'teamwork.publishPlan': (params) => service.publishPlan(params),
-    'teamwork.publish': (params) => service.publish(params)
+    'teamwork.publish': (params) => service.publish(params),
+    'teamwork.publishProgress': (params) => service.publishProgress(params),
+    'teamwork.cancelPublish': (params) => service.cancelPublish(params)
   }
 }
 
@@ -55,5 +59,7 @@ export function registerTeamworkHandlers(registry: MethodRegistry, service: Team
   registry.register('teamwork.setOrigin', Params.teamworkSetOrigin, handlers['teamwork.setOrigin'])
   registry.register('teamwork.publishPlan', Params.teamworkPublishPlan, handlers['teamwork.publishPlan'])
   registry.register('teamwork.publish', Params.teamworkPublish, handlers['teamwork.publish'])
+  registry.register('teamwork.publishProgress', Params.teamworkPublishProgress, handlers['teamwork.publishProgress'])
+  registry.register('teamwork.cancelPublish', Params.teamworkCancelPublish, handlers['teamwork.cancelPublish'])
   return service
 }

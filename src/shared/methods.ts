@@ -22,8 +22,10 @@ import type {
   TeamworkOrigin,
   TeamworkPublish,
   TeamworkPublishPlan,
+  TeamworkPublishProgress,
   TeamworkStatus,
   Terminal,
+  UpdateState,
   Worktree,
   WorktreeChanges,
   WorktreeCommit,
@@ -33,6 +35,7 @@ import type {
   WorktreePush,
   WorktreeStatus
 } from './entities'
+import { THEME_TOKENS, type Appearance } from './theme'
 
 /**
  * The most one remote keystroke may carry.
@@ -189,6 +192,33 @@ export const Params = {
   cliDismissPrompt: z.object({}),
 
   /**
+   * What this build is, what the download page has, and whether teamree looks.
+   *
+   * A read out of memory: it never asks GitHub anything. The answer includes
+   * whatever the last check found, including a check made in an earlier run.
+   */
+  updateState: z.object({}),
+  /**
+   * Asks GitHub now, because somebody chose to.
+   *
+   * The rate limit that governs the automatic check does not apply here: it
+   * exists to stop the app asking on its own account, and a person who has just
+   * picked "Check for updates" is owed an answer rather than a cached one.
+   */
+  updateCheck: z.object({}),
+  /** Turns the automatic check on or off. Remembered between runs. */
+  updateSetAutomatic: z.object({ automatic: z.boolean() }),
+  /**
+   * Opens the newer release's download in the user's browser.
+   *
+   * Takes no URL, and that is the point: the address came off the GitHub API,
+   * so the only thing this can open is the release the runtime is already
+   * holding. A call that named a page would be a way to aim somebody's browser
+   * through this app.
+   */
+  updateDownload: z.object({}),
+
+  /**
    * Everyone whose public key is committed to the project, and who this
    * installation is next to them.
    */
@@ -260,6 +290,24 @@ export const Params = {
     /** Overrides the message the plan proposed. */
     message: z.string().min(1).optional()
   }),
+  /**
+   * What the publish that is running is doing, while it is still doing it.
+   *
+   * `teamwork.publish` does not answer until the push is over, which for the
+   * one call here that crosses a network can be minutes — so without a second
+   * question to ask, a window has nothing to show between the button and the
+   * result. This is that question: the phase, what git has printed, when it
+   * started and when it last said anything.
+   */
+  teamworkPublishProgress: z.object({ projectId: z.string().min(1) }),
+  /**
+   * Stops the publish that is running.
+   *
+   * A way out is not a nicety on a call that can wait ten minutes on a
+   * credential nothing can supply. Whatever was committed stays committed;
+   * `teamwork.publish` reports it.
+   */
+  teamworkCancelPublish: z.object({ projectId: z.string().min(1) }),
 
   /**
    * Whether teamwork is running for a project, and how each link is going.
@@ -427,6 +475,28 @@ export const Params = {
     command: z.string().min(1).optional()
   }),
 
+  appearanceGet: z.object({}),
+  /**
+   * The whole appearance, replaced.
+   *
+   * Replaced rather than patched because that is what the editor has in its
+   * hand: a preset, two choices and a bag of edits, all of which move together
+   * when somebody presses a swatch. The schema only checks shape and size — a
+   * value that is not a colour is dropped by `sanitizeAppearance` on the way in
+   * rather than refused here, because a stored theme with one bad hex in it
+   * should cost that colour and nothing else.
+   */
+  appearanceSet: z.object({
+    themeId: z.string().min(1).max(64),
+    ground: z.string().max(32).nullable(),
+    accent: z.string().max(32).nullable(),
+    overrides: z
+      .record(z.string().max(64), z.string().max(32))
+      .refine((overrides) => Object.keys(overrides).length <= THEME_TOKENS.length, {
+        message: 'more overrides than there are tokens to override'
+      })
+  }),
+
   layoutGet: z.object({ worktreeId: z.string().min(1) }),
   layoutSet: z.object({ worktreeId: z.string().min(1), root: z.unknown(), focusedTerminalId: z.string().nullable() }),
 
@@ -477,6 +547,12 @@ export type MethodContract = {
   'cli.install': { params: z.infer<typeof Params.cliInstall>; result: CliInstall }
   'cli.dismissPrompt': { params: z.infer<typeof Params.cliDismissPrompt>; result: CliStatus }
 
+  'update.state': { params: z.infer<typeof Params.updateState>; result: UpdateState }
+  'update.check': { params: z.infer<typeof Params.updateCheck>; result: UpdateState }
+  'update.setAutomatic': { params: z.infer<typeof Params.updateSetAutomatic>; result: UpdateState }
+  /** Answers with the address that was opened, so a caller can say what it was. */
+  'update.download': { params: z.infer<typeof Params.updateDownload>; result: { opened: string } }
+
   'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
   'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }
 
@@ -485,6 +561,16 @@ export type MethodContract = {
   'teamwork.setOrigin': { params: z.infer<typeof Params.teamworkSetOrigin>; result: TeamworkOrigin }
   'teamwork.publishPlan': { params: z.infer<typeof Params.teamworkPublishPlan>; result: TeamworkPublishPlan }
   'teamwork.publish': { params: z.infer<typeof Params.teamworkPublish>; result: TeamworkPublish }
+  'teamwork.publishProgress': {
+    params: z.infer<typeof Params.teamworkPublishProgress>
+    /** Null when this project has never had a publish in this run of the app. */
+    result: TeamworkPublishProgress | null
+  }
+  'teamwork.cancelPublish': {
+    params: z.infer<typeof Params.teamworkCancelPublish>
+    /** False when there was nothing running to stop. */
+    result: { cancelled: boolean }
+  }
   'teamwork.status': { params: z.infer<typeof Params.teamworkStatus>; result: TeamworkStatus }
   'teamwork.presence': { params: z.infer<typeof Params.teamworkPresence>; result: TeammatePresence }
   'teamwork.watch': {
@@ -519,6 +605,10 @@ export type MethodContract = {
   'terminal.read': { params: z.infer<typeof Params.terminalRead>; result: { data: string } }
   'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
   'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
+
+  /** How this installation is painted. Per machine, not per project. */
+  'appearance.get': { params: z.infer<typeof Params.appearanceGet>; result: Appearance }
+  'appearance.set': { params: z.infer<typeof Params.appearanceSet>; result: Appearance }
 
   'layout.get': { params: z.infer<typeof Params.layoutGet>; result: Layout }
   'layout.set': { params: z.infer<typeof Params.layoutSet>; result: Layout }
@@ -557,6 +647,17 @@ export type WorkspaceEvent =
    * few projects a window has open.
    */
   | { type: 'teammates' }
+  /**
+   * The update check has something new to say: it ran, it finished, or the
+   * preference changed.
+   *
+   * On this stream rather than on one of its own because the check is started
+   * from places the window cannot see — a timer half a minute after launch, and
+   * the macOS app menu, which lives in the main process — and this is already
+   * the channel by which a window hears about work it did not do. Like every
+   * other event here it names no detail: the client re-reads `update.state`.
+   */
+  | { type: 'updates' }
   | { type: 'layout'; worktreeId: string }
   | { type: 'terminalExited'; terminalId: string; exitCode: number }
 

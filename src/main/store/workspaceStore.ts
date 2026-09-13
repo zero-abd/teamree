@@ -8,14 +8,29 @@ import type { Layout, Project, Worktree } from '../../shared/entities'
 import type { TerminalRecord } from '../terminals/session-restore'
 import { samePath } from '../git/pathIdentity'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
+import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '../../shared/theme'
 import {
   emptyWorkspaceDocument,
   parseWorkspaceDocument,
   type AskedQuestion,
   type AskedQuestions,
   type StandingConsentRecord,
+  type UpdateRecord,
   type WorkspaceDocument
 } from './workspaceDocument'
+
+/**
+ * The update check's preference and clock, with the defaults filled in.
+ *
+ * Declared here rather than imported from the service that reads it: this file
+ * is what a preference is kept in, and the service names its own seam for what
+ * it needs, the way the CLI's one-time question does.
+ */
+export type UpdateSettings = {
+  automatic: boolean
+  lastCheckedAt: number | null
+  lastSeenVersion: string | null
+}
 
 export type WorkspaceSnapshot = {
   projects: Project[]
@@ -76,6 +91,8 @@ export class WorkspaceStore {
   /** Standing permissions, keyed the way `consentKey` spells one out. */
   private readonly standingConsent = new Map<string, StandingConsentRecord>()
   private asked: AskedQuestions = {}
+  private appearance: Appearance = DEFAULT_APPEARANCE
+  private updates: UpdateRecord = {}
 
   private queue: Promise<void> = Promise.resolve()
   private queued = false
@@ -102,6 +119,8 @@ export class WorkspaceStore {
       this.standingConsent.set(consentKey(grant.terminalId, grant.publicKey), grant)
     }
     this.asked = document.asked
+    this.appearance = document.appearance
+    this.updates = document.updates
   }
 
   /**
@@ -297,6 +316,72 @@ export class WorkspaceStore {
     this.persist()
   }
 
+  /**
+   * How this installation is painted, as it stands between runs.
+   *
+   * Answered from memory like everything else here, because the main process
+   * reads it to colour a window before that window exists and a file read at
+   * that moment would be a frame of the wrong colour.
+   */
+  getAppearance(): Appearance {
+    return this.appearance
+  }
+
+  /**
+   * Replaces the whole choice, sanitised on the way in.
+   *
+   * Sanitised here rather than trusted from the caller because this is the last
+   * place before the bytes hit the disk, and the file is the thing a future
+   * launch has to be able to open. A colour that is not a colour is dropped;
+   * the rest of somebody's theme survives it.
+   */
+  setAppearance(appearance: unknown): Appearance {
+    this.appearance = sanitizeAppearance(appearance)
+    this.persist()
+    return this.appearance
+  }
+
+  /**
+   * The update check's preference and clock, defaults applied.
+   *
+   * Automatic unless somebody has said otherwise: an app that stops looking
+   * because a field is missing is an app that goes quiet on every machine whose
+   * workspace file predates this feature — which is every machine there is on
+   * the day it ships.
+   */
+  updateSettings(): UpdateSettings {
+    return {
+      automatic: this.updates.automatic ?? true,
+      lastCheckedAt: this.updates.lastCheckedAt ?? null,
+      lastSeenVersion: this.updates.lastSeenVersion ?? null
+    }
+  }
+
+  setUpdateAutomatic(automatic: boolean): void {
+    if ((this.updates.automatic ?? true) === automatic) return
+    this.updates = { ...this.updates, automatic }
+    this.persist()
+  }
+
+  /**
+   * When the app last asked GitHub anything, which is the rate limit's clock.
+   *
+   * On disk rather than in memory because the case it exists for is the one
+   * memory cannot see: quitting and relaunching. An hour of restarts is one
+   * check, the way it would be for an app nobody quit.
+   */
+  recordUpdateCheck(at: number): void {
+    this.updates = { ...this.updates, lastCheckedAt: at }
+    this.persist()
+  }
+
+  /** The newest version a check saw, or null when it saw no release at all. */
+  rememberLatestVersion(version: string | null): void {
+    if ((this.updates.lastSeenVersion ?? null) === version) return
+    this.updates = version === null ? omitLastSeen(this.updates) : { ...this.updates, lastSeenVersion: version }
+    this.persist()
+  }
+
   snapshot(): WorkspaceSnapshot {
     return {
       projects: this.listProjects(),
@@ -373,7 +458,9 @@ export class WorkspaceStore {
       ...this.snapshot(),
       mutedTerminals: this.listMutedTerminals(),
       standingConsent: this.listStandingConsent(),
-      asked: this.asked
+      asked: this.asked,
+      appearance: this.appearance,
+      updates: this.updates
     }
   }
 }
@@ -386,6 +473,18 @@ export class WorkspaceStore {
  */
 function consentKey(terminalId: string, publicKey: string): string {
   return `${terminalId}\u0000${publicKey}`
+}
+
+/**
+ * The record without a version in it, because nothing is the absence of a key.
+ *
+ * `lastSeenVersion: undefined` and no `lastSeenVersion` serialise to the same
+ * JSON, so this is about the in-memory record matching the file it writes
+ * rather than about the file itself.
+ */
+function omitLastSeen(updates: UpdateRecord): UpdateRecord {
+  const { lastSeenVersion: _dropped, ...rest } = updates
+  return rest
 }
 
 function describeError(error: unknown): string {

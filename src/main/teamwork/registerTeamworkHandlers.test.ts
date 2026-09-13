@@ -70,6 +70,17 @@ describe('registerTeamworkHandlers', () => {
     await expect(call('members.list', { projectId: 'nope' })).rejects.toThrow(/^not_found:/)
   })
 
+  // A push that reports itself and a Stop beside it are only worth anything if
+  // the window can reach them, and the window reaches everything through this
+  // dispatcher. Null and `cancelled: false` are the honest answers for a
+  // project that has never had a push: neither is an error.
+  it('answers the two calls a running push is watched and stopped through', async () => {
+    const { call, project } = await wire()
+
+    expect(await call('teamwork.publishProgress', { projectId: project.id })).toBeNull()
+    expect(await call('teamwork.cancelPublish', { projectId: project.id })).toEqual({ cancelled: false })
+  })
+
   it('refuses a call with no project named, before any of this runs', async () => {
     const { call } = await wire()
 

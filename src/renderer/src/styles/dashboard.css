@@ -56,12 +56,16 @@
 }
 
 /* Kept in place at zero rather than removed: the row of counts is read at a
-   glance, and one that reflows as panes change state is read twice. */
+   glance, and one that reflows as panes change state is read twice.
+
+   Quieted by losing its border and its fill, not by being faded. `--fg-muted`
+   is already the dimmest ink the palette will produce and it sits exactly on
+   the AA floor, so an opacity on top of it was a number nobody could read —
+   and a count of zero is still a fact somebody came here for. */
 .board-count--zero {
   border-color: transparent;
   background: none;
   color: var(--fg-muted);
-  opacity: 0.6;
 }
 
 .board-count .activity {

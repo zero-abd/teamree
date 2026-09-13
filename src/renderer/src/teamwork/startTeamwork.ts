@@ -20,14 +20,27 @@
 // the relay — but a checkout with no origin cannot take part whatever relay is
 // set, because the project's identity is a hash of the normalised origin. That
 // is why `TeamworkStatus` reports the two separately and why this reads both.
+//
+// What it does do now, and did not, is say which *side* of this the reader is
+// on. Teamwork is a two-sided protocol and the report that prompted this said
+// the setup was confusing even though it worked — and the confusion was not in
+// any one step. It was that the same five ticks describe two different jobs:
+// one person stands a relay up and invites, the other pulls what is already
+// there and answers. Half of what anybody needs to know is what the other end
+// is waiting for, and nothing here used to say it. So every step now carries
+// two more sentences — why it exists, and what a teammate sees while it is not
+// done — and both of them read differently depending on which of the two
+// things you are doing.
 
 import type {
   Member,
   MemberList,
   PeerLink,
+  PushFailureKind,
   RelaySetting,
   TeamworkPublish,
   TeamworkPublishPlan,
+  TeamworkPublishProgress,
   TeamworkStatus
 } from '@shared/entities'
 import { sanitiseHandle } from '@shared/handle'
@@ -35,6 +48,18 @@ import { checkOriginUrl } from '@shared/originUrl'
 import { parseRelayUrl } from '@shared/relayUrl'
 
 export type StepId = 'identity' | 'key' | 'relay' | 'push' | 'connected'
+
+/**
+ * Which of the two things somebody is doing here.
+ *
+ * Not a role and not a permission — after setup these two are members of one
+ * project with identical powers, exactly as `docs/teamwork.md` says. It is only
+ * a statement about what is already in the repository and therefore about which
+ * half of the work is left, and it exists because a panel that cannot tell them
+ * apart has to write every sentence for both at once, which is how five clear
+ * steps become a document.
+ */
+export type TeamworkPath = 'start' | 'join'
 
 export type StepMark =
   /** Checked, and true. */
@@ -60,6 +85,24 @@ export type StartTeamworkStep = {
   mark: StepMark
   /** One line saying what is true right now. Always set, never a bare code. */
   summary: string
+  /**
+   * Why this step is in the list at all.
+   *
+   * Fixed for a given path rather than derived from state: it is the answer to
+   * "why am I being asked for this", which does not change as the step goes
+   * from undone to done, and a reader who understands the shape of the thing
+   * stops needing the runbook.
+   */
+  why: string
+  /**
+   * What somebody on the other machine sees while this step is not done, or
+   * null where there is honestly nothing to say.
+   *
+   * The single most useful sentence in the whole panel, because the failure
+   * mode of a two-sided protocol is two people each waiting for the other and
+   * neither knowing it.
+   */
+  otherSide: string | null
 }
 
 export type StartTeamworkFlow = {
@@ -101,6 +144,11 @@ export type StartTeamworkInput = {
   relay: RelaySetting | undefined
   status: TeamworkStatus | undefined
   failedReads?: StartTeamworkReadErrors | undefined
+  /**
+   * Which of the two jobs this is. Null before anybody has said, which is the
+   * state the panel puts the choice in front of them in.
+   */
+  path?: TeamworkPath | null | undefined
 }
 
 /**
@@ -345,6 +393,14 @@ export type PublishState = {
   error: string | null
   /** What the last attempt did, including a push that failed after a commit that did not. */
   result: TeamworkPublish | undefined
+  /**
+   * What the running publish is doing, while it is still doing it.
+   *
+   * Undefined until one has run in this session. It is a separate read from
+   * `result` on purpose: `result` is what the call eventually answered, and
+   * this is the only thing there is to show for the minutes before it does.
+   */
+  progress: TeamworkPublishProgress | undefined
 }
 
 /** What to commit, and the commands that do it. Null when nothing is written. */
@@ -394,6 +450,121 @@ function shellPath(path: string): string {
   return /^[\w./@%+:,-]+$/.test(path) ? path : `'${path.replaceAll("'", String.raw`'\''`)}'`
 }
 
+/**
+ * How long git may say nothing before that silence is itself worth reporting.
+ *
+ * A push that is working talks: it counts objects, compresses them and writes
+ * them, and even a small one prints within a second or two. A push that is
+ * waiting for a credential prints nothing at all, ever, and used to go on
+ * printing nothing for ten minutes. Half a minute is comfortably longer than
+ * any gap a healthy push has and far short of the timeout, which makes it the
+ * point at which "still going" stops being the most likely explanation.
+ */
+export const PUBLISH_QUIET_MS = 30_000
+
+/** A publish in flight, as the panel needs to describe it this second. */
+export type PublishActivity = {
+  /** What it is doing, in words rather than as a phase name. */
+  doing: string
+  /** How long the whole publish has been going. */
+  elapsedMs: number
+  /** The last thing git printed, or null when it has printed nothing. */
+  lastLine: string | null
+  /** How long git has been silent. */
+  quietMs: number
+  /**
+   * What that silence probably means, once it has gone on long enough to mean
+   * anything. Null while git is talking.
+   */
+  quiet: string | null
+  /** True between pressing Stop and the process actually going. */
+  cancelling: boolean
+  /** False once it is over; the record stays so the duration can be reported. */
+  running: boolean
+}
+
+const PHASE_WORDS: Record<TeamworkPublishProgress['phase'], string> = {
+  staging: 'Staging the files',
+  committing: 'Making the commit',
+  pushing: 'Pushing to the remote',
+  finished: 'Finished'
+}
+
+/**
+ * The running publish, read as one sentence and two numbers.
+ *
+ * This is the whole answer to "it gets stuck at git push". Every part of it was
+ * being measured on the other side of an IPC call and none of it was being
+ * asked for: what it is doing, how long it has been doing it, and whether
+ * anything has happened lately.
+ */
+export function publishActivity(progress: TeamworkPublishProgress | undefined, now: number): PublishActivity | null {
+  if (progress === undefined) return null
+  const running = progress.finishedAt === null
+  const elapsedMs = Math.max(0, (progress.finishedAt ?? now) - progress.startedAt)
+  const quietMs = Math.max(0, now - progress.lastOutputAt)
+  return {
+    doing: progress.cancelling ? 'Stopping' : PHASE_WORDS[progress.phase],
+    elapsedMs,
+    lastLine: progress.output[progress.output.length - 1] ?? null,
+    quietMs,
+    quiet:
+      running && progress.phase === 'pushing' && !progress.cancelling && quietMs >= PUBLISH_QUIET_MS
+        ? `git has printed nothing for ${formatElapsed(quietMs)}. A push that goes this quiet is usually waiting ` +
+          'for a credential teamree cannot be asked for. Stop it, and run the same push once in Terminal to see ' +
+          'what it wants.'
+        : null,
+    cancelling: progress.cancelling,
+    running
+  }
+}
+
+/**
+ * A duration, for somebody watching a clock rather than reading a log.
+ *
+ * Seconds below a minute and never a decimal: this is read to answer "is this
+ * taking an unreasonable time", and a number with a fractional part in it
+ * invites a precision the question does not have.
+ */
+export function formatElapsed(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`
+}
+
+/** The label on the button that stops a push, named once so the tests can find it. */
+export const CANCEL_PUBLISH_BUTTON = 'Stop'
+
+/** The label on the button that tries a refused push again. */
+export const RETRY_PUBLISH_BUTTON = 'Try the push again'
+
+/**
+ * Whether trying the same thing again could possibly help.
+ *
+ * A rejection is the one failure retrying fixes, and only after a pull — so it
+ * gets the button and a sentence saying what to do first. An authentication
+ * refusal fixed by nothing in this window gets the button too, because a person
+ * who has just run `ssh-add` in Terminal should not have to go anywhere else to
+ * find out whether it worked. A timeout and a cancel are both "it never
+ * finished", which is exactly what trying again is for.
+ */
+export function retryHint(kind: PushFailureKind): string | null {
+  switch (kind) {
+    case 'rejected':
+      return 'Pull with rebase first, or you will be refused for the same reason: git pull --rebase, then try again.'
+    case 'auth':
+    case 'host-key':
+      return 'Fix the credential first — nothing in this window changes it — then try again without leaving the page.'
+    case 'cancelled':
+      return 'Nothing was sent. The commit is still here, so this sends exactly what it would have sent.'
+    case 'timeout':
+      return 'It never finished rather than being refused, so trying again is worth one attempt before anything else.'
+    default:
+      return null
+  }
+}
+
 export type RelayDraftCheck =
   | { state: 'empty' }
   | { state: 'ok'; url: string }
@@ -408,12 +579,46 @@ export type RelayDraftCheck =
  * everybody arrives with is the `https://` address their deploy printed and
  * telling them a round trip later that it was wrong reads as the app being
  * broken rather than the address being incomplete.
+ *
+ * It takes the URL out of whatever it arrives inside. A relay URL is a thing
+ * one person sends another, and what people send each other is a sentence with
+ * a URL in it, a line out of a deploy's output, or a URL with a full stop stuck
+ * to the end — so a field that only accepts the bare address refuses the exact
+ * input everybody actually has, with a message about schemes. The grammar is
+ * unchanged: what is found is put through the same parser and refused on the
+ * same terms.
  */
 export function checkRelayDraft(raw: string): RelayDraftCheck {
   if (raw.trim() === '') return { state: 'empty' }
-  const parsed = parseRelayUrl(raw)
-  if (parsed.ok) return { state: 'ok', url: parsed.url }
-  return { state: 'bad', reason: sentence(parsed.reason), suggestion: parsed.suggestion ?? null }
+  const first = parseRelayUrl(raw)
+  if (first.ok) return { state: 'ok', url: first.url }
+
+  const found = urlsIn(raw)
+  for (const candidate of found) {
+    const parsed = parseRelayUrl(candidate)
+    if (parsed.ok) return { state: 'ok', url: parsed.url }
+  }
+  // Nothing in it parses, so the refusal is about the most relay-shaped thing
+  // that was in there — which is what carries the suggestion worth offering.
+  const best = found[0] === undefined ? first : parseRelayUrl(found[0])
+  if (best.ok) return { state: 'ok', url: best.url }
+  return { state: 'bad', reason: sentence(best.reason), suggestion: best.suggestion ?? null }
+}
+
+/**
+ * Every URL in a piece of text, most relay-shaped first.
+ *
+ * `ws://` and `wss://` before `http`, because a message that carries both — an
+ * invitation naming the repository and the relay, say — means the WebSocket one
+ * here, and the repository URL is only a URL by accident of being in the same
+ * paragraph. Trailing punctuation goes: a URL at the end of a sentence arrives
+ * with a full stop on it.
+ */
+function urlsIn(text: string): string[] {
+  const found = [...text.matchAll(/\b(wss?|https?):\/\/[^\s"'<>)\]]+/gi)].map((match) =>
+    match[0].replace(/[.,;:!?]+$/, '')
+  )
+  return [...found.filter((url) => /^wss?:/i.test(url)), ...found.filter((url) => !/^wss?:/i.test(url))]
 }
 
 export type OriginDraftCheck = { state: 'empty' } | { state: 'ok'; url: string } | { state: 'bad'; reason: string }
@@ -443,8 +648,344 @@ export const ORIGIN_DETAIL =
   'A path on this disk is not something your teammates can clone. Your URLs need not match each other exactly: ' +
   'ssh against https, a port and a trailing .git are all normalised away. docs/teamwork.md has the rest.'
 
+/** The label on the button that copies the invitation. Named so a test can find it. */
+export const COPY_INVITE_BUTTON = 'Copy the invitation'
+
+/**
+ * The message to send a teammate, as a whole thing rather than as instructions
+ * for writing one.
+ *
+ * There is no invitation in this protocol — push access is membership, and
+ * nothing is sent anywhere — which is exactly why this is needed: the person
+ * setting a team up has to explain a thing with no invitation in it to somebody
+ * who is expecting one. So this is what that explanation actually says, in the
+ * order it has to be done, ending with the sentence about what they are
+ * agreeing to. It names no step they cannot find and invents no URL.
+ *
+ * Returns null when the repository has no origin to clone, because an
+ * invitation that cannot say where the repository is is worse than no button.
+ */
+export function inviteText(input: {
+  originUrl: string | null
+  relayUrl: string | null
+  projectName: string
+  handle: string | null
+}): string | null {
+  if (input.originUrl === null) return null
+  const who = input.handle === null ? 'I' : `I (${input.handle})`
+  const relay =
+    input.relayUrl === null
+      ? 'The relay we meet on is not in the repository yet — I will push it, and you will get it by pulling.'
+      : `The relay we meet on is already in the repository at .teamree/relay (${input.relayUrl}), so there is ` +
+        'nothing for you to configure.'
+  return [
+    `${who} have set up teamwork on ${input.projectName} in teamree. Everyone who can push to the repository is on`,
+    'the team, so there is nothing to accept and no account to make.',
+    '',
+    `1. Clone it if you have not: git clone ${input.originUrl}`,
+    '2. Open teamree on your Mac and add that checkout as a project.',
+    '3. Press Teamwork in the project header, choose “Join a team I was invited to”, and press Add my key.',
+    '4. Press Commit and push. That is what puts you on the team.',
+    '',
+    relay,
+    '',
+    'Worth knowing before you do it: a key in .teamree/members/ lets anyone on the roster type into any pane on',
+    'your machine, which is running commands as you. That is the feature, and none of it can be done invisibly —',
+    'a watched pane says so, typing is attributed live, every remote write is logged on your machine, and mute is',
+    'instant and yours.'
+  ].join('\n')
+}
+
+/** One thing that is either true or not at the end of setup. */
+export type SetupFact = {
+  label: string
+  /** `unknown` is reserved for the push, which teamree genuinely cannot check. */
+  state: 'yes' | 'no' | 'unknown'
+  detail: string
+}
+
+/**
+ * Where this ended up, in the four facts it is made of.
+ *
+ * A page of steps answers "what do I do next" and never answers "did that
+ * work" — and here the honest answer to the second is usually "partly": the
+ * commit lands and the push is refused, or everything on this machine is done
+ * and the teammate has not opened the app. Half-working is the normal outcome
+ * rather than an edge case, so one overall tick would have to pick one of the
+ * halves to be wrong about. Four separate verdicts do not.
+ */
+export type SetupOutcome = {
+  /** The sentence at the top. Never "done" unless every fact agrees. */
+  head: string
+  done: boolean
+  facts: SetupFact[]
+  /** The one thing left to do, or null when there is nothing. */
+  next: string | null
+}
+
+export function setupOutcome(
+  input: StartTeamworkInput & { publish?: TeamworkPublish | undefined }
+): SetupOutcome | null {
+  const { list, relay, status, publish } = input
+  if (list === undefined || relay === undefined) return null
+
+  const others = list.members.filter((member) => !member.isSelf)
+  const connected = status?.links.filter((link) => link.phase === 'connected') ?? []
+  const pushed: SetupFact['state'] = publish === undefined ? 'unknown' : publish.push.ok ? 'yes' : 'no'
+
+  const facts: SetupFact[] = [
+    {
+      label: 'Your key',
+      state: list.enrolled ? 'yes' : 'no',
+      detail: list.enrolled
+        ? `${selfFileOf(list) ?? list.selfFile} is in this checkout.`
+        : 'Not in this checkout yet, so no teammate can address this machine.'
+    },
+    {
+      label: 'The relay',
+      state: relay.url === null ? 'no' : 'yes',
+      detail:
+        relay.url === null
+          ? sentence(relay.onDisk.problem ?? `${relay.file} does not name a relay`)
+          : `${relay.url}, from ${relay.source === 'environment' ? relay.override.name : relay.file}.`
+    },
+    {
+      label: 'Pushed',
+      state: pushed,
+      detail:
+        publish === undefined
+          ? 'teamree has not pushed from here, so it cannot say whether these files are in the repository. Your ' +
+            'own git will tell you: git status.'
+          : publish.push.ok
+            ? `${publish.branch} is on ${publish.remote}.`
+            : // "Refused" is the remote's verdict, and two of these are not the
+              // remote's at all: a push somebody stopped, and one that never
+              // finished. Telling a person who pressed Stop that they were
+              // turned away would send them to look at the wrong machine.
+              `${
+                publish.push.kind === 'cancelled'
+                  ? 'You stopped the push.'
+                  : publish.push.kind === 'timeout'
+                    ? 'The push never finished.'
+                    : 'The push was refused.'
+              } ${publish.push.advice}`
+    },
+    {
+      label: 'Connected',
+      state: connected.length > 0 ? 'yes' : 'no',
+      detail:
+        connected.length > 0
+          ? `${namesOf(connected)} ${connected.length === 1 ? 'is' : 'are'} connected.`
+          : others.length === 0
+            ? 'Nobody but you is on this project’s roster yet.'
+            : `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} on the roster and not connected.`
+    }
+  ]
+
+  const done = facts.every((fact) => fact.state === 'yes')
+  // Only the first three are this machine's to finish. "Connected" is a fact
+  // about somebody else's laptop, and reporting it as the unfinished step would
+  // hand a person a job that is not theirs — which is the exact confusion this
+  // panel is here to end.
+  const stalled = facts.filter((fact) => fact.label !== 'Connected').find((fact) => fact.state === 'no')
+  return {
+    done,
+    facts,
+    head: done
+      ? 'Teamwork is working in this repository.'
+      : publish !== undefined && !publish.push.ok && publish.commit !== null
+        ? 'Half of it: the commit was made here and the push did not land.'
+        : stalled === undefined
+          ? 'Everything this machine can do is done. What is left is somebody else opening teamree.'
+          : `Not finished: ${stalled.label.toLowerCase()}.`,
+    next: done ? null : nextStepFor(stalled)
+  }
+}
+
+/** The single thing to do next, from the first fact of this machine's that is not true. */
+function nextStepFor(stalled: SetupFact | undefined): string | null {
+  switch (stalled?.label) {
+    case 'Your key':
+      return `Step 2 writes it: ${ADD_KEY_BUTTON}.`
+    case 'The relay':
+      return 'Step 3 is where a relay is chosen or pasted in.'
+    case 'Pushed':
+      return `Step 4 sends it: ${PUBLISH_BUTTON}.`
+    default:
+      return 'Nothing here. A teammate opening teamree on a checkout of this repository is what changes it.'
+  }
+}
+
+/**
+ * The two things somebody can be doing here, in the words the choice is offered
+ * in.
+ *
+ * Both are honest about what the other person has to do, because a flow that
+ * describes only your own half is exactly the flow that was confusing: it
+ * leaves you unable to tell "I have not finished" from "they have not started".
+ */
+export const TEAMWORK_PATHS = [
+  {
+    id: 'start',
+    title: 'Start a team here',
+    what:
+      'Nobody has set teamwork up in this repository yet. You choose the relay your team will meet on, put your ' +
+      'key in the repository, and push both — then send a teammate the repository URL.',
+    them: 'They clone it, open teamree, add their key and push. Nothing is sent to them and there is nothing to accept.'
+  },
+  {
+    id: 'join',
+    title: 'Join a team I was invited to',
+    what:
+      'Somebody has already pushed a relay and their key here. You pull, add your key beside theirs, and push — ' +
+      'there is no invitation to accept and nobody to ask, because push access is what membership means.',
+    them: 'They see you at their next pull. teamree re-reads .teamree by itself, so neither of you restarts anything.'
+  }
+] as const satisfies readonly { id: TeamworkPath; title: string; what: string; them: string }[]
+
+/**
+ * Which of the two this repository looks like, and the fact that says so.
+ *
+ * Offered rather than applied. Reading the repository is a far better guess
+ * than asking somebody who has not used this before — a relay file and a
+ * colleague's key are unambiguous evidence that somebody went first — but it is
+ * still a guess about intent, and the one thing this panel must never do is
+ * take a decision quietly on somebody's behalf and then describe the result as
+ * though they had made it.
+ */
+export function suggestedPath(
+  list: MemberList | undefined,
+  relay: RelaySetting | undefined
+): { id: TeamworkPath; because: string } | null {
+  if (list === undefined || relay === undefined) return null
+  const others = list.members.filter((member) => !member.isSelf)
+  if (relay.onDisk.url !== null && others.length > 0) {
+    return {
+      id: 'join',
+      because: `${relay.file} and ${namesOfMembers(others)}’s key are already in this checkout, so somebody went first.`
+    }
+  }
+  if (relay.onDisk.url !== null) {
+    return { id: 'join', because: `${relay.file} is already in this checkout, so somebody has stood a relay up.` }
+  }
+  if (others.length > 0) {
+    return {
+      id: 'join',
+      because: `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} already on this project’s roster.`
+    }
+  }
+  return { id: 'start', because: 'There is no relay and nobody’s key in this checkout, so nothing has been set up.' }
+}
+
+/** A step before the two sentences that say why it is there are added to it. */
+type StepCore = Omit<StartTeamworkStep, 'why' | 'otherSide'>
+
+/**
+ * Why a step exists and what the far end sees while it does not, for each of
+ * the two jobs.
+ *
+ * Written out per path rather than composed from fragments. The whole value of
+ * these sentences is that they are about the reader's actual situation, and a
+ * sentence assembled out of clauses that have to be true for both of two people
+ * is exactly the prose that made the original flow a document to be studied.
+ */
+const GUIDANCE: Record<StepId, Record<TeamworkPath, { why: string; otherSide: string | null }>> = {
+  identity: {
+    start: {
+      why:
+        'teamree made an X25519 keypair the first time it ran, and the private half never leaves this machine. ' +
+        'There is nothing to do here — it is shown so you can tell your own key from a teammate’s later.',
+      otherSide: null
+    },
+    join: {
+      why:
+        'teamree made an X25519 keypair the first time it ran, and the private half never leaves this machine. ' +
+        'Your teammate has one of their own; neither of you ever sees the other’s private half.',
+      otherSide: null
+    }
+  },
+  key: {
+    start: {
+      why:
+        'Push access is membership. Your public key under .teamree/members/ is the only thing that lets a teammate ' +
+        'address this machine — there is no account anywhere and nobody to ask.',
+      otherSide:
+        'Nobody who clones this repository can see that this machine exists until step 4 sends the file. There is ' +
+        'no announcement: your key simply appears in their next pull.'
+    },
+    join: {
+      why:
+        'Push access is membership. Adding your key beside your teammate’s is the whole of joining — there is no ' +
+        'invitation to accept, because being able to push this file is what being on the team means.',
+      otherSide:
+        'This file is exactly what your teammate is waiting for. Until it lands, teamree on their machine says ' +
+        '“No teammates”, which looks identical to you having changed your mind.'
+    }
+  },
+  relay: {
+    start: {
+      why:
+        'Two machines behind two routers cannot reach each other, so both dial out to a relay instead. Your team ' +
+        'runs it and teamree runs none — there is no default and nothing of ours to depend on.',
+      otherSide:
+        'Your teammates get this URL by pulling the repository, so choosing it is a one-time job for the team ' +
+        'rather than something each of them repeats.'
+    },
+    join: {
+      why:
+        'The relay is one line in the repository, so it arrives with a pull. You should not be choosing one: ' +
+        'everybody has to name the same relay or you never meet.',
+      otherSide:
+        'If you set a different relay from your teammate’s, you will each dial somewhere the other is not, and ' +
+        'both machines will sit at “Nobody connected” with nothing wrong on either.'
+    }
+  },
+  push: {
+    start: {
+      why:
+        'Writing those files changed nothing anybody else can see. This is the act that makes them the team’s, and ' +
+        'it is the only step here that leaves this machine.',
+      otherSide:
+        'Once it lands, a teammate needs only the repository URL: the relay is in it, and their own key is the ' +
+        'only thing they add.'
+    },
+    join: {
+      why:
+        'Adding your key wrote a file in this checkout and stopped. A key nobody pushed is not membership, so this ' +
+        'is the step that actually joins you.',
+      otherSide:
+        'Your teammate sees you at their next pull — teamree watches .teamree, so neither of you has to restart ' +
+        'anything. If you both push at once the second one is rejected: pull with rebase and push again.'
+    }
+  },
+  connected: {
+    start: {
+      why:
+        'A link is up when a Noise session has authenticated against the key in this repository and been confirmed ' +
+        'by a frame only the holder of its private half could have sent.',
+      otherSide:
+        'This one needs both machines: teamree open over there, their key pushed, and the same relay in both ' +
+        'checkouts. “Nobody connected” is the ordinary state while you wait for somebody.'
+    },
+    join: {
+      why:
+        'A link is up when a Noise session has authenticated against the key in this repository and been confirmed ' +
+        'by a frame only the holder of its private half could have sent.',
+      otherSide:
+        'Your teammate has to have pulled your key before their machine can dial you. If this sits at “not ' +
+        'connected”, asking them to pull is the first thing to try.'
+    }
+  }
+}
+
 export function startTeamworkFlow(input: StartTeamworkInput): StartTeamworkFlow {
-  const steps = [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)]
+  // The guidance has to say something before anybody has chosen, and the
+  // starting path is the one whose sentences are true of a repository nobody
+  // has touched — which is the state the choice is being made in.
+  const path = input.path ?? 'start'
+  const steps = [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)].map(
+    (step) => ({ ...step, ...GUIDANCE[step.id][path] })
+  )
   // `unchecked` is deliberately not settled: the push step never self-completes
   // and is the one to lead with for as long as anything is written.
   const current = steps.find((step) => step.mark !== 'done' && step.mark !== 'this-run')
@@ -482,7 +1023,7 @@ export function shortKey(publicKey: string): string {
   return `${publicKey.slice(0, 16)}…`
 }
 
-function identityStep({ list, failedReads }: StartTeamworkInput): StartTeamworkStep {
+function identityStep({ list, failedReads }: StartTeamworkInput): StepCore {
   const title = 'Your identity'
   if (list === undefined) {
     if (failedReads?.list !== undefined) {
@@ -510,7 +1051,7 @@ function identityStep({ list, failedReads }: StartTeamworkInput): StartTeamworkS
   }
 }
 
-function keyStep({ list, failedReads }: StartTeamworkInput): StartTeamworkStep {
+function keyStep({ list, failedReads }: StartTeamworkInput): StepCore {
   const title = 'Your key is in this repository'
   if (list === undefined) {
     if (failedReads?.list !== undefined) {
@@ -540,7 +1081,7 @@ function keyStep({ list, failedReads }: StartTeamworkInput): StartTeamworkStep {
   }
 }
 
-function relayStep({ relay, failedReads }: StartTeamworkInput): StartTeamworkStep {
+function relayStep({ relay, failedReads }: StartTeamworkInput): StepCore {
   const title = 'The team’s relay'
   if (relay === undefined) {
     if (failedReads?.relay !== undefined) {
@@ -587,7 +1128,7 @@ function relayStep({ relay, failedReads }: StartTeamworkInput): StartTeamworkSte
   }
 }
 
-function pushStep(input: StartTeamworkInput): StartTeamworkStep {
+function pushStep(input: StartTeamworkInput): StepCore {
   const title = 'Commit and push'
   // No path: this reads the plan for the files it names, and the commands with
   // the `cd` in them are rendered beside the summary, by the panel that knows
@@ -606,7 +1147,7 @@ function pushStep(input: StartTeamworkInput): StartTeamworkStep {
   }
 }
 
-function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
+function connectedStep(input: StartTeamworkInput): StepCore {
   const title = 'Connected'
   const { status } = input
   if (status === undefined) {

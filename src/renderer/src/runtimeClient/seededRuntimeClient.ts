@@ -17,11 +17,13 @@ import type {
   StartPoint,
   StartPointList,
   Terminal,
+  UpdateState,
   Worktree,
   WorktreeChange,
   WorktreeStatus
 } from '@shared/entities'
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
+import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '@shared/theme'
 import { leaf, splitPane } from '../panes/paneLayout'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
 
@@ -473,6 +475,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
    */
   let cliLinked = false
   let cliAskedAt: number | null = null
+  let automaticUpdates = true
   const cliStatus = (): CliStatus => ({
     installable: true,
     platform: 'darwin',
@@ -491,6 +494,20 @@ export function createSeededRuntimeClient(): RuntimeClient {
     onPath: 'login',
     askedAt: cliAskedAt,
     readAt: Date.now()
+  })
+
+  let appearance: Appearance = DEFAULT_APPEARANCE
+  const updateState = (): UpdateState => ({
+    current: '0.0.1-demo',
+    // Nothing to compare a demo build against, which is also what a checkout
+    // says about itself — and it keeps this stand-in from advertising a release
+    // that has nothing to do with what is running.
+    checkable: false,
+    automatic: automaticUpdates,
+    available: null,
+    checking: false,
+    checkedAt: Date.now() - 60_000,
+    problem: null
   })
 
   const handlers: { [M in MethodName]: (params: ParamsOf<M>) => ResultOf<M> } = {
@@ -752,6 +769,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'teamwork.publish': () => {
       throw new Error('the seeded runtime has no repository to commit to')
     },
+    // Null rather than a fabricated run: the demo has no push to be partway
+    // through, and a progress record here would put a moving percentage on a
+    // thing that is not happening.
+    'teamwork.publishProgress': () => null,
+    'teamwork.cancelPublish': () => ({ cancelled: false }),
     'teamwork.setRelay': ({ projectId, url }) => {
       relays.set(projectId, url)
       announce({ type: 'members' })
@@ -782,7 +804,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       projectId,
       relay: { url: 'wss://relay.example/v1/relay', source: 'repository' as const },
       disabledReason: null,
-      origin: { ok: true as const },
+      origin: { ok: true as const, url: 'https://example.com/team/pager.git' },
       enrolled: true,
       links: [
         {
@@ -1006,6 +1028,18 @@ export function createSeededRuntimeClient(): RuntimeClient {
       cliAskedAt ??= Date.now()
       return cliStatus()
     },
+
+    // The seeded runtime is a demonstration, and a demonstration that reached
+    // GitHub would not be one. It answers as a current build that has looked
+    // recently: the card is worth showing in a screenshot, but not at the cost
+    // of this file being the one place in the renderer that opens a socket.
+    'update.state': () => updateState(),
+    'update.check': () => updateState(),
+    'update.setAutomatic': ({ automatic }) => {
+      automaticUpdates = automatic
+      return updateState()
+    },
+    'update.download': () => ({ opened: 'https://github.com/zero-abd/teamree/releases/latest' }),
     'terminal.list': ({ worktreeId }) =>
       [...terminals.values()]
         .map((terminal) => terminal.record)
@@ -1094,6 +1128,15 @@ export function createSeededRuntimeClient(): RuntimeClient {
       layouts.set(worktreeId, layout)
       announce({ type: 'terminals' }, { type: 'layout', worktreeId })
       return { terminal: record, layout }
+    },
+
+    // Held for the life of the page rather than written anywhere: the seeded
+    // runtime has no disk, and a demo that claimed to have remembered a theme
+    // would be claiming to have written a file it never wrote.
+    'appearance.get': () => appearance,
+    'appearance.set': (next) => {
+      appearance = sanitizeAppearance(next)
+      return appearance
     },
 
     'layout.get': ({ worktreeId }) => layouts.get(worktreeId) ?? { worktreeId, root: null, focusedTerminalId: null },

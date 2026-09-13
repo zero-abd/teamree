@@ -27,13 +27,33 @@
 // **teamree still runs no relay.** It runs the deploy that puts one on the
 // team's own Cloudflare account, and it says so. There is no hosted relay and
 // this project deliberately has none.
+//
+// Three things arrived later, all from one report: that setting a team up
+// worked and was confusing, and that it appeared to hang on the push.
+//
+// **It asks which of the two jobs this is, before anything else.** The five
+// steps are the same five for both, and what they mean is not: one person
+// chooses a relay and invites, the other pulls one and answers. A panel that
+// could not tell them apart had to write every sentence for both at once, and
+// the reader had to work out which half was theirs.
+//
+// **Every step says what the other machine sees.** This is a two-sided
+// protocol whose ordinary failure is two people each waiting for the other, and
+// nothing in the window used to say what the far end was waiting for.
+//
+// **The push reports itself while it runs.** It streams git's own progress,
+// counts the wait, says so when git has gone quiet for long enough to mean
+// something, and has a Stop beside it — and afterwards a Try again, because
+// "somebody pushed first" is the ordinary outcome and it is fixed in two steps
+// rather than by starting over.
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   UNWATCHED_TEAMREE_LAG,
   type Member,
   type MemberList,
   type PeerLink,
+  type PushFailureKind,
   type RelaySetting,
   type TeamworkPublish,
   type TeamworkPublishPlan,
@@ -41,29 +61,41 @@ import {
 } from '@shared/entities'
 import {
   ADD_KEY_BUTTON,
+  CANCEL_PUBLISH_BUTTON,
   checkOriginDraft,
   checkRelayDraft,
+  COPY_INVITE_BUTTON,
+  formatElapsed,
+  inviteText,
   KEY_GRANT_WARNING,
   memberFilePreview,
   MORE_RELAYS_BUTTON,
   MORE_RELAYS_LEAD,
   ORIGIN_DETAIL,
   PUBLISH_BUTTON,
+  publishActivity,
   pushPlan,
   RELAY_DEPLOY,
   RELAY_LEAD,
   RELAY_OPTIONS,
+  RETRY_PUBLISH_BUTTON,
+  retryHint,
+  setupOutcome,
   shortKey,
   startTeamworkFlow,
+  suggestedPath,
+  TEAMWORK_PATHS,
   type OriginState,
   type PublishState,
   type RelayDeployState,
   type RelayDraftCheck,
   type RelayOption,
+  type SetupOutcome,
   type StartTeamworkRead,
   type StartTeamworkReadErrors,
   type StartTeamworkStep,
-  type StepMark
+  type StepMark,
+  type TeamworkPath
 } from './startTeamwork'
 
 export type TeamworkStepsProps = {
@@ -118,6 +150,31 @@ export type TeamworkStepsProps = {
   /** What the commit-and-push button would do, is doing, and last did. */
   publish: PublishState
   onPublish: () => void
+  /** Stops a push that is running. Always offered while one is. */
+  onCancelPublish: () => void
+
+  /** Which of the two jobs this is, or null while nobody has said. */
+  path: TeamworkPath | null
+  onChoosePath: (path: TeamworkPath | null) => void
+  /** The project's name, for the invitation to say what it is an invitation to. */
+  projectName: string
+  /**
+   * Puts text on the clipboard.
+   *
+   * A prop rather than a call to `navigator.clipboard`, so this file stays a
+   * pure function of what it is given — which is what lets the whole of what it
+   * says be rendered in a test without a browser's permission model in the way.
+   */
+  onCopy: (text: string) => void
+  /**
+   * Now, as the panel should measure it.
+   *
+   * Passed in rather than read, because everything it is used for is a
+   * duration somebody is watching — how long this push has been going, how long
+   * git has been silent — and a clock a test cannot set is a clock those
+   * sentences cannot be asserted against.
+   */
+  now?: number
 }
 
 /** A glyph for the eye; `MARK_WORDS` is what is actually read out. */
@@ -144,8 +201,20 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
     list: props.list,
     relay: props.relay,
     status: props.status,
-    failedReads: props.readErrors
+    failedReads: props.readErrors,
+    path: props.path
   })
+  const outcome = setupOutcome({
+    list: props.list,
+    relay: props.relay,
+    status: props.status,
+    publish: props.publish.result
+  })
+  // A repository where this already works has no question left to ask, and
+  // putting the two paths in front of somebody who is connected would be the
+  // app asking what they came here to do after they have done it.
+  const asking = props.path === null && outcome?.done !== true
+
   return (
     <div className="steps">
       {flow.blocker === null ? null : (
@@ -158,23 +227,111 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
           ) : null}
         </div>
       )}
-      <ol className="steps__list">
-        {flow.steps.map((step, index) => (
-          <li key={step.id} className={`step step--${step.mark}${step.id === flow.currentId ? ' step--current' : ''}`}>
-            <div className="step__head">
-              <span className="step__mark" aria-hidden="true">
-                {MARK_GLYPHS[step.mark]}
-              </span>
-              <h3 className="step__title">
-                {index + 1}. {step.title}
-              </h3>
-              <span className="step__state">{MARK_WORDS[step.mark]}</span>
-            </div>
-            <p className="step__summary">{step.summary}</p>
-            <StepBody step={step} {...props} />
+      {asking ? (
+        <PathChoice list={props.list} relay={props.relay} onChoose={props.onChoosePath} />
+      ) : (
+        <>
+          {props.path === null ? null : <ChosenPath path={props.path} onChange={() => props.onChoosePath(null)} />}
+          <ol className="steps__list">
+            {flow.steps.map((step, index) => (
+              <li
+                key={step.id}
+                className={`step step--${step.mark}${step.id === flow.currentId ? ' step--current' : ''}`}
+              >
+                <div className="step__head">
+                  <span className="step__mark" aria-hidden="true">
+                    {MARK_GLYPHS[step.mark]}
+                  </span>
+                  <h3 className="step__title">
+                    {index + 1}. {step.title}
+                  </h3>
+                  <span className="step__state">{MARK_WORDS[step.mark]}</span>
+                </div>
+                <p className="step__summary">{step.summary}</p>
+                {/* Why, then what is true, then what they see. The order is the
+                    argument: a step whose reason is only reachable from a
+                    runbook is a step people do without understanding, and this
+                    is a flow where not understanding it means waiting for
+                    somebody who is waiting for you. */}
+                <p className="step__why">{step.why}</p>
+                {step.otherSide === null ? null : (
+                  <p className="step__other-side">
+                    <span className="step__other-side-label">On their machine</span> {step.otherSide}
+                  </p>
+                )}
+                <StepBody step={step} {...props} />
+              </li>
+            ))}
+          </ol>
+          <Outcome outcome={outcome} {...props} />
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The question this panel used not to ask, and the whole reason the rest of it
+ * can now be written in the second person.
+ *
+ * Both options are offered, both say what the other person does, and the one
+ * the repository points at is marked and put first — marked, not taken. Reading
+ * a relay file and a colleague's key is very good evidence about what is going
+ * on here and still a guess about somebody's intent, and this panel does not
+ * take those quietly.
+ */
+function PathChoice({
+  list,
+  relay,
+  onChoose
+}: {
+  list: MemberList | undefined
+  relay: RelaySetting | undefined
+  onChoose: (path: TeamworkPath) => void
+}): React.JSX.Element {
+  const suggestion = suggestedPath(list, relay)
+  const order = [...TEAMWORK_PATHS].sort((a, b) => (a.id === suggestion?.id ? -1 : b.id === suggestion?.id ? 1 : 0))
+  return (
+    <div className="path-choice">
+      <h2 className="path-choice__head">Which of these are you doing?</h2>
+      <p className="path-choice__lead">
+        Teamwork has two ends and they do different things. Saying which one you are on is what lets the rest of this
+        page be about your half of it.
+      </p>
+      <ul className="path-choice__list">
+        {order.map((option) => (
+          <li key={option.id} className={`path-option${option.id === suggestion?.id ? ' path-option--suggested' : ''}`}>
+            <button
+              type="button"
+              className="button button--primary path-option__button"
+              onClick={() => onChoose(option.id)}
+            >
+              {option.title}
+            </button>
+            {option.id === suggestion?.id ? <p className="path-option__because">{suggestion.because}</p> : null}
+            <p className="path-option__what">{option.what}</p>
+            <p className="path-option__them">
+              <span className="step__other-side-label">They</span> {option.them}
+            </p>
           </li>
         ))}
-      </ol>
+      </ul>
+    </div>
+  )
+}
+
+/** The answer, kept on screen and changeable — because people pick the wrong one. */
+function ChosenPath({ path, onChange }: { path: TeamworkPath; onChange: () => void }): React.JSX.Element {
+  const chosen = TEAMWORK_PATHS.find((option) => option.id === path) as (typeof TEAMWORK_PATHS)[number]
+  return (
+    <div className="chosen-path">
+      <p className="chosen-path__line">
+        <span className="chosen-path__label">You are</span> {chosen.title.toLowerCase()}.{' '}
+        <span className="chosen-path__them">{chosen.them}</span>
+      </p>
+      <button type="button" className="button button--small" onClick={onChange}>
+        Not that
+      </button>
     </div>
   )
 }
@@ -204,6 +361,7 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
       }
       return (
         <RelayBody
+          path={props.path}
           relay={props.relay}
           // The options are a decision, and a relay already chosen is that
           // decision taken: offering them again is a wall of choices about a
@@ -226,6 +384,8 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
           projectPath={props.projectPath}
           publish={props.publish}
           onPublish={props.onPublish}
+          onCancelPublish={props.onCancelPublish}
+          now={props.now ?? Date.now()}
         />
       )
     case 'connected':
@@ -432,6 +592,7 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
  * and the rest in `relay/README.md`.
  */
 function RelayBody({
+  path,
   relay,
   options,
   pending,
@@ -442,6 +603,7 @@ function RelayBody({
   onCloseDeploy,
   renderDeployPane
 }: {
+  path: TeamworkPath | null
   relay: RelaySetting
   /** Whether the other ways to get a relay are still a decision to make. */
   options: boolean
@@ -463,6 +625,17 @@ function RelayBody({
 
   return (
     <div className="step__body">
+      {/* The one warning a joiner needs and a starter does not. Somebody who
+          was invited and finds no relay here is a step ahead of whoever
+          invited them, and the wrong answer — standing a second relay up — is
+          also the one this page is otherwise encouraging. */}
+      {path === 'join' && relay.onDisk.url === null ? (
+        <p className="relay-waiting">
+          Nobody has pushed {relay.file} yet, so whoever set this up has not got that far. Pull in a moment and it fills
+          in by itself. Only stand one up yourself if you have agreed that you are the one doing it — two relays means
+          two halves of a team that never meet.
+        </p>
+      ) : null}
       {relay.url === null ? null : (
         <p className="members__relay-current">
           <code>{relay.url}</code>
@@ -497,7 +670,8 @@ function RelayBody({
           />
           <span className="field__hint">
             {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>, and stops there. Everybody
-            else gets it from the repository.
+            else gets it from the repository. Paste the whole message a teammate sent if you like — the URL is taken out
+            of it.
           </span>
         </label>
         {check.state === 'bad' ? <RelayRefusal check={check} onUse={setDraft} /> : null}
@@ -757,13 +931,17 @@ function PushBody({
   relay,
   projectPath,
   publish,
-  onPublish
+  onPublish,
+  onCancelPublish,
+  now
 }: {
   list: MemberList | undefined
   relay: RelaySetting | undefined
   projectPath: string | undefined
   publish: PublishState
   onPublish: () => void
+  onCancelPublish: () => void
+  now: number
 }): React.JSX.Element | null {
   const local = pushPlan(list, relay, projectPath)
   const { plan } = publish
@@ -773,6 +951,8 @@ function PushBody({
   // behind must not be what decides whether this step has anything in it.
   const files = local?.files ?? plan?.files ?? []
   if (files.length === 0) return null
+  const activity = publishActivity(publish.progress, now)
+  const failed = publish.result?.push.ok === false ? publish.result.push : null
 
   return (
     <div className="step__body">
@@ -782,16 +962,31 @@ function PushBody({
         <PublishPlan plan={plan} files={files} />
       )}
       {plan?.blocker == null ? null : <p className="push__blocked">{plan.blocker}</p>}
-      <button
-        type="button"
-        className="button button--primary"
-        disabled={publish.pending || plan === undefined || plan.blocker !== null}
-        onClick={onPublish}
-      >
-        {publish.pending ? 'Pushing…' : PUBLISH_BUTTON}
-      </button>
+      <div className="push__controls">
+        <button
+          type="button"
+          className="button button--primary"
+          disabled={publish.pending || plan === undefined || plan.blocker !== null}
+          onClick={onPublish}
+        >
+          {publish.pending ? 'Pushing…' : failed === null ? PUBLISH_BUTTON : RETRY_PUBLISH_BUTTON}
+        </button>
+        {/* Beside the button and not behind a menu. A push can wait ten minutes
+            on something nobody can answer, and a way out of that is not a
+            refinement — it is the difference between a slow step and a dead
+            window. */}
+        {publish.pending ? (
+          <button type="button" className="button" onClick={onCancelPublish} disabled={activity?.cancelling === true}>
+            {activity?.cancelling === true ? 'Stopping…' : CANCEL_PUBLISH_BUTTON}
+          </button>
+        ) : null}
+      </div>
+      {publish.pending && activity !== null ? <PublishProgress activity={activity} /> : null}
+      {failed === null ? null : <RetryHint kind={failed.kind} />}
       {publish.error === null ? null : <p className="push__error">{publish.error}</p>}
-      {publish.result === undefined ? null : <PublishResult result={publish.result} />}
+      {publish.result === undefined ? null : (
+        <PublishResult result={publish.result} took={activity?.running === false ? activity.elapsedMs : null} />
+      )}
       {local === null ? null : (
         <details className="push__manual">
           <summary>Or run it yourself:</summary>
@@ -800,6 +995,40 @@ function PushBody({
       )}
     </div>
   )
+}
+
+/**
+ * The push while it is happening: what it is doing, for how long, and what git
+ * last said.
+ *
+ * `aria-live` because this is the one part of the panel that changes on its
+ * own, and somebody who cannot see the lines move is exactly the reader for
+ * whom "it appears stuck" was worst. Polite rather than assertive: it is a
+ * progress report, not an alarm — except for the silence, which is its own
+ * paragraph and is genuinely worth interrupting for.
+ */
+function PublishProgress({ activity }: { activity: ReturnType<typeof publishActivity> }): React.JSX.Element | null {
+  if (activity === null) return null
+  return (
+    <div className="push__progress" aria-live="polite">
+      <p className="push__progress-head">
+        <span className="push__progress-doing">{activity.doing}</span>
+        <span className="push__progress-elapsed">{formatElapsed(activity.elapsedMs)}</span>
+      </p>
+      {activity.lastLine === null ? (
+        <p className="push__progress-line push__progress-line--quiet">git has not printed anything yet.</p>
+      ) : (
+        <pre className="push__progress-line">{activity.lastLine}</pre>
+      )}
+      {activity.quiet === null ? null : <p className="push__stalled">{activity.quiet}</p>}
+    </div>
+  )
+}
+
+/** What to do before pressing the button again, when there is something. */
+function RetryHint({ kind }: { kind: PushFailureKind }): React.JSX.Element | null {
+  const hint = retryHint(kind)
+  return hint === null ? null : <p className="push__retry-hint">{hint}</p>
 }
 
 /** Exactly what the button will do, in the four facts it is made of. */
@@ -853,13 +1082,17 @@ function PublishPlan({ plan, files }: { plan: TeamworkPublishPlan; files: string
  * rather than paraphrased, because the paraphrase is not what anybody can
  * search for and the advice under it is teamree's opinion rather than git's.
  */
-function PublishResult({ result }: { result: TeamworkPublish }): React.JSX.Element {
+function PublishResult({ result, took }: { result: TeamworkPublish; took: number | null }): React.JSX.Element {
   return (
     <div className="push__result">
       <p>
         {result.commit === null
           ? 'Nothing new to commit.'
           : `Committed ${result.commit.shortSha} — “${result.commit.message}”.`}
+        {/* Reported after the fact as well as during, because how long it took
+            is the answer to "was that normal?" — which is the question a person
+            who has just sat through a slow one actually has. */}
+        {took === null ? '' : ` The whole thing took ${formatElapsed(took)}.`}
       </p>
       {result.push.ok ? (
         <p>
@@ -890,6 +1123,92 @@ function firstLineOf(text: string): string {
       .split('\n')
       .map((line) => line.trim())
       .find((line) => line.length > 0 && !line.startsWith('To ')) ?? ''
+  )
+}
+
+/**
+ * Where this ended up, at the bottom, as four separate verdicts.
+ *
+ * A page of steps answers "what do I do next" and never answers "did that
+ * work", because the answer to the second one is usually "partly": the commit
+ * landed and the push did not, or everything here is done and the person at the
+ * other end has not opened the app. One overall tick would have to pick one of
+ * those to be wrong about. Four facts do not.
+ */
+function Outcome({
+  outcome,
+  ...props
+}: TeamworkStepsProps & { outcome: SetupOutcome | null }): React.JSX.Element | null {
+  if (outcome === null) return null
+  const origin = props.status?.origin
+  const invite = inviteText({
+    originUrl: origin?.ok === true ? origin.url : null,
+    relayUrl: props.relay?.url ?? null,
+    projectName: props.projectName,
+    handle: props.list?.self.handle ?? null
+  })
+  return (
+    <section className={`outcome${outcome.done ? ' outcome--done' : ''}`}>
+      <h2 className="outcome__head">{outcome.head}</h2>
+      <ul className="outcome__facts">
+        {outcome.facts.map((fact) => (
+          <li key={fact.label} className={`outcome__fact outcome__fact--${fact.state}`}>
+            <span className="outcome__mark" aria-hidden="true">
+              {fact.state === 'yes' ? '✓' : fact.state === 'no' ? '○' : '—'}
+            </span>
+            <span className="outcome__label">{fact.label}</span>
+            <span className="outcome__state">
+              {fact.state === 'yes' ? 'yes' : fact.state === 'no' ? 'not yet' : 'teamree cannot check this'}
+            </span>
+            <span className="outcome__detail">{fact.detail}</span>
+          </li>
+        ))}
+      </ul>
+      {outcome.next === null ? null : <p className="outcome__next">{outcome.next}</p>}
+      {invite === null ? null : <Invite invite={invite} onCopy={props.onCopy} />}
+    </section>
+  )
+}
+
+/**
+ * The thing to send somebody, written out and copyable in one press.
+ *
+ * There is no invitation in this protocol — nothing is sent, and push access is
+ * the whole of membership — which is precisely why the person doing this has to
+ * write one: they have to explain a system with no invitations to somebody who
+ * is waiting for one. Leaving them to compose that from a five-step page is how
+ * the second half of a team ends up with instructions that miss the push.
+ *
+ * It is shown rather than hidden behind the button, because it goes to a
+ * colleague under this person's name and nobody should send words they have not
+ * read.
+ */
+function Invite({ invite, onCopy }: { invite: string; onCopy: (text: string) => void }): React.JSX.Element {
+  const [copied, setCopied] = useState(false)
+  // A confirmation that outstays the act is a confirmation about the last thing
+  // rather than this one, and the timer is cleared on the way out so a panel
+  // that is closed mid-flash cannot set state on a component that has gone.
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  return (
+    <div className="invite">
+      <div className="invite__head">
+        <h3 className="invite__title">Invite somebody</h3>
+        <button
+          type="button"
+          className="button button--primary button--small"
+          onClick={() => {
+            onCopy(invite)
+            setCopied(true)
+            clearTimeout(timer.current)
+            timer.current = setTimeout(() => setCopied(false), 2_000)
+          }}
+        >
+          {copied ? 'Copied' : COPY_INVITE_BUTTON}
+        </button>
+      </div>
+      <pre className="invite__text">{invite}</pre>
+    </div>
   )
 }
 

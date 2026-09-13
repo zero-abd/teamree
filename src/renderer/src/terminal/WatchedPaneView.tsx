@@ -43,6 +43,16 @@
 // output on the way to the screen. This one can — the relay has a budget and a
 // chatty agent can beat it — and when that happens the notice is written into
 // the pane, in place, where the missing output would have been.
+//
+// None of that is an argument for it being a different *object* on the screen,
+// and for a while it was: a card floating over the window at a fixed size in a
+// fixed corner, which could not be moved, resized or closed with the chord that
+// closes panes. So it is an ordinary pane now — the same chrome, the same
+// focused border, the same close button, the same gutter to drag — and the
+// distinction it has to carry is carried in words and in an accent rather than
+// by being a different kind of thing. The letterboxing is what makes that safe:
+// the slot resizes, the scale follows it, and the owner's pty never hears about
+// any of it.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -94,6 +104,13 @@ type WatchedPaneViewProps = {
   /** What to call the pane in the header, as the sidebar already names it. */
   label: string
   handle: string
+  /** Whether this is the pane the next keystroke goes to, as any pane is. */
+  focused: boolean
+  onFocus: () => void
+  /** Chords the app owns; they must not be typed onto somebody else's machine. */
+  isAppChord: (event: KeyboardEvent) => boolean
+  /** The close chord, named on the button, exactly as a local pane names it. */
+  closeHint: string
   onClose: () => void
   /** Every chunk that reaches the screen, so a row elsewhere can quote its last line. */
   onOutput?: (data: string) => void
@@ -112,6 +129,10 @@ export function WatchedPaneView({
   paneId,
   label,
   handle,
+  focused,
+  onFocus,
+  isAppChord,
+  closeHint,
   onClose,
   onOutput
 }: WatchedPaneViewProps): React.JSX.Element {
@@ -125,6 +146,14 @@ export function WatchedPaneView({
   const [holding, setHolding] = useState(false)
   const outputRef = useRef(onOutput)
   outputRef.current = onOutput
+  const chordRef = useRef(isAppChord)
+  chordRef.current = isAppChord
+  // Read inside the effect that builds the emulator, which can finish after the
+  // focus has already moved here: a pane opened by the chord is focused from
+  // its first frame, and its emulator does not exist until the watch is
+  // answered a tick or two later.
+  const focusedRef = useRef(focused)
+  focusedRef.current = focused
 
   // The owner's dimensions, as their last presence reported them. Nothing on
   // the watch stream carries a resize, so this is the only way this side is
@@ -376,7 +405,12 @@ export function WatchedPaneView({
           rows: showing.rows
         })
         term.open(host)
+        // The app's chords reach the window handler rather than the far end. A
+        // pane on somebody else's machine is the last place a stray Cmd-W
+        // should land, and this is the same refusal a local pane makes.
+        term.attachCustomKeyEventHandler((event) => !chordRef.current(event))
         term.onData(send)
+        if (focusedRef.current) term.focus()
         termRef.current = term
         refitRef.current = letterbox
 
@@ -438,13 +472,41 @@ export function WatchedPaneView({
     setState((current) => (current.phase === 'watching' ? { phase: 'watching', ...next } : current))
   }, [size])
 
+  /**
+   * Keeps the keyboard where the window says the focus is.
+   *
+   * The same two lines `TerminalView` has, and deliberately so: a pane that
+   * wore the focused border while its emulator did not have the keyboard would
+   * be telling somebody their keystrokes were going to a machine they were not
+   * going to.
+   */
+  useEffect(() => {
+    if (focused) termRef.current?.focus()
+    else termRef.current?.blur()
+  }, [focused, paneId])
+
+  // One sentence, used twice: on the bar, and as the bar's title for the slot
+  // that is too narrow to show all of it. It carries the whole of what typing
+  // here means, consent included — leaving out "once they allow it" would
+  // promise something this pane no longer does.
+  const promise = `what you type runs on ${handle}’s machine, as ${handle}, once they allow it, with your name on it`
+
   return (
-    <section className="watch" aria-label={`${handle}’s pane ${label}, which you can type into`}>
-      <header className="watch__head">
-        <span className="watch__title">
-          <span className="watch__owner">{handle}</span>
-          <span className="watch__label">{label}</span>
-        </span>
+    /* A pane, with the chrome every other pane has. What keeps it unmistakable
+       is on the bar rather than in its shape: whose machine it is, what typing
+       here does, and an accent border that is nobody's local pane. */
+    <section
+      className={`pane pane--watched${focused ? ' pane--focused' : ''}`}
+      aria-label={`${handle}’s pane ${label}, which you can type into`}
+      onFocus={onFocus}
+      onMouseDown={onFocus}
+    >
+      {/* The same bar a local pane has, carrying the things only this pane has
+          to say. The whole sentence is on the bar's own title as well, because
+          a narrow slot ellipsises it and the fact must survive the narrowing. */}
+      <header className="pane__bar pane__bar--watched" title={promise}>
+        <span className="watch__owner">{handle}</span>
+        <span className="pane__title">{label}</span>
         {/* Said in words, on the pane, at all times, and said about the person
             reading it rather than about the feature. The design's argument for
             why any of this is survivable is that nothing is ambiguous — and
@@ -457,15 +519,26 @@ export function WatchedPaneView({
             ? refused.reason
             : holding
               ? `waiting for ${handle}’s machine — nothing you have typed has run`
-              : `what you type runs on ${handle}’s machine, as ${handle}, once they allow it, with your name on it`}
+              : promise}
         </span>
         {state.phase === 'watching' ? (
-          <span className="watch__size" title="their pane’s size, which a reader never changes">
+          <span className="pane__meta" title="their pane’s size, which a reader never changes">
             {`${state.cols}×${state.rows}`}
           </span>
         ) : null}
-        <button type="button" className="button button--ghost watch__close" onClick={onClose}>
-          Stop watching
+        {/* The close button every pane has, in the place every pane has it.
+            Closing is stopping the watch — there is nothing else to stop — so
+            it says so, and it names the same chord a local pane's does. */}
+        <button
+          type="button"
+          className="pane__close"
+          title={`Stop watching ${handle}’s ${label} · ${closeHint}`}
+          aria-label={`Stop watching ${handle}’s pane ${label}`}
+          onClick={onClose}
+        >
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M3 3 L9 9 M9 3 L3 9" />
+          </svg>
         </button>
       </header>
 

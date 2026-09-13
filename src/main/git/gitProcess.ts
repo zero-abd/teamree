@@ -29,6 +29,24 @@ export type GitRun = {
    * confident wrong answer rather than a truncated right one.
    */
   stdoutLimitBytes?: number
+  /**
+   * Called with each chunk of stderr as it arrives, before the process ends.
+   *
+   * Every other caller here waits for `close` and reads the whole of stderr at
+   * once, which is right for a command that answers a question and wrong for
+   * one that takes a minute: a push spends its time counting and compressing
+   * objects and says so on stderr the entire time, and a caller that can only
+   * see that afterwards has nothing to show anybody meanwhile. That was the
+   * whole of "it gets stuck at git push" — the bytes existed and there was no
+   * seam to hand them out of.
+   *
+   * stderr and not stdout because that is where git's progress meter goes;
+   * stdout carries the machine-readable result, which is read once at the end
+   * and means nothing in pieces. Note that git only draws that meter when it
+   * believes something is watching, so a caller that wants it has to ask with
+   * `--progress`.
+   */
+  onStderr?: (chunk: string) => void
 }
 
 export type GitOutput = {
@@ -166,6 +184,15 @@ function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
     })
     child.stderr.on('data', (chunk: string) => {
       if (stderr.length < MAX_OUTPUT_BYTES) stderr += chunk
+      // Handed on even past the cap: what is being dropped is the buffer this
+      // process keeps, and a watcher that stops being told anything looks
+      // exactly like the hang it was added to rule out.
+      try {
+        run.onStderr?.(chunk)
+      } catch {
+        // A watcher that throws is the watcher's problem. It must never be the
+        // reason a git command this app is running fails.
+      }
     })
 
     child.on('error', (error: NodeJS.ErrnoException) => {

@@ -18,8 +18,10 @@ import type {
   TeammatePresence,
   TeamworkPublish,
   TeamworkPublishPlan,
+  TeamworkPublishProgress,
   TeamworkStatus,
   Terminal,
+  UpdateState,
   Worktree,
   WorktreeChanges,
   WorktreeDiff,
@@ -27,7 +29,16 @@ import type {
   WorktreeMergePreview,
   WorktreeStatus
 } from '@shared/entities'
+import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
+import {
+  isWatchedPaneId,
+  neighbourWatchId,
+  paneCycle,
+  watchedPaneId,
+  WATCH_TAIL_CHARS,
+  type WatchedPane
+} from '../panes/watchedPanes'
 import { awaitWorktreeReady } from './awaitWorktreeReady'
 import { relayUrlFromOutput } from '../teamwork/startTeamwork'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
@@ -43,6 +54,7 @@ import { readStoredSession, sessionChanged, writeStoredSession } from './storedS
 
 export type DialogState =
   | { kind: 'add-project' }
+  | { kind: 'appearance' }
   | { kind: 'install-cli' }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
@@ -215,6 +227,16 @@ type WorkspaceState = {
   /** What the last attempt did, by project id — including a push that failed. */
   publishResults: Record<string, TeamworkPublish>
   /**
+   * What the publish that is running is doing, by project id.
+   *
+   * The reason this exists at all: `teamwork.publish` does not answer until the
+   * push is over, so between the button and the result there was nothing in the
+   * store for the panel to show, and it showed "Pushing…" for as long as it
+   * took. This is read on a timer while one is running — the same shape as the
+   * relay deploy's pane, which is polled for the same reason.
+   */
+  publishProgress: Record<string, TeamworkPublishProgress>
+  /**
    * Whether teamwork is running for each project, by project id.
    *
    * Absent means "not asked yet", which is deliberately not the same as "off":
@@ -252,6 +274,47 @@ type WorkspaceState = {
    */
   consent: Record<string, PaneConsent>
   /**
+   * Teammates' panes open here, in the order they were opened — which is the
+   * order they are drawn in, left to right, beside your own.
+   *
+   * Several at once, which the floating viewer could not do and this can. The
+   * reason it used to be one was the relay's budget: `docs/teamwork.md` is
+   * explicit that output flows only for a pane somebody has open, and a viewer
+   * that was opened once and never shut is how that becomes the N² traffic the
+   * rule exists to prevent. That argument was about a pane nobody could see
+   * they still had open. A pane in the workspace is one you are looking at, it
+   * carries the same close button as every other pane, and closing it is what
+   * closes the subscription — so the cost is visible and the remedy is where a
+   * remedy belongs.
+   */
+  watches: WatchedPane[]
+  /**
+   * The fractions of the width given to the workspace and to each watched pane
+   * beside it, as the gutters between them were last dragged.
+   *
+   * Not persisted: it is an arrangement of panes that only exist while they are
+   * being watched, and a window that came back with a column reserved for a
+   * teammate's pane it had not reopened would be remembering the wrong half.
+   */
+  watchSizes: number[]
+  /**
+   * Whatever each watched pane has printed since it was opened, by pane id.
+   *
+   * Only an open pane has a line to quote in the sidebar, because only an open
+   * pane is streaming; the tail is trimmed to the last few thousand characters
+   * because a quote needs the end of it and nothing else.
+   */
+  watchTails: Record<string, string>
+  /**
+   * The watched pane with the focus, or null when one of your own has it.
+   *
+   * Held here rather than in a `Layout` because the layouts are the runtime's,
+   * and the runtime has never heard of this pane: it is a window onto a pty on
+   * another machine, and writing it into a tree the runtime reconciles against
+   * its own sessions would have it pruned at the next launch.
+   */
+  focusedWatchId: string | null
+  /**
    * Where this app's CLI is and what is at the path it would be linked to.
    *
    * Probed once at startup beside the agents, and for the same reason: it is
@@ -270,6 +333,15 @@ type WorkspaceState = {
    * and both belong next to the button that will be pressed again.
    */
   cliError: string | null
+  /**
+   * Whether a newer teamree exists, and whether this one is looking.
+   *
+   * Read at startup like the CLI's status, and re-read whenever the runtime
+   * says the check has something new to say — which it does for checks this
+   * window did not start: the one half a minute after launch, and the one
+   * behind the macOS app menu. Null means nobody has asked yet.
+   */
+  update: UpdateState | null
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
   /** True once the probe has answered, however it answered. Until then an
@@ -305,6 +377,17 @@ type WorkspaceState = {
   dialog: DialogState
   notices: Notice[]
 
+  /**
+   * How this window is painted, as the runtime last told it.
+   *
+   * Held here rather than in the appearance dialog's own state because the
+   * dialog is not the only reader: `App` writes the resolved palette onto the
+   * root element from it, and every open terminal re-reads its emulator theme
+   * when it changes. A colour edited in the dialog is therefore live in the
+   * panes behind the dialog, which is the whole point of editing one.
+   */
+  appearance: Appearance
+
   bootstrap: () => Promise<void>
   /** Opens the change stream. Returns the stop function an effect cleans up with. */
   startWatching: () => () => void
@@ -322,7 +405,8 @@ type WorkspaceState = {
   /** Opens the worktree a pane lives in and puts the focus on that pane. */
   revealPane: (worktreeId: string, terminalId: string) => Promise<void>
 
-  focusPane: (terminalId: string) => void
+  /** Puts the focus on one pane, whether it is yours or a teammate's. */
+  focusPane: (paneId: string) => void
   /** Adopts a fresh terminal record, e.g. the one a resize answers with. */
   recordTerminal: (terminal: Terminal) => void
   splitFocusedPane: (direction: 'row' | 'column') => Promise<void>
@@ -362,6 +446,22 @@ type WorkspaceState = {
    */
   dismissCliPrompt: () => Promise<void>
 
+  /** Re-reads what the runtime knows about newer releases. Asks nobody. */
+  loadUpdate: () => Promise<void>
+  /**
+   * Asks GitHub now, because somebody chose to.
+   *
+   * Raises a notice when there is nothing to report, and only then: a check
+   * somebody asked for has to answer even when the answer is "you are current",
+   * while the one the app makes by itself has to be silent unless it found
+   * something. A failed check says so too, because this one was asked for.
+   */
+  checkForUpdates: () => Promise<void>
+  /** Opens the newer release's download in the browser. */
+  downloadUpdate: () => Promise<void>
+  /** Turns the automatic check on or off. Remembered between runs. */
+  setAutomaticUpdates: (automatic: boolean) => Promise<void>
+
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
   /** Drops the last join refusal, for the keystroke that answers it. */
@@ -396,6 +496,10 @@ type WorkspaceState = {
   loadPublishPlan: (projectId: string) => Promise<void>
   /** Stages the two files, commits them, and pushes. Never more than those files. */
   publishTeamwork: (projectId: string) => Promise<void>
+  /** Reads what the running publish is doing, so the panel can say it. */
+  loadPublishProgress: (projectId: string) => Promise<void>
+  /** Stops the running publish. Whatever was committed stays committed. */
+  cancelPublish: (projectId: string) => Promise<void>
   /**
    * Writes this installation's key into the project. It does not commit and
    * does not push, and the dialog says so: doing either for somebody would hide
@@ -428,6 +532,21 @@ type WorkspaceState = {
   decideConsent: (requestId: string, decision: ConsentDecision, through: number) => Promise<void>
   /** Takes back a standing permission. Instant and local, exactly like a mute. */
   revokeConsent: (terminalId: string, publicKey: string) => Promise<void>
+  /**
+   * Opens a teammate's pane as a pane in this window, or closes the one that is
+   * already open on it.
+   *
+   * The second press being a close is what keeps stopping reachable from the
+   * row that started it, for somebody whose eye is on the sidebar rather than
+   * on the pane.
+   */
+  toggleWatchedPane: (projectId: string, pane: { terminalId: string; label: string; handle: string }) => void
+  /** Closes one, which is what stops the bytes: the pane is the subscription. */
+  closeWatchedPane: (id: string) => void
+  /** Records what a watched pane has printed, so a sidebar row can quote it. */
+  noteWatchedPaneOutput: (id: string, data: string) => void
+  /** Keeps the width the gutters beside the watched panes were dragged to. */
+  setWatchSizes: (sizes: number[]) => void
 
   toggleProject: (projectId: string) => void
   toggleDashboard: () => void
@@ -437,6 +556,17 @@ type WorkspaceState = {
   closeTeamwork: () => void
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
+  /**
+   * Applies an appearance and remembers it.
+   *
+   * Applied and stored in one step, with no draft and no confirm button:
+   * colours are judged by looking at them, so the window behind the dialog is
+   * the preview, and a change somebody liked enough to leave on screen is a
+   * change they have already decided. The write costs one in-process call and
+   * the runtime coalesces its disk writes, so a colour being dragged is cheap
+   * enough to save every frame of.
+   */
+  setAppearance: (appearance: Appearance) => Promise<void>
   openDialog: (dialog: NonNullable<DialogState>) => void
   closeDialog: () => void
   dismissNotice: (id: number) => void
@@ -698,6 +828,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.terminals) reads.push(refreshTerminals())
     if (targets.members) reads.push(refreshMembers(), refreshRelays())
     if (targets.teammates) reads.push(refreshTeammates())
+    if (targets.updates) reads.push(get().loadUpdate())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
       reads.push(
@@ -896,10 +1027,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     publishPending: false,
     publishError: null,
     publishResults: {},
+    publishProgress: {},
     teamwork: {},
     teammates: {},
     watchers: {},
     consent: {},
+    watches: [],
+    watchSizes: [],
+    watchTails: {},
+    focusedWatchId: null,
     changesOpen: false,
     changes: {},
     logs: {},
@@ -911,6 +1047,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     cliPending: false,
     cliInstall: null,
     cliError: null,
+    update: null,
     agents: [],
     agentsProbed: false,
     diff: null,
@@ -931,6 +1068,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     paneSearch: null,
     dialog: null,
     notices: [],
+
+    // The default until the runtime answers, which is the same palette
+    // `tokens.css` already painted the first frame in — so the window does not
+    // change shade on the way to its real theme.
+    appearance: DEFAULT_APPEARANCE,
 
     /**
      * The first read of everything. It goes through the same queue the change
@@ -956,6 +1098,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           .call('cli.status', {})
           .then((cli) => set({ cli }))
           .catch(() => {})
+        // And the theme. Not fatal either: a window that could not read its
+        // appearance opens in the default one rather than not opening.
+        void runtimeClient
+          .call('appearance.get', {})
+          .then((appearance) => set({ appearance }))
+          .catch(() => {})
+        // And the same again for what the runtime knows about newer releases.
+        // A read out of its memory: it asks GitHub nothing, and whatever its
+        // own check finds arrives later on the change stream.
+        void get().loadUpdate()
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
         await refresher.flush()
@@ -1168,13 +1320,31 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       )
     },
 
-    focusPane(terminalId) {
+    focusPane(paneId) {
+      // A teammate's pane is focused here and not in a layout, because the
+      // layouts belong to the runtime and this pane is not one of its sessions.
+      // Everything else about focus is the same for both, which is the point:
+      // one id space, one chord, one highlighted border.
+      if (isWatchedPaneId(paneId)) {
+        if (get().watches.some((watch) => watch.id === paneId)) set({ focusedWatchId: paneId })
+        return
+      }
+      // Focusing one of your own is also what takes the focus off a teammate's:
+      // two panes wearing the focused border would be two answers to where the
+      // next keystroke goes, and one of them would be wrong.
+      if (get().focusedWatchId !== null) set({ focusedWatchId: null })
       const layout = activeLayout()
-      if (!layout || layout.focusedTerminalId === terminalId) return
-      persistLayout({ ...layout, focusedTerminalId: terminalId })
+      if (!layout || layout.focusedTerminalId === paneId) return
+      persistLayout({ ...layout, focusedTerminalId: paneId })
     },
 
     async splitFocusedPane(direction) {
+      // Splitting somebody else's pane is not a thing that can be asked for:
+      // the tree the new pane would go in is on their machine, and this window
+      // has no say in it. Refused in silence rather than by a disabled button,
+      // because the button splits whatever pane has the focus and most of the
+      // time that is one of your own.
+      if (get().focusedWatchId !== null) return
       const layout = activeLayout()
       const terminalId = layout?.focusedTerminalId
       if (!layout || !terminalId) return
@@ -1243,14 +1413,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     focusNextPane() {
       const layout = activeLayout()
-      if (!layout?.root) return
-      const ids = collectTerminalIds(layout.root)
-      const index = layout.focusedTerminalId ? ids.indexOf(layout.focusedTerminalId) : -1
+      // Teammates' panes are in the cycle for the same reason they are in the
+      // tree: a pane you can type into that the chord for "next pane" refuses
+      // to reach is a pane that is only half in the window.
+      const ids = paneCycle(layout?.root ?? null, get().watches)
+      if (ids.length === 0) return
+      const current = get().focusedWatchId ?? layout?.focusedTerminalId ?? null
+      const index = current === null ? -1 : ids.indexOf(current)
       const next = ids[(index + 1) % ids.length]
-      if (next) persistLayout({ ...layout, focusedTerminalId: next })
+      if (next !== undefined) get().focusPane(next)
     },
 
     openPaneSearch() {
+      // Find searches an emulator's scrollback, and a watched pane's scrollback
+      // is a picture held at the owner's size and scaled to fit — there is no
+      // search addon on it, and there could not be one that meant anything
+      // about the pane rather than about the last few screens of it that
+      // reached here. Opening the field over a pane that is not the focused one
+      // would be worse than not opening it.
+      if (get().focusedWatchId !== null) return
       const focused = activeLayout()?.focusedTerminalId
       if (!focused) return
       set((state) => ({ paneSearch: { terminalId: focused, token: (state.paneSearch?.token ?? 0) + 1 } }))
@@ -1391,6 +1572,61 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // Worth a notice rather than a shrug: an answer that was not written
         // down is an answer that will be asked for again on the next launch.
         failed('Could not record that teamree asked about putting its CLI on your PATH')(error)
+      }
+    },
+
+    async loadUpdate() {
+      try {
+        set({ update: await runtimeClient.call('update.state', {}) })
+      } catch {
+        // Nothing. This is a read of what the runtime already knows, and a
+        // window that cannot perform it simply says nothing about updates —
+        // which is the same silence a check that found nothing produces.
+      }
+    },
+
+    async checkForUpdates() {
+      // Optimistic, so the row the user just pressed says "Checking…" rather
+      // than staying still until a round trip over a slow link completes.
+      const before = get().update
+      if (before) set({ update: { ...before, checking: true } })
+      try {
+        const update = await runtimeClient.call('update.check', {})
+        set({ update })
+        // The card says the rest when there is something to say. This is for
+        // the other two answers, which have nowhere else to appear — and which
+        // somebody who has just chosen "Check for updates" is owed.
+        if (update.available !== null) return
+        if (update.problem !== null) {
+          notify(`Could not check for updates: ${update.problem}`, 'info')
+          return
+        }
+        notify(`teamree ${update.current} is the latest release.`, 'info')
+      } catch (error) {
+        set({ update: before })
+        failed('Could not check for updates')(error)
+      }
+    },
+
+    async downloadUpdate() {
+      try {
+        await runtimeClient.call('update.download', {})
+      } catch (error) {
+        // Said out loud, unlike a failed check: this one is a button somebody
+        // pressed, and a button that does nothing at all is the worst outcome
+        // here — the release page is still reachable by hand.
+        failed('Could not open the download')(error)
+      }
+    },
+
+    async setAutomaticUpdates(automatic) {
+      const before = get().update
+      if (before) set({ update: { ...before, automatic } })
+      try {
+        set({ update: await runtimeClient.call('update.setAutomatic', { automatic }) })
+      } catch (error) {
+        set({ update: before })
+        failed('Could not change whether teamree checks for updates')(error)
       }
     },
 
@@ -1551,9 +1787,36 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    async loadPublishProgress(projectId) {
+      try {
+        const progress = await runtimeClient.call('teamwork.publishProgress', { projectId })
+        if (progress === null) return
+        set((state) => ({ publishProgress: { ...state.publishProgress, [projectId]: progress } }))
+      } catch {
+        // Deliberately silent. This is a poll running beside a call that is
+        // already going to report its own failure, and a notice for each read
+        // that did not land would bury the one that matters under thirty of
+        // its own.
+      }
+    },
+
+    async cancelPublish(projectId) {
+      await runtimeClient.call('teamwork.cancelPublish', { projectId }).catch(() => undefined)
+      // Read straight back rather than waiting for the next poll: a Stop that
+      // takes a beat to land must still change something on screen at once, or
+      // it reads as a button that did nothing.
+      await get().loadPublishProgress(projectId)
+    },
+
     async publishTeamwork(projectId) {
       if (get().publishPending) return
-      set({ publishPending: true, publishError: null })
+      // The previous run's record would otherwise be read as this one's for as
+      // long as the first poll takes, which is a stopwatch starting at the last
+      // push's duration.
+      set((state) => {
+        const { [projectId]: _previous, ...rest } = state.publishProgress
+        return { publishPending: true, publishError: null, publishProgress: rest }
+      })
       try {
         const result = await runtimeClient.call('teamwork.publish', { projectId })
         set((state) => ({ publishResults: { ...state.publishResults, [projectId]: result } }))
@@ -1564,15 +1827,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             ? result.push.alreadyUpToDate
               ? `${result.remote} already had ${result.branch}.`
               : `Pushed ${result.branch} to ${result.remote}. Your team can reach this machine now.`
-            : `${
-                result.commit === null ? 'Nothing to commit, and the' : 'Committed, but the'
-              } push was refused: ${result.push.advice}`,
+            : // "Refused" is the remote's verdict and is wrong for the two
+              // outcomes that are not the remote's at all: a push somebody
+              // stopped, and one that never finished.
+              `${result.commit === null ? 'Nothing to commit, and the' : 'Committed, but the'} push ${
+                result.push.kind === 'cancelled'
+                  ? 'was stopped'
+                  : result.push.kind === 'timeout'
+                    ? 'never finished'
+                    : 'was refused'
+              }: ${result.push.advice}`,
           result.push.ok ? 'info' : 'error'
         )
       } catch (error) {
         set({ publishError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ publishPending: false })
+        // One last read, so the panel can report how long it took rather than
+        // losing the whole measurement at the moment it becomes a fact.
+        await get().loadPublishProgress(projectId)
         await get().loadPublishPlan(projectId)
         await get().loadMembers(projectId)
       }
@@ -1648,6 +1921,49 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    toggleWatchedPane(projectId, pane) {
+      const id = watchedPaneId(projectId, pane.terminalId)
+      if (get().watches.some((watch) => watch.id === id)) {
+        get().closeWatchedPane(id)
+        return
+      }
+      set((state) => ({
+        watches: [...state.watches, { id, projectId, paneId: pane.terminalId, label: pane.label, handle: pane.handle }],
+        watchTails: { ...state.watchTails, [id]: '' },
+        // Focused on arrival, like a pane you just opened: it is the thing that
+        // was asked for, and it is the one you are about to type into.
+        focusedWatchId: id
+      }))
+    },
+
+    closeWatchedPane(id) {
+      set((state) => {
+        if (!state.watches.some((watch) => watch.id === id)) return {}
+        const watchTails = { ...state.watchTails }
+        delete watchTails[id]
+        return {
+          watches: state.watches.filter((watch) => watch.id !== id),
+          watchTails,
+          focusedWatchId: state.focusedWatchId === id ? neighbourWatchId(state.watches, id) : state.focusedWatchId
+        }
+      })
+    },
+
+    noteWatchedPaneOutput(id, data) {
+      set((state) => {
+        const tail = state.watchTails[id]
+        // Absent means the pane has already been closed, and the chunk is one
+        // that was in flight when it went. Keeping it would leave a tail behind
+        // for a pane nobody can see, quoted in a row that is no longer live.
+        if (tail === undefined) return {}
+        return { watchTails: { ...state.watchTails, [id]: (tail + data).slice(-WATCH_TAIL_CHARS) } }
+      })
+    },
+
+    setWatchSizes(sizes) {
+      set({ watchSizes: sizes })
+    },
+
     toggleProject(projectId) {
       set((state) => ({
         collapsedProjects: { ...state.collapsedProjects, [projectId]: !state.collapsedProjects[projectId] }
@@ -1672,6 +1988,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set((state) => ({ sidebarVisible: !state.sidebarVisible }))
       // Bringing the sidebar back brings every expanded row with it.
       if (get().sidebarVisible) readOnScreen()
+    },
+
+    async setAppearance(appearance) {
+      // Held locally first so the window repaints on the keystroke rather than
+      // on the round trip, and replaced by what the runtime answers — which is
+      // the same choice with anything it refused taken out of it.
+      set({ appearance })
+      try {
+        set({ appearance: await runtimeClient.call('appearance.set', appearance) })
+      } catch (error) {
+        failed('Could not save the appearance')(error)
+      }
     },
 
     openTeamwork(projectId) {

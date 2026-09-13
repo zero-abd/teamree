@@ -14,9 +14,16 @@
 
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
+import type {
+  MemberList,
+  PeerLink,
+  RelaySetting,
+  TeamworkPublish,
+  TeamworkPublishProgress,
+  TeamworkStatus
+} from '@shared/entities'
 import { TeamworkSteps, type TeamworkStepsProps } from './TeamworkSteps'
-import { ADD_KEY_BUTTON, KEY_GRANT_WARNING } from './startTeamwork'
+import { ADD_KEY_BUTTON, KEY_GRANT_WARNING, TEAMWORK_PATHS } from './startTeamwork'
 import { teamworkSummary } from '../sidebar/teamworkSummary'
 
 const SELF_KEY = 'c2VsZmtleXNlbGZrZXlzZWxma2V5c2VsZmtleXNlbGZrZXk='
@@ -68,7 +75,7 @@ const status = (overrides: Partial<TeamworkStatus> = {}): TeamworkStatus => ({
   projectId: 'p1',
   relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
   disabledReason: null,
-  origin: { ok: true },
+  origin: { ok: true, url: 'https://example.com/ada/pager.git' },
   enrolled: true,
   links: [],
   readAt: 0,
@@ -111,8 +118,15 @@ function render(overrides: Partial<TeamworkStepsProps> = {}): string {
     onDeployRelay: () => {},
     onCloseDeploy: () => {},
     renderDeployPane: () => null,
-    publish: { plan: undefined, pending: false, error: null, result: undefined },
+    publish: { plan: undefined, pending: false, error: null, result: undefined, progress: undefined },
     onPublish: () => {},
+    onCancelPublish: () => {},
+    // The steps are what this file is about, so the choice in front of them is
+    // already made in every case but the one that tests the choice itself.
+    path: 'start',
+    onChoosePath: () => {},
+    projectName: 'pager',
+    onCopy: () => {},
     ...overrides
   }
   return renderToStaticMarkup(<TeamworkSteps {...props} />)
@@ -252,7 +266,8 @@ describe('each step says whether it is done', () => {
           },
           pending: false,
           error: null,
-          result: undefined
+          result: undefined,
+          progress: undefined
         }
       })
     )
@@ -427,5 +442,313 @@ describe('a relay that only the environment names', () => {
     const shown = text(render({ list: enrolled(), relay: overridden() }))
     expect(shown).not.toContain('A VPS you rent')
     expect(shown).toContain('done for this run')
+  })
+})
+
+describe('the question asked before the steps', () => {
+  // One entry point and two honest paths. Without this the same five ticks had
+  // to describe two different jobs and the reader had to work out which half
+  // was theirs — which is what "it worked and it was confusing" meant.
+  it('puts both paths in front of somebody who has not said which they are', () => {
+    const shown = text(render({ path: null }))
+    expect(shown).toContain('Which of these are you doing?')
+    expect(shown).toContain('Start a team here')
+    expect(shown).toContain('Join a team I was invited to')
+    // And nothing else: a wall of steps under an unanswered question is the
+    // page the question was added to replace.
+    expect(shown).not.toContain('1. Your identity')
+  })
+
+  it('says what the other person does, for each path, before either is chosen', () => {
+    const shown = text(render({ path: null }))
+    for (const option of TEAMWORK_PATHS) expect(shown).toContain(option.them)
+  })
+
+  // Marked, never taken. A relay file and a colleague's key are very good
+  // evidence and still only evidence about somebody's intent.
+  it('marks the one the repository points at, with the fact behind it, and picks neither', () => {
+    const markup = render({ path: null, list: enrolled(), relay: relayOnDisk() })
+    expect(markup).toContain('path-option--suggested')
+    expect(text(markup)).toContain('.teamree/relay is already in this checkout')
+    // Both are still buttons: nothing has been decided for anybody.
+    expect(markup).toContain('Start a team here</button>')
+    expect(markup).toContain('Join a team I was invited to</button>')
+  })
+
+  // Somebody who is connected came here to look, not to be asked what they are
+  // doing after they have done it.
+  it('asks nothing of a project where this already works', () => {
+    const working = render({
+      path: null,
+      list: enrolled(),
+      relay: relayOnDisk(),
+      status: status({ links: [link({ phase: 'connected' })] }),
+      publish: {
+        plan: undefined,
+        pending: false,
+        error: null,
+        progress: undefined,
+        result: {
+          projectId: 'p1',
+          files: ['.teamree/members/ada.pub'],
+          commit: null,
+          remote: 'origin',
+          branch: 'main',
+          push: { ok: true, upstream: 'origin/main', setUpstream: false, alreadyUpToDate: true },
+          at: 0
+        }
+      }
+    })
+    expect(text(working)).not.toContain('Which of these are you doing?')
+    expect(text(working)).toContain('Teamwork is working in this repository.')
+  })
+
+  // People pick the wrong one, and a choice that cannot be unmade is a trap.
+  it('keeps the answer on screen with a way to take it back', () => {
+    const shown = text(render({ path: 'join' }))
+    expect(shown).toContain('You are')
+    expect(shown).toContain('join a team i was invited to')
+    expect(shown).toContain('Not that')
+  })
+})
+
+describe('what each step says about the machine at the other end', () => {
+  it('is on screen beside the step, not in a document somewhere', () => {
+    const shown = text(render({ path: 'join' }))
+    expect(shown).toContain('On their machine')
+    expect(shown).toMatch(/teamree on their machine says “No teammates”/)
+  })
+
+  it('reads differently for the two jobs, because the jobs are different', () => {
+    expect(text(render({ path: 'start' }))).toMatch(/Your team runs it and teamree runs none/)
+    expect(text(render({ path: 'join' }))).toMatch(/everybody has to name the same relay/)
+  })
+
+  // Two relays is two halves of a team that never meet, and it is also the
+  // mistake this page otherwise encourages by putting a deploy button in front
+  // of everybody.
+  it('warns a joiner whose team has not pushed a relay yet, before offering them one', () => {
+    const markup = render({ path: 'join' })
+    const warning = text(markup).indexOf('Only stand one up yourself if you have agreed')
+    expect(warning).toBeGreaterThan(-1)
+    expect(warning).toBeLessThan(text(markup).indexOf('Deploy a relay'))
+  })
+
+  it('says none of that to somebody who already has a relay', () => {
+    expect(text(render({ path: 'join', relay: relayOnDisk() }))).not.toContain('Only stand one up yourself')
+  })
+})
+
+describe('a push that is taking its time', () => {
+  const running = (overrides: Partial<TeamworkPublishProgress> = {}): Partial<TeamworkStepsProps> => ({
+    list: enrolled(),
+    relay: relayOnDisk(),
+    now: 100_000,
+    publish: {
+      plan: {
+        projectId: 'p1',
+        files: ['.teamree/members/ada.pub'],
+        message: 'Add my key to the team',
+        remote: 'origin',
+        branch: 'main',
+        upstream: 'origin/main',
+        committed: false,
+        blocker: null,
+        readAt: 0
+      },
+      pending: true,
+      error: null,
+      result: undefined,
+      progress: {
+        projectId: 'p1',
+        phase: 'pushing',
+        startedAt: 88_000,
+        lastOutputAt: 99_000,
+        finishedAt: null,
+        output: ['Enumerating objects: 12, done.', 'Writing objects:  60% (6/10)'],
+        cancelling: false,
+        readAt: 100_000,
+        ...overrides
+      }
+    }
+  })
+
+  // The whole of the original report. All three of these were being produced
+  // and thrown away between git and the window.
+  it('says what it is doing, for how long, and what git last printed', () => {
+    const shown = text(render(running()))
+    expect(shown).toContain('Pushing to the remote')
+    expect(shown).toContain('12s')
+    expect(shown).toContain('Writing objects:  60% (6/10)')
+  })
+
+  // It changes on its own, so a reader who cannot see it move is exactly the
+  // one for whom "it appears stuck" was worst.
+  it('announces itself to a reader who cannot watch the lines change', () => {
+    expect(render(running())).toContain('aria-live="polite"')
+  })
+
+  it('offers a way out for as long as it is running', () => {
+    expect(render(running())).toContain('Stop</button>')
+    // And not before there is anything to stop.
+    expect(render({ list: enrolled(), relay: relayOnDisk() })).not.toContain('Stop</button>')
+  })
+
+  it('says it is stopping once Stop has been pressed, rather than offering it again', () => {
+    // Disabled on the same element, so a second press cannot ask for a thing
+    // that is already happening.
+    expect(render(running({ cancelling: true }))).toContain('disabled="">Stopping…</button>')
+  })
+
+  // The sentence that makes a hang actionable instead of mysterious.
+  it('says when git has gone quiet for longer than a working push does', () => {
+    const shown = text(render(running({ lastOutputAt: 40_000 })))
+    expect(shown).toMatch(/git has printed nothing for 1m 00s/)
+    expect(shown).toMatch(/waiting for a credential/)
+  })
+
+  it('says git has printed nothing at all rather than showing an empty line', () => {
+    expect(text(render(running({ output: [] })))).toContain('git has not printed anything yet.')
+  })
+})
+
+describe('a push that did not land', () => {
+  const refused = (push: TeamworkPublish['push'], progress?: TeamworkPublishProgress): Partial<TeamworkStepsProps> => ({
+    list: enrolled(),
+    relay: relayOnDisk(),
+    now: 100_000,
+    publish: {
+      plan: undefined,
+      pending: false,
+      error: null,
+      progress,
+      result: {
+        projectId: 'p1',
+        files: ['.teamree/members/ada.pub'],
+        commit: { sha: 'abc1234def', shortSha: 'abc1234', message: 'Add my key to the team' },
+        remote: 'origin',
+        branch: 'main',
+        push,
+        at: 0
+      }
+    }
+  })
+
+  // Somebody pushed first is the ordinary outcome on the day a team sets this
+  // up, and it is fixed in two commands rather than by starting over.
+  it('offers the push again, and says what to do before pressing it', () => {
+    const shown = text(
+      render(
+        refused({
+          ok: false,
+          kind: 'rejected',
+          error: '! [rejected] main -> main (fetch first)',
+          advice: 'origin has commits that main does not. Pull or rebase onto origin/main and push again.'
+        })
+      )
+    )
+    expect(shown).toContain('Try the push again')
+    expect(shown).toContain('git pull --rebase')
+    expect(shown).not.toMatch(/--force/)
+  })
+
+  // The remedy, not the diagnosis. This app runs git with no terminal to prompt
+  // on, so a push that would have asked for a password simply refuses.
+  it('carries the credential remedy the runtime worked out', () => {
+    const shown = text(
+      render(
+        refused({
+          ok: false,
+          kind: 'auth',
+          error: "fatal: could not read Username for 'https://example.com': terminal prompts disabled",
+          advice:
+            'origin refused the push: fatal: could not read Username. git config --global credential.helper osxkeychain'
+        })
+      )
+    )
+    expect(shown).toContain('credential.helper osxkeychain')
+    expect(shown).toContain('terminal prompts disabled')
+    expect(shown).toContain('nothing in this window changes it')
+  })
+
+  it('tells somebody who stopped one that nothing was sent, and that the commit is still here', () => {
+    const shown = text(
+      render(
+        refused({
+          ok: false,
+          kind: 'cancelled',
+          error: 'the push was stopped before it finished',
+          advice: 'You stopped this push, so nothing reached origin. The commit is still here.'
+        })
+      )
+    )
+    expect(shown).toContain('Committed abc1234')
+    expect(shown).toContain('Nothing was sent')
+  })
+
+  // "Was that normal?" is the question somebody has after sitting through a
+  // slow one, and it is unanswerable without the number.
+  it('reports how long the whole thing took', () => {
+    const shown = text(
+      render(
+        refused(
+          { ok: false, kind: 'timeout', error: 'git push produced nothing', advice: 'It never finished.' },
+          {
+            projectId: 'p1',
+            phase: 'finished',
+            startedAt: 10_000,
+            lastOutputAt: 10_000,
+            finishedAt: 70_000,
+            output: [],
+            cancelling: false,
+            readAt: 70_000
+          }
+        )
+      )
+    )
+    expect(shown).toContain('took 1m 00s')
+  })
+})
+
+describe('how it ends', () => {
+  const finished = (overrides: Partial<TeamworkStepsProps> = {}): Partial<TeamworkStepsProps> => ({
+    list: enrolled(),
+    relay: relayOnDisk(),
+    ...overrides
+  })
+
+  // Half-working is the normal outcome here rather than an edge case, so the
+  // ending is four verdicts and not one.
+  it('says which halves worked, one line each', () => {
+    const shown = text(render(finished()))
+    expect(shown).toContain('Your key')
+    expect(shown).toContain('The relay')
+    expect(shown).toContain('Pushed')
+    expect(shown).toContain('Connected')
+    expect(shown).toContain('teamree cannot check this')
+  })
+
+  it('names the one thing left to do', () => {
+    expect(text(render(finished({ list: roster() })))).toContain('Step 2 writes it: Add my key')
+  })
+
+  // There is no invitation in this protocol, which is why the person setting it
+  // up has to write one — to somebody who is expecting one.
+  it('writes the invitation out in full, and offers to copy it', () => {
+    const shown = text(render(finished()))
+    expect(shown).toContain('Invite somebody')
+    expect(shown).toContain('git clone https://example.com/ada/pager.git')
+    expect(shown).toContain('Copy the invitation')
+  })
+
+  it('offers no invitation for a checkout with no repository URL to send', () => {
+    const shown = text(
+      render(
+        finished({
+          status: status({ origin: { ok: false, reason: 'this project has no origin remote' } })
+        })
+      )
+    )
+    expect(shown).not.toContain('Invite somebody')
   })
 })

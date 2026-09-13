@@ -114,6 +114,11 @@ describe('dispatcher', () => {
     // which method arrived or went missing.
     expect([...registry.methods()].sort()).toEqual([
       'agent.list',
+      // How this machine paints itself. Local by nature: a theme is a fact
+      // about one person's screen, and there is nothing for a teammate to read
+      // in it or ask of it.
+      'appearance.get',
+      'appearance.set',
       // This machine's own, and deliberately not on the peer list: linking a
       // command into /usr/local/bin is not something a teammate gets to ask
       // for, and neither is a password dialog on somebody else's screen.
@@ -134,17 +139,23 @@ describe('dispatcher', () => {
       'project.list',
       'project.remove',
       'status.get',
+      // Stops a push this machine started, so it is local for exactly the
+      // reason the push is: a teammate has no business halting a commit on
+      // somebody else's laptop.
+      'teamwork.cancelPublish',
       // Local, not peer-reachable, and the owner's own: answering a held
       // keystroke, lifting a permission and muting a pane all need nobody's
       // agreement, and the write log never leaves this machine.
       'teamwork.decide',
       'teamwork.mute',
       'teamwork.presence',
-      // Local, and emphatically not peer-reachable: these three write to the
+      // Local, and emphatically not peer-reachable: these write to the
       // repository this machine owns — a remote, a commit, a push — and the
-      // peer allow-list admits none of them.
+      // peer allow-list admits none of them. `publishProgress` only reads, and
+      // what it reads is what that push is doing right now.
       'teamwork.publish',
       'teamwork.publishPlan',
+      'teamwork.publishProgress',
       'teamwork.relay',
       'teamwork.requests',
       'teamwork.revoke',
@@ -168,6 +179,13 @@ describe('dispatcher', () => {
       'terminal.subscribe',
       'terminal.write',
       'unsubscribe',
+      // Local, and never peer-reachable: a teammate has no business making this
+      // machine ask GitHub anything, changing a preference on it, or opening a
+      // page in the browser of whoever is sitting in front of it.
+      'update.check',
+      'update.download',
+      'update.setAutomatic',
+      'update.state',
       'workspace.subscribe',
       'worktree.changes',
       'worktree.commit',
