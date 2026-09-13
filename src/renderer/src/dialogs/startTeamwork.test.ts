@@ -330,9 +330,13 @@ describe('step 5, connected', () => {
     expect(unreachable.summary).toMatch(/may be perfectly fine/)
   })
 
-  it('leads with a refusal, which is the one that means somebody was there', () => {
+  it('leads with a failed handshake, without saying whose end failed', () => {
     const refused = step({ ...written, status: status({ links: [link({ phase: 'refused' })] }) }, 'connected')
-    expect(refused.summary).toMatch(/did not authenticate/)
+    expect(refused.summary).toMatch(/did not complete/)
+    // This end raising an error before a byte is sent reaches the same phase,
+    // so the panel must not accuse the teammate of answering wrongly.
+    expect(refused.summary).not.toMatch(/did not authenticate/)
+    expect(refused.summary).toMatch(/not established/)
   })
 })
 
