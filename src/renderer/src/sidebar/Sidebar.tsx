@@ -210,9 +210,7 @@ export function Sidebar({
         </div>
 
         <div className="sidebar__scroll">
-          {projects.length === 0 ? (
-            <p className="sidebar__empty">No projects yet. Add a repository to get started.</p>
-          ) : null}
+          {projects.length === 0 ? <p className="sidebar__empty">No projects yet. Add a repository.</p> : null}
 
           {projects.map((project) => {
             const rows = matching.filter((worktree) => worktree.projectId === project.id)

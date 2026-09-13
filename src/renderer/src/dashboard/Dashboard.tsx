@@ -103,7 +103,7 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
           <h2 className="placeholder__title">Nothing running</h2>
           <p className="placeholder__body">
             Open a terminal in a worktree with <kbd>{shortcutHint('new-terminal', modifier)}</kbd> and it will show up
-            here, with what it is doing and how long it has been silent.
+            here.
           </p>
         </div>
       ) : (

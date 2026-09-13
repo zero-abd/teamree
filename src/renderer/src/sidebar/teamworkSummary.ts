@@ -79,16 +79,16 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
       tone: 'off',
       label: 'Your key is not here',
       detail:
-        'Your own key is not in .teamree/members in this checkout, so no teammate can reach you — their ' +
-        `machines have nothing to address. Open ${TEAMWORK_BUTTON_LABEL} in this project’s header and press ` +
-        `“${ADD_KEY_BUTTON}”, then commit and push the file it writes.`
+        'Your own key is not in .teamree/members in this checkout, so no teammate can reach you. Open ' +
+        `${TEAMWORK_BUTTON_LABEL} in this project’s header and press “${ADD_KEY_BUTTON}”, then commit and push ` +
+        'the file it writes.'
     }
   }
   if (status.links.length === 0) {
     return {
       tone: 'off',
       label: 'No teammates',
-      detail: 'This project’s roster has nobody in it but you, so there is nobody to connect to.'
+      detail: 'This project’s roster has nobody in it but you.'
     }
   }
 
@@ -107,8 +107,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
       tone: 'problem',
       label: refused.length === 1 ? 'Handshake failed' : `${refused.length} handshakes failed`,
       detail: [
-        'A handshake did not complete. Which end it failed on is not established here: either roster could be ' +
-          'the stale one, and a failure inside this machine looks the same from this side.',
+        'Either roster could be the stale one, so pull, and ask them to pull.',
         ...refused.map((link) => `${link.handle}: ${link.detail ?? 'no reason given'}`)
       ].join('\n')
     }
@@ -124,7 +123,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     return {
       tone: 'problem',
       label: 'Relay unreachable',
-      detail: `${relayLabel(status)} could not be reached. Teammates may be fine; this machine cannot get to the relay.`
+      detail: `${relayLabel(status)} could not be reached. Your teammates may be fine.`
     }
   }
   if (connected > 0) {

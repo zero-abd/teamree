@@ -133,9 +133,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
   {
     path: ['worktree', 'changes'],
     summary: 'List the changed paths in a worktree.',
-    details:
-      'The counters in `worktree status` say whether there is anything to look at. This is the looking: ' +
-      'conflicts first, then what is staged, then the rest.',
+    details: 'Conflicts first, then what is staged, then the rest.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     flags: [
       {
@@ -170,9 +168,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
     path: ['worktree', 'commit'],
     summary: 'Commit staged work in a worktree.',
     details:
-      'Nothing is staged for you beyond the paths you name. With no --path, it commits what is already ' +
-      'staged and refuses if that is nothing — there is deliberately no "commit everything", because a ' +
-      'sweep picks up the one file you did not mean to keep.',
+      'Nothing is staged for you beyond the paths you name. With no paths, it commits what is already ' +
+      'staged and refuses if that is nothing. There is no "commit everything".',
     args: [
       { name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true },
       {
@@ -213,9 +210,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
     path: ['worktree', 'push'],
     summary: "Send a worktree's branch to its remote.",
     details:
-      'Sets the upstream on the first push. There is deliberately no force: the value of one is overwriting ' +
-      "somebody else's history. Uncommitted work is reported, not blocked — but what lands is then not what " +
-      'is in the worktree.',
+      'Sets the upstream on the first push. There is no force push. Uncommitted work is reported, not ' +
+      'blocked, and stays behind.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     flags: [
       { name: 'remote', kind: 'string', placeholder: '<name>', description: 'Where to push. Defaults to origin.' }
@@ -244,9 +240,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
   {
     path: ['worktree', 'log'],
     summary: 'List the commits a worktree has made that its base has not.',
-    details:
-      'Scoped to base..branch, because the question is what this worktree did rather than what is in the ' +
-      'repository. Newest first.',
+    details: 'Scoped to base..branch, newest first.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     flags: [
       { name: 'limit', kind: 'number', placeholder: '<count>', description: 'Commits before the list is capped.' }
@@ -277,9 +271,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
     path: ['worktree', 'merges'],
     summary: 'Say whether a worktree would merge cleanly into its base.',
     details:
-      'Answered without checking anything out or starting a merge, so it costs the repository nothing and ' +
-      'can be asked about every worktree at once. The answer is in `state` under --json: clean, conflicts, ' +
-      'unrelated, or unavailable.',
+      'Answered without checking anything out or starting a merge. The answer is in `state` under --json: ' +
+      'clean, conflicts, unrelated, or unavailable.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     examples: ['teamree worktree merges fix-login', 'teamree worktree merges fix-login --json'],
     run: async (context) => {
@@ -309,9 +302,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
   {
     path: ['worktree', 'diff'],
     summary: 'Print the patch for a worktree, or for one path in it.',
-    details:
-      'Untracked files are included when a path names one, since git itself has nothing to compare them ' +
-      'against and would otherwise answer with silence.',
+    details: 'Untracked files are included when --path names one; git alone would print nothing for them.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     flags: [
       { name: 'path', kind: 'string', placeholder: '<path>', description: 'Restrict the patch to one path.' },
@@ -353,9 +344,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
   {
     path: ['worktree', 'wait'],
     summary: 'Block until a worktree finishes being created.',
-    details:
-      'Creation runs in the background, so `worktree create` answers immediately with state "creating". ' +
-      'This waits for it to settle, and exits non-zero if it settled as failed.',
+    details: 'Exits non-zero if the worktree settled as failed.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     flags: [
       {
@@ -420,8 +409,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
     path: ['worktree', 'start-points'],
     summary: 'List everything a new worktree in a project could branch from.',
     details:
-      'The same list the window offers in its create dialog: local branches, remote branches, tags and the ' +
-      'current head, newest first. Pass any `ref` back to `worktree create --from`.\n\n' +
+      'Local branches, remote branches, tags and the current head, newest first. Pass any `ref` back to ' +
+      '`worktree create --from`.\n\n' +
       'A repository with thousands of refs is capped rather than dumped; `truncated` says when a tail was ' +
       'dropped and `total` says how many there were.',
     args: [{ name: 'project', description: 'Project id, name, or path.', required: true }],
@@ -453,10 +442,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
   {
     path: ['worktree', 'layout'],
     summary: "Show how a worktree's panes are arranged and which one has focus.",
-    details:
-      '`terminal list` says which panes exist; this says where they are and which one the window would type ' +
-      'into. Read-only on purpose: the arrangement is changed by operations that mean something — ' +
-      '`terminal split`, `terminal close` — rather than by handing a pane tree back.',
+    details: 'Read-only: change the arrangement with `terminal split` and `terminal close`.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     examples: ['teamree worktree layout fix-login --json'],
     run: async (context) => {

@@ -230,6 +230,38 @@ describe('each step says whether it is done', () => {
     expect(shown).toContain('yours to do — teamree does not check this')
   })
 
+  // The step's summary used to promise this in a sentence. The promise belongs
+  // where it is kept: what will be committed and where it will be sent are on
+  // the screen, above the button, before anything is pressed.
+  it('says what it will commit and where it will send it, before the button', () => {
+    const shown = text(
+      render({
+        list: enrolled(),
+        relay: relayOnDisk(),
+        publish: {
+          plan: {
+            projectId: 'project-1',
+            files: ['.teamree/members/ada.pub', '.teamree/relay'],
+            message: 'Add ada to the teamree roster',
+            remote: 'origin',
+            branch: 'main',
+            upstream: 'origin/main',
+            committed: false,
+            blocker: null,
+            readAt: 0
+          },
+          pending: false,
+          error: null,
+          result: undefined
+        }
+      })
+    )
+    expect(shown).toContain('.teamree/members/ada.pub')
+    expect(shown).toContain('Add ada to the teamree roster')
+    expect(shown).toContain('Pushes to')
+    expect(shown).toContain('origin/main')
+  })
+
   it('shows a teammate’s link with the runtime’s own detail, not a phase code', () => {
     const waited = 'nobody has answered on this rendezvous across two hourly rotations'
     const shown = text(

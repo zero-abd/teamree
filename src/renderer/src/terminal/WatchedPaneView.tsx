@@ -364,10 +364,7 @@ export function WatchedPaneView({
           {refused ? refused.reason : `what you type runs on ${handle}’s machine, as ${handle}, with your name on it`}
         </span>
         {state.phase === 'watching' ? (
-          <span
-            className="watch__size"
-            title={`their pane’s size, which a reader never changes — a resize on ${handle}’s machine reaches this only with their next presence`}
-          >
+          <span className="watch__size" title="their pane’s size, which a reader never changes">
             {`${state.cols}×${state.rows}`}
           </span>
         ) : null}
