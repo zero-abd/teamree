@@ -39,20 +39,36 @@ describePty('recoverTailOnTeardown', () => {
     async () => {
       // A reader that stops before the pty is empty is the accident behind the
       // lost tail; here it is made deliberate, so the state that used to happen
-      // one run in five happens every run. The command's output outlives what a
-      // stopped socket can hold, so the last line is still in the kernel when
-      // node-pty closes the descriptor on its own timer — which is precisely
-      // the moment the tail used to disappear.
-      const handle = run(`for i in $(seq 1 ${LINES}); do echo "tail line $i"; done`)
+      // one run in five happens every run.
+      //
+      // The command sleeps rather than ending, and the pty is killed rather
+      // than awaited, because how much of that output fits before the child
+      // blocks is a property of the platform's pty buffer, not of this code. A
+      // first version waited for the child to exit and passed on Linux, whose
+      // buffer swallows the lot; on macOS the child blocked against a smaller
+      // one and the test hung for its whole timeout instead of failing. What is
+      // under test is that the drain recovers what the stopped socket did not —
+      // and that is true whether the child finished or was stopped mid-sentence.
+      const handle = run(`for i in $(seq 1 ${LINES}); do echo "tail line $i"; done; sleep 60`)
+      const delivered: string[] = []
+      handle.onData((chunk) => delivered.push(chunk))
       const recovered: string[] = []
       recoverTailOnTeardown(handle, process.platform, (chunk) => recovered.push(chunk))
       handle.pause()
 
-      await new Promise<void>((resolve) => {
+      // Long enough for the child to fill the pty, short enough to stay a test.
+      await new Promise<void>((resolve) => setTimeout(resolve, 500))
+
+      const exited = new Promise<void>((resolve) => {
         handle.onExit(() => resolve())
       })
+      handle.kill()
+      await exited
 
-      expect(recovered.join('')).toContain(`tail line ${LINES}`)
+      // Without the drain this is empty: the socket was stopped before any of
+      // it was read, and node-pty closes the descriptor without looking again.
+      expect(recovered.join('')).toMatch(/tail line \d+/)
+      expect(recovered.join('').length).toBeGreaterThan(delivered.join('').length)
     },
     TEST_TIMEOUT_MS
   )

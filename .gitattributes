@@ -1,0 +1,13 @@
+# Check out LF everywhere, including on Windows.
+#
+# Without this, git's autocrlf gives a Windows checkout CRLF endings, the
+# formatter reads every file as misformatted, and `format:check` fails on all
+# of them — which is exactly how the first Windows CI run failed, on 238 files
+# it had no other complaint about.
+* text=auto eol=lf
+
+# Binary, so never touched.
+*.png binary
+*.icns binary
+*.ico binary
+*.node binary
