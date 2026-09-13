@@ -318,6 +318,20 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
    */
   const confirm = (): void => {
     if (confirmed || !transport) return
+
+    // Belt and braces over what `IK` already guarantees: whichever side we
+    // played, the key the transcript authenticated is the key we dialled. This
+    // lives here rather than at `established` because the session refuses to
+    // name a peer that has not yet proved it holds the private half — on this
+    // side of the handshake that proof is the frame that just decrypted, and
+    // asking any earlier is asking before there is an answer.
+    const active = session
+    if (!active) return
+    if (Buffer.from(active.remoteStaticPublicKey()).toString('base64') !== options.remotePublicKey) {
+      rejectHandshake('the handshake authenticated a different key than the one this link dialled')
+      return
+    }
+
     confirmed = true
     backoffMs = BACKOFF_START_MS
     moveTo('connected')
@@ -334,13 +348,6 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     if (!active) return
     cancelHandshakeDeadline?.()
     cancelHandshakeDeadline = undefined
-
-    // Belt and braces over what `IK` already guarantees: whichever side we
-    // played, the key the transcript authenticated is the key we dialled.
-    if (Buffer.from(active.remoteStaticPublicKey()).toString('base64') !== options.remotePublicKey) {
-      rejectHandshake('the handshake authenticated a different key than the one this link dialled')
-      return
-    }
 
     transport = createPeerTransport({
       session: active,
