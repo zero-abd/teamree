@@ -43,7 +43,7 @@ checksum gives you the same guarantee by a different route, which is why every
 release publishes them. Before you install, compare:
 
 ```sh
-shasum -a 256 teamree-0.0.1.dmg
+shasum -a 256 teamree-0.1.0.dmg
 ```
 
 against the matching line in `SHA256SUMS.txt` on the release. If they agree, the
