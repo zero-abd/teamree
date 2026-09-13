@@ -121,7 +121,10 @@ and hits a wall an hour later is worse off than one that was told up front.
   has its object evicted from memory while both sockets stay connected, and it
   is rebuilt on the next frame. That is why nothing is kept in a field anywhere
   in `src/workers/`, and why the tests throw the object away between every single
-  frame.
+  frame. Against `workerd` locally an object is evicted after about ten seconds
+  of being left alone, and an object whose last connection has gone stops waking
+  itself at all — which it did not always do, and the section on testing says
+  how that was found.
 
 ### Two things this host does not do
 
@@ -536,33 +539,80 @@ disconnected, so neither of them is told its partner did.
 ```sh
 cd relay
 npm install
-npm test          # 71 tests
+npm test          # 84 tests, including the Worker under a real workerd
 npm run typecheck # both hosts: Node types and Workers types
 npm run build     # the container host's JavaScript, into dist/
+npm run worker:dev # the Worker on localhost, under workerd, deploying nothing
 ```
 
-The tests run in about two seconds and do not sleep. Everything that is about a
-deadline is driven by an injected clock, and everything else is awaited as a
+Most of it runs in about two seconds and does not sleep: everything that is about
+a deadline is driven by an injected clock, and everything else is awaited as a
 condition on a real socket event, so a failure means a failure rather than a slow
-machine.
+machine. The exception is `test/workerd/`, which takes roughly a minute, for a
+reason given below.
 
 The container host is tested over **real WebSockets on a real port** — the splice
-itself, every limit, and every awkward case above. The Durable Object host is
-tested against a narrow fake of the runtime that does only what Cloudflare's
-documentation says the real one does, and it **throws the object away between
-every single frame**, which is the worst case hibernation is allowed to put it
-in. What has not been exercised here is a deployed Worker; the bundle is checked
-with `wrangler deploy --dry-run`, and the first real deploy is the first time
-that code meets `workerd`.
+itself, every limit, and every awkward case above.
 
-Worth knowing which claims rest on which. That a peer's keepalive holds a session
-open, and that both halves of a reaped session are told the same true thing, are
-proved on real sockets against the container host. The Worker host's three-socket
-refusal, and its reading back of the timestamp the runtime kept for a keepalive it
-answered on the object's behalf, are proved only against the fake — they follow
-Cloudflare's documented behaviour for `getWebSocketAutoResponseTimestamp` and for
-`getWebSockets`, and the first deploy is still the first time either meets the
-real runtime.
+The Durable Object host is tested twice, and it is worth knowing which is which.
+`test/hibernation.test.ts` drives it against a narrow fake of the runtime that
+does only what Cloudflare's documentation says the real one does, and **throws
+the object away between every single frame**, which is the worst case hibernation
+is allowed to put it in. It is instant and it can be made to fail on demand,
+which is why it is still there. `test/workerd/` drives the same adapter through
+`wrangler dev`, which is **`workerd`, the runtime Cloudflare actually runs, on
+localhost**: nothing is deployed, no account is involved, no network resource is
+created. If wrangler or its per-platform binary is not installed that suite skips
+with a message saying so in as many words, rather than going quietly green.
+
+Those tests wait on the wall clock, because the alarm and the eviction belong to
+the runtime and neither takes instruction. An object has to be left alone for
+about ten seconds before `workerd` throws it out of memory, and a test that says
+it survived a hibernation wake checks that the eviction actually happened — by
+watching the object's own log refs change — rather than trusting the number. That
+is where the minute goes.
+
+### What running it on workerd settled
+
+Two assumptions the fake could only inherit from whoever wrote it were checked
+against the real runtime. Both hold:
+
+- **A socket's attachment can still be read inside `webSocketClose`.** It can,
+  and the closing socket is still in `getWebSockets()` while that handler runs.
+  This is the one that matters most: it is the whole of how a survivor gets told
+  its partner has gone.
+- **A `PairSocket` is one object for the whole of one event, after a hibernation
+  wake.** The JavaScript wrapper is *not* the one the pairing opened on — a
+  property set on it before the wake is gone afterwards — but within a single
+  event the socket handed to the handler is identical to the one in
+  `getWebSockets()`. That is the only thing the adapter relies on: it rebuilds
+  its table for every event and keeps no socket in a field.
+
+Two things the real runtime did that the fake could not show:
+
+- **An alarm that re-arms unconditionally never lets the object go.** It was
+  doing exactly that: every sweep armed the next one whether or not there was
+  anything left to sweep, so one object for every rendezvous anybody had ever
+  used would have stayed in memory waking itself every thirty seconds for as
+  long as the account lasted — billed to whoever deployed it, which is a team
+  rather than us. It now arms the next sweep only while it still holds a
+  connection, and a peer that comes back arms it again on the way in. The fake
+  could not have caught this: it clears the alarm itself between ticks.
+- **A close the object starts is not always flushed at once.** For a socket that
+  has never delivered a frame — the connection that opens and then says nothing,
+  which is what the greeting deadline exists for — `workerd` sends the close
+  handshake about ten seconds after the relay asks it to. The in-band
+  `{"t":"closing"}` frame arrives on time, which is exactly why the protocol
+  gives the reason in-band as well as in the close frame. Nothing is lost; the
+  peer's socket simply lingers after it has been told.
+
+What is still not exercised is a **deployed** Worker. All of the above is
+`workerd` on localhost: the same runtime, but not the same network. The edge in
+front of a real deployment — TLS termination, the `CF-Connecting-IP` header the
+relay reads to group connections, and whatever it does to a WebSocket left idle
+across the public internet — is not in the picture, and neither is the pricing.
+The bundle is checked with `wrangler deploy --dry-run`; the first deploy is still
+the first time any of that is met.
 
 ### How it is laid out
 

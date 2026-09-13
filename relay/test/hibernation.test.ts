@@ -273,6 +273,24 @@ describe('a pairing held by a durable object', () => {
     expect(relay.state.pendingAlarm).toBe(relay.clock.now() + 30_000)
   })
 
+  it('lets itself be forgotten once the last connection has gone', async () => {
+    const relay = hibernatingPair()
+    const peer = relay.connect()
+    await relay.say(peer, hello(rendezvousToken()))
+
+    await relay.vanish(peer)
+    await relay.tick()
+
+    // Re-arming here would wake this object every interval for as long as the
+    // account exists, once per rendezvous anybody ever used. There is nothing
+    // left to sweep, and a peer that comes back arms it again on the way in.
+    expect(relay.state.pendingAlarm).toBeNull()
+
+    const returning = relay.connect()
+    await relay.say(returning, hello(rendezvousToken()))
+    expect(relay.state.pendingAlarm).toBe(relay.clock.now() + 30_000)
+  })
+
   it('takes no more sockets than a pairing can account for, however many are offered', () => {
     const relay = hibernatingPair()
 
