@@ -185,8 +185,27 @@ describe('milestone 1 acceptance', () => {
       'echo TEAMREE_MARKER_OK; git rev-parse --abbrev-ref HEAD',
       '--enter'
     ])
-    await sleep(3000)
-    const { data } = cli<{ data: string }>(['terminal', 'read', terminal.id])
+
+    // Polled, like every other wait in this file, rather than slept against.
+    // A shell is not on a schedule: a fixed sleep makes the deadline part of
+    // the assertion, so a loaded machine — and this repository runs its suite
+    // alongside packaging builds — reports a pane that was merely slow as a
+    // product defect, and prints a missing marker instead of "it never came".
+    // Polling makes the deadline the failure mode and costs nothing when the
+    // shell answers in the usual few hundred milliseconds.
+    //
+    // The budget is wall-clock rather than a count of turns, because each turn
+    // spawns the CLI: a fixed 80 turns costs 20s of sleeping plus however long
+    // 80 process launches take, which overran the case's own timeout and
+    // reported "test timed out" instead of showing what the pane did hold.
+    let data = ''
+    const ready = (): boolean => data.includes('TEAMREE_MARKER_OK') && data.includes(worktree.branch)
+    const deadline = Date.now() + 20_000
+    while (!ready() && Date.now() < deadline) {
+      await sleep(250)
+      data = cli<{ data: string }>(['terminal', 'read', terminal.id]).data
+    }
+
     expect(data).toContain('TEAMREE_MARKER_OK')
     // Proves the pane really is inside this worktree, not the primary checkout.
     expect(data).toContain(worktree.branch)
