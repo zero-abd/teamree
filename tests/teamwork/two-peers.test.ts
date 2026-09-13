@@ -56,7 +56,8 @@ describe('two peers on one machine', () => {
     expect(peers.leader.identity.publicKey).not.toBe(peers.joiner.identity.publicKey)
     expect(peers.leader.identity.privateKey).not.toBe(peers.joiner.identity.privateKey)
     for (const peer of peers.peers) {
-      expect(peer.identity.publicKey).toMatch(/^-----BEGIN PUBLIC KEY-----/)
+      // Base64 of the raw 32 bytes, which is what the member file carries.
+      expect(Buffer.from(peer.identity.publicKey, 'base64')).toHaveLength(32)
     }
   })
 

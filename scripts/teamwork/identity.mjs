@@ -27,17 +27,16 @@ import { join } from 'node:path'
 export const MEMBERS_DIR = join('.teamree', 'members')
 
 /**
- * SPKI PEM, which is what `node:crypto` exports without being asked twice.
+ * The format milestone A actually shipped: a short comment header, then
+ * `handle:`, `key: x25519 <base64 of the raw 32 bytes>`, and `added:`.
  *
- * A guess, and flagged as one: `docs/teamwork.md` fixes the path and the
- * algorithm but never says whether the file holds 32 raw bytes, base64, or a
- * PEM wrapper. PEM is the guess most likely to survive review — it is ASCII, so
- * it diffs and reviews as a line rather than as a blob; it names its own
- * algorithm, so a key pasted into the wrong file is caught rather than
- * misinterpreted; and it is the one encoding every language's standard library
- * can already read.
+ * This was a guess when the harness was written — the design fixed the path and
+ * the algorithm but never the encoding — and the guess (SPKI PEM) was wrong.
+ * `src/main/teamwork/memberFile.ts` is the authority, and a test asserts that
+ * what this writes parses there, so the two cannot drift apart again without
+ * something going red.
  */
-export const PUBLIC_KEY_ENCODING = 'spki-pem'
+export const PUBLIC_KEY_ENCODING = 'x25519-base64'
 
 /**
  * A handle has to be a filename, and it ends up in a repository every member
@@ -64,11 +63,40 @@ export function assertHandle(handle) {
 export function generateIdentity(handle) {
   assertHandle(handle)
   const { publicKey, privateKey } = generateKeyPairSync('x25519')
+  // The last 32 bytes of the SPKI encoding are the raw key; the 12 before them
+  // are a fixed RFC 8410 prefix. node has no raw export, and the app's own
+  // identity module takes the same slice.
+  const raw = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)
   return {
     handle,
-    publicKey: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+    publicKey: raw.toString('base64'),
     privateKey: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
   }
+}
+
+/**
+ * The bytes of one member file, byte for byte what the app writes.
+ *
+ * Duplicated rather than imported because this harness is plain ESM and the
+ * authority is TypeScript. The duplication is held honest by a test that parses
+ * this output with the app's own parser.
+ */
+export function memberFileText(identity, addedAt = new Date().toISOString().slice(0, 10)) {
+  return [
+    '# teamree member',
+    '#',
+    '# Push access to this repository is what makes this membership: whoever can',
+    '# add a key here is on the team, and whoever loses push access stops being',
+    '# able to change it. There is no second list anywhere.',
+    '#',
+    '# This is the public half of an X25519 keypair. The private half never',
+    '# leaves the machine that generated it and is never written to a repository.',
+    '',
+    `handle: ${identity.handle}`,
+    `key: x25519 ${identity.publicKey}`,
+    `added: ${addedAt}`,
+    ''
+  ].join('\n')
 }
 
 /** The path a handle's public key occupies inside a checkout. */
@@ -85,8 +113,25 @@ export function memberKeyPath(repoPath, handle) {
 export async function writeMemberKey(repoPath, identity) {
   const path = memberKeyPath(repoPath, identity.handle)
   await mkdir(join(repoPath, MEMBERS_DIR), { recursive: true })
-  await writeFile(path, identity.publicKey)
+  await writeFile(path, memberFileText(identity))
   return path
+}
+
+/**
+ * The public key out of one member file, or null if it does not hold exactly
+ * one well-formed `key:` line. Mirrors the app's parser closely enough for the
+ * harness's purposes; `tests/teamwork/harnessKeyFormat.test.ts` is what keeps
+ * the two honest about the format itself.
+ */
+function readKeyLine(text) {
+  const keys = []
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const match = /^key:\s*x25519\s+([A-Za-z0-9+/]{43}=)$/.exec(trimmed)
+    if (match) keys.push(match[1])
+  }
+  return keys.length === 1 ? keys[0] : null
 }
 
 /**
@@ -111,7 +156,11 @@ export async function readRoster(repoPath) {
     if (!name.endsWith('.pub')) continue
     const handle = name.slice(0, -'.pub'.length)
     if (!HANDLE.test(handle)) continue
-    members.push({ handle, publicKey: await readFile(join(repoPath, MEMBERS_DIR, name), 'utf8') })
+    const text = await readFile(join(repoPath, MEMBERS_DIR, name), 'utf8')
+    const key = readKeyLine(text)
+    // A file it cannot read is skipped rather than guessed at, matching the
+    // app's parser: a guess here is a stranger in the roster.
+    if (key !== null) members.push({ handle, publicKey: key })
   }
   return members
 }
