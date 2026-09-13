@@ -2,6 +2,7 @@
   "name": "teamree-relay",
   "version": "0.1.0",
   "description": "A dumb pipe that splices two outbound WebSocket connections together",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "./dist/node/index.js",

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "An ADE built for teamwork",
   "author": "teamree contributors",
+  "license": "MIT",
   "homepage": "https://github.com/zero-abd/teamree",
   "desktopName": "teamree.desktop",
   "private": true,
