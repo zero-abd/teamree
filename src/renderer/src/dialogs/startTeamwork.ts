@@ -563,8 +563,10 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
       title,
       mark: 'todo',
       summary:
-        `Somebody answered on ${namesOf(refused)}’s rendezvous and did not authenticate against the key in this ` +
-        'repository. This is the one here worth reading in full.'
+        `The handshake with ${namesOf(refused)} did not complete. Which end it failed on is not established ` +
+        'here: either roster could be the stale one, and a failure raised inside this machine before anything ' +
+        'was sent looks the same from this side. The reason under that link is this machine’s own, not a ' +
+        'report from theirs.'
     }
   }
   const unreachable = status.links.filter((link) => link.phase === 'unreachable')

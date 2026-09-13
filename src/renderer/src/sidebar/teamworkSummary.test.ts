@@ -86,7 +86,7 @@ describe('what the project header says about teamwork', () => {
     expect(summary?.detail).toContain('marcus: nobody has answered on this rendezvous')
   })
 
-  it('puts a refused handshake above everything, because somebody was there', () => {
+  it('puts a failed handshake above everything, without claiming somebody was there', () => {
     const summary = teamworkSummary(
       status({
         links: [
@@ -100,7 +100,7 @@ describe('what the project header says about teamwork', () => {
       })
     )
     expect(summary?.tone).toBe('problem')
-    expect(summary?.label).toBe('1 refused')
+    expect(summary?.label).toBe('Handshake failed')
     expect(summary?.detail).toContain('marcus')
   })
 
