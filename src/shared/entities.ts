@@ -524,14 +524,7 @@ export type PeerLinkPhase =
   | 'waiting'
   /** Handshake complete against a key from this project's roster. */
   | 'connected'
-  /**
-   * Somebody was there and this side would not have the session.
-   *
-   * The handshake authenticating a key that is not on the roster, or a
-   * transport frame that did not authenticate at all — which means what arrived
-   * is not what was sent, and is a fact about the trip rather than about either
-   * machine. `detail` says which.
-   */
+  /** A handshake that did not complete. Which end it failed on is not established. */
   | 'refused'
   /** The relay could not be reached at all. */
   | 'unreachable'

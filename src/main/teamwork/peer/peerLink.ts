@@ -677,6 +677,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     const wasConnected = confirmed
     const wasRefused = refusedThisAttempt
     const wasStalled = stalledThisAttempt
+    const wasUnauthenticated = unauthenticatedThisAttempt
     const wasRollover = rolledOverThisAttempt
     const wasSilent = silentThisAttempt
     // A session that worked earns the reset; one that confirmed and went inside
@@ -729,6 +730,11 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // And a machine that stopped answering did not drop anything: its socket is
     // still open, which is the whole reason this side had to notice for itself.
     if (wasSilent) moveTo('waiting', SILENT_PEER_DETAIL)
+    // `waiting`, like every other way a link that was up stops being one: the
+    // session is over, the link is going back to the relay, and what is worth
+    // saying is why. Deliberately not `refused` — that phase is a handshake
+    // that did not complete, and this handshake completed and ran.
+    else if (wasUnauthenticated) moveTo('waiting', UNAUTHENTICATED_DETAIL)
     // Before the `paired` branch, and never reached once a session confirmed:
     // the deadline returns early when it has. A rendezvous that paired and then
     // carried nothing is not somebody hanging up, and the relay saying `paired`
@@ -1051,19 +1057,15 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
         // A Noise stream with a hole in it is over: there is no point it could
         // be picked up from, so the socket goes and the link rebuilds.
         //
-        // What the reader is told about it depends on which failure it was. A
-        // frame that did not authenticate is the relay's one symptom, and the
-        // close that follows would otherwise re-enter `onClosed` with both
-        // `confirmed` and `paired` true and come out as "your teammate's
-        // machine dropped the connection" — the sentence for a socket that
-        // closed, aimed at the only party here nothing has been established
-        // about. Recorded before the close rather than after it, so `onClosed`
-        // finds the verdict already made.
-        if (failure.kind === 'unauthenticated') {
-          refusedThisAttempt = true
-          unauthenticatedThisAttempt = true
-          moveTo('refused', UNAUTHENTICATED_DETAIL)
-        }
+        // What the reader is told about it depends on which failure it was, and
+        // `onClosed` below is where that is said — the same place every other
+        // way a session ends is accounted for. Recorded before the close rather
+        // than after it, because the close is what re-enters `onClosed`, where
+        // `confirmed` and `paired` are both true and the answer would otherwise
+        // be "your teammate's machine dropped the connection": the sentence for
+        // a socket that closed, aimed at the only party here nothing has been
+        // established about.
+        if (failure.kind === 'unauthenticated') unauthenticatedThisAttempt = true
         connection?.close(1000, '')
       },
       onError: options.onError
