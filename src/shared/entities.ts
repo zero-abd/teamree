@@ -213,6 +213,17 @@ export type Terminal = {
   rows: number
   /** False once the child process has exited; the pane stays until closed. */
   running: boolean
+  /**
+   * True between the child being reaped and the last of its output arriving.
+   *
+   * `running` is still true across that window — the pane is still filling, and
+   * the exit is not announced until the scrollback is complete — but there is
+   * nothing on the other end to read a keystroke and the pty refuses one.
+   * Anything deciding whether input can still land has to ask this too, or it
+   * concludes "running, therefore typeable" for the half-second after every
+   * exit and says so in writing.
+   */
+  draining?: boolean
   exitCode?: number
   /** Which coding agent this pane runs, when it runs one. */
   agent?: AgentKind

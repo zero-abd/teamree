@@ -71,6 +71,7 @@ export class WorkspaceStore {
   private readonly worktrees = new Map<string, Worktree>()
   private readonly layouts = new Map<string, Layout>()
   private readonly terminals = new Map<string, TerminalRecord>()
+  private readonly mutedTerminals = new Set<string>()
   private asked: AskedQuestions = {}
 
   private queue: Promise<void> = Promise.resolve()
@@ -93,6 +94,7 @@ export class WorkspaceStore {
     for (const worktree of document.worktrees) this.worktrees.set(worktree.id, worktree)
     for (const layout of document.layouts) this.layouts.set(layout.worktreeId, layout)
     for (const terminal of document.terminals) this.terminals.set(terminal.id, terminal)
+    for (const terminalId of document.mutedTerminals) this.mutedTerminals.add(terminalId)
     this.asked = document.asked
   }
 
@@ -206,8 +208,28 @@ export class WorkspaceStore {
 
   removeTerminal(terminalId: string): boolean {
     const removed = this.terminals.delete(terminalId)
-    if (removed) this.persist()
+    // The mute goes with the record it was about. A pane that has been closed
+    // is not a pane the owner is still silencing, and keying the two together
+    // is what makes a mute durable without anything ever having to be swept.
+    const unmuted = this.mutedTerminals.delete(terminalId)
+    if (removed || unmuted) this.persist()
     return removed
+  }
+
+  /**
+   * Panes the owner has muted, as the decision stands between runs.
+   *
+   * Read once at startup by the peer service, which answers every keystroke
+   * from its own copy: a mute has to be instant, and a file read is not.
+   */
+  listMutedTerminals(): string[] {
+    return [...this.mutedTerminals]
+  }
+
+  setTerminalMuted(terminalId: string, muted: boolean): void {
+    const changed = muted ? !this.mutedTerminals.has(terminalId) : this.mutedTerminals.delete(terminalId)
+    if (muted) this.mutedTerminals.add(terminalId)
+    if (changed) this.persist()
   }
 
   /**
@@ -300,7 +322,12 @@ export class WorkspaceStore {
   }
 
   private document(): WorkspaceDocument {
-    return { ...emptyWorkspaceDocument(), ...this.snapshot(), asked: this.asked }
+    return {
+      ...emptyWorkspaceDocument(),
+      ...this.snapshot(),
+      mutedTerminals: this.listMutedTerminals(),
+      asked: this.asked
+    }
   }
 }
 

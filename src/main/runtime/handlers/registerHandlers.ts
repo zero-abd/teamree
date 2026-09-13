@@ -166,6 +166,12 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
       },
       dataDir,
       subscriptions: registry.context.subscriptions,
+      // The owner's mutes, kept beside the terminal records they are about, so
+      // a pane restored under the id it had comes back as muted as it was left.
+      mutes: {
+        list: () => registry.context.store.listMutedTerminals(),
+        set: (terminalId, muted) => registry.context.store.setTerminalMuted(terminalId, muted)
+      },
       onChange: () => workspaceEvents.emit({ type: 'teammates' }),
       // Nothing a peer does should be able to fail quietly here. A snapshot
       // refused, a watch that could not be started: none of them stop the app,

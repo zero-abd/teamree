@@ -186,6 +186,10 @@ export class PtySession {
       cols: this.cols,
       rows: this.rows,
       running: this.running,
+      // Said out loud rather than left to be inferred from `running`, which is
+      // deliberately still true here: `write` already throws, so a reader that
+      // only had `running` would offer a pane that cannot take anything.
+      ...(this.draining === undefined ? {} : { draining: true }),
       ...(this.exitCode === undefined ? {} : { exitCode: this.exitCode }),
       ...(this.restored === undefined ? {} : { restored: this.restored }),
       ...(this.agent === undefined ? {} : { agent: this.agent }),

@@ -32,6 +32,16 @@
 // The file is JSON Lines so it is greppable by hand, appended to rather than
 // rewritten so a crash costs at most the last line, and rotated once at a cap
 // so a stuck agent typing all night cannot fill a disk.
+//
+// THE CAP IS ALSO A WAY IN, AND THE CALLER CLOSES IT. Rotation is what stops a
+// disk filling, and it is equally what lets whoever fills it decide what falls
+// off the end: a refusal needs no valid pane and no valid project, so anybody
+// who may open a link could once send enough of them to roll the owner's record
+// of what they really typed out of both generations. This file does not judge
+// what it is handed — it must not, or a record would depend on a guess — so the
+// bound lives where the sender is known: `peerService.ts` files the first of a
+// link's unaimed refusals as they are and collapses the rest into one entry
+// carrying the count. Nothing here changes; what arrives is already bounded.
 
 import { appendFile, mkdir, readFile, rename, stat } from 'node:fs/promises'
 import { join } from 'node:path'

@@ -84,11 +84,34 @@ export type WorkspaceDocument = {
   worktrees: Worktree[]
   layouts: Layout[]
   terminals: TerminalRecord[]
+  /**
+   * Panes the owner has stopped remote keystrokes reaching, by terminal id.
+   *
+   * Here rather than in memory because a terminal id survives a restart on
+   * purpose — `session-restore.ts` keeps it so the pane layout needs no
+   * remapping — so a pane comes back indistinguishable from the one that was
+   * muted: same id, same worktree, same conversation resumed. A mute that did
+   * not come back with it would be the owner's decision discarded at the one
+   * moment nothing on screen says so.
+   *
+   * Beside the terminal records and pruned with them: `removeTerminal` drops
+   * the mute, so there is nothing to sweep at startup, which is the moment
+   * sweeping is least reliable.
+   */
+  mutedTerminals: string[]
   asked: AskedQuestions
 }
 
 export function emptyWorkspaceDocument(): WorkspaceDocument {
-  return { version: WORKSPACE_DOCUMENT_VERSION, projects: [], worktrees: [], layouts: [], terminals: [], asked: {} }
+  return {
+    version: WORKSPACE_DOCUMENT_VERSION,
+    projects: [],
+    worktrees: [],
+    layouts: [],
+    terminals: [],
+    mutedTerminals: [],
+    asked: {}
+  }
 }
 
 /**
@@ -105,6 +128,7 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     worktrees: salvage(record.worktrees, WorktreeSchema),
     layouts: salvage(record.layouts, LayoutSchema),
     terminals: salvage(record.terminals, TerminalRecordSchema) as TerminalRecord[],
+    mutedTerminals: salvage(record.mutedTerminals, z.string().min(1)),
     // Salvaged like everything else: a date somebody hand-edited into a string
     // means the question has not been asked, never that the file is unusable.
     asked: AskedSchema.safeParse(record.asked).data ?? {}
