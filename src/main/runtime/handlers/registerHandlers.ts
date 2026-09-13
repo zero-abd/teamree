@@ -91,6 +91,24 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   publishTerminalEvents(registry, terminals, workspaceEvents)
 
   const git = new GitService({ store: registry.context.store })
+  // A worktree removed takes its panes with it, and nothing else does this: a
+  // terminal record is dropped only by an explicit close, so without this the
+  // agents that were running in the checkout keep running — in a directory
+  // that is gone, invisible to the sidebar and the dashboard alike, and still
+  // counted by the status bar.
+  git.events.on((event) => {
+    if (event.type !== 'worktree.removed') return
+    void closeWorktreeTerminals(terminals, event.worktreeId)
+      .then(() => {
+        // Closing the last pane saves the worktree's layout, which would put
+        // back the record the removal just deleted.
+        registry.context.store.removeLayout(event.worktreeId)
+        // The list every client holds is shorter now, and the panes that left
+        // it were not closed by any call of theirs.
+        workspaceEvents.emit({ type: 'terminals' })
+      })
+      .catch((error: unknown) => console.error('[terminals]', error))
+  })
   // A create interrupted by a quit can never resume, so it is marked failed and
   // offered as a retry rather than left stuck in `creating`.
   git.reviveRestoredRecords()
@@ -166,6 +184,12 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
       },
       dataDir,
       subscriptions: registry.context.subscriptions,
+      // The owner's mutes, kept beside the terminal records they are about, so
+      // a pane restored under the id it had comes back as muted as it was left.
+      mutes: {
+        list: () => registry.context.store.listMutedTerminals(),
+        set: (terminalId, muted) => registry.context.store.setTerminalMuted(terminalId, muted)
+      },
       onChange: () => workspaceEvents.emit({ type: 'teammates' }),
       // Nothing a peer does should be able to fail quietly here. A snapshot
       // refused, a watch that could not be started: none of them stop the app,
@@ -196,4 +220,24 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   })
 
   return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers }
+}
+
+/**
+ * Closes every pane of a worktree that has just been removed.
+ *
+ * The checkout is already gone by the time the event arrives, so nothing here
+ * may depend on the directory: closing kills a process tree by pid, drops a
+ * record by id and ends the streams, none of which needs a cwd. One at a time,
+ * because each close reads and rewrites the same worktree's layout. And each
+ * one on its own: a pane that will not die must not be the reason the rest of
+ * them stay alive, so a failure is reported and the next pane is closed anyway.
+ */
+async function closeWorktreeTerminals(terminals: TerminalService, worktreeId: string): Promise<void> {
+  for (const terminal of terminals.manager.list(worktreeId)) {
+    try {
+      await terminals.manager.close(terminal.id)
+    } catch (error) {
+      console.error(`[terminals] could not close ${terminal.id} of removed worktree ${worktreeId}`, error)
+    }
+  }
 }

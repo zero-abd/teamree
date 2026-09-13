@@ -340,3 +340,16 @@ it('keeps the refusal of an install that was refused, across the re-read it does
   expect(useWorkspaceStore.getState().cliError).toBe(refused)
   expect(useWorkspaceStore.getState().cliPending).toBe(false)
 })
+
+// The other outcome that belongs to the attempt that earned it. A link made in
+// March and broken in April leaves a panel that opens saying the CLI is not on
+// your PATH and, three lines down, that it now points at this app.
+it('does not repeat a CLI success line to somebody who reopens the panel', async () => {
+  await useWorkspaceStore.getState().installCli()
+  expect(useWorkspaceStore.getState().cliInstall).not.toBeNull()
+
+  await useWorkspaceStore.getState().loadCli()
+
+  expect(useWorkspaceStore.getState().cliInstall).toBeNull()
+  expect(useWorkspaceStore.getState().cli).not.toBeNull()
+})

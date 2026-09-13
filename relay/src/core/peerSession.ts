@@ -154,20 +154,60 @@ export class PeerSession implements Peer {
 
   onText(text: string): void {
     if (this.state === 'closed') return
-    this.lastHeardAt = this.host.clock.now()
-    if (this.state !== 'greeting') {
-      if (text === PING_FRAME) {
-        this.socket.sendText(PONG_FRAME)
-        return
-      }
-      // Otherwise: control is text and content is binary, in both directions and
-      // with no exceptions. A peer sending anything else here is either a
-      // different protocol or a confused one, and guessing which is not the
-      // relay's job.
-      this.close(CloseCode.Protocol, 'text frame after hello')
+    const now = this.host.clock.now()
+    this.lastHeardAt = now
+
+    // The hello is the one frame that is not charged, and it is safe not to
+    // charge because there can only ever be one: `onHello` either closes this
+    // connection or moves it out of `greeting`, so no second frame is ever read
+    // in this state. Everything after it is charged like content.
+    if (this.state === 'greeting') {
+      this.onHello(text)
       return
     }
-    this.onHello(text)
+
+    // A frame is a frame. Control frames cost the relay the same event loop that
+    // content frames cost it, and one that nothing charges for is one a single
+    // connection can send several hundred thousand times a second — so the
+    // budget is taken here, before the frame is looked at, exactly as in
+    // `onBinary`. The frame token goes first because it is the O(1) one: an
+    // oversized frame should not buy a scan of itself from a peer that is
+    // already over its budget.
+    if (!this.frameBudget.take(1, now)) {
+      this.close(CloseCode.RateLimited, 'over the per-connection frame or byte budget')
+      return
+    }
+    const bytes = utf8Length(text)
+    if (bytes > this.host.config.maxFrameBytes) {
+      this.close(CloseCode.TooLarge, 'frame over the size cap')
+      return
+    }
+    if (!this.byteBudget.take(bytes, now)) {
+      this.close(CloseCode.RateLimited, 'over the per-connection frame or byte budget')
+      return
+    }
+
+    if (text === PING_FRAME) {
+      // The pong is the relay's own write, so the same rule that governs a
+      // spliced frame governs it: past the buffer bound the relay does not
+      // queue. `onBinary` measures the partner because the partner is who the
+      // write is for; here the write is for this peer, and a peer that is not
+      // reading its own pongs is the one case nothing else measures at all —
+      // a connection with no partner is never looked at otherwise.
+      if (this.socket.backlog() > this.host.config.maxBufferedBytes) {
+        this.host.log.warn('peer.slow', { conn: this.id, pair: this.pairRef ?? undefined })
+        this.close(CloseCode.SlowConsumer, 'not reading fast enough to stay spliced')
+        return
+      }
+      this.socket.sendText(PONG_FRAME)
+      return
+    }
+
+    // Otherwise: control is text and content is binary, in both directions and
+    // with no exceptions. A peer sending anything else here is either a
+    // different protocol or a confused one, and guessing which is not the
+    // relay's job.
+    this.close(CloseCode.Protocol, 'text frame after hello')
   }
 
   onBinary(payload: Uint8Array): void {
@@ -201,7 +241,15 @@ export class PeerSession implements Peer {
 
     const partner = this.host.rendezvous.partnerOf(this)
     if (partner === undefined) {
-      this.close(CloseCode.Protocol, 'no partner for a paired connection')
+      // This connection says it is paired and the relay's own table does not
+      // agree. That is the relay having lost state — a host rebuilds this table
+      // from what is attached to each socket, and a socket it could not read for
+      // one event is a socket the pairing was rebuilt without. The peer did
+      // nothing wrong and has nothing to fix, so it is told the same thing any
+      // other lost session is told: go away and come back. A protocol complaint
+      // here reads to a client as its own bug and stops it retrying at all.
+      this.host.log.warn('session.lost', { conn: this.id, pair: this.pairRef ?? undefined })
+      this.close(CloseCode.GoingAway, 'the relay lost this session; reconnect')
       return
     }
 
@@ -385,4 +433,23 @@ export class PeerSession implements Peer {
     if (this.token === null) return
     this.host.rendezvous.leave(this.token, this)
   }
+}
+
+/**
+ * What a text frame costs in bytes on the wire, without allocating a copy of it
+ * to find out. Frames arrive already validated as UTF-8 by whatever parsed them,
+ * so a high surrogate here is always the first half of a pair.
+ */
+function utf8Length(text: string): number {
+  let bytes = 0
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index)
+    if (code < 0x80) bytes += 1
+    else if (code < 0x800) bytes += 2
+    else if (code >= 0xd800 && code <= 0xdbff) {
+      bytes += 4
+      index += 1
+    } else bytes += 3
+  }
+  return bytes
 }

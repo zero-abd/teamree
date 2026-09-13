@@ -73,10 +73,27 @@ export function administratorScript(command: string): string {
 /** Runs a command as an administrator, or says why it did not. */
 export type AdministratorRunner = (command: string) => Promise<void>
 
-export function createAdministratorRunner(): AdministratorRunner {
+/**
+ * The one call this module makes out of the process, named so that a test can
+ * stand in for it without a Mac.
+ *
+ * `osascript` exists on exactly one operating system, and two of the three
+ * things this function does can be proved on any: that the script crosses as a
+ * single argv entry rather than through a shell, and that what a finished
+ * process hands back is read the way it is. The third — that the dialog
+ * appears, and that Cancel is what makes osascript exit with -128 — needs the
+ * Mac, and no seam here can stand in for it.
+ */
+export type ExecFile = (
+  file: string,
+  args: readonly string[],
+  callback: (error: Error | null, stdout: string, stderr: string) => void
+) => void
+
+export function createAdministratorRunner(exec: ExecFile = execFile): AdministratorRunner {
   return (command) =>
     new Promise<void>((resolve, reject) => {
-      execFile('/usr/bin/osascript', ['-e', administratorScript(command)], (error, _stdout, stderr) => {
+      exec('/usr/bin/osascript', ['-e', administratorScript(command)], (error, _stdout, stderr) => {
         if (error === null) {
           resolve()
           return

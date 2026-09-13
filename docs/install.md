@@ -138,8 +138,11 @@ work. `ROADMAP.md` keeps the honest account of what has and has not been run.
 
 Nothing publishes these packages today either, and the same applies: the
 section describes the configured packaging, and building from source is the way
-to run teamree on Linux now. Unlike Windows, this packaging has been built and
-launched for real in CI.
+to run teamree on Linux now. Unlike Windows, this packaging was built and
+launched for real in CI before the matrix was narrowed to macOS — which is
+something, but it is a past tense: nothing builds it on any schedule now, and
+the version numbers below are what the configuration would name rather than
+files anyone can point at.
 
 Nothing warns you about anything here; neither of the mechanisms above exists.
 
@@ -147,7 +150,7 @@ On Debian and Ubuntu, install the `.deb` through `apt` rather than `dpkg`, so
 that its dependencies come with it:
 
 ```sh
-sudo apt install ./teamree_0.0.1_amd64.deb
+sudo apt install ./teamree_0.1.0_amd64.deb
 ```
 
 It lands in `/opt/teamree` and adds a desktop entry, so it appears in the
@@ -158,8 +161,8 @@ The AppImage is the option for everything else. It is a single file that needs
 no installation and no root:
 
 ```sh
-chmod +x teamree-0.0.1-x86_64.AppImage
-./teamree-0.0.1-x86_64.AppImage
+chmod +x teamree-0.1.0-x86_64.AppImage
+./teamree-0.1.0-x86_64.AppImage
 ```
 
 If it exits immediately complaining about `libfuse.so.2`, that is the one
@@ -169,15 +172,16 @@ default. Either install it — `sudo apt install libfuse2` — or skip the mount
 entirely:
 
 ```sh
-./teamree-0.0.1-x86_64.AppImage --appimage-extract-and-run
+./teamree-0.1.0-x86_64.AppImage --appimage-extract-and-run
 ```
 
 ## Putting the `teamree` CLI on PATH
 
-The app ships its own CLI, under `resources/cli/`, and everything the window can
-do the CLI can do — which is how a coding agent drives teamree. It runs under
-the app's own Electron binary in plain-Node mode, so an installed app needs no
-separate Node runtime.
+The app ships its own CLI, under `resources/cli/`. It drives the same runtime
+the window does — projects, worktrees, terminals and the agents on your PATH,
+which is the surface a coding agent needs — while teamwork stays the window's
+alone. It runs under the app's own Electron binary in plain-Node mode, so an
+installed app needs no separate Node runtime.
 
 **On macOS it is a button.** The first time you open an installed build whose
 `teamree` command is not this app's — absent, or a link to another copy — the app
@@ -188,24 +192,29 @@ sidebar offers **Put teamree on my PATH** while the command is not linked to thi
 build, and the command palette finds it by name at any time.
 
 It stays quiet where a question would be useless: a link that already points
-here, a build with no CLI in it, a source checkout, and a regular file or a
-directory sitting at the destination — that last one is a thing to explain rather
-than an offer to make, and the sidebar still carries you to the panel that
-explains it.
+here, a build with no CLI in it, a source checkout, a copy still running from the
+disk image it arrived in, and a regular file or a directory sitting at the
+destination — that last one is a thing to explain rather than an offer to make,
+and the sidebar still carries you to the panel that explains it.
 
 It says what it will do before you press anything: link
 `/usr/local/bin/teamree` to the CLI inside this app. That is where a Mac
 developer expects a command to be and it is already on the PATH every login
 shell is built with, so there is nothing to choose.
 
-macOS asks for your administrator password only if `/usr/local/bin` cannot be
-written without one — on a Mac with Homebrew it usually can, and then nothing
-asks you anything. When it does ask, the dialog is the system's own: the
+macOS asks for your administrator password if `/usr/local/bin` cannot be
+written without one, and on a Mac bought in the last few years it cannot.
+Homebrew took ownership of `/usr/local` on Intel Macs, which is where the
+opposite idea comes from; on Apple Silicon it installs to `/opt/homebrew` and
+leaves `/usr/local/bin` as `root:wheel`, so being asked is the ordinary case
+rather than the exception. When it asks, the dialog is the system's own: the
 password goes to macOS and never to teamree. The panel says which of the two is
 about to happen before the button is pressed, and says what actually happened
-afterwards, having resolved the link to check.
+afterwards, having resolved the link to check — including what "your shell will
+find it" was checked against, since this app can read `/etc/paths` and its own
+environment and neither of those is your shell profile.
 
-Three things it will not do, each of them said rather than hidden:
+Four things it will not do, each of them said rather than hidden:
 
 - A **regular file** at `/usr/local/bin/teamree` is left exactly where it is and
   named. It is somebody's program, quite possibly yours.
@@ -213,9 +222,17 @@ Three things it will not do, each of them said rather than hidden:
   `~/Downloads`, say — is named too, because it is the one failure nobody
   diagnoses unaided: `teamree` runs, and it drives the other app, so nothing you
   do in this window ever seems to reach it. Pressing the button points the link
-  here instead and leaves that copy alone.
+  here instead and leaves that copy alone. If that copy has since been deleted or
+  ejected the panel says the other thing, because it is a different failure: the
+  link leads nowhere and `teamree` runs nothing at all.
 - A link that already points at this app is success, not an error. The button is
   safe to press twice, and says so rather than inventing work.
+- A copy of teamree **running from the disk image**, or from the read-only copy
+  macOS runs instead when an app is opened outside `/Applications`, is not linked
+  at all — no password is asked for and nothing is written. Both of them work
+  perfectly until they do not: the link would be made, read back, and reported as
+  done, and it would lead nowhere the moment you ejected. Drag teamree to
+  Applications, open it from there, and press it again.
 
 Running from a source checkout, nothing offers itself: a link into a checkout
 breaks the moment that checkout moves, and a question asked on every `npm run
@@ -307,6 +324,15 @@ agent inside it if you have one installed. teamree looks for agents on your
 and makes the worktree on its own, which is still useful, and you can open a
 terminal in it and type.
 
+All of that is teamree on its own. The other half — the reason it exists — is
+teamwork: a teammate's worktrees and panes in your sidebar, theirs to watch live
+and to type into, over a relay your team stands up itself.
+**[`docs/trying-teamwork.md`](trying-teamwork.md)** is the walkthrough, and it is
+honest about the price of entry: two Macs, a relay somebody on the team hosts
+(there is no default and nobody hosts one for you), and each person's public key
+committed to a repository you can all push to — which is what lets them run
+commands on your machine, deliberately.
+
 ## Uninstalling
 
 Removing the app never removes your data, which is deliberate — a worktree is
@@ -323,3 +349,16 @@ whatever directory you chose and are untouched by any of this.
 That settings directory holds the list of projects, the worktrees teamree knows
 about and your pane layouts. Deleting it makes the next launch look like a first
 one; it does not touch a repository.
+
+One thing no column above covers, because it is not the app and it is not the
+app's settings: if you ever put the `teamree` command on your PATH — the card on
+first run, the sidebar button, or the `ln -s` above typed by hand — that is a
+symlink, and deleting the app leaves it behind pointing at nothing. Nothing
+removes it for you:
+
+```sh
+sudo rm /usr/local/bin/teamree
+```
+
+If you never took that offer there is no such file and nothing to do.
+`ls -l /usr/local/bin/teamree` says which of the two you are in.

@@ -94,6 +94,16 @@ export type StartTeamworkInput = {
 }
 
 /**
+ * The label on the button that writes this machine's key into the repository.
+ *
+ * A constant because the sidebar names it from a long way away: the header's
+ * "Your key is not here" tooltip tells somebody which button to press, and a
+ * tooltip naming a button that has since been renamed is the failure this
+ * whole file exists to avoid being on the other end of.
+ */
+export const ADD_KEY_BUTTON = 'Add my key'
+
+/**
  * What adding a key to `.teamree/members/` actually grants, said before the
  * button that adds one and not in a footnote.
  *
@@ -119,11 +129,19 @@ export const KEY_GRANT_WARNING = {
   close: 'Add the keys of people you would hand an unlocked laptop to, because that is what you are doing.'
 } as const
 
-/** The one line about who chooses a relay, for whoever has not got one. */
+/**
+ * Who chooses a relay, and where the commands below are run.
+ *
+ * All four options start `cd relay`, and `relay/` is in a checkout of teamree
+ * rather than in the project being worked on — an app installed from the `.dmg`
+ * has no such directory at all. Said once here rather than four times in the
+ * commands, which is where the options would otherwise stop being copyable.
+ */
 export const RELAY_LEAD =
   'If somebody on your team has already stood a relay up, you do not choose: git pull, and it arrives in ' +
   '.teamree/relay. This list is for whoever is standing one up. teamree never starts a relay itself — it dials ' +
-  'a URL, and standing one up happens in a terminal.'
+  'a URL, and standing one up happens in a terminal. Every option below starts in a clone of the teamree ' +
+  'repository, because that is where relay/ is: an app installed from the .dmg does not have that directory.'
 
 /**
  * Where the resulting URL belongs, which is the part of this decision that is
@@ -241,15 +259,37 @@ export type PushPlan = {
  * Two runbook steps told people to commit and push these separately. They are
  * one commit, and saying so here is the difference between a person doing it
  * and a person doing half of it.
+ *
+ * It also says where they run. teamree opens terminals inside worktrees and
+ * `.teamree` is in the primary checkout, so the obvious way to run these —
+ * paste them into the pane the panel just helped make — stages nothing and
+ * blames git for it. The `cd` is the first line of the same block the commands
+ * are in, so whatever is selected to copy them takes it too.
  */
-export function pushPlan(list: MemberList | undefined, relay: RelaySetting | undefined): PushPlan | null {
+export function pushPlan(
+  list: MemberList | undefined,
+  relay: RelaySetting | undefined,
+  projectPath: string | undefined
+): PushPlan | null {
   const mine = list?.enrolled ? (selfFileOf(list) ?? null) : null
-  const theirs = relay?.committed.url ? relay.file : null
+  const theirs = relay?.onDisk.url ? relay.file : null
   const files = [mine, theirs].filter((file): file is string => file !== null)
   if (files.length === 0) return null
 
   const message = mine === null ? 'Meet on our relay' : theirs === null ? 'Add my key to the team' : 'Set up teamwork'
-  return { files, commands: `git add .teamree\ngit commit -m "${message}"\ngit push` }
+  const cd = projectPath === undefined ? '' : `cd ${shellPath(projectPath)}\n`
+  return { files, commands: `${cd}git add .teamree\ngit commit -m "${message}"\ngit push` }
+}
+
+/**
+ * A path a shell will take as one word, quoted only when it has to be.
+ *
+ * `~/My Projects/thing` is an ordinary place to keep a checkout on a Mac, and
+ * an unquoted `cd` on it fails in a way that reads as the panel being wrong
+ * about where the files are.
+ */
+function shellPath(path: string): string {
+  return /^[\w./@%+:,-]+$/.test(path) ? path : `'${path.replaceAll("'", String.raw`'\''`)}'`
 }
 
 export type RelayDraftCheck =
@@ -384,12 +424,15 @@ function relayStep({ relay, failedReads }: StartTeamworkInput): StartTeamworkSte
     }
     return { id: 'relay', title, mark: 'todo', summary: 'Reading where this project’s relay is recorded…' }
   }
-  if (relay.committed.url !== null) {
+  if (relay.onDisk.url !== null) {
+    // What is read is the file in the working tree, so this says the same thing
+    // step 2 says about the key. "Everyone who pulls it meets there" described
+    // a push that had not happened and that this panel cannot see.
     return {
       id: 'relay',
       title,
       mark: 'done',
-      summary: `${relay.file} names ${relay.committed.url}. Everyone who pulls it meets there.`
+      summary: `${relay.file} in this checkout names ${relay.onDisk.url}. Step 4 is what makes it the team’s.`
     }
   }
   if (relay.source === 'environment' && relay.url !== null) {
@@ -411,13 +454,16 @@ function relayStep({ relay, failedReads }: StartTeamworkInput): StartTeamworkSte
     id: 'relay',
     title,
     mark: 'todo',
-    summary: sentence(relay.committed.problem ?? `${relay.file} does not name a relay`)
+    summary: sentence(relay.onDisk.problem ?? `${relay.file} does not name a relay`)
   }
 }
 
 function pushStep(input: StartTeamworkInput): StartTeamworkStep {
   const title = 'Commit and push'
-  const plan = pushPlan(input.list, input.relay)
+  // No path: this reads the plan for the files it names, and the commands with
+  // the `cd` in them are rendered beside the summary, by the panel that knows
+  // where the checkout is.
+  const plan = pushPlan(input.list, input.relay, undefined)
   if (plan === null) {
     return { id: 'push', title, mark: 'todo', summary: 'Nothing to commit yet — the steps above write the files.' }
   }
@@ -517,8 +563,10 @@ function connectedStep(input: StartTeamworkInput): StartTeamworkStep {
       title,
       mark: 'todo',
       summary:
-        `Somebody answered on ${namesOf(refused)}’s rendezvous and did not authenticate against the key in this ` +
-        'repository. This is the one here worth reading in full.'
+        `The handshake with ${namesOf(refused)} did not complete. Which end it failed on is not established ` +
+        'here: either roster could be the stale one, and a failure raised inside this machine before anything ' +
+        'was sent looks the same from this side. The reason under that link is this machine’s own, not a ' +
+        'report from theirs.'
     }
   }
   const unreachable = status.links.filter((link) => link.phase === 'unreachable')

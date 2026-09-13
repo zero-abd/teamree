@@ -14,7 +14,8 @@
 //
 // Only meaningful on macOS, where quarantine and Gatekeeper exist at all.
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+import { findPackagedApp } from './packaged-app.mjs'
 
 const DOC = 'docs/install.md'
 // What the document tells the reader to install into, and therefore what the
@@ -91,7 +92,18 @@ function agreesWithReleaseNotes(documented) {
     .split('\n')
     .filter((line) => line.includes('com.apple.quarantine'))
     .map((line) => line.trim())
-  if (mentions.length === 0) return
+  // Not a `return`. The notes losing the command is not the absence of a
+  // disagreement, it is the rot this check exists to catch: a download page
+  // that stops telling somebody how to get past Gatekeeper, while the check
+  // that is supposed to keep the two copies in step goes green because it can
+  // no longer find one of them. `documentedCommand()` fails loudly for the same
+  // case in the other file, and the two should read the same way.
+  if (mentions.length === 0) {
+    fail(
+      `${notes} no longer prints a quarantine command.`,
+      `${DOC} still gives one, and the release notes are where somebody standing at the download page reads it:\n${documented}`
+    )
+  }
   const disagreeing = mentions.filter((line) => !line.includes(documented))
   if (disagreeing.length > 0) {
     fail(
@@ -116,10 +128,13 @@ if (process.platform !== 'darwin') {
 
 // -------------------------------------------------------------- the bundle --
 
-const built = ['dist/mac-arm64/teamree.app', 'dist/mac/teamree.app', 'dist/mac-universal/teamree.app'].find(
-  (candidate) => existsSync(candidate)
-)
+// Newest first, not a fixed order — see scripts/packaged-app.mjs. Picking a
+// stale single-architecture build here would install it at /Applications and
+// report that the instructions work, having tested them against an app nobody
+// is going to download.
+const built = findPackagedApp()
 if (!built) fail('no packaged macOS app found. Run `npm run package:mac` first.')
+ok(`checking against ${built}`)
 
 // ---------------------------------------------------------- the quarantine --
 

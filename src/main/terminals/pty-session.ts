@@ -14,6 +14,7 @@ import { ScrollbackBuffer } from './scrollback'
 import {
   buildShellCommand,
   buildTerminalEnv,
+  loginShellPath,
   shellCannotRun,
   SHELL_UNRUNNABLE,
   TERMINAL_TYPE,
@@ -62,6 +63,22 @@ const EXIT_DRAIN_MAX_MS = 500
  * while you watch it.
  */
 export const QUIET_AFTER_MS = 4_000
+
+/**
+ * What a pane keeps once it has exited.
+ *
+ * A dead pty appends nothing more, so the whole of an exited pane's buffer is
+ * memory held against whoever reads it next — and those readers are real: the
+ * renderer repaints a pane from `terminal.read` every time its view remounts,
+ * the sidebar reads the last few KB once more after the exit, `teamree
+ * terminal read` answers out of it, and a teammate joining a watch takes its
+ * snapshot from it. So it is trimmed rather than freed. Every one of them wants
+ * the tail; the head of a finished command is what nobody comes back for.
+ *
+ * Sixteen times smaller than a live pane's cap, which is the difference between
+ * a day of command panes costing tens of megabytes and costing a few.
+ */
+export const EXITED_RETENTION_BYTES = 256 * 1024
 
 export type PtySessionInit = {
   id: string
@@ -148,7 +165,10 @@ export class PtySession {
   static start(init: PtySessionInit): PtySession {
     const platform = init.platform ?? process.platform
     const { file, args } = buildShellCommand(init.shell, init.command, platform)
-    const env = buildTerminalEnv(init.env, platform)
+    // The login shell's PATH rather than this process's: a pane opened from a
+    // desktop launch would otherwise start from the PATH launchd handed the
+    // app, which is not the one the user installed anything on.
+    const env = buildTerminalEnv(init.env, platform, loginShellPath({ platform }))
 
     // The two platforms answer "that shell is not there" in different places.
     // Windows refuses in spawn() below. POSIX does not refuse at all: the fork
@@ -186,6 +206,10 @@ export class PtySession {
       cols: this.cols,
       rows: this.rows,
       running: this.running,
+      // Said out loud rather than left to be inferred from `running`, which is
+      // deliberately still true here: `write` already throws, so a reader that
+      // only had `running` would offer a pane that cannot take anything.
+      ...(this.draining === undefined ? {} : { draining: true }),
       ...(this.exitCode === undefined ? {} : { exitCode: this.exitCode }),
       ...(this.restored === undefined ? {} : { restored: this.restored }),
       ...(this.agent === undefined ? {} : { agent: this.agent }),
@@ -371,6 +395,10 @@ export class PtySession {
     this.emit({ type: 'exit', exitCode: this.exitCode })
     for (const waiter of this.exitWaiters) waiter()
     this.exitWaiters.clear()
+    // Last, so every subscriber has had the exit and whatever it read on the
+    // back of it out of the whole buffer. From here nothing is appended again,
+    // so what is kept is only what a later reader can ask for.
+    this.scrollback.restrictTo(EXITED_RETENTION_BYTES)
   }
 
   private emit(event: TerminalEvent): void {

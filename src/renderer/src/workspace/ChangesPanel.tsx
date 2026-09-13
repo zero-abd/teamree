@@ -50,9 +50,16 @@ export function ChangesPanel(): React.JSX.Element | null {
   const commitStaged = useWorkspaceStore((state) => state.commitStaged)
   const committing = useWorkspaceStore((state) => state.committing)
   const log = useWorkspaceStore((state) => (worktreeId ? state.logs[worktreeId] : undefined))
-  const [message, setMessage] = useState('')
+  // Kept per worktree, because this panel is never remounted when the tabs
+  // change under it. A message typed for one worktree, still in the box over
+  // another one's diff, is a sentence about work that is not there — and the
+  // commit button beside it will happily put it on the change that is.
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const message = draftFor(drafts, worktreeId)
 
   if (!open || !worktreeId) return null
+
+  const setMessage = (next: string): void => setDrafts((current) => withDraft(current, worktreeId, next))
 
   const rows = changes?.changes ?? []
   const ticked = new Set(stagedPaths)
@@ -207,6 +214,27 @@ export function ChangesPanel(): React.JSX.Element | null {
       )}
     </aside>
   )
+}
+
+/**
+ * The commit message for one worktree, which is the only worktree it is about.
+ *
+ * Held rather than cleared on the way out. The panel already refuses to empty
+ * the box when a commit is refused, for the reason that a message is the one
+ * thing on this screen the app cannot reconstruct; going to look at another
+ * worktree's diff is a weaker reason to throw it away than a failed commit, so
+ * it is not one either.
+ */
+export function draftFor(drafts: Record<string, string>, worktreeId: string | null): string {
+  return worktreeId === null ? '' : (drafts[worktreeId] ?? '')
+}
+
+/** The same map with one worktree's message replaced; emptying it drops it. */
+export function withDraft(drafts: Record<string, string>, worktreeId: string, message: string): Record<string, string> {
+  const next = { ...drafts }
+  if (message === '') delete next[worktreeId]
+  else next[worktreeId] = message
+  return next
 }
 
 /**

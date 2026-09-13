@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Project, Worktree } from '../../shared/entities'
+import type { TerminalRecord } from '../terminals/session-restore'
 import { describeStoreProblem, WorkspaceStore, type StoreProblem } from './workspaceStore'
 
 const project: Project = { id: 'p1', name: 'teamree', path: '/repos/teamree', baseRef: 'origin/main' }
@@ -242,6 +243,62 @@ describe('workspace store', () => {
 
       await writeFile(path, JSON.stringify({ version: 1, asked: { installCli: 'yesterday' } }), 'utf8')
       expect((await WorkspaceStore.open(path)).askedAt('installCli')).toBeUndefined()
+    })
+  })
+
+  describe('muted panes', () => {
+    const terminal = (id: string): TerminalRecord => ({
+      id,
+      worktreeId: 'w1',
+      cwd: '/repos/teamree',
+      shell: '/bin/bash',
+      cols: 80,
+      rows: 24,
+      createdAt: 1700000000000
+    })
+
+    it('mutes nothing on a fresh installation', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      expect(store.listMutedTerminals()).toEqual([])
+    })
+
+    it('keeps a mute across a restart, because the pane comes back under its id', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(terminal('t1'))
+      store.setTerminalMuted('t1', true)
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(filePath)
+      expect(reopened.listMutedTerminals()).toEqual(['t1'])
+    })
+
+    it('drops the mute with the record it was about, so nothing has to be swept', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(terminal('t1'))
+      store.setTerminalMuted('t1', true)
+      store.removeTerminal('t1')
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(filePath)
+      expect(reopened.listMutedTerminals()).toEqual([])
+    })
+
+    it('lifts a mute the owner lifts', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.setTerminalMuted('t1', true)
+      store.setTerminalMuted('t1', false)
+      await store.flush()
+
+      expect((await WorkspaceStore.open(filePath)).listMutedTerminals()).toEqual([])
+    })
+
+    it('survives a file that has never heard of mutes, and one that has them wrong', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(path, JSON.stringify({ version: 1, projects: [project] }), 'utf8')
+      expect((await WorkspaceStore.open(path)).listMutedTerminals()).toEqual([])
+
+      await writeFile(path, JSON.stringify({ version: 1, mutedTerminals: ['t1', 7, '', null] }), 'utf8')
+      expect((await WorkspaceStore.open(path)).listMutedTerminals()).toEqual(['t1'])
     })
   })
 })

@@ -138,8 +138,13 @@ async function readStatus(
   worktreePath: string,
   signal?: AbortSignal
 ): Promise<ReturnType<typeof parseChangeRecords>> {
+  // `--untracked-files=normal` is pinned, never left to the repository's own
+  // `status.showUntrackedFiles`. People set that to `no` in ~/.gitconfig to
+  // make status usable on a large repository, where it then covers every
+  // repository they own — and this read would answer "nothing untracked" for
+  // a checkout whose own status chip, which pins the flag, says otherwise.
   const { stdout } = await runner.run({
-    args: ['status', '--porcelain=v2', '-z'],
+    args: ['status', '--porcelain=v2', '-z', '--untracked-files=normal'],
     cwd: worktreePath,
     readOnly: true,
     ...(signal ? { signal } : {}),

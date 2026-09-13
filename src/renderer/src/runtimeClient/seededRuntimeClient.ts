@@ -416,7 +416,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
         url === null
           ? 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
           : null,
-      committed: { url, problem: null },
+      onDisk: { url, problem: null },
       override: { name: 'TEAMREE_RELAY_URL', value: null },
       readAt: Date.now()
     }
@@ -437,10 +437,14 @@ export function createSeededRuntimeClient(): RuntimeClient {
     source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
     packaged: true,
     bundle: '/Applications/teamree.app/Contents/Resources/cli/teamree.mjs',
+    // In /Applications rather than in the disk image it arrived in, which is
+    // the one state where the panel has a button to demonstrate at all.
+    impermanent: null,
     destination: '/usr/local/bin/teamree',
     directory: '/usr/local/bin',
     state: cliLinked ? 'linked' : 'absent',
     resolved: cliLinked ? '/Applications/teamree.app/Contents/Resources/cli/teamree' : null,
+    dangling: false,
     needsAdministrator: !cliLinked,
     onPath: 'login',
     askedAt: cliAskedAt,

@@ -55,15 +55,34 @@ files:
   # stopped on `prebuilds/win32-arm64/conpty.node` — a Windows binary, in a
   # macOS build, that the packager had been told about and then had taken away.
   #
-  # Here rather than under `mac.files`, which looks like the precise way to say
-  # it and is not: a platform-specific `files` replaces this list instead of
-  # adding to it, and the package went from 263 MB to 1.4 GB carrying 2421 test
-  # files. Measured, after reading the merge code and concluding the opposite.
+  # Here, and not under `mac.files`. A `files` list under a platform block is a
+  # trap on electron-builder 26.15.3, and this is what it actually does, built
+  # and measured rather than read:
   #
-  # The cost of saying it globally is that a Windows build would now package no
-  # Windows PTY. It fails loudly when that happens — afterPack checks for the
-  # binary by name and says which platform it is missing — and nobody builds
-  # Windows today. Reviving it means deleting these two lines.
+  # `doMergeConfigs` runs `normalizeFiles` over the *top-level* `files` and
+  # nothing else, which folds this list of strings into one file set —
+  # `[{filter: [...]}]`. A platform block's `files` is left as plain strings.
+  # `getFileMatchers` then sorts the two by shape: a file set becomes a matcher
+  # of its own, plain strings go into the default matcher, and the default
+  # matcher is put first. So adding `mac.files` does not replace this list and
+  # does not add to it either — it inserts a second, *primary* matcher carrying
+  # only the platform patterns. Those are all exclusions, so electron-builder
+  # sees a matcher that contains only ignores and prepends `**/*` to it, and
+  # that matcher copies the entire project directory. Both matchers run, so
+  # everything this list selects is still packaged, with the whole checkout
+  # alongside it.
+  #
+  # Measured here with two `--dir` builds of the same tree: adding a two-line
+  # `mac.files` put README.md, ROADMAP.md, docs/, examples/, relay/ and src/
+  # into the asar, which is the shape of the 263 MB → 1.4 GB blow-up an earlier
+  # note in this file recorded. electron-builder's own dist/builder-debug.yml
+  # shows it plainly — `firstOrDefaultFilePatterns` loses every pattern below
+  # and gains `**/*`.
+  #
+  # So these stay global, and the cost of that is real: a Windows build now
+  # packages no Windows PTY. It fails loudly when that happens — afterPack checks
+  # for the binary by name and says which platform it is missing — and nobody
+  # builds Windows today. Reviving it means deleting these two lines.
   - '!node_modules/node-pty/prebuilds/{win32-*,linux-*}'
   - '!node_modules/node-pty/prebuilds/{win32-*,linux-*}/**'
 
@@ -132,24 +151,26 @@ mac:
   # framework, the helpers — is still lipo'd into one binary as it should be.
   x64ArchFiles: '**/node-pty/prebuilds/**'
 
-  # Keep the other platforms' prebuilds out of the package entirely, rather than
-  # deleting them afterwards.
+  # A compiled node-pty would stop the universal merge dead, and there is
+  # deliberately no `mac.files` here excluding it. Recorded rather than fixed,
+  # because both places it could be written are worse than the hazard.
   #
-  # These are merged with the top-level `files`, not a replacement for them.
+  # `npm install` compiles node-pty into `build/Release/pty.node` wherever there
+  # is no prebuild for the host. macOS has prebuilds for both architectures, so
+  # a Mac normally has no such file and this has never bitten. A Mac that ended
+  # up with one — node-gyp run by hand, or node-pty bumped to a version with no
+  # darwin prebuild — would package a single-architecture Mach-O that is
+  # byte-identical in both slices and that `x64ArchFiles` above does not match,
+  # and `@electron/universal` would refuse the merge with "Detected file ... not
+  # covered by the x64ArchFiles rule" at the end of a long build.
   #
-  # scripts/afterpack.mjs prunes foreign prebuilds too, and has to, because it is
-  # the only place that knows the target for a Windows or Linux build. But it
-  # runs *after* the asar is written, so what it deletes stays listed in the
-  # archive's header as an unpacked file that is no longer on disk. For a
-  # single-architecture build nothing ever looks, so that has been harmless and
-  # invisible. The universal merge enumerates every unpacked entry, and stopped
-  # dead on `prebuilds/win32-arm64/conpty.node` — a Windows binary, in a macOS
-  # build, that the packager had been told about and then had taken away.
-  #
-  # Excluding them here means they are never in the header to begin with.
-  # Windows and Linux keep the hook's pruning and keep the latent dangling
-  # entry; neither is built today, and the fix for them is another two lines
-  # like these rather than a rewrite.
+  # Excluding it in the top-level `files` would take the Linux artifact's only
+  # PTY away: node-pty publishes no Linux prebuild and `build/Release` is all it
+  # has. Excluding it in a `mac.files` would package the whole checkout, for the
+  # reason written against the top-level list. The place this belongs is
+  # scripts/afterpack.mjs, which already prunes prebuilds, knows the platform it
+  # is packing for, and runs on each architecture *before* the merge.
+
   # Ad-hoc signature. Apple Silicon refuses to launch a Mach-O binary with no
   # signature at all, and electron-builder invalidates the one Electron ships as
   # soon as it rewrites the bundle — so an unsigned build still has to be
@@ -172,6 +193,21 @@ mac:
   notarize: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+
+  # Electron's stock Info.plist asks for the camera, the microphone and
+  # Bluetooth, with its own placeholder wording — "This app needs access to the
+  # camera" — in an application that is a terminal. The strings are not inert:
+  # macOS shows that sentence in the consent dialog, and an app that asks for a
+  # camera it has no code to use is one somebody is right to be suspicious of.
+  #
+  # Deleted rather than reworded. electron-builder drops any key whose value is
+  # null instead of writing it empty, which is the difference between the plist
+  # not carrying the key and it carrying a blank reason.
+  extendInfo:
+    NSCameraUsageDescription: null
+    NSMicrophoneUsageDescription: null
+    NSBluetoothAlwaysUsageDescription: null
+    NSBluetoothPeripheralUsageDescription: null
 
 dmg:
   contents:
