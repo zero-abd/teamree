@@ -10,10 +10,11 @@
 // open a terminal is not a pass. Both groups skip on an absence, and a skip
 // nobody sees is a test that does not exist.
 //
-// This used to say so only when `CI` was set. That was the wrong way round:
-// with GitHub Actions switched off for this repository, a local `npm test` is
-// the only gate there is, and it was the one run where the check printed a
-// warning into the middle of a minute of vitest output and exited 0.
+// This used to say so only when `CI` was set. That was the wrong way round, and
+// it is more wrong now that this repository has no GitHub Actions at all: a
+// local `npm test` is the only gate there is, and it was the one run where the
+// check printed a warning into the middle of a minute of vitest output and
+// exited 0.
 //
 // So the rule here is that an absence is never inferred. Every refusal below
 // names the command that fixes it, and every one of them can be stood down —

@@ -16,6 +16,7 @@
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { findPackagedApp } from './packaged-app.mjs'
+import { releaseNotes } from './release.mjs'
 
 const DOC = 'docs/install.md'
 // What the document tells the reader to install into, and therefore what the
@@ -86,8 +87,19 @@ ok(`read the advice out of ${DOC}: ${command}`)
 // warning. Two copies of one instruction is exactly the arrangement where one
 // gets fixed and the other does not, so they are required to agree.
 function agreesWithReleaseNotes(documented) {
-  const notes = '.github/workflows/release.yml'
-  const body = readFileSync(notes, 'utf8')
+  const notes = 'scripts/release.mjs'
+  // The notes themselves rather than the source that writes them. `npm run
+  // release` generates them per build and chooses the Gatekeeper paragraph from
+  // the signature on the bundle it is about to publish, so the only text worth
+  // comparing is the text a reader would actually be shown — and the unsigned
+  // build is the one this project has always produced and the only one that
+  // carries the command at all.
+  const body = releaseNotes({
+    tag: 'v0.0.0',
+    repo: 'owner/name',
+    checksums: '',
+    kind: 'adhoc'
+  })
   const mentions = body
     .split('\n')
     .filter((line) => line.includes('com.apple.quarantine'))
@@ -117,10 +129,9 @@ function agreesWithReleaseNotes(documented) {
 agreesWithReleaseNotes(command)
 
 // Everything above is reading text, and is worth doing wherever this runs: the
-// two documents can disagree on any machine, and catching that on the cheap
-// Linux leg is better than catching it on the one runner that packages. What
-// follows needs a real bundle, a real quarantine attribute and a real
-// Gatekeeper, so it needs a Mac.
+// document and the notes can disagree on any machine, and that half of the
+// check costs a millisecond and needs nothing built. What follows needs a real
+// bundle, a real quarantine attribute and a real Gatekeeper, so it needs a Mac.
 if (process.platform !== 'darwin') {
   console.log('verify-quarantine-advice: the documents agree. Running the command needs macOS; stopping here.')
   process.exit(0)

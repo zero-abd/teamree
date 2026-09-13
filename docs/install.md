@@ -139,9 +139,10 @@ installs a real packaged build at the path named above, quarantines it both ways
 a download arrives, and runs the command in this document — read out of this
 file, so the instruction cannot rot into being wrong while the check stays green.
 It last ran green in CI on 13 September 2026, in run `34740171822`, as the step
-"Verify the install instructions". GitHub has provisioned no runner for this
-repository since, so it is a command a maintainer runs rather than something that
-happens on every commit.
+"Verify the install instructions". That is the one machine-checked run of it
+there is: the workflows have since been removed, so it is a command a maintainer
+runs — by hand, when this document changes and before a release anybody new will
+follow — rather than something that happens on every commit.
 
 There is a route through the interface as well, for anyone who would rather not
 type a command: attempt to open teamree, press **Done**, then go to **System
@@ -237,8 +238,8 @@ work. `ROADMAP.md` keeps the honest account of what has and has not been run.
 Nothing publishes these packages today either, and the same applies: the
 section describes the configured packaging, and building from source is the way
 to run teamree on Linux now. Unlike Windows, this packaging was built and
-launched for real in CI before the matrix was narrowed to macOS — which is
-something, but it is a past tense: nothing builds it on any schedule now, and
+launched for real on a Linux runner before the matrix was narrowed to macOS —
+which is something, but it is a past tense: nothing builds it at all now, and
 the version numbers below are what the configuration would name rather than
 files anyone can point at.
 

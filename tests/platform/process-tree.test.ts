@@ -19,7 +19,7 @@
 //           would say nothing about whether a pane orphans anything.
 //
 // That asymmetry is left in place rather than closed. Windows was deliberately
-// dropped — see the matrix comment in .github/workflows/build.yml — and the app
+// dropped — see "macOS is the supported platform" in ROADMAP.md — and the app
 // ships macOS-only, so a real Windows test would be one nothing in this project
 // can run: another green block proving nothing, which is what the rest of this
 // file is being careful not to be. A file that says plainly where the evidence

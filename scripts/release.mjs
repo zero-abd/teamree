@@ -1,16 +1,16 @@
-// Cuts a release from this machine, because nothing else can cut one.
+// Cuts a release from this machine, because nothing else cuts one.
 //
-// `.github/workflows/release.yml` was written to do this and has never run. It
-// cannot: every Actions run in this repository ends in six or seven seconds
-// with no steps and the annotation "The job was not started because recent
-// account payments have failed or your spending limit needs to be increased."
-// No runner is provisioned, so no step of that workflow has ever executed. A
-// tag pushed today produces nothing and reports a failure next to the release.
+// There was a GitHub Actions pipeline that did this from a `v*` tag, and it
+// worked. It was removed anyway: every job in it ran on a `macos` runner, which
+// bills at ten times the Linux rate against a free account's monthly minutes,
+// and a full run packaged a 190 MB Electron app. A handful of pushes spent the
+// month. Nothing about the checks was wrong — they cost more than they were
+// worth on this plan, so they moved here.
 //
-// What that workflow was for is still needed, though, and it is not the
+// What that pipeline was for is still needed, though, and it is not the
 // building — it is the refusing. A release is the one artifact nobody re-runs
 // the tests on, so the checks have to be attached to the act of publishing
-// rather than remembered next to it. So this runs every gate the workflow ran,
+// rather than remembered next to it. So this runs every gate the pipeline ran,
 // in one sequence, and stops at the first that says no:
 //
 //   typecheck, format, lint, the relay build, the full suite, the app build,
@@ -71,8 +71,8 @@ export const GATES = [
   { name: 'build:cli', args: ['run', 'build:cli'] },
   // Before the suite, not beside it: `relay/dist` is gitignored per-machine
   // state, the peer tests stat it before deciding whether to run, and `pretest`
-  // refuses to start a suite whose relay is stale. Building it here is what CI
-  // did in its own step for the same reason.
+  // refuses to start a suite whose relay is stale. Building it here is what the
+  // pipeline did in its own step, for the same reason.
   { name: 'relay build', args: ['run', 'build'], cwd: 'relay' },
   { name: 'test', args: ['test'] },
   { name: 'build', args: ['run', 'build'] },
@@ -114,8 +114,8 @@ export function isPrerelease(tag) {
  * spent on it.
  *
  * All of it is knowable in a second, and all of it would otherwise be found
- * after the build — which is where `release.yml` put its one guard, and why it
- * grew a `guard` job in front of the build.
+ * after the build — which is where the old pipeline put its one guard, and why
+ * that guard ended up in front of the build rather than behind it.
  */
 export function preflightRefusals(state) {
   const refusals = []

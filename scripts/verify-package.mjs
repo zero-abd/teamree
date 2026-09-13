@@ -166,8 +166,9 @@ ok(`node-pty binary for ${process.platform}-${process.arch} is unpacked (${binar
 // whole point of this block. A universal app carries a node-pty prebuild per
 // architecture — `node-gyp-build` resolves `prebuilds/darwin-<arch>` from
 // `process.arch` at run time — and everything below this section runs the app,
-// so it exercises whichever half the machine happens to be. `macos-latest` is
-// Apple Silicon, which makes the Intel half the half nothing ever executes. If
+// so it exercises whichever half the machine happens to be. Every Mac that has
+// packaged this is Apple Silicon, which makes the Intel half the half nothing
+// ever executes. If
 // the universal merge or the ad-hoc signature damaged it, a release would go
 // out green and every Intel Mac would open no terminal, which for this app is
 // the whole app.

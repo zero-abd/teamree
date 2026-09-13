@@ -347,26 +347,32 @@ recorded so none of them is discovered by surprise later.
   succeed either: the Windows prebuilds are excluded at the top level of `files` in
   `electron-builder.yml`, so they are excluded for Windows too, and `afterPack` throws
   when it cannot find `pty.node`. That is the hook doing its job, and it is two
-  deleted lines away from building again. The platform-specific code and the
-  Windows-conditional workflow steps are all still present, so putting a platform back
-  is adding a block to the matrix rather than a rewrite.
-- **CI ran, was green, and no longer starts at all.** Recorded in that order because
-  both halves are true and the second one is what matters today. The workflow runs
+  deleted lines away from building again. The platform-specific code is all still
+  present, so putting a platform back is adding to the packaging and the release
+  sequence rather than a rewrite.
+- **CI ran, was green, and has been removed on cost grounds.** Recorded in that order,
+  because all three are true and the last is what matters today. The pipeline ran
   typecheck, lint, format, the relay's own suite, the full suite, the build, the
   headless smoke test, the package and the packaged-app check — the one that launches
-  the artifact and drives it — and macOS passed all of it and uploaded a build. The
-  last run that executed any step finished at about 05:42 UTC on 13 September 2026;
-  the last fully green one was about sixteen minutes before that. Every run since — well over a
-  hundred — has ended in six to nine seconds with no steps, no logs and one annotation:
-  *"The job was not started because recent account payments have failed or your
-  spending limit needs to be increased."* GitHub is declining to provision a runner, so
-  the red cross beside recent commits is not a failing build; nothing ran. Until that
-  is settled the gate is `npm test` and `npm run release` on a maintainer's Mac, and
-  `.github/workflows/*` is a description of checks rather than a thing that happens.
-  Its first four runs all failed, each for a real
-  reason that a developer machine had been hiding: a stale CLI build, a configured git
-  identity, LF line endings, and a sandbox helper that only needs its permissions fixed
-  on a runner.
+  the artifact and drives it — and macOS passed all of it and uploaded a build. It was
+  not removed for failing. It was removed because of what it cost: this repository is
+  on GitHub's free tier, every job ran on a `macos` runner — billed at ten times the
+  Linux rate against the same monthly allowance — and a full run packaged a 190 MB
+  Electron app. A handful of pushes spent the month, after which every pull request
+  carried a red cross that was about the allowance rather than about the code, which
+  teaches everybody to stop reading the checks. So the four workflows are gone and the
+  gate is `npm test` and `npm run release` on a maintainer's Mac, with
+  `scripts/release.mjs` as the single description of the sequence.
+
+  The cost of that decision is the honest half of this entry: nothing checks a branch
+  any more. A contributor who does not run `npm run typecheck`, `npm run lint`,
+  `npm run format:check` and `npm test` before opening a pull request has had nothing
+  checked at all, and there is no machine anywhere that will notice.
+
+  The pipeline's first four runs all failed, each for a real reason a developer machine
+  had been hiding: a stale CLI build, a configured git identity, LF line endings, and a
+  sandbox helper that only needs its permissions fixed on a runner. Those fixes are all
+  still in the tree, and they are why the local sequence is clean rather than lucky.
 
   For most of that time the suite it ran was quietly smaller than the one a developer
   runs. `relay/` is a separate package with its own dependencies and its own gitignored
@@ -375,18 +381,18 @@ recorded so none of them is discovered by surprise later.
   teamwork end to end rather than against a fake — skip when it is absent. So they
   skipped on every run, in a warning nobody reads, and the run stayed green: the
   skipped tests reported as skipped and an exit code of zero, which is
-  indistinguishable at a glance from the same number having passed. The workflow now
-  installs and builds the relay before testing and runs the relay's own suite, which
-  had never run here either; and `pretest` refuses to start the suite at all when
-  `relay/dist` is missing and `CI` is set, so that absence fails the run loudly instead
-  of silently shrinking it. `vitest.config.ts` runs the same check as a `globalSetup`,
-  so `npx vitest run` cannot slip past it either. The same condition still only warns
-  on a developer's machine, where another package's missing build is not a broken peer
-  transport. Measured on macOS at this commit: the relay's own suite passes 84, and
+  indistinguishable at a glance from the same number having passed. That fix outlived
+  the pipeline that prompted it. `scripts/require-test-environment.mjs` refuses to
+  start the suite at all when `relay/dist` is missing or stale — on every machine, not
+  only where `CI` was set, because a local run is now the only run there is — and
+  `vitest.config.ts` names it as a `globalSetup` so `npx vitest run` cannot slip past
+  it either. `npm run release` builds the relay as a gate of its own before the suite,
+  for the same reason the pipeline had a step for it. Measured on macOS at this commit:
+  the relay's own suite passes 84, and
   `relayProcess.test.ts` and `relayWatch.test.ts` report 23 tests run where hiding
   `relay/dist` makes the same command report 23 skipped and still exit zero — 34
   skipped once `tests/teamwork/scenario.test.ts` and `tests/teamwork/two-peers.test.ts`
-  are counted with them. That the steps do this on a runner is reasoned, not observed.
+  are counted with them.
 
   Turning them on turned up the reason to watch them. `relayWatch.test.ts` is the most
   timing-exposed file in the suite — a real relay, real PTYs and real wall-clock waits —
@@ -394,36 +400,23 @@ recorded so none of them is discovered by surprise later.
   three: once on an assertion that a frame had arrived without having waited for one,
   and once on two `until`s running out of patience, with the file taking forty seconds
   where it usually takes under two. Run on its own it passed eleven of eleven, five
-  times over. Nothing about the transport was wrong either time. A runner that
-  is not sharing its cores may never see it; the honest position is that this file has
-  never before run unattended, and if CI goes intermittently red this is the first place
-  to look.
+  times over. Nothing about the transport was wrong either time. A machine that is not
+  sharing its cores may never see it; the honest position is that this file is exposed
+  to load, and if a run goes intermittently red this is the first place to look.
+- **The release pipeline is local by design.**
+  A `release.yml` was written to build on a `v*` tag through the same workflow CI used
+  and attach the `.dmg` and a `SHA256SUMS.txt` to a GitHub release. Its tag trigger had
+  already been taken off, so nothing was cut through it, and it has now been removed
+  along with the other three, for the cost reason in the entry above.
 
-  The action versions have since been checked against the upstream tags
-  and all resolve, so the first run will not fail on those; they are two to three
-  majors behind current, which is a maintenance note rather than a fault. Those steps
-  now live in `build.yml`, which `ci.yml` and `release.yml` both call rather than
-  restate, so there is one sequence to be wrong rather than two. All three files are
-  checked by actionlint with shellcheck behind it and are clean, which means the first
-  run will not die on a syntax error, an unknown action input or a shell mistake in a
-  `run:` block — it does not mean the jobs pass.
-- **No release has ever been published, and the release pipeline is now local.**
-  `release.yml` was written to build on a `v*` tag through the same workflow CI uses
-  and attach the `.dmg` and a `SHA256SUMS.txt` to a GitHub release. It has never fired,
-  and with no runner being provisioned it cannot; its tag trigger has been removed so
-  that a tag does not hang a red cross off a release that was built correctly by hand.
-  The workflow is kept, still runnable by hand, and its comment says what to put back.
-
-  What replaces it is `npm run release` — `scripts/release.mjs` — which runs the same
-  sequence on a maintainer's Mac and refuses on a dirty tree, a tag that does not name
-  the version in `package.json`, a `HEAD` that is not on `origin`, a release that
-  already exists, or a `gh` that is not signed in. It adds one check the workflow never
-  got to run: the packaged-app check against the copy inside the mounted `.dmg`, which
+  What stands in its place is `npm run release` — `scripts/release.mjs` — which runs
+  the same sequence on a maintainer's Mac and refuses on a dirty tree, a tag that does
+  not name the version in `package.json`, a `HEAD` that is not on `origin`, a release
+  that already exists, or a `gh` that is not signed in. It adds one check the pipeline
+  never had: the packaged-app check against the copy inside the mounted `.dmg`, which
   is the file that actually leaves here. `docs/releasing.md` is the account of it, and
   `tests/release/` covers the refusals. `npm run release:dry-run` has been run end to
-  end on a Mac, through every gate, and stops before creating anything. What is still
-  unobserved is the publishing itself: `gh release create` has never run for this
-  repository, and the first real release is also the first test of it.
+  end on a Mac, through every gate, and stops before creating anything.
 - **The shipped relay command does nothing, silently, when it is reached through a
   symlinked path.** `relay/bin/teamree-relay.mjs` decides whether it is the program
   being run with
@@ -437,14 +430,14 @@ recorded so none of them is discovered by surprise later.
 
   Not a release blocker, which is why it is recorded rather than fixed here: the
   paths a user actually reaches it through — `/Applications`, and `/Volumes` for a
-  mounted image — are real directories, and CI's `$RUNNER_TEMP` is one too. It is a
+  mounted image — are real directories. It is a
   one-line fix (compare realpaths rather than URLs) and it is a trap for anything
   that invokes the command from a temporary directory, which is what
   `scripts/release.mjs` now works around by mounting at a resolved path.
 - **The Intel half of the universal app has never been executed.** A universal `.dmg`
   carries node-pty twice, once per architecture, and the packaged-app check runs the
-  app — so it exercises whichever architecture the runner is, which on `macos-latest`
-  is Apple Silicon. The `darwin-x64` binaries are now asserted statically: present,
+  app — so it exercises whichever architecture the packaging Mac is, which so far has
+  always been Apple Silicon. The `darwin-x64` binaries are now asserted statically: present,
   executable, and Mach-O files for the architecture whose directory they sit in. That
   is more than nothing and it is not the same as running them. If the merge or the
   ad-hoc signature damaged the Intel slice, the release would go out green and every
@@ -472,9 +465,10 @@ recorded so none of them is discovered by surprise later.
   operating system can tell them. One half of the macOS instructions is now checked
   rather than asserted: `npm run install:verify` reads the quarantine command out of
   `docs/install.md`, installs a real packaged bundle at the path the document names,
-  quarantines it both ways a download arrives and runs that command verbatim; CI ran it
-  on the macOS leg while it still ran, and it is a command a maintainer runs now. The
-  other half is not. The dialogs, the **Open Anyway**
+  quarantines it both ways a download arrives and runs that command verbatim. The
+  pipeline ran it on the macOS leg while there was one; it is a command a maintainer
+  runs by hand now, deliberately outside the release sequence because it writes into
+  `/Applications`. The other half is not checked. The dialogs, the **Open Anyway**
   route through System Settings and the macOS-version differences around it are
   written from Apple's behaviour and the ad-hoc signing the build already does, and
   have not been walked through on a Mac at this commit.
@@ -486,7 +480,7 @@ recorded so none of them is discovered by surprise later.
   noticing late rather than never. Opening the Start teamwork panel re-reads both
   files as well. What is left of the gap is the bound: a pull the watch misses is up
   to half a minute late, and `docs/trying-teamwork.md` step 5 says so rather than
-  promising it is instant. The watch's own tests fail on the macOS runner and have
+  promising it is instant. The watch's own tests fail on macOS and have
   never failed on Linux, and why has not been established on a Mac:
   `src/main/teamwork/macWatchProbe.test.ts` answers it outright, under
   `TEAMREE_MAC_PROBE=1`, when somebody can run it.

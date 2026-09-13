@@ -1,5 +1,6 @@
 // Boots the built app with the window hidden, asserts the renderer mounted and
-// the preload bridge is reachable, then exits. Used by CI and by `npm run smoke`.
+// the preload bridge is reachable, then exits. Run by `npm run smoke`, which is
+// one of the gates `npm run release` refuses to publish without.
 //
 // It also runs the peer library's cipher check here, in a genuine Electron main
 // process, which is the process the teamwork feature's handshakes actually
