@@ -128,21 +128,51 @@ describe.skipIf(unavailable !== null)('the durable object, run by workerd', () =
     expect(await returning.waitPaired()).toMatchObject({ initiator: false })
   })
 
-  it('refuses a fourth upgrade rather than letting one object be piled up', async () => {
+  it('keeps a rendezvous open for its own pair, whatever else is aimed at it', async () => {
     const token = rendezvousToken()
-    // The object's name is a hex string the client picked, with no token behind
-    // it, so anybody may address any object. Three is the pair plus the one
-    // arriving to displace them; a fourth has nothing left to be.
-    const offers: Offer[] = []
-    for (let attempt = 0; attempt < 6; attempt += 1) offers.push(await offerWorkerdPeer(relay, token))
+    // Six connections presenting no hello, no token and no proof of anything.
+    // The object's name is a hash anybody who has seen the URL may compute, so
+    // these cost nothing to open. What they must not buy is the pairing itself:
+    // the teammate refused here has no way to tell this from a relay that is not
+    // there, and would be told the relay could not be reached.
+    const silent: Offer[] = []
+    for (let attempt = 0; attempt < 6; attempt += 1) silent.push(await offerWorkerdPeer(relay, token))
+    expect(silent.filter((offer) => offer.accepted)).toHaveLength(6)
 
-    expect(offers.filter((offer) => offer.accepted)).toHaveLength(3)
-    for (const offer of offers) {
-      // Refused before the upgrade completes, so it costs an HTTP response
-      // rather than a socket the object then has to hold and close.
-      if (offer.accepted) offer.peer.close()
-      else expect(offer.status).toBe(503)
+    // Bounded all the same. Each arrival ends the silent socket that has been
+    // here longest, so what one frame costs this object stays fixed however many
+    // are offered — the first of these is gone by now.
+    const earliest = silent[0]
+    expect(earliest?.accepted).toBe(true)
+    if (earliest?.accepted === true) {
+      // Read in-band rather than waited for as a close, for the reason
+      // `deadlines.workerd.test.ts` records: for a socket that never delivered a
+      // frame to the object, workerd holds the closing handshake back for about
+      // ten seconds after the relay asks for it, and the frame goes out on time.
+      const told = await earliest.peer.control.until((frames) => frames.some((frame) => frame.t === 'closing'))
+      expect(told.at(-1)).toMatchObject({ t: 'closing', code: CloseCode.Capacity })
     }
+
+    const first = await joinWorkerdPeer(relay, token)
+    const second = await joinWorkerdPeer(relay, token)
+    expect(await second.waitPaired()).toMatchObject({ initiator: true })
+    expect(await first.waitPaired()).toMatchObject({ initiator: false })
+
+    for (const offer of silent) if (offer.accepted) offer.peer.close()
+  })
+
+  it('turns away a hello that names a rendezvous other than the one in the URL', async () => {
+    const token = rendezvousToken()
+    const squatter = await connectWorkerdPeer(relay, token)
+
+    // A token nobody but the sender has ever seen. Unchecked, it parks this
+    // socket in an object it has no business being in for the whole pairing
+    // budget, holding a slot against the pair whose rendezvous names it. The
+    // object is `SHA-256(token)`, so the hello has to name the object it landed
+    // in — which a peer that derived the one from the other always does.
+    squatter.hello(rendezvousToken())
+
+    expect(await squatter.waitClosed()).toMatchObject({ code: CloseCode.BadHello })
   })
 
   it('answers a peer keepalive without ever waking the object to do it', async () => {

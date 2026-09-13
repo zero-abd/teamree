@@ -116,11 +116,11 @@ and hits a wall an hour later is worse off than one that was told up front.
   connection, and forwarding one frame is microseconds of it. A WebSocket held
   by a Durable Object is not on a request clock, which is exactly why the pairing
   lives in the object rather than in the Worker.
-- **Concurrency: 32,768 WebSockets per Durable Object.** An object here refuses
-  the fourth: it holds one pairing, which is two peers plus room for the one
-  arriving to displace them. Cloudflare's ceiling is irrelevant by four orders
-  of magnitude; the object's own is the one that matters, and the next section
-  says why.
+- **Concurrency: 32,768 WebSockets per Durable Object.** An object here holds at
+  most six: three for the pairing — two peers plus room for the one arriving to
+  displace them — and three for connections that have not said anything yet.
+  Cloudflare's ceiling is irrelevant by four orders of magnitude; the object's
+  own is the one that matters, and the next section says why.
 - **Hibernation is the reason this is cheap.** A pair that sits quiet overnight
   has its object evicted from memory while both sockets stay connected, and it
   is rebuilt on the next frame. That is why nothing is kept in a field anywhere
@@ -140,16 +140,32 @@ that nobody reads the limits table further down as a description of this host.
 `RELAY_MAX_CONNECTIONS_PER_ADDRESS_PER_MINUTE` are counts across a whole process,
 and a Worker has no process to count across. They are not in `wrangler.jsonc`
 and setting them there would do nothing. What bounds this host instead is that
-**one Durable Object takes three sockets and refuses the fourth** with a `503`.
-That matters because the object's name in the URL is a hash anybody may compute
-or simply invent — it carries no token and proves nothing — so without a refusal
-a single client could aim every socket it can open at one object, and every
-frame that object then handled would cost work in proportion to how many were
-attached. Three is the number because two is what a pairing is and the third is
-the peer arriving to displace a stale one, which is how a laptop that slept gets
-its session back. Cloudflare's own per-account and per-request limits are what
-stand between you and a flood of objects; the relay's job is to make each one
-cheap and bounded, and that it does.
+**one Durable Object holds at most six sockets**, in two halves that are not
+interchangeable. A bound is needed at all because the object's name in the URL is
+a hash anybody may compute or simply invent — it carries no token and proves
+nothing — so without one a single client could aim every socket it can open at a
+single object, and every frame that object then handled would cost work in
+proportion to how many were attached.
+
+Three sockets may hold the pairing. Two is what a pairing is and the third is the
+peer arriving to displace a stale one, which is how a laptop that slept gets its
+session back. A socket holds one of those only once it has sent a hello whose
+token hashes to this object's own name; that check belongs to this host, and it
+is what stops a hello carrying an invented token from parking a socket here for
+the whole pairing budget.
+
+The other three are for sockets that have not said anything yet, and when they
+are full an arriving connection displaces the one that has been silent longest —
+told `4007` — rather than being refused itself. The direction matters. A
+connection that is refused an upgrade is handed a transport error and cannot tell
+it from a relay that is not there, so three sockets presenting nothing at all
+must not be able to shut a rendezvous against the teammate it belongs to. What is
+left of the `503` is a rendezvous whose three pairing slots are all held by
+connections that presented its token.
+
+Cloudflare's own per-account and per-request limits are what stand between you
+and a flood of objects; the relay's job is to make each one cheap and bounded,
+and that it does.
 
 **The slow-consumer rule cannot fire.** The runtime does not expose a send-queue
 depth to a Durable Object, so the relay has nothing to measure and never closes
@@ -334,17 +350,35 @@ that. On the Worker host the hash is also what names the Durable Object, which i
 why it has to be in the URL at all: the object must be chosen before the first
 frame arrives. The container host has no use for it and ignores it.
 
-The hash is not nothing, though, and on the Worker host it is worth being exact:
-because it names an object and an object takes three sockets, whoever holds the
-hash can hold those three open and keep the real pair from being admitted, until
-the greeting deadline reaps them. That is denial of service against one pairing
-for as long as they keep it up — weaker than what the token itself buys, and no
-more than what anyone able to see the URL could already do by refusing to carry
-traffic. Nobody sees that URL but the two peers and the relay.
+The hash is not nothing, though, and on the Worker host it is worth being exact.
+It names a Durable Object, and an object holds a bounded number of sockets, so
+whoever holds the hash can aim sockets at the pairing it names. What that used to
+buy was a lock: three connections presenting no hello, no token and no proof of
+anything took every slot the object had, and the teammate whose rendezvous it was
+got the refusal — as an HTTP status, which a WebSocket client cannot read, so
+what the person was shown was that the relay could not be reached. It does not
+buy that now. A socket that has said nothing is displaced by the next arrival
+rather than counted against the pair, and a hello is only honoured by the object
+its own token names.
 
-Neither host checks that the hash and the token agree. Neither needs to: a peer
-that sends a hint for one pairing and a token for another simply lands where its
-partner is not, which costs only that peer.
+What holding the hash still buys is churn — traffic aimed at one object, which is
+a cost to whoever is paying for it — and a narrow race, in which an arriving peer
+is displaced in the moment before its own hello lands and comes back after the
+`4007` it was given. So treat the hash as public, because it is: it is in a URL,
+and a URL reaches request analytics, `wrangler tail`, Logpush and anything
+terminating TLS in front — and the wire itself, if the URL in `.teamree/relay`
+names `ws://` rather than `wss://`.
+
+The Worker host does check that the hash and the token agree, and the check is
+not about the peer that got it wrong. A Durable Object is chosen by the name in
+the URL before any frame arrives, so a hello carrying some other token would park
+a socket in an object it has no business being in, for the whole pairing budget,
+holding a slot against the two peers whose rendezvous named it. Requiring the
+hello to name the object it landed in costs a legitimate peer nothing — it
+derived the one from the other — and a hello that does not is closed with `4000`.
+The container host pairs on the token alone and has no name to check against; it
+needs none, because there a peer that sends a hint for one pairing and a token
+for another simply lands where its partner is not, which costs only that peer.
 
 ### What this hides, and what it does not
 
@@ -389,7 +423,9 @@ Enough to write another client against, and short on purpose.
 1. Connect to `<relay><path>/<sha256-of-token>`.
 2. Send one **text** frame: `{"version":1,"rendezvous":"<64 hex characters>"}`.
    Unknown fields are ignored. Anything else, or nothing at all within the
-   greeting deadline, and the connection is closed with `4000`.
+   greeting deadline, and the connection is closed with `4000`. On the Worker
+   host the token must also be the one the URL names — the relay hashes it and
+   compares — which a peer that derived the URL from the token always satisfies.
 3. The relay replies with a text frame — `{"t":"waiting"}` if the partner has not
    arrived, and `{"t":"paired","session":"…","initiator":true|false}` when it
    has. Both sides get `paired`; exactly one gets `initiator: true`, which is the
@@ -418,16 +454,16 @@ worst, tear a session down — which it could do anyway by hanging up.
 
 | Code | Meaning | What a client should do |
 | --- | --- | --- |
-| `4000` | Hello absent, late, malformed, or a version it does not speak | Fix the client |
+| `4000` | Hello absent, late, malformed, a version it does not speak, or naming a different rendezvous than the URL did | Fix the client |
 | `4001` | Your partner disconnected | Reconnect now |
 | `4002` | A newer connection claimed this rendezvous | Back off, then reconnect |
 | `4003` | You stopped reading and the relay will not queue for you | Reconnect |
 | `4004` | Over the frame or byte budget | Slow down, then reconnect |
 | `4005` | The session showed no sign of life past the idle budget. Both halves get this | Reconnect, and keepalive more often than `RELAY_IDLE_TIMEOUT_MS` |
 | `4006` | Nobody joined you within the pairing budget | Reconnect |
-| `4007` | The relay is at capacity | Back off |
+| `4007` | The relay is at capacity, or this connection was displaced before it said anything | Back off |
 | `4008` | You sent something the protocol does not allow there | Fix the client |
-| `1001` | The relay is going away | Reconnect shortly |
+| `1001` | The relay is going away, or has lost the state for this session | Reconnect shortly |
 | `1009` | Frame over the size cap | Fix the client |
 
 `4001` and `4002` are deliberately different. A pair that treated being
@@ -438,6 +474,16 @@ and do it again for as long as both were running.
 them were quiet and both are being reaped for it — so telling either one its
 partner left would be false, and would send it into an immediate reconnect for a
 fault that did not happen.
+
+`1001` covers one case worth naming, because the wrong code there is expensive. A
+Durable Object rebuilds its pairing table from what is attached to each socket on
+every event, and a socket it could not read for one event is one the table gets
+rebuilt without. The peer on the other half of that pairing did nothing: its own
+state says paired, the table no longer agrees, and its next frame — its keepalive
+at the latest — finds no partner. That is the relay having lost state, so the
+peer is told to go away and come back. A protocol complaint (`4008`) there reads
+to a client as its own bug, and a client that believes that stops reconnecting
+for the life of the process, for a fault that was never its.
 
 ---
 
@@ -462,9 +508,9 @@ marked `both`.
 | `RELAY_MAX_CONNECTIONS_PER_ADDRESS` | `32` | container | A team behind one office NAT shares an address; 32 leaves room for that without letting one address take the whole relay. |
 | `RELAY_MAX_CONNECTIONS_PER_ADDRESS_PER_MINUTE` | `60` | container | Makes a reconnect loop cost the looper rather than the relay. |
 | `RELAY_MAX_FRAME_BYTES` | `262144` | both | Noise caps a message at 65535 bytes, so 256 KiB carries several batched and still refuses anything designed to make the relay allocate. |
-| `RELAY_MAX_FRAMES_PER_SECOND` | `200` | both | A terminal at full tilt is tens of frames a second. 200 is generous for typing and streaming, and stops a peer spending the relay's event loop. |
-| `RELAY_MAX_BYTES_PER_SECOND` | `4194304` | both | 4 MiB/s per connection — more than a terminal produces, less than a peer needs to saturate a host. |
-| `RELAY_MAX_BUFFERED_BYTES` | `4194304` | container | The memory bound that matters. Past it the peer that stopped reading is closed; the relay never queues without limit. The Worker runtime owns that queue and does not show its depth. |
+| `RELAY_MAX_FRAMES_PER_SECOND` | `200` | both | A terminal at full tilt is tens of frames a second. 200 is generous for typing and streaming, and stops a peer spending the relay's event loop. Every frame after the hello is counted, control frames included: a keepalive costs the relay what a content frame costs it, so it is charged the same. |
+| `RELAY_MAX_BYTES_PER_SECOND` | `4194304` | both | 4 MiB/s per connection — more than a terminal produces, less than a peer needs to saturate a host. Counted over every frame, of either kind. |
+| `RELAY_MAX_BUFFERED_BYTES` | `4194304` | container | The memory bound that matters. Past it the peer that stopped reading is closed and the relay never queues without limit — whether what it is not reading is its partner's traffic or the pongs it asked for itself. The Worker runtime owns that queue and does not show its depth. |
 | `RELAY_HELLO_TIMEOUT_MS` | `10000` | both | A connection that opens and says nothing is the cheapest way to hold a slot, so this is the tightest deadline here. |
 | `RELAY_PAIR_TIMEOUT_MS` | `600000` | both | How long a peer may park waiting for a teammate. `0` parks until the socket dies. |
 | `RELAY_IDLE_TIMEOUT_MS` | `600000` | both | How long a paired session may show no sign of life at all — no content either way, and nothing from the peer, keepalives included. A pair that keepalives never reaches it. `0` disables. |
@@ -519,8 +565,10 @@ which a client reconnects. Set it to `0` to park indefinitely.
 it is closed with `4003` and its partner with `4001`. The relay does not buffer
 without bound, does not silently drop frames from the middle of a stream, and
 does not slow the sender down — a Noise stream with a hole in it is over anyway,
-so ending it cleanly is better than any of those. (On the Worker host this rule
-cannot fire; see the limits section above.)
+so ending it cleanly is better than any of those. A peer with no partner at all
+is held to the same rule: the pongs it asked for are the relay's writes too, and
+a peer that will not read its own answers is closed rather than queued for. (On
+the Worker host neither rule can fire; see the limits section above.)
 
 **A peer goes quiet but stays connected.** Nothing happens to it, as long as it
 is still there. On the container host the relay pings it at the WebSocket layer
@@ -543,7 +591,7 @@ disconnected, so neither of them is told its partner did.
 ```sh
 cd relay
 npm install
-npm test          # 84 tests, including the Worker under a real workerd
+npm test          # 93 tests, including the Worker under a real workerd
 npm run typecheck # both hosts: Node types and Workers types
 npm run build     # the container host's JavaScript, into dist/
 npm run worker:dev # the Worker on localhost, under workerd, deploying nothing

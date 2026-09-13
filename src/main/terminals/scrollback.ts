@@ -16,9 +16,11 @@ const COALESCE_BELOW_BYTES = 8 * 1024
 export class ScrollbackBuffer {
   private chunks: Buffer[] = []
   private bytes = 0
+  private capBytes: number
 
-  constructor(private readonly capBytes: number = SCROLLBACK_CAP_BYTES) {
+  constructor(capBytes: number = SCROLLBACK_CAP_BYTES) {
     if (capBytes <= 0) throw new RangeError('scrollback cap must be positive')
+    this.capBytes = capBytes
   }
 
   get byteLength(): number {
@@ -74,6 +76,18 @@ export class ScrollbackBuffer {
   clear(): void {
     this.chunks = []
     this.bytes = 0
+  }
+
+  /**
+   * Lowers the cap for the rest of this buffer's life, evicting down to it now.
+   * One-way: a buffer that has been told to keep less is never asked to keep
+   * more, and a request for more than it already keeps is not one.
+   */
+  restrictTo(capBytes: number): void {
+    if (capBytes <= 0) throw new RangeError('scrollback cap must be positive')
+    if (capBytes >= this.capBytes) return
+    this.capBytes = capBytes
+    this.evictOverflow()
   }
 
   private evictOverflow(): void {

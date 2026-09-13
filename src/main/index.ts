@@ -1,5 +1,6 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
+import { applicationMenuTemplate } from './appMenu'
 import { APP_VERSION } from './appVersion'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
 
@@ -51,6 +52,14 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(async () => {
+    // Before any window: with no menu of its own Electron installs a default
+    // one, whose File menu is a single "Close Window" on Cmd+W. A menu key
+    // equivalent never reaches the web contents, so that one item is what the
+    // renderer's "Close pane" binding has been losing to. See appMenu.ts.
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate(applicationMenuTemplate({ developing: process.env.ELECTRON_RENDERER_URL !== undefined }))
+    )
+
     ipcMain.handle('teamree:select-project-folder', async (event) => {
       const owner = BrowserWindow.fromWebContents(event.sender)
       if (!owner || event.senderFrame !== event.sender.mainFrame) return null
