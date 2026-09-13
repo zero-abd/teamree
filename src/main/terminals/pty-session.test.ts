@@ -239,6 +239,36 @@ describePty('PtySession', () => {
   )
 
   it(
+    'reports going quiet for a pane that dies while it is still working',
+    async () => {
+      const edges: { busy: boolean; running: boolean }[] = []
+      const session = start({
+        // Output, then death, well inside the quiet window: the pane is
+        // genuinely busy at the moment it exits.
+        command: 'echo working; exit 5',
+        onActivityChange: (each) => {
+          const { busy, running } = each.snapshot()
+          edges.push({ busy, running })
+        }
+      })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'exit'), 'exit event')
+
+      // Both edges, not just the first. Settling the exit cancels the quiet
+      // countdown that would have reported the second one, so without it a
+      // subscriber watching activity is left holding "busy" for a pane that is
+      // never going to say anything again.
+      expect(edges).toEqual([
+        { busy: true, running: true },
+        { busy: false, running: false }
+      ])
+      expect(session.snapshot()).toMatchObject({ busy: false, running: false, exitCode: 5 })
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'stops notifying a listener that unsubscribed',
     async () => {
       const session = start({ command: 'cat' })

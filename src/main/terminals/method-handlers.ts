@@ -20,9 +20,11 @@
 //     the hub and the global `unsubscribe` method keeps working untouched. With
 //     no hub configured the service keeps its own ids instead and pushes events
 //     through the `publish` option, which is how the tests run it headless.
-//   - Failures throw TerminalServiceError, whose `code` is already an ErrorCode;
-//     map it onto the response (see isTerminalServiceError) rather than letting
-//     it fall through as `internal`.
+//   - Failures throw TerminalServiceError, a RuntimeError carrying an ErrorCode,
+//     so the dispatcher puts that code on the wire itself and a caller can
+//     branch on `not_found` instead of reading a message. Nothing here has to
+//     map it, and nothing here may throw a plain Error: that falls through as
+//     `internal` and tells a caller an expected condition was a runtime bug.
 
 import type { z } from 'zod'
 import { Params } from '../../shared/methods'
