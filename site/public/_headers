@@ -25,6 +25,18 @@
 /favicon.svg
   Cache-Control: public, max-age=300, stale-while-revalidate=86400
 
+# The demo clips and their posters, same reasoning as the images above: the
+# names carry no content hash, so a re-encode overwrites them in place and a
+# long max-age would pin visitors to the old cut. Without a rule here they fall
+# back to must-revalidate, which is a round trip per clip on every single load.
+#
+# Note these are served without an `accept-ranges` header and a Range request is
+# answered with the whole file and a 200, so seeking is not supported -- see the
+# note in wrangler.jsonc. `content-length` is present and the clips are not
+# compressed, which is what progressive playback needs.
+/demos/*
+  Cache-Control: public, max-age=300, stale-while-revalidate=86400
+
 # The download aliases resolve to whatever GitHub calls "latest". Caching that
 # redirect would pin the destination to the release that happened to be current
 # when it was cached, which is the one thing it must never do. Two blocks,

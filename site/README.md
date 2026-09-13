@@ -69,6 +69,28 @@ comment**, so a visitor fires no 404s at a page whose clips have not landed.
 The frames reserve their space either way, so dropping the clips in changes
 nothing structural — the placeholder underneath is simply covered.
 
+A clip that will not play is a real outcome, not an impossibility, and is handled
+as one. The host does not answer byte-range requests — it returns the whole file
+with a `200` where GitHub's asset host returns a `206` — and some browsers
+decline to play media on that basis, which on a macOS-only page means Safari is
+the one to check before trusting the clips. When a clip's sources are exhausted
+the script removes the play control and leaves the `<video>` in place showing its
+poster; if the poster is missing too, the placeholder underneath shows through.
+The caption and the prose beside it already carry the meaning, so nothing is lost
+but the motion.
+
+Two things that failure path got wrong first time, both found by testing it with
+deliberately broken sources rather than by reasoning about it:
+
+- A `<video>` with `<source>` children does **not** fire `error` at itself when
+  they all fail — the event goes to the last `<source>`, and the element is left
+  with `networkState === NETWORK_NO_SOURCE`. A listener on the video alone never
+  fires. The script listens on the sources and checks that state.
+- Removing the failed `<video>` from the DOM hid the entire figure, caption and
+  all. `.demo-figure:not(:has(video))` is what keeps the figures out of the page
+  while the clips are parked, and `:has()` does not reliably re-evaluate when
+  script changes the subtree. The element stays; only the control goes.
+
 Playback, for anyone changing it: the markup carries native `controls` so the
 page works with JavaScript off; the script removes them, fits a custom play
 button, and plays a clip only while it is on screen. `prefers-reduced-motion`

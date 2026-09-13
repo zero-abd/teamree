@@ -978,6 +978,46 @@ document.querySelectorAll('.cmd-copy').forEach(function (button) {
     video.addEventListener('play', function () { frame.dataset.paused = 'no'; button.setAttribute('aria-label', 'Pause this clip'); });
     video.addEventListener('pause', function () { frame.dataset.paused = 'yes'; button.setAttribute('aria-label', 'Play this clip'); });
 
+    // A clip that cannot play must not leave a dead rectangle where a feature
+    // was being explained. The host serving these does not answer byte-range
+    // requests — it returns the whole file with a 200 rather than a 206 — and
+    // some browsers decline to play media on that basis. So failure is treated
+    // as a real outcome rather than an impossibility: the video and its button
+    // are removed, the poster-or-placeholder underneath becomes the picture,
+    // and the caption and the prose beside it already say what the clip shows.
+    var giveUp = function () {
+      if (frame.dataset.failed === 'yes') return;
+      frame.dataset.failed = 'yes';
+      frame.dataset.paused = 'yes';
+      // The <video> deliberately stays in the DOM. Removing it looked tidier and
+      // was wrong twice over: the poster frame is the best possible fallback for
+      // a clip that will not play, and the stylesheet decides whether to show
+      // this figure at all with `:has(video)` — which does not reliably
+      // re-evaluate when script changes the subtree, so removing the element
+      // hid the whole figure, caption included. Only the dead control goes.
+      if (button.parentNode) button.parentNode.removeChild(button);
+      frame.__video = null;
+    };
+    // A <video> that carries <source> children does NOT fire `error` at itself
+    // when they all fail — the event goes to the last <source> and the video is
+    // simply left with networkState NETWORK_NO_SOURCE. Listening on the video
+    // alone therefore never fires, which is what testing the failure path with
+    // deliberately broken sources turned up. So: listen on the sources, keep
+    // the listener on the video for the direct-src case, and check the one
+    // unambiguous state afterwards.
+    var NO_SOURCE = 3; // HTMLMediaElement.NETWORK_NO_SOURCE
+    var giveUpIfExhausted = function () { if (video.networkState === NO_SOURCE) giveUp(); };
+
+    video.addEventListener('error', giveUp);
+    [].slice.call(video.querySelectorAll('source')).forEach(function (source) {
+      source.addEventListener('error', function () { setTimeout(giveUpIfExhausted, 0); });
+    });
+    video.addEventListener('stalled', function () {
+      setTimeout(function () { if (video.readyState < 1) giveUpIfExhausted(); }, 8000);
+    });
+    // Belt and braces for a browser that reports exhaustion without an event.
+    setTimeout(giveUpIfExhausted, 4000);
+
     frame.__video = video;
   });
 
