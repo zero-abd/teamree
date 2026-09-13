@@ -100,10 +100,24 @@ the `SHA256SUMS.txt` published beside it.
 Every factual claim on the page was checked against the repository rather than
 written from memory, and three were cut because they did not survive it:
 
-- **"open source"** is not claimed anywhere, because there is no `LICENSE` file
-  and no `license` field in `package.json`. Published source with no licence is
-  all-rights-reserved. The page says "free" and "the source is on GitHub", both
-  of which are true. **Add a licence and this can go back.**
+- **"open source"** as a phrase is still not used, and does not need to be. The
+  page says "free" and "the source is on GitHub" and now links the licence, which
+  is the thing a sceptical reader actually wanted. Those three stay true under any
+  licence, so nothing has to change if the choice changes. The claim was cut
+  originally because there was no `LICENSE` at all, and published source with no
+  licence is all-rights-reserved.
+
+  MIT landed on `main` in #36 after that check, so the footer nav now carries a
+  **MIT licence** link to `blob/main/LICENSE` (verified 200). That link is
+  deliberately the only place on the page that would name a licence. The
+  PR's own framing is that MIT is an assumption — conventional for a developer
+  tool, and matching what the site already promised — rather than a decision
+  anybody has stated, so the owner may well pick something else. The whole blast
+  radius if they do is five places: the `LICENSE` file itself, the `license`
+  field in `package.json`, the same field in `relay/package.json`, one line in
+  the root `README.md`, and the footer link above. Nothing else on this page
+  names a licence, and "free" and "the source is on GitHub" are true under any
+  of them.
 - **"runs whatever agent is on your PATH"** was cut. Agent support is a closed
   catalogue of five — `claude`, `codex`, `gemini`, `opencode`, `droid`
   (`src/main/terminals/agent-command.ts`) — and the page now names them.
@@ -111,9 +125,21 @@ written from memory, and three were cut because they did not survive it:
   a decision rather than a gap waiting to close, and that the Windows packaging
   has never been built or launched by anybody.
 
-One known staleness, in the repository rather than here: `docs/install.md` still
-opens with "nothing has been published", which stopped being true when v0.1.0
-shipped. The page links to that document.
+The Gatekeeper section quotes the macOS 26 dialog — **"teamree" Not Opened** /
+*Apple could not verify "teamree" is free of malware…*, buttons **Move to Trash**
+and **Done** — read live off a real first launch of the published v0.1.0. The
+older string, "cannot be opened because the developer cannot be verified", does
+not exist on macOS 15 or later and is not used anywhere on the page. The page and
+`docs/install.md` were written to agree; if one changes, change both.
+
+The single highest-risk line on the page is the one telling a reader **not** to
+press Move to Trash. It is the prominent button in that dialog, it deletes the
+app they just downloaded, and a cautious person reaches for it. It appears twice
+on purpose: once in the hero, for anyone who double-clicks before reading, and
+once in the callout.
+
+`docs/install.md`, which the page links to, was brought into line with the
+published release and the real dialog wording in commit `397bf90`.
 
 ## Deploying
 

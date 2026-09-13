@@ -77,7 +77,7 @@
 }
 
 *,*::before,*::after{ box-sizing:border-box; }
-html{ -webkit-text-size-adjust:100%; scroll-behavior:smooth; }
+html{ -webkit-text-size-adjust:100%; scroll-behavior:smooth; background:var(--bg); }
 body{
   margin:0;
   background:var(--bg);
@@ -120,13 +120,20 @@ code,kbd{ font-family:var(--font-mono); }
   -webkit-backdrop-filter:saturate(160%) blur(14px);
   border-bottom:1px solid var(--line);
 }
-.header-row{ display:flex; align-items:center; justify-content:space-between; gap:var(--s4); height:62px; }
-.nav{ display:flex; align-items:center; gap:var(--s5); font-size:var(--text-base); }
-.nav a{ color:var(--fg-secondary); }
+.header-row{ display:flex; align-items:center; justify-content:space-between; gap:var(--s4); min-height:62px; padding-block:var(--s2); }
+.nav{ display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:0 var(--s5); font-size:var(--text-base); }
+.nav a{ color:var(--fg-secondary); display:inline-flex; align-items:center; min-height:38px; }
 .nav a:hover{ color:var(--fg); text-decoration:none; }
 .nav .ghlink{ display:inline-flex; align-items:center; gap:7px; }
 .nav .ghlink svg{ width:16px; height:16px; fill:currentColor; }
-@media (max-width:700px){ .nav .hide-sm{ display:none; } }
+/* Below 700px — which is also 200% zoom on an ordinary laptop — the nav wraps
+   onto a second line rather than dropping half of itself. Hiding two of the four
+   links left a reader at that zoom with no way to reach two of the four sections
+   and nothing offered in their place. */
+@media (max-width:700px){
+  .header-row{ min-height:0; padding-block:var(--s2); }
+  .nav{ gap:0 var(--s4); font-size:var(--text-base); }
+}
 
 /* ------------------------------------------------------------------- hero -- */
 .hero{ padding-block:var(--s9) var(--s8); }
@@ -141,7 +148,7 @@ code,kbd{ font-family:var(--font-mono); }
 h1{ font-size:var(--text-3xl); max-width:17ch; }
 h1 em{ font-style:normal; color:var(--accent-bright); }
 .lede{ margin-top:var(--s5); font-size:var(--text-xl); color:var(--fg-secondary); max-width:56ch; line-height:1.5; letter-spacing:-.01em; }
-.lede b{ color:var(--fg); font-weight:560; }
+.lede strong{ color:var(--fg); font-weight:560; }
 
 /* --------------------------------------------------------------- download -- */
 .cta{ margin-top:var(--s7); display:flex; flex-wrap:wrap; align-items:stretch; gap:var(--s4); }
@@ -167,7 +174,7 @@ h1 em{ font-style:normal; color:var(--accent-bright); }
 .btn-ghost:hover{ border-color:#3a445a; background:var(--bg-raised); text-decoration:none; }
 .btn-ghost svg{ width:17px; height:17px; fill:currentColor; flex:none; }
 .dl-meta{ margin-top:var(--s4); font-family:var(--font-mono); font-size:var(--text-sm); color:var(--fg-muted); }
-.dl-meta .sep{ color:var(--line-strong); padding:0 9px; }
+.dl-meta .sep{ color:var(--fg-muted); padding:0 9px; }
 .dl-note{ margin-top:var(--s3); font-size:var(--text-base); color:var(--fg-muted); max-width:58ch; }
 
 /* --------------------------------------------------------------- sections -- */
@@ -213,7 +220,7 @@ h2{ font-size:var(--text-2xl); max-width:24ch; }
   font-family:var(--font-mono); font-size:var(--text-xs); font-weight:600;
   display:flex; align-items:center; justify-content:center;
 }
-.gate ol li b{ color:var(--fg); font-weight:600; }
+.gate ol li strong{ color:var(--fg); font-weight:600; }
 
 /* ------------------------------------------------------------------ code -- */
 .cmd{ position:relative; margin-top:var(--s3); }
@@ -224,14 +231,37 @@ pre{
   line-height:1.75; color:var(--fg); tab-size:2;
 }
 pre code{ font-size:inherit; }
-.cmd pre{ padding-right:96px; }
+/* Every one of these can overflow, so every one is a focus stop with a name.
+   A scroll container that overflows is added to the tab order by Chrome and not
+   by Safari, and on a macOS-only product page Safari is the wrong browser in
+   which to make the end of a command unreachable. */
+pre[tabindex]{ scrollbar-gutter:stable; }
+
+/* The copy button is positioned on the wrapper, which does not scroll, while the
+   `pre` beneath it does — so right padding on the `pre` scrolled away with the
+   content and the command ran underneath the chip at every scroll position but
+   the last. The box chrome moves onto the wrapper and the scrolling strip stops
+   short of the gutter the button sits in, so nothing can pass beneath it. Only
+   blocks that actually carry a button reserve the gutter. */
+.cmd.has-copy{
+  background:var(--bg-term); border:1px solid var(--line); border-radius:var(--r2);
+  padding:var(--s4) var(--s5); padding-right:100px;
+}
+.cmd.has-copy > pre{ background:none; border:0; border-radius:0; padding:0; }
 .cmd-copy{
   position:absolute; top:9px; right:9px;
   font:inherit; font-family:var(--font-ui); font-size:var(--text-xs); font-weight:600;
   color:var(--fg-secondary); background:var(--bg-raised);
   border:1px solid var(--line-strong); border-radius:var(--r1);
-  padding:5px 11px; cursor:pointer;
+  padding:6px 12px; min-height:32px; cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center;
   transition:color var(--motion) var(--ease), border-color var(--motion) var(--ease);
+}
+/* Narrow enough that a 100px gutter would take a third of the line: the button
+   drops below the command instead, and gets a full touch target while it is there. */
+@media (max-width:560px){
+  .cmd.has-copy{ padding-right:var(--s4); padding-left:var(--s4); padding-bottom:62px; }
+  .cmd-copy{ top:auto; bottom:10px; right:10px; min-height:44px; padding:10px 16px; }
 }
 .cmd-copy:hover{ color:var(--fg); border-color:#3a445a; }
 .cmd-copy[data-copied="yes"]{ color:var(--success); border-color:rgb(87 195 138 / 55%); }
@@ -265,33 +295,44 @@ pre code{ font-size:inherit; }
 .fact{ border:1px solid var(--line); border-radius:var(--r2); padding:var(--s4) var(--s5); background:var(--bg-panel); }
 .fact dt{ font-size:var(--text-sm); font-family:var(--font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--fg-muted); }
 .fact dd{ margin:var(--s2) 0 0; color:var(--fg-secondary); font-size:var(--text-base); }
-.fact dd b{ color:var(--fg); font-weight:580; }
+.fact dd strong{ color:var(--fg); font-weight:580; }
 
 /* ----------------------------------------------------------------- footer -- */
 .site-footer{ border-top:1px solid var(--line); padding:var(--s6) 0 var(--s7); color:var(--fg-muted); font-size:var(--text-base); }
 .footer-row{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--s4); }
 .footer-links{ display:flex; flex-wrap:wrap; gap:var(--s5); }
-.footer-links a{ color:var(--fg-secondary); }
+.footer-links a{ color:var(--fg-secondary); display:inline-flex; align-items:center; min-height:44px; }
 .footer-links a:hover{ color:var(--fg); text-decoration:none; }
 .footer-note{ margin-top:var(--s5); max-width:62ch; }
 /* ------------------------------------------------------------------ demos -- */
 /* Each feature that is easier shown than described gets a short screen capture
    of the real application beside its explanation. The text is the feature;
    the clip is evidence. Everything here reads correctly with video disabled. */
+/* The alternating rows alternate in the markup, not with `order`. Reordering the
+   two columns in CSS left the DOM — and so the tab order and the reading order —
+   running right to left across every flipped row. */
 .demo{ display:grid; gap:var(--s6); align-items:center; grid-template-columns:minmax(0,1fr) minmax(0,1.28fr); }
-.demo.flip .demo-body{ order:2; }
-.demo.flip .demo-figure{ order:1; }
+.demo.flip{ grid-template-columns:minmax(0,1.28fr) minmax(0,1fr); }
+/* The CLI samples are the whole point of the sections that carry them, and in the
+   narrow column a 61-character command was showing about 33 of it with no visual
+   hint of the rest. They span the row instead. */
+.demo-wide{ grid-column:1 / -1; min-width:0; }
+.demo-wide .cmd{ margin-top:0; }
 @media (max-width:900px){
-  .demo{ grid-template-columns:minmax(0,1fr); gap:var(--s5); }
-  .demo.flip .demo-body, .demo.flip .demo-figure{ order:initial; }
+  .demo, .demo.flip{ grid-template-columns:minmax(0,1fr); gap:var(--s5); }
 }
 .demo-step{ font-family:var(--font-mono); font-size:var(--text-xs); letter-spacing:.11em; text-transform:uppercase; color:var(--fg-muted); }
 .demo-body h2{ margin-top:var(--s3); font-size:var(--text-2xl); max-width:20ch; }
 .demo-body p{ margin-top:var(--s4); color:var(--fg-secondary); max-width:52ch; }
-.demo-body .cmd{ margin-top:var(--s5); }
 .demo-body ul{ margin-top:var(--s4); padding-left:0; list-style:none; }
 .demo-body ul li{ position:relative; padding-left:22px; margin-top:var(--s2); color:var(--fg-secondary); font-size:var(--text-base); }
 .demo-body ul li::before{ content:""; position:absolute; left:2px; top:.68em; width:6px; height:6px; border-radius:50%; background:var(--accent); }
+.demo-body .warn{
+  padding:var(--s4); background:var(--bg-panel);
+  border:1px solid var(--line-strong); border-left:3px solid var(--warning);
+  border-radius:0 var(--r2) var(--r2) 0;
+}
+.demo-body .warn strong{ color:var(--fg); }
 
 .demo-figure{ margin:0; min-width:0; }
 .demo-frame{
@@ -321,13 +362,28 @@ pre code{ font-size:inherit; }
   width:62px; height:62px; border-radius:50%; cursor:pointer;
   background:rgb(10 12 16 / 74%); border:1px solid var(--line-strong);
   backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
-  display:none; align-items:center; justify-content:center; padding:0;
-  transition:background var(--motion) var(--ease), border-color var(--motion) var(--ease);
+  display:flex; align-items:center; justify-content:center; padding:0;
+  transition:background var(--motion) var(--ease), border-color var(--motion) var(--ease), opacity var(--motion) var(--ease);
 }
 .demo-play svg{ width:22px; height:22px; fill:var(--fg); margin-left:3px; }
 .demo-play:hover{ background:rgb(10 12 16 / 92%); border-color:#3a445a; }
-.demo-frame[data-paused="yes"] .demo-play{ display:flex; }
+/* While a clip is moving the button recedes; it never leaves. Hiding it was the
+   only control over a clip that autoplays on scroll and loops forever, so for
+   exactly as long as one was playing there was nothing to focus and nothing to
+   press — the JS also takes the native `controls` off. Hover and focus bring it back. */
+.demo-frame[data-paused="no"] .demo-play{ opacity:.3; }
+.demo-frame[data-paused="no"] .demo-play:hover,
+.demo-frame[data-paused="no"] .demo-play:focus-visible,
+.demo-frame[data-paused="no"]:focus-within .demo-play{ opacity:1; }
 .demo-cap{ margin-top:var(--s3); font-size:var(--text-base); color:var(--fg-muted); }
+/* The clips are parked inside HTML comments, so there is no <video> in the frame
+   and the frame renders as a reserved empty box — 215px tall on a phone, ~540px at
+   desktop — under a caption confidently describing a clip that is not there. While
+   they are parked the figure is gone and the row is one column. Un-parking the video
+   markup (`node site/tools/sync-demos.mjs`) puts a <video> back in the frame and
+   restores both, with nothing else to change. */
+.demo-figure:not(:has(video)){ display:none; }
+.demo:not(:has(video)), .demo.flip:not(:has(video)){ grid-template-columns:minmax(0,1fr); }
 </style>
 </head>
 <body>
@@ -456,11 +512,18 @@ pre code{ font-size:inherit; }
         <b>There is no &ldquo;Open Anyway&rdquo; button in that dialog.</b> Through macOS 14
         you could Control-click the app and choose Open; macOS 15 removed that, and on 15 and
         later — macOS 26 included — the dialog offers no way through at all. If you would
-        rather not type a command, the button does exist, just elsewhere: after the refusal,
-        go to <b>System Settings &rarr; Privacy &amp; Security</b>, scroll to the Security
-        section, and a line naming teamree will be waiting there with <b>Open Anyway</b>
-        beside it. Do it reasonably soon — the offer is tied to the attempt, and a stale one
-        goes away.
+        rather not type a command, the button does exist, just elsewhere: after pressing Done,
+        go to <b>System Settings &rarr; Privacy &amp; Security</b> and scroll to the Security
+        section, where a line naming teamree appears with <b>Open Anyway</b> beside it. Expect
+        it to ask for your password or Touch ID.
+      </p>
+      <p class="caption">
+        Being exact about that last paragraph, because the rest of this is written from
+        watching a real download install itself: the command above was run against this build
+        and watched to work, and the dialog is quoted off the screen. The System Settings route
+        was not clicked through. <code>Open Anyway</code> is the button macOS ships for this
+        case, but nobody here has confirmed how that pane looks on macOS 26 with teamree in it.
+        If you take that route and it does not match, the command is the one that was tested.
       </p>
       <p>
         <b>Two silences that look like something worse than they are.</b> Before you clear
