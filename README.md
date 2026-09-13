@@ -7,22 +7,28 @@ git worktree, and keep track of all of them in one window.
 
 ## Status
 
-Single-user and working. Runs from source with `npm run dev`, and packages for
-macOS, Windows and Linux — though only macOS and Linux have actually been built
-and launched; the Windows installer has never been made. See the known gaps in
-`ROADMAP.md`, which are recorded rather than discovered. Team features come
-after this works.
+Single-user work is done, and teamwork is built rather than planned: all five
+milestones have landed, the relay in `relay/` ships with the repository, and
+`docs/trying-teamwork.md` walks two people through it — including the one thing
+still untested, which is two Macs in two places.
+
+Releases are macOS only: one unsigned universal `.dmg`. CI has packaged it,
+launched it and opened a real terminal inside it. Nothing has been published —
+no tag has been pushed and `release.yml` has never run. The Linux packaging has
+been built and launched; the Windows packaging never has, and `npm run
+package:win` cannot succeed as configured (see "Packaged builds"). The known
+gaps are in `ROADMAP.md`, recorded rather than discovered.
 
 ## Installing a build
 
-If somebody sent you a link rather than a checkout, the installers are on the
-releases page and **[`docs/install.md`](docs/install.md) is the thing to read
-first**. Not because installing is hard — it is a drag to Applications, an
-installer, or `apt install ./teamree_*.deb` — but because none of it is signed,
-and so macOS and Windows will both stop you with a warning the first time. That
-document explains what each warning is actually saying, what it is not saying,
-and the exact way past it on each platform. Every release carries the checksums
-that stand in for the signature.
+If somebody sent you a link rather than a checkout, the download is on the
+releases page — one universal macOS `.dmg` — and
+**[`docs/install.md`](docs/install.md) is the thing to read first**. Not because
+installing is hard; it is a drag to Applications. It is because the build is not
+signed, so macOS will stop you with a warning the first time. That document
+explains what the warning is actually saying, what it is not saying, and the
+exact way past it. Every release carries the checksums that stand in for the
+signature.
 
 ## What it does
 
@@ -88,8 +94,9 @@ npm run dev
 
 `npm test` runs the suite, including an acceptance pass that drives a real
 runtime over the real socket. `npm run typecheck`, `npm run lint` and
-`npm run format:check` are what CI checks, on all three platforms, alongside the
-build, the smoke test and the packaged artifact.
+`npm run format:check` are what CI checks, on one macOS runner, alongside the
+build, the smoke test, the packaged app, and the app inside the `.dmg` that is
+published.
 
 ## Trying teamwork
 
@@ -116,7 +123,7 @@ rebuilds the app first, so a package is never made from stale output.
 | Platform | Command | Artifacts in `dist/` |
 | --- | --- | --- |
 | macOS | `npm run package:mac` | `teamree-<version>.dmg`, universal (Apple Silicon and Intel in one file) |
-| Windows | `npm run package:win` | `teamree-<version>-setup-x64.exe` (NSIS) |
+| Windows | `npm run package:win` | none — the build fails; see below |
 | Linux | `npm run package:linux` | `teamree-<version>-x86_64.AppImage`, `teamree_<version>_amd64.deb` |
 | The one you are on | `npm run package` | as above, for the host platform |
 
@@ -128,7 +135,28 @@ Two more, for working on packaging itself:
   reads the output back. This is the check that matters: `node-pty` needs its
   native binary outside the asar, plus an executable `spawn-helper` on macOS and
   two backends and a ConPTY sidecar on Windows, and only spawning a shell proves
-  all of that survived packaging.
+  all of that survived packaging. It takes a path, so it can be pointed at an
+  app anywhere — CI points it at the copy inside the mounted `.dmg` as well as
+  at the unpacked one.
+
+  On a universal build it also checks both architectures' `node-pty` binaries
+  statically — present, executable, and a Mach-O for the architecture whose
+  directory they are in. It can only *run* one of them, which is whichever the
+  machine is. The Intel half of a universal build has never been executed by
+  anything, here or in CI; closing that needs an Intel Mac, or an Apple Silicon
+  one with Rosetta and the app launched under `arch -x86_64`.
+
+`npm run package:win` is in the table because the configuration is still there,
+not because it runs. It fails in the `afterPack` hook, and would on any machine.
+The Windows prebuilds are excluded at the *top level* of `files` in
+`electron-builder.yml`, so they are excluded for every platform including
+Windows; `scripts/afterpack.mjs` then looks for `pty.node` in
+`prebuilds/win32-x64` or in `build/Release`, and on Windows node-pty's own
+prebuild script exits successfully because the source prebuilds exist, so
+`build/Release` is never created either. The hook throws, which is what it is
+for — a Windows package with no PTY in it builds cleanly and then opens no
+terminal. Reviving Windows starts with deleting the two exclusion lines that
+comment names.
 
 On Linux, run both the smoke test and this one under a virtual display:
 `xvfb-run --auto-servernum npm run package:verify`. Electron also refuses to
@@ -138,9 +166,10 @@ pass `--no-sandbox` themselves, so a container needs no special invocation.
 Each platform's artifact must be built on that platform. `node-pty` publishes
 prebuilt binaries for macOS and Windows but none for Linux, where `npm install`
 compiles one — so a Linux package built anywhere else would contain no working
-terminal at all. `.github/workflows/build.yml` runs every check and all three
-builds on three runners for that reason, and both `ci.yml` and `release.yml`
-call it rather than restating it.
+terminal at all. `.github/workflows/build.yml` runs every check and the one
+build this project publishes, on a single macOS runner; both `ci.yml` and
+`release.yml` call it rather than restating it. Its matrix has one entry, kept
+in that shape so that adding a platform back is a block rather than a rewrite.
 
 The app icon is generated, not drawn by hand: `npm run icons` rewrites
 `build/icon.png`, `build/icon.icns`, `build/icon.ico` and `build/icons/`.
@@ -189,17 +218,28 @@ If the app is not running, the CLI says so and exits 3 rather than hanging.
 
 ## Releases
 
-`.github/workflows/release.yml` turns a `v*` tag into downloadable installers.
-It does not build them itself: it calls `.github/workflows/build.yml`, which is
-the same workflow `ci.yml` calls on every pull request, so what gets published
-has been through typecheck, lint, format, the full suite, the smoke test and the
-packaged-app check on all three platforms. A release pipeline of its own would
-be a second, shorter sequence that nobody reads the output of, and the check it
-would be tempting to leave out — launching the artifact and spawning a PTY in it
-— is the only one that can tell a package that built from a package that works.
+`.github/workflows/release.yml` turns a `v*` tag into a download. It does not
+build it itself: it calls `.github/workflows/build.yml`, the same workflow
+`ci.yml` calls on every pull request, so what gets published has been through
+typecheck, lint, format, the full suite, the smoke test, and the packaged-app
+check twice — once against the unpacked app, and once against the copy inside
+the mounted `.dmg`, which is the file that actually leaves the building. A
+release pipeline of its own would be a second, shorter sequence that nobody
+reads the output of, and the check it would be tempting to leave out —
+launching the artifact and spawning a PTY in it — is the only one that can tell
+a package that built from a package that works.
 
-The job then attaches every installer to the release along with a
-`SHA256SUMS.txt`, and writes notes that say plainly that nothing is signed and
-what each platform will do about that. Unsigned software that arrives without
-explaining itself gets clicked through or thrown away, and neither is what you
-want from somebody trying it for the first time.
+The job then attaches the `.dmg` to the release along with a `SHA256SUMS.txt`,
+and writes notes that say plainly that nothing is signed and what macOS will do
+about that. Unsigned software that arrives without explaining itself gets
+clicked through or thrown away, and neither is what you want from somebody
+trying it for the first time.
+
+Nothing has been released yet. No tag has been pushed and this workflow has
+never run, so its first run is also the first test of the parts that need
+GitHub: the artifact handoff between the two jobs, and `gh release create`. One
+of those is worth settling beforehand rather than at the end of a
+three-quarter-hour build. Publishing needs `contents: write`, which the workflow
+asks for — but a repository whose **Settings → Actions → General → Workflow
+permissions** is set to read-only overrides that, and the failure looks like a
+403 from `gh` after everything else has passed.
