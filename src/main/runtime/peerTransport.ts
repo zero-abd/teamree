@@ -143,6 +143,15 @@ export type RemoteWriteRequest = {
 export type RemoteWriteVerdict = { ok: true } | { ok: false; code: ErrorCode; message: string }
 
 /**
+ * What the owner's machine decided about one read.
+ *
+ * The same shape as a write's verdict, and deliberately a separate name: what
+ * they permit is not the same thing, and a single type would invite one call
+ * site to be wired to the other's judge.
+ */
+export type RemoteReadVerdict = { ok: true } | { ok: false; code: ErrorCode; message: string }
+
+/**
  * How many streams one teammate may hold open on this runtime at once.
  *
  * A watcher needs one for presence and one for each pane they are reading, and
@@ -208,6 +217,16 @@ export type PeerTransportOptions = {
    * say who sent it is the one thing this design may not do.
    */
   onRemoteWrite?: (write: RemoteWriteRequest) => RemoteWriteVerdict
+  /**
+   * Whether this teammate may read that pane. Asked of the same thing that
+   * knows whose link the request arrived on, for the same reason the write
+   * verdict is: a transport cannot know what a project is.
+   *
+   * A transport wired without one carries no reads at all, which is the safe
+   * direction: a peer transport that forgot to ask would otherwise stream every
+   * pane on the machine.
+   */
+  onRemoteRead?: (terminalId: string) => RemoteReadVerdict
   /**
    * Timers and the clock, so the pacing below is driven rather than slept
    * through. Defaults to the real ones.
@@ -558,6 +577,19 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         return
       }
     }
+    // Reading is scoped too, and was not. `terminal.read` and
+    // `terminal.subscribe` went to the dispatcher carrying nothing but the id
+    // the caller named, so a teammate on one repository's roster could stream a
+    // pane of a project they hold no key for. Typing has been scoped since it
+    // was built; this is reading catching up.
+    if (method === 'terminal.read' || method === 'terminal.subscribe') {
+      const terminalId = terminalIdOf(value)
+      const verdict = judgeRead(terminalId)
+      if (!verdict.ok) {
+        write({ id: idOf(value), ok: false, error: { code: verdict.code, message: verdict.message } })
+        return
+      }
+    }
     // Noted before the call and answered after it: the subscription id only
     // exists once the handler has minted one, and it is the id the pane is
     // remembered under for as long as the teammate holds it.
@@ -594,6 +626,22 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
    * arrived on, and a transport with nobody to report the write to. The owner's
    * verdict is asked last, because it is the one that has to be freshest.
    */
+  /**
+   * The owner's verdict on a read, with the transport's own refusals in front:
+   * a request that named no pane cannot be scoped to a project, and a transport
+   * with nobody to ask must not answer for one.
+   */
+  const judgeRead = (terminalId: string | undefined): RemoteReadVerdict => {
+    if (terminalId === undefined) {
+      return { ok: false, code: ErrorCode.InvalidParams, message: 'no pane was named' }
+    }
+    const ask = options.onRemoteRead
+    if (!ask) {
+      return { ok: false, code: ErrorCode.NotFound, message: 'this runtime is not sharing panes' }
+    }
+    return ask(terminalId)
+  }
+
   const judgeWrite = (value: unknown): RemoteWriteVerdict => {
     // A replayed handshake reaches `established` holding somebody's key and can
     // never produce a transport message. Nothing can arrive here without having

@@ -23,6 +23,7 @@ import {
   STREAM_BUFFER_BYTES,
   STREAM_FLUSH_MS,
   type PeerTransport,
+  type RemoteReadVerdict,
   type RemoteWriteRequest,
   type RemoteWriteVerdict,
   type TransportScheduler
@@ -99,6 +100,14 @@ type RigOptions = {
   allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][]
   /** The owner's verdict on a keystroke. Left out to prove nothing writes without one. */
   onRemoteWrite?: (write: RemoteWriteRequest) => RemoteWriteVerdict
+  /**
+   * The owner's verdict on a read. Allowed by default here, because these tests
+   * are about pacing, subscriptions and what the owner is told — not about who
+   * may look. The refusal a missing judge produces has its own test.
+   */
+  onRemoteRead?: (terminalId: string) => RemoteReadVerdict
+  /** Builds a transport with no read judge at all, to prove reads stop without one. */
+  bareRead?: boolean
   /** Run when the answering side first decrypts anything, as key confirmation is. */
   onConfirmed?: (transport: PeerTransport) => void
 }
@@ -176,6 +185,9 @@ function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0]
     },
     ...(allowedMethods ? { allowedMethods } : {}),
     ...(options?.onRemoteWrite ? { onRemoteWrite: options.onRemoteWrite } : {}),
+    ...(options?.bareRead === true
+      ? {}
+      : { onRemoteRead: options?.onRemoteRead ?? ((): RemoteReadVerdict => ({ ok: true })) }),
     ...(options?.onConfirmed ? { onConfirmed: () => options.onConfirmed?.(answerer) } : {}),
     onFatal: () => {}
   })
@@ -248,6 +260,50 @@ describe('what a teammate can reach', () => {
       code: ErrorCode.UnknownMethod
     })
     expect(written).toEqual([])
+  })
+
+  it('refuses a read when nothing is there to scope it to', async () => {
+    // The same rule as the keystroke above, for the two methods that stream a
+    // pane. A transport wired without `onRemoteRead` cannot tell which project
+    // this teammate reached it through, and a transport that cannot tell must
+    // not guess: the failure would be streaming every pane on the machine to
+    // somebody holding one repository's key.
+    //
+    // `rig` supplies a permissive judge by default, so this one is built
+    // without it on purpose.
+    const { caller } = rig(['terminal.read', 'terminal.subscribe'], { onRemoteRead: undefined, bareRead: true })
+    await expect(caller.call('terminal.read', { terminalId: 't_1' })).rejects.toMatchObject({
+      code: ErrorCode.NotFound
+    })
+    await expect(caller.call('terminal.subscribe', { terminalId: 't_1' })).rejects.toMatchObject({
+      code: ErrorCode.NotFound
+    })
+  })
+
+  it('asks the owner about every read, and streams only the panes they allow', async () => {
+    // The hole this closes: reading was on the allow-list and nothing scoped
+    // it, so a teammate on one repository's roster could name any pane id on
+    // the machine — including a project they hold no key for. Typing has been
+    // scoped since it was built; this is reading catching up.
+    const asked: string[] = []
+    const { caller } = rig(['terminal.read', 'terminal.subscribe'], {
+      onRemoteRead: (terminalId) => {
+        asked.push(terminalId)
+        return terminalId === 't_ours'
+          ? { ok: true }
+          : { ok: false, code: ErrorCode.NotFound, message: `there is no pane ${terminalId} in this project` }
+      }
+    })
+
+    await expect(caller.call('terminal.read', { terminalId: 't_ours' })).resolves.toBeDefined()
+    await expect(caller.call('terminal.subscribe', { terminalId: 't_theirs' })).rejects.toMatchObject({
+      code: ErrorCode.NotFound,
+      // Reported exactly as a pane that does not exist. Telling the two apart
+      // would answer "is there a pane with this id somewhere on your machine",
+      // which is not a question a teammate should be able to ask.
+      message: 'there is no pane t_theirs in this project'
+    })
+    expect(asked).toEqual(['t_ours', 't_theirs'])
   })
 
   it('asks the owner about every keystroke and writes only what they allow', async () => {

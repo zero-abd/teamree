@@ -54,7 +54,12 @@ import {
 import type { ParamsOf, ResultOf } from '../../../shared/methods'
 import { createGitRunner, type GitRunner } from '../../git/gitProcess'
 import type { Dispatcher } from '../../runtime/dispatcher'
-import { PeerCallError, type RemoteWriteRequest, type RemoteWriteVerdict } from '../../runtime/peerTransport'
+import {
+  PeerCallError,
+  type RemoteReadVerdict,
+  type RemoteWriteRequest,
+  type RemoteWriteVerdict
+} from '../../runtime/peerTransport'
 import type { SubscriptionChannel, SubscriptionHub } from '../../runtime/subscriptionHub'
 import { notFound } from '../../runtime/runtimeError'
 import { ErrorCode } from '../../../shared/protocol'
@@ -600,6 +605,53 @@ export class PeerService {
    * runtime's own list. A teammate whose key left the roster is refused at the
    * next keystroke, which is what "revocation at fetch speed" means here.
    */
+  /**
+   * The project a teammate reached this machine through, if they may use it.
+   *
+   * Both halves matter and neither is enough alone: the roster is membership,
+   * and the project key is what stops a teammate reached over one repository's
+   * session reaching into another's. Push access to repository A says nothing
+   * about repository B, and `docs/teamwork.md` scopes everything it grants to
+   * "within a project" for exactly that reason.
+   */
+  #projectForPeer(peer: { publicKey: string; projectKey: string | undefined }): ProjectFacts | undefined {
+    return [...this.#projects.values()].find(
+      (fact) =>
+        fact.projectKey === peer.projectKey && fact.disabledReason === null && fact.rosterKeys.includes(peer.publicKey)
+    )
+  }
+
+  /**
+   * Whether a teammate may read one of this machine's panes.
+   *
+   * The same scoping `remoteWrite` puts on typing, which reading did not have:
+   * `terminal.read` and `terminal.subscribe` went to the dispatcher with
+   * nothing but the id the caller named, so a teammate on one repository's
+   * roster could stream a pane belonging to a project they hold no key for.
+   * Every legitimate watcher takes the id out of a presence snapshot, which is
+   * already scoped to the session's project, so nothing honest is refused by
+   * checking.
+   *
+   * A pane in another project is reported exactly as a pane that does not
+   * exist, deliberately: telling the two apart would answer "is there a pane
+   * with this id somewhere on your machine", which is a question a teammate has
+   * no business being able to ask.
+   */
+  remoteRead(connectionId: string, terminalId: string): RemoteReadVerdict {
+    const peer = this.#peerByConnection.get(connectionId)
+    if (!peer) {
+      return { ok: false, code: ErrorCode.NotFound, message: 'this connection is not a peer link' }
+    }
+    const project = this.#projectForPeer(peer)
+    if (!project) {
+      return { ok: false, code: ErrorCode.NotFound, message: 'you are not on this project’s roster' }
+    }
+    if (!this.#paneOf(project.projectId, terminalId)) {
+      return { ok: false, code: ErrorCode.NotFound, message: `there is no pane ${terminalId} in this project` }
+    }
+    return { ok: true }
+  }
+
   remoteWrite(connectionId: string, write: RemoteWriteRequest): RemoteWriteVerdict {
     const at = this.#scheduler.now()
     const peer = this.#peerByConnection.get(connectionId)
@@ -617,13 +669,7 @@ export class PeerService {
     const handle = this.#handleFor(peer.publicKey) ?? peer.publicKey.slice(0, 8)
     const stamp = { at, handle, publicKey: peer.publicKey, projectId: '', terminalId: write.terminalId }
 
-    // On the roster of a project this session is actually for. Both halves
-    // matter: the roster is membership, and the project key is what stops a
-    // teammate reached over one repository's session typing into another's.
-    const project = [...this.#projects.values()].find(
-      (fact) =>
-        fact.projectKey === peer.projectKey && fact.disabledReason === null && fact.rosterKeys.includes(peer.publicKey)
-    )
+    const project = this.#projectForPeer(peer)
     if (!project) {
       return this.#refuse(stamp, write, 'not-a-member', 'you are not on this project’s roster')
     }
@@ -766,6 +812,7 @@ export class PeerService {
       onPresence: (presence) => this.#record(linkId, want.publicKey, presence),
       onWatchersChange: (terminalIds) => this.#recordWatchers(linkId, terminalIds),
       onRemoteWrite: (write) => this.remoteWrite(linkId, write),
+      onRemoteRead: (terminalId) => this.remoteRead(linkId, terminalId),
       onError: this.#options.onError
     })
 
