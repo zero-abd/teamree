@@ -158,67 +158,92 @@ describe('the watch set', () => {
     expect(reports).toBe(1)
   })
 
-  it('hears .teamree arriving even when the platform names the file inside it', () => {
-    // The two platforms do not report the same string, and the difference is
-    // invisible on the one this was written on. Linux's inotify names the
-    // direct child, so `.teamree` appearing arrives as `.teamree`. macOS has no
-    // non-recursive watch to offer: `fs.watch` is FSEvents underneath, which is
-    // recursive by nature, and the event arrives as the path relative to the
-    // watched directory — `.teamree/members/bo.pub`.
+  it('reports on what .teamree did, whatever the platform called the event', async () => {
+    // The filter used to read the event's filename, and the filename is the one
+    // thing here that is not the same on two platforms. Linux's inotify names
+    // the direct child; macOS has no non-recursive watch, so `fs.watch` is
+    // FSEvents underneath and reports a path relative to the watched directory
+    // — spelled differently again when that directory is reached through a
+    // symlink, which `os.tmpdir()` is on macOS. Two CI failures, two guesses at
+    // the string.
     //
-    // Matching the whole string therefore passed here and failed on the only
-    // platform this ships to, in the case that matters most. A project whose
-    // `.teamree` arrives in somebody else's commit has a watch on its checkout
-    // root and nowhere else, because the other two directories do not exist
-    // yet — so this filter is the only thing that can notice teamwork being set
-    // up at all, and rejecting the event leaves the app on the roster from
-    // before the pull with nothing on screen to say so.
+    // So the names below are deliberately the wrong shape on purpose: an
+    // absolute path, an empty string, and nothing at all. What the watcher
+    // reports on is what `.teamree` actually did.
+    const root = await checkout()
     const fake = fakeWatches()
     let reports = 0
+    let run: (() => void) | undefined
     const watcher = new TeamreeWatcher({
       onChange: () => {
         reports += 1
       },
       watch: fake.watch,
       schedule: (task) => {
-        task()
-        return () => {}
+        run = task
+        return () => {
+          run = undefined
+        }
       }
     })
-    watcher.sync([{ id: 'p1', path: '/repo' }])
+    watcher.sync([{ id: 'p1', path: root }])
 
-    // Spelled with a literal separator rather than `join`, because this is the
-    // string macOS hands over and not a path this code is constructing.
-    fake.fire('/repo', '.teamree/members/bo.pub')
+    // Nothing has happened to `.teamree` yet, and these are the checkout's own
+    // churn — a build writing where builds write.
+    fake.fire(root, 'node_modules/.vite/deps/chunk.js')
+    fake.fire(root, '')
+    run?.()
+    expect(reports).toBe(0)
+
+    // Now it genuinely arrives, and the event is named the least helpful way
+    // available: the absolute path of a file three levels down.
+    await writeMemberFile(root, 'bo')
+    fake.fire(root, join(root, '.teamree', 'members', 'bo.pub'))
+    run?.()
     expect(reports).toBe(1)
 
-    // And the reason the filter exists is intact: a build writing into the
-    // checkout still costs nothing.
-    fake.fire('/repo', 'node_modules/.vite/deps/chunk.js')
-    expect(reports).toBe(1)
+    // And when it goes, with no filename at all.
+    await rm(join(root, '.teamree'), { recursive: true, force: true })
+    fake.fire(root, null)
+    run?.()
+    expect(reports).toBe(2)
 
     watcher.close()
   })
 
-  it('ignores everything in the checkout that is not .teamree', () => {
+  it('does not cost a roster read for a build writing in the checkout', async () => {
+    // The reason the checkout root is filtered at all. A checkout is where an
+    // agent works and a build writes, and a report per file would mean reading
+    // and parsing the roster thousands of times for events that have nothing to
+    // do with it.
+    //
+    // A real directory rather than a made-up path, because the filter now asks
+    // the filesystem what `.teamree` did instead of reading the event's name,
+    // and a path that does not exist cannot answer that question honestly.
+    const root = await checkout()
+    await writeMemberFile(root, 'ana')
     const fake = fakeWatches()
     let reports = 0
+    let run: (() => void) | undefined
     const watcher = new TeamreeWatcher({
       onChange: () => {
         reports += 1
       },
       watch: fake.watch,
       schedule: (task) => {
-        task()
-        return () => {}
+        run = task
+        return () => {
+          run = undefined
+        }
       }
     })
-    watcher.sync([{ id: 'p1', path: '/repo' }])
-    // An agent building in the checkout must not cost a roster read per file.
-    fake.fire('/repo', 'dist')
+    watcher.sync([{ id: 'p1', path: root }])
+
+    for (const file of ['dist', 'node_modules', 'build/out.js', '.DS_Store']) fake.fire(root, file)
+    run?.()
     expect(reports).toBe(0)
-    fake.fire('/repo', '.teamree')
-    expect(reports).toBe(1)
+
+    watcher.close()
   })
 
   it('says a project is not watched rather than letting a stale roster look live', () => {
