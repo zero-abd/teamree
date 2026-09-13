@@ -11,7 +11,14 @@ import type { TerminalEvent } from '../../shared/methods'
 import { killProcessTree } from './process-tree'
 import { recoverTailOnTeardown } from './pty-tail'
 import { ScrollbackBuffer } from './scrollback'
-import { buildShellCommand, buildTerminalEnv, TERMINAL_TYPE, shellName } from './shell-environment'
+import {
+  buildShellCommand,
+  buildTerminalEnv,
+  shellCannotRun,
+  SHELL_UNRUNNABLE,
+  TERMINAL_TYPE,
+  shellName
+} from './shell-environment'
 import { terminalFailed, TerminalServiceError } from './service-error'
 import { ErrorCode } from '../../shared/protocol'
 import type { AgentKind } from './agent-command'
@@ -141,6 +148,17 @@ export class PtySession {
   static start(init: PtySessionInit): PtySession {
     const platform = init.platform ?? process.platform
     const { file, args } = buildShellCommand(init.shell, init.command, platform)
+    const env = buildTerminalEnv(init.env, platform)
+
+    // The two platforms answer "that shell is not there" in different places.
+    // Windows refuses in spawn() below. POSIX does not refuse at all: the fork
+    // succeeds, the helper's own execvp failure goes to the pty, and the caller
+    // is handed a running session that dies a moment later — a pane that
+    // appears and vanishes, with nothing anywhere saying why. So the platform
+    // that will not raise is asked the question first, and both ends here.
+    if (shellCannotRun(file, env, init.cwd, platform)) {
+      throw terminalFailed(`failed to start ${file}: ${SHELL_UNRUNNABLE}`, { cwd: init.cwd })
+    }
 
     let handle: IPty
     try {
@@ -149,10 +167,10 @@ export class PtySession {
         cwd: init.cwd,
         cols: init.cols,
         rows: init.rows,
-        env: buildTerminalEnv(init.env, platform)
+        env
       })
     } catch (error) {
-      throw terminalFailed(`failed to start ${file}: ${describe(error)}`, { cwd: init.cwd })
+      throw terminalFailed(`failed to start ${file}: ${startFailureReason(error)}`, { cwd: init.cwd })
     }
 
     return new PtySession(init, handle, platform)
@@ -377,6 +395,17 @@ function initialTitle(init: PtySessionInit, platform: NodeJS.Platform): string {
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Windows reports a shell that is not there as "File not found" out of
+ * node-pty's own spawn. That is the cause the check above refuses on POSIX, so
+ * it is reported in the same words; anything else is a different failure and is
+ * passed through as node-pty described it.
+ */
+function startFailureReason(error: unknown): string {
+  const reason = describe(error)
+  return /file not found|no such file/i.test(reason) ? SHELL_UNRUNNABLE : reason
 }
 
 /** A timer that is never the reason a process stays alive. */

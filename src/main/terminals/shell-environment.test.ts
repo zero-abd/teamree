@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest'
-import { buildShellCommand, buildTerminalEnv, resolveLoginShell, shellName, TERMINAL_TYPE } from './shell-environment'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import {
+  buildShellCommand,
+  buildTerminalEnv,
+  resolveLoginShell,
+  shellCannotRun,
+  shellName,
+  TERMINAL_TYPE
+} from './shell-environment'
 
 describe('resolveLoginShell', () => {
   it('trusts SHELL on unix', () => {
@@ -63,7 +73,13 @@ describe('buildTerminalEnv', () => {
   })
 
   it('substitutes a PATH only when there is none', () => {
-    expect(buildTerminalEnv({}).PATH).toContain('/usr/bin')
+    // Which PATH is a property of the platform asked about, not of the machine
+    // the suite happens to be running on, so each one is named.
+    expect(buildTerminalEnv({}, 'linux').PATH).toContain('/usr/bin')
+    expect(buildTerminalEnv({}, 'darwin').PATH).toContain('/usr/bin')
+    expect(buildTerminalEnv({}, 'win32').PATH).toContain('\\Windows')
+    // And here, wherever here is, a pane is never handed an empty PATH.
+    expect(buildTerminalEnv({}).PATH).not.toBe('')
   })
 
   it('declares the terminal it actually is', () => {
@@ -108,5 +124,59 @@ describe('shellName', () => {
   it('reduces a path to a bare lowercase name', () => {
     expect(shellName('/bin/zsh', 'darwin')).toBe('zsh')
     expect(shellName('C:\\Windows\\System32\\CMD.EXE', 'win32')).toBe('cmd')
+  })
+})
+
+describe('shellCannotRun', () => {
+  const created: string[] = []
+  afterEach(async () => {
+    await Promise.all(created.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  })
+
+  const scratch = async (): Promise<string> => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'teamree-shell-'))
+    created.push(dir)
+    return dir
+  }
+
+  /** The rule is POSIX exec's; on Windows node-pty answers instead. */
+  const itPosix = process.platform === 'win32' ? it.skip : it
+
+  it('leaves the question to node-pty on Windows', () => {
+    expect(shellCannotRun('C:\\nothing\\here.exe', { Path: 'C:\\Windows' }, 'C:\\', 'win32')).toBe(false)
+  })
+
+  itPosix('accepts the shell this platform opens panes with', async () => {
+    expect(shellCannotRun(resolveLoginShell(), process.env, process.cwd())).toBe(false)
+  })
+
+  itPosix('refuses a path with nothing at it', async () => {
+    const dir = await scratch()
+    expect(shellCannotRun(path.join(dir, 'not-a-shell'), {}, dir)).toBe(true)
+  })
+
+  itPosix('refuses a file nobody may execute, and the directory it sits in', async () => {
+    const dir = await scratch()
+    const readable = path.join(dir, 'readable')
+    await writeFile(readable, '#!/bin/sh\n', 'utf8')
+    await chmod(readable, 0o644)
+    expect(shellCannotRun(readable, {}, dir)).toBe(true)
+    // A directory answers yes to the execute bit and is still not a program.
+    await mkdir(path.join(dir, 'bin'), { recursive: true })
+    expect(shellCannotRun(path.join(dir, 'bin'), {}, dir)).toBe(true)
+  })
+
+  itPosix('searches PATH for a bare name, the way exec does', async () => {
+    const dir = await scratch()
+    const bin = path.join(dir, 'bin')
+    await mkdir(bin, { recursive: true })
+    const tool = path.join(bin, 'my-shell')
+    await writeFile(tool, '#!/bin/sh\n', 'utf8')
+    await chmod(tool, 0o755)
+
+    expect(shellCannotRun('my-shell', { PATH: bin }, dir)).toBe(false)
+    expect(shellCannotRun('my-shell', { PATH: '/nowhere' }, dir)).toBe(true)
+    // No PATH at all is the same answer as a PATH without it in.
+    expect(shellCannotRun('my-shell', {}, dir)).toBe(true)
   })
 })

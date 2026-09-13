@@ -7,7 +7,8 @@
 // lack of one) is not what a PTY child should see. So the environment is derived
 // deliberately rather than passed through.
 
-import { basename } from 'node:path'
+import { accessSync, constants, statSync } from 'node:fs'
+import { basename, resolve } from 'node:path'
 
 /** Advertised terminal type. xterm.js implements this set. */
 export const TERMINAL_TYPE = 'xterm-256color'
@@ -135,6 +136,53 @@ export function buildShellCommand(
 
   if (command) return { file: shell, args: ['-c', command] }
   return { file: shell, args: LOGIN_FLAG_SHELLS.has(name) ? ['-l'] : [] }
+}
+
+/**
+ * The one sentence for the one cause, whichever platform noticed it.
+ *
+ * Windows hears it from node-pty as "File not found"; POSIX is asked the
+ * question below because node-pty never raises it there. A user reading the
+ * pane cannot tell those two apart and should not have to.
+ */
+export const SHELL_UNRUNNABLE = 'not found, or not executable — check the shell setting and PATH'
+
+/**
+ * Whether this program cannot be exec'd, answered the way execvp answers it:
+ * a name with a separator is that file, a bare name is searched on PATH, and
+ * only a regular file with the execute bit counts.
+ *
+ * POSIX only. Windows resolution goes through PATHEXT and the loader's own
+ * search order, and node-pty raises there anyway, so guessing at it here would
+ * be a second rule that could disagree with the first.
+ */
+export function shellCannotRun(
+  file: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+  platform: NodeJS.Platform = process.platform
+): boolean {
+  if (platform === 'win32') return false
+  if (file.includes('/')) return !isExecutableFile(resolve(cwd, file))
+  // `:`, not path.delimiter: this branch is POSIX by definition, and the
+  // delimiter of whichever machine is asking is not what the child would use.
+  return !(nonEmpty(env.PATH) ?? '')
+    .split(':')
+    .filter((entry) => entry.length > 0)
+    .some((entry) => isExecutableFile(resolve(cwd, entry, file)))
+}
+
+function isExecutableFile(candidate: string): boolean {
+  try {
+    // Follows symlinks, as exec does: /bin/sh is one nearly everywhere.
+    if (!statSync(candidate).isFile()) return false
+    accessSync(candidate, constants.X_OK)
+    return true
+  } catch {
+    // Unreadable is unrunnable. Saying so costs the user an error message they
+    // can act on; the alternative is the pane that opens and disappears.
+    return false
+  }
 }
 
 /**

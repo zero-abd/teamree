@@ -4,7 +4,7 @@
 // refuse rather than to guess. Everything else in this folder answers
 // questions; a bad answer is a wrong chip. A bad commit is in the history.
 //
-// Three refusals shape it:
+// Four refusals shape it:
 //
 //   - Nothing is ever staged on the caller's behalf. Passing paths stages those
 //     paths and nothing else; passing none commits what the user already
@@ -15,6 +15,9 @@
 //     were code.
 //   - An empty commit is refused, because it is almost always a sign that the
 //     paths named were not the paths that changed.
+//   - A machine whose git has no identity is refused before anything is staged,
+//     because the alternative is a wall of git's own prose at the last step of
+//     a commit the user has already composed.
 
 import type { WorktreeCommit } from '../../shared/entities'
 import { GitServiceError } from './errors'
@@ -46,6 +49,8 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
 
   const run = { cwd: options.worktreePath, timeoutMs: COMMIT_TIMEOUT_MS } as const
   const signal = options.signal ? { signal: options.signal } : {}
+
+  await requireCommitIdentity(runner, options.worktreePath, options.signal)
 
   const before = await readStatus(runner, options.worktreePath, options.signal)
   const conflicted = before.filter((change) => change.kind === 'conflicted').map((change) => change.path)
@@ -92,6 +97,40 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
     paths: staged.map((change) => change.path).sort(),
     committedAt: (options.now ?? Date.now)()
   }
+}
+
+/**
+ * Refuses before anything is staged when git has no identity to sign with.
+ *
+ * This is the fourth refusal, and the only one whose cause is the machine
+ * rather than the tree: git is installed, `git config --global user.email` was
+ * never run, and the commit fails at the last step with "Author identity
+ * unknown" — after the paths have been staged, and after the user has typed a
+ * message. Asked first, nothing has moved when the refusal arrives, and the
+ * answer is the same one git's own `commit` would have reached: `git var`
+ * resolves the ident through env, local, global and system config exactly as a
+ * commit does, so this cannot disagree with the command it stands in front of.
+ *
+ * It does not set the identity. Whose name a commit carries is the user's to
+ * say, and a tool that picks one for them has forged the history of the
+ * repository rather than helped.
+ */
+async function requireCommitIdentity(runner: GitRunner, worktreePath: string, signal?: AbortSignal): Promise<void> {
+  const { exitCode } = await runner.tryRun({
+    args: ['var', 'GIT_AUTHOR_IDENT'],
+    cwd: worktreePath,
+    readOnly: true,
+    ...(signal ? { signal } : {}),
+    timeoutMs: 30_000
+  })
+  if (exitCode === 0) return
+
+  throw new GitServiceError(
+    ErrorCode.Conflict,
+    'git does not know who you are, so it will not write a commit. Set a name and an email once, ' +
+      'in a terminal: git config --global user.name "Your Name" and ' +
+      'git config --global user.email "you@example.com".'
+  )
 }
 
 async function readStatus(

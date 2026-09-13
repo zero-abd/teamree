@@ -61,7 +61,14 @@ export function ChangesPanel(): React.JSX.Element | null {
 
   const commit = (): void => {
     if (!canCommit) return
-    void commitStaged(message).then(() => setMessage(''))
+    // The message is the one thing on this screen the app cannot reconstruct,
+    // and a commit can be refused for a reason the user has to go and fix —
+    // an unset git identity, a conflict, nothing staged. Clearing the box on
+    // the way out would make them type it again to try. A commit that landed
+    // is the one that empties the selection, so that is what is asked.
+    void commitStaged(message).then(() => {
+      if (useWorkspaceStore.getState().stagedPaths.length === 0) setMessage('')
+    })
   }
 
   return (

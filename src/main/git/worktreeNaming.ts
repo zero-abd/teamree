@@ -6,6 +6,8 @@
 
 import { access } from 'node:fs/promises'
 import path from 'node:path'
+import { ErrorCode } from '../../shared/protocol'
+import { describeError, GitServiceError } from './errors'
 import { pathKey } from './pathIdentity'
 import { slugifyBranchName } from '../../shared/branchName'
 
@@ -96,11 +98,22 @@ export async function allocateCheckoutPath(
   return path.join(parent, `${base}-${Date.now().toString(36)}`)
 }
 
+/**
+ * Only "there is nothing there" makes a path free.
+ *
+ * Any other answer is "could not tell", and could-not-tell must not become
+ * was-not-there here of all places: the path this returns is handed to
+ * `git worktree add`, and a create that fails then deletes the directory it
+ * was pointed at. A permission error, an I/O error or a symlink loop all mean
+ * something may well be sitting there, so they are raised rather than guessed
+ * past.
+ */
 async function exists(target: string): Promise<boolean> {
   try {
     await access(target)
     return true
-  } catch {
-    return false
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw new GitServiceError(ErrorCode.Conflict, `cannot tell whether ${target} is free: ${describeError(error)}`)
   }
 }
