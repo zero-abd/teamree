@@ -199,7 +199,7 @@ export class TeamworkService {
   async #describeRelay(project: Project): Promise<RelaySetting> {
     const file = await readRelayFile(project.path)
     const override = relayOverride(this.#env)
-    const committed = { url: file.ok ? file.url : null, problem: file.ok ? null : file.reason }
+    const onDisk = { url: file.ok ? file.url : null, problem: file.ok ? null : file.reason }
 
     const effective = ((): Pick<RelaySetting, 'url' | 'source' | 'problem'> => {
       if (override === null) {
@@ -217,7 +217,7 @@ export class TeamworkService {
       projectId: project.id,
       file: RELAY_FILE_NAME,
       ...effective,
-      committed,
+      onDisk,
       override: { name: RELAY_URL_ENV, value: override },
       readAt: this.#now()
     }
