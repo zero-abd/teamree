@@ -37,6 +37,11 @@ export function findInstalledAgents(options: DiscoveryOptions = {}): InstalledAg
   const pathValue = options.pathValue ?? process.env.PATH ?? ''
   const isExecutable = options.isExecutable ?? canExecute
   const separator = platform === 'win32' ? ';' : ':'
+  // Joined with the flavour of the platform being asked about, not the one this
+  // process happens to run on. Everything else here is decided by `platform`,
+  // and a path built the host's way would quietly disagree with all of it — on
+  // a Windows host, asking about linux produced backslashes.
+  const join = platform === 'win32' ? path.win32.join : path.posix.join
   const directories = pathValue
     .split(separator)
     .map((entry) => entry.trim())
@@ -54,7 +59,7 @@ export function findInstalledAgents(options: DiscoveryOptions = {}): InstalledAg
 
   const found: InstalledAgent[] = []
   for (const kind of AGENT_KINDS) {
-    const binary = locate(kind, directories, extensions, isExecutable)
+    const binary = locate(kind, directories, extensions, isExecutable, join)
     if (binary !== null) found.push({ kind, command: kind, binary })
   }
   return found
@@ -64,11 +69,12 @@ function locate(
   name: string,
   directories: readonly string[],
   extensions: readonly string[],
-  isExecutable: (candidate: string) => boolean
+  isExecutable: (candidate: string) => boolean,
+  join: (directory: string, file: string) => string
 ): string | null {
   for (const directory of directories) {
     for (const extension of extensions) {
-      const candidate = path.join(directory, `${name}${extension}`)
+      const candidate = join(directory, `${name}${extension}`)
       // The first hit wins, the way a shell resolves it: a later directory
       // shadowed by an earlier one is not the one that would run.
       if (isExecutable(candidate)) return candidate

@@ -48,15 +48,19 @@ describe('findInstalledAgents', () => {
     expect(found.map((agent) => agent.binary)).toEqual(['/usr/bin/claude'])
   })
 
+  // `path.win32`, not `path.join`: this test names the platform it is about, and
+  // the bare join follows whichever machine happens to be running the suite —
+  // which is the same host-dependence that made discovery itself wrong.
   it('looks for the Windows extensions, on the Windows separator', () => {
+    const binary = path.win32.join('C:\\other', 'claude.CMD')
     const found = findInstalledAgents({
       pathValue: 'C:\\tools;C:\\other',
       platform: 'win32',
       pathExt: '.EXE;.CMD',
-      isExecutable: only(path.join('C:\\other', 'claude.CMD'))
+      isExecutable: only(binary)
     })
 
-    expect(found).toEqual([{ kind: 'claude', command: 'claude', binary: path.join('C:\\other', 'claude.CMD') }])
+    expect(found).toEqual([{ kind: 'claude', command: 'claude', binary }])
   })
 
   it('keeps the catalogue order, so the list does not reshuffle between reads', () => {
