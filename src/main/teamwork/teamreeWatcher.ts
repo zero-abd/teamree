@@ -33,37 +33,52 @@
 //
 // AND WHY A SWEEP AS WELL. An event is the fast path, not the guarantee.
 //
-// This file's tests fail on the macOS runner and have never failed on Linux,
-// always as silence — `nothing was reported` — and landing on whichever of the
-// real-filesystem tests the timing catches. Three fixes before this one were
-// guesses at what macOS puts in an event's `filename`; the filter stopped
-// reading that string two commits ago and the silence outlived it, so the
-// remaining explanation is that the event does not arrive, or arrives far too
-// late.
+// On darwin it is not even reliably the fast path, and that has now been
+// measured on a mac rather than reasoned about from libuv's source. Driving
+// this class the way its own tests do — `sync`, then write a key — and logging
+// every raw `fs.watch` callback beside every report: in three runs out of eight
+// not one of the three handles said anything at all, ever, and the report at
+// ~213ms came from the sweep. Under parallel load the silent share rose past
+// nine in ten. In the runs that did speak, the first callback arrived 2-6ms
+// after `fs.watch` returned and carried a replay of writes made *before* the
+// watch existed — a stream that starts slightly in the past and races the
+// caller.
 //
-// What libuv's `fs.watch` does on darwin makes that easy to believe. There is
-// no non-recursive directory watch on that platform, so every handle is a path
-// added to one process-wide FSEvents stream — and adding or removing any handle
-// tears that stream down and builds a new one, subscribed from *now*. The work
-// happens on libuv's CoreFoundation thread, after `fs.watch` has already
-// returned. So a watch is not listening when it is created, it is listening
-// some unmeasured time later, and every other watch in the process goes deaf
-// for the same window each time a new one is attached. Anything that happens in
-// that window is not delivered late; it is never delivered. `sync` attaches
-// three watches back to back and the test writes immediately afterwards, which
-// is precisely that window.
+// That is the documented shape of the platform. There is no non-recursive
+// directory watch on darwin, so every handle is a path on one process-wide
+// FSEvents stream, and adding or removing any handle tears that stream down and
+// builds a new one subscribed from now. The work happens on libuv's
+// CoreFoundation thread, after `fs.watch` has already returned. So a watch is
+// not listening when it is created; it starts listening some unmeasured time
+// later, and whatever happened in between is not delivered late, it is never
+// delivered. No event-shaped fix can recover it: an event macOS did not send
+// cannot be waited for.
 //
-// That reading is from libuv's source, not from a machine anyone here can run,
-// which is why the fix does not depend on it being right. The sweep below is
-// the floor under every explanation: the same three `stat`s the checkout-root
-// filter already does, on a timer that starts short after a watch is attached —
-// the moment the platform is most likely blind — and backs off to once every
-// thirty seconds while nothing is happening. Not a poll standing in for the
-// watch: on Linux the event arrives in single-digit milliseconds and the sweep
-// never has anything to say. What it changes is the worst case. A dropped event
-// used to mean a roster that had quietly stopped following its file for the life
-// of the process, which is the exact failure this whole area exists to prevent.
-// Now it means noticing late.
+// So the sweep is the floor under the whole feature, not a belt beside a brace:
+// the same three `stat`s the checkout-root filter already does, on a timer. On
+// Linux the event arrives in single-digit milliseconds and the sweep never has
+// anything to say. On darwin it is routinely the only thing that speaks.
+//
+// Being the floor is what shapes its timing, and two of those rules are here
+// because leaving them out left holes that the measurements above walk straight
+// into:
+//
+//   - It holds the short delay for a run of sweeps after the handle set
+//     changes, rather than sampling once and backing off. One sample is not a
+//     covering of a window: if that sample lands before the change does — a
+//     loaded machine need only stall the write past the first tick — the next
+//     chance used to be 800ms later, then 3.2s, then 12.8s.
+//   - Finding something resets it. A sweep that finds a change the watch never
+//     mentioned is the plainest evidence available that the watch is not
+//     delivering, and the old code responded to that evidence by sweeping less
+//     often. It now responds by staying close until things go quiet.
+//
+// And a watch *dying* re-arms it too, for the same reason attaching one does:
+// the handle set changed. A branch switch that removes `.teamree` kills two
+// watches, and the watch that has to notice the directory coming back is a
+// watch on the same deaf stream. Without this the project could sit thirty
+// seconds behind its own checkout, still marked unwatched, waiting for a report
+// that is what would have re-attached it.
 //
 // What comes out is the same coarse invalidation every other producer emits.
 // The value here is entirely in the timing.
@@ -78,7 +93,8 @@ import { RELAY_FILE_SEGMENTS } from './peer/relayUrl'
 export const DEFAULT_SETTLE_MS = 200
 
 /**
- * How soon after a watch is attached the set is checked by hand anyway.
+ * How soon after a watch is attached the set is checked by hand anyway, and how
+ * close it keeps sampling while anything is still moving.
  *
  * Short, because attaching is when the platform is least likely to be
  * listening — see the note above on what darwin does with a new handle — and
@@ -92,6 +108,18 @@ export const DEFAULT_SWEEP_UNTIL_MS = 30_000
 
 /** Steep, so the cost decays in four steps rather than fifty. */
 const SWEEP_BACKOFF = 4
+
+/**
+ * How many sweeps run at the short delay before the backoff is allowed to start.
+ *
+ * Sized against the window darwin is blind for, not against a test: the raw
+ * `fs.watch` callbacks measured on a mac arrive 2-6ms after the handle is made
+ * and are lost outright before that, so a second of close sampling is two
+ * orders of magnitude of margin over the window itself and leaves room for a
+ * loaded machine to be late with the write as well. The cost of the whole
+ * settling phase is five sweeps of three `stat`s per project.
+ */
+const SWEEP_SETTLE_SWEEPS = 5
 
 /** The directory both team-wide facts live in, under the checkout root. */
 const TEAMREE_DIR = MEMBERS_DIR_SEGMENTS[0]
@@ -224,6 +252,8 @@ export class TeamreeWatcher {
   #cancelPending: (() => void) | undefined
   #cancelSweep: (() => void) | undefined
   #sweepDelayMs: number
+  /** Sweeps still owed at the short delay before backing off is allowed. */
+  #settlingSweeps = SWEEP_SETTLE_SWEEPS
   #closed = false
 
   constructor(options: TeamreeWatcherOptions) {
@@ -395,7 +425,12 @@ export class TeamreeWatcher {
   #lose(projectId: string, target: string, error: unknown): void {
     const watched = this.#watched.get(projectId)
     if (!watched) return
-    watched.handles.delete(target)
+    // Losing a handle changes the handle set, which is the same kind of moment
+    // as attaching one: on darwin it rebuilds the stream every watch in this
+    // process shares, and the directory that just went is the one a branch
+    // switch is about to bring back. Only on the first loss of a given handle,
+    // so a watch that dies noisily cannot push the sweep out ahead of itself.
+    if (watched.handles.delete(target)) this.#armSweep(true)
     // Said once per project. A dying watch can report repeatedly, and the app
     // has already stopped following the file after the first one.
     if (!watched.covered) return
@@ -437,13 +472,14 @@ export class TeamreeWatcher {
   /**
    * Puts the next sweep on the clock.
    *
-   * `fromStart` is for the moments a watch has just been attached or the
-   * project list has just been set, which are the moments an event is most
-   * likely to be lost; everything else lets the backoff carry on.
+   * `fromStart` is for the moments the handle set has changed — a watch
+   * attached, a watch lost, the project list set — and for a sweep that has
+   * just found a change nothing reported, which are the moments an event is
+   * most likely to be lost; everything else lets the backoff carry on.
    */
   #armSweep(fromStart: boolean): void {
     if (this.#closed || this.#watched.size === 0) return
-    if (fromStart) this.#sweepDelayMs = this.#sweepFromMs
+    if (fromStart) this.#stayClose()
     else if (this.#cancelSweep) return
     this.#cancelSweep?.()
     this.#cancelSweep = this.#sweep(
@@ -470,9 +506,23 @@ export class TeamreeWatcher {
     for (const [id, watched] of this.#watched) {
       if (this.#teamreeChanged(id, watched.path)) changed = true
     }
-    this.#sweepDelayMs = Math.min(this.#sweepDelayMs * SWEEP_BACKOFF, this.#sweepUntilMs)
+    if (changed) {
+      // The sweep found what the watch did not say. That is evidence about the
+      // watch, not about the repository, and the answer to it is to stay close.
+      this.#stayClose()
+    } else if (this.#settlingSweeps > 0) {
+      this.#settlingSweeps -= 1
+    } else {
+      this.#sweepDelayMs = Math.min(this.#sweepDelayMs * SWEEP_BACKOFF, this.#sweepUntilMs)
+    }
     this.#armSweep(false)
     if (changed) this.#report()
+  }
+
+  /** Back to the short delay, with the settling phase to run again. */
+  #stayClose(): void {
+    this.#sweepDelayMs = this.#sweepFromMs
+    this.#settlingSweeps = SWEEP_SETTLE_SWEEPS
   }
 
   #report(): void {

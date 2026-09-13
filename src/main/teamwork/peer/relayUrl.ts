@@ -120,7 +120,7 @@ export function relayOverride(env: NodeJS.ProcessEnv = process.env): string | nu
 export type RelayFileRead = { ok: true; url: string } | { ok: false; reason: string }
 
 /**
- * What the committed file says, on its own.
+ * What the file in the checkout says, on its own.
  *
  * Read separately from the environment because the two are worth showing side
  * by side: an override in effect does not stop the team's relay being a fact

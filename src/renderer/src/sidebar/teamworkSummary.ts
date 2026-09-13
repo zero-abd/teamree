@@ -15,6 +15,16 @@
 // that wins is the one that most needs acting on.
 
 import type { TeamworkStatus } from '@shared/entities'
+import { ADD_KEY_BUTTON } from '../dialogs/startTeamwork'
+
+/**
+ * The label on the button in the project header that opens the setup panel.
+ *
+ * Shared with the sidebar that renders it, because the tooltip below tells
+ * somebody to press it by name: a name written out twice is a name that can
+ * end up pointing at a button nobody can find.
+ */
+export const TEAMWORK_BUTTON_LABEL = 'Teamwork'
 
 export type TeamworkTone =
   /** Everything that can be up is up. */
@@ -52,7 +62,9 @@ export function teamworkSummary(status: TeamworkStatus | undefined): TeamworkSum
       tone: 'off',
       label: 'Your key is not here',
       detail:
-        'Your own key is not in .teamree/members in this checkout, so no teammate can reach you — their machines have nothing to address. Add it in Members, then commit and push it.'
+        'Your own key is not in .teamree/members in this checkout, so no teammate can reach you — their ' +
+        `machines have nothing to address. Open ${TEAMWORK_BUTTON_LABEL} in this project’s header and press ` +
+        `“${ADD_KEY_BUTTON}”, then commit and push the file it writes.`
     }
   }
   if (status.links.length === 0) {
@@ -69,13 +81,19 @@ export function teamworkSummary(status: TeamworkStatus | undefined): TeamworkSum
   const unreachable = status.links.filter((link) => link.phase === 'unreachable')
   const connected = counted('connected')
 
-  // Ordered by what would make somebody look. A refusal outranks everything:
-  // it means somebody was there and was not who they should have been.
+  // Ordered by what would make somebody look. A failed handshake outranks
+  // everything: it is the state most worth reading. It does NOT mean somebody
+  // was there and was wrong — this end raising an error before a byte is sent
+  // reaches the same phase, so the wording claims only that it failed.
   if (refused.length > 0) {
     return {
       tone: 'problem',
-      label: `${refused.length} refused`,
-      detail: refused.map((link) => `${link.handle}: ${link.detail ?? 'the handshake did not authenticate'}`).join('\n')
+      label: refused.length === 1 ? 'Handshake failed' : `${refused.length} handshakes failed`,
+      detail: [
+        'A handshake did not complete. Which end it failed on is not established here: either roster could be ' +
+          'the stale one, and a failure inside this machine looks the same from this side.',
+        ...refused.map((link) => `${link.handle}: ${link.detail ?? 'no reason given'}`)
+      ].join('\n')
     }
   }
   if (stopped.length > 0) {

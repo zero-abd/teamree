@@ -333,8 +333,18 @@ class Peer {
 
   /** Waits until a teammate's session has authenticated and been confirmed. */
   async waitForLink(options = {}) {
-    const what = `${this.handle} to connect to a teammate`
-    await until(async () => (await this.links()).some((link) => link.phase === 'connected'), what, options.timeoutMs)
+    let seen = []
+    await until(
+      async () => {
+        seen = await this.links()
+        return seen.some((link) => link.phase === 'connected')
+      },
+      // The phases, not just the fact. "dialling forever", "handshaking and
+      // dropping" and "no link at all because the relay never arrived" are
+      // three different failures and read identically without them.
+      () => `${this.handle} to connect to a teammate (last seen: ${JSON.stringify(seen)})`,
+      options.timeoutMs
+    )
   }
 
   async gitPush() {
@@ -570,7 +580,11 @@ async function until(predicate, what, timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
     if (await predicate()) return
-    if (Date.now() > deadline) throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`)
+    // `what` may be a function so a caller can report the state it last saw,
+    // which is the whole of what a reader of a timeout has to go on.
+    if (Date.now() > deadline) {
+      throw new Error(`timed out after ${timeoutMs}ms waiting for ${typeof what === 'function' ? what() : what}`)
+    }
     await sleep(50)
   }
 }

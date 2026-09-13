@@ -27,6 +27,10 @@ impersonation, because this program is not where that bound lives.
 Your team runs this. We do not run one for you, and there is nothing to sign up
 for.
 
+Every command below runs in a clone of the teamree repository, because that is
+where this `relay/` directory is — an installation from the `.dmg` does not ship
+it. Clone `https://github.com/zero-abd/teamree` first if you have not already.
+
 ---
 
 ## Pick one of these two
