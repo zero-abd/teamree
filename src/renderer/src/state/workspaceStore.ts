@@ -34,6 +34,7 @@ import {
   SIDEBAR_DEFAULT_PX
 } from '../shell/sidebarWidth'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
+import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
 
 export type DialogState =
   | { kind: 'add-project' }
@@ -324,6 +325,9 @@ let noticeSeq = 0
 
 const storage = typeof window === 'undefined' ? undefined : window.localStorage
 
+/** What the last window in this installation was showing, read once at startup. */
+const lastSession = readStoredSession(storage)
+
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const notify = (text: string, tone: Notice['tone'] = 'error'): void => {
     const notice: Notice = { id: ++noticeSeq, text, tone }
@@ -532,6 +536,29 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     })
   }
 
+  /**
+   * The worktrees whose git numbers are being shown right now: the open tabs,
+   * and the sidebar rows actually rendered.
+   *
+   * `worktree.status` is a `git status` in the checkout and
+   * `worktree.mergePreview` a `git merge-tree` in the primary one, and the
+   * invalidation that asks for them names no worktree — so without this, one
+   * file changing anywhere costs two git processes for every ready worktree in
+   * every project, up to once a second, most of them for numbers nothing is
+   * painting. It is the same rationing the sidebar already does for its pane
+   * reads, and it is only honest as long as coming into view is itself a read:
+   * see `readOnScreen`.
+   */
+  const onScreenWorktreeIds = (): Set<string> => {
+    const { openWorktreeIds, sidebarVisible, collapsedProjects, worktrees } = get()
+    const shown = new Set(openWorktreeIds)
+    if (!sidebarVisible) return shown
+    for (const worktree of worktrees) {
+      if (!collapsedProjects[worktree.projectId]) shown.add(worktree.id)
+    }
+    return shown
+  }
+
   const applyRefresh = async (targets: RefreshTargets): Promise<void> => {
     // An exit is fully described by its event, so it costs no call at all.
     if (targets.exits.length > 0) markExited(targets.exits)
@@ -560,9 +587,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }
 
     await Promise.all(reads)
-    // Last, so a status is never asked for a worktree the list just dropped.
+    // Last, so a status is never asked for a worktree the list just dropped —
+    // and never for one nothing is showing.
     const live = new Set(get().worktrees.map((worktree) => worktree.id))
-    const readable = [...stale].filter((worktreeId) => live.has(worktreeId))
+    const onScreen = onScreenWorktreeIds()
+    const readable = [...stale].filter((worktreeId) => live.has(worktreeId) && onScreen.has(worktreeId))
     await refreshStatuses(readable)
     // After the statuses, because a row without chips has nothing to put a
     // merge badge beside yet.
@@ -654,9 +683,39 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     onError: failed('Could not refresh the workspace')
   })
 
-  const persistLayout = (layout: Layout): void => {
+  /**
+   * Reads the rows on screen, for the moments when what is on screen changes.
+   *
+   * The other half of `onScreenWorktreeIds`, and the part that keeps it honest:
+   * a row that was hidden while its numbers moved has to be read as it appears,
+   * or somebody ends up reading a chip that stopped updating when they collapsed
+   * the project it was in. Every way a row can appear comes through here or
+   * through `openWorktree`, which asks for its own.
+   */
+  const readOnScreen = (): void => {
+    const shown = onScreenWorktreeIds()
+    // Ready ones only, exactly as `refreshWorktrees` picks them: there is no
+    // git in a checkout that is still being built, or never was.
+    const worth = get()
+      .worktrees.filter((worktree) => worktree.state === 'ready' && shown.has(worktree.id))
+      .map((worktree) => worktree.id)
+    if (worth.length > 0) refresher.request(refreshTargets({ statuses: worth }))
+  }
+
+  /**
+   * Shows a layout without writing it back.
+   *
+   * For a tree the runtime has already saved: a write-back would send the whole
+   * tree as this window computed it, and this window's copy is only ever as new
+   * as the last event that reached it.
+   */
+  const showLayout = (layout: Layout): void => {
     layoutEdits.bump(layout.worktreeId)
     set((state) => ({ layouts: { ...state.layouts, [layout.worktreeId]: layout } }))
+  }
+
+  const persistLayout = (layout: Layout): void => {
+    showLayout(layout)
     void runtimeClient
       .call('layout.set', {
         worktreeId: layout.worktreeId,
@@ -725,13 +784,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     diff: null,
     diffPending: false,
 
-    collapsedProjects: {},
+    // Which projects are folded away is a per-person arrangement of the same
+    // sidebar the width belongs to, so it is remembered on the same terms.
+    // The tabs are not restored here: they name worktrees, and whether those
+    // still exist is not known until the runtime has answered. See `bootstrap`.
+    collapsedProjects: lastSession.collapsedProjects,
     openWorktreeIds: [],
     activeWorktreeId: null,
     dashboardOpen: false,
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
-    sidebarVisible: true,
+    sidebarVisible: lastSession.sidebarVisible,
     paneSearch: null,
     dialog: null,
     notices: [],
@@ -769,8 +832,23 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         await refresher.flush()
 
         if (!get().activeWorktreeId) {
-          const first = get().worktrees.find((worktree) => worktree.state === 'ready')
-          if (first) await get().openWorktree(first.id)
+          // The tabs the last window had, in the order it had them, and the one
+          // that was in front left in front. Main restores the panes and
+          // resumes the agents in them; opening one arbitrary tab instead threw
+          // that away every launch. A worktree removed since — from here, from
+          // another window, from the CLI — simply has no tab to reopen.
+          const live = new Set(get().worktrees.map((worktree) => worktree.id))
+          const reopening = lastSession.openWorktreeIds.filter((worktreeId) => live.has(worktreeId))
+          for (const worktreeId of reopening) await get().openWorktree(worktreeId)
+          const wasActive = lastSession.activeWorktreeId
+          if (wasActive !== null && live.has(wasActive)) await get().openWorktree(wasActive)
+
+          // Nothing remembered, or nothing remembered is left: the first ready
+          // worktree is still better than an empty window.
+          if (reopening.length === 0) {
+            const first = get().worktrees.find((worktree) => worktree.state === 'ready')
+            if (first) await get().openWorktree(first.id)
+          }
         }
       } catch (error) {
         failed('Could not reach the runtime')(error)
@@ -819,6 +897,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],
           collapsedProjects: { ...state.collapsedProjects, [projectId]: false }
         }))
+        // The project may have been collapsed until now, and its other rows
+        // with it.
+        readOnScreen()
 
         // The agent needs a checkout to run in, so the pane waits for one. A
         // failure here is already on the row, with its reason and its retry.
@@ -993,9 +1074,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Re-read: the close was awaited, and the layout can have moved under it.
       const layout = get().layouts[activeWorktreeId]
       if (!layout) return
+      // Shown, not saved. The runtime took the leaf out and wrote the layout as
+      // part of closing the terminal, and it publishes it; writing this
+      // window's version back over that would replace the whole tree with one
+      // that never contained a pane opened from anywhere else in the meantime,
+      // leaving that pane running with no leaf and no way back to it.
       const nextFocus = neighbourTerminalId(layout.root, terminalId)
       const root = closePane(layout.root, terminalId)
-      persistLayout({
+      showLayout({
         worktreeId: activeWorktreeId,
         root,
         focusedTerminalId: layout.focusedTerminalId === terminalId ? nextFocus : layout.focusedTerminalId
@@ -1301,6 +1387,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set((state) => ({
         collapsedProjects: { ...state.collapsedProjects, [projectId]: !state.collapsedProjects[projectId] }
       }))
+      // Expanding puts rows back on screen that have not been read while they
+      // were hidden. Collapsing needs nothing: what is left was already current.
+      if (!get().collapsedProjects[projectId]) readOnScreen()
     },
 
     setSidebarWidth(width) {
@@ -1315,6 +1404,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     toggleSidebar() {
       set((state) => ({ sidebarVisible: !state.sidebarVisible }))
+      // Bringing the sidebar back brings every expanded row with it.
+      if (get().sidebarVisible) readOnScreen()
     },
 
     openDialog(dialog) {
@@ -1329,6 +1420,20 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set((state) => ({ notices: state.notices.filter((notice) => notice.id !== id) }))
     }
   }
+})
+
+/**
+ * One writer for everything the next launch restores.
+ *
+ * Here rather than in each action for the reason the sidebar's width is written
+ * where it is dragged: there is exactly one place a width changes, and there are
+ * a dozen places a tab opens, closes or moves — including the refetch that drops
+ * a worktree somebody removed from another window. Watching the state is the
+ * only version of this that cannot be forgotten in a new one.
+ */
+useWorkspaceStore.subscribe((state, previous) => {
+  if (!sessionChanged(state, previous)) return
+  writeStoredSession(storage, state)
 })
 
 /**
