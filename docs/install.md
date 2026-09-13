@@ -276,10 +276,10 @@ entirely:
 ## Putting the `teamree` CLI on PATH
 
 The app ships its own CLI, under `resources/cli/`. It drives the same runtime
-the window does — projects, worktrees, terminals and the agents on your PATH,
-which is the surface a coding agent needs — while teamwork stays the window's
-alone. It runs under the app's own Electron binary in plain-Node mode, so an
-installed app needs no separate Node runtime.
+the window does — projects, worktrees, terminals, teamwork, and the agents on
+your PATH, which is the surface a coding agent needs. It runs under the app's own
+Electron binary in plain-Node mode, so an installed app needs no separate Node
+runtime.
 
 **On macOS it is a button.** The first time you open an installed build whose
 `teamree` command is not this app's — absent, or a link to another copy — the app

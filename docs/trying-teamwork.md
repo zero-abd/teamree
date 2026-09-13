@@ -6,8 +6,8 @@ you should see after each step.
 
 `docs/teamwork.md` is why it is built this way. This is how to actually do it.
 
-macOS is the supported platform, and CI builds nothing else. Everything below
-assumes two Macs.
+macOS is the only platform with a published build. Everything below assumes two
+Macs.
 
 > **Nothing here has been done across two real machines yet.** All five
 > milestones are built and tested — identity, the relay and presence, watching a
@@ -34,7 +34,7 @@ five-minute silence deadline, which step 8 explains.
 
 **Not exercised between two Macs in two places.** All of the above has been
 driven between two runtimes through a real relay, with real Noise and real
-PTYs, on one computer and in CI. Nobody has yet watched it work across a
+PTYs, but on one computer. Nobody has yet watched it work across a
 network from two houses. That is what this document is for, and it is the one
 claim here you should treat as untested rather than merely new.
 
