@@ -43,6 +43,7 @@ Node 20 or newer. Nothing to install.
 ```sh
 npm test                                # 39 tests, about a second
 node bin/ledger.js fixtures/trip.ledger # the example above
+npm run test:task1                      # the target test for task 1: red until it is done
 ```
 
 ## The shape of it
@@ -56,6 +57,9 @@ node bin/ledger.js fixtures/trip.ledger # the example above
   depends on.
 - `fixtures/` — a weekend that settles, and a ledger with a mistake in it kept
   on purpose, so the error path has something to fail on.
+- `test/tasks/` — one failing test per task in `TASKS.md`, outside `npm test` so
+  that a suite which means "you broke something" never carries work nobody has
+  started.
 
 ## The file format
 
@@ -77,3 +81,8 @@ refuses to load.
 `TASKS.md` has three, chosen so that three people can take one each without
 touching the same file. That is the point: two agents in two worktrees should be
 able to finish and both merge.
+
+Each one has a test that fails today and passes when the task is done, so "done"
+is a command anybody can run rather than a judgement. One of them also has a
+question in it that the implementer cannot answer alone — which is the other
+thing worth trying here, and the reason somebody is watching the pane.

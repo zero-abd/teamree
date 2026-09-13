@@ -123,7 +123,11 @@ describe('two peers on one machine', () => {
     // The example earns its place here: an agent started in a worktree of it has
     // something to run that says something. An empty fixture proves nothing.
     const suite = execFileSync('npm', ['test'], { cwd: worktree.path, encoding: 'utf8' })
-    expect(suite).toMatch(/# fail 0/)
+    // node --test prints its summary as TAP on older releases and as the spec
+    // reporter from Node 22 on, so match the count rather than the decoration.
+    expect(suite).toMatch(/[#\u2139]\s*fail 0\b/)
+    // Guards against a run that reported nothing at all still counting as green.
+    expect(suite).toMatch(/[#\u2139]\s*pass ([1-9]\d*)\b/)
   }, 90_000)
 
   it.skipIf(!RELAY_BUILT)(

@@ -12,6 +12,8 @@ function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
     projectId: 'p1',
     relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
     disabledReason: null,
+    origin: { ok: true },
+    enrolled: true,
     links: [],
     readAt: 0,
     ...overrides
@@ -73,7 +75,11 @@ describe('what the project header says about teamwork', () => {
       status({
         links: [
           link({ handle: 'priya' }),
-          link({ handle: 'marcus', phase: 'refused', detail: 'the peer static key is not on the roster' })
+          link({
+            handle: 'marcus',
+            phase: 'refused',
+            detail: 'the peer static key is not on the roster'
+          })
         ]
       })
     )
@@ -89,8 +95,29 @@ describe('what the project header says about teamwork', () => {
     expect(summary).toMatchObject({ tone: 'live', label: '1 connected · 1 away' })
   })
 
+  it('names the one cause that is this machine, rather than blaming the teammate', () => {
+    // The roster has the teammate on it and not me, so every link is parked on
+    // a rendezvous their machine has no key to compute. It waits forever, and
+    // the phase alone would say "Nobody connected" — sending the reader to a
+    // machine that is doing nothing wrong.
+    const summary = teamworkSummary(status({ enrolled: false, links: [link({ handle: 'ana', phase: 'waiting' })] }))
+    expect(summary).toMatchObject({ tone: 'off', label: 'Your key is not here' })
+    expect(summary?.detail).toContain('.teamree/members')
+    expect(summary?.detail).toContain('commit and push')
+  })
+
+  it('still says which thing is not set up at all before it says whose key is missing', () => {
+    // "No relay here" is the earlier thing to fix, and it is the one the
+    // roster read could not get past.
+    const summary = teamworkSummary(status({ enrolled: false, disabledReason: 'no .teamree/relay in this project' }))
+    expect(summary).toMatchObject({ tone: 'off', label: 'Teamwork off' })
+  })
+
   it('says an empty roster is an empty roster, not a connection problem', () => {
-    expect(teamworkSummary(status({ links: [] }))).toMatchObject({ tone: 'off', label: 'No teammates' })
+    expect(teamworkSummary(status({ links: [] }))).toMatchObject({
+      tone: 'off',
+      label: 'No teammates'
+    })
   })
 
   it('names where the relay came from, because a surprising URL needs a source', () => {

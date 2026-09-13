@@ -117,6 +117,21 @@ describe('what counts as a relay URL', () => {
     expect(suggestionFor('ftp://relay.example/v1/relay')).toBeUndefined()
   })
 
+  it('refuses the host on its own, which dials a path no relay can serve', () => {
+    // The half-followed instruction: scheme corrected, endpoint never added.
+    // Accepting it dialled wss://host/<rendezvous>, the relay answered 404, the
+    // failed upgrade read as a socket error, and both machines said the relay
+    // was unreachable — about a relay that was up.
+    const parsed = parseRelayUrl('wss://my-relay.example.workers.dev')
+    expect(parsed.ok).toBe(false)
+    expect(parsed.ok === false && parsed.suggestion).toBe('wss://my-relay.example.workers.dev/v1/relay')
+    expect(parsed.ok === false && parsed.reason).toContain('wss://my-relay.example.workers.dev/v1/relay')
+  })
+
+  it('refuses a bare trailing slash too, which is the same address said differently', () => {
+    expect(suggestionFor('ws://127.0.0.1:8787/')).toBe('ws://127.0.0.1:8787/v1/relay')
+  })
+
   it('refuses a query or a fragment, which a relay URL never carries', () => {
     expect(parseRelayUrl('wss://relay.example/v1/relay?token=abc').ok).toBe(false)
     expect(parseRelayUrl('wss://relay.example/v1/relay#x').ok).toBe(false)

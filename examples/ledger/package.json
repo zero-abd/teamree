@@ -7,6 +7,9 @@
   "bin": { "ledger": "./bin/ledger.js" },
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
+    "test:task1": "node --test test/tasks/task-1-json.test.js",
+    "test:task2": "node --test test/tasks/task-2-totals.test.js",
+    "test:task3": "node --test test/tasks/task-3-repeats.test.js",
     "start": "node bin/ledger.js fixtures/trip.ledger"
   },
   "engines": { "node": ">=20" }

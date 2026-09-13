@@ -10,7 +10,7 @@ import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
 import { InstallCliDialog } from './dialogs/InstallCliDialog'
-import { MembersDialog } from './dialogs/MembersDialog'
+import { StartTeamworkDialog } from './dialogs/StartTeamworkDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { SidebarResizer } from './shell/SidebarResizer'
@@ -90,7 +90,7 @@ export function App(): React.JSX.Element {
       ) : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
-      {dialog?.kind === 'members' ? <MembersDialog projectId={dialog.projectId} /> : null}
+      {dialog?.kind === 'start-teamwork' ? <StartTeamworkDialog projectId={dialog.projectId} /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
     </div>
   )

@@ -54,7 +54,12 @@ import {
 import type { ParamsOf, ResultOf } from '../../../shared/methods'
 import { createGitRunner, type GitRunner } from '../../git/gitProcess'
 import type { Dispatcher } from '../../runtime/dispatcher'
-import { PeerCallError, type RemoteWriteRequest, type RemoteWriteVerdict } from '../../runtime/peerTransport'
+import {
+  PeerCallError,
+  type RemoteReadVerdict,
+  type RemoteWriteRequest,
+  type RemoteWriteVerdict
+} from '../../runtime/peerTransport'
 import type { SubscriptionChannel, SubscriptionHub } from '../../runtime/subscriptionHub'
 import { notFound } from '../../runtime/runtimeError'
 import { ErrorCode } from '../../../shared/protocol'
@@ -117,8 +122,16 @@ type ProjectFacts = {
   /** Public key to the handle the roster files it under, for display. */
   handles: Map<string, string>
   relay: RelayLocation | null
+  /** Whether this machine's own key is among `rosterKeys`. */
+  enrolled: boolean
   /** Why teamwork is not running for this project, or null when it is. */
   disabledReason: string | null
+  /**
+   * Whether `origin` gave a key, kept apart from `disabledReason` because a
+   * project can be missing both a relay and an origin and only one of those
+   * gets named as the first thing to fix.
+   */
+  origin: { ok: true } | { ok: false; reason: string }
 }
 
 type LinkRecord = {
@@ -273,7 +286,9 @@ export class PeerService {
     const identity = await loadIdentity(this.#options.dataDir)
     this.#identityKey = identity.publicKey
 
-    const facts = await Promise.all(this.#options.workspace.listProjects().map((project) => this.#readProject(project)))
+    const facts = await Promise.all(
+      this.#options.workspace.listProjects().map((project) => this.#readProject(project, identity.publicKey))
+    )
     this.#projects.clear()
     for (const fact of facts) this.#projects.set(fact.projectId, fact)
 
@@ -368,6 +383,8 @@ export class PeerService {
       projectId: facts.projectId,
       relay: facts.relay,
       disabledReason: facts.disabledReason,
+      origin: facts.origin,
+      enrolled: facts.enrolled,
       links,
       readAt: this.#scheduler.now()
     }
@@ -427,7 +444,10 @@ export class PeerService {
             // Namespaced, because a teammate's worktree id is theirs and two
             // installations can and do generate the same one.
             id: `peer:${publicKey.slice(0, 12)}:${worktree.id}`,
-            panes: worktree.panes.map((pane) => ({ ...pane, id: `peer:${publicKey.slice(0, 12)}:${pane.id}` })),
+            panes: worktree.panes.map((pane) => ({
+              ...pane,
+              id: `peer:${publicKey.slice(0, 12)}:${pane.id}`
+            })),
             handle,
             publicKey,
             heardAt: entry.heardAt,
@@ -595,6 +615,61 @@ export class PeerService {
    * runtime's own list. A teammate whose key left the roster is refused at the
    * next keystroke, which is what "revocation at fetch speed" means here.
    */
+  /**
+   * The project a teammate reached this machine through, if they may use it.
+   *
+   * Both halves matter and neither is enough alone: the roster is membership,
+   * and the project key is what stops a teammate reached over one repository's
+   * session reaching into another's. Push access to repository A says nothing
+   * about repository B, and `docs/teamwork.md` scopes everything it grants to
+   * "within a project" for exactly that reason.
+   */
+  #projectForPeer(peer: { publicKey: string; projectKey: string | undefined }): ProjectFacts | undefined {
+    return [...this.#projects.values()].find(
+      (fact) =>
+        fact.projectKey === peer.projectKey && fact.disabledReason === null && fact.rosterKeys.includes(peer.publicKey)
+    )
+  }
+
+  /**
+   * Whether a teammate may read one of this machine's panes.
+   *
+   * The same scoping `remoteWrite` puts on typing, which reading did not have:
+   * `terminal.read` and `terminal.subscribe` went to the dispatcher with
+   * nothing but the id the caller named, so a teammate on one repository's
+   * roster could stream a pane belonging to a project they hold no key for.
+   * Every legitimate watcher takes the id out of a presence snapshot, which is
+   * already scoped to the session's project, so nothing honest is refused by
+   * checking.
+   *
+   * A pane in another project is reported exactly as a pane that does not
+   * exist, deliberately: telling the two apart would answer "is there a pane
+   * with this id somewhere on your machine", which is a question a teammate has
+   * no business being able to ask.
+   */
+  remoteRead(connectionId: string, terminalId: string): RemoteReadVerdict {
+    const peer = this.#peerByConnection.get(connectionId)
+    if (!peer) {
+      return { ok: false, code: ErrorCode.NotFound, message: 'this connection is not a peer link' }
+    }
+    const project = this.#projectForPeer(peer)
+    if (!project) {
+      return {
+        ok: false,
+        code: ErrorCode.NotFound,
+        message: 'you are not on this project’s roster'
+      }
+    }
+    if (!this.#paneOf(project.projectId, terminalId)) {
+      return {
+        ok: false,
+        code: ErrorCode.NotFound,
+        message: `there is no pane ${terminalId} in this project`
+      }
+    }
+    return { ok: true }
+  }
+
   remoteWrite(connectionId: string, write: RemoteWriteRequest): RemoteWriteVerdict {
     const at = this.#scheduler.now()
     const peer = this.#peerByConnection.get(connectionId)
@@ -610,15 +685,15 @@ export class PeerService {
     }
 
     const handle = this.#handleFor(peer.publicKey) ?? peer.publicKey.slice(0, 8)
-    const stamp = { at, handle, publicKey: peer.publicKey, projectId: '', terminalId: write.terminalId }
+    const stamp = {
+      at,
+      handle,
+      publicKey: peer.publicKey,
+      projectId: '',
+      terminalId: write.terminalId
+    }
 
-    // On the roster of a project this session is actually for. Both halves
-    // matter: the roster is membership, and the project key is what stops a
-    // teammate reached over one repository's session typing into another's.
-    const project = [...this.#projects.values()].find(
-      (fact) =>
-        fact.projectKey === peer.projectKey && fact.disabledReason === null && fact.rosterKeys.includes(peer.publicKey)
-    )
+    const project = this.#projectForPeer(peer)
     if (!project) {
       return this.#refuse(stamp, write, 'not-a-member', 'you are not on this project’s roster')
     }
@@ -761,6 +836,7 @@ export class PeerService {
       onPresence: (presence) => this.#record(linkId, want.publicKey, presence),
       onWatchersChange: (terminalIds) => this.#recordWatchers(linkId, terminalIds),
       onRemoteWrite: (write) => this.remoteWrite(linkId, write),
+      onRemoteRead: (terminalId) => this.remoteRead(linkId, terminalId),
       onError: this.#options.onError
     })
 
@@ -798,7 +874,13 @@ export class PeerService {
     this.#heard.set(linkId, { publicKey, presence, heardAt, live: true })
     const [project] = presence.projects
     if (projectKey !== undefined && project) {
-      this.#cache?.put({ publicKey, projectKey, handle: presence.handle, heardAt, worktrees: project.worktrees })
+      this.#cache?.put({
+        publicKey,
+        projectKey,
+        handle: presence.handle,
+        heardAt,
+        worktrees: project.worktrees
+      })
     }
     this.#options.onChange()
   }
@@ -1012,7 +1094,7 @@ export class PeerService {
     return undefined
   }
 
-  async #readProject(project: Project): Promise<ProjectFacts> {
+  async #readProject(project: Project, identityKey: string): Promise<ProjectFacts> {
     const [roster, relay, key] = await Promise.all([
       readRoster(project.path).catch(() => ({ entries: [], problems: [] })),
       readRelayConfig(project.path, this.#options.env),
@@ -1025,7 +1107,9 @@ export class PeerService {
       projectKey: key.ok ? key.key : undefined,
       rosterKeys: roster.entries.map((entry) => entry.publicKey),
       relay: relay.configured ? relay.location : null,
+      enrolled: roster.entries.some((entry) => entry.publicKey === identityKey),
       disabledReason: null,
+      origin: key.ok ? { ok: true } : { ok: false, reason: key.reason },
       handles
     }
 

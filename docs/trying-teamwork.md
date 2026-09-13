@@ -93,6 +93,12 @@ pieces of work chosen so that three people can take one each without touching th
 same file. That last part is what makes it worth using here — two agents in two
 worktrees should be able to finish and both merge.
 
+Each task has a test that fails today and passes when the task is done, so "done"
+is a command either of you can run rather than a judgement, and the diff the
+merge preview shows you has a green suite behind it. One task also has a question
+in it that whoever takes it cannot answer alone: that is step 7, and it is the
+thing you are really here to try.
+
 **Leader**, from a teamree checkout:
 
 ```sh
@@ -134,6 +140,15 @@ cd ~/teamree-example && npm test
 
 39 tests, about a second, and no network.
 
+The three task targets are deliberately outside that suite, and red:
+
+```sh
+npm run test:task1   # 5 of 6 failing, until somebody writes --json
+```
+
+That is the shape to expect: `npm test` green means you have broken nothing, and
+one target test going green means somebody finished something.
+
 ## 3. Stand up a relay, and commit where it is
 
 Two machines behind two routers cannot reach each other, so neither tries: each
@@ -161,6 +176,13 @@ at the root — but the refusal now says what the corrected URL would be, so
 pasting the address the deploy printed costs you a sentence rather than a
 search.
 
+Both halves of that correction are required, and the app checks both: a `wss://`
+URL with no path on it is refused the same way, with the same endpoint offered
+back. The rendezvous id is appended to whatever you write, so a host on its own
+dials a path no relay serves, and the 404 that comes back is indistinguishable
+from a relay that is not there — which is how a healthy deploy gets reported as
+unreachable on both machines at once.
+
 ### Write it into the repository
 
 The relay goes in the repository, at **`.teamree/relay`**, beside the member
@@ -177,12 +199,18 @@ the first, which is the thing the identity design spends its whole argument
 avoiding. One person deploys a relay, pushes a one-line file, and the team is
 connected, visibly, in a diff.
 
-**Whoever set the relay up** does it in the app, in the same **Members** dialog
-step 4 uses: paste the URL into **Set the relay for this project** and press
+**Whoever set the relay up** does it in the app, in the same **Start teamwork**
+panel step 4 uses — the **Teamwork** button in the project header opens it, and
+step 3 of it is the relay. If you have not stood one up yet, that step lists the
+four ways to get one with what each costs, and says which of them produce an
+address stable enough to commit and which belong in the environment override
+instead. Paste the URL into **Set the relay for this project** and press
 **Write relay file**. That writes `.teamree/relay` — the same file, with the
 same comment header — and stops there, exactly as adding your key does. The
-dialog then names both files it has written and the one commit that covers them,
+panel then names both files it has written and the one commit that covers them,
 which is step 4's commit: you can do this step and the next one and push once.
+The panel accepts any `ws://` or `wss://` URL — a deployed Worker, a tunnel, a
+Tailscale address, a box on the LAN — and it never starts a relay itself.
 
 Blank lines and `#` comments are skipped, the same way the member files' are;
 the first line that is neither is the URL. It must be `ws://` or `wss://`, and
@@ -203,7 +231,7 @@ launched from Finder or Spotlight does not inherit your shell's environment, so
 the override only applies if you start teamree from the terminal that has the
 variable set; and because it is per-machine it is exactly the second list this
 design avoids, so use it to test a relay and then commit the real one. The
-Members dialog says which of the two it is looking at — including *"No
+**Start teamwork** panel says which of the two it is looking at — including *"No
 `TEAMREE_RELAY_URL` in this app's environment"*, which is the answer to "I set
 the variable and nothing happened".
 
@@ -214,8 +242,10 @@ private half never leaves it, and the public half goes in the repository at
 `.teamree/members/<handle>.pub`. There is no account to make and nobody to ask:
 if you can push that file, you are on the team.
 
-In the app, open the project's **Members** dialog — the button is in the project
-header in the sidebar — and press **Add my key**.
+In the app, open the project's **Start teamwork** panel — the **Teamwork**
+button is in the project header in the sidebar — and press **Add my key** in
+step 2. What that grants is written above the button rather than under it: a key
+in `.teamree/members/` lets that person run commands on your machine, as you.
 
 Your handle defaults to the local part of `git config user.email` as configured
 *in that repository*, lowercased and reduced to `[a-z0-9._-]`, at most 48
@@ -237,7 +267,9 @@ execution.
 writes the file and stops. It does not stage it, commit it or push it — not
 because that would be hard, but because doing it for you would hide the only
 step that means anything. A key nobody pushed is not membership; a key the app
-pushed on your behalf would be a claim you never made.
+pushed on your behalf would be a claim you never made. Until your key is on the
+roster your checkout can see, the project header says **Your key is not here**
+and names this step, rather than counting teammates who cannot reach you.
 
 The dialog prints these underneath, naming every file it has written — so if you
 also set the relay in step 3, this one commit carries both:
@@ -294,13 +326,23 @@ you would add any repository.
 There is nothing to restart. teamree watches `.teamree` in each project's
 primary checkout, so a pull that brings in your teammate's key or the relay file
 reaches the app by itself: the roster is re-read, the links are rebuilt against
-it, and the project header moves. Opening the Members dialog re-reads both
-files as well, which is the belt-and-braces half of the same thing — and if the
-watch could not be set up at all, that is the dialog that says so rather than
-letting a list nothing is following look as live as one that is.
+it, and the project header moves. Almost always that is immediate.
 
-Open the Members dialog on both machines. You should each see two entries, one
-of them marked as you. That part reads the directory and needs no network at
+If it is not immediate, give it half a minute before you touch anything. A
+filesystem watch is the fast path, not a promise — this project's own tests have
+caught macOS starting a watch and then never saying a word on it — so underneath
+the watch teamree re-checks `.teamree` on a timer, fast just after a project is
+opened and settling to once every thirty seconds while nothing is happening. A
+pull the watch misses is picked up by that instead. Half a minute late is the
+worst this costs you; never noticing it at all is what it removes.
+
+Opening the **Start teamwork** panel re-reads both files as well, which is the
+belt-and-braces half of the same thing — and if the watch could not be set up at
+all, that is the panel that says so rather than letting a list nothing is
+following look as live as one that is.
+
+Open the **Start teamwork** panel on both machines. Its last step should list
+two entries, one of them marked as you. That part reads the directory and needs no network at
 all, so it is a clean check on step 4 before you blame anything on the relay.
 
 Then look at the project header in the sidebar, which says in one phrase what
@@ -310,9 +352,13 @@ teamwork is doing. The ones you will see are:
   no `.teamree/relay`, no `origin` remote, or a roster with nobody in it. This
   is the ordinary state of a project nobody has done this to, not a fault.
 - **No teammates** — the roster has nobody in it but you.
+- **Your key is not here** — your own key is not in `.teamree/members` in this
+  checkout, so nobody can address your machine. This is step 4, either not done
+  or not pushed, and no amount of waiting fixes it.
 - **Connecting…** — dialling.
-- **Nobody connected** — the relay is reachable and no teammate's machine is on
-  it. Normal when your colleague has not got there yet.
+- **Nobody connected** — the relay is reachable, your key is on the roster, and
+  no teammate's machine is on it. Normal when your colleague has not got there
+  yet.
 - **1 connected** — the one you are after, and it means a Noise session that
   authenticated against the key in the repository and has since been confirmed
   by a frame only the holder of the private half could have sent.
@@ -325,9 +371,10 @@ teamwork is doing. The ones you will see are:
 
 **Leader**: create a worktree — describe the task, pick an agent, pick what to
 start from — and let the agent run. `TASKS.md` in the example has three real
-ones; task 1, `--json` output, is a good first choice because the
-`spike/json-output` branch already has a half-finished note about it to start
-from.
+ones; task 1, `--json` output, is the one to take here: the `spike/json-output`
+branch already has a half-finished note about it to start from, and it is the
+task with the unanswerable question in it. Give the agent the task and tell it to
+run `npm run test:task1` until that passes.
 
 You should see, on your own machine, what you always see: the worktree in the
 sidebar, its pane underneath, a state dot and how long since it last said
@@ -356,9 +403,20 @@ reading.
 **Leader**: your own pane now says it is being watched, and by whom, by the
 handle their key is filed under in `.teamree/members/`.
 
-Now the part the whole design is for. Wait for the agent to stop on a question
-it cannot answer by itself — task 1 in `TASKS.md` is a good one for this — and
-have the **joiner type the answer into the leader's pane**.
+Now the part the whole design is for. Wait for the agent to stop on the question
+task 1 puts in front of it, and have the **joiner type the answer into the
+leader's pane**.
+
+The question is marked **Ask first** in `TASKS.md`, and it is real: under
+`--json`, what happens to a ledger that does not parse — today's message on
+stderr with nothing on stdout, or a JSON error object on stdout so the caller
+only ever parses one format? Both are ordinary, nothing in the repository
+prefers either, and the target test says nothing about it on purpose. The joiner
+answers in one line, and the agent carries on. That is the ninety seconds the
+whole feature exists for.
+
+If the agent decides for itself instead of asking, that is worth writing down:
+it is the sample failing to produce the moment, not the feature failing.
 
 - The leader's pane names the joiner while they type, and goes on saying they
   typed there after they stop.
@@ -382,6 +440,11 @@ Nothing here is new — it is the single-user flow. The agent commits, the leade
 checks whether the branch would merge into its base, and pushes. The joiner does
 the same in their own worktree on a different task from `TASKS.md`. Both should
 merge, because the tasks were chosen not to overlap.
+
+Before either of you pushes, the same two commands each: `npm test` still 39
+passing, and your own `npm run test:task<n>` now passing. Two green targets and
+two branches that merge is the whole claim of this walkthrough, and it is
+checkable in about two seconds.
 
 **Leader**: close your laptop, or quit teamree, and watch the joiner's sidebar.
 Your worktrees stay where they were, marked stale and dated, rather than
@@ -443,13 +506,13 @@ cd ~/teamree-example && git pull && ls .teamree/members/
 ```
 
 Both handles, or you are not done. The app follows that directory, so what is
-in it is what the Members dialog shows within a moment of the pull finishing —
-and opening the dialog re-reads it in any case. If the dialog shows two people
+in it is what the **Start teamwork** panel shows within a moment of the pull
+finishing — and opening it re-reads the directory in any case. If the panel shows two people
 and the header still says **No teammates**, that is worth reporting: it is the
 one shape of this failure the app is supposed to have stopped being able to
 have.
 
-If a key is in the directory and not in the dialog, the dialog will name the
+If a key is in the directory and not in the panel, the panel will name the
 file and say why it was skipped — a name that is not exactly `<handle>.pub`, a
 file whose contents name somebody other than its filename, two files with one
 key. One bad file costs one member and never the list.
@@ -471,15 +534,15 @@ cd ~/teamree-example && git pull && cat .teamree/relay
 ```
 
 Both of you, and compare the strings exactly, scheme included — or open the
-Members dialog on each machine, which shows the URL in effect and which of the
+**Start teamwork** panel on each machine, which shows the URL in effect and which of the
 two places it came from. If one of you has the file and the other does not,
-somebody did not push. If it says the scheme is `https`, not ws or wss, you
-pasted the address the deploy printed rather than the endpoint — add `/v1/relay`
-and make it `wss://`, which is what the dialog says back to you if you paste it
-there. If you set `TEAMREE_RELAY_URL` earlier to test a tunnel and forgot, it is
-still winning over the file in whatever process inherited it; the header's
-tooltip says `(from the environment)` when that is what happened, and the
-dialog names the variable and its value.
+somebody did not push. If it says the scheme is `https`, not ws or wss, or that
+it has no path, you pasted the address the deploy printed rather than the
+endpoint — add `/v1/relay` and make it `wss://`, which is what the dialog says
+back to you if you paste it there. If you set `TEAMREE_RELAY_URL` earlier to
+test a tunnel and forgot, it is still winning over the file in whatever process
+inherited it; the header's tooltip says `(from the environment)` when that is
+what happened, and the dialog names the variable and its value.
 
 ### The relay is not reachable
 

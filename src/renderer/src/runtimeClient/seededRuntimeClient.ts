@@ -107,7 +107,12 @@ function seededChanges(status: WorktreeStatus): WorktreeChange[] {
     changes.push({ path: take(), kind: 'conflicted', staged: false, unstaged: true })
   }
   for (let index = 0; index < status.staged; index += 1) {
-    changes.push({ path: take(), kind: index === 0 ? 'added' : 'modified', staged: true, unstaged: false })
+    changes.push({
+      path: take(),
+      kind: index === 0 ? 'added' : 'modified',
+      staged: true,
+      unstaged: false
+    })
   }
   for (let index = 0; index < status.unstaged; index += 1) {
     changes.push({ path: take(), kind: 'modified', staged: false, unstaged: true })
@@ -237,7 +242,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
   }
 
   const seedStatus = (worktree: Worktree, partial: Omit<WorktreeStatus, 'worktreeId' | 'branch' | 'readAt'>): void => {
-    statuses.set(worktree.id, { worktreeId: worktree.id, branch: worktree.branch, readAt: Date.now(), ...partial })
+    statuses.set(worktree.id, {
+      worktreeId: worktree.id,
+      branch: worktree.branch,
+      readAt: Date.now(),
+      ...partial
+    })
   }
 
   // --- seed -----------------------------------------------------------------
@@ -267,7 +277,14 @@ export function createSeededRuntimeClient(): RuntimeClient {
 
   seedStatus(search, { ahead: 3, behind: 0, staged: 2, unstaged: 4, untracked: 1, conflicted: 0 })
   seedStatus(themes, { ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 })
-  seedStatus(migration, { ahead: 1, behind: 12, staged: 0, unstaged: 3, untracked: 0, conflicted: 2 })
+  seedStatus(migration, {
+    ahead: 1,
+    behind: 12,
+    staged: 0,
+    unstaged: 3,
+    untracked: 0,
+    conflicted: 2
+  })
 
   const searchShell = spawn(search.id, 'zsh', [
     dim('teamree · worktree ready in 1.9s'),
@@ -308,7 +325,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
       ]
     }
   })
-  layouts.set(themes.id, { worktreeId: themes.id, focusedTerminalId: themeShell.id, root: leaf(themeShell.id) })
+  layouts.set(themes.id, {
+    worktreeId: themes.id,
+    focusedTerminalId: themeShell.id,
+    root: leaf(themeShell.id)
+  })
   layouts.set(migration.id, {
     worktreeId: migration.id,
     focusedTerminalId: migrationShell.id,
@@ -347,7 +368,14 @@ export function createSeededRuntimeClient(): RuntimeClient {
       }
       const ready: Worktree = { ...worktree, state: 'ready' }
       worktrees.set(worktreeId, ready)
-      seedStatus(ready, { ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 })
+      seedStatus(ready, {
+        ahead: 0,
+        behind: 0,
+        staged: 0,
+        unstaged: 0,
+        untracked: 0,
+        conflicted: 0
+      })
       const shell = spawn(worktreeId, 'zsh', [
         dim('teamree · worktree ready'),
         `${good('✓')} ${accent(ready.branch)} from ${dim(ready.startedFrom)}`
@@ -670,7 +698,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
         const name = handle ?? SEEDED_HANDLE
         rosters.set(projectId, [
           ...roster,
-          { ...seededMember(name, SEEDED_PUBLIC_KEY, new Date().toISOString().slice(0, 10)), isSelf: true }
+          {
+            ...seededMember(name, SEEDED_PUBLIC_KEY, new Date().toISOString().slice(0, 10)),
+            isSelf: true
+          }
         ])
         announce({ type: 'members' })
       }
@@ -684,6 +715,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       projectId,
       relay: { url: 'wss://relay.example/v1/relay', source: 'repository' as const },
       disabledReason: null,
+      origin: { ok: true as const },
+      enrolled: true,
       links: [
         {
           publicKey: SEEDED_PEER_KEY,
@@ -709,8 +742,18 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'teamwork.presence': ({ projectId }) => ({
       projectId,
       teammates: [
-        { handle: 'marcus', publicKey: SEEDED_AWAY_KEY, connected: false, heardAt: Date.now() - 2_700_000 },
-        { handle: 'priya', publicKey: SEEDED_PEER_KEY, connected: true, heardAt: Date.now() - 4_000 }
+        {
+          handle: 'marcus',
+          publicKey: SEEDED_AWAY_KEY,
+          connected: false,
+          heardAt: Date.now() - 2_700_000
+        },
+        {
+          handle: 'priya',
+          publicKey: SEEDED_PEER_KEY,
+          connected: true,
+          heardAt: Date.now() - 4_000
+        }
       ],
       worktrees: [
         {
@@ -823,7 +866,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
     // which pane, how much — and, deliberately, not a byte of what was typed.
     'teamwork.writeLog': ({ limit }) => {
       const writes = [...seededWrites]
-      return { writes: limit === undefined ? writes : writes.slice(-limit), problem: null, readAt: Date.now() }
+      return {
+        writes: limit === undefined ? writes : writes.slice(-limit),
+        problem: null,
+        readAt: Date.now()
+      }
     },
 
     // PEER-ONLY, and refused here rather than seeded. These are what a teammate
@@ -870,7 +917,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
       terminal.record = { ...record, cols: cols ?? record.cols, rows: rows ?? record.rows }
       const layout = layouts.get(worktreeId)
       if (!layout?.root) {
-        layouts.set(worktreeId, { worktreeId, root: leaf(record.id), focusedTerminalId: record.id })
+        layouts.set(worktreeId, {
+          worktreeId,
+          root: leaf(record.id),
+          focusedTerminalId: record.id
+        })
       } else {
         const root = layout.root
         const share = root.kind === 'split' && root.direction === 'row' ? 1 / (root.children.length + 1) : 0.5
@@ -884,7 +935,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
                   children: [...root.children, leaf(record.id)],
                   sizes: [...root.sizes.map((size) => size * (1 - share)), share]
                 }
-              : { kind: 'split', direction: 'row', children: [root, leaf(record.id)], sizes: [0.5, 0.5] }
+              : {
+                  kind: 'split',
+                  direction: 'row',
+                  children: [root, leaf(record.id)],
+                  sizes: [0.5, 0.5]
+                }
         })
       }
       announce({ type: 'terminals' }, { type: 'layout', worktreeId })
@@ -939,7 +995,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
 
     'layout.get': ({ worktreeId }) => layouts.get(worktreeId) ?? { worktreeId, root: null, focusedTerminalId: null },
     'layout.set': ({ worktreeId, root, focusedTerminalId }) => {
-      const layout: Layout = { worktreeId, root: (root as PaneNode | null) ?? null, focusedTerminalId }
+      const layout: Layout = {
+        worktreeId,
+        root: (root as PaneNode | null) ?? null,
+        focusedTerminalId
+      }
       layouts.set(worktreeId, layout)
       announce({ type: 'layout', worktreeId })
       return layout
@@ -1022,7 +1082,10 @@ function echo(
       terminal.line = ''
       emit(terminal, { type: 'data', data: '\r\n' })
       if (command) {
-        emit(terminal, { type: 'data', data: `${dim(`demo runtime: '${command}' was not run`)}\r\n` })
+        emit(terminal, {
+          type: 'data',
+          data: `${dim(`demo runtime: '${command}' was not run`)}\r\n`
+        })
       }
       emit(terminal, { type: 'data', data: prompt(terminal) })
     } else if (char === '\u007f' || char === '\b') {
@@ -1106,7 +1169,13 @@ function capStartPoints(baseRef: string, rows: StartPoint[], limit: number): Sta
   }
   const marked = rows.map((row) => (row.ref === baseRef ? { ...row, isBase: true } : row))
   marked.sort((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt || a.ref.localeCompare(b.ref))
-  return { baseRef, options: marked.slice(0, limit), total: marked.length, limit, truncated: marked.length > limit }
+  return {
+    baseRef,
+    options: marked.slice(0, limit),
+    total: marked.length,
+    limit,
+    truncated: marked.length > limit
+  }
 }
 
 /** Stable digits per ref name, so a row keeps its sha across refetches. */
