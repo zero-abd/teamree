@@ -186,10 +186,11 @@ export type HandshakeConfig = {
   readonly remoteStaticPublicKey: Uint8Array | null
   readonly random: RandomSource
   /**
-   * Called the instant a peer's static public key is decrypted out of a
-   * handshake message, before any further token is processed. Returning false
-   * aborts the handshake. This is where IK earns its place: it is the roster
-   * check, and it happens before we have sent anything back.
+   * The roster check, run on a peer static key decrypted out of a handshake
+   * message. Returning false aborts the handshake. It runs only once the whole
+   * of that message has been processed — see `readMessage` for why it is not
+   * run the moment the key comes out — and always before we have sent anything
+   * back.
    */
   readonly acceptRemoteStatic?: (staticPublicKey: Uint8Array) => boolean
 }
@@ -298,6 +299,7 @@ export function readMessage(hs: HandshakeState, message: Uint8Array): HandshakeS
   if (message.length > MAX_MESSAGE_LEN) throw peerError(PeerErrorCode.MessageTooLong)
   const tokens = currentMessage(hs)
   let offset = 0
+  let carriedStatic: Uint8Array | null = null
 
   const take = (length: number): Uint8Array => {
     if (message.length - offset < length) throw peerError(PeerErrorCode.Truncated)
@@ -314,19 +316,29 @@ export function readMessage(hs: HandshakeState, message: Uint8Array): HandshakeS
       const encrypted = take(hasKey(hs.symmetric.cipher) ? DH_LEN + TAG_LEN : DH_LEN)
       const remoteStatic = decryptAndHash(hs.symmetric, encrypted)
       if (remoteStatic.length !== DH_LEN) throw peerError(PeerErrorCode.InvalidKey)
-      // The roster check runs here, on the first message that carries a static
-      // key, so an unrecognised peer is refused before we mix any further
-      // secret or write a single byte back to it.
-      if (hs.acceptRemoteStatic && !hs.acceptRemoteStatic(remoteStatic)) {
-        throw peerError(PeerErrorCode.UnknownPeer)
-      }
       hs.rs = remoteStatic.slice()
+      carriedStatic = hs.rs
     } else {
       mixDiffieHellman(hs, token)
     }
   }
 
   const payload = decryptAndHash(hs.symmetric, message.subarray(offset))
+
+  // The roster check waits until the whole message has been processed — every
+  // DH and both AEAD openings — rather than running the instant the `s` token
+  // is decrypted. In IK that slot is sealed under `es` alone, which anybody who
+  // knows our static public key can compute from its own ephemeral, so a caller
+  // can claim any static key without holding its private half. Deciding early
+  // would make the work we do depend on whether that claimed key is on the
+  // roster, and that difference is measurable from the other end of the wire:
+  // a roster-membership oracle for anyone who can dial us. Refusing early
+  // bought nothing in exchange, because a peer that cannot complete the
+  // handshake gets nothing from the tokens we mixed on its behalf.
+  if (carriedStatic && hs.acceptRemoteStatic && !hs.acceptRemoteStatic(carriedStatic)) {
+    throw peerError(PeerErrorCode.UnknownPeer)
+  }
+
   hs.messageIndex += 1
   return { bytes: payload, transport: finishedTransport(hs) }
 }

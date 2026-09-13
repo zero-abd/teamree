@@ -27,6 +27,10 @@ export const PeerErrorCode = {
   DecryptionFailed: 'decryption_failed',
   /** The peer's static key is not on the roster we were given. */
   UnknownPeer: 'unknown_peer',
+  /** A payload was offered on, or arrived in, the first handshake message, which is replayable. */
+  ReplayablePayload: 'replayable_payload',
+  /** The peer has not yet proved it holds the static key it claimed. */
+  UnconfirmedPeer: 'unconfirmed_peer',
   /** The 2^64 - 1 nonce ceiling was reached. The session must be rebuilt, never wrapped. */
   NonceExhausted: 'nonce_exhausted'
 } as const
@@ -45,6 +49,8 @@ const MESSAGES: Readonly<Record<PeerErrorCode, string>> = Object.freeze({
   [PeerErrorCode.MessageTooLong]: 'the message exceeds the 65535-byte Noise limit',
   [PeerErrorCode.DecryptionFailed]: 'authentication failed; the message was not produced by this session',
   [PeerErrorCode.UnknownPeer]: 'the peer static key is not on the roster',
+  [PeerErrorCode.ReplayablePayload]: 'the first handshake message carries no payload, because it can be replayed',
+  [PeerErrorCode.UnconfirmedPeer]: 'the peer has not yet proved it holds the static key it claimed',
   [PeerErrorCode.NonceExhausted]: 'the nonce space for this session is exhausted'
 })
 
