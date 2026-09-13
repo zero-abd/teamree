@@ -538,6 +538,17 @@
   gap: var(--s2);
 }
 
+/* Said instead of the commit list, never beside it: the point is that there is
+   no list. Kept quiet — this is a gap in what is known, not a fault. */
+.commits__unknown {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--line);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
 /* What this worktree committed. Sits below the uncommitted changes because it
    is the settled half: an agent that finished leaves only this. */
 .commits {

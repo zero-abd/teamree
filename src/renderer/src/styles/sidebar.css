@@ -371,6 +371,14 @@
   background: var(--danger);
 }
 
+/* The chips beside it could not be confirmed. Not a warning — nothing is wrong
+   with the repository, the app simply cannot see it — so this is dimmer than
+   the counts rather than louder, and the counts keep their own colour. */
+.gitchip--unconfirmed {
+  opacity: 0.7;
+  font-style: italic;
+}
+
 /* Whether this worktree can go in. Kept quiet: it sits beside the status chips
    and must not shout over them, and "unknown" is not a warning — it is the
    absence of an answer. */

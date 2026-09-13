@@ -196,10 +196,18 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
     ? [...base, '--cached', ...(options.path ? ['--', options.path] : [])]
     : [...base, ...(options.path ? ['--', options.path] : [])]
 
+  // One byte past the budget is all it takes to know the patch overflows it, so
+  // that is where the read stops. A 40MB log read whole only to be cut back to
+  // a megabyte used to overrun the runner's hard cap and come back as a failure
+  // — which the panel then rendered as "No patch for this path", an answer,
+  // for a file it had simply declined to read.
+  const stdoutLimitBytes = maxBytes + 1
+
   const { stdout } = await runner.run({
     args,
     cwd: options.worktreePath,
     readOnly: true,
+    stdoutLimitBytes,
     ...(options.signal ? { signal: options.signal } : {}),
     timeoutMs: 60_000
   })
@@ -212,12 +220,15 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
       args: ['diff', '--no-color', `--unified=${context}`, '--no-index', '--', nullDevice, options.path],
       cwd: options.worktreePath,
       readOnly: true,
+      stdoutLimitBytes,
       ...(options.signal ? { signal: options.signal } : {}),
       timeoutMs: 60_000
     })
     // Exit 1 is "there was a difference"; anything higher is a real failure,
-    // including the path simply not existing, and leaves the patch empty.
-    if (attempt.exitCode <= 1) patch = attempt.stdout
+    // including the path simply not existing, and leaves the patch empty. A
+    // clipped read reports git's own death by signal instead, and has the
+    // difference in hand already.
+    if (attempt.stdoutClipped === true || attempt.exitCode <= 1) patch = attempt.stdout
   }
 
   const truncated = Buffer.byteLength(patch, 'utf8') > maxBytes

@@ -65,6 +65,15 @@ type WorkspaceState = {
   projects: Project[]
   worktrees: Worktree[]
   statuses: Record<string, WorktreeStatus>
+  /**
+   * When git reads for a worktree started failing, by worktree id, for the ones
+   * where they still are. A failed read leaves the last good numbers on screen
+   * — they are the best anyone has — and this is what stops the row presenting
+   * them as current, including the merge badge beside them: the status read is
+   * the cheap one every refresh attempts, so it is the honest proxy for whether
+   * this checkout can be read at all.
+   */
+  unreadableSince: Record<string, number>
   terminals: Record<string, Terminal>
   layouts: Record<string, Layout>
 
@@ -218,6 +227,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             : (openWorktreeIds[openWorktreeIds.length - 1] ?? null),
         layouts: keptFor(state.layouts, live),
         statuses: keptFor(state.statuses, live),
+        unreadableSince: keptFor(state.unreadableSince, live),
         mergePreviews: keptFor(state.mergePreviews, live),
         logs: keptFor(state.logs, live)
       }
@@ -252,11 +262,23 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // One unreadable worktree must not cost the others their chips.
       worktreeIds.map((worktreeId) => runtimeClient.call('worktree.status', { worktreeId }).catch(() => null))
     )
-    set((state) => ({
-      statuses: statuses.reduce((map, status) => (status ? { ...map, [status.worktreeId]: status } : map), {
-        ...state.statuses
+    const readAt = Date.now()
+    set((state) => {
+      const next = { ...state.statuses }
+      const unreadableSince = { ...state.unreadableSince }
+      statuses.forEach((status, index) => {
+        const worktreeId = worktreeIds[index] as string
+        if (status) {
+          next[status.worktreeId] = status
+          delete unreadableSince[worktreeId]
+          return
+        }
+        // Kept from the first failure rather than refreshed on every one, so
+        // the row can say how long it has been unable to confirm itself.
+        unreadableSince[worktreeId] ??= readAt
       })
-    }))
+      return { statuses: next, unreadableSince }
+    })
   }
 
   /**
@@ -447,6 +469,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     projects: [],
     worktrees: [],
     statuses: {},
+    unreadableSince: {},
     terminals: {},
     layouts: {},
 

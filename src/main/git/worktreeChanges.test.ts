@@ -280,6 +280,27 @@ describe('changes and diffs against a real repository', () => {
     expect(diff.patch.endsWith('\n')).toBe(true)
   })
 
+  // A log, a fixture, a dataset. The whole patch used to have to fit in the
+  // runner's 32MB ceiling before anything was cut down to the budget, and a
+  // file past it came back as a failure — which the panel rendered as "No patch
+  // for this path", an answer, for a file it had declined to read.
+  it('cuts a very large untracked file down rather than failing to read it', async () => {
+    const repo = await repository()
+    // Comfortably past the runner's hard ceiling, whatever the patch budget is.
+    await repo.write('huge.log', `${'x'.repeat(79)}\n`.repeat(500_000))
+
+    const diff = await readWorktreeDiff(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      path: 'huge.log',
+      maxBytes: 64 * 1024
+    })
+
+    expect(diff.truncated).toBe(true)
+    expect(diff.patch).toContain('+xxx')
+    expect(Buffer.byteLength(diff.patch, 'utf8')).toBeLessThanOrEqual(64 * 1024)
+  })
+
   it('reads a worktree that is not the primary checkout', async () => {
     const repo = await repository()
     const checkout = path.join(repo.worktreesRoot, 'feature')

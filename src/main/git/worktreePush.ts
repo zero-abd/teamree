@@ -63,31 +63,35 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
 
   const before = await upstreamOf(runner, options.worktreePath, options.branch, options.signal)
 
+  const refspec = `refs/heads/${options.branch}:refs/heads/${options.branch}`
   // An explicit refspec, because `push.default` is a user setting and a push
   // that lands on a differently named branch because of one is a bad surprise.
+  //
+  // `--porcelain` is what makes the outcome readable rather than guessable: it
+  // prints one line per ref whose first character is the result — `=` for a ref
+  // the remote already had, `*` for a new one, a space for a fast-forward, `!`
+  // for a rejection. git leaves those untranslated, unlike the prose on stderr
+  // that used to be matched here.
   const pushed = await runner.tryRun({
-    args: [
-      'push',
-      ...(before === null ? ['--set-upstream'] : []),
-      remote,
-      `refs/heads/${options.branch}:refs/heads/${options.branch}`
-    ],
+    args: ['push', '--porcelain', ...(before === null ? ['--set-upstream'] : []), remote, refspec],
     cwd: options.worktreePath,
     timeoutMs: PUSH_TIMEOUT_MS,
     ...signal
   })
+  const reported = parsePushStatus(pushed.stdout, refspec)
 
   if (pushed.exitCode !== 0) {
-    throw new GitServiceError(ErrorCode.GitFailed, pushRefusal(pushed.stderr, remote, options.branch))
+    throw new GitServiceError(ErrorCode.GitFailed, pushRefusal(pushed.stderr, remote, options.branch, reported))
   }
 
   return {
     worktreeId: options.worktreeId,
     remote,
     branch: options.branch,
-    // git says this on stderr, and it is the difference between "your work is
-    // on the remote now" and "your work was already there".
-    alreadyUpToDate: /everything up-to-date/i.test(pushed.stderr),
+    // The difference between "your work is on the remote now" and "your work
+    // was already there", which a caller that cannot tell them apart reports
+    // wrongly to somebody.
+    alreadyUpToDate: reported?.flag === '=',
     upstream:
       (await upstreamOf(runner, options.worktreePath, options.branch, options.signal)) ?? `${remote}/${options.branch}`,
     setUpstream: before === null,
@@ -114,15 +118,44 @@ async function upstreamOf(
   return result.exitCode === 0 && name.length > 0 ? name : null
 }
 
+/** One `--porcelain` line: the result flag, and git's own word for why. */
+export type PushRefStatus = { flag: string; summary: string }
+
+/**
+ * The line `--porcelain` printed for one refspec.
+ *
+ * The format is `<flag>\t<from>:<to>\t<summary>`, with the flag in column one
+ * and `To <url>` and `Done` around the outside. Everything read here — the
+ * flag, the refspec, and the parenthesised reason inside the summary — is
+ * fixed text git does not translate, which is the whole reason for asking in
+ * this form.
+ */
+export function parsePushStatus(stdout: string, refspec: string): PushRefStatus | null {
+  for (const line of stdout.split('\n')) {
+    const withoutFlag = line.slice(1)
+    if (!withoutFlag.startsWith(`\t${refspec}\t`)) continue
+    return { flag: line[0] ?? '', summary: withoutFlag.slice(refspec.length + 2) }
+  }
+  return null
+}
+
 /**
  * Turns git's refusal into something worth reading.
  *
  * The rejection that matters is a non-fast-forward: the remote has commits this
  * branch does not, and the fix is to bring them in — never to force, which is
  * exactly what the message git prints suggests to a reader in a hurry.
+ *
+ * `reported` is the porcelain line for the ref, when there is one. It decides
+ * first, because it says the same thing in a form that survives a translated
+ * git; the prose on stderr is what is left when git refused before it ever got
+ * as far as a ref.
  */
-export function pushRefusal(stderr: string, remote: string, branch: string): string {
+export function pushRefusal(stderr: string, remote: string, branch: string, reported?: PushRefStatus | null): string {
   const text = stderr.trim()
+  if (reported?.flag === '!' && /non-fast-forward|fetch first|stale info/i.test(reported.summary)) {
+    return `${remote} has commits that ${branch} does not. Pull or rebase onto ${remote}/${branch} and push again.`
+  }
   if (/non-fast-forward|fetch first|rejected/i.test(text)) {
     return `${remote} has commits that ${branch} does not. Pull or rebase onto ${remote}/${branch} and push again.`
   }

@@ -183,6 +183,14 @@ export type WorktreeLog = {
   baseRef: string
   commits: WorktreeCommitSummary[]
   truncated: boolean
+  /**
+   * Why the branch could not be compared against its base, when it could not:
+   * an unfetched clone, a base deleted on the remote, a repository with no
+   * commits at all. Absent when the log was read — and an empty `commits` list
+   * then means this branch has made none, which is a different thing to put in
+   * front of somebody than not knowing either way.
+   */
+  unavailable?: string
   readAt: number
 }
 

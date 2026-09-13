@@ -8,7 +8,7 @@
 
 import type { WorktreeStatus } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
-import { assertRefShape } from './repository'
+import { assertRefShape, comparesAgainstItself } from './repository'
 
 export type ParsedStatus = {
   branch: string
@@ -138,6 +138,10 @@ async function readDivergence(
   baseRef: string,
   signal?: AbortSignal
 ): Promise<{ ahead: number; behind: number } | null> {
+  // `HEAD...HEAD` is the branch against itself: it exits 0 and counts "0 0",
+  // which would be published as a confident "in sync" for a branch nobody has
+  // compared against anything.
+  if (comparesAgainstItself(baseRef)) return null
   try {
     assertRefShape(baseRef, 'base ref')
   } catch {

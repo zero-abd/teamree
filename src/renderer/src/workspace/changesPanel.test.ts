@@ -1,6 +1,41 @@
 import { describe, expect, it } from 'vitest'
-import { directoryOf, fileNameOf, lineKind } from './ChangesPanel'
+import type { WorktreeLog } from '@shared/entities'
+import { directoryOf, emptyChangesLabel, fileNameOf, lineKind } from './ChangesPanel'
 import { changedCount } from './WorkspaceArea'
+
+describe('emptyChangesLabel', () => {
+  const log = (partial: Partial<WorktreeLog>): WorktreeLog => ({
+    worktreeId: 'wt',
+    baseRef: 'origin/main',
+    commits: [],
+    truncated: false,
+    readAt: 0,
+    ...partial
+  })
+
+  const commit = {
+    sha: 'abc1234',
+    shortSha: 'abc1234',
+    author: 'Ada',
+    committedAt: '2026-01-01T00:00:00Z',
+    subject: 'the work'
+  }
+
+  it('separates a worktree that has committed from one that has not', () => {
+    expect(emptyChangesLabel(log({ commits: [commit] }))).toBe('Everything here is committed.')
+    expect(emptyChangesLabel(log({}))).toBe('Nothing changed here yet.')
+  })
+
+  // The screen an agent leaves behind the moment it commits. Claiming nothing
+  // happened, when the base could not be compared against at all, is the app
+  // telling somebody their day's work is gone.
+  it('does not claim nothing happened when the commits could not be read', () => {
+    const text = emptyChangesLabel(log({ unavailable: 'base ref "origin/main" does not resolve' }))
+
+    expect(text).not.toContain('Nothing changed')
+    expect(text).toBe('Nothing uncommitted here.')
+  })
+})
 
 describe('lineKind', () => {
   it('colours additions and removals by their first character', () => {
