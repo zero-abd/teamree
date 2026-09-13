@@ -259,6 +259,48 @@ still meant reading the whole tree.
 - [x] Live off the existing `terminals` invalidation, with the silences kept
       counting by a clock of their own — no new runtime method
 
+## M19 — Finding something in a pane
+
+Scrollback is where the answer usually is, and the only way to reach it was to
+scroll.
+
+- [x] A find bar over the pane, on the chord, scoped to that pane alone
+- [x] Case and whole-word toggles, match counts, next and previous
+- [x] Absolutely positioned over the terminal, taking no layout space: a bar
+      that took space would resize the PTY under a program being read
+
+## M20 — Starting work, not making directories
+
+The create dialog made a checkout and left you to go and find an agent button.
+Nobody wants a worktree; they want a thing done in one.
+
+- [x] One dialog: describe the task, pick the agent, pick what it starts from
+- [x] One submission creates the worktree, waits for it, and starts the agent
+      inside it — the wait rides the existing change stream rather than a poll,
+      serialises its reads so a burst of events cannot land answers out of
+      order, and gives up after ten minutes rather than holding a subscription
+      open for the life of the window
+- [x] The footer never promises what it cannot deliver: an empty agent list
+      means "not asked yet" until the startup probe answers, and only then
+      "none on PATH" — at which point the button says "Create worktree"
+- [x] The dialog closes on submit; creation narrates itself on the sidebar row
+
+## M21 — What a pane actually said
+
+The sidebar said a pane was working. It did not say what it was working on.
+
+- [x] The last line each pane printed, on its row, replayed the way a terminal
+      would — carriage returns, backspaces and erase-line sequences collapse a
+      progress bar to its final state rather than the fragment that ended it
+- [x] Bare prompts, spinner frames and rules refused; a tail that ends inside
+      the alternate screen buffer refused outright, because the bottom row of a
+      full-screen program is not the end of a story
+- [x] Cheap on purpose: a 4KB tail, only for worktrees on screen, a floor per
+      pane, a cap per tick, a quiet pane read only once output has arrived, and
+      an exited pane read once more and then never again — no subscription,
+      which would push every byte an agent prints into the renderer to show one
+      line
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,
@@ -289,7 +331,30 @@ recorded so none of them is discovered by surprise later.
   agent wants. Fixing it properly means reading the pty ourselves rather than
   through node-pty's socket.
 
+## Milestone 2 — Teamwork
+
+Planned in full, with every decision made and written down, in
+[docs/teamwork.md](docs/teamwork.md). The short version: the people who can push
+to the repository are the team, their public keys live in the repository, an
+untrusted relay the team hosts splices two outbound WebSockets together, and
+everything across it is end-to-end encrypted. A teammate is a third transport
+onto the method catalogue that already exists, not a new protocol.
+
+- [ ] **A — Identity, with no network at all.** Keypair, `.teamree/members/`,
+      members shown in the app. The whole trust model, testable offline.
+- [ ] **B — The relay, and presence.** Outbound connections, the Noise `IK`
+      handshake against keys from the roster, teammates' worktrees in the
+      sidebar. No terminal output yet.
+- [ ] **C — Watching a pane.** `terminal.subscribe` over the peer transport,
+      read-only, letterboxed to the owner's dimensions, and the pane says it is
+      being watched.
+- [ ] **D — Typing into a pane.** `terminal.write` over the same transport, with
+      live attribution, a local audit log, and per-pane mute. The milestone that
+      needs the most care: it is the one that hands somebody else a shell.
+- [ ] **E — Staleness.** The local cache, stale marking with its age, and
+      reconnection that reconciles rather than re-fetching the world.
+
 ## Later
 
-Graph-based unified memory. Multi-user networking. Per-person attribution of work
-under a shared project.
+Graph-based unified memory. Per-person attribution of work under a shared
+project.
