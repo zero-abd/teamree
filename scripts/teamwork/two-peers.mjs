@@ -284,11 +284,11 @@ class Peer {
   /**
    * Writes this peer's public key into its own clone, through the app.
    *
-   * `members.join` is the button in the Members dialog, and it writes the file
-   * and stops there — no staging, no commit, no push. Getting it into the
-   * repository is the step the runbook makes a person do on purpose, and a
-   * harness that did it silently would hide the one thing most likely to be
-   * forgotten.
+   * `members.join` is the Add my key button in the Start teamwork panel, and it
+   * writes the file and stops there — no staging, no commit, no push. Getting it
+   * into the repository is the step the runbook makes a person do on purpose,
+   * and a harness that did it silently would hide the one thing most likely to
+   * be forgotten.
    */
   async addSelfToRoster() {
     const list = await this.call('members.join', { projectId: await this.ensureProject(), handle: this.handle })

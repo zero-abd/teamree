@@ -33,31 +33,55 @@ import { createRuntimeContext } from './runtimeContext'
 import { SubscriptionHub } from './subscriptionHub'
 
 /** A clock a test moves by hand, so pacing is asserted rather than waited out. */
-function manualClock(): TransportScheduler & { advance: (ms: number) => void; pending: () => number } {
+function manualClock(): TransportScheduler & {
+  advance: (ms: number) => void
+  /** A suspended machine: the wall clock moves, no timer runs, and then it wakes. */
+  sleep: (ms: number) => void
+  pending: () => number
+} {
   let now = 1_000
+  // Kept apart from the wall clock, because everything a deadline concludes
+  // depends on the two of them being able to disagree.
+  let monotonic = 0
   const timers = new Map<number, { at: number; run: () => void }>()
   let sequence = 0
+  const runDue = (target: number): void => {
+    for (;;) {
+      const due = [...timers.entries()].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)
+      const next = due[0]
+      if (!next) break
+      timers.delete(next[0])
+      const step = Math.max(0, next[1].at - monotonic)
+      monotonic += step
+      now += step
+      next[1].run()
+    }
+  }
   return {
     now: () => now,
+    monotonicNow: () => monotonic,
     setTimer: (run, delayMs) => {
       sequence += 1
       const id = sequence
-      timers.set(id, { at: now + Math.max(0, delayMs), run })
+      timers.set(id, { at: monotonic + Math.max(0, delayMs), run })
       return () => {
         timers.delete(id)
       }
     },
     advance: (ms) => {
-      const target = now + ms
-      for (;;) {
-        const due = [...timers.entries()].filter(([, timer]) => timer.at <= target).sort((a, b) => a[1].at - b[1].at)
-        const next = due[0]
-        if (!next) break
-        timers.delete(next[0])
-        now = Math.max(now, next[1].at)
-        next[1].run()
-      }
-      now = target
+      const target = monotonic + ms
+      const wallTarget = now + ms
+      runDue(target)
+      monotonic = target
+      now = wallTarget
+    },
+    sleep: (ms) => {
+      // macOS's monotonic clock counts time spent suspended, so waking makes
+      // every overdue timer fire at once having measured far longer than it
+      // was armed for.
+      now += ms
+      monotonic += ms
+      runDue(monotonic)
     },
     pending: () => timers.size
   }
@@ -729,6 +753,22 @@ describe('a call the teammate never answers', () => {
 
     clock.advance(1)
     await expect(answer).resolves.toMatch(/did not answer/)
+  })
+
+  it('does not blame the teammate for a deadline this machine slept through', async () => {
+    const { transport, clock } = intoTheVoid()
+    const answer = transport.call('peer.presence', {}).then(
+      () => 'answered',
+      (error: unknown) => (error instanceof Error ? error.message : String(error))
+    )
+
+    // The thirty seconds it was given were spent with the lid shut, so nobody
+    // failed to answer in them. The call is still settled — a promise nothing
+    // ever answers is the worse failure — and it is settled with the truth.
+    clock.sleep(3_600_000)
+    const said = await answer
+    expect(said).not.toMatch(/did not answer/)
+    expect(said).toMatch(/asleep/)
   })
 
   it('lets go of the deadline the moment the answer lands', async () => {

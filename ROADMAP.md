@@ -411,26 +411,35 @@ recorded so none of them is discovered by surprise later.
   operating system can tell them. The macOS instructions in that document are written
   from Apple's behaviour and the ad-hoc signing the build already does; they have not
   been walked through on a Mac at this commit.
-- **Nothing re-reads `.teamree` after a `git pull`.** The roster and the relay URL are
-  files in the primary checkout, and the runtime reconciles the peer service only when
-  this app writes a member file — not when git brings somebody else's in. So the
-  sequence teamwork actually requires, where two people each add a key and then pull
-  each other's, leaves both apps holding the roster from before the pull, with nothing
-  on screen suggesting a stale read. Writing the runbook forced "quit and reopen
-  teamree" to become a numbered step, which is the clearest possible sign it is a
-  defect rather than a quirk. A watch on `.teamree`, or a re-read when the members
-  dialog opens, removes the step.
-- **A team-wide fact has no button.** Every other decision here is made in the app;
-  the relay URL is a file whose format has to be inferred, and the helper that would
-  write it is exported and called by nothing. Related, and the reason this bites: the
-  deploy prints an `https://` URL that the app correctly refuses, because it wants
-  `wss://` and the `/v1/relay` path — and the refusal names the scheme without naming
-  the remedy.
-- **Two silent failures look identical.** A clock far enough out to straddle the hourly
-  rendezvous boundary and a teammate pointing at a different relay both present as
-  nobody arriving, forever, with nothing anywhere saying why. The relay cannot help —
-  it sees opaque tokens by design — but a client that has been waiting across two
-  epoch rollovers knows enough to say which two things to check.
+- **A `git pull` is noticed, but not always at once.** This entry used to say nothing
+  re-read `.teamree` at all, and that is no longer true. Each project gets a
+  non-recursive watch on its checkout root, on `.teamree` and on `.teamree/members`,
+  with a sweep underneath it — the same three `stat`s on a timer, 200ms after a watch
+  is attached and backing off to once every thirty seconds — so a dropped event means
+  noticing late rather than never. Opening the Start teamwork panel re-reads both
+  files as well. What is left of the gap is the bound: a pull the watch misses is up
+  to half a minute late, and `docs/trying-teamwork.md` step 5 says so rather than
+  promising it is instant. The watch's own tests fail on the macOS runner and have
+  never failed on Linux, and why has not been established on a Mac:
+  `src/main/teamwork/macWatchProbe.test.ts` answers it outright, under
+  `TEAMREE_MAC_PROBE=1`, when somebody can run it.
+- **The team-wide fact has a button now.** This entry used to say the relay URL was a
+  file whose format had to be inferred, with the helper that would write it exported
+  and called by nothing. `teamwork.setRelay` writes `.teamree/relay` from the Start
+  teamwork panel's third step, which also lists the four ways to get a relay with what
+  each costs and which of them produce an address stable enough to commit. The
+  `https://` a deploy prints is still refused rather than guessed at — so is a
+  `wss://` origin with no path — but the refusal now offers the corrected URL as a
+  button instead of naming only the scheme.
+- **Two silent failures look identical, for the first hour.** A clock far enough out to
+  straddle the hourly rendezvous boundary and a teammate pointing at a different relay
+  both present as nobody arriving, with nothing anywhere saying why. The relay cannot
+  help — it sees opaque tokens by design. Narrowed rather than closed: a link that has
+  waited across two epoch rollovers now names the two things checkable from this side,
+  in the header's tooltip and in the panel's link row. Before then it says only that
+  nobody has answered, deliberately, because a colleague making coffee accounts for
+  the first hour — so the first hour of this failure still looks like the ordinary
+  wait.
 - **A path is stored two ways.** A project's path is canonical — resolved, with its
   separators normalised — and a worktree's is joined the host's way, so on Windows the
   same location is spelled `C:/x/y` in one record and `C:\x\y` in another. Nothing is

@@ -28,12 +28,24 @@ import { registerPeerHandlers } from './handlers'
 import type { LinkScheduler } from './peerLink'
 import { PeerService } from './peerService'
 import type { RelayDialer, RelaySocketHandlers } from './relaySocket'
+import type { WakeWatch } from './wakeWatch'
 
 // ---------------------------------------------------------------- the clock
 
 export type ManualScheduler = LinkScheduler & {
   /** Runs every timer due at or before `now + ms`, advancing as it goes. */
   advance: (ms: number) => Promise<void>
+  /**
+   * A machine suspended for `ms`: no timer ran, and the clocks come back
+   * disagreeing about it, which is the only trace a sleep leaves.
+   *
+   * Platforms split over whether their monotonic source counts time spent
+   * suspended — macOS's does — so both shapes are offered. `counted` wakes with
+   * every overdue timer firing at once, having measured far longer than it was
+   * armed for; `uncounted` wakes with the timers still owing their original
+   * wait and the wall clock an hour ahead of them.
+   */
+  sleep: (ms: number, monotonic?: 'counted' | 'uncounted') => Promise<void>
   /** Lets queued microtasks and promise callbacks run without moving the clock. */
   settle: () => Promise<void>
   pending: () => number
@@ -41,6 +53,14 @@ export type ManualScheduler = LinkScheduler & {
 
 export function createManualScheduler(startAt = 1_700_000_000_000): ManualScheduler {
   let current = startAt
+  /**
+   * The clock timers actually run on, kept apart from the wall clock.
+   *
+   * Real timers are armed against a monotonic source rather than against
+   * `Date.now()`, and the whole of the sleep problem lives in the gap between
+   * the two, so a scheduler that conflated them could not express it.
+   */
+  let monotonic = 0
   let sequence = 0
   const timers = new Map<number, { at: number; run: () => void }>()
 
@@ -50,34 +70,53 @@ export function createManualScheduler(startAt = 1_700_000_000_000): ManualSchedu
     for (let turn = 0; turn < 64; turn += 1) await Promise.resolve()
   }
 
+  /** Everything due by `target` on the monotonic clock, in order, then settled. */
+  const runDue = async (target: number): Promise<void> => {
+    await settle()
+    for (;;) {
+      const due = [...timers.entries()]
+        .filter(([, timer]) => timer.at <= target)
+        .sort((a, b) => a[1].at - b[1].at || a[0] - b[0])
+      const next = due[0]
+      if (!next) break
+      timers.delete(next[0])
+      const step = Math.max(0, next[1].at - monotonic)
+      monotonic += step
+      current += step
+      next[1].run()
+      await settle()
+    }
+  }
+
   return {
     now: () => current,
+    monotonicNow: () => monotonic,
     // Fixed rather than random: jitter is the point in production and the enemy
     // in a test, and `scheduleRetry` multiplies by whatever this returns.
     random: () => 1,
     setTimer: (run, delayMs) => {
       sequence += 1
       const id = sequence
-      timers.set(id, { at: current + Math.max(0, delayMs), run })
+      timers.set(id, { at: monotonic + Math.max(0, delayMs), run })
       return () => {
         timers.delete(id)
       }
     },
     advance: async (ms) => {
-      const target = current + ms
+      const target = monotonic + ms
+      const wallTarget = current + ms
+      await runDue(target)
+      monotonic = target
+      current = wallTarget
       await settle()
-      for (;;) {
-        const due = [...timers.entries()]
-          .filter(([, timer]) => timer.at <= target)
-          .sort((a, b) => a[1].at - b[1].at || a[0] - b[0])
-        const next = due[0]
-        if (!next) break
-        timers.delete(next[0])
-        current = Math.max(current, next[1].at)
-        next[1].run()
-        await settle()
-      }
-      current = target
+    },
+    sleep: async (ms, monotonicCounts = 'counted') => {
+      // Nothing runs while the machine is suspended, which is the point: the
+      // wall clock moves without a single timer firing.
+      current += ms
+      if (monotonicCounts === 'counted') monotonic += ms
+      // And on waking, whatever is now overdue fires.
+      await runDue(monotonic)
       await settle()
     },
     settle,
@@ -336,6 +375,8 @@ export type PeerRuntimeOptions = {
   cache?: TeammateCache
   /** Lets a test wait on a condition instead of on the clock. */
   onChange?: () => void
+  /** Stands in for Electron's power monitor, which no test process has. */
+  watchWake?: WakeWatch
   /**
    * Registers the real terminal service, with real PTYs, and reports its panes
    * as this runtime's terminals. Off by default: most peer tests are about the
@@ -444,6 +485,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     env: options.env ?? {},
     ...(options.runner ? { runner: options.runner } : {}),
     ...(options.cache ? { cache: options.cache } : {}),
+    ...(options.watchWake ? { watchWake: options.watchWake } : {}),
     onChange: () => {
       changes += 1
       options.onChange?.()

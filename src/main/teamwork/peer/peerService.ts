@@ -54,6 +54,7 @@ import {
 import type { ParamsOf, ResultOf } from '../../../shared/methods'
 import { createGitRunner, type GitRunner } from '../../git/gitProcess'
 import type { Dispatcher } from '../../runtime/dispatcher'
+import { defaultMonotonicNow } from '../../runtime/elapsed'
 import {
   PeerCallError,
   type RemoteReadVerdict,
@@ -81,6 +82,7 @@ import { createPeerLink, type LinkScheduler, type PeerLink } from './peerLink'
 import { presenceFor, type PresenceProject, type PresenceSource } from './presence'
 import { readProjectKey } from './projectKey'
 import { readRelayConfig, type RelayLocation } from './relayUrl'
+import { watchForWake, type WakeWatch } from './wakeWatch'
 import { webSocketDialer, type RelayDialer } from './relaySocket'
 
 /**
@@ -107,6 +109,11 @@ export type PeerServiceOptions = {
   runner?: GitRunner
   dial?: RelayDialer
   scheduler?: LinkScheduler
+  /**
+   * How this machine hears that it has woken up. Electron's `powerMonitor` by
+   * default, and nothing at all when there is no Electron to ask.
+   */
+  watchWake?: WakeWatch
   env?: NodeJS.ProcessEnv
   /** What each teammate last showed, across a drop and across a restart. */
   cache?: TeammateCache
@@ -142,6 +149,9 @@ type LinkRecord = {
 
 const defaultScheduler: LinkScheduler = {
   now: () => Date.now(),
+  // A clock a closing lid cannot move, so a deadline can tell this machine's
+  // sleep from a teammate's silence. See `elapsed.ts`.
+  monotonicNow: defaultMonotonicNow,
   setTimer: (run, delayMs) => {
     const timer = setTimeout(run, delayMs)
     // A pending reconnect must never be the reason a process stays alive.
@@ -219,6 +229,8 @@ export class PeerService {
   #revision = 0
   #started = false
   #cancelCoalesce: (() => void) | undefined
+  /** Stops listening for "this machine woke up", once there is something to stop. */
+  #unwatchWake: (() => void) | undefined
   /** When the window was last told about typing, so a burst is not a flood of reads. */
   #typingToldAt = 0
   #cancelTypingIdle: (() => void) | undefined
@@ -251,13 +263,31 @@ export class PeerService {
     // frame it paints rather than after the first teammate answers.
     this.#cache ??=
       this.#options.cache ?? (await TeammateCacheStore.open(join(this.#options.dataDir, TEAMMATE_CACHE_FILE)))
+    // Before the links, so a wake during startup finds them already listening.
+    this.#unwatchWake ??= await (this.#options.watchWake ?? watchForWake)(() => this.#wake())
     await this.reconcile()
+  }
+
+  /**
+   * This machine slept, so nothing any link believes about a teammate is
+   * current: every one of them withdraws its verdict and goes to find out
+   * again.
+   *
+   * Each link also notices a sleep for itself, from its own clocks, and has to
+   * — there is no Electron in the acceptance suite and none in the CLI. This is
+   * the same conclusion arriving as soon as the machine is awake rather than at
+   * the next deadline.
+   */
+  #wake(): void {
+    for (const record of this.#links.values()) record.link.wake()
   }
 
   stop(): void {
     this.#started = false
     this.#cancelCoalesce?.()
     this.#cancelCoalesce = undefined
+    this.#unwatchWake?.()
+    this.#unwatchWake = undefined
     // What was heard is kept — that is the whole of milestone E — but with no
     // link behind it none of it is live any longer.
     for (const entry of this.#heard.values()) entry.live = false
