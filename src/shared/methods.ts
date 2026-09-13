@@ -46,6 +46,21 @@ import type {
  */
 export const MAX_REMOTE_WRITE_BYTES = 65_536
 
+/**
+ * The most a pane id a remote keystroke names may be.
+ *
+ * Every id this runtime mints is a short word and a counter — `term_12` — so
+ * this is three orders of magnitude of headroom and refuses nothing anybody
+ * types. It is here because `data` was capped and the id beside it was not, and
+ * the id is copied further than the data ever goes: into the owner's write log,
+ * onto their disk, and into the map that remembers who typed where. An
+ * unbounded id is therefore a megabyte of somebody else's choosing in a file
+ * that is supposed to be the owner's evidence — see `writeLog.ts`, which bounds
+ * the entry as well, and `peerTransport.judgeWrite`, which refuses past this
+ * before the schema is ever reached.
+ */
+export const MAX_TERMINAL_ID_CHARS = 256
+
 export const Params = {
   statusGet: z.object({}),
 
@@ -259,7 +274,7 @@ export const Params = {
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional()
   }),
-  terminalWrite: z.object({ terminalId: z.string().min(1), data: z.string() }),
+  terminalWrite: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS), data: z.string() }),
   terminalResize: z.object({
     terminalId: z.string().min(1),
     cols: z.number().int().positive(),

@@ -5,12 +5,14 @@
 // naming what to fix, and the push step, which must never show a tick because
 // nothing in the window can see a commit.
 
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { MemberList, PeerLink, RelaySetting, TeamworkStatus } from '@shared/entities'
 import {
   checkRelayDraft,
   memberFilePreview,
   pushPlan,
+  RELAY_LEAD,
   RELAY_OPTIONS,
   startTeamworkFlow,
   type StartTeamworkInput,
@@ -54,7 +56,7 @@ function relay(overrides: Partial<RelaySetting> = {}): RelaySetting {
     url: null,
     source: null,
     problem: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on',
-    committed: {
+    onDisk: {
       url: null,
       problem: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
     },
@@ -64,8 +66,8 @@ function relay(overrides: Partial<RelaySetting> = {}): RelaySetting {
   }
 }
 
-const committedRelay = (url = 'wss://relay.example/v1/relay'): RelaySetting =>
-  relay({ url, source: 'repository', problem: null, committed: { url, problem: null } })
+const relayOnDisk = (url = 'wss://relay.example/v1/relay'): RelaySetting =>
+  relay({ url, source: 'repository', problem: null, onDisk: { url, problem: null } })
 
 function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
   return {
@@ -98,8 +100,8 @@ const step = (input: StartTeamworkInput, id: StepId) => {
 /** Everything read, and nothing done. The state a fresh project is in. */
 const fresh: StartTeamworkInput = { list: list(), relay: relay(), status: status() }
 
-/** Both files written and the relay committed, with nobody else on the roster. */
-const written: StartTeamworkInput = { list: enrolled(), relay: committedRelay(), status: status() }
+/** Both files written into the checkout, with nobody else on the roster. */
+const written: StartTeamworkInput = { list: enrolled(), relay: relayOnDisk(), status: status() }
 
 describe('step 1, your identity', () => {
   it('is done as soon as the roster has been read, because the keypair is made on first run', () => {
@@ -137,7 +139,7 @@ describe('step 2, your key is in the repository', () => {
 })
 
 describe('step 3, the team’s relay', () => {
-  it('is not done when nothing is committed, and repeats the runtime’s reason as a sentence', () => {
+  it('is not done when nothing has been written, and repeats the runtime’s reason as a sentence', () => {
     const pending = step(fresh, 'relay')
     expect(pending.mark).toBe('todo')
     expect(pending.summary).toBe(
@@ -145,10 +147,15 @@ describe('step 3, the team’s relay', () => {
     )
   })
 
-  it('is done when the repository names one, because that is what a teammate reads', () => {
+  // The read behind this is the file in the working tree, so what it can say is
+  // what step 2 says about the key: it is in this checkout, and step 4 is what
+  // makes it the team's. "Everyone who pulls it meets there" was true of a push
+  // this panel deliberately does not perform and cannot see.
+  it('is done when the file in this checkout names one, and does not claim it was pushed', () => {
     const done = step(written, 'relay')
     expect(done.mark).toBe('done')
     expect(done.summary).toContain('wss://relay.example/v1/relay')
+    expect(done.summary).toMatch(/Step 4 is what makes it the team’s/)
   })
 
   // The override is for the ephemeral tunnel URL, which is per-machine and dies
@@ -187,6 +194,17 @@ describe('step 3, the team’s relay', () => {
       expect(option.money).not.toBe('')
       expect(option.commands).not.toBe('')
     }
+  })
+
+  // Every option starts `cd relay`, and `relay/` is only in a checkout of
+  // teamree: an installation from the .dmg ships neither the directory nor the
+  // README, so the four options land a person in a directory they do not have.
+  // Said once, in the lead, rather than four times in the commands.
+  it('says where the commands run, in the panel and in relay/README.md', () => {
+    expect(RELAY_LEAD).toMatch(/clone of the teamree repository/)
+    for (const option of RELAY_OPTIONS) expect(option.commands.startsWith('cd relay')).toBe(true)
+    const readme = readFileSync(new URL('../../../../relay/README.md', import.meta.url), 'utf8')
+    expect(readme.slice(0, readme.indexOf('cd relay'))).toMatch(/clone of the teamree repository/)
   })
 
   it('does not promise the Worker is free, because relay/README.md does not', () => {
@@ -230,10 +248,13 @@ describe('the relay field’s verdict on what has been typed', () => {
 })
 
 describe('step 4, commit and push', () => {
+  /** Where `.teamree` is: the primary checkout, which is not where a pane is. */
+  const PROJECT_PATH = '/Users/ada/code/teamree'
+
   it('has nothing to say until a file has been written', () => {
     const nothing = step(fresh, 'push')
     expect(nothing.mark).toBe('todo')
-    expect(pushPlan(fresh.list, fresh.relay)).toBeNull()
+    expect(pushPlan(fresh.list, fresh.relay, PROJECT_PATH)).toBeNull()
   })
 
   // A tick here would be the app claiming the one act it deliberately refuses
@@ -245,24 +266,33 @@ describe('step 4, commit and push', () => {
   })
 
   it('names both files and one commit that carries them', () => {
-    expect(pushPlan(written.list, written.relay)).toEqual({
+    expect(pushPlan(written.list, written.relay, PROJECT_PATH)).toEqual({
       files: ['.teamree/members/ada.pub', '.teamree/relay'],
-      commands: 'git add .teamree\ngit commit -m "Set up teamwork"\ngit push'
+      commands: `cd ${PROJECT_PATH}\ngit add .teamree\ngit commit -m "Set up teamwork"\ngit push`
     })
   })
 
   it('names only the key when that is all that was written', () => {
-    expect(pushPlan(enrolled(), relay())).toEqual({
+    expect(pushPlan(enrolled(), relay(), PROJECT_PATH)).toEqual({
       files: ['.teamree/members/ada.pub'],
-      commands: 'git add .teamree\ngit commit -m "Add my key to the team"\ngit push'
+      commands: `cd ${PROJECT_PATH}\ngit add .teamree\ngit commit -m "Add my key to the team"\ngit push`
     })
   })
 
   it('names only the relay when somebody set that and has not joined', () => {
-    expect(pushPlan(list(), committedRelay())).toEqual({
+    expect(pushPlan(list(), relayOnDisk(), PROJECT_PATH)).toEqual({
       files: ['.teamree/relay'],
-      commands: 'git add .teamree\ngit commit -m "Meet on our relay"\ngit push'
+      commands: `cd ${PROJECT_PATH}\ngit add .teamree\ngit commit -m "Meet on our relay"\ngit push`
     })
+  })
+
+  // The pane a person has in front of them is a worktree's, and `.teamree` is
+  // in the primary checkout, so the commands without this stage nothing and
+  // blame git for it. A path with a space in it is ordinary on a Mac.
+  it('quotes the path when a shell would otherwise read it as two words', () => {
+    expect(pushPlan(enrolled(), relay(), '/Users/ada/My Projects/teamree')?.commands).toMatch(
+      /^cd '\/Users\/ada\/My Projects\/teamree'\n/
+    )
   })
 })
 
@@ -300,9 +330,13 @@ describe('step 5, connected', () => {
     expect(unreachable.summary).toMatch(/may be perfectly fine/)
   })
 
-  it('leads with a refusal, which is the one that means somebody was there', () => {
+  it('leads with a failed handshake, without saying whose end failed', () => {
     const refused = step({ ...written, status: status({ links: [link({ phase: 'refused' })] }) }, 'connected')
-    expect(refused.summary).toMatch(/did not authenticate/)
+    expect(refused.summary).toMatch(/did not complete/)
+    // This end raising an error before a byte is sent reaches the same phase,
+    // so the panel must not accuse the teammate of answering wrongly.
+    expect(refused.summary).not.toMatch(/did not authenticate/)
+    expect(refused.summary).toMatch(/not established/)
   })
 })
 

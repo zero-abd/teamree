@@ -103,17 +103,22 @@ boring, because:
 repository — and everything after the handshake is ciphertext the relay cannot
 read.
 
-A compromised relay cannot read, alter or forge content. It **can** do two
-things, and an early version of this document wrongly said it could not. It can
+A compromised relay cannot read, alter or forge content. Two things it can
+attempt, and an early version of this document wrongly said it could not. It can
 drop frames or refuse to pair, which is denial of service and was always
 conceded. And, because `IK`'s first message is inherently replayable and the
 relay holds both that frame and the rendezvous token, it can replay a recorded
-handshake to forge a peer's *presence* — a session the other side believes is
-established and authenticated to a colleague who is not there. It still cannot
-send a second frame or read a byte. The fix is to refuse to treat anything in a
-first message as actionable until a frame arrives that only the real holder of
-the private key could have sent; until that is in, presence is the one thing here
-a relay operator can fake.
+handshake to reach `established` carrying a real peer's static key. It still
+cannot send a second frame or read a byte.
+
+**That second one is closed**, and the way it is closed is the rule
+`src/main/teamwork/peer/peerLink.ts` is written around: `established` means only
+that the handshake parsed. Nothing actionable is ever put in the message-1
+payload — the one this sends is empty — and a link says `connected`, subscribes,
+or believes a snapshot only after the first transport message from the far end
+that *decrypts*, which needs keys a recording cannot supply. It costs one round
+trip of a frame that was going to be sent anyway. So denial of service is what a
+compromised relay is left with.
 
 Noise rather than a scheme of our own. A hand-rolled handshake is where this
 kind of project gets its one unrecoverable bug.
