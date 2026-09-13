@@ -324,8 +324,9 @@ recorded so none of them is discovered by surprise later.
   package and the packaged-app check on three runners — but "configured" is not
   "green". Every step of the Linux job has been executed locally, in order, on Linux,
   and passes. The macOS and Windows jobs are reasoned from the same scripts and have
-  not been run, and the action versions could not be checked from the machine that
-  wrote them.
+  not been run. The action versions have since been checked against the upstream tags
+  and all resolve, so the first run will not fail on those; they are two to three
+  majors behind current, which is a maintenance note rather than a fault.
 - **Windows behaviour is reasoned, not observed.** Narrower than it was, and not
   closed. Command-line encoding is now checked exhaustively rather than by example:
   every argument up to four characters over the alphabet that drives the rules, and
