@@ -4,6 +4,8 @@
 
 import { create } from 'zustand'
 import type {
+  CliInstall,
+  CliStatus,
   InstalledAgent,
   Layout,
   MemberList,
@@ -35,6 +37,7 @@ import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type Re
 
 export type DialogState =
   | { kind: 'add-project' }
+  | { kind: 'install-cli' }
   | { kind: 'members'; projectId: string }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
@@ -145,6 +148,25 @@ type WorkspaceState = {
    * for the same reason: somebody's link moved, or somebody opened a pane.
    */
   watchers: Record<string, PaneWatchers>
+  /**
+   * Where this app's CLI is and what is at the path it would be linked to.
+   *
+   * Probed once at startup beside the agents, and for the same reason: it is
+   * cheap, it decides which buttons are worth offering, and null means "not
+   * asked yet" rather than "nothing there".
+   */
+  cli: CliStatus | null
+  cliPending: boolean
+  /** What the last install did, kept so the panel can say it afterwards. */
+  cliInstall: CliInstall | null
+  /**
+   * Why the last attempt was refused, or null.
+   *
+   * Kept in the dialog rather than raised as a notice, like the relay's: the
+   * refusals here are "there is a file in the way" and "no password was given",
+   * and both belong next to the button that will be pressed again.
+   */
+  cliError: string | null
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
   /** True once the probe has answered, however it answered. Until then an
@@ -210,6 +232,14 @@ type WorkspaceState = {
   pushActiveWorktree: () => Promise<void>
   /** Opens a pane already running one of the agents found on this machine. */
   startAgent: (command: string) => Promise<void>
+
+  /** Reads where the CLI is and what is at its destination. */
+  loadCli: () => Promise<void>
+  /**
+   * Links the CLI into /usr/local/bin, asking for an administrator password
+   * only if that directory cannot be written without one.
+   */
+  installCli: () => Promise<void>
 
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
@@ -614,6 +644,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     stagedPaths: [],
     committing: false,
     pushing: false,
+    cli: null,
+    cliPending: false,
+    cliInstall: null,
+    cliError: null,
     agents: [],
     agentsProbed: false,
     diff: null,
@@ -648,6 +682,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           .call('agent.list', {})
           .then((agents) => set({ agents, agentsProbed: true }))
           .catch(() => set({ agents: [], agentsProbed: true }))
+        // Asked on the same terms: one cheap read, never fatal, and it decides
+        // whether the sidebar has anything to offer about the CLI at all.
+        void runtimeClient
+          .call('cli.status', {})
+          .then((cli) => set({ cli }))
+          .catch(() => {})
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
         await refresher.flush()
@@ -1004,6 +1044,34 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         await refresher.flush()
       } catch (error) {
         failed('Could not start the agent')(error)
+      }
+    },
+
+    async loadCli() {
+      set({ cliPending: true })
+      try {
+        set({ cli: await runtimeClient.call('cli.status', {}) })
+      } catch (error) {
+        failed('Could not work out where the teamree CLI is')(error)
+      } finally {
+        set({ cliPending: false })
+      }
+    },
+
+    async installCli() {
+      set({ cliPending: true, cliError: null })
+      try {
+        const install = await runtimeClient.call('cli.install', {})
+        // The runtime resolved the link before answering, so its status is the
+        // read-back rather than a guess, and there is nothing left to re-read.
+        set({ cliInstall: install, cli: install.status })
+      } catch (error) {
+        set({ cliError: error instanceof Error ? error.message : String(error) })
+        // What is at the destination may be exactly why it was refused, so the
+        // panel is re-read: "there is a file there" has to survive the refusal.
+        await get().loadCli()
+      } finally {
+        set({ cliPending: false })
       }
     },
 

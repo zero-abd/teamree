@@ -8,6 +8,7 @@ import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModi
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
+import { InstallCliDialog } from './dialogs/InstallCliDialog'
 import { MembersDialog } from './dialogs/MembersDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
@@ -83,6 +84,7 @@ export function App(): React.JSX.Element {
         <ConfirmRemoveDialog worktreeId={dialog.worktreeId} reason={dialog.reason} />
       ) : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
+      {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
       {dialog?.kind === 'members' ? <MembersDialog projectId={dialog.projectId} /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
     </div>

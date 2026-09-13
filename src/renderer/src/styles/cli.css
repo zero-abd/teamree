@@ -1,0 +1,98 @@
+/* Putting the CLI on PATH: the panel, and the one line in the sidebar that
+   offers it while there is anything to offer. */
+
+.sidebar__foot {
+  flex: none;
+  padding: var(--s2) var(--s4) var(--s4);
+  border-top: 1px solid var(--line);
+}
+
+.sidebar__cli {
+  width: 100%;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar__cli:hover {
+  border-color: var(--accent-line);
+  color: var(--accent-bright);
+}
+
+.sidebar__cli:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.cli-install {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: 0 var(--s5) var(--s5);
+}
+
+.cli-install__headline {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 560;
+}
+
+.cli-install__detail {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+/* What the button will do, penned off from the prose above it so that the
+   destination and the password are read rather than skimmed past. */
+.cli-install__promise {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.cli-install__password {
+  color: var(--fg);
+}
+
+.cli-install__warning {
+  color: var(--warning);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.cli-install__error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.cli-install__done {
+  color: var(--success);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.cli-install__command {
+  padding: var(--s3);
+  overflow-x: auto;
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre;
+}

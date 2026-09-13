@@ -23,6 +23,7 @@
 
 import { dirname } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
+import { CliService, createAdministratorRunner, findShippedCli, registerCliHandlers } from '../../cli'
 import { GitService, registerGitHandlers } from '../../git'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
@@ -131,6 +132,18 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
       // Writing a member file or a relay is this app's own change to `.teamree`,
       // and the watch above can be degraded, so the service says so itself.
       onRosterChange: () => workspaceEvents.emit({ type: 'members' })
+    })
+  )
+
+  // Nothing to tear down and nothing to watch: putting the CLI on PATH is two
+  // reads and, at most, one symlink. The privileged runner is handed over here
+  // rather than defaulted inside the service, so that the only code that can
+  // reach osascript is code that asked for it.
+  registerCliHandlers(
+    registry,
+    new CliService({
+      source: findShippedCli({ resourcesPath: process.resourcesPath }),
+      administrator: createAdministratorRunner()
     })
   )
 

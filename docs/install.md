@@ -177,7 +177,46 @@ entirely:
 The app ships its own CLI, under `resources/cli/`, and everything the window can
 do the CLI can do — which is how a coding agent drives teamree. It runs under
 the app's own Electron binary in plain-Node mode, so an installed app needs no
-separate Node runtime. Linking it is one command, done once after installing.
+separate Node runtime.
+
+**On macOS it is a button.** The sidebar offers **Put teamree on my PATH**
+while the command is not linked to this build, and the command palette finds it
+by name at any time. It says what it will do before you press it: link
+`/usr/local/bin/teamree` to the CLI inside this app. That is where a Mac
+developer expects a command to be and it is already on the PATH every login
+shell is built with, so there is nothing to choose.
+
+macOS asks for your administrator password only if `/usr/local/bin` cannot be
+written without one — on a Mac with Homebrew it usually can, and then nothing
+asks you anything. When it does ask, the dialog is the system's own: the
+password goes to macOS and never to teamree. The panel says which of the two is
+about to happen before the button is pressed, and says what actually happened
+afterwards, having resolved the link to check.
+
+Three things it will not do, each of them said rather than hidden:
+
+- A **regular file** at `/usr/local/bin/teamree` is left exactly where it is and
+  named. It is somebody's program, quite possibly yours.
+- A link to a **different copy of teamree** — an older build still in
+  `~/Downloads`, say — is named too, because it is the one failure nobody
+  diagnoses unaided: `teamree` runs, and it drives the other app, so nothing you
+  do in this window ever seems to reach it. Pressing the button points the link
+  here instead and leaves that copy alone.
+- A link that already points at this app is success, not an error. The button is
+  safe to press twice, and says so rather than inventing work.
+
+The same two things from a terminal, with the app running:
+
+```sh
+teamree cli status
+teamree cli install
+```
+
+### Doing it yourself
+
+The button is a convenience; the command it runs is no secret, and on Windows
+and Linux it is all there is. Nothing published on those platforms today builds
+the app, so this is what to run against a build from source.
 
 **macOS**
 

@@ -4,6 +4,8 @@
 
 import { z } from 'zod'
 import type {
+  CliInstall,
+  CliStatus,
   InstalledAgent,
   Layout,
   MemberList,
@@ -118,6 +120,21 @@ export const Params = {
 
   /** Coding agents found on PATH, so a pane can start one without being told. */
   agentList: z.object({}),
+
+  /**
+   * Where this app's CLI is, what is at the path it would be linked to, and
+   * whether that path is somewhere a shell would find it.
+   */
+  cliStatus: z.object({}),
+  /**
+   * Puts the CLI on PATH, asking for an administrator password only when the
+   * destination directory cannot be written without one.
+   *
+   * Takes nothing: the destination is `/usr/local/bin/teamree` and the source
+   * is this app's own CLI, so there is no argument that could be got wrong and
+   * no way for a caller to aim the link somewhere else.
+   */
+  cliInstall: z.object({}),
 
   /**
    * Everyone whose public key is committed to the project, and who this
@@ -297,6 +314,9 @@ export type MethodContract = {
   }
 
   'agent.list': { params: z.infer<typeof Params.agentList>; result: InstalledAgent[] }
+
+  'cli.status': { params: z.infer<typeof Params.cliStatus>; result: CliStatus }
+  'cli.install': { params: z.infer<typeof Params.cliInstall>; result: CliInstall }
 
   'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
   'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }
