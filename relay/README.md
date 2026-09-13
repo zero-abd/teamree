@@ -290,13 +290,30 @@ token   = HKDF-SHA256(ikm = shared,
                       length = 32)                   # 64 lowercase hex characters
 ```
 
-The token is what a peer presents in its hello. It is **pairwise** — one per
-pair of teammates, not one per project — and it **rotates hourly**.
+The token is what a peer presents in its hello, and it **rotates hourly**.
+
+**What the app actually derives differs from the sketch above, in `info`.** This
+section described one token per pair of teammates; the app scopes it per project
+as well, so two people who share three repositories have three rendezvous rather
+than one. That came out of a security review: with a single token per pair,
+every repository two colleagues share produced one indistinguishable session and
+nothing in the handshake said which project it was for.
+
+It also pins the encoding. `info = epoch` above never said whether that is
+decimal text or eight big-endian bytes, and the relay cannot arbitrate — 32
+opaque bytes either way — so two implementations that disagree simply never meet,
+and are never told why. What the app derives is:
+
+```
+info = "teamree/rendezvous/v2" LF <project key> LF <epoch as decimal text>
+```
 
 The relay itself knows none of this. To it, a rendezvous is 32 opaque bytes, and
-its entire job is to notice that two connections presented the same ones. A team
-that wanted a different scheme, or a fixed token per pair, would not have to
-change a line of it.
+its entire job is to notice that two connections presented the same ones. That is
+why the divergence above costs it nothing, and why a team that wanted a different
+scheme again — a fixed token per pair, say — would not have to change a line of
+it. The rule for anyone writing a second client is simply that both ends must
+derive `info` identically, byte for byte.
 
 ### The URL carries a hash, not the token
 
