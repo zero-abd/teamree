@@ -42,8 +42,30 @@ files:
   # node-pty's build inputs. The prebuilt binaries stay; the C++ sources,
   # vendored dependencies and gyp files that produced them do not.
   - '!node_modules/node-pty/{src,deps,third_party,scripts,binding.gyp}'
-  # Prebuilt binaries for the platforms this artifact is not for are stripped in
-  # scripts/afterpack.mjs, where the target platform and arch are known.
+  # Windows and Linux prebuilds, kept out of the package rather than deleted
+  # from it afterwards — which is not the same thing, and the difference stopped
+  # a universal build dead.
+  #
+  # scripts/afterpack.mjs also prunes foreign prebuilds, and has to: it is the
+  # only place that knows the target of a build. But it runs *after* the asar is
+  # written, so what it deletes stays listed in the archive's header as an
+  # unpacked file that is no longer on disk. Nothing ever looks, for a
+  # single-architecture build, so that was harmless and invisible for as long as
+  # this shipped one. The universal merge enumerates every unpacked entry and
+  # stopped on `prebuilds/win32-arm64/conpty.node` — a Windows binary, in a
+  # macOS build, that the packager had been told about and then had taken away.
+  #
+  # Here rather than under `mac.files`, which looks like the precise way to say
+  # it and is not: a platform-specific `files` replaces this list instead of
+  # adding to it, and the package went from 263 MB to 1.4 GB carrying 2421 test
+  # files. Measured, after reading the merge code and concluding the opposite.
+  #
+  # The cost of saying it globally is that a Windows build would now package no
+  # Windows PTY. It fails loudly when that happens — afterPack checks for the
+  # binary by name and says which platform it is missing — and nobody builds
+  # Windows today. Reviving it means deleting these two lines.
+  - '!node_modules/node-pty/prebuilds/{win32-*,linux-*}'
+  - '!node_modules/node-pty/prebuilds/{win32-*,linux-*}/**'
 
 # The CLI ships next to the app rather than inside the asar: it is executed as a
 # separate process (see resources/cli/teamree), and an archived file cannot be
@@ -109,6 +131,25 @@ mac:
   # the two slices agree on. Everything it does not match — the Electron
   # framework, the helpers — is still lipo'd into one binary as it should be.
   x64ArchFiles: '**/node-pty/prebuilds/**'
+
+  # Keep the other platforms' prebuilds out of the package entirely, rather than
+  # deleting them afterwards.
+  #
+  # These are merged with the top-level `files`, not a replacement for them.
+  #
+  # scripts/afterpack.mjs prunes foreign prebuilds too, and has to, because it is
+  # the only place that knows the target for a Windows or Linux build. But it
+  # runs *after* the asar is written, so what it deletes stays listed in the
+  # archive's header as an unpacked file that is no longer on disk. For a
+  # single-architecture build nothing ever looks, so that has been harmless and
+  # invisible. The universal merge enumerates every unpacked entry, and stopped
+  # dead on `prebuilds/win32-arm64/conpty.node` — a Windows binary, in a macOS
+  # build, that the packager had been told about and then had taken away.
+  #
+  # Excluding them here means they are never in the header to begin with.
+  # Windows and Linux keep the hook's pruning and keep the latent dangling
+  # entry; neither is built today, and the fix for them is another two lines
+  # like these rather than a rewrite.
   # Ad-hoc signature. Apple Silicon refuses to launch a Mach-O binary with no
   # signature at all, and electron-builder invalidates the one Electron ships as
   # soon as it rewrites the bundle — so an unsigned build still has to be
