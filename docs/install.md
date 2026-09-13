@@ -144,12 +144,20 @@ repository since, so it is a command a maintainer runs rather than something tha
 happens on every commit.
 
 There is a route through the interface as well, for anyone who would rather not
-type a command. You attempt to open teamree, get the dialog above, and press
-**Done**. Then go to **System Settings → Privacy & Security** and scroll to the
-Security section: a line naming teamree has appeared there, with an **Open
-Anyway** button beside it. It will ask for your password or Touch ID. Do this
-reasonably soon after the refusal — the offer is tied to the attempt, and a
-stale one goes away.
+type a command: attempt to open teamree, press **Done**, then go to **System
+Settings → Privacy & Security** and scroll to the Security section, where a line
+naming teamree appears with an **Open Anyway** button beside it. Expect it to
+ask for your password or Touch ID.
+
+Being exact about that last paragraph, because the rest of this document is
+written from observation and it would be wrong to let one paragraph pass for the
+same thing: the `xattr` command above was run against this build and watched to
+work, and the dialog is quoted off the screen. The System Settings route was not
+clicked through. `Open Anyway` is the button macOS ships for this case — it is
+in `CodeEvaluation.loctable` next to the strings that produce the dialog — but
+nobody here has confirmed how that pane looks on macOS 26 with teamree in it. If
+you take that route and it does not match, the command is the one that was
+tested.
 
 One thing that will look like failure and is not: `spctl -a -vv` on the app says
 `rejected` before you clear quarantine **and after**. Clearing the attribute
