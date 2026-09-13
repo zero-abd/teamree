@@ -15,7 +15,7 @@ import { createDelayedRunner, createTempRepo, type TempRepo } from '../git/testR
 import { degradedWatchReport, type WatchDegraded } from '../git/worktreeWatcher'
 import { createTerminalService, registerTerminalHandlers } from '../terminals/method-handlers'
 import type { TerminalService } from '../terminals/method-handlers'
-import { canSpawnPty } from '../terminals/pty-test-support'
+import { canSpawnPty, testShell } from '../terminals/pty-test-support'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { registerUnsubscribeHandler } from './handlers/unsubscribeHandler'
@@ -430,7 +430,7 @@ describePty('workspace stream terminal producers', () => {
 
       const terminal = await app.call<{ id: string }>('c1', 'terminal.create', {
         worktreeId: WORKTREE,
-        shell: '/bin/sh',
+        shell: testShell(),
         command: 'cat'
       })
       await watcher.waitFor(has('terminals'), 'the terminal invalidation')
@@ -459,7 +459,7 @@ describePty('workspace stream terminal producers', () => {
       const app = await harness()
       const terminal = await app.call<{ id: string }>('c1', 'terminal.create', {
         worktreeId: WORKTREE,
-        shell: '/bin/sh',
+        shell: testShell(),
         command: 'cat'
       })
       const watcher = await app.watch('c1')
@@ -484,7 +484,7 @@ describePty('workspace stream terminal producers', () => {
 
       const terminal = await app.call<{ id: string }>('c1', 'terminal.create', {
         worktreeId: WORKTREE,
-        shell: '/bin/sh',
+        shell: testShell(),
         command: 'exit 7'
       })
 

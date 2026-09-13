@@ -17,7 +17,7 @@ import type { WorkspaceEvent } from '../../shared/methods'
 import type { Response } from '../../shared/protocol'
 import { createTerminalService, registerTerminalHandlers } from '../terminals/method-handlers'
 import type { TerminalService } from '../terminals/method-handlers'
-import { canSpawnPty, waitUntil } from '../terminals/pty-test-support'
+import { canSpawnPty, testShell, waitUntil } from '../terminals/pty-test-support'
 import type { TerminalRecord } from '../terminals/session-restore'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
@@ -116,7 +116,7 @@ function recordFor(binary: string, checkout: string): TerminalRecord {
     id: RESTORED_ID,
     worktreeId: WORKTREE,
     cwd: checkout,
-    shell: '/bin/sh',
+    shell: testShell(),
     // An agent pane, because that is the one M10 brings back with its
     // conversation rather than as a plain shell.
     command: binary,

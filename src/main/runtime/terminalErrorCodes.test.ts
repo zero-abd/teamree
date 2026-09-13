@@ -15,7 +15,7 @@ import type { Terminal } from '../../shared/entities'
 import { ErrorCode, type ErrorResponse, type Response } from '../../shared/protocol'
 import { createTerminalService, registerTerminalHandlers } from '../terminals/method-handlers'
 import type { TerminalService } from '../terminals/method-handlers'
-import { canSpawnPty, waitUntil } from '../terminals/pty-test-support'
+import { canSpawnPty, testShell, waitUntil } from '../terminals/pty-test-support'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { MethodRegistry } from './methodRegistry'
@@ -127,7 +127,7 @@ describePty('terminal error codes over a real pty', () => {
         {
           id: 'open',
           method: 'terminal.create',
-          params: { worktreeId: WORKTREE, shell: '/bin/sh', command: 'exit 3' }
+          params: { worktreeId: WORKTREE, shell: testShell(), command: 'exit 3' }
         },
         { connectionId: 'c1' }
       )) as Response

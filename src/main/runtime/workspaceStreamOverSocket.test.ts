@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Project } from '../../shared/entities'
 import type { WorkspaceEvent } from '../../shared/methods'
 import { createFrameDecoder, type Frame, type Response, type StreamEvent } from '../../shared/protocol'
+import { canonicalPath } from '../git/pathIdentity'
 import { createTempRepo, type TempRepo } from '../git/testRepository'
 import { startRuntime, type Runtime } from './startRuntime'
 
@@ -115,7 +116,11 @@ describe('workspace stream across connections', () => {
 
     // The mutation an agent would make through the CLI.
     const project = await mutator.call<Project>('project.add', { path: repo.repoPath })
-    expect(project.path).toBe(repo.repoPath)
+    // Compared canonically: a project's path is stored resolved and with its
+    // separators normalised, which on Windows is not the string that was handed
+    // in. Asserting the raw input would be asserting that the app does not do
+    // the normalisation it deliberately does.
+    expect(project.path).toBe(canonicalPath(repo.repoPath))
 
     const event = await watcher.waitForEvent(subscription, 'projects')
     expect(event).toEqual({ type: 'projects' })
