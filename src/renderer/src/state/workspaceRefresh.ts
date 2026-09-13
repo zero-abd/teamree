@@ -32,6 +32,11 @@ export type RefreshTargets = {
    * carries no project id, so this re-reads the projects on screen.
    */
   teammates: boolean
+  /**
+   * What the update check has to say. No id either, and nothing to narrow: it
+   * is one small read out of the runtime's memory.
+   */
+  updates: boolean
   /** Layouts of exactly these worktrees. Never widened to "every layout". */
   layouts: readonly string[]
   /** Git status of exactly these worktrees. */
@@ -48,6 +53,7 @@ export const NOTHING_TO_REFRESH: RefreshTargets = {
   terminals: false,
   members: false,
   teammates: false,
+  updates: false,
   layouts: [],
   statuses: [],
   exits: []
@@ -64,6 +70,7 @@ export function isEmptyRefresh(targets: RefreshTargets): boolean {
     !targets.terminals &&
     !targets.members &&
     !targets.teammates &&
+    !targets.updates &&
     targets.layouts.length === 0 &&
     targets.statuses.length === 0 &&
     targets.exits.length === 0
@@ -91,6 +98,8 @@ export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
     // once for the roster and once more for the announcement of the same thing.
     case 'teammates':
       return refreshTargets({ teammates: true })
+    case 'updates':
+      return refreshTargets({ updates: true })
     case 'layout':
       return refreshTargets({ layouts: [event.worktreeId] })
     case 'terminalExited':
@@ -108,6 +117,7 @@ export function mergeTargets(a: RefreshTargets, b: RefreshTargets): RefreshTarge
     terminals: a.terminals || b.terminals,
     members: a.members || b.members,
     teammates: a.teammates || b.teammates,
+    updates: a.updates || b.updates,
     layouts: union(a.layouts, b.layouts),
     statuses: union(a.statuses, b.statuses),
     exits: mergeExits(a.exits, b.exits)

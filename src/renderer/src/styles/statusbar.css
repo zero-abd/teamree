@@ -28,8 +28,12 @@
   color: var(--fg-muted);
 }
 
+/* Monospace and quiet, not accented. The accent in this window means one
+   thing — where you are and what is selected — and a branch name in the status
+   bar is neither: it is a caption on the tab that is already marked. Spending
+   the accent here is part of what stopped it pointing anywhere. */
 .statusbar__branch {
-  color: var(--accent-bright);
+  color: var(--fg-secondary);
   font-family: var(--font-mono);
 }
 
@@ -46,7 +50,7 @@
 
 .statusbar__connection--ready .statusbar__dot {
   background: var(--success);
-  box-shadow: 0 0 0 3px rgb(87 195 138 / 15%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);
 }
 
 .statusbar__connection--connecting .statusbar__dot,

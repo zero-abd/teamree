@@ -19,6 +19,7 @@ import type {
   TeamworkPublishProgress,
   TeamworkStatus,
   Terminal,
+  UpdateState,
   Worktree,
   WorktreeChanges,
   WorktreeDiff,
@@ -26,6 +27,7 @@ import type {
   WorktreeMergePreview,
   WorktreeStatus
 } from '@shared/entities'
+import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
 import {
   isWatchedPaneId,
@@ -50,6 +52,7 @@ import { readStoredSession, sessionChanged, writeStoredSession } from './storedS
 
 export type DialogState =
   | { kind: 'add-project' }
+  | { kind: 'appearance' }
   | { kind: 'install-cli' }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
@@ -318,6 +321,15 @@ type WorkspaceState = {
    * and both belong next to the button that will be pressed again.
    */
   cliError: string | null
+  /**
+   * Whether a newer teamree exists, and whether this one is looking.
+   *
+   * Read at startup like the CLI's status, and re-read whenever the runtime
+   * says the check has something new to say — which it does for checks this
+   * window did not start: the one half a minute after launch, and the one
+   * behind the macOS app menu. Null means nobody has asked yet.
+   */
+  update: UpdateState | null
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
   /** True once the probe has answered, however it answered. Until then an
@@ -352,6 +364,17 @@ type WorkspaceState = {
   paneSearch: PaneSearch | null
   dialog: DialogState
   notices: Notice[]
+
+  /**
+   * How this window is painted, as the runtime last told it.
+   *
+   * Held here rather than in the appearance dialog's own state because the
+   * dialog is not the only reader: `App` writes the resolved palette onto the
+   * root element from it, and every open terminal re-reads its emulator theme
+   * when it changes. A colour edited in the dialog is therefore live in the
+   * panes behind the dialog, which is the whole point of editing one.
+   */
+  appearance: Appearance
 
   bootstrap: () => Promise<void>
   /** Opens the change stream. Returns the stop function an effect cleans up with. */
@@ -410,6 +433,22 @@ type WorkspaceState = {
    * panel.
    */
   dismissCliPrompt: () => Promise<void>
+
+  /** Re-reads what the runtime knows about newer releases. Asks nobody. */
+  loadUpdate: () => Promise<void>
+  /**
+   * Asks GitHub now, because somebody chose to.
+   *
+   * Raises a notice when there is nothing to report, and only then: a check
+   * somebody asked for has to answer even when the answer is "you are current",
+   * while the one the app makes by itself has to be silent unless it found
+   * something. A failed check says so too, because this one was asked for.
+   */
+  checkForUpdates: () => Promise<void>
+  /** Opens the newer release's download in the browser. */
+  downloadUpdate: () => Promise<void>
+  /** Turns the automatic check on or off. Remembered between runs. */
+  setAutomaticUpdates: (automatic: boolean) => Promise<void>
 
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
@@ -489,6 +528,17 @@ type WorkspaceState = {
   closeTeamwork: () => void
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
+  /**
+   * Applies an appearance and remembers it.
+   *
+   * Applied and stored in one step, with no draft and no confirm button:
+   * colours are judged by looking at them, so the window behind the dialog is
+   * the preview, and a change somebody liked enough to leave on screen is a
+   * change they have already decided. The write costs one in-process call and
+   * the runtime coalesces its disk writes, so a colour being dragged is cheap
+   * enough to save every frame of.
+   */
+  setAppearance: (appearance: Appearance) => Promise<void>
   openDialog: (dialog: NonNullable<DialogState>) => void
   closeDialog: () => void
   dismissNotice: (id: number) => void
@@ -750,6 +800,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.terminals) reads.push(refreshTerminals())
     if (targets.members) reads.push(refreshMembers(), refreshRelays())
     if (targets.teammates) reads.push(refreshTeammates())
+    if (targets.updates) reads.push(get().loadUpdate())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
       reads.push(
@@ -964,6 +1015,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     cliPending: false,
     cliInstall: null,
     cliError: null,
+    update: null,
     agents: [],
     agentsProbed: false,
     diff: null,
@@ -984,6 +1036,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     paneSearch: null,
     dialog: null,
     notices: [],
+
+    // The default until the runtime answers, which is the same palette
+    // `tokens.css` already painted the first frame in — so the window does not
+    // change shade on the way to its real theme.
+    appearance: DEFAULT_APPEARANCE,
 
     /**
      * The first read of everything. It goes through the same queue the change
@@ -1009,6 +1066,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           .call('cli.status', {})
           .then((cli) => set({ cli }))
           .catch(() => {})
+        // And the theme. Not fatal either: a window that could not read its
+        // appearance opens in the default one rather than not opening.
+        void runtimeClient
+          .call('appearance.get', {})
+          .then((appearance) => set({ appearance }))
+          .catch(() => {})
+        // And the same again for what the runtime knows about newer releases.
+        // A read out of its memory: it asks GitHub nothing, and whatever its
+        // own check finds arrives later on the change stream.
+        void get().loadUpdate()
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
         await refresher.flush()
@@ -1476,6 +1543,61 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    async loadUpdate() {
+      try {
+        set({ update: await runtimeClient.call('update.state', {}) })
+      } catch {
+        // Nothing. This is a read of what the runtime already knows, and a
+        // window that cannot perform it simply says nothing about updates —
+        // which is the same silence a check that found nothing produces.
+      }
+    },
+
+    async checkForUpdates() {
+      // Optimistic, so the row the user just pressed says "Checking…" rather
+      // than staying still until a round trip over a slow link completes.
+      const before = get().update
+      if (before) set({ update: { ...before, checking: true } })
+      try {
+        const update = await runtimeClient.call('update.check', {})
+        set({ update })
+        // The card says the rest when there is something to say. This is for
+        // the other two answers, which have nowhere else to appear — and which
+        // somebody who has just chosen "Check for updates" is owed.
+        if (update.available !== null) return
+        if (update.problem !== null) {
+          notify(`Could not check for updates: ${update.problem}`, 'info')
+          return
+        }
+        notify(`teamree ${update.current} is the latest release.`, 'info')
+      } catch (error) {
+        set({ update: before })
+        failed('Could not check for updates')(error)
+      }
+    },
+
+    async downloadUpdate() {
+      try {
+        await runtimeClient.call('update.download', {})
+      } catch (error) {
+        // Said out loud, unlike a failed check: this one is a button somebody
+        // pressed, and a button that does nothing at all is the worst outcome
+        // here — the release page is still reachable by hand.
+        failed('Could not open the download')(error)
+      }
+    },
+
+    async setAutomaticUpdates(automatic) {
+      const before = get().update
+      if (before) set({ update: { ...before, automatic } })
+      try {
+        set({ update: await runtimeClient.call('update.setAutomatic', { automatic }) })
+      } catch (error) {
+        set({ update: before })
+        failed('Could not change whether teamree checks for updates')(error)
+      }
+    },
+
     async loadMembers(projectId) {
       // A refusal is about one attempt at one project, so re-opening the panel
       // must not show somebody else's.
@@ -1814,6 +1936,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set((state) => ({ sidebarVisible: !state.sidebarVisible }))
       // Bringing the sidebar back brings every expanded row with it.
       if (get().sidebarVisible) readOnScreen()
+    },
+
+    async setAppearance(appearance) {
+      // Held locally first so the window repaints on the keystroke rather than
+      // on the round trip, and replaced by what the runtime answers — which is
+      // the same choice with anything it refused taken out of it.
+      set({ appearance })
+      try {
+        set({ appearance: await runtimeClient.call('appearance.set', appearance) })
+      } catch (error) {
+        failed('Could not save the appearance')(error)
+      }
     },
 
     openTeamwork(projectId) {

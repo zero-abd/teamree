@@ -32,10 +32,12 @@ import { WorktreeRow } from './WorktreeRow'
 
 export function Sidebar({
   newWorktreeHint,
-  searchHint
+  searchHint,
+  appearanceHint
 }: {
   newWorktreeHint: string
   searchHint: string
+  appearanceHint: string
 }): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
@@ -166,6 +168,29 @@ export function Sidebar({
                 <rect x="7.8" y="7.8" width="4.2" height="4.2" rx="1" />
               </svg>
               <span>All panes</span>
+            </button>
+          </li>
+          <li>
+            {/* The one entry here that opens a dialog rather than taking the
+                main area. It is in the rail anyway because it belongs to the
+                same set — things about the window rather than about a worktree
+                — and because a preference nobody can find is a preference
+                nobody has. The chord beside it is the one macOS people reach
+                for without looking. */}
+            <button
+              type="button"
+              className="rail__link"
+              title="Themes and colours"
+              onClick={() => openDialog({ kind: 'appearance' })}
+            >
+              <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
+                <path d="M7 1.6a5.4 5.4 0 1 0 0 10.8c.9 0 1.3-.6 1.3-1.2 0-.8-.7-1.1-.7-1.8 0-.5.4-.9 1-.9h1.1a2.7 2.7 0 0 0 2.7-2.8c0-2.6-2.4-4.1-5.4-4.1Z" />
+                <circle cx="4.5" cy="6" r="0.9" />
+                <circle cx="7" cy="4.2" r="0.9" />
+                <circle cx="9.6" cy="6" r="0.9" />
+              </svg>
+              <span>Appearance</span>
+              <kbd>{appearanceHint}</kbd>
             </button>
           </li>
         </ul>

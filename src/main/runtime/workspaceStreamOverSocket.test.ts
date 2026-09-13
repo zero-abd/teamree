@@ -108,6 +108,8 @@ beforeAll(async () => {
     serveCli: true,
     // No Electron in a vitest worker, so the renderer transport stays off.
     serveRenderer: false,
+    // And nothing in a test may reach the network.
+    checkForUpdates: false,
     onError: () => undefined
   })
   expect(runtime.endpoint).not.toBe('')

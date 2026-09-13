@@ -452,6 +452,29 @@ own Cloudflare account and prints the address to hand round. You need a
 Cloudflare account and Node 20 or newer; `relay/README.md` in the repository is
 the whole story, including what the relay can and cannot see.
 
+## Keeping it up to date
+
+teamree tells you when there is a newer release. It asks GitHub for the latest
+published one a little after it starts, at most once every few hours, and if
+there is something newer it says so in a card in the corner of the window —
+the version, the release notes, and a button that opens the `.dmg` in your
+browser. A check that cannot be made says nothing at all; the app does not
+complain at you about a network it cannot reach.
+
+**It is a notice, never an install.** Nothing about this replaces the app while
+you are not looking, and that is not caution — it is not possible. The macOS
+updater every app of this kind uses checks the code signature of the
+replacement before swapping it in, and refuses one that is unsigned, which this
+build is and will stay. So the download is a new `.dmg`, installed exactly the
+way this copy was: drag it to Applications over the old one, and if you had to
+clear the quarantine flag before, do it again for the new copy.
+
+You can ask at any time: **teamree → Check for Updates…** in the menu bar, or
+"Check for updates" in the command palette. And you can tell it to stop looking
+— the card's **Stop checking** button, or "Stop checking for updates
+automatically" in the palette. That answer is remembered between launches, and
+the menu item still works when you want it.
+
 ## Uninstalling
 
 Removing the app never removes your data, which is deliberate — a worktree is

@@ -75,6 +75,9 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
         case 'open-dashboard':
           store.toggleDashboard()
           break
+        case 'open-appearance':
+          store.openDialog({ kind: 'appearance' })
+          break
       }
     }
 

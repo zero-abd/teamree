@@ -1,38 +1,45 @@
 // xterm needs literal colours, but the palette belongs in CSS. This reads the
-// custom properties once per terminal so the emulator and the chrome around it
-// can never drift apart.
+// custom properties so the emulator and the chrome around it can never drift
+// apart — including when the palette changes under a running terminal, which is
+// what makes switching themes reach panes that are already open.
+//
+// All sixteen ANSI colours are mapped, not the eight the interface happens to
+// reuse. An unmapped entry does not go unthemed, it silently keeps xterm's own
+// default, which is how a window could end up drawing bright green from one
+// palette beside green from another.
 
 import type { ISearchOptions } from '@xterm/addon-search'
 import type { ITheme } from '@xterm/xterm'
 
 const FALLBACK: ITheme = {
-  background: '#0f1116',
-  foreground: '#d7dde8',
-  cursor: '#8b8cf7',
-  cursorAccent: '#0f1116',
-  selectionBackground: '#2b3350',
-  black: '#1b1f27',
+  background: '#000000',
+  foreground: '#e4e7ee',
+  cursor: '#9e9ef8',
+  cursorAccent: '#000000',
+  selectionBackground: '#2f3054',
+  black: '#212223',
   red: '#e8615a',
   green: '#57c38a',
   yellow: '#d6a24a',
   blue: '#5aa9e6',
   magenta: '#a98bf0',
   cyan: '#4fb6b2',
-  white: '#c3cad6',
-  brightBlack: '#5c6577',
-  brightRed: '#f2827b',
-  brightGreen: '#79d8a6',
-  brightYellow: '#e8bd6c',
-  brightBlue: '#7ec0f5',
-  brightMagenta: '#c0a7ff',
-  brightCyan: '#6fd0cb',
-  brightWhite: '#eef2f8'
+  white: '#bbbdc3',
+  brightBlack: '#737577',
+  brightRed: '#ed847e',
+  brightGreen: '#7cd0a4',
+  brightYellow: '#dfb672',
+  brightBlue: '#7ebcec',
+  brightMagenta: '#bca5f3',
+  brightCyan: '#76c6c3',
+  brightWhite: '#e4e7ee'
 }
 
 const VARIABLE_BY_KEY: Partial<Record<keyof ITheme, string>> = {
   background: '--term-bg',
   foreground: '--term-fg',
   cursor: '--term-cursor',
+  cursorAccent: '--term-bg',
   selectionBackground: '--term-selection',
   black: '--term-black',
   red: '--term-red',
@@ -42,7 +49,14 @@ const VARIABLE_BY_KEY: Partial<Record<keyof ITheme, string>> = {
   magenta: '--term-magenta',
   cyan: '--term-cyan',
   white: '--term-white',
-  brightBlack: '--term-bright-black'
+  brightBlack: '--term-bright-black',
+  brightRed: '--term-bright-red',
+  brightGreen: '--term-bright-green',
+  brightYellow: '--term-bright-yellow',
+  brightBlue: '--term-bright-blue',
+  brightMagenta: '--term-bright-magenta',
+  brightCyan: '--term-bright-cyan',
+  brightWhite: '--term-bright-white'
 }
 
 export function readTerminalTheme(root: Element | null): ITheme {
@@ -79,12 +93,12 @@ const SEARCH_VARIABLE_BY_KEY: Record<keyof Required<SearchDecorations>, string> 
 }
 
 const SEARCH_FALLBACK: Required<SearchDecorations> = {
-  matchBackground: '#2b3350',
-  matchBorder: '#5c6577',
-  matchOverviewRuler: '#5c6577',
-  activeMatchBackground: '#2b3350',
-  activeMatchBorder: '#a6a7ff',
-  activeMatchColorOverviewRuler: '#a6a7ff'
+  matchBackground: '#2f3054',
+  matchBorder: '#737577',
+  matchOverviewRuler: '#737577',
+  activeMatchBackground: '#2f3054',
+  activeMatchBorder: '#9e9ef8',
+  activeMatchColorOverviewRuler: '#9e9ef8'
 }
 
 export function readSearchDecorations(root: Element | null): SearchDecorations {

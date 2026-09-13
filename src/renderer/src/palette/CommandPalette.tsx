@@ -15,7 +15,8 @@ const ACTION_SHORTCUTS: Partial<Record<PaletteAction, WorkspaceCommand>> = {
   'split-right': 'split-right',
   'split-down': 'split-down',
   'toggle-sidebar': 'toggle-sidebar',
-  'open-dashboard': 'open-dashboard'
+  'open-dashboard': 'open-dashboard',
+  'open-appearance': 'open-appearance'
 }
 
 export function CommandPalette({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
@@ -23,6 +24,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
   const projects = useWorkspaceStore((state) => state.projects)
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const agents = useWorkspaceStore((state) => state.agents)
+  const update = useWorkspaceStore((state) => state.update)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   const [query, setQuery] = useState('')
@@ -35,12 +37,13 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         projects,
         activeWorktreeId,
         agents,
+        update,
         hintFor: (action) => {
           const command = ACTION_SHORTCUTS[action]
           return command ? shortcutHint(command, modifier) : ''
         }
       }),
-    [worktrees, projects, activeWorktreeId, agents, modifier]
+    [worktrees, projects, activeWorktreeId, agents, update, modifier]
   )
 
   const matches = useMemo(() => filterPalette(items, query), [items, query])
@@ -94,6 +97,18 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         break
       case 'install-cli':
         store.openDialog({ kind: 'install-cli' })
+        break
+      case 'open-appearance':
+        store.openDialog({ kind: 'appearance' })
+        break
+      case 'check-for-updates':
+        // The palette has already closed. The answer arrives as the card, or as
+        // a notice saying this build is the latest — never as a dialog, because
+        // this is news and news does not take the keyboard.
+        void store.checkForUpdates()
+        break
+      case 'toggle-automatic-updates':
+        void store.setAutomaticUpdates(!(store.update?.automatic ?? true))
         break
     }
   }

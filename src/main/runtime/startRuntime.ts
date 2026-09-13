@@ -27,6 +27,20 @@ export type RuntimeOptions = {
    * nothing until a project actually names one: no relay, no connections.
    */
   serveTeamwork?: boolean
+  /**
+   * Off for a harness that has no business dialling GitHub. On, it costs one
+   * request every few hours, made half a minute after startup and awaited by
+   * nothing — see updateService.ts.
+   */
+  checkForUpdates?: boolean
+  /**
+   * Opens a URL in the user's browser; `shell.openExternal` in the app.
+   *
+   * Passed in rather than imported so that the only code able to open a browser
+   * is code that was handed the means, and so a runtime with no Electron around
+   * it — the acceptance host, a vitest worker — simply has none.
+   */
+  openExternal?: (url: string) => Promise<void>
   onError?: (error: unknown) => void
 }
 
@@ -35,18 +49,35 @@ export type Runtime = {
   readonly registry: MethodRegistry
   readonly dispatch: Dispatcher
   readonly endpoint: string
+  /**
+   * Asks GitHub whether there is a newer release, because somebody chose to.
+   *
+   * On the handle rather than reached through the registry because its one
+   * caller is outside the runtime entirely: the macOS app menu is built in the
+   * main process, and a menu item is not a method call from a window.
+   */
+  checkForUpdates: () => Promise<void>
   stop: () => Promise<void>
 }
 
 export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
-  const { userDataDir, version, serveCli = true, serveRenderer = true, serveTeamwork = true, onError } = options
+  const {
+    userDataDir,
+    version,
+    serveCli = true,
+    serveRenderer = true,
+    serveTeamwork = true,
+    checkForUpdates = true,
+    openExternal,
+    onError
+  } = options
   const report = onError ?? ((error: unknown) => console.error('[runtime]', error))
 
   const store = await WorkspaceStore.open(join(userDataDir, WORKSPACE_FILE_NAME))
   const subscriptions = new SubscriptionHub()
   const context = createRuntimeContext({ version, store, subscriptions })
   const registry = new MethodRegistry(context)
-  const areas = registerHandlers(registry)
+  const areas = registerHandlers(registry, { openExternal })
   const dispatch = createDispatcher(registry)
 
   // After the dispatcher, and deliberately: a teammate reaching a registry that
@@ -56,6 +87,11 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   // fatal, because an app that cannot reach a relay is still an app.
   areas.peers.attach(dispatch)
   if (serveTeamwork) void areas.peers.start().catch(report)
+
+  // Nothing is awaited and nothing is requested yet: this sets a timer for half
+  // a minute's time, and the check it eventually makes is best-effort and
+  // silent about failing. Startup must cost nothing for it.
+  if (checkForUpdates) areas.updates.start()
 
   let socketServer: RuntimeSocketServer | undefined
   const discoveryPath = discoveryFilePath(userDataDir)
@@ -93,8 +129,14 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     get endpoint() {
       return context.endpoint
     },
+    checkForUpdates: async () => {
+      await areas.updates.check({ force: true })
+    },
     stop: async () => {
       uninstallBridge()
+      // Before anything that takes time: a pending check firing during shutdown
+      // would be a request nobody is left to read the answer to.
+      areas.updates.stop()
       // First: a relay connection outliving the process it reports on would
       // have a teammate watching panes that are already being killed below.
       areas.peers.stop()

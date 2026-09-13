@@ -486,12 +486,12 @@
 }
 
 .patch__line--added {
-  background: rgb(87 195 138 / 12%);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
   color: var(--success);
 }
 
 .patch__line--removed {
-  background: rgb(232 97 90 / 12%);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
   color: var(--danger);
 }
 
