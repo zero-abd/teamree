@@ -9,6 +9,12 @@
 // function, and all of them are the difference between reading a teammate's
 // terminal and believing you are.
 //
+// Since it stopped floating over the window there is one more: that a pane
+// which now sits in a slot somebody can drag the edge of still never renegotiates
+// the far end's geometry. Resizing the slot has to move the scale and nothing
+// else — the letterbox is the whole reason a watcher is allowed to have a
+// smaller window than the owner.
+//
 // xterm is replaced by a recorder. The real emulator needs layout jsdom does
 // not have, and what matters here is not that a glyph was rasterised but which
 // bytes this component decided to put in the pane — which is exactly what a
@@ -28,6 +34,9 @@ type FakeTerm = {
   data: ((data: string) => void) | null
   disposed: boolean
   resized: number
+  focused: boolean
+  /** What the view told the emulator to decline, so the app can have it. */
+  keyHandler: ((event: KeyboardEvent) => boolean) | null
 }
 
 const terms = vi.hoisted(() => [] as unknown[])
@@ -41,6 +50,8 @@ vi.mock('@xterm/xterm', () => {
     data: ((data: string) => void) | null = null
     disposed = false
     resized = 0
+    focused = false
+    keyHandler: ((event: KeyboardEvent) => boolean) | null = null
 
     constructor(options: Record<string, unknown>) {
       this.options = options
@@ -69,6 +80,18 @@ vi.mock('@xterm/xterm', () => {
       this.resized += 1
     }
 
+    focus(): void {
+      this.focused = true
+    }
+
+    blur(): void {
+      this.focused = false
+    }
+
+    attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean): void {
+      this.keyHandler = handler
+    }
+
     loadAddon(): void {}
 
     dispose(): void {
@@ -84,6 +107,26 @@ vi.mock('@xterm/addon-webgl', () => ({
     dispose(): void {}
   }
 }))
+
+/**
+ * The observers this view is watching its own slot with.
+ *
+ * The harness's stub never fires, because jsdom has no layout to fire about —
+ * so the one test that is about a slot being dragged narrower calls the
+ * callback itself, which is exactly what the browser would do.
+ */
+const observers: (() => void)[] = []
+
+class RecordingResizeObserver implements ResizeObserver {
+  constructor(callback: ResizeObserverCallback) {
+    observers.push(() => callback([], this))
+  }
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+
+globalThis.ResizeObserver = RecordingResizeObserver
 
 const call = vi.fn<(method: string, params: unknown) => Promise<unknown>>()
 const watchPane = vi.fn()
@@ -146,23 +189,32 @@ function armWatch(): Opened {
 
 function mount(overrides: Partial<Parameters<typeof WatchedPaneView>[0]> = {}): {
   onClose: ReturnType<typeof vi.fn>
+  onFocus: ReturnType<typeof vi.fn>
   onOutput: ReturnType<typeof vi.fn>
+  rerender: (next: Partial<Parameters<typeof WatchedPaneView>[0]>) => void
   unmount: () => void
 } {
   const onClose = vi.fn()
+  const onFocus = vi.fn()
   const onOutput = vi.fn()
-  const { unmount } = render(
+  const view = (extra: Partial<Parameters<typeof WatchedPaneView>[0]>): React.JSX.Element => (
     <WatchedPaneView
       projectId="p1"
       paneId="priya:t7"
       label="agent"
       handle="priya"
+      focused={false}
+      onFocus={onFocus}
+      isAppChord={() => false}
+      closeHint="⌘W"
       onClose={onClose}
       onOutput={onOutput}
       {...overrides}
+      {...extra}
     />
   )
-  return { onClose, onOutput, unmount }
+  const { rerender, unmount } = render(view({}))
+  return { onClose, onFocus, onOutput, rerender: (next) => rerender(view(next)), unmount }
 }
 
 /** Everything the view has put into the pane, as one string. */
@@ -171,6 +223,7 @@ const paneText = (): string => (fakeTerms.at(-1)?.writes ?? []).join('')
 const pane = (): HTMLElement => screen.getByRole('region', { name: /priya/ })
 
 beforeEach(() => {
+  observers.length = 0
   fakeTerms.length = 0
   call.mockReset()
   call.mockResolvedValue(undefined)
@@ -247,6 +300,92 @@ describe('the size is the owner’s', () => {
     Object.defineProperty(frame, 'clientHeight', { get: () => 3000 })
     await watch.resolve()
     expect(fakeTerms[0]?.element?.style.transform).toBe('scale(1)')
+  })
+})
+
+/** The element the picture is letterboxed into, with a size jsdom cannot give it. */
+function frameOf(width: number, height: number): HTMLElement {
+  const frame = document.querySelector('.watch__frame') as HTMLElement
+  Object.defineProperty(frame, 'clientWidth', { configurable: true, get: () => width })
+  Object.defineProperty(frame, 'clientHeight', { configurable: true, get: () => height })
+  return frame
+}
+
+// The reason this view stopped floating over the window: it is a pane, and a
+// pane is a thing you can drag the edge of. What must not follow from that is
+// the far end being told about it.
+describe('a slot in the window, like any other pane', () => {
+  it('is a pane, with the accent that says it is not one of yours', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    expect(pane().classList.contains('pane')).toBe(true)
+    expect(pane().classList.contains('pane--watched')).toBe(true)
+    expect(pane().classList.contains('pane--focused')).toBe(false)
+  })
+
+  it('wears the focused border, and takes the keyboard, when the window says it has the focus', async () => {
+    const watch = armWatch()
+    const { rerender } = mount()
+    await watch.resolve()
+    expect(fakeTerms[0]?.focused).toBe(false)
+    act(() => rerender({ focused: true }))
+    expect(pane().classList.contains('pane--focused')).toBe(true)
+    expect(fakeTerms[0]?.focused).toBe(true)
+    act(() => rerender({ focused: false }))
+    expect(fakeTerms[0]?.focused).toBe(false)
+  })
+
+  // A pane opened by the sidebar is focused from its first frame, and its
+  // emulator does not exist until the watch is answered a tick later.
+  it('takes the keyboard when it was focused before there was an emulator', async () => {
+    const watch = armWatch()
+    mount({ focused: true })
+    await watch.resolve()
+    expect(fakeTerms[0]?.focused).toBe(true)
+  })
+
+  it('asks for the focus when somebody presses it, the way a pane does', async () => {
+    const watch = armWatch()
+    const { onFocus } = mount()
+    await watch.resolve()
+    act(() => {
+      pane().dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    })
+    expect(onFocus).toHaveBeenCalled()
+  })
+
+  // A stray chord is the last thing that should be typed onto a machine that
+  // is not yours.
+  it('declines the app’s own chords rather than sending them to the owner', async () => {
+    const watch = armWatch()
+    mount({ isAppChord: (event: KeyboardEvent) => event.key === 'w' })
+    await watch.resolve()
+    const handler = fakeTerms[0]?.keyHandler
+    expect(handler?.(new KeyboardEvent('keydown', { key: 'w' }))).toBe(false)
+    expect(handler?.(new KeyboardEvent('keydown', { key: 'a' }))).toBe(true)
+  })
+
+  // The whole of what makes a pane in a resizable slot survivable: the slot is
+  // this window's, the geometry is theirs, and the two are joined by a CSS
+  // transform and nothing else.
+  it('rescales when its slot is dragged narrower, and never renegotiates their size', async () => {
+    const watch = armWatch()
+    picture.width = 800
+    picture.height = 600
+    mount()
+    frameOf(800, 600)
+    await watch.resolve({ cols: 100, rows: 30 })
+    expect(fakeTerms[0]?.element?.style.transform).toBe('scale(1)')
+
+    frameOf(400, 600)
+    act(() => {
+      for (const fire of observers) fire()
+    })
+    expect(fakeTerms[0]?.element?.style.transform).toBe('scale(0.5)')
+    expect(fakeTerms[0]?.resized).toBe(0)
+    expect(screen.getByText('100×30')).toBeTruthy()
+    for (const [method] of call.mock.calls) expect(method).not.toMatch(/resize/)
   })
 })
 
@@ -430,7 +569,7 @@ describe('closing', () => {
     const watch = armWatch()
     const { onClose } = mount()
     await watch.resolve()
-    screen.getByRole('button', { name: 'Stop watching' }).click()
+    screen.getByRole('button', { name: 'Stop watching priya’s pane agent' }).click()
     expect(onClose).toHaveBeenCalledOnce()
   })
 

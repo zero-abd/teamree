@@ -1,14 +1,18 @@
 /** @vitest-environment jsdom */
 
-// The sidebar, assembled: projects, your worktrees, your teammates' worktrees
-// under the same project, and the one window this app opens onto somebody
-// else's machine.
+// The sidebar, assembled: projects, your worktrees, and your teammates'
+// worktrees under the same project.
 //
 // The rows have their own files. What is only true here is the wiring between
-// them — that pressing a teammate's pane opens a viewer for *that* pane, that
-// pressing it again stops watching rather than opening a second one, and that
-// one window watches one pane at a time, which is what keeps "bytes flow on
-// demand" from becoming the N² traffic it exists to prevent.
+// them — that pressing a teammate's pane opens *that* pane, that pressing it
+// again closes it rather than opening a second one, and that the row goes on
+// saying which of them this window has open.
+//
+// The pane itself is not here any more. It used to be: a card this component
+// rendered, floating over the whole window, which is what made it the one
+// surface in the app that could not be moved, resized or closed the way
+// everything else can. It is a pane in the workspace now, held in the store, so
+// what the sidebar is responsible for is the decision rather than the window.
 //
 // It is also where the several ways of having nothing to show are kept apart:
 // no projects, no worktrees, and a teammate on the roster nothing has ever been
@@ -31,18 +35,6 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
     onConnectionChange: () => () => {}
   },
   RUNTIME_IS_SEEDED: false
-}))
-
-// The viewer is exercised in its own file; here it only has to prove which
-// pane the sidebar decided to open, and that it went away again.
-vi.mock('../terminal/WatchedPaneView', () => ({
-  WatchedPaneView: ({ paneId, handle, onClose }: { paneId: string; handle: string; onClose: () => void }) => (
-    <section aria-label={`watching ${handle} ${paneId}`}>
-      <button type="button" onClick={onClose}>
-        Stop watching
-      </button>
-    </section>
-  )
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
@@ -232,9 +224,14 @@ describe('a project header', () => {
 // Selected by hover text rather than by accessible name: a teammate's pane
 // button is labelled by its own content ("claude"), so two teammates running
 // the same agent are two identically named buttons. See the note in the report.
-const paneOf = (handle: string): HTMLElement => screen.getByTitle(new RegExp(`^Watch ${handle}`))
+// The text says what the next press would do, so a row that is already open
+// offers to stop — which is the half of the toggle this has to match too.
+const paneOf = (handle: string): HTMLElement => screen.getByTitle(new RegExp(`^(Watch|Stop watching) ${handle}`))
 
 describe('watching a teammate’s pane', () => {
+  const open = (): { projectId: string; paneId: string }[] =>
+    useWorkspaceStore.getState().watches.map(({ projectId, paneId }) => ({ projectId, paneId }))
+
   beforeEach(() => {
     seed({
       teammates: {
@@ -245,37 +242,43 @@ describe('watching a teammate’s pane', () => {
   })
 
   it('opens nothing until somebody asks for it', () => {
-    expect(screen.queryByRole('region', { name: /watching/ })).toBeNull()
+    expect(open()).toEqual([])
   })
 
   it('opens the pane that was pressed, on its own project', () => {
     act(() => paneOf('priya').click())
-    expect(screen.getByRole('region', { name: 'watching priya priya:t7' })).toBeTruthy()
+    expect(open()).toEqual([{ projectId: 'p1', paneId: 'priya:t7' }])
   })
 
-  // Bytes cost a relay budget and a reader has one pair of eyes. "Open" meaning
-  // "was opened once and never shut" is how that becomes N² traffic.
-  it('watches one pane at a time, replacing rather than stacking', () => {
+  // The floating card could only ever be one, because it was one card. A pane
+  // in the workspace is a pane, and a second one is a second pane — which is
+  // the whole reason somebody wanted two teammates side by side.
+  it('opens a second pane beside the first rather than replacing it', () => {
     act(() => paneOf('priya').click())
     act(() => paneOf('ana').click())
-    expect(screen.getAllByRole('region', { name: /watching/ })).toHaveLength(1)
-    expect(screen.getByRole('region', { name: 'watching ana ana:t2' })).toBeTruthy()
+    expect(open()).toEqual([
+      { projectId: 'p1', paneId: 'priya:t7' },
+      { projectId: 'p1', paneId: 'ana:t2' }
+    ])
   })
 
-  // Which is also what makes stopping reachable without reaching for the viewer.
+  // Which is what keeps stopping reachable for somebody whose eye is on this
+  // list rather than on the pane.
   it('stops watching when the same row is pressed again', () => {
     const row = (): HTMLElement => paneOf('priya')
     act(() => row().click())
     expect(row().getAttribute('aria-pressed')).toBe('true')
     act(() => row().click())
-    expect(screen.queryByRole('region', { name: /watching/ })).toBeNull()
+    expect(open()).toEqual([])
     expect(row().getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('stops watching from the viewer itself', () => {
+  it('goes on saying which rows are open once a pane is closed from the workspace', () => {
     act(() => paneOf('priya').click())
-    act(() => screen.getByRole('button', { name: 'Stop watching' }).click())
-    expect(screen.queryByRole('region', { name: /watching/ })).toBeNull()
+    act(() => paneOf('ana').click())
+    act(() => useWorkspaceStore.getState().closeWatchedPane(useWorkspaceStore.getState().watches[0]!.id))
+    expect(paneOf('priya').getAttribute('aria-pressed')).toBe('false')
+    expect(paneOf('ana').getAttribute('aria-pressed')).toBe('true')
   })
 })
 
