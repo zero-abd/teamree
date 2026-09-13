@@ -555,7 +555,16 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
   it('lands a teammate’s keystroke in the pane and tells the owner whose it was', async () => {
     const window = openWindow(alice, 'window_type_1')
     const opened = await aliceWatch(paneId, 'window_type_1')
-    await until(() => window.outputOn(opened.subscription).length >= 0, 'the watch to open')
+    // Bob's own books, not Alice's output: `length >= 0` is true of an empty
+    // array, so waiting on it waits on nothing, and the keystroke below would
+    // then race the watch it is supposed to be seen through. Losing that race
+    // means the pty echoes into a stream nobody is attached to yet and the echo
+    // never arrives — which is a test that fails under load and passes alone,
+    // the worst kind to leave in the suite that proves this feature.
+    await until(
+      () => bob.service.watchers({ projectId: 'p_bob' }).panes.some((row) => row.terminalId === terminalId),
+      'Bob to see the reader'
+    )
 
     const answer = await aliceType(paneId, 'a-keystroke-from-alice\n')
     expect(answer).toMatchObject({ ok: true, result: { written: true } })
