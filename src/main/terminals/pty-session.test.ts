@@ -124,10 +124,8 @@ describePty('PtySession', () => {
     'caps scrollback no matter how much the child prints',
     async () => {
       // The ratio is the point, not the volume: 200 lines is about 6.8KB
-      // against a 2KB cap, so most of it must be evicted. Bigger runs measure
-      // node-pty's 200ms socket-destroy window instead of this buffer — see the
-      // trailing-output limit in ROADMAP.md — and the buffer's own eviction is
-      // covered exhaustively, without a PTY, in scrollback.test.ts.
+      // against a 2KB cap, so most of it must be evicted. The buffer's own
+      // eviction is covered exhaustively, without a PTY, in scrollback.test.ts.
       const cap = 2 * 1024
       const session = start({
         command: 'for i in $(seq 1 200); do echo "chatty line $i padding padding padding"; done',
@@ -142,6 +140,24 @@ describePty('PtySession', () => {
       // line arrived is node-pty's question, not this buffer's, and the test
       // above answers it at a volume that always drains in time.
       expect(session.read()).not.toContain('chatty line 1 ')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'keeps the last line of a chatty command that exits the moment it has printed it',
+    async () => {
+      // 3000 lines is the volume the tail used to go missing at: enough that
+      // the pty is still holding some of it when the child is reaped. A handful
+      // of runs rather than one, because what used to fail here failed by race
+      // and a single green run would have said nothing.
+      for (let run = 0; run < 5; run++) {
+        const session = start({ command: 'seq 1 3000' })
+        const events = collect(session)
+
+        await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
+        expect(session.read()).toContain('\r\n3000\r\n')
+      }
     },
     TEST_TIMEOUT_MS
   )

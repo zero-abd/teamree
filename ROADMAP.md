@@ -320,16 +320,19 @@ recorded so none of them is discovered by surprise later.
   against a reference `CommandLineToArgvW` parser rather than a live ConPTY, and the
   process-tree kill is untested there. The POSIX equivalent is tested for real.
 - **The Windows CLI launcher is a batch shim**, not a native executable.
-- **A very chatty command can lose the tail of its output.** node-pty destroys the
-  pty socket 200ms after the child is reaped, and whatever is still unread at that
-  moment is discarded before the runtime sees it. The session holds its own exit
-  event until the data goes quiet, so "exited" still means "and everything that
-  reached us is readable" — but it cannot recover what was already dropped.
-  Measured on an idle machine: 1000 lines of output always arrive intact, 3000
-  lose the tail about one run in five, and a loaded machine does worse. It matters
-  most for `teamree terminal run`, where the last lines are usually the ones an
-  agent wants. Fixing it properly means reading the pty ourselves rather than
-  through node-pty's socket.
+- **A chatty command keeps its tail on POSIX; Windows is unproven.** The loss was
+  node-pty's reader stopping short of the end: the `tty.ReadStream` over the pty
+  reports end-of-stream while bytes the child already wrote are still in the
+  kernel, and node-pty then closes the descriptor — from its own close handling,
+  or from the 200ms timer it arms when the child is reaped — taking those bytes
+  with it. The session now reads that descriptor to its real end in the moment
+  before the close, so on POSIX nothing is outstanding by the time exit is
+  reported, which is the invariant `teamree terminal run` hands an agent. Measured
+  here on a 3000-line command: 24 runs in 60 lost the tail before, 0 in 200 after;
+  on four cores kept busy, 52 in 60 before and 0 in 60 after. Windows still has
+  only the older mitigation — exit held until the output goes quiet — because
+  ConPTY output arrives over a pipe node-pty owns rather than a descriptor we can
+  read, and nothing has been observed there either way.
 
 ## Milestone 2 — Teamwork
 
