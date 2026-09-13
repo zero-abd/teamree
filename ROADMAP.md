@@ -360,6 +360,26 @@ recorded so none of them is discovered by surprise later.
   operating system can tell them. The macOS instructions in that document are written
   from Apple's behaviour and the ad-hoc signing the build already does; they have not
   been walked through on a Mac at this commit.
+- **Nothing re-reads `.teamree` after a `git pull`.** The roster and the relay URL are
+  files in the primary checkout, and the runtime reconciles the peer service only when
+  this app writes a member file — not when git brings somebody else's in. So the
+  sequence teamwork actually requires, where two people each add a key and then pull
+  each other's, leaves both apps holding the roster from before the pull, with nothing
+  on screen suggesting a stale read. Writing the runbook forced "quit and reopen
+  teamree" to become a numbered step, which is the clearest possible sign it is a
+  defect rather than a quirk. A watch on `.teamree`, or a re-read when the members
+  dialog opens, removes the step.
+- **A team-wide fact has no button.** Every other decision here is made in the app;
+  the relay URL is a file whose format has to be inferred, and the helper that would
+  write it is exported and called by nothing. Related, and the reason this bites: the
+  deploy prints an `https://` URL that the app correctly refuses, because it wants
+  `wss://` and the `/v1/relay` path — and the refusal names the scheme without naming
+  the remedy.
+- **Two silent failures look identical.** A clock far enough out to straddle the hourly
+  rendezvous boundary and a teammate pointing at a different relay both present as
+  nobody arriving, forever, with nothing anywhere saying why. The relay cannot help —
+  it sees opaque tokens by design — but a client that has been waiting across two
+  epoch rollovers knows enough to say which two things to check.
 - **A path is stored two ways.** A project's path is canonical — resolved, with its
   separators normalised — and a worktree's is joined the host's way, so on Windows the
   same location is spelled `C:/x/y` in one record and `C:\x\y` in another. Nothing is
