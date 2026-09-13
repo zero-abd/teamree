@@ -52,6 +52,7 @@ import {
   type TeammatePresence,
   type TeammateStanding,
   type TeammateWorktree,
+  type TeamworkRead,
   type TeamworkStatus,
   type Terminal,
   type WatchedPane,
@@ -217,7 +218,7 @@ type ProjectFacts = {
    * project can be missing both a relay and an origin and only one of those
    * gets named as the first thing to fix.
    */
-  origin: TeamworkStatus['origin']
+  origin: TeamworkRead['origin']
 }
 
 type LinkRecord = {
@@ -607,10 +608,26 @@ export class PeerService {
    * project on every refresh. The one fact behind it that nothing invalidates
    * is therefore checked by the handler, which awaits `refreshIfOriginMoved`
    * before asking.
+   *
+   * What that synchronous read cannot do is wait for a reconcile, and there are
+   * two ordinary moments when the last one has not covered a project the
+   * workspace already has: the beat between `project.add` writing it to the
+   * store and the reconcile the resulting event sets off, and the whole of
+   * startup before `start()` finishes. The facts are missing in both, and for
+   * the same reason — nothing has read this project yet — so that is what is
+   * answered. The workspace is asked directly, because it is the thing that
+   * knows whether the project exists at all, and the difference between "not
+   * read yet" and "no such project" is the entire point of asking: the first is
+   * a project on screen whose row settles in a moment, and the second is a
+   * caller holding an id for something this machine does not have.
    */
   status(params: ParamsOf<'teamwork.status'>): TeamworkStatus {
     const facts = this.#projects.get(params.projectId)
-    if (!facts) throw notFound(`no project with id ${params.projectId}`)
+    if (!facts) {
+      const known = this.#options.workspace.listProjects().some((project) => project.id === params.projectId)
+      if (!known) throw notFound(`no project with id ${params.projectId}`)
+      return { state: 'unread', projectId: params.projectId, readAt: this.#scheduler.now() }
+    }
 
     const links = facts.rosterKeys
       .filter((key) => key !== this.#identityKey)
@@ -620,6 +637,7 @@ export class PeerService {
       .filter((status): status is PeerLinkStatus => status !== undefined)
 
     return {
+      state: 'read',
       projectId: facts.projectId,
       relay: facts.relay,
       disabledReason: facts.disabledReason,

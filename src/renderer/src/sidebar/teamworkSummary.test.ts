@@ -4,12 +4,13 @@
 // shut a laptop, and stops it saying "off" when it has simply not asked yet.
 
 import { describe, expect, it } from 'vitest'
-import type { PeerLink, TeamworkStatus } from '@shared/entities'
+import type { PeerLink, TeamworkRead } from '@shared/entities'
 import { ADD_KEY_BUTTON } from '../teamwork/startTeamwork'
 import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
 
-function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
+function status(overrides: Partial<TeamworkRead> = {}): TeamworkRead {
   return {
+    state: 'read',
     projectId: 'p1',
     relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
     disabledReason: null,
@@ -38,6 +39,17 @@ describe('what the project header says about teamwork', () => {
     // An absent answer is not an answer. Rendering one as "off" would have the
     // app state something it has not established.
     expect(teamworkSummary(undefined, NOW)).toBeNull()
+  })
+
+  it('separates "not read yet" from "nothing is configured here"', () => {
+    // The runtime's answer for a project added a moment ago. It is not "off":
+    // nothing about this project has been read, so nothing may be named as
+    // missing, and a reader sent to set a relay up would be sent on the
+    // strength of a finding nobody has made.
+    const summary = teamworkSummary({ state: 'unread', projectId: 'p1', readAt: NOW }, NOW)
+    expect(summary).toMatchObject({ tone: 'pending' })
+    expect(summary?.label).not.toContain('off')
+    expect(summary?.detail).toContain('has not read')
   })
 
   it('reads a project with no relay as something to set up, not something broken', () => {

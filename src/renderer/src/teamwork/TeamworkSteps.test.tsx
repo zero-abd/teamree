@@ -20,7 +20,7 @@ import type {
   RelaySetting,
   TeamworkPublish,
   TeamworkPublishProgress,
-  TeamworkStatus
+  TeamworkRead
 } from '@shared/entities'
 import { TeamworkSteps, type TeamworkStepsProps } from './TeamworkSteps'
 import { ADD_KEY_BUTTON, KEY_GRANT_WARNING, TEAMWORK_PATHS } from './startTeamwork'
@@ -71,7 +71,8 @@ const relayOnDisk = (): RelaySetting => ({
   onDisk: { url: 'wss://relay.example/v1/relay', problem: null }
 })
 
-const status = (overrides: Partial<TeamworkStatus> = {}): TeamworkStatus => ({
+const status = (overrides: Partial<TeamworkRead> = {}): TeamworkRead => ({
+  state: 'read',
   projectId: 'p1',
   relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
   disabledReason: null,

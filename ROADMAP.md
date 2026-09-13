@@ -308,12 +308,16 @@ The sidebar said a pane was working. It did not say what it was working on.
 Milestone 1 is complete and verified. These are the honest limits of what it does,
 recorded so none of them is discovered by surprise later.
 
-- **`teamwork.status` refuses a project the store plainly has**, for as long as
-  the peer service has not reconciled after `project.add`. The window swallows
-  the error and shows nothing for a moment rather than an error, so nobody sees
-  it today — but the method answers "no such project" about a project that
-  exists, which is the wrong sentence, and the next caller to handle the error
-  rather than ignore it will act on it.
+- **`teamwork.status` has a third answer now.** This entry used to say the method
+  refused a project the store plainly had, for as long as the peer service had not
+  reconciled after `project.add`, and that is no longer true. A project that exists
+  and has not been read is `state: 'unread'` — its own answer, carried by the
+  contract, by the window, by `teamree team status` and by nothing on the peer
+  allow-list, which has never had this method on it. "No such project" now means
+  what it says. What is left is not a gap in this method but the shape of the
+  window it names: the reconcile still happens after the event rather than inside
+  `project.add`, so the answer is unread for as long as that takes, and the window
+  and the CLI both say so rather than waiting.
 - **A repository shared over a filesystem path cannot take part.** What makes
   two checkouts the same project is a hash of the normalised `origin` remote,
   and a path is not a URL — `file://localhost/...` loses its host to the URL

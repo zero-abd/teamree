@@ -49,6 +49,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import {
+  teamworkFacts,
   UNWATCHED_TEAMREE_LAG,
   type Member,
   type MemberList,
@@ -222,7 +223,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
           <p className="steps__blocker-lead">
             <strong>This checkout cannot take part yet.</strong> {flow.blocker}
           </p>
-          {props.status?.origin.ok === false ? (
+          {teamworkFacts(props.status)?.origin.ok === false ? (
             <OriginFix origin={props.origin} onSetOrigin={props.onSetOrigin} />
           ) : null}
         </div>
@@ -1140,7 +1141,9 @@ function Outcome({
   ...props
 }: TeamworkStepsProps & { outcome: SetupOutcome | null }): React.JSX.Element | null {
   if (outcome === null) return null
-  const origin = props.status?.origin
+  // Nothing to name the repository with until the origin has been read, and the
+  // invitation says so rather than filling the gap in.
+  const origin = teamworkFacts(props.status)?.origin
   const invite = inviteText({
     originUrl: origin?.ok === true ? origin.url : null,
     relayUrl: props.relay?.url ?? null,
@@ -1221,6 +1224,10 @@ function ConnectedBody({
   status: TeamworkStatus | undefined
 }): React.JSX.Element | null {
   if (list === undefined && status === undefined) return null
+  // No link rows while teamwork has not read this project: the links are made
+  // out of the roster and the relay, and neither has been read. The step's own
+  // summary says so in words; an empty list under it would say nothing.
+  const links = teamworkFacts(status)?.links ?? []
   return (
     <div className="step__body">
       {list === undefined ? null : (
@@ -1230,9 +1237,9 @@ function ConnectedBody({
           <Freshness list={list} />
         </>
       )}
-      {status === undefined || status.links.length === 0 ? null : (
+      {links.length === 0 ? null : (
         <ul className="links">
-          {status.links.map((link) => (
+          {links.map((link) => (
             <LinkRow key={link.publicKey} link={link} />
           ))}
         </ul>

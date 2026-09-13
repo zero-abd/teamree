@@ -697,13 +697,15 @@ export type PeerLink = {
 }
 
 /**
- * Whether teamwork is running for one project, and how.
+ * Whether teamwork is running for one project, and how, once that has been read.
  *
  * `disabledReason` is the honest half: a project with no relay, no origin
  * remote or no roster is not "offline", it is not configured, and a row that
  * said "offline" would have somebody looking at their network.
  */
-export type TeamworkStatus = {
+export type TeamworkRead = {
+  /** Everything below was established by a reconcile, rather than assumed. */
+  state: 'read'
   projectId: string
   /** Where the relay is and which of the two places said so. Null when neither did. */
   relay: { url: string; source: 'repository' | 'environment' } | null
@@ -736,6 +738,62 @@ export type TeamworkStatus = {
   enrolled: boolean
   links: PeerLink[]
   readAt: number
+}
+
+/**
+ * A project this machine has and teamwork has not read yet.
+ *
+ * The window is small and entirely real. Adding a project writes it to the
+ * store and emits an event; the reconcile that reads its `.teamree`, its
+ * `origin` and its roster runs off the back of that event, afterwards and
+ * asynchronously. Between the two there is a project with an id, a name and a
+ * path about which teamwork knows nothing whatever — and the same is true of
+ * every project in a restored session until the peer service has finished
+ * starting.
+ *
+ * This is its own answer rather than a row of nulls, because a row of nulls
+ * would be a different claim. `relay: null` with `disabledReason: 'no relay'`
+ * says somebody has to go and set one up; `enrolled: false` says this machine's
+ * key was never pushed, and sends them to the roster. Both are findings, and
+ * nothing has been found here yet. The one true sentence about this project is
+ * that nothing has been read about it, and every reader below says exactly that
+ * for the moment it lasts, rather than naming a fault nobody established.
+ *
+ * It is not an error either. A project that exists is not "no such project",
+ * and answering that to a caller which handles its errors would have the caller
+ * reporting a project gone while it sits in the sidebar.
+ */
+export type TeamworkUnread = {
+  state: 'unread'
+  projectId: string
+  /** When this answer was given, which is the whole of what it asserts. */
+  readAt: number
+}
+
+/**
+ * Whether teamwork is running for one project — or whether even that is known.
+ *
+ * A union rather than one shape with softer fields, because a reader that
+ * cannot tell the two apart writes the wrong sentence for one of them, and the
+ * wrong sentence here is this app describing a fault nobody has established.
+ */
+export type TeamworkStatus = TeamworkRead | TeamworkUnread
+
+/**
+ * What was found, or nothing at all while teamwork has not read this project.
+ *
+ * For the readers that only ever wanted a finding — the origin field in the
+ * setup panel, the empty state asking whether teamwork is already running here
+ * — which would otherwise repeat the same narrowing at every field they touch.
+ *
+ * `undefined` is deliberately the same answer it gives for a project nobody has
+ * asked about yet, because those two readers treat them the same way and say
+ * nothing in either case. Anything that has a sentence to write about the wait
+ * itself — the sidebar header, the setup panel's last step, `teamree team
+ * status` — reads `state` instead and says which of the two this is.
+ */
+export function teamworkFacts(status: TeamworkStatus | undefined): TeamworkRead | undefined {
+  return status?.state === 'read' ? status : undefined
 }
 
 /** One of a teammate's worktrees, with whose it is attached to it. */

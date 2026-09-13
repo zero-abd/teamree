@@ -313,7 +313,15 @@ export const Params = {
    * Whether teamwork is running for a project, and how each link is going.
    *
    * Answers "not configured" as readily as "connected", because a project with
-   * no relay is not offline and must not be shown as though it were.
+   * no relay is not offline and must not be shown as though it were. And it
+   * answers `state: 'unread'` as readily as either, for a project the workspace
+   * has that teamwork has not read yet — the window between `project.add` and
+   * the reconcile it sets off, and the whole of startup before the peer service
+   * is up. An error there would say "no such project" about a project that is
+   * on screen; see `TeamworkUnread`.
+   *
+   * "No such project" therefore means what it says: nothing in this workspace
+   * has that id.
    */
   teamworkStatus: z.object({ projectId: z.string().min(1) }),
   /** A teammate's worktrees and panes in one project, as last heard. */

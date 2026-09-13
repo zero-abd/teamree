@@ -16,6 +16,7 @@ import {
   remoteRunner,
   makeProjectDir,
   project,
+  statusOf,
   terminal,
   worktree,
   type FakeRelay,
@@ -194,7 +195,7 @@ async function connect(pair: Pair): Promise<void> {
 }
 
 function linkTo(runtime: PeerRuntime, projectId: string, publicKey: string) {
-  return runtime.service.status({ projectId }).links.find((link) => link.publicKey === publicKey)
+  return statusOf(runtime.service, projectId).links.find((link) => link.publicKey === publicKey)
 }
 
 /**
@@ -466,7 +467,7 @@ describe('two peers over a relay', () => {
     const pair = await pairOfRuntimes({ aliceSeesBob: false })
     await connect(pair)
 
-    expect(pair.alice.service.status({ projectId: 'p_alice' }).links).toEqual([])
+    expect(statusOf(pair.alice.service, 'p_alice').links).toEqual([])
     expect(linkTo(pair.bob, 'p_bob', pair.aliceKey)?.phase).toBe('waiting')
     expect(pair.bob.service.presence({ projectId: 'p_bob' }).worktrees).toEqual([])
   })
@@ -575,7 +576,7 @@ describe('two peers over a relay', () => {
     await pair.alice.service.reconcile()
 
     expect(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees).toEqual([])
-    expect(pair.alice.service.status({ projectId: 'p_alice' }).links).toEqual([])
+    expect(statusOf(pair.alice.service, 'p_alice').links).toEqual([])
   })
 })
 

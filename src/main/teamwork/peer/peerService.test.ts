@@ -31,6 +31,7 @@ import {
   project,
   remoteRunner,
   standingConsent,
+  statusOf,
   terminal,
   worktree,
   type PeerRuntime
@@ -435,7 +436,7 @@ describe('a roster that could not be read is not a team nobody has joined', () =
       await Promise.resolve()
     })
 
-    const reason = runtime.service.status({ projectId: 'p_a' }).disabledReason
+    const reason = statusOf(runtime.service, 'p_a').disabledReason
     expect(reason).not.toBe('nobody has joined this project yet, so there is no roster to meet anyone from')
     expect(reason).toMatch(/roster could not be read/)
   })

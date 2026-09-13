@@ -105,6 +105,7 @@ const PRESENCE = {
 }
 
 const STATUS = {
+  state: 'read',
   projectId: 'p_api',
   relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
   disabledReason: null,
@@ -419,6 +420,25 @@ describe('team status', () => {
     expect(result.out).toContain('none')
     expect(result.out).toContain('not shared - this checkout has no origin remote')
     expect(result.out).toContain('teamree team join')
+  })
+
+  // The beat between `project.add` and the reconcile it sets off. The runtime
+  // answers that it has not read this project, which is neither "teamwork is
+  // off" nor a failure, and a script that branched on `disabledReason` here
+  // would be branching on a finding nobody has made.
+  it('says a project teamwork has not read yet is exactly that, and still exits 0', async () => {
+    const cli = await harness(
+      teamHandler({
+        'teamwork.status': () => ({ state: 'unread', projectId: 'p_api', readAt: NOW })
+      })
+    )
+    const result = await cli.run(['team', 'status', 'api'])
+    expect(result.code).toBe(ExitCode.Success)
+    expect(result.out).toContain('not read yet')
+    expect(result.out).toContain('Ask again in a moment.')
+    // And no roster table under it, invented out of a second question the
+    // runtime cannot answer about this project either.
+    expect(cli.stub.received.some((request) => request.method === 'teamwork.presence')).toBe(false)
   })
 
   it('resolves the project by id, by name and by path', async () => {

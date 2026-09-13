@@ -13,7 +13,7 @@ import type {
   RelaySetting,
   TeamworkPublish,
   TeamworkPublishProgress,
-  TeamworkStatus
+  TeamworkRead
 } from '@shared/entities'
 import {
   checkOriginDraft,
@@ -91,8 +91,9 @@ function relay(overrides: Partial<RelaySetting> = {}): RelaySetting {
 const relayOnDisk = (url = 'wss://relay.example/v1/relay'): RelaySetting =>
   relay({ url, source: 'repository', problem: null, onDisk: { url, problem: null } })
 
-function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
+function status(overrides: Partial<TeamworkRead> = {}): TeamworkRead {
   return {
+    state: 'read',
     projectId: 'p1',
     relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
     disabledReason: null,
@@ -414,6 +415,23 @@ describe('step 5, connected', () => {
 
   it('does not blame the network for a project nobody has set up', () => {
     expect(step(fresh, 'connected').summary).toMatch(/Nothing to connect to yet/)
+  })
+
+  // The runtime's answer for a project it has not read yet, which the panel can
+  // meet by opening on a project added seconds ago. Neither a fault nor a
+  // finding: every other sentence in this step names something that was read.
+  it('says nothing has been read yet, rather than a finding it does not have', () => {
+    const unread = step({ ...written, status: { state: 'unread', projectId: 'p1', readAt: 0 } }, 'connected')
+    expect(unread.mark).toBe('todo')
+    expect(unread.summary).toMatch(/has not read/)
+    expect(unread.summary).not.toMatch(/nobody in it but you/)
+  })
+
+  // And the banner over the whole panel stays away with it: "this checkout
+  // cannot take part" is a verdict on an origin nothing has looked at.
+  it('does not block the panel on an origin nothing has read', () => {
+    const flow = startTeamworkFlow({ ...written, status: { state: 'unread', projectId: 'p1', readAt: 0 } })
+    expect(flow.blocker).toBeNull()
   })
 
   it('says a roster of one is a roster of one, once everything else is done', () => {

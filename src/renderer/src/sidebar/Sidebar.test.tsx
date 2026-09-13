@@ -186,6 +186,7 @@ describe('a project header', () => {
   // laptop.
   it('says which of the ways teamwork is not working applies here', () => {
     const status: TeamworkStatus = {
+      state: 'read',
       projectId: 'p1',
       relay: null,
       disabledReason: 'no .teamree/relay in this project',

@@ -801,6 +801,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
     // connected and one whose machine is not. Inventing a refused link would be
     // inventing a security event, so the seeded data has none.
     'teamwork.status': ({ projectId }) => ({
+      // Read, and not the honest "not read yet" a real runtime passes through
+      // on its way here: the seeded workspace is a picture of a machine that
+      // has been running for a while, and a demo that started every project as
+      // unread would be showing a state that lasts milliseconds.
+      state: 'read' as const,
       projectId,
       relay: { url: 'wss://relay.example/v1/relay', source: 'repository' as const },
       disabledReason: null,

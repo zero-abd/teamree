@@ -314,9 +314,16 @@ class Peer {
     return readRoster(this.repoPath)
   }
 
-  /** How this peer's links to its teammates are going, in one project. */
+  /**
+   * How this peer's links to its teammates are going, in one project.
+   *
+   * A project the runtime has not read yet reports no links, because it knows
+   * of none — and that is what every caller here wants: all of them are waiting
+   * for links to come up, and "none yet" is the state they are waiting out.
+   */
   async links() {
-    return (await this.call('teamwork.status', { projectId: await this.ensureProject() })).links
+    const status = await this.call('teamwork.status', { projectId: await this.ensureProject() })
+    return status.state === 'read' ? status.links : []
   }
 
   /**
@@ -325,16 +332,21 @@ class Peer {
    *
    * `project.add` answers as soon as the project is in the store, and the peer
    * service reconciles against it afterwards on the workspace bus. Until it
-   * has, `teamwork.status` answers "no project with id …" for a project the
-   * store plainly has — so a caller that asked straight away would get an
-   * error rather than a link that is not up yet.
+   * has, `teamwork.status` answers `state: 'unread'` — the project exists and
+   * nothing has been read about it — so this waits for the read rather than for
+   * the call to stop failing. It used to wait for the latter, because the
+   * method used to refuse a project the store plainly had; a wait on a call
+   * that no longer throws is a wait that ends immediately and hands the next
+   * line a project with no facts in it.
    */
   async waitForTeamwork(options = {}) {
     await until(
       async () => {
         try {
-          await this.call('teamwork.status', { projectId: await this.ensureProject() })
-          return true
+          const status = await this.call('teamwork.status', { projectId: await this.ensureProject() })
+          return status.state === 'read'
+          // A runtime still opening its socket, which is a different wait and
+          // one this loop is also the end of.
         } catch {
           return false
         }

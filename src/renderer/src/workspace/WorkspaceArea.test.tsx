@@ -21,7 +21,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Layout, Project, TeamworkStatus, Worktree, WorktreeStatus } from '@shared/entities'
+import type { Layout, Project, TeamworkRead, TeamworkStatus, Worktree, WorktreeStatus } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -89,8 +89,9 @@ const status = (overrides: Partial<WorktreeStatus> = {}): WorktreeStatus => ({
 })
 
 /** Teamwork running in `p1`: a relay is set, the origin matches, the key is in. */
-const teamworkUp = (overrides: Partial<TeamworkStatus> = {}): Record<string, TeamworkStatus> => ({
+const teamworkUp = (overrides: Partial<TeamworkRead> = {}): Record<string, TeamworkStatus> => ({
   p1: {
+    state: 'read',
     projectId: 'p1',
     relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
     disabledReason: null,
