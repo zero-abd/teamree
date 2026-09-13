@@ -177,14 +177,37 @@ relay, nothing to deploy. This is the whole trust model, testable offline.
 
 ### B — The relay, and presence
 
-**Still to settle here:** how a peer learns which relay to dial. The roster says
-who is on the team and nothing about where they meet, and the two are not
-obviously the same kind of fact — a key is a permanent statement about a person,
-a relay URL is an operational detail a team may change. Putting it in the
-repository makes it travel with membership and be reviewable in a diff; keeping
-it in local settings makes it a per-machine choice that two teammates can get
-wrong independently. Whichever is chosen, the absence of one must read as "this
-team has not set up a relay" rather than as a connection failure.
+**Settled while building it:** the relay URL lives at `.teamree/relay`, committed
+beside the member keys, with an environment variable overriding it for one run
+and no default ever.
+
+A relay is a team-wide fact, not a per-machine preference: everyone has to name
+the same one or they never meet. Anywhere else is a second list to keep in step
+with the first, which is the thing the identity design spends its whole argument
+avoiding. So one person deploys a relay, pushes a one-line file, and the team is
+connected — visible in a diff like every other decision here. The obvious
+objection, that whoever can push can redirect the team, costs nothing already
+conceded: `IK` authenticates both static keys, so a relay someone redirects you
+to can still only refuse to pair or drop frames. The override exists for the
+ephemeral tunnel URL the relay's own documentation describes — a thing to try,
+not a thing to commit, so it lives somewhere that dies with the process.
+
+Two more decisions the build forced, recorded because neither was in this
+document and both had to be invented:
+
+**What makes two checkouts the same project** is the SHA-256 of the normalised
+origin remote. This document said teammates' worktrees appear "under the same
+project" without ever saying what that meant, and project ids are per-
+installation. A project with no origin is honestly non-participating rather than
+quietly matching nothing.
+
+**A teammate reaches an allow-list, not the whole method catalogue.** The
+transport can carry anything the runtime answers, which includes
+`worktree.remove` and `project.remove`. "Everyone sees everything; anyone can
+type" is a statement about panes, and reading it as a licence to delete a
+colleague's worktree would be a stretch nobody intended — but the document did
+not say so, and an allow-list is the difference between a decision and an
+oversight.
 
 The relay itself; outbound connections from each peer; the Noise `IK` handshake
 against keys from the roster; teammates' worktrees appearing in the sidebar with
