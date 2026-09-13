@@ -4,8 +4,13 @@
 // expects a command to be and it is already on the PATH every login shell gets,
 // so offering a directory picker would be offering a way to get it wrong. What
 // the user is asked is the one thing only they can answer: their password, and
-// only when the directory cannot be written without it — which on a Mac with
-// Homebrew it usually can.
+// only when the directory cannot be written without it.
+//
+// Expect that to be almost always. Homebrew took ownership of /usr/local on
+// Intel Macs, but on Apple Silicon it installs to /opt/homebrew and leaves
+// /usr/local/bin as root:wheel 755. So the password path is the ordinary one on
+// every Apple Silicon Mac, not the fallback — which makes it the path to keep
+// tested, not the one to treat as rare.
 //
 // Three things here are refusals rather than conveniences, and each of them is
 // somebody's afternoon:
