@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { TeammatePresence, TeammateWorktree } from '@shared/entities'
+import type { TeammatePresence, TeammatePresenceRead, TeammateWorktree } from '@shared/entities'
 import { ACTIVITY_LABEL } from './agentRows'
 import { teammateRows, teammateTitle, unheardTeammates, unheardTitle } from './teammateRows'
 
@@ -145,7 +145,8 @@ describe('a teammate whose machine is away', () => {
 })
 
 describe('a teammate never heard from', () => {
-  const presence = (teammates: TeammatePresence['teammates']): TeammatePresence => ({
+  const presence = (teammates: TeammatePresenceRead['teammates']): TeammatePresence => ({
+    state: 'read',
     projectId: 'p1',
     worktrees: [],
     teammates,

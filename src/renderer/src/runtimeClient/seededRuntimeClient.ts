@@ -836,6 +836,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
     // connected, and marcus's laptop is shut — his worktree stays exactly where
     // it was, out of the local cache, dated and not live.
     'teamwork.presence': ({ projectId }) => ({
+      // Read, always: the demo runtime has no reconcile to be waiting on, and
+      // a seeded `unread` would put the sidebar's waiting state on screen
+      // permanently for a project that is never going to settle.
+      state: 'read' as const,
       projectId,
       teammates: [
         {

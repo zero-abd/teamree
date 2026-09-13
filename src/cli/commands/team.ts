@@ -10,7 +10,7 @@
 // implemented badly: there is no `layout set`, and there is no command that
 // reads a teammate's pane without naming whose it is.
 
-import type { PeerPane, TeammatePresence, TeammateWorktree } from '../../shared/entities.js'
+import type { PeerPane, TeammatePresence, TeammatePresenceRead, TeammateWorktree } from '../../shared/entities.js'
 import { MAX_REMOTE_WRITE_BYTES, type WatchedPaneEvent } from '../../shared/methods.js'
 import { readBoolean, readNumber, readString, requireString } from '../argv.js'
 import type { CommandContext, CommandSpec } from '../command-spec.js'
@@ -60,7 +60,7 @@ function shortKey(publicKey: string): string {
  * matches more than one teammate is an error rather than a coin flip.
  */
 function selectTeammate(
-  presence: TeammatePresence,
+  presence: TeammatePresenceRead,
   token: string
 ): { handle: string; publicKey: string; connected: boolean; heardAt: number | null } {
   const lower = token.toLowerCase()
@@ -105,7 +105,7 @@ type PaneCandidate = {
   pane: PeerPane
 }
 
-function panesOf(presence: TeammatePresence, publicKey: string): PaneCandidate[] {
+function panesOf(presence: TeammatePresenceRead, publicKey: string): PaneCandidate[] {
   const mine = presence.worktrees.filter((worktree: TeammateWorktree) => worktree.publicKey === publicKey)
   return mine.flatMap((worktree) =>
     worktree.panes.map((pane) => ({
@@ -185,6 +185,30 @@ function selectPane(candidates: readonly PaneCandidate[], handle: string, token:
   })
 }
 
+/**
+ * The roster, or a refusal that says which kind of nothing this is.
+ *
+ * `teamwork.presence` answers `state: 'unread'` for a project the runtime has
+ * but has not read yet — the beat after `project.add`, or a runtime still
+ * starting — and every command below wants the roster rather than the wait. The
+ * wait is still worth its own exit, though, and worth a code of its own: an
+ * agent that sees `not_read_yet` should ask again in a second, where one that
+ * sees an empty pane table has been told its teammate has no panes and will
+ * believe it. That is the distinction a `no_panes`-shaped answer destroys, so
+ * it is drawn here, once, rather than guessed at by each caller.
+ */
+async function readPresence(context: CommandContext, projectId: string): Promise<TeammatePresenceRead> {
+  const presence = await context.client.call('teamwork.presence', { projectId })
+  if (presence.state === 'read') return presence
+  throw new CliError({
+    code: 'not_read_yet',
+    message: `teamree has not read ${projectId}’s relay, roster or origin yet.`,
+    exitCode: ExitCode.Failure,
+    hint: 'Ask again in a moment. `teamree team status` says when it has.',
+    data: { projectId, readAt: presence.readAt }
+  })
+}
+
 /** Resolves project, teammate and pane in one go: every pane command needs all three. */
 async function resolveTarget(
   context: CommandContext,
@@ -192,7 +216,7 @@ async function resolveTarget(
   teammateToken: string
 ): Promise<{ projectId: string; projectName: string; person: ReturnType<typeof selectTeammate>; pane: PaneCandidate }> {
   const project = await resolveProject(context.client, projectToken)
-  const presence = await context.client.call('teamwork.presence', { projectId: project.id })
+  const presence = await readPresence(context, project.id)
   const person = selectTeammate(presence, teammateToken)
   const pane = selectPane(panesOf(presence, person.publicKey), person.handle, readString(context.flags, 'pane'))
   return { projectId: project.id, projectName: project.name, person, pane }
@@ -342,22 +366,29 @@ export const teamCommands: readonly CommandSpec[] = [
       const project = await resolveProject(context.client, context.args[0] as string)
       const status = await context.client.call('teamwork.status', { projectId: project.id })
       // Nothing has been read about this project, so there is no roster to lay
-      // a table out from and no relay to report — and asking the runtime for
-      // the presence beside it would only be asking a second question it cannot
-      // answer yet. One honest line instead, and still exit 0: a project this
-      // machine has just been given is not a failure of the command.
-      if (status.state === 'unread') {
-        const header = formatFields([
+      // a table out from and no relay to report. One honest line instead, and
+      // still exit 0: a project this machine has just been given is not a
+      // failure of the command.
+      const notReadYet = (
+        answer: { state: 'unread'; readAt: number },
+        presence: TeammatePresence | null
+      ): { data: unknown; text: string } => ({
+        data: { project, status, presence },
+        text: `${formatFields([
           ['project', `${project.name} (${project.id})`],
           ['teamwork', 'not read yet - teamree has not read this project’s relay, roster or origin'],
-          ['read at', new Date(status.readAt).toISOString()]
-        ])
-        return {
-          data: { project, status, presence: null },
-          text: `${header}\n\nAsk again in a moment.`
-        }
-      }
+          ['read at', new Date(answer.readAt).toISOString()]
+        ])}\n\nAsk again in a moment.`
+      })
+      // Asked before the presence beside it, because asking would only be
+      // asking a second question about the same unread project.
+      if (status.state === 'unread') return notReadYet(status, null)
       const presence = await context.client.call('teamwork.presence', { projectId: project.id })
+      // The two reads are one reconcile, so a status that is read has a
+      // presence to go with it and this is not a branch anybody reaches. It is
+      // here because the alternative is a cast, and a cast is what would let a
+      // roster that had genuinely not been read be laid out as an empty one.
+      if (presence.state === 'unread') return notReadYet(presence, presence)
       const now = Date.now()
 
       const standings = new Map(presence.teammates.map((person) => [person.publicKey, person]))
@@ -683,7 +714,9 @@ export const teamCommands: readonly CommandSpec[] = [
     details:
       'Where the pane ids for `team watch` and `team type` come from. A row that is not live shows what that ' +
       'teammate was showing when their machine was last reachable, not what is there now; nothing can be ' +
-      'done to it.',
+      'done to it.\n\n' +
+      'A project teamree has not read yet exits non-zero with `not_read_yet` rather than printing an empty ' +
+      'table, because an empty table says this teammate has no panes. Ask again in a moment.',
     args: [PROJECT_ARG],
     flags: [
       {
@@ -696,7 +729,7 @@ export const teamCommands: readonly CommandSpec[] = [
     examples: ['teamree team panes api', 'teamree team panes api --teammate ana --json'],
     run: async (context) => {
       const project = await resolveProject(context.client, context.args[0] as string)
-      const presence = await context.client.call('teamwork.presence', { projectId: project.id })
+      const presence = await readPresence(context, project.id)
       const token = readString(context.flags, 'teammate')
       const candidates =
         token === undefined

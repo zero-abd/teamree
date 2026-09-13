@@ -25,6 +25,7 @@ import {
   fixedRemoteRunner,
   makeProjectDir,
   project,
+  presenceOf,
   statusOf,
   terminal,
   worktree,
@@ -206,11 +207,11 @@ describe.skipIf(!RELAY_BUILT)('two peers over the real relay', () => {
   it('carries a presence snapshot end to end, encrypted, with the panes in it', async () => {
     await until(
       waiters,
-      () => alice.service.presence({ projectId: 'p_alice' }).worktrees.length === 1,
+      () => presenceOf(alice.service, 'p_alice').worktrees.length === 1,
       'Bob’s worktree to reach Alice'
     )
 
-    const [seen] = alice.service.presence({ projectId: 'p_alice' }).worktrees
+    const [seen] = presenceOf(alice.service, 'p_alice').worktrees
     expect(seen?.handle).toBe('bob')
     expect(seen?.name).toBe('flaky test')
     expect(seen?.branch).toBe('fix/flake')
@@ -224,17 +225,17 @@ describe.skipIf(!RELAY_BUILT)('two peers over the real relay', () => {
 
     await until(
       waiters,
-      () => alice.service.presence({ projectId: 'p_alice' }).worktrees.length === 2,
+      () => presenceOf(alice.service, 'p_alice').worktrees.length === 2,
       'the second worktree to reach Alice'
     )
-    expect(alice.service.presence({ projectId: 'p_alice' }).worktrees.map((entry) => entry.name)).toEqual([
+    expect(presenceOf(alice.service, 'p_alice').worktrees.map((entry) => entry.name)).toEqual([
       'flaky test',
       'second thing'
     ])
   })
 
   it('keeps a teammate’s worktrees on screen when their machine goes, and makes them live again when it returns', async () => {
-    const shown = (): string[] => alice.service.presence({ projectId: 'p_alice' }).worktrees.map((entry) => entry.name)
+    const shown = (): string[] => presenceOf(alice.service, 'p_alice').worktrees.map((entry) => entry.name)
     await until(waiters, () => shown().length === 2, 'both of Bob’s worktrees to reach Alice')
     const before = shown()
 
@@ -244,7 +245,7 @@ describe.skipIf(!RELAY_BUILT)('two peers over the real relay', () => {
     // Not one row fewer. A worktree row disappearing reads as a worktree
     // deleted, and over a real relay that is exactly what a closed laptop would
     // otherwise look like.
-    const away = alice.service.presence({ projectId: 'p_alice' })
+    const away = presenceOf(alice.service, 'p_alice')
     expect(away.worktrees.map((entry) => entry.name)).toEqual(before)
     expect(away.worktrees.some((entry) => entry.live)).toBe(false)
     expect(away.teammates.map((teammate) => [teammate.handle, teammate.connected])).toEqual([['bob', false]])
@@ -254,7 +255,7 @@ describe.skipIf(!RELAY_BUILT)('two peers over the real relay', () => {
     await bob.service.start()
     await until(
       waiters,
-      () => shown().length === 2 && alice.service.presence({ projectId: 'p_alice' }).worktrees.every((e) => e.live),
+      () => shown().length === 2 && presenceOf(alice.service, 'p_alice').worktrees.every((e) => e.live),
       'Bob to come back and his rows to be live again'
     )
     expect(shown()).toEqual(before)

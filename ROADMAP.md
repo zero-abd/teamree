@@ -460,6 +460,23 @@ recorded so none of them is discovered by surprise later.
   window it names: the reconcile still happens after the event rather than inside
   `project.add`, so the answer is unread for as long as that takes, and the window
   and the CLI both say so rather than waiting.
+
+  And it used to say "`teamwork.presence`, `teamwork.watchers` and
+  `teamwork.requests` still refuse in the same window". They do not. They were left
+  behind on the grounds that one union would not fit all three, which was true and
+  was the reason to work each out rather than to leave them lying: **`presence`**
+  takes the union, because its answer is a roster read off the repository and
+  `teammates: []` is a finding — it says the repository was read and holds nobody
+  but you, which is `relay: null`'s mistake with somebody's colleagues in it.
+  **`watchers`** and **`requests`** answer outright, because nothing in either
+  waits on a reconcile: a watcher, a typist and a held burst all arrive over a
+  link, a project with no facts has no links, and the mutes and standing
+  permissions are the owner's own decisions, restored before the first reconcile
+  runs. That last was the worst of the three while it lasted — a restored window
+  asking about a pane it was already drawing, told the project it belongs to does
+  not exist. The one read that still refuses is resolving a *teammate's* pane, and
+  it should: it is asked to act on somebody who cannot be found on a roster nobody
+  has opened. It now says that, rather than that the project is missing.
 - **A repository shared over a filesystem path takes part only if both Macs
   mount it at the same path.** It used to not take part at all. It does now: a
   path origin is normalised into its own namespace — a normalised URL is

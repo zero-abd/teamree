@@ -689,10 +689,22 @@ export class PeerService {
    *   * **Nothing has ever been heard from them.** No rows and no cache, which
    *     is why `teammates` lists the roster separately: a colleague whose app
    *     has never been up while yours was is not a colleague with no worktrees.
+   *
+   * And a fourth that is not about anybody: **this project has not been read**.
+   * The window is `status`'s exactly — the beat between `project.add` and the
+   * reconcile it sets off, and the whole of startup before `start()` finishes —
+   * and it is answered the same way, by asking the workspace whether the
+   * project exists at all. What it must not answer is an empty roster: that is
+   * a finding, it says the repository was read and holds nobody but you, and it
+   * would draw a project with four colleagues in it as a project with none.
    */
   presence(params: ParamsOf<'teamwork.presence'>): TeammatePresence {
     const facts = this.#projects.get(params.projectId)
-    if (!facts) throw notFound(`no project with id ${params.projectId}`)
+    if (!facts) {
+      const known = this.#options.workspace.listProjects().some((project) => project.id === params.projectId)
+      if (!known) throw notFound(`no project with id ${params.projectId}`)
+      return { state: 'unread', projectId: params.projectId, readAt: this.#scheduler.now() }
+    }
 
     const now = this.#scheduler.now()
     const worktrees: TeammateWorktree[] = []
@@ -742,7 +754,7 @@ export class PeerService {
 
     worktrees.sort((a, b) => a.handle.localeCompare(b.handle) || a.name.localeCompare(b.name))
     teammates.sort((a, b) => a.handle.localeCompare(b.handle))
-    return { projectId: facts.projectId, worktrees, teammates, readAt: now }
+    return { state: 'read', projectId: facts.projectId, worktrees, teammates, readAt: now }
   }
 
   /**
@@ -815,13 +827,30 @@ export class PeerService {
    * none of it can be done invisibly. A pane appears here for any of the three
    * reasons and not only for the first — a mute nobody can see is a mute nobody
    * can lift.
+   *
+   * The one read here that does not need a reconcile behind it, which is why it
+   * answers for a project teamwork has not read yet rather than refusing one.
+   * `presence` needs the roster and cannot honestly invent an empty one; this
+   * needs nothing off the repository at all. A watcher and a typist both arrive
+   * over a link, and a project with no facts has no links, so "nobody" is the
+   * only thing that can be true of it — while the mutes are read back from the
+   * owner's own decisions in `start()`, before the first reconcile, so a pane
+   * silenced last week says so from the first frame after a restart. Losing
+   * that to a `not_found` was the worst of the three: a restored window asking
+   * about a pane it is already drawing, told the project it belongs to does not
+   * exist.
    */
   watchers(params: ParamsOf<'teamwork.watchers'>): PaneWatchers {
+    // Only that the project exists, which is all this answer rests on. The
+    // facts are used where they have something to add and their absence is a
+    // shorter answer rather than a wrong one.
+    if (!this.#options.workspace.listProjects().some((project) => project.id === params.projectId)) {
+      throw notFound(`no project with id ${params.projectId}`)
+    }
     const facts = this.#projects.get(params.projectId)
-    if (!facts) throw notFound(`no project with id ${params.projectId}`)
 
     const byPane = new Map<string, PaneWatcher[]>()
-    if (facts.projectKey !== undefined) {
+    if (facts !== undefined && facts.projectKey !== undefined) {
       for (const publicKey of facts.rosterKeys) {
         if (publicKey === this.#identityKey) continue
         const linkId = linkIdFor(publicKey, facts.projectKey)
@@ -844,13 +873,13 @@ export class PeerService {
     // answer cannot carry another's rows. The typists were not, once: the map
     // was keyed by pane id alone, so a keystroke refused for naming a pane of
     // an unrelated project still put its sender's name on that project's row.
-    const named = new Set([...byPane.keys(), ...this.#panesOf(facts.projectId)])
+    const named = new Set([...byPane.keys(), ...this.#panesOf(params.projectId)])
 
     const panes: WatchedPane[] = [...named]
       .map((terminalId) => ({
         terminalId,
         watchers: (byPane.get(terminalId) ?? []).sort((a, b) => a.handle.localeCompare(b.handle)),
-        typists: [...(this.#typists.get(typistKey(facts.projectId, terminalId))?.values() ?? [])]
+        typists: [...(this.#typists.get(typistKey(params.projectId, terminalId))?.values() ?? [])]
           .map((typist) => ({ ...typist }))
           .sort((a, b) => a.handle.localeCompare(b.handle)),
         muted: this.#muted.has(terminalId)
@@ -858,7 +887,7 @@ export class PeerService {
       .filter((pane) => pane.watchers.length > 0 || pane.typists.length > 0 || pane.muted)
       .sort((a, b) => a.terminalId.localeCompare(b.terminalId))
 
-    return { projectId: facts.projectId, panes, readAt: this.#scheduler.now() }
+    return { projectId: params.projectId, panes, readAt: this.#scheduler.now() }
   }
 
   /**
@@ -905,10 +934,24 @@ export class PeerService {
    * pane id is a string, and what makes one mean somebody's pane is the project
    * it was resolved in. A request filed against a pane of another project
    * cannot be listed here, so it cannot be answered from here either.
+   *
+   * Answered for a project teamwork has not read yet, on `watchers`' argument
+   * rather than `presence`'s, because both halves hold without a reconcile. A
+   * held burst is a teammate's keystroke and arrives over a link, so a project
+   * with no facts has nothing waiting; the standing permissions are the owner's
+   * own and are restored in `start()` before the first reconcile runs. The one
+   * thing the roster adds is the name to put beside a key — and `#handleIn`
+   * already falls back to the key for a teammate the roster does not name, so a
+   * roster that has not been read yet lands in a case this answer has always
+   * had. A key where a handle will be is a shorter sentence; "no project with
+   * id" was a false one, said to an owner whose pane is on screen with somebody
+   * else's permission standing on it.
    */
   requests(params: ParamsOf<'teamwork.requests'>): PaneConsent {
+    if (!this.#options.workspace.listProjects().some((project) => project.id === params.projectId)) {
+      throw notFound(`no project with id ${params.projectId}`)
+    }
     const facts = this.#projects.get(params.projectId)
-    if (!facts) throw notFound(`no project with id ${params.projectId}`)
 
     const requests = [...this.#pending.values()]
       .filter((request) => request.projectId === params.projectId)
@@ -1468,10 +1511,24 @@ export class PeerService {
    * `intent` is only ever words for the error, and it is a parameter because
    * "cannot be read" and "cannot be typed into" are two different sentences to
    * be told at the moment a link is down.
+   *
+   * The only one of these reads that still fails for a project teamwork has not
+   * read yet, and it is not the same defect the others had. This one is asked
+   * to *act* on a named pane of a named teammate, and a project with no facts
+   * has no roster to find them on and no link to reach them over: there is no
+   * shorter true answer to give, so it refuses. What it owed the caller was the
+   * right refusal. "No project with id" sends somebody to check the id they
+   * typed, which is correct only in the second branch below; the first is a
+   * project on screen whose links come up in a moment, and saying so is the
+   * difference between "try again" and "you are holding a stale id".
    */
   #resolvePeerPane(projectId: string, paneId: string, intent: string): ResolvedPeerPane {
     const facts = this.#projects.get(projectId)
-    if (!facts) throw notFound(`no project with id ${projectId}`)
+    if (!facts) {
+      const known = this.#options.workspace.listProjects().some((project) => project.id === projectId)
+      if (!known) throw notFound(`no project with id ${projectId}`)
+      throw notFound(`teamree has not read project ${projectId} yet, so no teammate’s pane can be ${intent}`)
+    }
     if (facts.projectKey === undefined) throw notFound(`project ${projectId} is not shared with anyone`)
 
     const target = parsePeerPaneId(paneId)
@@ -2022,10 +2079,14 @@ export class PeerService {
    * A lookup that searched every project would call them by whichever roster it
    * happened to read first, which is a name with no repository behind it.
    *
-   * Falls back to the key, never to another project's word for them.
+   * Falls back to the key, never to another project's word for them — which is
+   * also the whole of what `undefined` facts mean here. A project teamwork has
+   * not read yet has no roster to be named by, and that is the same situation
+   * as a key the roster it does have does not mention: this machine knows a
+   * public key and no name for it, so it says the key.
    */
-  #handleIn(facts: ProjectFacts, publicKey: string): string {
-    return facts.handles.get(publicKey) ?? publicKey.slice(0, SHORT_KEY_LENGTH)
+  #handleIn(facts: ProjectFacts | undefined, publicKey: string): string {
+    return facts?.handles.get(publicKey) ?? publicKey.slice(0, SHORT_KEY_LENGTH)
   }
 
   /** `onlyProjectKey` narrows the source to the one repository a session is for. */

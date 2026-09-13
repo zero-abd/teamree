@@ -31,6 +31,7 @@ import {
   project,
   remoteRunner,
   standingConsent,
+  presenceOf,
   statusOf,
   terminal,
   worktree,
@@ -113,8 +114,8 @@ describe('a teammate is named by the roster of the project they reached this mac
 
   it('calls her what this project’s roster calls her, in the teammate list', async () => {
     const { runtime, malloryKey } = await twoRosters()
-    expect(runtime.service.presence({ projectId: 'p_a' }).teammates.map((row) => row.handle)).toEqual(['mallory'])
-    expect(runtime.service.presence({ projectId: 'p_z' }).teammates.map((row) => row.handle)).toEqual(['ana'])
+    expect(presenceOf(runtime.service, 'p_a').teammates.map((row) => row.handle)).toEqual(['mallory'])
+    expect(presenceOf(runtime.service, 'p_z').teammates.map((row) => row.handle)).toEqual(['ana'])
     expect(malloryKey).not.toBe('')
   })
 

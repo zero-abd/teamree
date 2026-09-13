@@ -14,7 +14,7 @@
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Project, TeamworkRead, Terminal, Worktree } from '../../../shared/entities'
+import type { Project, TeammatePresenceRead, TeamworkRead, Terminal, Worktree } from '../../../shared/entities'
 import type { GitRunner } from '../../git/gitProcess'
 import type { TeammateCache } from '../../store/teammateCache'
 import { formatMemberFile, MEMBER_FILE_SUFFIX, MEMBERS_DIR_SEGMENTS } from '../memberFile'
@@ -27,7 +27,7 @@ import { registerUnsubscribeHandler } from '../../runtime/handlers/unsubscribeHa
 import type { RemoteWriteDecision, RemoteWriteVerdict } from '../../runtime/peerTransport'
 import { registerPeerHandlers } from './handlers'
 import type { LinkScheduler } from './peerLink'
-import { PeerService, type ConsentStore } from './peerService'
+import { PeerService, type ConsentStore, type MuteStore } from './peerService'
 import type { RelayDialer, RelaySocketHandlers } from './relaySocket'
 import type { WakeWatch } from './wakeWatch'
 
@@ -382,6 +382,15 @@ export type PeerRuntimeOptions = {
    * last week" in one line rather than by driving the prompt through first.
    */
   consent?: ConsentStore
+  /**
+   * Panes this machine already has silenced when it starts.
+   *
+   * The mutes' half of `consent` above, and there for the same reason: "I
+   * muted that pane last week" is a fact a runtime restores before it has read
+   * a single repository, so a test about what is knowable before the first
+   * reconcile needs to be able to say it in one line.
+   */
+  mutes?: MuteStore
   /** Lets a test wait on a condition instead of on the clock. */
   onChange?: () => void
   /** Stands in for Electron's power monitor, which no test process has. */
@@ -495,6 +504,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     ...(options.runner ? { runner: options.runner } : {}),
     ...(options.cache ? { cache: options.cache } : {}),
     ...(options.consent ? { consent: options.consent } : {}),
+    ...(options.mutes ? { mutes: options.mutes } : {}),
     ...(options.watchWake ? { watchWake: options.watchWake } : {}),
     onChange: () => {
       changes += 1
@@ -535,6 +545,17 @@ export function statusOf(service: PeerService, projectId: string): TeamworkRead 
   const status = service.status({ projectId })
   if (status.state !== 'read') throw new Error(`teamwork has not read ${projectId} yet`)
   return status
+}
+
+/** The roster and the rows on it, for a test that has already reconciled. */
+export function presenceOf(service: PeerService, projectId: string): TeammatePresenceRead {
+  const presence = service.presence({ projectId })
+  // `statusOf`'s argument, about the other half of the same reconcile: an
+  // unread roster here is the service not having read a project the test put in
+  // front of it, and saying so beats an empty `worktrees` read three lines
+  // later as "the snapshot never arrived".
+  if (presence.state !== 'read') throw new Error(`teamwork has not read ${projectId}’s roster yet`)
+  return presence
 }
 
 // ------------------------------------------------------------- tiny builders
@@ -593,6 +614,24 @@ export function standingConsent(
       else held.set(key, { terminalId, publicKey, since })
     },
     written
+  }
+}
+
+/**
+ * Panes the owner has already silenced, in the shape `PeerServiceOptions.mutes`
+ * wants them.
+ *
+ * `standingConsent`'s twin, and the other half of what a runtime knows about
+ * its own panes before it has read anything off a repository.
+ */
+export function standingMutes(terminalIds: readonly string[] = []): MuteStore {
+  const held = new Set(terminalIds)
+  return {
+    list: () => [...held],
+    set: (terminalId, muted) => {
+      if (muted) held.add(terminalId)
+      else held.delete(terminalId)
+    }
   }
 }
 

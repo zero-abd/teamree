@@ -58,7 +58,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal as XTerm } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
-import type { TeammatePresence } from '@shared/entities'
+import { teammatesHeard, type TeammatePresence } from '@shared/entities'
 import type { WatchedPaneEvent } from '@shared/methods'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -588,7 +588,10 @@ export type WatchedPaneSize = { cols: number; rows: number; heardAt: number }
  * the output does not fit.
  */
 export function watchedPaneSize(presence: TeammatePresence | undefined, paneId: string): WatchedPaneSize | null {
-  for (const worktree of presence?.worktrees ?? []) {
+  // A project teamwork has not read yet is the same answer as a teammate who
+  // has sent no dimensions: nothing is known about this pane's shape, and the
+  // frame stays where it is rather than moving to a guess.
+  for (const worktree of teammatesHeard(presence)?.worktrees ?? []) {
     for (const pane of worktree.panes) {
       if (pane.id !== paneId) continue
       if (pane.cols === undefined || pane.rows === undefined) return null
