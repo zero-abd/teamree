@@ -372,3 +372,143 @@ export type RuntimeStatus = {
   platform: NodeJS.Platform
   startedAt: number
 }
+
+/**
+ * One pane on a teammate's machine, as their runtime reports it.
+ *
+ * Deliberately not a `Terminal`. A `Terminal` carries a cwd, a shell, a column
+ * count and a scrollback position, none of which mean anything on a machine
+ * that is not the one the process is on. What crosses is what the sidebar
+ * reads, and nothing else.
+ */
+export type PeerPane = {
+  /** The owner's id for it. Namespaced by the receiver before it is stored. */
+  id: string
+  /**
+   * The pane's own title and the shell behind it — the two raw facts a name is
+   * made from, rather than the name itself. The reader already owns the rule
+   * that turns them into a label, and sending the label instead would be a
+   * second copy of that rule, on the other machine, free to disagree.
+   */
+  title: string
+  shell: string
+  agent?: AgentKind
+  running: boolean
+  exitCode?: number
+  busy: boolean
+  /**
+   * Silence as a duration measured by the owner, never as an instant.
+   *
+   * Two machines do not agree about what time it is, and a `lastOutputAt` from
+   * a clock three minutes fast renders as a pane that last spoke in the future.
+   * A duration is true wherever it is read; the receiver adds the time since it
+   * arrived, which is a number it is entitled to.
+   */
+  quietForMs: number
+}
+
+/** One of a teammate's worktrees, with the panes inside it. */
+export type PeerWorktree = {
+  id: string
+  name: string
+  branch: string
+  state: WorktreeState
+  panes: PeerPane[]
+}
+
+/**
+ * A teammate's worktrees in one repository.
+ *
+ * The repository is named by a hash rather than by its remote, because a peer
+ * session is pairwise and covers every repository the two of them happen to
+ * share: sending remotes in the clear would tell a teammate the URLs of
+ * repositories they are not a member of.
+ */
+export type PeerProject = {
+  projectKey: string
+  worktrees: PeerWorktree[]
+}
+
+/** Everything one runtime tells a teammate about itself. Metadata only. */
+export type PeerPresence = {
+  /**
+   * Monotonic per sender. A snapshot that arrives behind one already applied is
+   * dropped: over a link with real latency two reads can overtake each other,
+   * and the older one landing last would freeze the sidebar in a past the
+   * sender has already left.
+   */
+  revision: number
+  /** The handle the sender's own roster files their key under. Display only. */
+  handle: string | null
+  projects: PeerProject[]
+}
+
+/**
+ * How a link to one teammate is going, in the words the window shows.
+ *
+ * `waiting`, `refused` and `unreachable` are three different facts and the UI
+ * says which: "their machine is not connected", "somebody answered and was not
+ * who they should be", and "the relay could not be reached" are the kind of
+ * distinction this codebase keeps rather than collapsing into "offline".
+ */
+export type PeerLinkPhase =
+  /** Reaching the relay. */
+  | 'connecting'
+  /** Parked on the relay; the teammate's machine has not arrived. */
+  | 'waiting'
+  /** Handshake complete against a key from this project's roster. */
+  | 'connected'
+  /** Somebody was there and the handshake did not authenticate them. */
+  | 'refused'
+  /** The relay could not be reached at all. */
+  | 'unreachable'
+  /** Given up: something reconnecting cannot fix, and `detail` says what. */
+  | 'stopped'
+
+/** One teammate, and how this machine is getting on with reaching them. */
+export type PeerLink = {
+  /** Their public key, which is the identity. */
+  publicKey: string
+  /** What the roster files that key under. */
+  handle: string
+  phase: PeerLinkPhase
+  /** Why, in words, whenever the phase is not `connected`. */
+  detail?: string
+  /** When the phase last changed, by this machine's clock. */
+  since: number
+  /** How many times this link has been built, so a flapping one is visible. */
+  attempts: number
+}
+
+/**
+ * Whether teamwork is running for one project, and how.
+ *
+ * `disabledReason` is the honest half: a project with no relay, no origin
+ * remote or no roster is not "offline", it is not configured, and a row that
+ * said "offline" would have somebody looking at their network.
+ */
+export type TeamworkStatus = {
+  projectId: string
+  /** Where the relay is and which of the two places said so. Null when neither did. */
+  relay: { url: string; source: 'repository' | 'environment' } | null
+  /** Why teamwork is not running here, or null when it is. */
+  disabledReason: string | null
+  links: PeerLink[]
+  readAt: number
+}
+
+/** One of a teammate's worktrees, with whose it is attached to it. */
+export type TeammateWorktree = PeerWorktree & {
+  handle: string
+  publicKey: string
+  /** When this was last heard, by this machine's clock. */
+  heardAt: number
+}
+
+/** Every teammate's worktrees in one project, as last heard. */
+export type TeammatePresence = {
+  projectId: string
+  /** Sorted by handle then by worktree name, so two reads compare cleanly. */
+  worktrees: TeammateWorktree[]
+  readAt: number
+}

@@ -13,7 +13,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { MemberProblem } from '../../shared/entities'
 import { sanitiseHandle } from './handle'
-import { MEMBER_FILE_SUFFIX, MEMBERS_DIR_SEGMENTS, parseMemberFile } from './memberFile'
+import { MEMBER_FILE_SUFFIX, MEMBERS_DIR_SEGMENTS, parseMemberFile, quote } from './memberFile'
 
 export type RosterEntry = {
   handle: string
@@ -53,6 +53,7 @@ export async function readRoster(projectPath: string): Promise<Roster> {
   const entries: RosterEntry[] = []
   const problems: MemberProblem[] = []
   const claimed = new Map<string, string>()
+  const claimedHandles = new Map<string, string>()
 
   for (const file of files) {
     const relative = [...MEMBERS_DIR_SEGMENTS, file].join('/')
@@ -60,9 +61,38 @@ export async function readRoster(projectPath: string): Promise<Roster> {
       problems.push({ file: relative, reason })
     }
 
+    // The suffix has to be exactly `.pub`, not `.PUB`. Listing is deliberately
+    // case-insensitive so a file like this is *seen* and reported; matching is
+    // exact so it is never a member.
+    //
+    // This is attribution, not tidiness. A case-insensitive suffix with a
+    // case-sensitive stem accepts `bob.PUB` as a fully authorised member named
+    // "bob", so anyone with push access could file their own key under a
+    // colleague's name — and the live attribution, the watcher badge and the
+    // audit log that make "anyone can type" survivable would all say the
+    // colleague. Worse on macOS and Windows, where `bob.pub` and `bob.PUB` in
+    // one commit fold to a single file, so the roster depends on who checked
+    // it out.
+    if (!file.endsWith(MEMBER_FILE_SUFFIX)) {
+      reject(`the name does not end in "${MEMBER_FILE_SUFFIX}" exactly, so teamree will not read it as a member`)
+      continue
+    }
+
     const stem = file.slice(0, file.length - MEMBER_FILE_SUFFIX.length)
     if (sanitiseHandle(stem) !== stem) {
       reject('the file name is not a handle teamree would have written')
+      continue
+    }
+
+    // Belt and braces over the two rules above, which between them already make
+    // this impossible: a stem is unique within a directory and has to be
+    // canonical. It is here anyway because "one handle names one person" is the
+    // property the whole attribution story rests on, and a property that holds
+    // only as an emergent consequence of two other rules is one a later change
+    // to either of them can quietly remove.
+    const namesake = claimedHandles.get(stem)
+    if (namesake !== undefined) {
+      reject(`claims the handle "${quote(stem)}", which ${namesake} already holds`)
       continue
     }
 
@@ -83,7 +113,7 @@ export async function readRoster(projectPath: string): Promise<Roster> {
     // the key belongs to. A file whose contents name somebody else is not a
     // member teamree is willing to guess about.
     if (parsed.value.handle !== stem) {
-      reject(`names "${parsed.value.handle}" but is filed under "${stem}"`)
+      reject(`names "${quote(parsed.value.handle)}" but is filed under "${quote(stem)}"`)
       continue
     }
 
@@ -91,10 +121,11 @@ export async function readRoster(projectPath: string): Promise<Roster> {
     if (owner !== undefined) {
       // Two handles on one key would make a peer ambiguous the moment anything
       // looks one up by key, which is exactly what a handshake does.
-      reject(`has the same key as "${owner}"`)
+      reject(`has the same key as "${quote(owner)}"`)
       continue
     }
     claimed.set(parsed.value.publicKey, stem)
+    claimedHandles.set(stem, quote(relative))
     entries.push({ ...parsed.value, file: relative })
   }
 

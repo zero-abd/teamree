@@ -13,6 +13,9 @@
 import { useMemo } from 'react'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { TeammateWorktreeRow } from './TeammateWorktreeRow'
+import { teammateRows } from './teammateRows'
+import { teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { WorktreeRow } from './WorktreeRow'
 
@@ -32,6 +35,8 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
   const retryWorktree = useWorkspaceStore((state) => state.retryWorktree)
   const removeWorktree = useWorkspaceStore((state) => state.removeWorktree)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const teamwork = useWorkspaceStore((state) => state.teamwork)
+  const teammates = useWorkspaceStore((state) => state.teammates)
 
   // No box sets this any more; the palette does the finding. Kept as the one
   // place the empty-state wording asks "is this filtered or simply empty".
@@ -82,6 +87,11 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
         {projects.map((project) => {
           const rows = matching.filter((worktree) => worktree.projectId === project.id)
           const isCollapsed = Boolean(collapsed[project.id])
+          const summary = teamworkSummary(teamwork[project.id])
+          // Under the same project, because that is what they are: the same
+          // repository, checked out somewhere else. The rows below make whose
+          // they are unmissable, which is what lets them share the list.
+          const theirs = teammateRows(teammates[project.id]?.worktrees ?? [], now)
           return (
             <section className="project" key={project.id}>
               <div className="project__head">
@@ -100,6 +110,14 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                   </svg>
                   <span className="project__name">{project.name}</span>
                   <span className="project__count">{rows.length}</span>
+                  {theirs.length > 0 ? (
+                    <span
+                      className="project__count project__count--teammate"
+                      title={`${theirs.length} teammate worktree${theirs.length === 1 ? '' : 's'}`}
+                    >
+                      {`+${theirs.length}`}
+                    </span>
+                  ) : null}
                 </button>
                 <button
                   type="button"
@@ -115,6 +133,15 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
               </div>
               <div className="project__meta">
                 <p className="project__base">{project.baseRef}</p>
+                {/* Honest about all four of "not set up", "cannot reach the
+                    relay", "nobody is connected" and "somebody answered and was
+                    not who they should be" — one word each, and the whole of it
+                    on hover. */}
+                {summary ? (
+                  <span className={`teamwork teamwork--${summary.tone}`} title={summary.detail}>
+                    {summary.label}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   className="project__members"
@@ -143,7 +170,10 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                       onRemove={() => void removeWorktree(worktree.id)}
                     />
                   ))}
-                  {rows.length === 0 ? (
+                  {theirs.map((row) => (
+                    <TeammateWorktreeRow key={row.id} row={row} />
+                  ))}
+                  {rows.length === 0 && theirs.length === 0 ? (
                     <li className="project__none">
                       {filter.trim().length > 0 ? (
                         'No worktrees match that.'

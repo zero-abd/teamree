@@ -62,7 +62,16 @@ export const ACTIVITY_NOUN: Record<AgentActivity, string> = {
   failed: 'failed'
 }
 
-export function activityOf(terminal: Terminal): AgentActivity {
+/**
+ * The two facts an activity is read from, and nothing else.
+ *
+ * Narrower than `Terminal` so a teammate's pane — which crosses the wire as
+ * metadata and has no cwd, no columns and no scrollback — is read by this
+ * function rather than by a second one written to agree with it.
+ */
+export type PaneActivitySource = { running: boolean; exitCode?: number; busy: boolean }
+
+export function activityOf(terminal: PaneActivitySource): AgentActivity {
   if (!terminal.running) return terminal.exitCode === 0 ? 'done' : 'failed'
   return terminal.busy ? 'working' : 'quiet'
 }
@@ -95,12 +104,17 @@ export function agentRows(
 /**
  * What to call a pane with no agent in it.
  *
+ * Takes the title and the shell rather than a `Terminal`, because a teammate's
+ * pane arrives as exactly those two facts: the rule for turning them into a
+ * name lives here once, on the reading machine, instead of being applied by the
+ * owner and shipped as a string the reader cannot check.
+ *
  * A program's own title is the best name it will ever have, except for the one
  * a plain shell sets: bash's default is the user, the host and the path, which
  * is long, changes as you cd, and repeats what the worktree row above already
  * says. The shell's own name is shorter and no less informative.
  */
-export function paneLabel(terminal: Terminal): string {
+export function paneLabel(terminal: { title: string; shell: string }): string {
   const title = terminal.title.trim()
   if (title.length === 0 || isDefaultShellTitle(title)) return shellName(terminal.shell)
   // A title that is only a path carries its information at the end — exactly

@@ -9,6 +9,8 @@ import type {
   MemberList,
   PaneNode,
   Project,
+  TeammatePresence,
+  TeamworkStatus,
   Terminal,
   Worktree,
   WorktreeChanges,
@@ -109,6 +111,16 @@ type WorkspaceState = {
   members: Record<string, MemberList>
   /** True while a roster is being read or written, so the dialog can say so. */
   membersPending: boolean
+  /**
+   * Whether teamwork is running for each project, by project id.
+   *
+   * Absent means "not asked yet", which is deliberately not the same as "off":
+   * an empty entry would have the header claim a project has no relay before
+   * anything had looked.
+   */
+  teamwork: Record<string, TeamworkStatus>
+  /** What each project's teammates are showing, by project id. */
+  teammates: Record<string, TeammatePresence>
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
   /** True once the probe has answered, however it answered. Until then an
@@ -396,6 +408,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.projects) reads.push(refreshProjects())
     if (targets.terminals) reads.push(refreshTerminals())
     if (targets.members) reads.push(refreshMembers())
+    if (targets.teammates) reads.push(refreshTeammates())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
       reads.push(
@@ -439,6 +452,37 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set((state) => ({
       members: lists.reduce((map, list) => (list ? { ...map, [list.projectId]: list } : map), { ...state.members })
     }))
+  }
+
+  /**
+   * Re-reads teamwork for every project this window is showing.
+   *
+   * Every project, not only the ones already held: a link coming up is exactly
+   * the moment a project that had nothing to say starts having something, and
+   * waiting for somebody to open it first would mean the sidebar never showed
+   * a teammate arriving. Both calls are cheap — they read memory the runtime
+   * already holds — and one project failing must not cost the others theirs.
+   */
+  const refreshTeammates = async (): Promise<void> => {
+    const projectIds = get().projects.map((project) => project.id)
+    if (projectIds.length === 0) return
+    const answers = await Promise.all(
+      projectIds.map((projectId) =>
+        Promise.all([
+          runtimeClient.call('teamwork.status', { projectId }).catch(() => null),
+          runtimeClient.call('teamwork.presence', { projectId }).catch(() => null)
+        ])
+      )
+    )
+    set((state) => {
+      const teamwork = { ...state.teamwork }
+      const teammates = { ...state.teammates }
+      for (const [status, presence] of answers) {
+        if (status) teamwork[status.projectId] = status
+        if (presence) teammates[presence.projectId] = presence
+      }
+      return { teamwork, teammates }
+    })
   }
 
   const refresher = createWorkspaceRefresher({
@@ -493,6 +537,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     mergePreviews: {},
     members: {},
     membersPending: false,
+    teamwork: {},
+    teammates: {},
     changesOpen: false,
     changes: {},
     logs: {},
@@ -536,6 +582,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           .catch(() => set({ agents: [], agentsProbed: true }))
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
+        await refresher.flush()
+        // After the projects exist, because teamwork is read per project and
+        // there is nothing to read it for until the list has landed.
+        refresher.request(refreshTargets({ teammates: true }))
         await refresher.flush()
 
         if (!get().activeWorktreeId) {

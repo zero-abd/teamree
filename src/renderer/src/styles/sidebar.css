@@ -117,10 +117,67 @@
 }
 
 .project__base {
-  padding: 0 var(--s2) var(--s2) 28px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--fg-muted);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+
+/* One line about whether teamwork is running, in the project's own header.
+   Four tones because there are four different things to say and collapsing
+   them would send somebody to check their network because a colleague shut a
+   laptop. */
+.teamwork {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 1px var(--s2);
+  border-radius: var(--r1);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.teamwork--live {
+  color: var(--success);
+  background: rgb(87 195 138 / 12%);
+}
+
+.teamwork--pending {
+  color: var(--fg-secondary);
+  background: var(--bg-hover);
+}
+
+/* Deliberately unadorned: "nothing is set up here" is a thing to do, not a
+   fault, and colouring it like one would have people looking for a break. */
+.teamwork--off {
+  color: var(--fg-muted);
+}
+
+.teamwork--problem {
+  color: var(--danger);
+  background: rgb(232 97 90 / 12%);
+}
+
+/* The count of a teammate's worktrees, beside the count of your own. Separate
+   numbers because they are separate things: "+3" reads as "and three more that
+   are somebody else's", which is exactly what it means. */
+.project__count--teammate {
+  margin-left: var(--s1);
+  color: var(--accent);
+}
+
+/* The base ref, the teamwork line and the members button share one line, so the
+   header stays two rows tall however much any of them has to say. */
+.project__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 0 var(--s2) var(--s2) 28px;
 }
 
 .project__worktrees {
@@ -533,4 +590,72 @@
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+
+/* ---------------------------------------------------------------------------
+   A teammate's worktrees.
+
+   They sit under the same project as your own, because that is what they are:
+   the same repository, checked out on somebody else's machine. Everything here
+   exists so a reader is never wrong about two things — whose checkout this is,
+   and that it is not theirs to act on.
+
+   The second one is structural rather than decorative. There is no disabled
+   button anywhere below, because a disabled button is a thing that would work
+   if something were different, and this is a thing that will not. Milestone C
+   makes a pane openable for reading; until then the honest affordance is none.
+   --------------------------------------------------------------------------- */
+
+.worktree--teammate {
+  --teammate-line: var(--accent-line);
+}
+
+/* Indented past your own rows and marked down the left edge, so the point where
+   your checkouts stop is visible without reading a word. */
+.worktree__row--teammate {
+  margin-left: var(--s4);
+  border-left: 2px solid var(--teammate-line);
+  border-radius: 0 var(--r2) var(--r2) 0;
+  background: rgb(139 140 247 / 5%);
+}
+
+.worktree__open--teammate {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 3px var(--s2) 3px var(--s4);
+  cursor: default;
+}
+
+.worktree--teammate .worktree__name {
+  color: var(--fg-secondary);
+}
+
+/* First on its line and in the accent, because whose it is changes what every
+   other fact on the row means. */
+.worktree__owner {
+  flex: 0 0 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.panes--teammate {
+  margin-left: var(--s4);
+  border-left: 2px solid var(--teammate-line);
+}
+
+.pane-row--teammate {
+  cursor: default;
+}
+
+.pane-row--teammate:hover {
+  background: transparent;
 }

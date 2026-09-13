@@ -25,6 +25,7 @@ import { dirname } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
 import { GitService, registerGitHandlers } from '../../git'
 import { registerTeamworkHandlers, TeamworkService } from '../../teamwork'
+import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import type { TerminalService } from '../../terminals/method-handlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
@@ -44,6 +45,12 @@ export type RegisteredAreas = {
   git: GitService
   /** Filesystem watches behind live git status. Released when the app quits. */
   worktreeFiles: { close: () => void }
+  /**
+   * Outbound relay connections, one per teammate. Started after the dispatcher
+   * exists, because a peer that reached a half-built registry would be told a
+   * method does not exist when it merely does not exist yet.
+   */
+  peers: PeerService
 }
 
 export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
@@ -96,11 +103,12 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   // directory, and never anywhere under a repository. That directory is not on
   // the runtime context, but the store's path is exactly it plus a file name,
   // and the store is already the authority on where this app keeps things.
+  const dataDir = dirname(registry.context.store.filePath)
   registerTeamworkHandlers(
     registry,
     new TeamworkService({
       store: registry.context.store,
-      dataDir: dirname(registry.context.store.filePath),
+      dataDir,
       // Joining writes a file that no watcher covers — `.teamree/members` lives
       // in the primary checkout, which nothing here watches — so the service is
       // the only thing that can say the roster moved.
@@ -108,5 +116,30 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
     })
   )
 
-  return { terminals, git, worktreeFiles }
+  const peers = registerPeerHandlers(
+    registry,
+    new PeerService({
+      workspace: {
+        listProjects: () => registry.context.store.listProjects(),
+        listWorktrees: (projectId) => registry.context.store.listWorktrees(projectId),
+        listTerminals: (worktreeId) => terminals.manager.list(worktreeId)
+      },
+      dataDir,
+      subscriptions: registry.context.subscriptions,
+      onChange: () => workspaceEvents.emit({ type: 'teammates' })
+    })
+  )
+  // A teammate's view of this machine rides the same bus everything else does,
+  // so a worktree created on the CLI reaches their sidebar for the same reason
+  // it reaches this window's.
+  workspaceEvents.on((event) => {
+    // `teammates` is this service's own event. Feeding it back in would have a
+    // link changing phase cost every peer a fresh snapshot of a workspace that
+    // did not move.
+    if (event.type === 'teammates') return
+    if (event.type === 'projects' || event.type === 'members') void peers.reconcile().catch(() => {})
+    peers.notifyWorkspaceChanged()
+  })
+
+  return { terminals, git, worktreeFiles, peers }
 }
