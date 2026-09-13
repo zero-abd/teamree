@@ -14,8 +14,9 @@
 // result is honest at the cost of being a little behind — which is the right
 // way round for a number whose job is to say something has been sitting there.
 
-import type { PeerPane, TeammateWorktree } from '@shared/entities'
+import type { PeerPane, TeammatePresence, TeammateWorktree } from '@shared/entities'
 import { activityOf, paneLabel, worktreeActivity, type AgentActivity, type AgentRow } from './agentRows'
+import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 
 export type TeammatePaneRow = AgentRow & {
   /** Whose pane it is, so a row is never ambiguous about that. */
@@ -37,6 +38,16 @@ export type TeammateWorktreeRowModel = {
   activity: AgentActivity | null
   /** How old the whole picture is, in this machine's milliseconds. */
   heardAgoMs: number
+  /**
+   * Whether the link behind this row is connected right now.
+   *
+   * The unrounded truth, and the only thing that may ever gate acting on a
+   * pane. `staleness` below is what a reader is shown and it forgives a blink;
+   * this forgives nothing.
+   */
+  live: boolean
+  /** How old this is and how to say so, or null while it is live. */
+  staleness: TeammateStaleness | null
 }
 
 /**
@@ -66,7 +77,9 @@ export function teammateRows(
       state: worktree.state,
       panes,
       activity: worktreeActivity(panes),
-      heardAgoMs
+      heardAgoMs,
+      live: worktree.live,
+      staleness: teammateStaleness({ live: worktree.live, heardAt: worktree.heardAt, handle: worktree.handle, now })
     }
   })
 }
@@ -98,5 +111,29 @@ function paneRow(pane: PeerPane, handle: string, heardAgoMs: number, evidence: s
  */
 export function teammateTitle(row: TeammateWorktreeRowModel): string {
   const panes = `${row.panes.length} pane${row.panes.length === 1 ? '' : 's'}`
-  return `${row.name} · ${row.handle}’s worktree on their machine · ${row.branch} · ${panes}`
+  const head = `${row.name} · ${row.handle}’s worktree on their machine · ${row.branch} · ${panes}`
+  return row.staleness ? `${head}\n${row.staleness.detail}` : head
+}
+
+/**
+ * Teammates on the roster there is no picture of at all.
+ *
+ * Deliberately not a row each. A colleague whose app has never been up while
+ * yours was has no worktrees to show and, as far as this machine knows, may
+ * have none — inventing a row for them would be inventing work, which is the
+ * mirror of the mistake this milestone exists to prevent. One line saying they
+ * are on the roster and unheard is the whole of what is true.
+ */
+export function unheardTeammates(presence: TeammatePresence | undefined): string[] {
+  return (presence?.teammates ?? []).filter((teammate) => teammate.heardAt === null).map((teammate) => teammate.handle)
+}
+
+/** The whole of it on hover, said as three facts rather than as a diagnosis. */
+export function unheardTitle(handles: readonly string[]): string {
+  const who = handles.join(', ')
+  const verb = handles.length === 1 ? 'is' : 'are'
+  return (
+    `${who} ${verb} on this project’s roster. Nothing has been heard from them, ` +
+    'so there is no picture of their worktrees here — not even an old one.'
+  )
 }

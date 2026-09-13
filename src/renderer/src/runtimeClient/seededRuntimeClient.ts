@@ -643,9 +643,37 @@ export function createSeededRuntimeClient(): RuntimeClient {
       ],
       readAt: Date.now()
     }),
+    // Two teammates, because the two cases read differently: priya is
+    // connected, and marcus's laptop is shut — his worktree stays exactly where
+    // it was, out of the local cache, dated and not live.
     'teamwork.presence': ({ projectId }) => ({
       projectId,
+      teammates: [
+        { handle: 'marcus', publicKey: SEEDED_AWAY_KEY, connected: false, heardAt: Date.now() - 2_700_000 },
+        { handle: 'priya', publicKey: SEEDED_PEER_KEY, connected: true, heardAt: Date.now() - 4_000 }
+      ],
       worktrees: [
+        {
+          id: `peer:${SEEDED_AWAY_KEY.slice(0, 12)}:wt_remote_9`,
+          handle: 'marcus',
+          publicKey: SEEDED_AWAY_KEY,
+          name: 'retry budget',
+          branch: 'fix/retry-budget',
+          state: 'ready' as const,
+          heardAt: Date.now() - 2_700_000,
+          live: false,
+          panes: [
+            {
+              id: `peer:${SEEDED_AWAY_KEY.slice(0, 12)}:t_remote_9`,
+              title: 'codex',
+              shell: '/bin/zsh',
+              agent: 'codex' as const,
+              running: true,
+              busy: false,
+              quietForMs: 120_000
+            }
+          ]
+        },
         {
           id: `peer:${SEEDED_PEER_KEY.slice(0, 12)}:wt_remote_1`,
           handle: 'priya',
@@ -654,6 +682,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
           branch: 'perf/compaction',
           state: 'ready' as const,
           heardAt: Date.now() - 4_000,
+          live: true,
           panes: [
             {
               id: `peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_1`,

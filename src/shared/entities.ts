@@ -514,6 +514,31 @@ export type TeammateWorktree = PeerWorktree & {
   publicKey: string
   /** When this was last heard, by this machine's clock. */
   heardAt: number
+  /**
+   * Whether the link this came over is confirmed and connected right now.
+   *
+   * False is a row out of the local cache: a true picture of what that teammate
+   * was showing when their machine was last reachable, and not a statement
+   * about what it is showing now. Nothing may be done to a pane on a row that
+   * is not live — the peer is not there to do it to.
+   */
+  live: boolean
+}
+
+/**
+ * One teammate on the roster, and whether there is any picture of them at all.
+ *
+ * "Their machine is away" and "nothing has ever been heard from them" are
+ * different facts and read differently: the first has rows behind it, and the
+ * second is a colleague whose app has never been up while yours was.
+ */
+export type TeammateStanding = {
+  handle: string
+  publicKey: string
+  /** Their link is connected and has confirmed key possession. */
+  connected: boolean
+  /** When anything was last heard from them, or null if it never has been. */
+  heardAt: number | null
 }
 
 /**
@@ -553,5 +578,7 @@ export type TeammatePresence = {
   projectId: string
   /** Sorted by handle then by worktree name, so two reads compare cleanly. */
   worktrees: TeammateWorktree[]
+  /** Every teammate on this project's roster, those never heard from included. */
+  teammates: TeammateStanding[]
   readAt: number
 }

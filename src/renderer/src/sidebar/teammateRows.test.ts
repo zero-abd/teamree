@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { TeammateWorktree } from '@shared/entities'
+import type { TeammatePresence, TeammateWorktree } from '@shared/entities'
 import { ACTIVITY_LABEL } from './agentRows'
-import { teammateRows, teammateTitle } from './teammateRows'
+import { teammateRows, teammateTitle, unheardTeammates, unheardTitle } from './teammateRows'
 
 const NOW = 1_700_000_000_000
 
@@ -14,6 +14,7 @@ function theirWorktree(overrides: Partial<TeammateWorktree> = {}): TeammateWorkt
     branch: 'perf/compaction',
     state: 'ready',
     heardAt: NOW,
+    live: true,
     panes: [],
     ...overrides
   }
@@ -115,5 +116,60 @@ describe('a teammate’s rows', () => {
   it('says whose it is before it says anything else', () => {
     const [row] = teammateRows([theirWorktree({ panes: [pane()] })], NOW)
     expect(teammateTitle(row!)).toContain('priya’s worktree on their machine')
+  })
+})
+
+describe('a teammate whose machine is away', () => {
+  it('keeps their worktrees on screen, and says how old what is on them is', () => {
+    const [row] = teammateRows([theirWorktree({ live: false, heardAt: NOW - 600_000, panes: [pane()] })], NOW)
+
+    expect(row?.name).toBe('index compaction')
+    expect(row?.live).toBe(false)
+    expect(row?.staleness?.age).toBe('10m')
+    expect(teammateTitle(row!)).toContain('priya’s machine is not connected')
+  })
+
+  it('carries the unrounded fact as well as the wording, so acting on a pane can gate on it', () => {
+    // The badge forgives a blink; `live` does not. Anything that could reach a
+    // teammate's pane has to read the one that forgives nothing.
+    const [blinking] = teammateRows([theirWorktree({ live: false, heardAt: NOW - 1_000 })], NOW)
+    expect(blinking?.staleness).toBeNull()
+    expect(blinking?.live).toBe(false)
+  })
+
+  it('says nothing about age while their machine is answering', () => {
+    const [row] = teammateRows([theirWorktree({ live: true, heardAt: NOW - 600_000 })], NOW)
+    expect(row?.staleness).toBeNull()
+    expect(teammateTitle(row!)).not.toContain('not connected')
+  })
+})
+
+describe('a teammate never heard from', () => {
+  const presence = (teammates: TeammatePresence['teammates']): TeammatePresence => ({
+    projectId: 'p1',
+    worktrees: [],
+    teammates,
+    readAt: NOW
+  })
+
+  it('is named as unheard rather than shown as a teammate with no work', () => {
+    const unheard = unheardTeammates(
+      presence([
+        { handle: 'marcus', publicKey: 'm==', connected: false, heardAt: null },
+        { handle: 'priya', publicKey: 'p==', connected: true, heardAt: NOW }
+      ])
+    )
+    expect(unheard).toEqual(['marcus'])
+    expect(unheardTitle(unheard)).toContain('not even an old one')
+  })
+
+  it('is not the same as a teammate whose rows are simply old', () => {
+    expect(
+      unheardTeammates(presence([{ handle: 'bob', publicKey: 'b==', connected: false, heardAt: NOW - 1 }]))
+    ).toEqual([])
+  })
+
+  it('says nothing at all before anything has been asked', () => {
+    expect(unheardTeammates(undefined)).toEqual([])
   })
 })

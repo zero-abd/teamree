@@ -231,6 +231,33 @@ describe.skipIf(!RELAY_BUILT)('two peers over the real relay', () => {
       'second thing'
     ])
   })
+
+  it('keeps a teammate’s worktrees on screen when their machine goes, and makes them live again when it returns', async () => {
+    const shown = (): string[] => alice.service.presence({ projectId: 'p_alice' }).worktrees.map((entry) => entry.name)
+    await until(waiters, () => shown().length === 2, 'both of Bob’s worktrees to reach Alice')
+    const before = shown()
+
+    bob.service.stop()
+    await until(waiters, () => phase(alice, 'p_alice') !== 'connected', 'Alice to notice Bob has gone')
+
+    // Not one row fewer. A worktree row disappearing reads as a worktree
+    // deleted, and over a real relay that is exactly what a closed laptop would
+    // otherwise look like.
+    const away = alice.service.presence({ projectId: 'p_alice' })
+    expect(away.worktrees.map((entry) => entry.name)).toEqual(before)
+    expect(away.worktrees.some((entry) => entry.live)).toBe(false)
+    expect(away.teammates.map((teammate) => [teammate.handle, teammate.connected])).toEqual([['bob', false]])
+    // Heard, and heard a while ago: never the shape of a teammate never seen.
+    expect(away.teammates.every((teammate) => teammate.heardAt !== null)).toBe(true)
+
+    await bob.service.start()
+    await until(
+      waiters,
+      () => shown().length === 2 && alice.service.presence({ projectId: 'p_alice' }).worktrees.every((e) => e.live),
+      'Bob to come back and his rows to be live again'
+    )
+    expect(shown()).toEqual(before)
+  })
 })
 
 function phase(runtime: PeerRuntime, projectId: string): string | undefined {

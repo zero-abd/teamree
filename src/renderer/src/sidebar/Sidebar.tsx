@@ -17,7 +17,7 @@ import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { evidenceLine } from './outputEvidence'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
-import { teammateRows, type TeammatePaneRow } from './teammateRows'
+import { teammateRows, unheardTeammates, unheardTitle, type TeammatePaneRow } from './teammateRows'
 import { teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { WorktreeRow } from './WorktreeRow'
@@ -133,6 +133,9 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
           // they are unmissable, which is what lets them share the list.
           const theirs = teammateRows(teammates[project.id]?.worktrees ?? [], now, watchEvidence)
           const reading = watchersByPane(watching[project.id])
+          // Teammates on the roster this machine has never heard a word from.
+          // Not the same as away, and not the same as having no worktrees.
+          const unheard = unheardTeammates(teammates[project.id])
           return (
             <section className="project" key={project.id}>
               <div className="project__head">
@@ -220,6 +223,11 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                       onWatch={(pane) => openWatch(project.id, pane)}
                     />
                   ))}
+                  {unheard.length > 0 ? (
+                    <li className="project__unheard" title={unheardTitle(unheard)}>
+                      {`Nothing heard yet from ${unheard.join(', ')}`}
+                    </li>
+                  ) : null}
                   {rows.length === 0 && theirs.length === 0 ? (
                     <li className="project__none">
                       {filter.trim().length > 0 ? (

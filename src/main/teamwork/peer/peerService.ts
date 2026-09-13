@@ -27,6 +27,7 @@
 // member of — the key is a hash of a remote, and somebody who knows the
 // repository exists can compute one.
 
+import { join } from 'node:path'
 import type {
   PaneWatcher,
   PaneWatchers,
@@ -35,6 +36,7 @@ import type {
   PeerPresence,
   Project,
   TeammatePresence,
+  TeammateStanding,
   TeammateWorktree,
   TeamworkStatus,
   Terminal,
@@ -46,6 +48,7 @@ import { createGitRunner, type GitRunner } from '../../git/gitProcess'
 import type { Dispatcher } from '../../runtime/dispatcher'
 import type { SubscriptionChannel, SubscriptionHub } from '../../runtime/subscriptionHub'
 import { notFound } from '../../runtime/runtimeError'
+import { TeammateCacheStore, TEAMMATE_CACHE_FILE, type TeammateCache } from '../../store/teammateCache'
 import { badPaneId } from '../errors'
 import { loadIdentity, loadStaticPrivateKey } from '../identity'
 import { readRoster } from '../roster'
@@ -81,6 +84,8 @@ export type PeerServiceOptions = {
   dial?: RelayDialer
   scheduler?: LinkScheduler
   env?: NodeJS.ProcessEnv
+  /** What each teammate last showed, across a drop and across a restart. */
+  cache?: TeammateCache
   /** Publishes `{ type: 'teammates' }` so the window re-reads. */
   onChange: () => void
   onError?: (error: unknown) => void
@@ -130,7 +135,7 @@ export class PeerService {
    * snapshot that arrived over the session for one repository can then never be
    * read out under another, whatever it claims to contain.
    */
-  readonly #heard = new Map<string, { publicKey: string; presence: PeerPresence; heardAt: number }>()
+  readonly #heard = new Map<string, HeardPresence>()
   readonly #subscribers = new Map<string, SubscriptionChannel>()
   /**
    * Which of this machine's panes each link's teammate has open, and since
@@ -149,6 +154,7 @@ export class PeerService {
    */
   readonly #watching = new Map<string, Set<SubscriptionChannel>>()
 
+  #cache: TeammateCache | undefined
   #dispatch: Dispatcher | undefined
   #identityKey: string | null = null
   #handle: string | null = null
@@ -176,6 +182,10 @@ export class PeerService {
   /** Reads the rosters and relays, then brings every link it finds up. */
   async start(): Promise<void> {
     this.#started = true
+    // Before the links, so the sidebar has last night's picture from the first
+    // frame it paints rather than after the first teammate answers.
+    this.#cache ??=
+      this.#options.cache ?? (await TeammateCacheStore.open(join(this.#options.dataDir, TEAMMATE_CACHE_FILE)))
     await this.reconcile()
   }
 
@@ -183,6 +193,9 @@ export class PeerService {
     this.#started = false
     this.#cancelCoalesce?.()
     this.#cancelCoalesce = undefined
+    // What was heard is kept — that is the whole of milestone E — but with no
+    // link behind it none of it is live any longer.
+    for (const entry of this.#heard.values()) entry.live = false
     for (const record of this.#links.values()) record.link.stop()
     this.#links.clear()
     this.#peerByConnection.clear()
@@ -232,12 +245,47 @@ export class PeerService {
       record.link.stop()
       this.#links.delete(linkId)
       this.#peerByConnection.delete(linkId)
-      this.#heard.delete(linkId)
+      // A link the roster no longer wants is a revocation, and a revoked
+      // teammate's rows go now rather than at the next restart. A link the
+      // roster still wants — one whose relay merely moved — keeps what it was
+      // showing, because it is about to come back to the same teammate. The
+      // copy on disk is left to age out: telling "removed from the roster" from
+      // "the roster could not be read this once" is not something this can do,
+      // and wiping a cache on a transient read is the worse of the two.
+      if (!want) this.#heard.delete(linkId)
+      // The link is going either way, so anything being read across it stops
+      // either way — a row that kept saying "watched by ana" after the link
+      // went would be wrong in the reassuring direction, which is the one
+      // direction this display must never be wrong in.
       this.#watchers.delete(linkId)
-      this.#endWatches(linkId, 'this teammate is no longer on the project’s roster')
+      this.#endWatches(
+        linkId,
+        want ? 'the link to this teammate is being remade' : 'this teammate is no longer on the project’s roster'
+      )
     }
 
     if (wanted.size > 0) this.#privateKey ??= await loadStaticPrivateKey(this.#options.dataDir)
+
+    // What was last heard, for every link the roster still wants, before
+    // anything dials. A sidebar painted during the handshake then shows what
+    // this machine knew instead of an empty project. It enters stale: a cached
+    // snapshot has confirmed nothing, and everything downstream reads it that
+    // way until a frame from the far end decrypts.
+    for (const [linkId, want] of wanted) {
+      if (this.#heard.has(linkId)) continue
+      const cached = this.#cache?.get(want.publicKey, want.projectKey)
+      if (!cached) continue
+      this.#heard.set(linkId, {
+        publicKey: want.publicKey,
+        presence: {
+          revision: 0,
+          handle: cached.handle,
+          projects: [{ projectKey: want.projectKey, worktrees: cached.worktrees }]
+        },
+        heardAt: cached.heardAt,
+        live: false
+      })
+    }
 
     for (const [linkId, want] of wanted) {
       if (this.#links.has(linkId)) continue
@@ -268,26 +316,54 @@ export class PeerService {
     }
   }
 
-  /** Every teammate's worktrees in one project, as last heard. */
+  /**
+   * Every teammate's worktrees in one project, live or as last heard.
+   *
+   * Three things a reader has to be able to tell apart, and they are three
+   * different shapes here rather than three readings of one:
+   *
+   *   * **Their machine is away.** Rows, with `live: false` and the age of what
+   *     is on them. They are still working on that branch; you simply cannot
+   *     see what it is doing this second.
+   *   * **They are here and that worktree is gone.** No row. A snapshot is the
+   *     whole of what a teammate has, so what is missing from the newest one is
+   *     removed — the cache replaces rather than accumulates, and a worktree
+   *     they deleted stops being shown the moment they say so.
+   *   * **Nothing has ever been heard from them.** No rows and no cache, which
+   *     is why `teammates` lists the roster separately: a colleague whose app
+   *     has never been up while yours was is not a colleague with no worktrees.
+   */
   presence(params: ParamsOf<'teamwork.presence'>): TeammatePresence {
     const facts = this.#projects.get(params.projectId)
     if (!facts) throw notFound(`no project with id ${params.projectId}`)
 
     const now = this.#scheduler.now()
     const worktrees: TeammateWorktree[] = []
-    if (facts.projectKey !== undefined) {
-      // Reached through this project's own links, so a snapshot heard on
-      // another repository's session cannot be read out here however it is
-      // shaped. Being on the roster is still required: it is what makes a
-      // project key — which is only a hash of a remote, computable by anybody
-      // who knows the repository exists — mean something when it is claimed.
+    const teammates: TeammateStanding[] = []
+    // Nothing is expected of a project teamwork is not running on, so nobody is
+    // reported unheard from either: "nothing heard from ana" where there is no
+    // relay would read as a fault rather than as a thing nobody has set up.
+    const projectKey = facts.disabledReason === null ? facts.projectKey : undefined
+    // Reached through this project's own links, so a snapshot heard on another
+    // repository's session cannot be read out here however it is shaped. Being
+    // on the roster is still required: it is what makes a project key — which
+    // is only a hash of a remote, computable by anybody who knows the
+    // repository exists — mean something when it is claimed.
+    if (projectKey !== undefined) {
       for (const publicKey of facts.rosterKeys) {
         if (publicKey === this.#identityKey) continue
-        const entry = this.#heard.get(linkIdFor(publicKey, facts.projectKey))
+        const linkId = linkIdFor(publicKey, projectKey)
+        const entry = this.#heard.get(linkId)
+        const connected = this.#links.get(linkId)?.status.phase === 'connected'
+        const handle = this.#handleFor(publicKey) ?? entry?.presence.handle ?? publicKey.slice(0, 8)
+        teammates.push({ handle, publicKey, connected, heardAt: entry?.heardAt ?? null })
         if (!entry) continue
-        const project = entry.presence.projects.find((candidate) => candidate.projectKey === facts.projectKey)
+        const project = entry.presence.projects.find((candidate) => candidate.projectKey === projectKey)
         if (!project) continue
-        const handle = this.#handleFor(publicKey) ?? entry.presence.handle ?? publicKey.slice(0, 8)
+        // Both halves, because either one alone would be a way for a cached
+        // snapshot to be read as a live one: the entry is only live if a frame
+        // decrypted on it, and only while the link it decrypted on is still up.
+        const live = entry.live && connected
         for (const worktree of project.worktrees) {
           worktrees.push({
             ...worktree,
@@ -297,14 +373,16 @@ export class PeerService {
             panes: worktree.panes.map((pane) => ({ ...pane, id: `peer:${publicKey.slice(0, 12)}:${pane.id}` })),
             handle,
             publicKey,
-            heardAt: entry.heardAt
+            heardAt: entry.heardAt,
+            live
           })
         }
       }
     }
 
     worktrees.sort((a, b) => a.handle.localeCompare(b.handle) || a.name.localeCompare(b.name))
-    return { projectId: facts.projectId, worktrees, readAt: now }
+    teammates.sort((a, b) => a.handle.localeCompare(b.handle))
+    return { projectId: facts.projectId, worktrees, teammates, readAt: now }
   }
 
   /**
@@ -487,10 +565,18 @@ export class PeerService {
         const record = this.#links.get(linkId)
         if (record) record.status = status
         // Anything but `connected` means nothing has confirmed on this session,
-        // so what it last showed is no longer something this app will render as
-        // live. Milestone E is what gives it a stale life instead.
+        // so what it last showed stops being live — and stays on screen, marked
+        // stale and dated, because a row vanishing reads as a worktree deleted.
+        // Not deleted, either: the revision it was heard at goes with it, so a
+        // peer that restarted and began again at 1 is not mistaken for a reply
+        // that arrived late.
+        //
+        // What a dropped link must never keep is anything that claims to be
+        // happening now. A remembered worktree is honest; a remembered pair of
+        // eyes is not.
         if (status.phase !== 'connected') {
-          this.#heard.delete(linkId)
+          const entry = this.#heard.get(linkId)
+          if (entry) entry.live = false
           // A link that is not up is not carrying anybody's eyes either, and a
           // row that kept saying "watched by ana" after her machine went would
           // be the one thing this display must never be: wrong in the
@@ -511,11 +597,28 @@ export class PeerService {
     link.start()
   }
 
-  /** Drops a snapshot that is behind the one already held for this link. */
+  /**
+   * Drops a snapshot that is behind the one already held for this link.
+   *
+   * Only ever reached for a session that has confirmed key possession — the
+   * link will not forward a stream event before that — so this is also the one
+   * door through which anything becomes live. A cached entry is stale, and
+   * what makes it live again is this, not the link coming up.
+   */
   #record(linkId: string, publicKey: string, presence: PeerPresence): void {
     if (!isPresence(presence)) return
-    if (!isNewerPresence(this.#heard.get(linkId)?.presence, presence)) return
-    this.#heard.set(linkId, { publicKey, presence, heardAt: this.#scheduler.now() })
+    const held = this.#heard.get(linkId)
+    if (!isNewerPresence(held?.live === true ? held.presence : undefined, presence)) return
+    const heardAt = this.#scheduler.now()
+    this.#heard.set(linkId, { publicKey, presence, heardAt, live: true })
+    // Only the project this session is for, out of everything the snapshot
+    // happens to carry. A peer that named ten project keys it invented would
+    // otherwise get ten cache slots for them and push out every real one.
+    const projectKey = this.#peerByConnection.get(linkId)?.projectKey
+    const project = presence.projects.find((candidate) => candidate.projectKey === projectKey)
+    if (projectKey !== undefined && project) {
+      this.#cache?.put({ publicKey, projectKey, handle: presence.handle, heardAt, worktrees: project.worktrees })
+    }
     this.#options.onChange()
   }
 
@@ -659,13 +762,24 @@ type WantedLink = {
   relayUrl: string
 }
 
+/** What one link last said, and whether that is still a live claim. */
+type HeardPresence = {
+  publicKey: string
+  presence: PeerPresence
+  /** This machine's clock when it arrived, or when the cache recorded it. */
+  heardAt: number
+  /** True only between a frame decrypting on this session and that session ending. */
+  live: boolean
+}
+
 /**
  * Whether a snapshot is worth applying over the one already held.
  *
  * Revisions are per sender and only ever increase, so "behind" is an answer and
- * not a guess. A peer that restarted begins again at 1, which reads as behind —
- * and is, because its link was rebuilt and the old snapshot was dropped with
- * it, so there is nothing for a fresh one to be behind.
+ * not a guess — but only within one session. A peer that restarted begins again
+ * at 1, and the snapshot kept from before their laptop closed is not something
+ * a fresh one can be behind, so the caller stops offering it as a comparison
+ * the moment its session ends.
  */
 export function isNewerPresence(held: PeerPresence | undefined, incoming: PeerPresence): boolean {
   return held === undefined || incoming.revision > held.revision
