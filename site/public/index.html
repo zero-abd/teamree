@@ -501,7 +501,7 @@ pre[tabindex]{ scrollbar-gutter:stable; }
           <b>Clear the quarantine flag, once.</b> Every file a browser downloads is marked
           with <code>com.apple.quarantine</code>; removing it tells macOS this is a file you
           put there on purpose.
-          <div class="cmd">
+          <div class="cmd has-copy">
             <pre><code id="cmd-xattr">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
             <button class="cmd-copy" type="button" data-copy="cmd-xattr">Copy</button>
           </div>
@@ -546,7 +546,7 @@ pre[tabindex]{ scrollbar-gutter:stable; }
         matching line in <code>SHA256SUMS.txt</code>, published beside the <code>.dmg</code>.
         If they agree, the file you have is the file the build produced.
       </p>
-      <div class="cmd">
+      <div class="cmd has-copy">
         <pre><code id="cmd-sum">shasum -a 256 teamree-0.1.0.dmg</code></pre>
         <button class="cmd-copy" type="button" data-copy="cmd-sum">Copy</button>
       </div>
@@ -760,7 +760,7 @@ demo:video:parked -->
       app carries the Worker with it, so it is one command from any directory and needs no
       clone of the repository:
     </p>
-    <div class="cmd" style="margin-top:var(--s5)">
+    <div class="cmd has-copy" style="margin-top:var(--s5)">
       <pre><code id="cmd-relay">/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy</code></pre>
       <button class="cmd-copy" type="button" data-copy="cmd-relay">Copy</button>
     </div>
