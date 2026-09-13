@@ -186,7 +186,25 @@ export function parseRelayUrl(raw: string): RelayUrlParse {
   if (url.search || url.hash) return { ok: false, reason: 'a relay URL carries no query or fragment' }
   // The rendezvous id is appended to this, so a trailing slash here would make
   // the path the relay sees have an empty segment in the middle of it.
-  return { ok: true, url: `${url.origin}${url.pathname.replace(/\/+$/, '')}` }
+  const path = url.pathname.replace(/\/+$/, '')
+  // An origin with no path on it is the half-followed instruction: the scheme
+  // was corrected to wss and the endpoint was not added. It cannot be dialled
+  // by any relay configuration that exists — the rendezvous is appended, so
+  // the relay sees `/<rendezvous>`, and a relay serves under a path that must
+  // begin with `/`, which no single segment can match. The socket then fails
+  // to upgrade and the app reports the relay unreachable, sending two people
+  // to debug a healthy deploy. Refused rather than corrected: the path is the
+  // team's answer to where their relay is served, and this only says which
+  // answer is missing.
+  if (path === '') {
+    const suggestion = `${url.origin}${RELAY_ENDPOINT_PATH}`
+    return {
+      ok: false,
+      reason: `it has no path, and a relay is served under one. A deployed relay is reached at ${suggestion}`,
+      suggestion
+    }
+  }
+  return { ok: true, url: `${url.origin}${path}` }
 }
 
 /**

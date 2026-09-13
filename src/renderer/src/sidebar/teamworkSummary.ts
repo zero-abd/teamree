@@ -1,9 +1,10 @@
 // One line about whether teamwork is working, for the project header.
 //
-// The whole difficulty is that "no teammates on screen" has five causes and
-// four of them are not each other:
+// The whole difficulty is that "no teammates on screen" has six causes and
+// five of them are not each other:
 //
 //   * nobody has set a relay up here — a thing to do, not a fault;
+//   * this machine's own key was never pushed — nobody can address it;
 //   * the relay cannot be reached — this machine's network, or the relay's;
 //   * the relay is fine and the teammate is not connected — their machine;
 //   * somebody answered and did not authenticate — a real problem;
@@ -40,6 +41,19 @@ export function teamworkSummary(status: TeamworkStatus | undefined): TeamworkSum
 
   if (status.disabledReason !== null) {
     return { tone: 'off', label: 'Teamwork off', detail: status.disabledReason }
+  }
+  // Before any phase, because every phase below would be a sentence about
+  // somebody else's machine. An unenrolled key means each link is parked on a
+  // rendezvous the teammate has no key to compute, so they all sit at
+  // `waiting` and the header reads "Nobody connected" — pointing at the one
+  // machine that is doing nothing wrong.
+  if (!status.enrolled) {
+    return {
+      tone: 'off',
+      label: 'Your key is not here',
+      detail:
+        'Your own key is not in .teamree/members in this checkout, so no teammate can reach you — their machines have nothing to address. Add it in Members, then commit and push it.'
+    }
   }
   if (status.links.length === 0) {
     return {

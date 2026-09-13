@@ -161,6 +161,13 @@ at the root — but the refusal now says what the corrected URL would be, so
 pasting the address the deploy printed costs you a sentence rather than a
 search.
 
+Both halves of that correction are required, and the app checks both: a `wss://`
+URL with no path on it is refused the same way, with the same endpoint offered
+back. The rendezvous id is appended to whatever you write, so a host on its own
+dials a path no relay serves, and the 404 that comes back is indistinguishable
+from a relay that is not there — which is how a healthy deploy gets reported as
+unreachable on both machines at once.
+
 ### Write it into the repository
 
 The relay goes in the repository, at **`.teamree/relay`**, beside the member
@@ -237,7 +244,9 @@ execution.
 writes the file and stops. It does not stage it, commit it or push it — not
 because that would be hard, but because doing it for you would hide the only
 step that means anything. A key nobody pushed is not membership; a key the app
-pushed on your behalf would be a claim you never made.
+pushed on your behalf would be a claim you never made. Until your key is on the
+roster your checkout can see, the project header says **Your key is not here**
+and names this step, rather than counting teammates who cannot reach you.
 
 The dialog prints these underneath, naming every file it has written — so if you
 also set the relay in step 3, this one commit carries both:
@@ -310,9 +319,13 @@ teamwork is doing. The ones you will see are:
   no `.teamree/relay`, no `origin` remote, or a roster with nobody in it. This
   is the ordinary state of a project nobody has done this to, not a fault.
 - **No teammates** — the roster has nobody in it but you.
+- **Your key is not here** — your own key is not in `.teamree/members` in this
+  checkout, so nobody can address your machine. This is step 4, either not done
+  or not pushed, and no amount of waiting fixes it.
 - **Connecting…** — dialling.
-- **Nobody connected** — the relay is reachable and no teammate's machine is on
-  it. Normal when your colleague has not got there yet.
+- **Nobody connected** — the relay is reachable, your key is on the roster, and
+  no teammate's machine is on it. Normal when your colleague has not got there
+  yet.
 - **1 connected** — the one you are after, and it means a Noise session that
   authenticated against the key in the repository and has since been confirmed
   by a frame only the holder of the private half could have sent.
@@ -473,13 +486,13 @@ cd ~/teamree-example && git pull && cat .teamree/relay
 Both of you, and compare the strings exactly, scheme included — or open the
 Members dialog on each machine, which shows the URL in effect and which of the
 two places it came from. If one of you has the file and the other does not,
-somebody did not push. If it says the scheme is `https`, not ws or wss, you
-pasted the address the deploy printed rather than the endpoint — add `/v1/relay`
-and make it `wss://`, which is what the dialog says back to you if you paste it
-there. If you set `TEAMREE_RELAY_URL` earlier to test a tunnel and forgot, it is
-still winning over the file in whatever process inherited it; the header's
-tooltip says `(from the environment)` when that is what happened, and the
-dialog names the variable and its value.
+somebody did not push. If it says the scheme is `https`, not ws or wss, or that
+it has no path, you pasted the address the deploy printed rather than the
+endpoint — add `/v1/relay` and make it `wss://`, which is what the dialog says
+back to you if you paste it there. If you set `TEAMREE_RELAY_URL` earlier to
+test a tunnel and forgot, it is still winning over the file in whatever process
+inherited it; the header's tooltip says `(from the environment)` when that is
+what happened, and the dialog names the variable and its value.
 
 ### The relay is not reachable
 
