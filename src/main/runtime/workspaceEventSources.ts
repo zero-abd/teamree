@@ -8,8 +8,10 @@
 //   - git already emits its own state transitions (including the ones that
 //     happen on a background task, long after the call returned), so that
 //     emitter is simply bridged onto the bus.
-//   - the terminal service has no lifecycle emitter, so its mutating handlers
-//     are re-registered wrapped: the wrapper publishes after the inner handler
+//   - the terminal service announces only one transition of its own — a pane's
+//     process ending, which no call causes — so that rides the manager's exit
+//     report and every other terminal change is a mutating handler
+//     re-registered wrapped: the wrapper publishes after the inner handler
 //     succeeds. Registering a method twice is how the runtime already replaces
 //     placeholders, so this needs nothing new from the registry.
 //   - and the filesystem, which answers to nobody's call at all: files under a
@@ -126,8 +128,17 @@ export function publishTerminalEvents(
 ): void {
   const { handlers, schemas } = terminals
 
+  // A shell exiting on its own is nobody's method call, so the only way to hear
+  // about it is the session's own lifecycle. The manager reports it for every
+  // pane it started, which is what makes a pane restored at startup — started
+  // before any of these handlers exist — announce its exit like any other.
+  terminals.manager.onTerminalExit((terminalId, exitCode) => {
+    bus.emit({ type: 'terminalExited', terminalId, exitCode })
+    // The terminal's own record changed with it: `running` is false now.
+    bus.emit({ type: 'terminals' })
+  })
+
   const announceOpened = (terminal: Terminal): void => {
-    watchForExit(terminals, bus, terminal.id)
     bus.emit({ type: 'terminals' })
     // Opening a pane rewrites the worktree's tree, so the layout changed too.
     bus.emit({ type: 'layout', worktreeId: terminal.worktreeId })
@@ -175,27 +186,5 @@ export function publishTerminalEvents(
     const layout = await handlers['layout.set'](params, call)
     bus.emit({ type: 'layout', worktreeId: layout.worktreeId })
     return layout
-  })
-}
-
-/**
- * A shell exiting on its own is nobody's method call, so the only way to hear
- * about it is the terminal's own event stream. This attaches one that ignores
- * output and waits for the exit, which is cheap: the session already fans its
- * events out to whatever is listening.
- */
-function watchForExit(terminals: TerminalService, bus: WorkspaceEventBus, terminalId: string): void {
-  let detach = (): void => {}
-  detach = terminals.manager.attachStream(terminalId, {
-    emit: (event) => {
-      if (event.type !== 'exit') return
-      detach()
-      bus.emit({ type: 'terminalExited', terminalId, exitCode: event.exitCode })
-      // The terminal's own record changed with it: `running` is false now.
-      bus.emit({ type: 'terminals' })
-    },
-    // The manager ends this stream when the terminal goes; its own teardown has
-    // already detached us by then.
-    close: () => {}
   })
 }

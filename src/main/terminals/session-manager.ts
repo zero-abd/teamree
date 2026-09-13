@@ -79,9 +79,12 @@ export type TerminalSessionManagerOptions = {
 
 type AttachedStream = { channel: StreamChannel; detach: () => void }
 
+export type TerminalExitListener = (terminalId: string, exitCode: number) => void
+
 export class TerminalSessionManager {
   private readonly sessions = new Map<string, PtySession>()
   private readonly streams = new Map<string, Set<AttachedStream>>()
+  private readonly exitListeners = new Set<TerminalExitListener>()
   private readonly ownSubscriptions = new Map<string, { terminalId: string; end: () => void }>()
   private readonly layouts: LayoutRepository
   private readonly records: SessionRepository
@@ -194,6 +197,23 @@ export class TerminalSessionManager {
     return () => {
       unlisten()
       streams.delete(stream)
+    }
+  }
+
+  /**
+   * Reports every pane's exit, whichever call opened the pane — or no call at
+   * all, for the ones restoreSessions() brings back.
+   *
+   * Hung off the session rather than off the handler that created it on
+   * purpose: restored panes are started before any handler exists to wrap, so a
+   * watcher attached at create time covers only this run's panes and a pane
+   * that came back from the last launch would die unannounced. A restored pane
+   * and a fresh one have to be indistinguishable to every client.
+   */
+  onTerminalExit(listener: TerminalExitListener): () => void {
+    this.exitListeners.add(listener)
+    return () => {
+      this.exitListeners.delete(listener)
     }
   }
 
@@ -365,6 +385,7 @@ export class TerminalSessionManager {
     })
 
     this.sessions.set(session.id, session)
+    this.watchForExit(session)
     const snapshot = session.snapshot()
     this.records.putTerminal({
       id: session.id,
@@ -404,6 +425,19 @@ export class TerminalSessionManager {
   /** Stored and returned as copies: nothing outside can mutate a live layout. */
   private saveLayout(layout: Layout): Layout {
     return cloneLayout(this.layouts.putLayout(cloneLayout(layout)))
+  }
+
+  private watchForExit(session: PtySession): void {
+    let detach = (): void => {}
+    detach = session.on((event) => {
+      if (event.type !== 'exit') return
+      detach()
+      // A pane already out of the registry was closed or shut down on purpose:
+      // that removal is what a client was told about, and an exit event for a
+      // terminal it can no longer list would be news about nothing.
+      if (this.sessions.get(session.id) !== session) return
+      for (const listener of this.exitListeners) listener(session.id, event.exitCode)
+    })
   }
 
   private streamsFor(terminalId: string): Set<AttachedStream> {

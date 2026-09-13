@@ -342,8 +342,14 @@ export class PtySession {
     // An exited pane is not busy, whatever it was doing a moment ago.
     this.cancelQuietWatch?.()
     this.cancelQuietWatch = undefined
+    const wasBusy = this.busy
     this.busy = false
     this.exitCode = draining.exitCode
+    // The quiet countdown that would have reported this edge was just
+    // cancelled, so the edge has to be reported here instead: a pane that dies
+    // mid-burst goes busy -> not busy like any other, and a subscriber watching
+    // activity must not be left holding the last thing it was told.
+    if (wasBusy) this.init.onActivityChange?.(this)
     this.emit({ type: 'exit', exitCode: this.exitCode })
     for (const waiter of this.exitWaiters) waiter()
     this.exitWaiters.clear()
