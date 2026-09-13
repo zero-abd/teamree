@@ -80,7 +80,10 @@ const ICNS_PNG_TYPES = [
  * present and not empty; the artwork in them is checked by extracting the file
  * further down.
  */
-const ICNS_ARGB_TYPES = [['ic04', 16], ['ic05', 32]]
+const ICNS_ARGB_TYPES = [
+  ['ic04', 16],
+  ['ic05', 32]
+]
 
 /**
  * Never acceptable. `icp4` and `icp5` nominally mean 16x16 and 32x32, and a PNG
