@@ -27,7 +27,14 @@ nothing to install on either machine and nothing to go stale; no build step, so
 a change is live the moment it is saved; and a test suite that runs in a second,
 so an agent's work can be checked as often as you like.
 
-`../../docs/trying-teamwork.md` is the runbook that uses it.
+**[`../../docs/trying-teamwork.md`](../../docs/trying-teamwork.md) is the runbook
+that uses it**, and the place to start if you are here to try teamwork rather
+than to read a bill-splitter. It turns this directory into a real repository with
+`../init-example-repo.mjs`, has both people push it somewhere they can both push
+to — which matters, because push access is what membership is, and because
+teamree matches two checkouts by their `origin` remote and a project without one
+does not take part — and walks from there to each person's worktrees showing up
+in the other's sidebar.
 
 ## Running it
 

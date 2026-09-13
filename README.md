@@ -99,9 +99,14 @@ people can take a task each without colliding. `node
 examples/init-example-repo.mjs ~/teamree-example` turns it into a real
 repository.
 
-`docs/trying-teamwork.md` walks two people through it end to end, and
-`scripts/teamwork/two-peers.mjs` runs both sides on one machine. Teamwork itself
-is still being built; the runbook marks which steps are waiting on it.
+**[`docs/trying-teamwork.md`](docs/trying-teamwork.md) is the thing to follow**:
+two people on two Macs, start to finish — the relay, both keys committed and
+pushed, and each other's worktrees in the sidebar — with a troubleshooting
+section for what actually goes wrong. Identity, the roster, the relay and
+presence are built; watching a teammate's pane and typing into one are the next
+two milestones, and the runbook is exact about which is which.
+`docs/teamwork.md` is why it is built this way, and `relay/README.md` is how to
+stand a relay up.
 
 ## Packaged builds
 
