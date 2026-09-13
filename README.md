@@ -62,6 +62,12 @@ teamree terminal run --worktree fix-login --command "npm test"
 teamree worktree changes fix-login
 ```
 
+**The relay, for when the team is not in one room.** Two machines behind two
+routers cannot reach each other, so both dial out to a small relay that splices
+their connections together and is never trusted with what crosses it. A team
+runs its own, as a Cloudflare Worker or a container — see `relay/README.md`.
+`docs/teamwork.md` is the plan the relay is part of.
+
 ## Running it
 
 ```sh

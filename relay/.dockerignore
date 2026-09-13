@@ -1,0 +1,9 @@
+node_modules
+dist
+test
+wrangler.jsonc
+tsconfig.test.json
+tsconfig.workers.json
+vitest.config.ts
+README.md
+.wrangler

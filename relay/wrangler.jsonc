@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "teamree-relay",
+  "main": "src/workers/worker.ts",
+  "compatibility_date": "2026-04-07",
+
+  // No nodejs_compat, and that is a property worth keeping: everything the
+  // Worker runs is in src/core, which imports nothing from Node. If adding a
+  // compatibility flag here ever becomes necessary, something has leaked out of
+  // the adapter and into the part that is supposed to be portable.
+
+  "workers_dev": true,
+  "observability": { "enabled": true },
+
+  // One Durable Object per rendezvous. The name is a hash of the pair's shared
+  // token, so the object exists for exactly as long as the two of them are
+  // talking and nobody has to create or clean anything up.
+  "durable_objects": {
+    "bindings": [{ "name": "RENDEZVOUS_PAIR", "class_name": "RelayPair" }]
+  },
+
+  // SQLite-backed, because that is the only storage backend available on the
+  // Workers Free plan. Nothing is written to it: the class exists to hold two
+  // live sockets, not to keep anything.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RelayPair"] }],
+
+  // Every limit the relay enforces, at its default. Change one here and
+  // redeploy; a value that cannot be parsed stops the Worker starting rather
+  // than being quietly ignored.
+  "vars": {
+    "RELAY_PATH": "/v1/relay",
+    "RELAY_MAX_FRAME_BYTES": "262144",
+    "RELAY_MAX_FRAMES_PER_SECOND": "200",
+    "RELAY_MAX_BYTES_PER_SECOND": "4194304",
+    "RELAY_HELLO_TIMEOUT_MS": "10000",
+    "RELAY_PAIR_TIMEOUT_MS": "600000",
+    "RELAY_IDLE_TIMEOUT_MS": "600000",
+    "RELAY_KEEPALIVE_INTERVAL_MS": "30000"
+  }
+}
