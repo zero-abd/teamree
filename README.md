@@ -8,9 +8,10 @@ git worktree, and keep track of all of them in one window.
 ## Status
 
 Single-user and working. Runs from source with `npm run dev`, and packages for
-macOS, Windows and Linux — though only macOS has actually been built and
-launched; see the known gaps in `ROADMAP.md`, which are recorded rather than
-discovered. Team features come after this works.
+macOS, Windows and Linux — though only macOS and Linux have actually been built
+and launched; the Windows installer has never been made. See the known gaps in
+`ROADMAP.md`, which are recorded rather than discovered. Team features come
+after this works.
 
 ## What it does
 
@@ -70,7 +71,8 @@ npm run dev
 
 `npm test` runs the suite, including an acceptance pass that drives a real
 runtime over the real socket. `npm run typecheck`, `npm run lint` and
-`npm run format` are what CI would check.
+`npm run format:check` are what CI checks, on all three platforms, alongside the
+build, the smoke test and the packaged artifact.
 
 ## Packaged builds
 
@@ -90,14 +92,20 @@ Two more, for working on packaging itself:
 - `npm run package:verify` — launches the packaged app against a throwaway
   profile, drives it through the CLI the app ships, opens a real PTY in it and
   reads the output back. This is the check that matters: `node-pty` needs its
-  native binary and its `spawn-helper` outside the asar with the executable bit
-  intact, and only spawning a shell proves that survived packaging.
+  native binary outside the asar, plus an executable `spawn-helper` on macOS and
+  two backends and a ConPTY sidecar on Windows, and only spawning a shell proves
+  all of that survived packaging.
+
+On Linux, run both the smoke test and this one under a virtual display:
+`xvfb-run --auto-servernum npm run package:verify`. Electron also refuses to
+start as root unless the sandbox is switched off; the scripts detect that and
+pass `--no-sandbox` themselves, so a container needs no special invocation.
 
 Each platform's artifact must be built on that platform. `node-pty` publishes
 prebuilt binaries for macOS and Windows but none for Linux, where `npm install`
 compiles one — so a Linux package built anywhere else would contain no working
-terminal at all. `.github/workflows/package.yml` runs the three builds on three
-runners for that reason.
+terminal at all. `.github/workflows/ci.yml` runs every check and all three
+builds on three runners for that reason.
 
 The app icon is generated, not drawn by hand: `npm run icons` rewrites
 `build/icon.png`, `build/icon.icns`, `build/icon.ico` and `build/icons/`.

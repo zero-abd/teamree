@@ -312,13 +312,33 @@ recorded so none of them is discovered by surprise later.
   command is never re-issued unless it resumes something, so a pane left on a deploy
   or a migration comes back as a shell rather than running it twice. Keeping the
   process itself alive would mean moving PTYs into a daemon that outlives the app.
-- **Only macOS has been packaged and launched.** The Windows installer needs Windows or
-  wine; Linux cannot be packaged off Linux because node-pty has no Linux prebuild and
-  must be compiled. Both are configured, and a three-runner CI workflow exists but has
-  never been run.
-- **Windows behaviour is reasoned, not observed.** Command-line encoding is proved
-  against a reference `CommandLineToArgvW` parser rather than a live ConPTY, and the
-  process-tree kill is untested there. The POSIX equivalent is tested for real.
+- **Linux and macOS are packaged and launched. Windows is not.** Linux is no longer
+  theoretical: `npm ci` compiles node-pty, `npm run package:linux` produces both the
+  AppImage and the `.deb`, and the packaged app has been launched headless under
+  Xvfb, driven through the CLI it ships, and made to spawn a real PTY and read a
+  command's output back — three times over, as the unpacked tree, as the AppImage's
+  own payload, and as a `.deb` installed with `dpkg`. The Windows installer still
+  needs Windows: it has never been built and the app has never started there.
+- **The CI workflow has still never run on GitHub.** It is no longer a stub — it runs
+  typecheck, lint, format, the full suite, the build, the headless smoke test, the
+  package and the packaged-app check on three runners — but "configured" is not
+  "green". Every step of the Linux job has been executed locally, in order, on Linux,
+  and passes. The macOS and Windows jobs are reasoned from the same scripts and have
+  not been run, and the action versions could not be checked from the machine that
+  wrote them.
+- **Windows behaviour is reasoned, not observed.** Narrower than it was, and not
+  closed. Command-line encoding is now checked exhaustively rather than by example:
+  every argument up to four characters over the alphabet that drives the rules, and
+  every pair of arguments up to two, round-trips through a reference
+  `CommandLineToArgvW` parser, and the `cmd.exe` tail is checked against cmd's
+  documented `/S` rule. That proves the encoder agrees with the parsers it is written
+  for. It does not prove a live ConPTY agrees with either, because there is no
+  Windows here to ask. The process-tree kill is still untested on Windows: taskkill
+  is driven through an injected host, so the decisions around it are asserted, but no
+  real taskkill has ever run. The POSIX equivalent is tested for real. Packaging at
+  least fails loudly there now — the afterPack hook refuses a build whose node-pty is
+  missing `conpty.node`, `pty.node`, `winpty.dll`, `winpty-agent.exe` or the bundled
+  ConPTY sidecar, rather than shipping an app whose first terminal never opens.
 - **The Windows CLI launcher is a batch shim**, not a native executable.
 - **A very chatty command can lose the tail of its output.** node-pty destroys the
   pty socket 200ms after the child is reaped, and whatever is still unread at that

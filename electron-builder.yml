@@ -145,6 +145,16 @@ linux:
   icon: build/icons
   category: Development
   synopsis: An ADE built for teamwork
+  # fpm refuses to build a .deb without a maintainer, and package.json's author
+  # has no address. A GitHub noreply address is used on purpose: a Debian control
+  # file must carry something that parses as an address, and this one is real
+  # without being a person's inbox.
+  maintainer: teamree contributors <zero-abd@users.noreply.github.com>
+  # Electron takes its app_id from `desktopName` in package.json, and a desktop
+  # environment matches a running window to its launcher by that id. Syncing the
+  # installed .desktop filename to the same name is what makes the association
+  # hold; StartupWMClass below is the third name that has to agree.
+  syncDesktopName: true
   desktop:
     entry:
       StartupWMClass: teamree
@@ -155,17 +165,28 @@ linux:
       arch: [x64]
 
 deb:
-  # Terminals shell out to git constantly, and an ADE without it is inert.
+  # Split the way dpkg means it, and checked against the built binary rather
+  # than copied from a template: `ldd` on the packaged executable names
+  # libgtk-3, libnss3 and libatspi as link-time dependencies, so the app cannot
+  # start without them. git is here for the same reason — terminals shell out
+  # to it constantly, and an ADE without it is inert.
   depends:
     - git
     - libgtk-3-0
-    - libnotify4
     - libnss3
-    - libxss1
-    - libxtst6
-    - xdg-utils
     - libatspi2.0-0
+  # Not linked. libnotify and libsecret-1 appear only as dlopen names inside the
+  # Electron binary, and xdg-utils is executed by name; each one missing costs a
+  # feature, not the app. Listing them as Depends made the package refuse to
+  # configure on a minimal system that runs teamree perfectly well. apt installs
+  # Recommends by default, so a normal install is unchanged.
+  #
+  # libxss1 and libxtst6 are deliberately absent: they are in electron-builder's
+  # stock list for older Electron, and this build neither links nor dlopens them.
+  recommends:
+    - libnotify4
     - libsecret-1-0
+    - xdg-utils
 
 appImage:
   artifactName: ${productName}-${version}-${arch}.${ext}

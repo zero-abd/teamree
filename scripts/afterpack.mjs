@@ -70,20 +70,27 @@ export default async function afterPack(context) {
   }
 
   // --- the native module has to exist for the target -----------------------
+  // The directory existing is not the same as the binary being in it: a failed
+  // node-gyp run leaves build/Release behind empty, so look for pty.node itself.
   const prebuilt = join(prebuilds, wanted)
   const compiled = join(pty, 'build', 'Release')
-  if (!existsSync(prebuilt) && !existsSync(compiled)) {
+  const binaryDir = [prebuilt, compiled].find((dir) => existsSync(join(dir, 'pty.node')))
+  if (!binaryDir) {
     // node-pty publishes no Linux prebuild: it is compiled by `npm install`, so
     // a Linux artifact packaged on macOS or Windows would ship no PTY at all.
     throw new Error(
-      `node-pty has no binary for ${wanted}: neither ${prebuilt} nor ${compiled} exists. ` +
+      `node-pty has no pty.node for ${wanted}: it is in neither ${prebuilt} nor ${compiled}. ` +
         `Package the ${electronPlatformName} artifact on ${electronPlatformName}, where npm install builds one.`
     )
   }
-  const binaryDir = existsSync(prebuilt) ? prebuilt : compiled
+  log(`node-pty binary for ${wanted} found in ${binaryDir}`)
 
   // --- spawn-helper has to stay executable ---------------------------------
-  if (electronPlatformName !== 'win32') {
+  // macOS only, and deliberately not "every platform that is not Windows":
+  // node-pty builds spawn-helper under `OS=="mac"` alone and calls it from a
+  // `#if defined(__APPLE__)` branch of pty.cc. Linux forks and execvp's in
+  // process, so demanding the helper there fails a package that is in fact fine.
+  if (electronPlatformName === 'darwin') {
     const helper = join(binaryDir, 'spawn-helper')
     if (!existsSync(helper)) {
       throw new Error(`node-pty's spawn-helper is missing from ${binaryDir}; PTY spawning would fail at runtime.`)
@@ -98,6 +105,36 @@ export default async function afterPack(context) {
       throw new Error(`could not make ${helper} executable (mode ${(verified & 0o777).toString(8)}).`)
     }
     log(`spawn-helper ready at mode ${(verified & 0o777).toString(8)}`)
+  }
+
+  // --- the Windows PTY needs more than pty.node ----------------------------
+  // Windows is the platform this project cannot run, so its failures have to be
+  // made to happen here, on the Windows runner, rather than on a user's machine
+  // the first time they open a terminal. node-pty picks its backend at spawn
+  // time: ConPTY out of conpty.node, falling back to winpty, which is pty.node
+  // plus a DLL and a separate agent executable it launches. Any one of these
+  // missing is invisible until a pane fails to open, so all of them are checked.
+  if (electronPlatformName === 'win32') {
+    const required = ['conpty.node', 'pty.node', 'winpty.dll', 'winpty-agent.exe']
+    const missing = required.filter((name) => !existsSync(join(binaryDir, name)))
+    if (missing.length > 0) {
+      throw new Error(
+        `node-pty is missing ${missing.join(', ')} from ${binaryDir}. ` +
+          'Check the files/asarUnpack patterns in electron-builder.yml: without these a packaged ' +
+          'Windows app builds cleanly and then fails to open any terminal.'
+      )
+    }
+    log(`Windows PTY backends present: ${required.join(', ')}`)
+
+    // The conpty/ sidecar carries the Windows Terminal ConPTY implementation
+    // node-pty prefers over the one in the OS. It is loaded by path, not by
+    // require, so nothing would complain at build time if it went missing.
+    const conpty = join(binaryDir, 'conpty')
+    const sidecars = ['conpty.dll', 'OpenConsole.exe'].filter((name) => !existsSync(join(conpty, name)))
+    if (sidecars.length > 0) {
+      throw new Error(`node-pty's bundled ConPTY is incomplete: ${sidecars.join(', ')} missing from ${conpty}.`)
+    }
+    log('bundled ConPTY sidecar is complete')
   }
 
   // --- the shipped CLI launcher has to stay executable ---------------------
