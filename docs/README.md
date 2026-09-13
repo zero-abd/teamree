@@ -19,9 +19,9 @@ Read them in this order. The first is the only one you need in order to try it.
   two Macs: the relay, both keys committed and pushed, and each other's
   worktrees in the sidebar. Ends with a troubleshooting section for what
   actually goes wrong, and is exact about what has not been tried. Step 2 sends
-  you into [`examples/ledger`](../examples/), a small program with a test suite
-  that runs in a second and a task list chosen so two people can take one each
-  without colliding.
+  you into [`examples/ledger`](../examples/ledger/), a small program with a test
+  suite that runs in a second and a task list chosen so two people can take one
+  each without colliding.
 - [**The relay**](../relay/README.md) — the relay your team runs: one command to
   deploy it as a Cloudflare Worker, a container for teams who will not, what it
   costs, what its operator can and cannot see, and the protocol on the wire.
