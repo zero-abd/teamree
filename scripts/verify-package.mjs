@@ -26,7 +26,7 @@ import {
   statSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { electronSandboxArgs } from './electron-sandbox.mjs'
 import { packagedAppCandidates } from './packaged-app.mjs'
 
@@ -100,6 +100,52 @@ for (const path of [app.binary, app.resources, app.launcher, join(app.resources,
   if (!existsSync(path)) fail(`missing from the package: ${path}`)
 }
 ok('app binary and shipped CLI are in place')
+
+// ------------------------------------------------- the relay it ships with --
+
+// Standing up a relay used to need a clone of this repository, and the first
+// person to try it from an installed app got npm's ENOENT about a package.json
+// that was never going to be there. The app now carries the relay's deployable
+// project, and `relay/teamree-relay` writes it into a directory the person owns
+// and deploys it. That claim is only worth making if the files are really in
+// the package, so this checks each one and then runs the launcher for real.
+const relayRoot = join(app.resources, 'relay')
+const relayLauncher = join(relayRoot, process.platform === 'win32' ? 'teamree-relay.cmd' : 'teamree-relay')
+const relayFiles = [
+  relayLauncher,
+  join(relayRoot, 'bin', 'teamree-relay.mjs'),
+  join(relayRoot, 'wrangler.jsonc'),
+  join(relayRoot, 'src', 'workers', 'worker.ts'),
+  join(relayRoot, 'src', 'core', 'rendezvous.ts')
+]
+for (const path of relayFiles) {
+  if (!existsSync(path)) fail(`the relay is not in the package: ${path} is missing, so a .dmg user still needs a clone`)
+}
+if (process.platform !== 'win32' && !(statSync(relayLauncher).mode & 0o111)) {
+  fail(`${relayLauncher} is not executable, so the one command in relay/README.md would not run`)
+}
+
+// The whole of the command short of Wrangler: it resolves the sources beside
+// it, refuses nothing, and writes a project a deploy could run from. Deploying
+// is not attempted — that needs somebody's Cloudflare account — and `--dry-run`
+// is not either, because it fetches Wrangler from the network.
+{
+  const target = join(mkdtempSync(join(tmpdir(), 'teamree-verify-relay-')), 'relay')
+  const isCmd = relayLauncher.endsWith('.cmd')
+  const result = spawnSync(
+    isCmd ? process.env.ComSpec || 'cmd.exe' : relayLauncher,
+    isCmd ? ['/c', relayLauncher, 'deploy', target, '--write-only'] : ['deploy', target, '--write-only'],
+    { encoding: 'utf8', timeout: STEP_TIMEOUT_MS }
+  )
+  if (result.status !== 0) {
+    fail(`the shipped relay command failed to write a project`, `${result.stdout}\n${result.stderr}`)
+  }
+  for (const name of ['wrangler.jsonc', join('src', 'workers', 'worker.ts'), 'package.json', 'README.md']) {
+    if (!existsSync(join(target, name))) fail(`the shipped relay command wrote no ${name} into ${target}`)
+  }
+  rmSync(dirname(target), { recursive: true, force: true })
+  ok('the shipped relay command wrote a deployable Worker project from inside the package')
+}
 
 // ------------------------------------------------------- static PTY checks --
 

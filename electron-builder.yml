@@ -99,6 +99,35 @@ extraResources:
   - from: resources/cli/teamree.ps1
     to: cli/teamree.ps1
 
+# The relay's deployable project, shipped so that standing one up needs no clone
+# of this repository. That was the whole of a usability failure: the instructions
+# said `cd relay && npm install`, which is true only inside a checkout, and
+# somebody who installed the .dmg has none — so what they got was npm's ENOENT
+# about a package.json that was never going to be there.
+#
+# `relay/teamree-relay` writes this tree into a directory the person owns and
+# runs Wrangler there, so nothing is ever deployed or installed from inside the
+# app bundle: /Applications is code-signed, may be read-only, and is not
+# somewhere a person's edited `wrangler.jsonc` should live.
+#
+# Listed file by file rather than as one filtered copy of `relay/`, because a
+# filter that lets `relay/node_modules` through would put tens of thousands of
+# files into every artifact, and the failure mode of getting it wrong is silent
+# weight rather than a build error. scripts/verify-package.mjs checks that every
+# path below is in the built app and that the launcher is executable.
+  - from: relay/teamree-relay
+    to: relay/teamree-relay
+  - from: relay/teamree-relay.cmd
+    to: relay/teamree-relay.cmd
+  - from: relay/bin/teamree-relay.mjs
+    to: relay/bin/teamree-relay.mjs
+  - from: relay/wrangler.jsonc
+    to: relay/wrangler.jsonc
+  - from: relay/src/core
+    to: relay/src/core
+  - from: relay/src/workers
+    to: relay/src/workers
+
 asar: true
 # node-pty loads a .node binary and then execs a sibling `spawn-helper`
 # executable. Neither can be read out of an asar archive, so the whole package

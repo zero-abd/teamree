@@ -1,0 +1,33 @@
+#!/bin/sh
+# The one command that stands a relay up, as it ships inside the installed app
+# (macOS and Linux) and as it sits in a clone of the repository.
+#
+#   /Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy
+#
+# Run it from anywhere. It writes the Worker project into a directory you own
+# and deploys it to your own Cloudflare account; there is nothing to clone and
+# nothing to install first except Node.
+#
+# Unlike the `teamree` CLI beside it, this does not fall back to the app's own
+# Electron binary as a Node runtime. It would work for the copying and then fail
+# at the step that matters: Wrangler is a Node program and this machine needs
+# one either way, so the absence is said once, here, rather than twice.
+set -e
+
+target=$0
+# POSIX symlink resolution: `readlink -f` is not portable to older macOS.
+while [ -L "$target" ]; do
+  link=$(readlink "$target")
+  case $link in
+    /*) target=$link ;;
+    *) target=$(dirname "$target")/$link ;;
+  esac
+done
+here=$(cd "$(dirname "$target")" && pwd)
+
+if command -v node >/dev/null 2>&1; then
+  exec node "$here/bin/teamree-relay.mjs" "$@"
+fi
+
+echo "teamree-relay: deploying a Cloudflare Worker needs Node, and there is none on PATH — install Node 20 or newer from https://nodejs.org and run this again." >&2
+exit 1

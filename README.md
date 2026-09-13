@@ -136,8 +136,15 @@ an agent lacks:
 **The relay, for when the team is not in one room.** Two machines behind two
 routers cannot reach each other, so both dial out to a small relay that splices
 their connections together and is never trusted with what crosses it. A team
-runs its own, as a Cloudflare Worker or a container — see `relay/README.md`.
-`docs/teamwork.md` is the plan the relay is part of.
+runs its own, as a Cloudflare Worker — one command, from any directory, with no
+clone of this repository, because the installed app carries the Worker with it:
+
+```sh
+/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy
+```
+
+`relay/README.md` is the whole of it, including the one fallback for a team that
+will not use Cloudflare. `docs/teamwork.md` is the plan the relay is part of.
 
 ## Running it
 

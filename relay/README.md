@@ -6,50 +6,100 @@ streams together. Outbound-only means no port forwarding, no STUN, no public
 address on either machine, and no difference between an office, a café and a
 phone tether.
 
-The relay is a dumb pipe. It has no database, no accounts and no user records,
-and **it is never trusted with content**: the two peers run a Noise `IK` session
-over the spliced connection, keyed from the public keys already committed to
-your repository, and everything after that handshake is ciphertext. A relay that
-was compromised — or simply run by someone you would rather not read your
-terminal — cannot read a byte of it.
-
-What it can do is get in the way. It can drop frames, delay them, refuse to
-pair, end a session, or claim a rendezvous itself and keep two teammates apart.
-It also holds two things worth naming: the rendezvous token, which is the whole
-of what a peer presents to be paired, and a copy of every frame that has passed
-through it, the handshake's included. Whether holding those is enough for it to
-pass for one of you, rather than only to stand in your way, is a property of the
-peer handshake and not of this program — it is being settled there, in the
-transport above this relay. So read this as: **the relay cannot read your
-terminals, and it can deny and disrupt.** Do not read it as a bound on
-impersonation, because this program is not where that bound lives.
-
-Your team runs this. We do not run one for you, and there is nothing to sign up
+Your team runs this. We do not run one for you, there is nothing to sign up for,
+and the relay is never trusted with content — the two peers encrypt end to end
+through it. [What the operator learns, and what they do not](#what-the-operator-learns-and-what-they-do-not)
+is the whole of that argument, below, and it is worth reading before you hand
+the address to anybody. The commands come first because they are what you came
 for.
 
-Every command below runs in a clone of the teamree repository, because that is
-where this `relay/` directory is — an installation from the `.dmg` does not ship
-it. Clone `https://github.com/zero-abd/teamree` first if you have not already.
+**Deploy it as a Cloudflare Worker.** That is the answer unless you have a
+specific reason otherwise: one command, a permanent address, nothing to babysit,
+and it works from a café and a phone tether because both peers dial out to it.
+The one fallback — [a container you run
+yourself](#if-you-will-not-use-cloudflare-run-the-container) — is at the bottom
+of this file, for teams who will not use Cloudflare at all.
 
 ---
 
-## Pick one of these two
+## Deploy the Worker
 
-|  | Cloudflare Worker | Container |
-| --- | --- | --- |
-| Setup | `npx wrangler deploy`, once | `docker run`, plus a way to be reached |
-| Works from anywhere | Yes | Only if the box is reachable |
-| Money | Free plan is enough for a team; see below | Whatever the box costs |
-| Stays up | Yes, nothing to babysit | As long as the box does |
-| Needs an account | A Cloudflare one | None |
+**What you need first:** a Cloudflare account (the free plan is enough; see
+[What it costs](#what-it-costs)), and **Node 20 or newer**, because Wrangler —
+Cloudflare's deployment tool — is a Node program. Nothing else, and in
+particular **no clone of this repository**: the command below ships inside the
+installed app and carries the Worker's sources with it.
 
-**Take the Worker unless you have a reason not to.** It is one command, it keeps
-working, and it does not care where anyone is. The container is for teams who
-will not use Cloudflare, or who are all on one network anyway.
+**Where to run it: anywhere.** It does not care what directory you are in. It
+writes the Worker project into `~/teamree-relay` — a directory you own, that you
+can edit and keep — and deploys from there.
 
----
+```sh
+/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy
+```
 
-## Path 1 — deploy the Worker
+If you *do* have a clone of this repository, the same command is
+`relay/teamree-relay deploy` from the top of it. It is the same program: the app
+ships a copy of this directory.
+
+A browser opens once, for Cloudflare to log you in. Then it prints the line your
+team needs:
+
+```
+teamree-relay: deployed. Your relay endpoint is
+
+    wss://teamree-relay.<your-subdomain>.workers.dev/v1/relay
+```
+
+That is the whole of it. There are no resource ids to fill in, nothing to click
+in the dashboard, and no secrets to set. The Durable Object namespace and its
+migration are declared in `wrangler.jsonc`, and Wrangler creates them on first
+deploy.
+
+**The endpoint is not the address the deploy printed.** Wrangler prints an
+`https://` host; the relay is that host with `/v1/relay` on the end, spoken as
+`wss://`. The command does that conversion for you and prints the result, which
+is the line to paste — teamree refuses an `https://` URL rather than guessing at
+the rest of it.
+
+Give that URL to everyone on the team by committing it: in teamree, **Teamwork →
+Set the relay for this project → Write relay file**, which writes
+`.teamree/relay`. One person deploys, pushes one line, and the team is connected.
+
+### Deploying again, and changing it
+
+The project is `~/teamree-relay`, and it is yours. `wrangler.jsonc` there holds
+the Worker's name and the relay's limits under `vars`; edit one and deploy
+again:
+
+```sh
+cd ~/teamree-relay
+npx wrangler@4 deploy
+```
+
+A value the relay cannot parse stops the Worker starting rather than being
+quietly ignored. Only the limits this host can actually enforce are listed, and
+the ones missing from it are named in [Two things this host does not
+do](#two-things-this-host-does-not-do) rather than left for you to notice.
+Re-running `teamree-relay deploy` is also safe: it never writes over a file that
+is already there, so an edited limit survives.
+
+If you want it on your own domain, add a [custom domain
+route](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
+
+### If it refuses
+
+Every refusal names the command that fixes it. Two are worth knowing about in
+advance:
+
+- **`ENOENT: no such file or directory, open '.../relay/package.json'`** is not
+  this command. It is npm, answering `npm install` in a directory that has no
+  project in it — which is what an older version of this file told people to do.
+  There is no `mkdir`, no `cd relay` and no `npm install` step any more. Run the
+  one command above instead, from wherever you are.
+- **"there is no wrangler.jsonc here, so there is no relay in … to deploy"** is
+  `--here` used in a directory that holds no Worker project. Drop `--here` and
+  it writes one into `~/teamree-relay` first.
 
 ### What it costs
 
@@ -69,39 +119,6 @@ holding pairwise sessions is well inside them; a large team that lives in this
 all day should look at the current numbers on that page before assuming. **We
 have not verified today's exact free-tier figures** — they change — so read them
 there rather than from here.
-
-### Deploy it
-
-```sh
-cd relay
-npm install
-npx wrangler login      # opens a browser once
-npm run deploy
-```
-
-That is the whole of it. There are no resource ids to fill in, nothing to click
-in the dashboard, and no secrets to set. The Durable Object namespace and its
-migration are declared in `wrangler.jsonc`, and Wrangler creates them on first
-deploy.
-
-Wrangler prints the URL it deployed to, of the form
-`https://teamree-relay.<your-subdomain>.workers.dev`. The relay endpoint is that
-host with `/v1/relay` on the end, spoken as `wss://`:
-
-```
-wss://teamree-relay.<your-subdomain>.workers.dev/v1/relay
-```
-
-Give that to everyone on the team. If you want a different name, change `name`
-in `wrangler.jsonc` before deploying; if you want it on your own domain, add a
-[custom domain
-route](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
-
-To change a limit, edit the matching entry under `vars` in `wrangler.jsonc` and
-deploy again. A value the relay cannot parse stops the Worker starting rather
-than being quietly ignored. Only the limits this host can actually enforce are
-listed there, and the ones missing from it are named below rather than left for
-you to notice.
 
 ### Cloudflare's limits, and whether they bite
 
@@ -178,10 +195,20 @@ for.
 
 ---
 
-## Path 2 — run the container
+## If you will not use Cloudflare: run the container
+
+**Take the Worker unless you have a specific reason not to.** This is the one
+fallback, and it is for teams who will not use a hosted runtime at all, or who
+are all on one network anyway. It costs more than it looks: a relay on a laptop
+re-inherits the NAT problem the relay exists to solve, and goes away when the
+laptop sleeps.
+
+Unlike the Worker, **this path does need a clone of this repository** — the
+Dockerfile and the Node host live here and are not shipped inside the app:
 
 ```sh
-cd relay
+git clone https://github.com/zero-abd/teamree
+cd teamree/relay
 docker build -t teamree-relay .
 docker run -d --name teamree-relay -p 8787:8787 --restart unless-stopped teamree-relay
 ```
@@ -219,7 +246,7 @@ running it has to be reachable, which means one of:
   **ephemeral**: it changes every time the tunnel restarts, and dies with it. Use
   it to try things, not to run a team on. A named tunnel, which does need a
   Cloudflare account, gives a stable hostname; at which point compare the effort
-  with path 1, which needs the same account and less work.
+  with the Worker, which needs the same account and less work.
 - **A port forward.** Works, exposes a box on your home network to the internet,
   and breaks whenever the ISP changes your address. Only if you already know you
   want this.
@@ -248,8 +275,8 @@ exits. Peers see an ordinary "come back in a moment", not a dropped socket.
 
 ## What the operator learns, and what they do not
 
-This matters more on path 2 than path 1, because there the operator is a
-colleague rather than a company. It is the same answer either way.
+This matters more for the container than for the Worker, because there the
+operator is a colleague rather than a company. It is the same answer either way.
 
 **Whoever runs the relay cannot read anyone's terminals.** Not with effort, not
 by changing the code, not by keeping the logs. The two peers complete a Noise
@@ -277,8 +304,8 @@ What the operator **does** learn:
   outright. A relay in the middle of two connections inevitably knows there are
   two connections.
 - **Both peers' IP addresses**, as any server learns its clients'. Not logged by
-  default; `RELAY_LOG_CLIENT_ADDRESS=1` turns that on for debugging. On path 1,
-  Cloudflare sees them regardless.
+  default; `RELAY_LOG_CLIENT_ADDRESS=1` turns that on for debugging. On the
+  Worker, Cloudflare sees them regardless.
 - **Timing and volume.** Frame sizes and when they arrive. Noise does not pad,
   so an idle session looks idle and a burst of typing looks like a burst of
   typing. Padding would be the peers' to add, not the relay's.
@@ -591,7 +618,7 @@ disconnected, so neither of them is told its partner did.
 ```sh
 cd relay
 npm install
-npm test          # 93 tests, including the Worker under a real workerd
+npm test          # 120 tests, including the Worker under a real workerd
 npm run typecheck # both hosts: Node types and Workers types
 npm run build     # the container host's JavaScript, into dist/
 npm run worker:dev # the Worker on localhost, under workerd, deploying nothing
@@ -679,6 +706,12 @@ src/core/        every rule, portable, no host in it
 
 src/node/        the container host: an HTTP server, `ws`, one sweep timer
 src/workers/     the Cloudflare host: a Worker that routes, a DO that holds a pair
+
+teamree-relay    the one command at the top of this file: a shell wrapper
+bin/             what it runs — writes the Worker project into a directory you
+                 own and deploys it there. Plain JavaScript with no build step,
+                 because a copy of it ships inside the installed app, where
+                 there is nothing to build it with.
 ```
 
 `src/core` imports nothing from Node and nothing from Cloudflare. That is not

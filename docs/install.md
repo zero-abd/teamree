@@ -333,6 +333,18 @@ honest about the price of entry: two Macs, a relay somebody on the team hosts
 committed to a repository you can all push to — which is what lets them run
 commands on your machine, deliberately.
 
+Standing that relay up is one command, and this app carries it, so nobody has to
+clone anything to run it:
+
+```sh
+/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy
+```
+
+It writes a Cloudflare Worker project into `~/teamree-relay`, deploys it to your
+own Cloudflare account and prints the address to hand round. You need a
+Cloudflare account and Node 20 or newer; `relay/README.md` in the repository is
+the whole story, including what the relay can and cannot see.
+
 ## Uninstalling
 
 Removing the app never removes your data, which is deliberate — a worktree is

@@ -174,28 +174,38 @@ Two machines behind two routers cannot reach each other, so neither tries: each
 opens an outbound WebSocket to a relay your team runs, and the relay splices the
 two streams together.
 
+One person does this, once, for the team. It is one command, it runs from any
+directory, and **it does not need a clone of this repository** — the command
+ships inside the app you installed:
+
+```sh
+/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy
+```
+
+That writes the Worker project into `~/teamree-relay` and deploys it to your own
+Cloudflare account; a browser opens once to log you in, and then it prints the
+`wss://` endpoint to paste below. You need a Cloudflare account and Node 20 or
+newer — Wrangler, Cloudflare's deployment tool, is a Node program. If you are
+working from a clone, the same command is `relay/teamree-relay deploy`.
+
 > **Hand-off.** The relay is its own piece of work, with its own instructions.
-> Follow **[`relay/README.md`](../relay/README.md)** for this step, then come
-> back with its URL. The commands live there so that there is one copy of them
-> and it is the one that is kept true.
+> **[`relay/README.md`](../relay/README.md)** is the authority for this step —
+> what it costs, what the operator can and cannot see, and how to change a
+> limit. The command above is repeated here because it is one line; everything
+> else about the relay lives there so that there is one copy of it and it is the
+> one that is kept true.
 
-Two paths, and that README covers both. Deploying the Worker to your own account
-is one command, gives a permanent URL, and works from anywhere because both
-peers dial out to it; start there unless you have a reason not to. Running the
-container yourself works too, and is the answer for a team that will not use a
-hosted runtime — but a relay on a laptop re-inherits the NAT problem the relay
-exists to solve and goes away when the laptop sleeps.
+**Take the Worker unless you have a specific reason not to.** There is exactly
+one fallback, in that README: a container you run yourself, for a team that will
+not use Cloudflare at all. It is the answer for a team already on one network,
+and it costs more than it looks anywhere else — a relay on a laptop re-inherits
+the NAT problem the relay exists to solve and goes away when the laptop sleeps.
 
-The **Start teamwork** panel lists four rather than two, because it splits the
-container path into the three shapes it actually takes: a tunnel in front of
-your own machine, a box on a LAN or a mesh VPN, and a VPS you rent. Same two
-paths, told apart by what each one costs and by whether its address is stable
-enough to commit.
-
-What you need at the end of it is **one WebSocket URL**. It is not the address
-the deploy printed: what you get is an `https://` host, and the relay endpoint is
-that host with `/v1/relay` on it, spoken as `wss://`. teamree refuses an
-`https://` URL rather than guessing at it, because guessing would work often
+What you need at the end of it is **one WebSocket URL**, and the command above
+prints it ready to paste. If you got there another way — the container, or
+`wrangler deploy` run by hand — what you have instead is an `https://` host, and
+the relay endpoint is that host with `/v1/relay` on it, spoken as `wss://`.
+teamree refuses an `https://` URL rather than guessing at it, because guessing would work often
 enough to be trusted and then fail on the one deployment where the relay is not
 at the root — but the refusal now says what the corrected URL would be, so
 pasting the address the deploy printed costs you a sentence rather than a
@@ -226,11 +236,10 @@ connected, visibly, in a diff.
 
 **Whoever set the relay up** does it in the app, in the same **Start teamwork**
 panel step 4 uses — the **Teamwork** button in the project header opens it, and
-step 3 of it is the relay. If you have not stood one up yet, that step lists the
-four ways to get one with what each costs, and says which of them produce an
-address stable enough to commit and which belong in the environment override
-instead. Paste the URL into **Set the relay for this project** and press
-**Write relay file**. That writes `.teamree/relay` — the same file, with the
+step 3 of it is the relay. If you have not stood one up yet, that step gives you
+the one command above and names the single fallback, with what each costs and
+which of them produces an address stable enough to commit. Paste the URL into
+**Set the relay for this project** and press **Write relay file**. That writes `.teamree/relay` — the same file, with the
 same comment header — and stops there, exactly as adding your key does. The
 panel then names both files it has written and the one commit that covers them,
 which is step 4's commit: you can do this step and the next one and push once.
