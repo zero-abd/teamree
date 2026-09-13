@@ -72,6 +72,18 @@ npm run dev
 runtime over the real socket. `npm run typecheck`, `npm run lint` and
 `npm run format` are what CI would check.
 
+## Trying teamwork
+
+`examples/ledger` is a small project that exists to be worked in — no
+dependencies, a test suite that runs in a second, and a task list chosen so two
+people can take a task each without colliding. `node
+examples/init-example-repo.mjs ~/teamree-example` turns it into a real
+repository.
+
+`docs/trying-teamwork.md` walks two people through it end to end, and
+`scripts/teamwork/two-peers.mjs` runs both sides on one machine. Teamwork itself
+is still being built; the runbook marks which steps are waiting on it.
+
 ## Packaged builds
 
 Packaging is electron-builder, configured in `electron-builder.yml`. Every command

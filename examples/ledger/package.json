@@ -1,0 +1,13 @@
+{
+  "name": "ledger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Splits a shared bill. A project to try teamree's teamwork features on.",
+  "type": "module",
+  "bin": { "ledger": "./bin/ledger.js" },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "start": "node bin/ledger.js fixtures/trip.ledger"
+  },
+  "engines": { "node": ">=20" }
+}
