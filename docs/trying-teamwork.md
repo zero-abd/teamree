@@ -19,36 +19,39 @@ assumes two Macs.
 
 ## What actually works today
 
-Be clear about this before you spend an afternoon on it, because the runbook is
-worth following now and the last two steps of the story are not built.
+Be clear about this before you spend an afternoon on it, because what the
+roster grants has changed and the change is the whole point of reading this.
 
 **Working.** Your keypair and the roster. The relay. Outbound connections from
-both machines, the Noise `IK` handshake against the keys in the repository, and
-a teammate's worktrees, branches and panes appearing in your sidebar without
-either of you subscribing to anything.
+both machines and the Noise `IK` handshake against the keys in the repository.
+A teammate's worktrees, branches and panes appearing in your sidebar without
+either of you subscribing to anything. Opening one of their panes and reading
+it live. Typing into it, attributed by name, recorded locally, and stoppable by
+the owner at any moment. A teammate whose machine goes away leaving their rows
+behind, marked stale and dated, rather than vanishing.
 
-**Not built.** Opening a teammate's pane and reading it is milestone C.
-Typing into one, with attribution, the audit log and mute, is milestone D.
-Neither has landed — `ROADMAP.md` has both unticked, and what a teammate may
-call over the link is one explicit list in `src/main/runtime/peerTransport.ts`
-that contains presence and nothing else. A teammate's row in your sidebar is
-deliberately not a button: there is nothing yet that opening it could do.
+**Not exercised between two Macs in two places.** All of the above has been
+driven between two runtimes through a real relay, with real Noise and real
+PTYs, on one computer and in CI. Nobody has yet watched it work across a
+network from two houses. That is what this document is for, and it is the one
+claim here you should treat as untested rather than merely new.
 
-**Also not built:** staleness, milestone E. When a teammate's machine goes away
-their rows *disappear* rather than going grey with an age on them. `docs/teamwork.md`
-says they should stay and go stale, and one day they will; today they do not.
+**Known rough edges** are in `ROADMAP.md` under "Known gaps", kept honest and
+worth a minute before you start.
 
-> **Read this before you start, even though the last part of it is not built.**
-> Teamwork is remote code execution, deliberately. Once milestone D lands, a
-> person on this team can type into a pane on your machine, which means running
+> **Read this before you start. It is live now, not a promise about later.**
+> Teamwork is remote code execution, deliberately. A person whose key is in
+> `.teamree/members/` can type into a pane on your machine, which means running
 > arbitrary commands as you. That is the feature — a teammate who can see your
-> agent stuck on a question can answer it — and what makes it survivable is that
-> it cannot be done invisibly: the pane says it is being watched and by whom,
-> typing is attributed live, every remote write is logged locally, and mute is
-> instant and yours. None of that is on the wire yet, and adding your key to a
-> repository today grants nobody anything but a view of your worktree names. Do
-> it anyway with people you would hand an unlocked laptop to, because that is
-> what the roster will mean by the time C and D land.
+> agent stuck on a question can answer it — and what makes it survivable is not
+> a permission model, which would be a lie at this granularity, but that it
+> cannot be done invisibly: the pane says it is being watched and by whom,
+> typing is attributed live, every remote write is recorded on your machine
+> with who and when, and mute is instant, per-pane and yours alone.
+>
+> So adding a key to this repository is not a formality and no longer grants
+> only a view of worktree names. Add the keys of people you would hand an
+> unlocked laptop to, because that is now exactly what you are doing.
 
 ## Two roles
 
@@ -335,30 +338,59 @@ project, indented and tinted and with the leader's handle on the row. You did
 not ask for it and there is nothing to subscribe to — a sidebar you have to
 populate by hand is a sidebar nobody populates.
 
-What arrives is metadata only: the worktree's name, its branch, its state, its
-panes and how long each has been quiet. No terminal output has crossed, and none
-will: that is milestone C, and until it lands the row is a `<div>` with nothing
-to click rather than a button that would work if something were different.
-Silence crosses as a *duration* rather than a timestamp, because the two
-machines do not agree about what time it is, and your machine adds what has
+What arrives so far is metadata only: the worktree's name, its branch, its
+state, its panes and how long each has been quiet. No terminal output has
+crossed yet, and none will until somebody opens a pane — ten people each
+streaming forty panes at each other is bandwidth spent on output nobody is
+reading. Silence crosses as a *duration* rather than a timestamp, because the
+two machines do not agree about what time it is, and your machine adds what has
 elapsed since it heard.
 
-This is the step that has been exercised between two runtimes over a real relay
-on one computer, and never between two Macs in two places. If it works for you,
-that is new information.
+## 7. The joiner reads the pane, and then answers it
 
-## 7. Finish the work
+**Joiner**: open the leader's pane. The scrollback arrives first and the live
+tail follows it, each line exactly once, letterboxed to the leader's
+dimensions — your window does not resize a PTY under a program you are only
+reading.
+
+**Leader**: your own pane now says it is being watched, and by whom, by the
+handle their key is filed under in `.teamree/members/`.
+
+Now the part the whole design is for. Wait for the agent to stop on a question
+it cannot answer by itself — task 1 in `TASKS.md` is a good one for this — and
+have the **joiner type the answer into the leader's pane**.
+
+- The leader's pane names the joiner while they type, and goes on saying they
+  typed there after they stop.
+- The keystrokes reach a real shell on the leader's machine, as the leader.
+- The leader can **mute that pane** at any moment, and the next keystroke does
+  not land: the joiner is told, in the leader's own words, in the pane where
+  their typing would have gone. A muted pane keeps streaming and keeps its row.
+  Mute stops the bytes; it does not hide the work.
+- On the leader's machine, `teamwork.writeLog` holds who typed, when, into
+  which pane, how many bytes and how many submissions — and never what was
+  typed. Input includes what a program deliberately does not echo, and a
+  passphrase at an `ssh` prompt is not something a safety feature should be
+  writing to disk.
+
+Try muting deliberately, while the joiner is mid-sentence. Watching a refusal
+arrive is the fastest way to believe the rest of it.
+
+## 8. Finish the work
 
 Nothing here is new — it is the single-user flow. The agent commits, the leader
 checks whether the branch would merge into its base, and pushes. The joiner does
 the same in their own worktree on a different task from `TASKS.md`. Both should
 merge, because the tasks were chosen not to overlap.
 
-That is as far as the story goes today. `docs/teamwork-scenario.md` is the whole
-of it written as steps with expected observations, and
-`tests/teamwork/scenario.test.ts` is that document as a test — with the steps
-that belong to milestones C, D and E still standing as `todo`, each naming what
-it will assert when its milestone lands.
+**Leader**: close your laptop, or quit teamree, and watch the joiner's sidebar.
+Your worktrees stay where they were, marked stale and dated, rather than
+vanishing — a row disappearing reads as a worktree deleted, and for a worktree
+that is the one thing this display must never wrongly say.
+
+`docs/teamwork-scenario.md` is the whole story written as steps with expected
+observations, and `tests/teamwork/scenario.test.ts` is that document as a
+test.
 
 ---
 
@@ -534,21 +566,36 @@ a thing that can be down independently of the relay.
 
 ### A teammate's worktrees vanished instead of going stale
 
-`docs/teamwork.md` says a peer who drops leaves their worktrees in your sidebar,
-marked stale, with the age of what you are looking at — because a row that
-disappears when a laptop closes reads as "it was deleted", which for a worktree
-is the one thing it must never wrongly say.
+They should not. A peer who drops leaves their worktrees where they were,
+marked stale and carrying the age of what you are looking at, because a row
+that disappears when a laptop closes reads as "it was deleted" — which for a
+worktree is the one thing this display must never wrongly say.
 
-**That is milestone E and it has not landed.** What the app does today is the
-opposite: the moment a link stops being confirmed, what that teammate last
-showed is dropped, and their rows go. So a row disappearing currently means
-their machine or their network went away, and it does *not* mean anything about
-the worktree. Check the project header — **Nobody connected** or **Relay
-unreachable** is the same event, said in a place that is not lying to you.
+So a row that *goes* means something different from a row that greys: their
+key was taken off the roster, or the project was removed. If a teammate's rows
+vanish while they are merely offline, that is a bug worth reporting rather than
+something to work around. Check the project header — **Nobody connected** or
+**Relay unreachable** says the same event in a place that is not guessing.
 
-### The worktree is there, but there is nothing to open
+### The worktree is there, but the pane shows nothing
 
-Expected. Metadata flows on its own and bytes do not, and a teammate's pane is
-not openable yet at all: reading one is milestone C and typing into one is
-milestone D. A teammate's row has no affordance on purpose, because the honest
-affordance for a thing that is not built is none.
+Metadata flows on its own and bytes flow on demand, so a pane you have not
+opened has sent you nothing by design. Open it and the scrollback arrives
+first.
+
+If you have opened it and it stays empty, the pane may genuinely be quiet —
+check the age beside it. If it is not quiet, note it: there is a known defect
+where the first thing a pane says after a watch opens could be dropped under
+load, recorded in `ROADMAP.md`, and a report that it happened to you on two
+real Macs is more useful than the measurement we have.
+
+### Your typing does not reach the pane
+
+The owner muted it. That is not a failure and it does not need diagnosing: mute
+is theirs, it takes effect on the next keystroke, and the refusal you see in
+the pane is in their words. A muted pane deliberately keeps streaming and keeps
+its row, so it looks exactly like an unmuted one apart from refusing you.
+
+If there is no refusal at all and the keystrokes simply go nowhere, check the
+project header first — a link that has dropped is the commoner explanation, and
+it says so.
