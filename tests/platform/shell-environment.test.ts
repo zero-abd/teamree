@@ -76,6 +76,47 @@ describe('quoteWindowsArgument', () => {
       expect(parseWindowsCommandLine(encodeWindowsCommandLine(argv))).toEqual(argv)
     }
   })
+
+  // Hand-picked cases only prove the cases somebody thought of, and this
+  // encoder cannot be exercised against a real ConPTY from here. Enumerating
+  // the alphabet that actually drives the rules — backslash, quote, separator,
+  // ordinary character — covers the whole state machine instead of a sample of
+  // it, which is the strongest claim available without a Windows machine.
+  const ALPHABET = ['\\', '"', ' ', 'a'] as const
+
+  function stringsUpTo(length: number): string[] {
+    let all = ['']
+    let frontier = ['']
+    for (let step = 0; step < length; step += 1) {
+      frontier = frontier.flatMap((prefix) => ALPHABET.map((character) => prefix + character))
+      all = all.concat(frontier)
+    }
+    return all
+  }
+
+  it('round-trips every argument up to four characters of the alphabet that drives the rules', () => {
+    const inputs = stringsUpTo(4)
+    expect(inputs.length).toBe(341)
+    for (const input of inputs) {
+      const parsed = parseWindowsCommandLine(encodeWindowsCommandLine([input]))
+      expect(parsed, `single argument ${JSON.stringify(input)}`).toEqual([input])
+    }
+  })
+
+  // Separately, because an argument that encodes correctly on its own can still
+  // merge with its neighbour: the boundary is where a trailing backslash run or
+  // an unbalanced quote does its damage.
+  it('keeps neighbouring arguments apart for every pair up to two characters', () => {
+    const inputs = stringsUpTo(2)
+    expect(inputs.length).toBe(21)
+    for (const first of inputs) {
+      for (const second of inputs) {
+        const argv = [first, second]
+        const parsed = parseWindowsCommandLine(encodeWindowsCommandLine(argv))
+        expect(parsed, `pair ${JSON.stringify(argv)}`).toEqual(argv)
+      }
+    }
+  })
 })
 
 describe('buildShellCommand on Windows', () => {
@@ -91,6 +132,23 @@ describe('buildShellCommand on Windows', () => {
 
   it('starts cmd.exe interactive with no arguments at all', () => {
     expect(buildShellCommand(CMD, undefined, 'win32')).toEqual({ file: CMD, args: '' })
+  })
+
+  // cmd.exe is a second parser, with nothing in common with CommandLineToArgvW,
+  // and the commands most likely to break it are the ones carrying their own
+  // quotes. Checked against cmd's documented /S rule rather than a fixed string,
+  // so the assertion is about what cmd would run, not about how it was spelled.
+  it('survives a command that carries its own quotes, whatever it contains', () => {
+    for (const command of [
+      'echo hi',
+      'git commit -m "wip"',
+      '"C:\\Program Files\\Git\\bin\\git.exe" status',
+      'echo "a & b" && echo done',
+      'echo ^caret% and "unbalanced'
+    ]) {
+      const { args } = buildShellCommand(CMD, command, 'win32')
+      expect(commandCmdWouldRun(args as string), JSON.stringify(command)).toBe(command)
+    }
   })
 
   it('quotes a PowerShell command by the CommandLineToArgvW rules', () => {
@@ -200,6 +258,22 @@ describe('the running platform', () => {
     expect(typeof args === 'string' ? process.platform === 'win32' : Array.isArray(args)).toBe(true)
   })
 })
+
+/**
+ * What cmd.exe would actually run, given the tail teamree hands it. cmd's
+ * documented `/S` rule is the whole algorithm: strip the first and the last
+ * quote after `/C`, and take everything else verbatim.
+ */
+function commandCmdWouldRun(tail: string): string {
+  const marker = '/c '
+  const at = tail.indexOf(marker)
+  if (at === -1) throw new Error(`no /c in ${JSON.stringify(tail)}`)
+  const rest = tail.slice(at + marker.length)
+  const first = rest.indexOf('"')
+  const last = rest.lastIndexOf('"')
+  if (first === -1 || first === last) return rest
+  return rest.slice(0, first) + rest.slice(first + 1, last) + rest.slice(last + 1)
+}
 
 /**
  * The CommandLineToArgvW algorithm, used only to check the encoder against the
