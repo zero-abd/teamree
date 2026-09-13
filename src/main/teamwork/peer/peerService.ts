@@ -903,6 +903,20 @@ export class PeerService {
    * And it stands past this runtime. The decision goes to `options.mutes` on
    * its way through, so the pane the owner silenced is still silenced when it
    * comes back from a restart under the id `session-restore.ts` kept for it.
+   *
+   * It is also answerable from the first frame after that restart, before
+   * teamwork has read a repository — which it has to be, because `watchers` is
+   * answerable then and draws the row with the mute on it. Every half of this
+   * is already this machine's own at that moment: the durable record keyed by
+   * this machine's own terminal ids and read back in `start()`, the set beside
+   * it, and the project, which `#projectOfPane` finds in the workspace rather
+   * than in the facts. The only thing a reconcile would add is links, and the
+   * prompts settled and permissions dropped below all arrive over one — so a
+   * project with no facts has nothing for those two loops to find, rather than
+   * something they would miss. Refusing the call for want of the project put
+   * the owner one click from an error on a pane their own window was drawing as
+   * muted, which is worse than a read that lies: a control that visibly does
+   * nothing.
    */
   mute(params: ParamsOf<'teamwork.mute'>): PaneWatchers {
     const projectId = this.#projectOfPane(params.terminalId)
@@ -1027,6 +1041,11 @@ export class PeerService {
    * nothing awaited between them, is every keystroke that has not already been
    * written. The teammate is not told; they find out the way they found out
    * they had permission in the first place, by typing.
+   *
+   * Answerable before the first reconcile for the same reasons the mute is, and
+   * it is the same pairing: `requests` lists a standing permission restored in
+   * `start()`, and a permission the owner can see and cannot lift is the one
+   * thing that listing is for.
    */
   revoke(params: ParamsOf<'teamwork.revoke'>): PaneConsent {
     const projectId = this.#projectOfPane(params.terminalId)
@@ -2030,10 +2049,27 @@ export class PeerService {
       .flatMap((worktree) => this.#options.workspace.listTerminals(worktree.id).map((pane) => pane.id))
   }
 
-  /** Which project one of this machine's panes is in. */
+  /**
+   * Which project one of this machine's panes is in.
+   *
+   * Walked over the workspace rather than over the facts, which is a difference
+   * of one window and of nothing else: the facts are built from `listProjects`
+   * at every reconcile, so once one has run the two walks visit the same
+   * projects in the same order and reach the same answer. Before the first one
+   * the facts are empty and the workspace is not — and the pane the owner is
+   * looking at belongs to a project the store plainly has.
+   *
+   * That window was a real refusal. `mute` and `revoke` above are the owner's
+   * own controls over their own panes, both restored out of a file in `start()`
+   * before a single repository is read, and resolving them through the facts
+   * meant a restored window could draw a muted pane from `watchers` and then be
+   * told there is no such pane on this machine when the owner clicked to lift
+   * it. Neither of them wants anything off the repository: `#paneOf` reads the
+   * workspace too, so this is the fact both of them were actually after.
+   */
   #projectOfPane(terminalId: string): string | undefined {
-    for (const fact of this.#projects.values()) {
-      if (this.#paneOf(fact.projectId, terminalId)) return fact.projectId
+    for (const project of this.#options.workspace.listProjects()) {
+      if (this.#paneOf(project.id, terminalId)) return project.id
     }
     return undefined
   }
