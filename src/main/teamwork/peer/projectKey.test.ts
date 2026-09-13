@@ -5,8 +5,11 @@
 // nothing is wrong. So the normalisation is tested against the spellings people
 // actually have, not against one canonical form.
 
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { normaliseRemote, projectKeyFor, readProjectKey } from './projectKey'
+import { createTempRepo } from '../../git/testRepository'
+import { normaliseRemote, originMark, projectKeyFor, readProjectKey } from './projectKey'
 import { fixedRemoteRunner } from './peerTestSupport'
 
 describe('one repository, however it was cloned', () => {
@@ -59,5 +62,42 @@ describe('reading it out of a checkout', () => {
     const result = await readProjectKey(runner, '/anywhere')
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toContain('no origin remote')
+  })
+})
+
+describe('knowing when to ask git again', () => {
+  it('moves when the remote does, and holds still otherwise', async () => {
+    const repo = await createTempRepo()
+    try {
+      const before = originMark(repo.repoPath)
+      expect(before).toBeDefined()
+      expect(originMark(repo.repoPath)).toBe(before)
+
+      await repo.git(['remote', 'add', 'origin', 'https://example.invalid/team/app.git'])
+      expect(originMark(repo.repoPath)).not.toBe(before)
+    } finally {
+      await repo.cleanup()
+    }
+  })
+
+  it('follows a linked worktree to the config it actually borrows', async () => {
+    const repo = await createTempRepo()
+    try {
+      const linked = join(repo.worktreesRoot, 'feature')
+      await repo.git(['worktree', 'add', '-b', 'feature', linked])
+      const before = originMark(linked)
+      expect(before).toBeDefined()
+
+      // Written into the repository's config, which is not under the worktree's
+      // own git directory: a mark that stopped at `.git` would never move.
+      await repo.git(['remote', 'add', 'origin', 'https://example.invalid/team/app.git'])
+      expect(originMark(linked)).not.toBe(before)
+    } finally {
+      await repo.cleanup()
+    }
+  })
+
+  it('has nothing to say about a directory that is not a checkout', () => {
+    expect(originMark(join(tmpdir(), 'teamree-not-a-repo'))).toBeUndefined()
   })
 })

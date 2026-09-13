@@ -260,10 +260,24 @@ export class TerminalSessionManager {
    * conversation rather than opening a fresh shell.
    */
   restoreSessions(): { restored: number; resumed: number } {
-    const records = restorableRecords(this.records.listTerminals(), (worktreeId) => {
-      const cwd = this.options.resolveWorktreeCwd?.(worktreeId)
+    const stored = this.records.listTerminals()
+    const worktreeCwd = (worktreeId: string): string | undefined => this.options.resolveWorktreeCwd?.(worktreeId)
+    const records = restorableRecords(stored, (worktreeId) => {
+      const cwd = worktreeCwd(worktreeId)
       return cwd !== undefined && cwd.length > 0 && isDirectory(cwd)
     })
+
+    // A record whose worktree the workspace no longer has is not coming back
+    // on a later start either, and left here it stays in the workspace file
+    // for the life of the installation — a set of them per worktree ever
+    // removed. A worktree that is still recorded but whose checkout is not
+    // there is a different thing entirely: a volume not mounted, a directory
+    // moved back tomorrow. That one is left out of this restore and left
+    // alone, because one bad start is no reason to throw a pane away.
+    for (const record of stored) {
+      const cwd = worktreeCwd(record.worktreeId)
+      if (cwd === undefined || cwd.length === 0) this.records.removeTerminal(record.id)
+    }
 
     let restored = 0
     let resumed = 0

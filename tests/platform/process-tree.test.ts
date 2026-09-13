@@ -2,6 +2,28 @@
 // platforms: POSIX signals a process group, Windows walks the tree with
 // taskkill. The decision logic is driven through an injected host so both paths
 // are asserted from one machine, and the POSIX path is then run for real.
+//
+// The two platforms are not equally covered, and the difference is easy to miss
+// in a file where every describe block is green, so it is stated here:
+//
+//   POSIX   is decided against a fake host below and then actually carried out.
+//           `the real POSIX process group` spawns a shell, spawns a grandchild
+//           under it, kills the tree, and waits for the grandchild to be reaped.
+//           That block is the evidence that closing a pane does not orphan an
+//           agent.
+//   Windows is decided only. `execFile` is replaced at the top of this file, so
+//           no taskkill is ever launched and nothing is ever killed; the Windows
+//           cases establish which branch is taken and what command line would be
+//           built, and that is all they establish. The one block that kills a
+//           real process is skipped on win32, so on a Windows runner this file
+//           would say nothing about whether a pane orphans anything.
+//
+// That asymmetry is left in place rather than closed. Windows was deliberately
+// dropped — see the matrix comment in .github/workflows/build.yml — and the app
+// ships macOS-only, so a real Windows test would be one nothing in this project
+// can run: another green block proving nothing, which is what the rest of this
+// file is being careful not to be. A file that says plainly where the evidence
+// stops is worth more here than a test that would only ever be skipped.
 
 import { spawn } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
@@ -107,6 +129,10 @@ describe('killProcessTree on POSIX', () => {
   })
 })
 
+// Decision only, via the injected host: `killWindowsTree` records a pid and
+// flips a boolean. What is proven is the branch — taskkill rather than signals,
+// and nothing at all against a pid that has already gone — never that a tree
+// came down.
 describe('killProcessTree on Windows', () => {
   it('walks the tree with taskkill and sends no POSIX signal', async () => {
     const { host, signals, windowsKills } = fakeHost()
@@ -133,7 +159,12 @@ describe('taskkill', () => {
     expect(resolveTaskkill({})).toBe('taskkill.exe')
   })
 
-  it('kills the whole tree, forcibly, without showing a console', async () => {
+  // Named for what it checks. `execFile` is mocked at the top of this file, so
+  // this is the command line the app would hand Windows, not a kill: no process
+  // is launched and nothing dies. It is still worth having — the defect above
+  // was in exactly these four arguments and this one option — but it is a
+  // string comparison, and on Windows it is the only Windows evidence there is.
+  it('builds the command line that takes the whole tree, forcibly, with no console', async () => {
     execFileCalls.length = 0
     await defaultProcessTreeHost.killWindowsTree(4242)
     expect(execFileCalls).toHaveLength(1)
@@ -142,6 +173,10 @@ describe('taskkill', () => {
   })
 })
 
+// The only block here that kills a real process, and the only one whose passing
+// depends on the operating system having actually done something. It is skipped
+// on win32 because a process group is a POSIX idea; see the header for what that
+// leaves unproven there.
 describe.skipIf(process.platform === 'win32')('the real POSIX process group', () => {
   const pidIsAlive = (pid: number): boolean => {
     try {
