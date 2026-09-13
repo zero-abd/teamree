@@ -94,16 +94,45 @@ const LAST_ARGUMENT = 'shift $(($# - 1)); eval "$1"'
 // every pane the app opens. These tests are about that choice.
 describe('findInstalledAgents without a PATH of its own', () => {
   const originalShell = process.env.SHELL
+  const originalPath = process.env.PATH
   let dir = ''
+
+  /**
+   * What this process is started with for as long as these tests run: launchd's
+   * own environment, which is what a Mac app opened from the Dock really is
+   * handed.
+   *
+   * Pinned, and put back afterwards, for the same reason SHELL is. Each test
+   * below asks which of two PATHs discovery ended up searching, and reading the
+   * real one lets the machine running the suite answer that question instead of
+   * the test: a GitHub macOS runner has Homebrew preinstalled and
+   * /opt/homebrew/bin on PATH already, so the process PATH there holds the very
+   * directory these tests use to mean "somewhere only the profile knew about".
+   */
+  const PROCESS_PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
+
+  /** The install the process PATH can see, and the one a profile adds. */
+  const INHERITED_CLAUDE = '/usr/bin/claude'
+  const PROFILE_CLAUDE = '/opt/homebrew/bin/claude'
+
+  /**
+   * An agent sitting in both PATHs at once, so the binary that comes back names
+   * the PATH that was searched — where an empty answer would only say discovery
+   * searched nothing, which is what a broken fallback looks like too.
+   */
+  const claudeInBoth = only(PROFILE_CLAUDE, INHERITED_CLAUDE)
 
   beforeEach(async () => {
     dir = await mkdtemp(path.join(os.tmpdir(), 'teamree-login-shell-'))
+    process.env.PATH = PROCESS_PATH
     resetLoginShellPathCache()
   })
 
   afterEach(async () => {
     if (originalShell === undefined) delete process.env.SHELL
     else process.env.SHELL = originalShell
+    if (originalPath === undefined) delete process.env.PATH
+    else process.env.PATH = originalPath
     resetLoginShellPathCache()
     await rm(dir, { recursive: true, force: true })
   })
@@ -125,26 +154,34 @@ describe('findInstalledAgents without a PATH of its own', () => {
   }
 
   it('searches the login shell PATH, not the one this process was started with', async () => {
-    process.env.SHELL = await loginShell('zsh', '/opt/homebrew/bin:/usr/bin')
+    // What a profile really does: put its own directory in front of the PATH
+    // the process already had. Finding the agent there is finding it somewhere
+    // only the profile knew about.
+    process.env.SHELL = await loginShell('zsh', `/opt/homebrew/bin:${PROCESS_PATH}`)
 
-    // /opt/homebrew/bin is on no CI machine's PATH and on every Mac user's, so
-    // finding claude there is finding it somewhere only the profile knew about.
-    const found = findInstalledAgents({ isExecutable: only('/opt/homebrew/bin/claude') })
+    const found = findInstalledAgents({ isExecutable: claudeInBoth })
 
-    expect(found).toEqual([{ kind: 'claude', command: 'claude', binary: '/opt/homebrew/bin/claude' }])
+    expect(found).toEqual([{ kind: 'claude', command: 'claude', binary: PROFILE_CLAUDE }])
   })
 
   it('falls back to the process PATH when the login shell answers with something else', async () => {
     process.env.SHELL = await loginShell('zsh', '/opt/homebrew/bin', "echo 'zsh: parse error'")
 
-    // Only the directory the unusable answer named holds an agent, so coming
-    // back empty is proof that answer was thrown away rather than trusted.
-    expect(findInstalledAgents({ isExecutable: only('/opt/homebrew/bin/claude') })).toEqual([])
+    // The install the unusable answer pointed at is not the one that comes
+    // back, so that answer was thrown away; the one that does come back is on
+    // the process PATH, so a PATH was still searched in its place.
+    expect(findInstalledAgents({ isExecutable: claudeInBoth })).toEqual([
+      { kind: 'claude', command: 'claude', binary: INHERITED_CLAUDE }
+    ])
   })
 
   it('leaves a shell it does not know how to ask alone', async () => {
     process.env.SHELL = await loginShell('nu', '/opt/homebrew/bin')
 
-    expect(findInstalledAgents({ isExecutable: only('/opt/homebrew/bin/claude') })).toEqual([])
+    // A shell nobody asked cannot have contributed the PATH it would have
+    // printed, and the process PATH answered instead.
+    expect(findInstalledAgents({ isExecutable: claudeInBoth })).toEqual([
+      { kind: 'claude', command: 'claude', binary: INHERITED_CLAUDE }
+    ])
   })
 })
