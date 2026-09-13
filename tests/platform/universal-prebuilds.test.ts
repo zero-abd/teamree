@@ -12,14 +12,14 @@
 // happens per-architecture during a build that electron-builder then merges, so
 // the bug would look like a working build right up until it did not.
 
-import { mkdtemp, mkdir, readdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import afterPack from '../../scripts/afterpack.mjs'
 
 /** electron-builder's Arch enum, which is what a real context carries. */
-const ARCH = { x64: 1, arm64: 3 } as const
+const ARCH = { x64: 1, arm64: 3, universal: 4 } as const
 
 const PLATFORMS = ['darwin-arm64', 'darwin-x64', 'linux-x64', 'win32-x64'] as const
 
@@ -50,8 +50,8 @@ const context = (appOutDir: string, arch: number): Parameters<typeof afterPack>[
     packager: { appInfo: { productFilename: 'teamree' } }
   }) as never
 
-async function prebuildsIn(appOutDir: string): Promise<string[]> {
-  const dir = join(
+function prebuildsDir(appOutDir: string): string {
+  return join(
     appOutDir,
     'teamree.app',
     'Contents',
@@ -61,7 +61,10 @@ async function prebuildsIn(appOutDir: string): Promise<string[]> {
     'node-pty',
     'prebuilds'
   )
-  return (await readdir(dir)).sort()
+}
+
+async function prebuildsIn(appOutDir: string): Promise<string[]> {
+  return (await readdir(prebuildsDir(appOutDir))).sort()
 }
 
 describe('what a universal macOS build keeps', () => {
@@ -78,6 +81,29 @@ describe('what a universal macOS build keeps', () => {
       expect(await prebuildsIn(out)).toEqual(['darwin-arm64', 'darwin-x64'])
     })
   }
+
+  it('accepts the merged bundle, where the architecture is not one', async () => {
+    // electron-builder runs this hook three times for a universal build: once
+    // per architecture, and once more over the merged bundle with `arch`
+    // reported as `universal`. There is no `darwin-universal` prebuild and
+    // there never will be — asking for one failed the build after the merge had
+    // already succeeded, which is the most expensive place to find out.
+    //
+    // What the third pass has to check is that both real prebuilds survived the
+    // merge, since that is exactly what the merge could have broken.
+    const out = await packagedApp()
+    await afterPack(context(out, ARCH.universal))
+    expect(await prebuildsIn(out)).toEqual(['darwin-arm64', 'darwin-x64'])
+  })
+
+  it('still fails the merged bundle when an architecture did not survive', async () => {
+    // The check above is only worth having if it can still fail. A universal
+    // app missing one side opens no terminal on those Macs, and says nothing
+    // about it until somebody tries.
+    const out = await packagedApp()
+    await rm(join(prebuildsDir(out), 'darwin-x64'), { recursive: true, force: true })
+    await expect(afterPack(context(out, ARCH.universal))).rejects.toThrow('darwin-x64')
+  })
 
   it('still drops the platforms this artifact is not for', async () => {
     // The pruning is worth ~58 MB across four platforms and is the reason the

@@ -66,9 +66,16 @@ export default async function afterPack(context) {
   // separately and lipos the results, and two trees that disagree about which
   // prebuild directory exists are two trees that cannot be merged into one
   // asar. Keeping every darwin prebuild in both makes them identical.
+  //
+  // `universal` is a third pass, not a third architecture. electron-builder
+  // packs x64, packs arm64, merges them, and runs this hook over the merged
+  // bundle with `arch` reported as `universal` — for which there is no prebuild
+  // and never will be. What that pass has to check is that *both* real ones
+  // survived the merge.
   const prebuilds = join(pty, 'prebuilds')
-  const wanted = `${electronPlatformName}-${arch}`
-  const keep = (entry) => entry === wanted || entry.startsWith(`${electronPlatformName}-`)
+  const wantedArches = arch === 'universal' ? ['arm64', 'x64'] : [arch]
+  const wanted = wantedArches.map((each) => `${electronPlatformName}-${each}`)
+  const keep = (entry) => entry.startsWith(`${electronPlatformName}-`)
   let pruned = 0
   let prunedBytes = 0
   if (existsSync(prebuilds)) {
@@ -82,21 +89,27 @@ export default async function afterPack(context) {
     if (pruned) log(`dropped ${pruned} foreign-platform prebuild set(s), ${megabytes(prunedBytes)}`)
   }
 
-  // --- the native module has to exist for the target -----------------------
+  // --- the native module has to exist for every target -----------------------
   // The directory existing is not the same as the binary being in it: a failed
   // node-gyp run leaves build/Release behind empty, so look for pty.node itself.
-  const prebuilt = join(prebuilds, wanted)
+  // One directory per architecture the artifact claims to run on, which is two
+  // for a universal build and one for everything else.
   const compiled = join(pty, 'build', 'Release')
-  const binaryDir = [prebuilt, compiled].find((dir) => existsSync(join(dir, 'pty.node')))
-  if (!binaryDir) {
-    // node-pty publishes no Linux prebuild: it is compiled by `npm install`, so
-    // a Linux artifact packaged on macOS or Windows would ship no PTY at all.
-    throw new Error(
-      `node-pty has no pty.node for ${wanted}: it is in neither ${prebuilt} nor ${compiled}. ` +
-        `Package the ${electronPlatformName} artifact on ${electronPlatformName}, where npm install builds one.`
-    )
-  }
-  log(`node-pty binary for ${wanted} found in ${binaryDir}`)
+  const binaryDirs = wanted.map((name) => {
+    const prebuilt = join(prebuilds, name)
+    const found = [prebuilt, compiled].find((dir) => existsSync(join(dir, 'pty.node')))
+    if (!found) {
+      // node-pty publishes no Linux prebuild: it is compiled by `npm install`,
+      // so a Linux artifact packaged on macOS or Windows would ship no PTY at
+      // all.
+      throw new Error(
+        `node-pty has no pty.node for ${name}: it is in neither ${prebuilt} nor ${compiled}. ` +
+          `Package the ${electronPlatformName} artifact on ${electronPlatformName}, where npm install builds one.`
+      )
+    }
+    return found
+  })
+  log(`node-pty binaries found for ${wanted.join(', ')}`)
 
   // --- spawn-helper has to stay executable ---------------------------------
   // macOS only, and deliberately not "every platform that is not Windows":
@@ -104,20 +117,24 @@ export default async function afterPack(context) {
   // `#if defined(__APPLE__)` branch of pty.cc. Linux forks and execvp's in
   // process, so demanding the helper there fails a package that is in fact fine.
   if (electronPlatformName === 'darwin') {
-    const helper = join(binaryDir, 'spawn-helper')
-    if (!existsSync(helper)) {
-      throw new Error(`node-pty's spawn-helper is missing from ${binaryDir}; PTY spawning would fail at runtime.`)
+    // Every architecture's helper, not just the first: on a universal build the
+    // one that matters is whichever machine opens the terminal.
+    for (const binaryDir of binaryDirs) {
+      const helper = join(binaryDir, 'spawn-helper')
+      if (!existsSync(helper)) {
+        throw new Error(`node-pty's spawn-helper is missing from ${binaryDir}; PTY spawning would fail at runtime.`)
+      }
+      const mode = statSync(helper).mode
+      if (!(mode & 0o111)) {
+        chmodSync(helper, 0o755)
+        log('restored the executable bit on spawn-helper')
+      }
+      const verified = statSync(helper).mode
+      if (!(verified & 0o111)) {
+        throw new Error(`could not make ${helper} executable (mode ${(verified & 0o777).toString(8)}).`)
+      }
+      log(`spawn-helper ready at mode ${(verified & 0o777).toString(8)} in ${binaryDir}`)
     }
-    const mode = statSync(helper).mode
-    if (!(mode & 0o111)) {
-      chmodSync(helper, 0o755)
-      log('restored the executable bit on spawn-helper')
-    }
-    const verified = statSync(helper).mode
-    if (!(verified & 0o111)) {
-      throw new Error(`could not make ${helper} executable (mode ${(verified & 0o777).toString(8)}).`)
-    }
-    log(`spawn-helper ready at mode ${(verified & 0o777).toString(8)}`)
   }
 
   // --- the Windows PTY needs more than pty.node ----------------------------
@@ -129,6 +146,7 @@ export default async function afterPack(context) {
   // missing is invisible until a pane fails to open, so all of them are checked.
   if (electronPlatformName === 'win32') {
     const required = ['conpty.node', 'pty.node', 'winpty.dll', 'winpty-agent.exe']
+    const [binaryDir] = binaryDirs
     const missing = required.filter((name) => !existsSync(join(binaryDir, name)))
     if (missing.length > 0) {
       throw new Error(
