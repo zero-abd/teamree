@@ -1,4 +1,9 @@
-<h1 align="center">teamree</h1>
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/wordmark-dark.svg">
+    <img src="brand/wordmark-light.svg" width="340" alt="teamree">
+  </picture>
+</h1>
 
 <p align="center">
   <a href="https://github.com/zero-abd/teamree/releases/latest"><img src="https://img.shields.io/github/v/release/zero-abd/teamree?color=08C&label=release" alt="Latest release"></a>

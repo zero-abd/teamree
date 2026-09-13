@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 274 64" fill="currentColor" role="img" aria-label="teamree">
+  <!--
+    The horizontal lockup: brand/mark.svg, then the word.
+
+    The word is drawn, not set. Outlining an installed face would tie the
+    wordmark to that font's licence and to whatever is on the machine that
+    rendered it; these letterforms are monolinear circles and stems in the
+    mark's own language — stroke 6 with round terminals, the same round-capped
+    geometry as the `>` prompt inside the windows.
+
+    Metrics: baseline y=44, x-height top y=20, bowl centreline radius 9 so a
+    round letter is exactly one x-height across the outside (2*9 + 6 = 24).
+    The x-height band 20..44 is centred on y=32, which is the centre of the
+    mark's own 5.5..58.44 — that is the optical alignment, and it deliberately
+    ignores the t's ascender, as lowercase logotypes do.
+
+    Spacing is optical, not metric: stem-to-stem pairs (a-m, m-r) carry 6 units
+    of air and round-to-round pairs (e-a, e-e) carry 4, because equal gaps look
+    unequal between those shapes. The mark and the word are 14 apart.
+
+    Padding is built in only as bleed: the mark's glyph starts at x=2, the word
+    ends at x=269 in a 274 box. There is no clear-space margin baked in — a host
+    that wants air adds it outside this box.
+  -->
+
+  <g>
+    <!-- the mark, exactly as brand/mark.svg -->
+    <path d="M16.28 58.44 Q32 49.19 47.72 58.44 Q32 55.69 16.28 58.44 Z"/>
+    <path d="M30.13 21.63 H33.88 V57.06 H30.13 Z"/>
+    <g fill="none" stroke="currentColor" stroke-width="3.63" stroke-linecap="round">
+      <path d="M15.81 39.13 C17.91 45.69 32.91 48.50 30.16 54.75"/>
+      <path d="M48.19 39.13 C46.09 45.69 31.09 48.50 33.84 54.75"/>
+    </g>
+    <g fill="none" stroke="currentColor" stroke-width="3.13" stroke-linecap="round">
+      <path d="M27.09 39.25 L32 46.75"/>
+      <path d="M36.91 39.25 L32 46.75"/>
+    </g>
+    <g fill-rule="evenodd">
+      <path d="M24.44 5.5 H39.56 A3.38 3.38 0 0 1 42.94 8.88 V18.5 A3.38 3.38 0 0 1 39.56 21.88 H24.44 A3.38 3.38 0 0 1 21.06 18.5 V8.88 A3.38 3.38 0 0 1 24.44 5.5 Z
+               M23.5 8.88 A1.13 1.13 0 0 1 25.75 8.88 A1.13 1.13 0 0 1 23.5 8.88 Z
+               M26.66 8.88 A1.13 1.13 0 0 1 28.91 8.88 A1.13 1.13 0 0 1 26.66 8.88 Z
+               M29.81 8.88 A1.13 1.13 0 0 1 32.06 8.88 A1.13 1.13 0 0 1 29.81 8.88 Z
+               M24.77 13.70 L27.34 15.69 L24.77 17.68 A0.84 0.84 0 0 0 25.80 19.01 L29.23 16.36 A0.84 0.84 0 0 0 29.23 15.02 L25.80 12.36 A0.84 0.84 0 0 0 24.77 13.70 Z
+               M31.00 19.22 L34.81 19.22 A0.81 0.81 0 0 0 34.81 17.59 L31.00 17.59 A0.81 0.81 0 0 0 31.00 19.22 Z"/>
+      <path d="M5.38 23.31 H20.50 A3.38 3.38 0 0 1 23.88 26.69 V36.31 A3.38 3.38 0 0 1 20.50 39.69 H5.38 A3.38 3.38 0 0 1 2 36.31 V26.69 A3.38 3.38 0 0 1 5.38 23.31 Z
+               M4.44 26.69 A1.13 1.13 0 0 1 6.69 26.69 A1.13 1.13 0 0 1 4.44 26.69 Z
+               M7.59 26.69 A1.13 1.13 0 0 1 9.84 26.69 A1.13 1.13 0 0 1 7.59 26.69 Z
+               M10.75 26.69 A1.13 1.13 0 0 1 13.00 26.69 A1.13 1.13 0 0 1 10.75 26.69 Z
+               M5.70 31.51 L8.28 33.50 L5.70 35.49 A0.84 0.84 0 0 0 6.73 36.82 L10.17 34.17 A0.84 0.84 0 0 0 10.17 32.83 L6.73 30.18 A0.84 0.84 0 0 0 5.70 31.51 Z
+               M11.94 37.03 L15.75 37.03 A0.81 0.81 0 0 0 15.75 35.41 L11.94 35.41 A0.81 0.81 0 0 0 11.94 37.03 Z"/>
+      <path d="M43.50 23.31 H58.63 A3.38 3.38 0 0 1 62 26.69 V36.31 A3.38 3.38 0 0 1 58.63 39.69 H43.50 A3.38 3.38 0 0 1 40.13 36.31 V26.69 A3.38 3.38 0 0 1 43.50 23.31 Z
+               M42.56 26.69 A1.13 1.13 0 0 1 44.81 26.69 A1.13 1.13 0 0 1 42.56 26.69 Z
+               M45.72 26.69 A1.13 1.13 0 0 1 47.97 26.69 A1.13 1.13 0 0 1 45.72 26.69 Z
+               M48.88 26.69 A1.13 1.13 0 0 1 51.13 26.69 A1.13 1.13 0 0 1 48.88 26.69 Z
+               M43.83 31.51 L46.40 33.50 L43.83 35.49 A0.84 0.84 0 0 0 44.86 36.82 L48.30 34.17 A0.84 0.84 0 0 0 48.30 32.83 L44.86 30.18 A0.84 0.84 0 0 0 43.83 31.51 Z
+               M50.06 37.03 L53.88 37.03 A0.81 0.81 0 0 0 53.88 35.41 L50.06 35.41 A0.81 0.81 0 0 0 50.06 37.03 Z"/>
+    </g>
+  </g>
+
+  <!-- the word -->
+  <g fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <!-- t -->
+    <path d="M84 12 V37.5 A6 6 0 0 0 90 43.5"/>
+    <path d="M79 20 H90"/>
+    <!-- e -->
+    <path d="M116 32 A9 9 0 1 0 112.16 39.37"/>
+    <path d="M116 32 H98"/>
+    <!-- a -->
+    <path d="M144 32 A9 9 0 1 1 144 31.99"/>
+    <path d="M144 20 V44"/>
+    <!-- m -->
+    <path d="M156 20 V44"/>
+    <path d="M156 29 A9 9 0 0 1 174 29 V44"/>
+    <path d="M174 29 A9 9 0 0 1 192 29 V44"/>
+    <!-- r -->
+    <path d="M204 20 V44"/>
+    <path d="M204 27.5 A7.5 7.5 0 0 1 211.5 20"/>
+    <!-- e -->
+    <path d="M238 32 A9 9 0 1 0 234.16 39.37"/>
+    <path d="M238 32 H220"/>
+    <!-- e -->
+    <path d="M266 32 A9 9 0 1 0 262.16 39.37"/>
+    <path d="M266 32 H248"/>
+  </g>
+</svg>
