@@ -5,7 +5,8 @@
 
 import { describe, expect, it } from 'vitest'
 import type { PeerLink, TeamworkStatus } from '@shared/entities'
-import { teamworkSummary } from './teamworkSummary'
+import { ADD_KEY_BUTTON } from '../dialogs/startTeamwork'
+import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
 
 function status(overrides: Partial<TeamworkStatus> = {}): TeamworkStatus {
   return {
@@ -85,7 +86,7 @@ describe('what the project header says about teamwork', () => {
     expect(summary?.detail).toContain('marcus: nobody has answered on this rendezvous')
   })
 
-  it('puts a refused handshake above everything, because somebody was there', () => {
+  it('puts a failed handshake above everything, without claiming somebody was there', () => {
     const summary = teamworkSummary(
       status({
         links: [
@@ -99,7 +100,7 @@ describe('what the project header says about teamwork', () => {
       })
     )
     expect(summary?.tone).toBe('problem')
-    expect(summary?.label).toBe('1 refused')
+    expect(summary?.label).toBe('Handshake failed')
     expect(summary?.detail).toContain('marcus')
   })
 
@@ -119,6 +120,16 @@ describe('what the project header says about teamwork', () => {
     expect(summary).toMatchObject({ tone: 'off', label: 'Your key is not here' })
     expect(summary?.detail).toContain('.teamree/members')
     expect(summary?.detail).toContain('commit and push')
+  })
+
+  it('sends the reader to controls that exist, under the names they render with', () => {
+    // This sentence is the only instruction a stuck reader gets, and it named a
+    // Members dialog that the Start teamwork panel replaced. Both names now come
+    // from the components that draw them, so the tooltip cannot name a control
+    // that is not there — nor go on naming one that has been renamed.
+    const detail = teamworkSummary(status({ enrolled: false }))?.detail
+    expect(detail).toContain(TEAMWORK_BUTTON_LABEL)
+    expect(detail).toContain(ADD_KEY_BUTTON)
   })
 
   it('still says which thing is not set up at all before it says whose key is missing', () => {

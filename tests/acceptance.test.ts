@@ -252,4 +252,22 @@ describe('milestone 1 acceptance', () => {
     const remaining = cli<Worktree[]>(['worktree', 'list'])
     expect(remaining.find((row) => row.id === worktree.id)).toBeUndefined()
   })
+
+  it("takes the removed worktree's terminals with it, rather than leaving them running", async () => {
+    // The panes opened above were still running when the row went. Nothing
+    // else closes them: the sidebar only walks worktrees and the dashboard
+    // drops panes whose worktree is gone, so a pane left alive here is an
+    // agent still working in a directory that no longer exists, reachable
+    // only by id and still counted in the status bar.
+    //
+    // Polled rather than asserted at once: the close is started off the
+    // worktree.removed event, so it is in flight while the remove is
+    // answering.
+    let stranded = cli<Terminal[]>(['terminal', 'list']).filter((row) => row.worktreeId === worktree.id)
+    for (let attempt = 0; attempt < 20 && stranded.length > 0; attempt += 1) {
+      await sleep(250)
+      stranded = cli<Terminal[]>(['terminal', 'list']).filter((row) => row.worktreeId === worktree.id)
+    }
+    expect(stranded).toEqual([])
+  }, 30_000)
 })

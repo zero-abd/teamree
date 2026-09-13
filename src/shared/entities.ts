@@ -407,8 +407,8 @@ export type RelaySetting = {
   source: 'repository' | 'environment' | null
   /** Why there is no URL in effect, in words to act on. Null when there is one. */
   problem: string | null
-  /** What the committed file says, read even when the environment is winning. */
-  committed: { url: string | null; problem: string | null }
+  /** What the file in this checkout says, read even when the environment is winning. */
+  onDisk: { url: string | null; problem: string | null }
   /** The per-machine override, as this process sees it. */
   override: {
     /** The variable's name, so a message can say it rather than imply it. */
