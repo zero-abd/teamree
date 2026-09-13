@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { applicationMenuTemplate } from './appMenu'
+import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
@@ -20,7 +21,12 @@ function createWindow(): BrowserWindow {
     ...(process.platform === 'darwin'
       ? { trafficLightPosition: { x: TRAFFIC_LIGHT_X_PX, y: TRAFFIC_LIGHT_Y_PX } }
       : {}),
-    backgroundColor: '#14161a',
+    // The ground the chosen theme is about to paint, so the frame Electron
+    // shows before the renderer has rendered anything is already the right
+    // colour. Hard-coding one meant that switching to a dark theme still opened
+    // on a flash of the old near-black, and switching to a light one opened on
+    // a flash of dark.
+    backgroundColor: windowBackground(),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       sandbox: false,
@@ -44,6 +50,17 @@ function createWindow(): BrowserWindow {
   else void window.loadFile(join(import.meta.dirname, '../renderer/index.html'))
 
   return window
+}
+
+/**
+ * The window's backdrop, from the appearance this installation last chose.
+ *
+ * Falls back to the default theme's ground whenever the runtime is not up yet
+ * or could not read its file — which is the same ground `tokens.css` declares,
+ * so the fallback is not a guess.
+ */
+function windowBackground(): string {
+  return resolvePalette(runtime?.context.store.getAppearance() ?? DEFAULT_APPEARANCE)['bg-window']
 }
 
 let runtime: Runtime | undefined

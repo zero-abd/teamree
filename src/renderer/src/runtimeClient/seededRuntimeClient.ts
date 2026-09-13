@@ -20,6 +20,7 @@ import type {
   WorktreeStatus
 } from '@shared/entities'
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
+import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '@shared/theme'
 import { leaf, splitPane } from '../panes/paneLayout'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
 
@@ -455,6 +456,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
     askedAt: cliAskedAt,
     readAt: Date.now()
   })
+
+  let appearance: Appearance = DEFAULT_APPEARANCE
 
   const handlers: { [M in MethodName]: (params: ParamsOf<M>) => ResultOf<M> } = {
     'status.get': () => ({
@@ -1023,6 +1026,15 @@ export function createSeededRuntimeClient(): RuntimeClient {
       layouts.set(worktreeId, layout)
       announce({ type: 'terminals' }, { type: 'layout', worktreeId })
       return { terminal: record, layout }
+    },
+
+    // Held for the life of the page rather than written anywhere: the seeded
+    // runtime has no disk, and a demo that claimed to have remembered a theme
+    // would be claiming to have written a file it never wrote.
+    'appearance.get': () => appearance,
+    'appearance.set': (next) => {
+      appearance = sanitizeAppearance(next)
+      return appearance
     },
 
     'layout.get': ({ worktreeId }) => layouts.get(worktreeId) ?? { worktreeId, root: null, focusedTerminalId: null },

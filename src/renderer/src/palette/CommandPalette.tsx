@@ -15,7 +15,8 @@ const ACTION_SHORTCUTS: Partial<Record<PaletteAction, WorkspaceCommand>> = {
   'split-right': 'split-right',
   'split-down': 'split-down',
   'toggle-sidebar': 'toggle-sidebar',
-  'open-dashboard': 'open-dashboard'
+  'open-dashboard': 'open-dashboard',
+  'open-appearance': 'open-appearance'
 }
 
 export function CommandPalette({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
@@ -94,6 +95,9 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         break
       case 'install-cli':
         store.openDialog({ kind: 'install-cli' })
+        break
+      case 'open-appearance':
+        store.openDialog({ kind: 'appearance' })
         break
     }
   }

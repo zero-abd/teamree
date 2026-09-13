@@ -29,6 +29,7 @@ import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, T
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import type { TerminalService } from '../../terminals/method-handlers'
+import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerStatusHandler } from './statusHandler'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
@@ -64,6 +65,8 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   registerStatusHandler(registry)
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)
+  // Two reads and a write against the store, with no resource behind them.
+  registerAppearanceHandlers(registry)
   const workspaceEvents = registry.context.workspaceEvents
 
   const terminals = createTerminalService({

@@ -8,6 +8,7 @@ import type { Layout, Project, Worktree } from '../../shared/entities'
 import type { TerminalRecord } from '../terminals/session-restore'
 import { samePath } from '../git/pathIdentity'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
+import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '../../shared/theme'
 import {
   emptyWorkspaceDocument,
   parseWorkspaceDocument,
@@ -73,6 +74,7 @@ export class WorkspaceStore {
   private readonly terminals = new Map<string, TerminalRecord>()
   private readonly mutedTerminals = new Set<string>()
   private asked: AskedQuestions = {}
+  private appearance: Appearance = DEFAULT_APPEARANCE
 
   private queue: Promise<void> = Promise.resolve()
   private queued = false
@@ -96,6 +98,7 @@ export class WorkspaceStore {
     for (const terminal of document.terminals) this.terminals.set(terminal.id, terminal)
     for (const terminalId of document.mutedTerminals) this.mutedTerminals.add(terminalId)
     this.asked = document.asked
+    this.appearance = document.appearance
   }
 
   /**
@@ -263,6 +266,31 @@ export class WorkspaceStore {
     this.persist()
   }
 
+  /**
+   * How this installation is painted, as it stands between runs.
+   *
+   * Answered from memory like everything else here, because the main process
+   * reads it to colour a window before that window exists and a file read at
+   * that moment would be a frame of the wrong colour.
+   */
+  getAppearance(): Appearance {
+    return this.appearance
+  }
+
+  /**
+   * Replaces the whole choice, sanitised on the way in.
+   *
+   * Sanitised here rather than trusted from the caller because this is the last
+   * place before the bytes hit the disk, and the file is the thing a future
+   * launch has to be able to open. A colour that is not a colour is dropped;
+   * the rest of somebody's theme survives it.
+   */
+  setAppearance(appearance: unknown): Appearance {
+    this.appearance = sanitizeAppearance(appearance)
+    this.persist()
+    return this.appearance
+  }
+
   snapshot(): WorkspaceSnapshot {
     return {
       projects: this.listProjects(),
@@ -338,7 +366,8 @@ export class WorkspaceStore {
       ...emptyWorkspaceDocument(),
       ...this.snapshot(),
       mutedTerminals: this.listMutedTerminals(),
-      asked: this.asked
+      asked: this.asked,
+      appearance: this.appearance
     }
   }
 }

@@ -16,6 +16,7 @@ export type PaletteAction =
   | 'open-dashboard'
   | 'add-project'
   | 'install-cli'
+  | 'open-appearance'
 
 export type PaletteItem =
   /** Jump to a worktree. */
@@ -127,6 +128,13 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
   },
   { id: 'toggle-sidebar', label: 'Toggle sidebar', keywords: 'hide show projects' },
   { id: 'add-project', label: 'Add project', keywords: 'repository repo folder clone' },
+  {
+    id: 'open-appearance',
+    label: 'Appearance',
+    // Every word somebody might reach for it by, including the two spellings of
+    // the one word this is mostly about.
+    keywords: 'theme colour color dark black contrast accent ground palette settings preferences'
+  },
   {
     id: 'install-cli',
     label: 'Put teamree on my PATH',

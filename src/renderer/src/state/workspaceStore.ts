@@ -25,6 +25,7 @@ import type {
   WorktreeMergePreview,
   WorktreeStatus
 } from '@shared/entities'
+import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
 import { awaitWorktreeReady } from './awaitWorktreeReady'
 import { relayUrlFromOutput } from '../teamwork/startTeamwork'
@@ -41,6 +42,7 @@ import { readStoredSession, sessionChanged, writeStoredSession } from './storedS
 
 export type DialogState =
   | { kind: 'add-project' }
+  | { kind: 'appearance' }
   | { kind: 'install-cli' }
   | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
@@ -293,6 +295,17 @@ type WorkspaceState = {
   dialog: DialogState
   notices: Notice[]
 
+  /**
+   * How this window is painted, as the runtime last told it.
+   *
+   * Held here rather than in the appearance dialog's own state because the
+   * dialog is not the only reader: `App` writes the resolved palette onto the
+   * root element from it, and every open terminal re-reads its emulator theme
+   * when it changes. A colour edited in the dialog is therefore live in the
+   * panes behind the dialog, which is the whole point of editing one.
+   */
+  appearance: Appearance
+
   bootstrap: () => Promise<void>
   /** Opens the change stream. Returns the stop function an effect cleans up with. */
   startWatching: () => () => void
@@ -409,6 +422,17 @@ type WorkspaceState = {
   closeTeamwork: () => void
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
+  /**
+   * Applies an appearance and remembers it.
+   *
+   * Applied and stored in one step, with no draft and no confirm button:
+   * colours are judged by looking at them, so the window behind the dialog is
+   * the preview, and a change somebody liked enough to leave on screen is a
+   * change they have already decided. The write costs one in-process call and
+   * the runtime coalesces its disk writes, so a colour being dragged is cheap
+   * enough to save every frame of.
+   */
+  setAppearance: (appearance: Appearance) => Promise<void>
   openDialog: (dialog: NonNullable<DialogState>) => void
   closeDialog: () => void
   dismissNotice: (id: number) => void
@@ -900,6 +924,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     dialog: null,
     notices: [],
 
+    // The default until the runtime answers, which is the same palette
+    // `tokens.css` already painted the first frame in — so the window does not
+    // change shade on the way to its real theme.
+    appearance: DEFAULT_APPEARANCE,
+
     /**
      * The first read of everything. It goes through the same queue the change
      * stream uses, so the opening snapshot cannot be overtaken by an event that
@@ -923,6 +952,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         void runtimeClient
           .call('cli.status', {})
           .then((cli) => set({ cli }))
+          .catch(() => {})
+        // And the theme. Not fatal either: a window that could not read its
+        // appearance opens in the default one rather than not opening.
+        void runtimeClient
+          .call('appearance.get', {})
+          .then((appearance) => set({ appearance }))
           .catch(() => {})
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
@@ -1620,6 +1655,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set((state) => ({ sidebarVisible: !state.sidebarVisible }))
       // Bringing the sidebar back brings every expanded row with it.
       if (get().sidebarVisible) readOnScreen()
+    },
+
+    async setAppearance(appearance) {
+      // Held locally first so the window repaints on the keystroke rather than
+      // on the round trip, and replaced by what the runtime answers — which is
+      // the same choice with anything it refused taken out of it.
+      set({ appearance })
+      try {
+        set({ appearance: await runtimeClient.call('appearance.set', appearance) })
+      } catch (error) {
+        failed('Could not save the appearance')(error)
+      }
     },
 
     openTeamwork(projectId) {

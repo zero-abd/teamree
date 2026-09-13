@@ -121,7 +121,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
 }
 
 const mount = (): void => {
-  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" />)
+  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," />)
 }
 
 beforeEach(() => {
