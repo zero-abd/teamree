@@ -96,7 +96,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                   className="button button--ghost button--icon"
                   title={`New worktree in ${project.name} · ${newWorktreeHint}`}
                   aria-label={`New worktree in ${project.name}`}
-                  onClick={() => openDialog({ kind: 'create-worktree', projectId: project.id })}
+                  onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
                 >
                   <svg viewBox="0 0 14 14" aria-hidden="true">
                     <path d="M7 2.5 L7 11.5 M2.5 7 L11.5 7" />
@@ -132,7 +132,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                           <button
                             type="button"
                             className="project__none-action"
-                            onClick={() => openDialog({ kind: 'create-worktree', projectId: project.id })}
+                            onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
                           >
                             Start one
                           </button>

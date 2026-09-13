@@ -66,6 +66,15 @@
   font-size: var(--text-base);
 }
 
+/* The task is the one field the user has to think about, so it is the one that
+   reads as a paragraph rather than as a form control. */
+.field__input--task {
+  min-height: 66px;
+  resize: vertical;
+  font-size: var(--text-lg);
+  line-height: 1.45;
+}
+
 .field__input--mono {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -94,6 +103,14 @@ select.field__input {
 
 .field__hint code {
   color: var(--accent-bright);
+}
+
+/* Agent and project: two short choices that belong on one line, and stack when
+   the modal is narrower than they are. */
+.form__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s4);
 }
 
 .form__actions {

@@ -17,6 +17,7 @@ import type {
   WorktreeStatus
 } from '@shared/entities'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
+import { awaitWorktreeReady } from './awaitWorktreeReady'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import {
@@ -29,11 +30,21 @@ import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type Re
 
 export type DialogState =
   | { kind: 'add-project' }
-  | { kind: 'create-worktree'; projectId: string }
+  | { kind: 'new-task'; projectId: string }
   | { kind: 'palette' }
   /** Raised only when git has already refused: there is work here to lose. */
   | { kind: 'confirm-remove'; worktreeId: string; reason: string }
   | null
+
+/** What the task composer submits: a description, who runs it, and from where. */
+export type TaskDraft = {
+  projectId: string
+  /** The task as written. Names the worktree and seeds its branch. */
+  task: string
+  startedFrom?: string
+  /** Command for the agent's pane. Absent means the worktree alone. */
+  agentCommand?: string
+}
 
 export type Notice = { id: number; text: string; tone: 'error' | 'info' }
 
@@ -74,6 +85,9 @@ type WorkspaceState = {
   pushing: boolean
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
+  /** True once the probe has answered, however it answered. Until then an
+   * empty `agents` means "not asked yet", not "none installed". */
+  agentsProbed: boolean
   diff: WorktreeDiff | null
   diffPending: boolean
 
@@ -98,7 +112,8 @@ type WorkspaceState = {
   startWatching: () => () => void
 
   addProject: (path: string, name?: string) => Promise<void>
-  createWorktree: (input: { projectId: string; name: string; startedFrom?: string }) => void
+  /** Creates the worktree, waits for it, then starts the agent in it. */
+  startTask: (draft: TaskDraft) => void
   retryWorktree: (worktreeId: string) => void
   removeWorktree: (worktreeId: string) => Promise<void>
   /** Goes through with a removal git refused, discarding the work in it. */
@@ -405,6 +420,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     committing: false,
     pushing: false,
     agents: [],
+    agentsProbed: false,
     diff: null,
     diffPending: false,
 
@@ -435,8 +451,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // an app, and the answer only decides which buttons to offer.
         void runtimeClient
           .call('agent.list', {})
-          .then((agents) => set({ agents }))
-          .catch(() => set({ agents: [] }))
+          .then((agents) => set({ agents, agentsProbed: true }))
+          .catch(() => set({ agents: [], agentsProbed: true }))
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
         await refresher.flush()
@@ -474,20 +490,38 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     /**
-     * Fire and forget: the dialog closes on submit and the new row appears in
-     * its creating state, because a worktree can take tens of seconds.
+     * One action, three steps, none of which the user waits on: the composer
+     * closes immediately and the new row appears in its creating state, because
+     * a worktree can take tens of seconds and the sidebar already narrates that
+     * better than a spinner in a box would.
      */
-    createWorktree({ projectId, name, startedFrom }) {
+    startTask({ projectId, task, startedFrom, agentCommand }) {
       set({ dialog: null })
-      void runtimeClient
-        .call('worktree.create', startedFrom ? { projectId, name, startedFrom } : { projectId, name })
-        .then((worktree) => {
-          set((state) => ({
-            worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), worktree],
-            collapsedProjects: { ...state.collapsedProjects, [projectId]: false }
-          }))
+      const name = task.trim()
+
+      void (async () => {
+        const created = await runtimeClient.call(
+          'worktree.create',
+          startedFrom ? { projectId, name, startedFrom } : { projectId, name }
+        )
+        set((state) => ({
+          worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],
+          collapsedProjects: { ...state.collapsedProjects, [projectId]: false }
+        }))
+
+        // The agent needs a checkout to run in, so the pane waits for one. A
+        // failure here is already on the row, with its reason and its retry.
+        const ready = await awaitWorktreeReady({
+          worktreeId: created.id,
+          read: (worktreeId) => runtimeClient.call('worktree.get', { worktreeId }),
+          watch: (onChange) => runtimeClient.watchWorkspace(onChange)
         })
-        .catch(failed('Could not start the worktree'))
+
+        if (agentCommand) {
+          await runtimeClient.call('terminal.create', { worktreeId: ready.id, command: agentCommand })
+        }
+        await get().openWorktree(ready.id)
+      })().catch(failed('Could not start the task'))
     },
 
     retryWorktree(worktreeId) {

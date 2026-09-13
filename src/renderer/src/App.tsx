@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo } from 'react'
 import { AddProjectDialog } from './dialogs/AddProjectDialog'
-import { CreateWorktreeDialog } from './dialogs/CreateWorktreeDialog'
+import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
@@ -82,7 +82,7 @@ export function App(): React.JSX.Element {
         <ConfirmRemoveDialog worktreeId={dialog.worktreeId} reason={dialog.reason} />
       ) : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
-      {dialog?.kind === 'create-worktree' ? <CreateWorktreeDialog projectId={dialog.projectId} /> : null}
+      {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
     </div>
   )
 }

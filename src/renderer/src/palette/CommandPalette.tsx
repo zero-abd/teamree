@@ -59,7 +59,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
       case 'new-worktree': {
         const active = store.worktrees.find((worktree) => worktree.id === store.activeWorktreeId)
         const projectId = active?.projectId ?? store.projects[0]?.id
-        if (projectId) store.openDialog({ kind: 'create-worktree', projectId })
+        if (projectId) store.openDialog({ kind: 'new-task', projectId })
         break
       }
       case 'new-terminal':
