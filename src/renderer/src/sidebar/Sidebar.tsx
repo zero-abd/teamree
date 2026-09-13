@@ -18,7 +18,7 @@
 // ends up with two answers to "where is it".
 
 import { useMemo } from 'react'
-import type { PaneWatchers } from '@shared/entities'
+import { teammatesHeard, type PaneWatchers } from '@shared/entities'
 import { offerCliInstall } from '../dialogs/cliInstallModel'
 import type { PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
@@ -222,7 +222,7 @@ export function Sidebar({
             // Under the same project, because that is what they are: the same
             // repository, checked out somewhere else. The rows below make whose
             // they are unmissable, which is what lets them share the list.
-            const theirs = teammateRows(teammates[project.id]?.worktrees ?? [], now, watchEvidence)
+            const theirs = teammateRows(teammatesHeard(teammates[project.id])?.worktrees ?? [], now, watchEvidence)
             const reading = watchersByPane(watching[project.id])
             // Teammates on the roster this machine has never heard a word from.
             // Not the same as away, and not the same as having no worktrees.

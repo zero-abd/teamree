@@ -24,6 +24,7 @@ const pane = (partial: Partial<PeerPane> = {}): PeerPane => ({
 })
 
 const presence = (panes: PeerPane[], heardAt = 1_000): TeammatePresence => ({
+  state: 'read',
   projectId: 'p1',
   worktrees: [
     {

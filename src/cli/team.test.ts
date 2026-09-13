@@ -69,6 +69,7 @@ const PANE_BO = {
 }
 
 const PRESENCE = {
+  state: 'read',
   projectId: 'p_api',
   worktrees: [
     {
@@ -770,6 +771,23 @@ describe('team panes', () => {
     const result = await cli.run(['team', 'panes', 'api', '--teammate', 'ana', '--json'])
     const data = soleJsonDocument(result.out)['data'] as { panes: Array<{ paneId: string }> }
     expect(data.panes.map((pane) => pane.paneId)).toEqual(['peer:AAAABBBBCCCC:t_7', 'peer:AAAABBBBCCCC:t_8'])
+  })
+
+  // The same beat `team status` reports as "not read yet", reaching a command
+  // whose whole output is a list. An empty table here would read as "this
+  // teammate has no panes", so the wait gets an exit and a code of its own —
+  // which is the one thing an agent can branch on without parsing prose.
+  it('refuses rather than printing an empty table for a project teamwork has not read', async () => {
+    const cli = await harness(
+      teamHandler({
+        'teamwork.presence': () => ({ state: 'unread', projectId: 'p_api', readAt: NOW })
+      })
+    )
+    const result = await cli.run(['team', 'panes', 'api', '--json'])
+    expect(result.code).toBe(ExitCode.Failure)
+    const document = JSON.parse(result.err) as { error: { code: string; hint: string } }
+    expect(document.error.code).toBe('not_read_yet')
+    expect(document.error.hint).toContain('Ask again in a moment.')
   })
 })
 

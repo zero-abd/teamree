@@ -25,6 +25,7 @@ import type {
   PaneConsent,
   PaneWatchers,
   TeammatePresence,
+  TeammatePresenceRead,
   Terminal,
   WatchedPane
 } from '../../src/shared/entities'
@@ -82,6 +83,21 @@ const ACT_TWO_AGENT = [
 ].join('; ')
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * The roster out of a presence answer, or a failure that says it was never read.
+ *
+ * `teamwork.presence` answers a union: a project the runtime has but has not
+ * reconciled yet has no roster, and says so rather than handing back an empty
+ * one. Every peer below is fully up before anything here asks, so unread is not
+ * a state to wait out — it is the harness having got ahead of a runtime, and a
+ * named failure beats `worktrees` being `undefined` on the next line.
+ */
+async function rosterOf(answer: Promise<TeammatePresence>): Promise<TeammatePresenceRead> {
+  const presence = await answer
+  if (presence.state !== 'read') throw new Error(`teamwork has not read ${presence.projectId}’s roster yet`)
+  return presence
+}
 
 /**
  * Polls a condition nothing here can be woken for.
@@ -227,11 +243,11 @@ describe.skipIf(!RELAY_BUILT)('act II — across the relay', () => {
       .map((event) => event.data)
       .join('')
 
-  const bosView = (): Promise<TeammatePresence> =>
-    peers.joiner.call('teamwork.presence', { projectId: peers.joiner.projectId })
+  const bosView = (): Promise<TeammatePresenceRead> =>
+    rosterOf(peers.joiner.call('teamwork.presence', { projectId: peers.joiner.projectId }))
 
   /** Ana's row in bo's sidebar, with her panes under it. */
-  const anasRow = async (): Promise<TeammatePresence['worktrees'][number] | undefined> =>
+  const anasRow = async (): Promise<TeammatePresenceRead['worktrees'][number] | undefined> =>
     (await bosView()).worktrees.find((row) => row.handle === 'ana')
 
   /** Ana's own books: who is reading her panes and who has typed into them. */
@@ -513,7 +529,7 @@ describe.skipIf(!RELAY_BUILT)('act II — across the relay', () => {
     // ever heard from anybody. A rendezvous is derived from the two keys, so a
     // peer who is not on the roster is not merely turned away at the door —
     // there is no door at the address she can compute.
-    const view = await stranger.call('teamwork.presence', { projectId: stranger.projectId })
+    const view = await rosterOf(stranger.call('teamwork.presence', { projectId: stranger.projectId }))
     expect(view.worktrees).toEqual([])
     expect(view.teammates).toEqual([
       { handle: 'ana', publicKey: (await peers.leader.whoAmI()).publicKey, connected: false, heardAt: null },

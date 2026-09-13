@@ -327,7 +327,16 @@ export const Params = {
    * has that id.
    */
   teamworkStatus: z.object({ projectId: z.string().min(1) }),
-  /** A teammate's worktrees and panes in one project, as last heard. */
+  /**
+   * A teammate's worktrees and panes in one project, as last heard.
+   *
+   * A union on the same window and for the same reason as `teamwork.status`,
+   * because the roster is the other half of the same reconcile. `state:
+   * 'unread'` says the project exists and nothing has been read about it; an
+   * empty roster would say the repository was read and holds nobody but you,
+   * which is a different sentence and the one that empties a sidebar. See
+   * `TeammatePresence`.
+   */
   teamworkPresence: z.object({ projectId: z.string().min(1) }),
   /**
    * Opens a teammate's pane for reading.
@@ -359,7 +368,16 @@ export const Params = {
     paneId: z.string().min(1),
     data: atMostBytes(MAX_REMOTE_WRITE_BYTES, 1)
   }),
-  /** Who is reading and typing into this machine's panes, right now, in one project. */
+  /**
+   * Who is reading and typing into this machine's panes, right now, in one
+   * project.
+   *
+   * One shape rather than the union above, because every fact in it is this
+   * machine's own and none of it waits on a reconcile — the argument is written
+   * out on `PaneWatchers`. It answers for a project teamwork has not read yet
+   * rather than refusing one, which is what lets a restored window read the
+   * mutes on panes it is already drawing.
+   */
   teamworkWatchers: z.object({ projectId: z.string().min(1) }),
   /**
    * Whose keystrokes are waiting on the owner in one project, and which
@@ -369,6 +387,11 @@ export const Params = {
    * appearing, growing, being answered or expiring all move the same
    * `teammates` event, because the window that has to put the question on
    * screen is the window that is already listening for it.
+   *
+   * Answers for a project teamwork has not read yet, on `teamwork.watchers`'
+   * argument: see `PaneConsent`. A permission the owner cannot see is a
+   * permission they cannot lift, and refusing the project outright was the most
+   * complete way to hide one.
    */
   teamworkRequests: z.object({ projectId: z.string().min(1) }),
   /**

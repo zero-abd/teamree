@@ -16,6 +16,7 @@ import {
   remoteRunner,
   makeProjectDir,
   project,
+  presenceOf,
   statusOf,
   terminal,
   worktree,
@@ -182,9 +183,11 @@ async function untilOnDisk(filePath: string): Promise<void> {
 }
 
 function bobsRows(runtime: PeerRuntime): { name: string; live: boolean; heardAt: number }[] {
-  return runtime.service
-    .presence({ projectId: 'p_alice' })
-    .worktrees.map((row) => ({ name: row.name, live: row.live, heardAt: row.heardAt }))
+  return presenceOf(runtime.service, 'p_alice').worktrees.map((row) => ({
+    name: row.name,
+    live: row.live,
+    heardAt: row.heardAt
+  }))
 }
 
 /** Brings both sides up and lets the handshake and the first snapshot settle. */
@@ -356,7 +359,7 @@ function recorder(): { channel: SubscriptionChannel; events: unknown[] } {
 
 /** Bob’s pane as Alice’s side names it, which is what a watcher is handed. */
 function bobsPaneId(runtime: PeerRuntime): string {
-  const pane = runtime.service.presence({ projectId: 'p_alice' }).worktrees[0]?.panes[0]
+  const pane = presenceOf(runtime.service, 'p_alice').worktrees[0]?.panes[0]
   if (!pane) throw new Error('Bob’s pane is not in Alice’s presence')
   return pane.id
 }
@@ -420,12 +423,12 @@ describe('two peers over a relay', () => {
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
     expect(linkTo(pair.bob, 'p_bob', pair.aliceKey)?.phase).toBe('connected')
 
-    const seenByAlice = pair.alice.service.presence({ projectId: 'p_alice' })
+    const seenByAlice = presenceOf(pair.alice.service, 'p_alice')
     expect(seenByAlice.worktrees.map((entry) => [entry.handle, entry.name, entry.branch])).toEqual([
       ['bob', 'flaky test', 'fix/flake']
     ])
 
-    const seenByBob = pair.bob.service.presence({ projectId: 'p_bob' })
+    const seenByBob = presenceOf(pair.bob.service, 'p_bob')
     expect(seenByBob.worktrees.map((entry) => [entry.handle, entry.name])).toEqual([['alice', 'search ranking']])
   })
 
@@ -433,7 +436,7 @@ describe('two peers over a relay', () => {
     const pair = await pairOfRuntimes()
     await connect(pair)
 
-    const [bobsWorktree] = pair.alice.service.presence({ projectId: 'p_alice' }).worktrees
+    const [bobsWorktree] = presenceOf(pair.alice.service, 'p_alice').worktrees
     const [pane] = bobsWorktree?.panes ?? []
     expect(pane?.agent).toBe('codex')
     expect(pane?.running).toBe(true)
@@ -456,7 +459,7 @@ describe('two peers over a relay', () => {
     pair.bob.workspace.worktrees[0]!.id = 'wt_a1'
     await connect(pair)
 
-    const [seen] = pair.alice.service.presence({ projectId: 'p_alice' }).worktrees
+    const [seen] = presenceOf(pair.alice.service, 'p_alice').worktrees
     expect(seen?.id).not.toBe('wt_a1')
     expect(seen?.id.startsWith('peer:')).toBe(true)
   })
@@ -469,7 +472,7 @@ describe('two peers over a relay', () => {
 
     expect(statusOf(pair.alice.service, 'p_alice').links).toEqual([])
     expect(linkTo(pair.bob, 'p_bob', pair.aliceKey)?.phase).toBe('waiting')
-    expect(pair.bob.service.presence({ projectId: 'p_bob' }).worktrees).toEqual([])
+    expect(presenceOf(pair.bob.service, 'p_bob').worktrees).toEqual([])
   })
 
   it('tells a teammate nothing about a project they are not a member of', async () => {
@@ -575,7 +578,7 @@ describe('two peers over a relay', () => {
     pair.alice.workspace.projects[0] = project('p_alice', stripped)
     await pair.alice.service.reconcile()
 
-    expect(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees).toEqual([])
+    expect(presenceOf(pair.alice.service, 'p_alice').worktrees).toEqual([])
     expect(statusOf(pair.alice.service, 'p_alice').links).toEqual([])
   })
 })
@@ -584,13 +587,13 @@ describe('presence stays live', () => {
   it('sends a new snapshot when a worktree appears, without anyone asking', async () => {
     const pair = await pairOfRuntimes()
     await connect(pair)
-    expect(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees).toHaveLength(1)
+    expect(presenceOf(pair.alice.service, 'p_alice').worktrees).toHaveLength(1)
 
     pair.bob.workspace.worktrees.push(worktree('wt_b2', 'p_bob', 'second thing', 'feat/second'))
     pair.bob.changed()
     await pair.scheduler.advance(1_000)
 
-    expect(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees.map((w) => w.name)).toEqual([
+    expect(presenceOf(pair.alice.service, 'p_alice').worktrees.map((w) => w.name)).toEqual([
       'flaky test',
       'second thing'
     ])
@@ -643,7 +646,7 @@ describe('the failure paths', () => {
     await pair.scheduler.advance(30_000)
 
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
-    expect(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees).toHaveLength(1)
+    expect(presenceOf(pair.alice.service, 'p_alice').worktrees).toHaveLength(1)
   })
 
   it('rebuilds the session when the relay restarts under it', async () => {
@@ -663,7 +666,7 @@ describe('the failure paths', () => {
   it('says a teammate who vanished is not connected, and stops calling what they showed live', async () => {
     const pair = await pairOfRuntimes()
     await connect(pair)
-    expect(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees).toHaveLength(1)
+    expect(presenceOf(pair.alice.service, 'p_alice').worktrees).toHaveLength(1)
 
     pair.bob.service.stop()
     await pair.scheduler.advance(100)
@@ -832,7 +835,7 @@ describe('a teammate who is not there', () => {
     await pair.alice.service.start()
     await pair.scheduler.advance(0)
 
-    const seen = pair.alice.service.presence({ projectId: 'p_alice' })
+    const seen = presenceOf(pair.alice.service, 'p_alice')
     // No rows at all, and a named teammate with nothing behind them — never the
     // same shape as somebody whose rows are simply old.
     expect(seen.worktrees).toEqual([])
@@ -857,7 +860,7 @@ describe('a teammate who is not there', () => {
     await revived.service.start()
     await pair.scheduler.advance(0)
 
-    const seen = revived.service.presence({ projectId: 'p_alice' })
+    const seen = presenceOf(revived.service, 'p_alice')
     expect(seen.worktrees.map((row) => [row.handle, row.name, row.live])).toEqual([['bob', 'flaky test', false]])
     // It is a picture, not a claim: nobody is connected and the standing says so.
     expect(seen.teammates.map((teammate) => teammate.connected)).toEqual([false])
@@ -898,7 +901,7 @@ describe('a teammate who is not there', () => {
 
     const counts: number[] = []
     const watch = (): void => {
-      counts.push(pair.alice.service.presence({ projectId: 'p_alice' }).worktrees.length)
+      counts.push(presenceOf(pair.alice.service, 'p_alice').worktrees.length)
     }
 
     watch()
@@ -925,7 +928,7 @@ describe('a teammate who is not there', () => {
 
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
     expect(bobsRows(pair.alice).every((row) => row.live)).toBe(false)
-    expect(pair.alice.service.presence({ projectId: 'p_alice' }).teammates.map((one) => one.connected)).toEqual([false])
+    expect(presenceOf(pair.alice.service, 'p_alice').teammates.map((one) => one.connected)).toEqual([false])
   })
 })
 
@@ -969,14 +972,14 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
     pair.bob.changed()
     await pair.scheduler.advance(1_000)
 
-    expect(() => pair.alice.service.presence({ projectId: 'p_alice' })).not.toThrow()
+    expect(() => presenceOf(pair.alice.service, 'p_alice')).not.toThrow()
     expect(bobsRows(pair.alice).map((row) => row.name)).toEqual(['flaky test'])
     expect(pair.alice.errors().map(String).join()).toContain('was not a snapshot')
 
     // And still refused ten minutes later: a refusal that wore off would be a
     // wedge with a delay on it.
     await pair.scheduler.advance(600_000)
-    expect(() => pair.alice.service.presence({ projectId: 'p_alice' })).not.toThrow()
+    expect(() => presenceOf(pair.alice.service, 'p_alice')).not.toThrow()
   })
 
   it('keeps a teammate’s snapshot inside this machine’s own bounds', async () => {
@@ -1013,7 +1016,7 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
     pair.bob.changed()
     await pair.scheduler.advance(1_000)
 
-    const rows = pair.alice.service.presence({ projectId: 'p_alice' }).worktrees
+    const rows = presenceOf(pair.alice.service, 'p_alice').worktrees
     // The cache's numbers rather than a second set: what is held in memory and
     // the copy written to disk being bounded differently would mean one of the
     // two numbers is wrong.

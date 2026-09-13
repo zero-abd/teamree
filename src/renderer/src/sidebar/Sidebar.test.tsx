@@ -20,7 +20,7 @@
 
 import { act, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project, TeammatePresence, TeamworkStatus, Worktree } from '@shared/entities'
+import type { Project, TeammatePresence, TeammatePresenceRead, TeamworkStatus, Worktree } from '@shared/entities'
 
 const call = vi.fn<(method: string, params: unknown) => Promise<unknown>>()
 const watchPane = vi.fn()
@@ -57,7 +57,8 @@ const worktree = (overrides: Partial<Worktree> = {}): Worktree => ({
   ...overrides
 })
 
-const presence = (overrides: Partial<TeammatePresence> = {}): TeammatePresence => ({
+const presence = (overrides: Partial<TeammatePresenceRead> = {}): TeammatePresence => ({
+  state: 'read',
   projectId: 'p1',
   worktrees: [],
   teammates: [],
