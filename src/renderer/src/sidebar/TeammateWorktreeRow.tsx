@@ -55,10 +55,14 @@ export function TeammateWorktreeRow({ row, watchingPaneId, onWatch }: TeammateWo
             <span className="worktree__branch">{row.branch}</span>
             {/* The age, never the bare word "offline": what is known is how old
                 this picture is, and the sentence behind it says their machine
-                is away rather than anything at all about the worktree. */}
+                is away rather than anything at all about the worktree. The
+                badge names which age it is, because the number is the age of
+                the picture and not of the absence, and the two are not the
+                same for a teammate whose worktrees had been static for hours
+                before their machine went. */}
             {row.staleness ? (
               <span className="worktree__stale" title={row.staleness.detail} aria-label={row.staleness.detail}>
-                {`away · ${row.staleness.age}`}
+                {row.staleness.badge}
               </span>
             ) : null}
           </span>

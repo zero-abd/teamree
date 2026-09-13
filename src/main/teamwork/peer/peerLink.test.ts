@@ -28,6 +28,7 @@ import {
   createPeerLink,
   HANDSHAKE_TIMEOUT_MS,
   KEEPALIVE_MS,
+  LINK_QUIET_AFTER_MS,
   MAX_UNROUTED_EVENTS,
   SILENCE_TIMEOUT_MS,
   SILENT_PEER_DETAIL,
@@ -41,6 +42,7 @@ import type { RelayDialer } from './relaySocket'
 import type { WakeWatch } from './wakeWatch'
 import { Params } from '../../../shared/methods'
 import { createDispatcher } from '../../runtime/dispatcher'
+import { CLOCK_JUMP_TOLERANCE_MS } from '../../runtime/elapsed'
 import { MethodRegistry } from '../../runtime/methodRegistry'
 import { createRuntimeContext } from '../../runtime/runtimeContext'
 import { SubscriptionHub, type SubscriptionChannel } from '../../runtime/subscriptionHub'
@@ -251,6 +253,46 @@ function sleepingLid(): { wrap: (dial: RelayDialer) => RelayDialer; sleep: () =>
         close: (code, reason) => {
           if (!asleep) socket.close(code, reason)
         }
+      }
+    }
+  }
+}
+
+/**
+ * A socket that holds everything back and then lets it all through, in order.
+ *
+ * The other real shape of a machine going away, and the only one a link can
+ * come back from. `sleepingLid` above drops, which is a hole in the Noise
+ * transcript and ends the session by design; a suspended laptop's connection
+ * loses nothing and delivers late, so this is what a test about *recovering*
+ * from a silence has to be written against.
+ */
+function stalledLid(): { wrap: (dial: RelayDialer) => RelayDialer; stall: () => void; resume: () => void } {
+  let stalled = false
+  const held: (() => void)[] = []
+  const run = (effect: () => void): void => {
+    if (stalled) held.push(effect)
+    else effect()
+  }
+  return {
+    stall: () => {
+      stalled = true
+    },
+    resume: () => {
+      stalled = false
+      for (const effect of held.splice(0, held.length)) effect()
+    },
+    wrap: (dial) => (url, handlers) => {
+      const socket = dial(url, {
+        onOpen: () => run(() => handlers.onOpen()),
+        onText: (text) => run(() => handlers.onText(text)),
+        onBinary: (payload) => run(() => handlers.onBinary(payload)),
+        onClosed: (code, reason) => run(() => handlers.onClosed(code, reason))
+      })
+      return {
+        sendText: (text) => run(() => socket.sendText(text)),
+        sendBinary: (payload) => run(() => socket.sendBinary(payload)),
+        close: (code, reason) => run(() => socket.close(code, reason))
       }
     }
   }
@@ -1194,6 +1236,118 @@ describe('a teammate whose machine stopped answering', () => {
     expect(link?.detail).toBe(SILENT_PEER_DETAIL)
     await pair.scheduler.advance(3_600_000)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBe(SILENT_PEER_DETAIL)
+  })
+
+  it('carries the age of its silence for the minutes before the deadline, and not before that', async () => {
+    // The window the deadline left behind. `since` is when the phase last
+    // moved, so a link established hours ago and silent for four minutes used
+    // to be indistinguishable from one that is fine, and the header asserted
+    // "connected" for the whole of it.
+    const lid = sleepingLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.lastHeardAt).toBeUndefined()
+
+    lid.sleep()
+    // Just inside the threshold there is still nothing to say.
+    await pair.scheduler.advance(LINK_QUIET_AFTER_MS - 1)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.lastHeardAt).toBeUndefined()
+
+    await pair.scheduler.advance(1)
+    const quiet = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    // Still connected — this is the window, not the deadline — and now saying
+    // when, by this machine's clock, anything from Bob last decrypted.
+    expect(quiet?.phase).toBe('connected')
+    // A timestamp rather than a duration: the sidebar ticks on its own clock
+    // and is only handed a link when something changes, so an age it can work
+    // out for itself goes on being right while nothing is sent to it again.
+    expect(quiet?.lastHeardAt).toBe(CLOCK_START)
+    expect(pair.scheduler.now() - (quiet?.lastHeardAt ?? 0)).toBe(LINK_QUIET_AFTER_MS)
+  })
+
+  it('measures that age on a clock a stepped wall clock cannot move', async () => {
+    // The age is a liveness deadline's number, so it is owed a liveness
+    // deadline's clock. Two `Date.now()` readings subtracted is the one thing
+    // this file has established a silence may not be measured with: a wall
+    // clock that steps — an NTP correction, somebody changing the time —
+    // lengthens that difference without a second of silence having passed, and
+    // the sidebar would age a link nobody had stopped hearing from.
+    //
+    // A step this small is deliberately *not* a sleep: it is inside
+    // `CLOCK_JUMP_TOLERANCE_MS`, so no deadline withdraws its verdict and
+    // nothing rescues the number except its being measured on the right clock.
+    const lid = sleepingLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+
+    lid.sleep()
+    const step = CLOCK_JUMP_TOLERANCE_MS - 1_000
+    await pair.scheduler.sleep(step, 'uncounted')
+    await pair.scheduler.advance(LINK_QUIET_AFTER_MS)
+
+    const quiet = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    // The link is still up, so the age is still this link's to report, and the
+    // step is not part of it: exactly the threshold, not the threshold plus
+    // half a minute of somebody else's clock correction.
+    expect(quiet?.phase).toBe('connected')
+    expect(pair.scheduler.now() - (quiet?.lastHeardAt ?? 0)).toBe(LINK_QUIET_AFTER_MS)
+  })
+
+  it('stops carrying an age at all once this machine turns out to be the one that was away', async () => {
+    // Where the two halves of this file meet. A link four minutes silent is
+    // carrying a number; then the lid shuts. On waking, that number would be an
+    // hour old and would read as an hour of the teammate's silence — the
+    // sentence this link learned not to say, arriving as a figure instead of as
+    // a phrase. There is nothing known to put a number on, so there is no
+    // number.
+    const lid = sleepingLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+
+    lid.sleep()
+    await pair.scheduler.advance(LINK_QUIET_AFTER_MS)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.lastHeardAt).toBeDefined()
+
+    await pair.scheduler.sleep(3_600_000, 'counted')
+
+    const woken = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(woken?.detail).toBe(WOKE_DETAIL)
+    expect(woken?.lastHeardAt).toBeUndefined()
+  })
+
+  it('says nothing new about a link that is talking, however long it has been up', async () => {
+    const pair = await pairOfRuntimes()
+    await connect(pair)
+
+    // Several ordinary keepalive cycles. A gap of one whole interval is what
+    // healthy looks like, which is why the threshold sits past one: a header
+    // that sprouted an age in the instant before every keepalive landed would
+    // teach a reader to ignore the one that means something.
+    for (let cycle = 0; cycle < 5; cycle += 1) {
+      await pair.scheduler.advance(KEEPALIVE_MS)
+      const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
+      expect(link?.phase).toBe('connected')
+      expect(link?.lastHeardAt).toBeUndefined()
+    }
+  })
+
+  it('stops carrying an age the moment the teammate is heard from again', async () => {
+    const lid = stalledLid()
+    const pair = await pairOfRuntimes({ bobDial: lid.wrap })
+    await connect(pair)
+
+    lid.stall()
+    await pair.scheduler.advance(LINK_QUIET_AFTER_MS)
+    expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.lastHeardAt).toBeDefined()
+
+    // Inside the deadline, so there is still a link to come back to. A header
+    // going on saying "last heard 3m ago" about somebody who answered a
+    // moment ago is the same untruth pointed the other way.
+    lid.resume()
+    await pair.scheduler.advance(0)
+    const woken = linkTo(pair.alice, 'p_alice', pair.bobKey)
+    expect(woken?.phase).toBe('connected')
+    expect(woken?.lastHeardAt).toBeUndefined()
   })
 
   it('says nothing about a machine it has never heard from, because it cannot know', async () => {
