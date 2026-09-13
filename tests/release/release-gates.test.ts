@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   GATES,
+  STABLE_DMG_NAME,
   checksumLine,
   expectedTag,
   isPrerelease,
@@ -238,5 +239,27 @@ describe('what it says before it does anything', () => {
   it('warns, on the plan itself, that an unsigned build is refused by a downloader', () => {
     expect(plan(false, 'adhoc')).toContain('will refuse it')
     expect(plan(false, 'developer-id')).not.toContain('will refuse it')
+  })
+})
+
+// The link on the download button points at this name and nothing else, so the
+// property that matters is not what it is called but that what it is called
+// cannot go stale. `releases/latest/download/<name>` finds the newest release
+// and then looks for that exact filename inside it, which is why a name with a
+// version in it breaks on the day the next version ships.
+describe('the name the download button can keep pointing at', () => {
+  it('carries no version, so a newer release cannot orphan the link', () => {
+    expect(STABLE_DMG_NAME).not.toMatch(/\d+\.\d+\.\d+/)
+    expect(STABLE_DMG_NAME.endsWith('.dmg')).toBe(true)
+  })
+
+  it('is a second name for one file, so both lines carry the same hash', () => {
+    const hash = 'ccf09c74af6ba75a032fee58b11dc578ece77dd3ec38401328fe34a8131bf8d2'
+    const sums = `${checksumLine(hash, 'teamree-0.1.0.dmg')}\n${checksumLine(hash, STABLE_DMG_NAME)}\n`
+
+    const lines = sums.trim().split('\n')
+    expect(lines).toHaveLength(2)
+    expect(lines.every((line) => line.startsWith(hash))).toBe(true)
+    expect(lines[1]).toContain(STABLE_DMG_NAME)
   })
 })

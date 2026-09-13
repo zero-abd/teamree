@@ -28,6 +28,7 @@
 // sequence that shares a name with it.
 import { createHash } from 'node:crypto'
 import {
+  copyFileSync,
   createReadStream,
   existsSync,
   mkdtempSync,
@@ -194,6 +195,22 @@ export function preflightRefusals(state) {
 function short(sha) {
   return sha.slice(0, 7)
 }
+
+/**
+ * The second name every release publishes the same `.dmg` under.
+ *
+ * `releases/latest/download/<name>` resolves the latest RELEASE and then looks
+ * for that exact filename in it — so a link naming `teamree-0.1.0.dmg` keeps
+ * working right up until the moment v0.2.0 is published, and then 404s while
+ * having looked healthy the whole time. That is the worst shape a broken link
+ * can have: it breaks on the day traffic is highest and nothing before then
+ * tells you.
+ *
+ * So the image goes up twice, under the same bytes: once named for its version,
+ * because somebody linking a specific release needs that, and once under a name
+ * with no version in it, which is what the download button points at.
+ */
+export const STABLE_DMG_NAME = 'teamree-mac-universal.dmg'
 
 /** `shasum -a 256` output, byte for byte, so a reader can compare it as printed. */
 export function checksumLine(hash, name) {
@@ -466,7 +483,9 @@ async function main(argv) {
   }
 
   const dist = join(REPO_ROOT, 'dist')
-  const dmgs = readdirSync(dist).filter((name) => name.endsWith('.dmg'))
+  // The alias this script wrote on an earlier run is not a second build, and
+  // counting it as one would make every re-run refuse.
+  const dmgs = readdirSync(dist).filter((name) => name.endsWith('.dmg') && name !== STABLE_DMG_NAME)
   if (dmgs.length !== 1) {
     fail(
       dmgs.length === 0
@@ -504,7 +523,16 @@ async function main(argv) {
   const kind = readSignatureKind(findPackagedApp())
 
   const hash = await sha256(dmg)
-  const checksums = `${checksumLine(hash, dmgs[0])}\n`
+
+  // Copied rather than symlinked: a release asset is uploaded by reading the
+  // path, and a link would upload as whatever it points at on this machine.
+  const stableDmg = join(dist, STABLE_DMG_NAME)
+  copyFileSync(dmg, stableDmg)
+
+  // Both names, one hash. Somebody who downloaded either file can compare
+  // what they have against the line naming it, rather than working out that
+  // the two files are the same file.
+  const checksums = `${checksumLine(hash, dmgs[0])}\n${checksumLine(hash, STABLE_DMG_NAME)}\n`
   const sumsPath = join(dist, 'SHA256SUMS.txt')
   writeFileSync(sumsPath, checksums)
 
@@ -578,6 +606,7 @@ async function main(argv) {
       'create',
       tag,
       dmg,
+      stableDmg,
       sumsPath,
       '--repo',
       repoName,
