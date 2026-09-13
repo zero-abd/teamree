@@ -158,6 +158,22 @@ export function WatchedPaneView({
       })
     }
 
+    /**
+     * The last word, and it stays the last word.
+     *
+     * A watch can end before it has finished opening — the teammate's machine
+     * can stop answering between the runtime accepting the request and the
+     * stream being answered — and the `lost` for that arrives while this view
+     * is still showing "Opening…". Without this, the continuation below would
+     * then overwrite the stated reason with `watching` and leave a window that
+     * looks live and will never move again, which is the failure this view
+     * exists to make impossible pointed the reassuring way.
+     */
+    const end = (reason: string): void => {
+      if (!alive) return
+      setState((current) => (current.phase === 'ended' ? current : { phase: 'ended', reason }))
+    }
+
     const onEvent = (event: WatchedPaneEvent): void => {
       if (!alive) return
       if (event.type === 'data') {
@@ -179,7 +195,7 @@ export function WatchedPaneView({
         // reader is told in the pane and on the header, because a viewer that
         // simply stopped updating reads as a teammate who went quiet.
         term?.write(`\r\n${DIM}[stopped watching: ${event.reason}]${RESET}\r\n`)
-        setState({ phase: 'ended', reason: event.reason })
+        end(event.reason)
       }
     }
 
@@ -228,11 +244,12 @@ export function WatchedPaneView({
         observer = new ResizeObserver(letterbox)
         observer.observe(frame)
         letterbox()
-        setState({ phase: 'watching', cols: opened.cols, rows: opened.rows })
+        setState((current) =>
+          current.phase === 'ended' ? current : { phase: 'watching', cols: opened.cols, rows: opened.rows }
+        )
       })
       .catch((error: unknown) => {
-        if (!alive) return
-        setState({ phase: 'ended', reason: error instanceof Error ? error.message : String(error) })
+        end(error instanceof Error ? error.message : String(error))
       })
 
     return () => {

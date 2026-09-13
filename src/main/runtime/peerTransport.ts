@@ -96,6 +96,18 @@ export const PEER_METHODS: readonly MethodName[] = [
 ] as const
 
 /**
+ * How long a call to the teammate may go unanswered before it is refused.
+ *
+ * Every method on `PEER_METHODS` is answered out of memory or out of a pty
+ * buffer on the far machine, so thirty seconds is not a slow answer, it is no
+ * answer. The link's own silence deadline in `peerLink.ts` is the real backstop
+ * and is deliberately longer; this is the cheaper belt, and what it buys is
+ * that no single wedged call can become a keystroke that vanished, a watch that
+ * never opens, or a promise nothing ever settles.
+ */
+export const PEER_CALL_TIMEOUT_MS = 30_000
+
+/**
  * How long output for one pane is gathered before it is sent.
  *
  * Fifty flushes a second per watched pane, against the relay's 200 frames, and
@@ -288,6 +300,16 @@ export type PeerTransport = {
    * anything, which makes it the cheapest legal thing to say.
    */
   keepalive: () => void
+  /**
+   * When this session last turned something from the peer into plaintext, on
+   * the injected clock.
+   *
+   * The only honest evidence anybody is there. A socket that has not been
+   * closed is not evidence — a machine that suspends leaves one open on both
+   * hosts — and neither is a frame this side sent. `peerLink.ts` reads this
+   * and nothing else to decide whether a link is still a link.
+   */
+  readonly lastDecryptedAt: number
   /** Fails every call still in flight and releases this peer's subscriptions. */
   close: (reason: string) => void
 }
@@ -295,7 +317,10 @@ export type PeerTransport = {
 export function createPeerTransport(options: PeerTransportOptions): PeerTransport {
   const allowed = new Set<string>(options.allowedMethods ?? PEER_METHODS)
   const subscribing = new Set<string>(SUBSCRIBING_METHODS)
-  const pending = new Map<string, { resolve: (answer: never) => void; reject: (error: Error) => void }>()
+  const pending = new Map<
+    string,
+    { resolve: (answer: never) => void; reject: (error: Error) => void; cancel: () => void }
+  >()
   const reader = createLineReader(options.session)
   const scheduler = options.scheduler ?? realScheduler
   /** Request id to the pane it asked to watch, until its answer comes back. */
@@ -322,6 +347,13 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   let received = 0
   let live = true
   let confirmed = false
+  /**
+   * Starts at construction rather than at zero, so a session that has said
+   * nothing yet reads as quiet for no time rather than quiet since the epoch.
+   * The window before the first frame is the handshake's to police, and
+   * `peerLink.ts` has a separate deadline for it.
+   */
+  let decryptedAt = scheduler.now()
 
   const write = (frame: Frame): void => {
     if (!live) return
@@ -340,7 +372,10 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     for (const stream of paced.values()) stream.cancel?.()
     paced.clear()
     options.subscriptions.closeConnection(options.connectionId)
-    for (const [, waiter] of pending) waiter.reject(new Error(reason))
+    for (const [, waiter] of pending) {
+      waiter.cancel()
+      waiter.reject(new Error(reason))
+    }
     pending.clear()
     options.onFatal(reason)
   }
@@ -535,6 +570,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     const waiter = pending.get(response.id)
     if (!waiter) return
     pending.delete(response.id)
+    waiter.cancel()
     if (response.ok) waiter.resolve({ result: response.result, sequence } as never)
     else waiter.reject(new PeerCallError(response.error.code, response.error.message))
   }
@@ -692,7 +728,19 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     nextId += 1
     const id = `peer_${nextId}`
     return new Promise<Answered<M>>((resolve, reject) => {
-      pending.set(id, { resolve: resolve as (answer: never) => void, reject })
+      // Armed before the frame is written, because `write` can fail the whole
+      // transport in place and the cleanup that does must find this waiter
+      // already holding its own cancel.
+      const cancel = scheduler.setTimer(() => {
+        if (!pending.delete(id)) return
+        // Named, and named as silence rather than as a refusal: the far end has
+        // not said no, it has said nothing, and the person who typed is owed
+        // the difference.
+        reject(
+          new Error(`your teammate’s machine did not answer ${method} within ${PEER_CALL_TIMEOUT_MS / 1000} seconds`)
+        )
+      }, PEER_CALL_TIMEOUT_MS)
+      pending.set(id, { resolve: resolve as (answer: never) => void, reject, cancel })
       write({ id, method, params } as unknown as Frame)
     })
   }
@@ -710,6 +758,12 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         values = reader.push(message)
         // After the decrypt, before anything is acted on: whatever is in this
         // message, the fact that it authenticated is the interesting part.
+        // Recorded for every message and not only the first, because this
+        // number is the link's whole evidence that somebody is still there and
+        // it is worth exactly as much as it is fresh. A keepalive counts: it
+        // carries an empty line that the decoder drops, and the decrypt that
+        // produced it is the proof.
+        decryptedAt = scheduler.now()
         if (!confirmed) {
           confirmed = true
           options.onConfirmed?.()
@@ -743,6 +797,10 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       } catch (error) {
         fail(messageOf(error))
       }
+    },
+
+    get lastDecryptedAt() {
+      return decryptedAt
     },
 
     close: (reason) => fail(reason)
