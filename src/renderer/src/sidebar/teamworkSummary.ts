@@ -23,7 +23,17 @@
 // talking carries nothing and this says nothing new about it.
 
 import type { PeerLink, TeamworkStatus } from '@shared/entities'
+import { ADD_KEY_BUTTON } from '../dialogs/startTeamwork'
 import { sinceLabel } from './agentRows'
+
+/**
+ * The label on the button in the project header that opens the setup panel.
+ *
+ * Shared with the sidebar that renders it, because the tooltip below tells
+ * somebody to press it by name: a name written out twice is a name that can
+ * end up pointing at a button nobody can find.
+ */
+export const TEAMWORK_BUTTON_LABEL = 'Teamwork'
 
 export type TeamworkTone =
   /** Everything that can be up is up. */
@@ -69,7 +79,9 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
       tone: 'off',
       label: 'Your key is not here',
       detail:
-        'Your own key is not in .teamree/members in this checkout, so no teammate can reach you — their machines have nothing to address. Add it in Members, then commit and push it.'
+        'Your own key is not in .teamree/members in this checkout, so no teammate can reach you — their ' +
+        `machines have nothing to address. Open ${TEAMWORK_BUTTON_LABEL} in this project’s header and press ` +
+        `“${ADD_KEY_BUTTON}”, then commit and push the file it writes.`
     }
   }
   if (status.links.length === 0) {

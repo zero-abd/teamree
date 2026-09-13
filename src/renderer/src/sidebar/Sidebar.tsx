@@ -20,7 +20,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { evidenceLine } from './outputEvidence'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle, type TeammatePaneRow } from './teammateRows'
-import { teamworkSummary } from './teamworkSummary'
+import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { WorktreeRow } from './WorktreeRow'
 
@@ -195,7 +195,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
                   title={`Set up teamwork in ${project.name}, and see who is on it`}
                   onClick={() => openDialog({ kind: 'start-teamwork', projectId: project.id })}
                 >
-                  Teamwork
+                  {TEAMWORK_BUTTON_LABEL}
                 </button>
               </div>
 

@@ -302,7 +302,7 @@ describe('the relay a project meets on', () => {
     expect(setting.problem).toContain('.teamree/relay')
   })
 
-  it('shows the committed relay as well as the override beating it', async () => {
+  it('shows the relay this checkout holds as well as the override beating it', async () => {
     const harness = await wire({
       email: 'ada@example.com',
       env: { TEAMREE_RELAY_URL: 'ws://127.0.0.1:8787/v1/relay' }
@@ -313,6 +313,6 @@ describe('the relay a project meets on', () => {
 
     expect(setting.url).toBe('ws://127.0.0.1:8787/v1/relay')
     expect(setting.source).toBe('environment')
-    expect(setting.committed.url).toBe('wss://relay.example/v1/relay')
+    expect(setting.onDisk.url).toBe('wss://relay.example/v1/relay')
   })
 })
