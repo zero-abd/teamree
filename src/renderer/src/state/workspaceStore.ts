@@ -1206,10 +1206,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async loadCli() {
-      // A refusal belongs to the attempt that earned it. Without this, cancelling
-      // the password prompt and closing the dialog leaves "the password was not
-      // given" waiting for whoever opens it next, about an attempt nobody made.
-      set({ cliPending: true, cliError: null })
+      // A refusal belongs to the attempt that earned it, and so does a success.
+      // Without this, cancelling the password prompt and closing the dialog
+      // leaves "the password was not given" waiting for whoever opens it next,
+      // about an attempt nobody made — and a link made in March and broken in
+      // April leaves a panel saying the CLI is not on your PATH with a line
+      // under it saying it now points at this app. Cleared on the read rather
+      // than on open because the read is what opening does, and because
+      // `installCli` re-reads before it records its own refusal.
+      set({ cliPending: true, cliError: null, cliInstall: null })
       try {
         set({ cli: await runtimeClient.call('cli.status', {}) })
       } catch (error) {

@@ -12,6 +12,7 @@
 // proves all of that survived packaging.
 import { spawn, spawnSync } from 'node:child_process'
 import {
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -19,7 +20,7 @@ import {
   readdirSync,
   readFileSync,
   readSync,
-  closeSync,
+  realpathSync,
   rmdirSync,
   rmSync,
   statSync
@@ -401,6 +402,50 @@ function cliJson(...args) {
 
 const status = cliJson('status')
 ok(`shipped CLI reached the packaged runtime (status: ${JSON.stringify(status.data ?? status)})`)
+
+// ------------------------------------------- what the app says about its CLI --
+
+// Everything the first-run offer says rests on this one read, and only a real
+// packaged app can answer it: the app finds its own CLI through
+// `process.resourcesPath`. Every claim is checked against the package on disk,
+// because a status naming a path with nothing at it is a panel offering to link
+// one — and an offer made from the wrong place costs somebody a password.
+//
+// The install itself is not driven from here. It writes to /usr/local/bin, and
+// that destination is deliberately not configurable: an environment variable
+// that moved it would let the environment choose the target of a symlink
+// written as root. Linking is covered against a temporary directory in
+// src/main/cli/cliService.test.ts and through the real dispatcher in
+// registerCliHandlers.test.ts; what only a packaged app can answer is here.
+const cliStatus = cliJson('cli', 'status').data
+const shippedCli = join(app.resources, 'cli', 'teamree')
+
+function wrongAboutItsCli() {
+  if (!cliStatus.source) return 'it reports no CLI of its own'
+  if (!existsSync(cliStatus.source)) return `it would link ${cliStatus.source}, and nothing is there`
+  if (realpathSync(cliStatus.source) !== realpathSync(shippedCli)) {
+    return `it would link ${cliStatus.source}, which is not the CLI in this package (${shippedCli})`
+  }
+  if (!cliStatus.packaged) return 'it does not know it is packaged, so it would never make the first-run offer'
+  if (!cliStatus.bundle || !existsSync(cliStatus.bundle)) {
+    return `it names ${cliStatus.bundle} as the bundle behind its launcher, and nothing is there`
+  }
+  if (cliStatus.destination !== '/usr/local/bin/teamree') return `it would put the link at ${cliStatus.destination}`
+  return null
+}
+
+const wrong = wrongAboutItsCli()
+if (wrong) {
+  cleanup()
+  fail(`the packaged app is wrong about its own CLI: ${wrong}`, JSON.stringify(cliStatus, null, 2))
+}
+if (cliStatus.impermanent !== null) {
+  // Not a packaging fault and not a failure: it is what the app should say
+  // about a copy being run from the disk image, and from there it refuses to
+  // link rather than leaving a symlink that dangles at the eject.
+  ok(`the app knows it is running from somewhere a link cannot follow (${cliStatus.impermanent})`)
+}
+ok(`the app finds its own CLI at ${cliStatus.source}, with the bundle at ${cliStatus.bundle}`)
 
 cliJson('project', 'add', repo, '--name', 'verify')
 
