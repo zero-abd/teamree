@@ -66,6 +66,15 @@
   font-size: var(--text-base);
 }
 
+/* The task is the one field the user has to think about, so it is the one that
+   reads as a paragraph rather than as a form control. */
+.field__input--task {
+  min-height: 66px;
+  resize: vertical;
+  font-size: var(--text-lg);
+  line-height: 1.45;
+}
+
 .field__input--mono {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -94,6 +103,14 @@ select.field__input {
 
 .field__hint code {
   color: var(--accent-bright);
+}
+
+/* Agent and project: two short choices that belong on one line, and stack when
+   the modal is narrower than they are. */
+.form__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s4);
 }
 
 .form__actions {
@@ -280,4 +297,139 @@ select.field__input {
     opacity: 0;
     transform: translateY(-3px);
   }
+}
+
+/* The palette. Same modal chrome as the dialogs, but the input is the whole
+   header: there is nothing to fill in, only something to find. */
+.palette {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  /* Padded like a form body, so the input lines up with the title above it
+     rather than running flush to the panel's edge. */
+  padding: 0 var(--s5) var(--s5);
+}
+
+/* A palette is a list to scan, not fields to fill, so it wants more width than
+   a form does. The panel follows the content — declaring the width on the
+   content alone left it overflowing a 440px panel by 120px. */
+.modal:has(.palette) {
+  width: min(560px, 86vw);
+}
+
+.palette__input {
+  width: 100%;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-size: var(--text-base);
+}
+
+.palette__input:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.palette__list {
+  margin: var(--s3) 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  max-height: min(52vh, 400px);
+}
+
+.palette__empty {
+  margin: var(--s4) 0 0;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.palette__row {
+  width: 100%;
+  padding: var(--s2) var(--s3);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.palette__row--selected {
+  background: var(--accent-soft);
+}
+
+.palette__label {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The branch is the middle column and the only one allowed to be clipped: it
+   is the longest and the least likely to be what is being read. */
+.palette__hint {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.palette__detail {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* The confirmation for discarding a worktree. Wordy on purpose: this is the
+   one place in the app where reading the sentence matters. */
+.confirm {
+  width: min(440px, 84vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.confirm__body {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-base);
+}
+
+.confirm__detail {
+  margin: 0;
+  color: var(--warning);
+  font-size: var(--text-sm);
+}
+
+.confirm__path {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
+}
+
+.button--danger {
+  border-color: rgb(232 97 90 / 55%);
+  background: rgb(232 97 90 / 16%);
+  color: var(--danger);
+}
+
+.button--danger:hover {
+  background: rgb(232 97 90 / 26%);
 }

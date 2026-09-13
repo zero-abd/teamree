@@ -8,7 +8,7 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Project, Terminal, Worktree, WorktreeStatus } from '../src/shared/entities'
+import type { Project, Terminal, Worktree, WorktreeChanges, WorktreeDiff, WorktreeStatus } from '../src/shared/entities'
 
 const CLI = join(process.cwd(), 'out/cli/index.js')
 const HOST = join(process.cwd(), 'scripts/acceptance-host.mjs')
@@ -41,11 +41,25 @@ beforeAll(async () => {
   env = { ...process.env, TEAMREE_USER_DATA_DIR: userDataDir }
 
   execFileSync('git', ['init', '-b', 'main', repoPath])
+  // On the repository itself, not just on this file's own git calls: the
+  // commits that matter here are made by the app, through its own CLI, and it
+  // uses whatever identity the machine has. A fresh CI runner has none, so a
+  // fixture that configured only its own commands passed locally and failed
+  // there with "Author identity unknown".
+  git(['config', 'user.email', 'test@teamree.local'], repoPath)
+  git(['config', 'user.name', 'teamree test'], repoPath)
   writeFileSync(join(repoPath, 'README.md'), '# demo\n')
   git(['add', '.'], repoPath)
   git(['commit', '-m', 'initial'], repoPath)
 
-  host = spawn('npx', ['tsx', HOST], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+  // Its own process group, because `npx` puts two wrapper processes between us
+  // and the runtime and does not pass a signal down to it. Killing the wrapper
+  // left the runtime alive holding its socket, its discovery file and an inotify
+  // instance — two orphans per run, and this suite runs often. They accumulated
+  // until the per-user inotify limit was exhausted and every filesystem-watch
+  // test on the machine began failing for reasons that had nothing to do with
+  // the watcher.
+  host = spawn('npx', ['tsx', HOST], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
 
   const discovery = join(userDataDir, 'runtime.json')
   for (let attempt = 0; attempt < 160 && !existsSync(discovery); attempt += 1) await sleep(250)
@@ -53,7 +67,14 @@ beforeAll(async () => {
 }, 90_000)
 
 afterAll(async () => {
-  host?.kill('SIGTERM')
+  // Negative pid: signal the whole group, so the runtime goes with the wrapper.
+  if (host?.pid !== undefined) {
+    try {
+      process.kill(-host.pid, 'SIGTERM')
+    } catch {
+      // Already gone, which is the outcome this wanted anyway.
+    }
+  }
   await sleep(500)
   rmSync(root, { recursive: true, force: true })
 })
@@ -103,6 +124,50 @@ describe('milestone 1 acceptance', () => {
     const status = cli<WorktreeStatus>(['worktree', 'status', worktree.id])
     expect(status.untracked).toBe(1)
     expect(status.branch).toBe(worktree.branch)
+  })
+
+  it('names the changed paths and prints the patch for one of them', () => {
+    // scratch.txt is untracked, which is the case plain `git diff` answers with
+    // silence — and the case a fresh branch is usually full of.
+    const changes = cli<WorktreeChanges>(['worktree', 'changes', worktree.id])
+    expect(changes.changes.map((change) => change.path)).toContain('scratch.txt')
+    expect(changes.changes.find((change) => change.path === 'scratch.txt')?.kind).toBe('untracked')
+
+    const diff = cli<WorktreeDiff>(['worktree', 'diff', worktree.id, '--path', 'scratch.txt'])
+    expect(diff.patch).toContain('work in progress')
+  })
+
+  it('commits only the path it was given, and says what landed', () => {
+    writeFileSync(join(worktree.path, 'kept.txt'), 'keep me\n')
+    // No `--` here: it would terminate flag parsing and swallow the --json the
+    // harness appends, which is exactly what `--` is supposed to do. It is only
+    // needed for a path that could be read as a flag.
+    const committed = cli<WorktreeCommit>(['worktree', 'commit', worktree.id, '--message', 'keep this one', 'kept.txt'])
+
+    expect(committed.paths).toEqual(['kept.txt'])
+    expect(committed.shortSha).toHaveLength(7)
+    // scratch.txt was never named, so it is still sitting there untracked.
+    const after = cli<WorktreeChanges>(['worktree', 'changes', worktree.id])
+    expect(after.changes.map((change) => change.path)).toContain('scratch.txt')
+    expect(after.changes.map((change) => change.path)).not.toContain('kept.txt')
+  })
+
+  it('shows what the worktree committed, which nothing else would say', () => {
+    // The commit above left the changes list empty for that path. Without a log
+    // the app would have nothing at all to show for the work.
+    const log = cli<WorktreeLog>(['worktree', 'log', worktree.id])
+    expect(log.commits.map((commit) => commit.subject)).toContain('keep this one')
+    expect(log.commits[0]?.shortSha).toHaveLength(7)
+  })
+
+  it('says whether the worktree would merge back without trying it', () => {
+    const preview = cli<WorktreeMergePreview>(['worktree', 'merges', worktree.id])
+    // One commit was made above, so there is something to merge and it merges
+    // cleanly — and asking must leave the repository exactly as it was.
+    expect(preview.state).toBe('clean')
+    expect(preview.ahead).toBe(1)
+    expect(preview.baseRef).toBe(project.baseRef)
+    expect(cli<WorktreeStatus>(['worktree', 'status', worktree.id]).conflicted).toBe(0)
   })
 
   it('opens a terminal in the worktree checkout', () => {

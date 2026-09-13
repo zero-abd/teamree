@@ -16,7 +16,32 @@ export { canonicalPath, isInside, pathKey, samePath } from './pathIdentity'
 export { createMemoryRecordStore, type GitRecordStore } from './recordStore'
 export { parseWorktreeList, readWorktreeInventory, type InventoryEntry } from './worktreeInventory'
 export { allocateBranchName, allocateCheckoutPath, branchCollides, slugify } from './worktreeNaming'
+export {
+  cutToBytes,
+  DEFAULT_CHANGE_LIMIT,
+  DEFAULT_DIFF_CONTEXT_LINES,
+  DEFAULT_DIFF_MAX_BYTES,
+  parseChangeRecords,
+  readWorktreeChanges,
+  readWorktreeDiff,
+  sortChanges
+} from './worktreeChanges'
+export { lacksWriteTree, parseMergeTree, readMergePreview } from './mergePreview'
+export { commitWorktree } from './worktreeCommit'
+export { DEFAULT_LOG_LIMIT, parseLogRecords, readWorktreeLog } from './worktreeLog'
+export { pushRefusal, pushWorktree } from './worktreePush'
 export { parsePorcelainV2, readWorktreeStatus, type ParsedStatus } from './worktreeStatus'
+export {
+  DEFAULT_MIN_INTERVAL_MS,
+  DEFAULT_SETTLE_MS,
+  ignoresCheckoutChange,
+  ignoresGitDirChange,
+  resolveGitDir,
+  WorktreeWatcher,
+  type WatchFn,
+  type WatchHandle,
+  type WorktreeWatcherOptions
+} from './worktreeWatcher'
 export {
   DEFAULT_START_POINT_LIMIT,
   listStartPoints,

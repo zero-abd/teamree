@@ -1,3 +1,6 @@
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GitCommandError } from './errors'
 import { createGitRunner } from './gitProcess'
@@ -59,13 +62,74 @@ describe('git runner', () => {
     const repo = await newRepo()
     const runner = createGitRunner()
 
+    // `hash-object --stdin` reads until end of input, and the runner never
+    // closes the child's stdin, so this one never finishes on its own. A fast
+    // command with a 1ms timeout would race instead: under load the timer fires
+    // late enough for git to have already succeeded, and the test fails for a
+    // reason that has nothing to do with timeouts.
     const error = (await runner
-      .run({ args: ['status', '--porcelain=v2', '--branch'], cwd: repo.repoPath, timeoutMs: 1 })
+      .run({ args: ['hash-object', '--stdin'], cwd: repo.repoPath, timeoutMs: 250 })
       .catch((e: unknown) => e)) as GitCommandError
 
     expect(error).toBeInstanceOf(GitCommandError)
     expect(error.timedOut).toBe(true)
     expect(error.message).toContain('timed out')
+  })
+
+  // Four decisions in this app are made by matching git's English prose, and
+  // git is translated in most distro packages and in Git for Windows. Without
+  // this pin a German machine reads "Alles aktuell" and reports a push that
+  // sent nothing as a push that sent the work.
+  it('hands git a locale that keeps its messages untranslated', async () => {
+    if (process.platform === 'win32') return
+    const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-locale-'))
+    const reporter = path.join(base, 'report-locale')
+    await writeFile(reporter, '#!/bin/sh\necho "LC_ALL=$LC_ALL LANGUAGE=$LANGUAGE"\n', 'utf8')
+    await chmod(reporter, 0o755)
+
+    const { stdout } = await createGitRunner(reporter).run({
+      args: ['status'],
+      cwd: base,
+      // The ambient environment of somebody who does not work in English.
+      env: { LANG: 'de_DE.UTF-8' }
+    })
+
+    expect(stdout.trim()).toBe('LC_ALL=C LANGUAGE=')
+    await rm(base, { recursive: true, force: true })
+  })
+
+  // A caller that only ever wanted the first megabyte should not have to get
+  // forty of them into memory first, and must not be handed a failure for
+  // output that arrived perfectly well.
+  it('clips stdout to the caller’s budget instead of failing on a huge read', async () => {
+    const repo = await newRepo()
+    const runner = createGitRunner()
+    await repo.write('big.txt', `${'x'.repeat(79)}\n`.repeat(200_000))
+    await repo.commit('a large file')
+
+    const result = await runner.run({
+      args: ['show', 'HEAD:big.txt'],
+      cwd: repo.repoPath,
+      stdoutLimitBytes: 64 * 1024
+    })
+
+    expect(result.stdoutClipped).toBe(true)
+    expect(result.stdout.length).toBeGreaterThanOrEqual(64 * 1024)
+    expect(result.stdout.length).toBeLessThan(16 * 1024 * 1024)
+  })
+
+  it('leaves an output that fits unclipped', async () => {
+    const repo = await newRepo()
+    const runner = createGitRunner()
+
+    const result = await runner.run({
+      args: ['rev-parse', 'HEAD'],
+      cwd: repo.repoPath,
+      stdoutLimitBytes: 64 * 1024
+    })
+
+    expect(result.stdoutClipped).toBeUndefined()
+    expect(result.stdout.trim()).toHaveLength(40)
   })
 
   it('explains a missing git binary instead of leaking ENOENT', async () => {

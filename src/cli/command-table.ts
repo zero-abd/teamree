@@ -4,6 +4,7 @@
 import { parseArgs, type FlagSpec, type ParsedArgs } from './argv.js'
 import { GLOBAL_FLAGS, type CommandSpec } from './command-spec.js'
 import { UsageError } from './exit.js'
+import { agentCommands } from './commands/agent.js'
 import { projectCommands } from './commands/project.js'
 import { statusCommands } from './commands/status.js'
 import { terminalCommands } from './commands/terminal.js'
@@ -13,7 +14,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   ...statusCommands,
   ...projectCommands,
   ...worktreeCommands,
-  ...terminalCommands
+  ...terminalCommands,
+  ...agentCommands
 ]
 
 /** Top-level nouns that group subcommands, in declaration order. */
@@ -84,6 +86,12 @@ export function resolveCommand(tokens: readonly string[]): Resolution {
   return { kind: 'unknown', words: words.map((entry) => entry.word) }
 }
 
+/** How one argument reads in a usage line. */
+export function usageName(arg: { name: string; required?: boolean; variadic?: boolean }): string {
+  if (arg.variadic) return `[<${arg.name}>...]`
+  return arg.required === false ? `[<${arg.name}>]` : `<${arg.name}>`
+}
+
 export function specFlags(spec: CommandSpec): FlagSpec[] {
   return [...GLOBAL_FLAGS, ...(spec.flags ?? [])]
 }
@@ -98,10 +106,13 @@ export function parseCommand(spec: CommandSpec, tokens: readonly string[]): Pars
     const missing = args[parsed.positionals.length]
     throw new UsageError(
       `${spec.path.join(' ')} needs <${missing?.name ?? 'argument'}>.`,
-      `Usage: teamree ${spec.path.join(' ')} ${args.map((arg) => `<${arg.name}>`).join(' ')}`.trim()
+      `Usage: teamree ${spec.path.join(' ')} ${args.map(usageName).join(' ')}`.trim()
     )
   }
-  if (parsed.positionals.length > args.length) {
+  // A variadic tail swallows everything after the fixed arguments, so there is
+  // no such thing as too many.
+  const variadic = args.length > 0 && args[args.length - 1]?.variadic === true
+  if (!variadic && parsed.positionals.length > args.length) {
     throw new UsageError(
       `${spec.path.join(' ')} takes ${args.length} argument${
         args.length === 1 ? '' : 's'

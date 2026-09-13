@@ -1,9 +1,11 @@
 // The right-hand side: which worktree is open, what it is doing, and its panes.
 
 import { useCallback } from 'react'
+import { Dashboard } from '../dashboard/Dashboard'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { PaneTree } from '../panes/PaneTree'
+import { ChangesPanel } from './ChangesPanel'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { WorktreeTabs } from './WorktreeTabs'
 
@@ -25,6 +27,22 @@ export function WorkspaceArea({
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
   const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
   const applySplitSizes = useWorkspaceStore((state) => state.applySplitSizes)
+  const changesOpen = useWorkspaceStore((state) => state.changesOpen)
+  const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
+  const status = useWorkspaceStore((state) =>
+    state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
+  )
+  const pushing = useWorkspaceStore((state) => state.pushing)
+  const agents = useWorkspaceStore((state) => state.agents)
+  const startAgent = useWorkspaceStore((state) => state.startAgent)
+  const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
+  const paneSearch = useWorkspaceStore((state) => state.paneSearch)
+  const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
+  const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
+  const toggleDashboard = useWorkspaceStore((state) => state.toggleDashboard)
+  const projects = useWorkspaceStore((state) => state.projects)
+  const connection = useWorkspaceStore((state) => state.connection)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -34,7 +52,58 @@ export function WorkspaceArea({
   )
   const onClose = useCallback((terminalId: string) => void closeTerminal(terminalId), [closeTerminal])
 
+  // Before the empty state, not after it: which pane needs you is a question
+  // about every worktree, and it is worth asking with none of them open.
+  if (dashboardOpen) return <Dashboard modifier={modifier} />
+
   if (!worktree || !activeWorktreeId) {
+    // A runtime that never came up leaves a window that looks ordinary and
+    // answers nothing. The status bar says so in three words at the bottom of
+    // the screen; this is the surface somebody is actually looking at, and
+    // every shortcut the empty state would otherwise offer is inert.
+    if (connection.phase === 'offline') {
+      return (
+        <main className="workspace workspace--empty">
+          <div className="placeholder">
+            <h1 className="placeholder__title">The runtime is not running</h1>
+            <p className="placeholder__body">
+              Git, worktrees and terminals all live in a process this window talks to, and it is not answering. Nothing
+              here will respond until it is back — quitting and reopening teamree starts a new one.
+            </p>
+            {connection.detail ? <p className="placeholder__body">{connection.detail}</p> : null}
+          </div>
+        </main>
+      )
+    }
+
+    // The genuine first run. Every shortcut in the legend below acts on a pane,
+    // and the one that makes a worktree needs a project to make it in — with
+    // none added it does nothing at all when pressed. Naming a chord here would
+    // be telling somebody to press a key that cannot answer, so this state
+    // offers the only action that can.
+    if (projects.length === 0) {
+      return (
+        <main className="workspace workspace--empty">
+          <div className="placeholder">
+            <h1 className="placeholder__title">Add a repository to start</h1>
+            <p className="placeholder__body">
+              teamree works in git worktrees of a repository you already have: one checkout per task, so several agents
+              can work at once without seeing each other&rsquo;s files. Point it at a clone to begin.
+            </p>
+            <div className="placeholder__actions">
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={() => openDialog({ kind: 'add-project' })}
+              >
+                Add a repository
+              </button>
+            </div>
+          </div>
+        </main>
+      )
+    }
+
     return (
       <main className="workspace workspace--empty">
         <div className="placeholder">
@@ -59,6 +128,18 @@ export function WorkspaceArea({
               <dt>{shortcutHint('focus-next-pane', modifier)}</dt>
               <dd>next pane</dd>
             </div>
+            <div>
+              <dt>{shortcutHint('open-palette', modifier)}</dt>
+              <dd>go to anything</dd>
+            </div>
+            <div>
+              <dt>{shortcutHint('find-in-pane', modifier)}</dt>
+              <dd>find in pane</dd>
+            </div>
+            <div>
+              <dt>{shortcutHint('open-dashboard', modifier)}</dt>
+              <dd>every pane</dd>
+            </div>
           </dl>
         </div>
       </main>
@@ -78,6 +159,40 @@ export function WorkspaceArea({
           <button
             type="button"
             className="button button--ghost button--small"
+            title={`Every pane in every worktree, by what needs you · ${shortcutHint('open-dashboard', modifier)}`}
+            onClick={toggleDashboard}
+          >
+            All panes
+          </button>
+          <button
+            type="button"
+            className={`button button--ghost button--small${changesOpen ? ' button--on' : ''}`}
+            aria-pressed={changesOpen}
+            title={`Show what changed in this worktree · ${shortcutHint('open-palette', modifier)} to jump anywhere`}
+            onClick={toggleChanges}
+          >
+            Changes
+            {changedCount(status) > 0 ? <span className="button__count">{changedCount(status)}</span> : null}
+          </button>
+          <button
+            type="button"
+            className="button button--ghost button--small"
+            disabled={pushing}
+            title={
+              status === undefined
+                ? 'Send this branch to its remote'
+                : status.ahead > 0
+                  ? `Send ${status.ahead} commit${status.ahead === 1 ? '' : 's'} to the remote. Never forces.`
+                  : 'Nothing to send; the remote already has this branch.'
+            }
+            onClick={() => void pushActiveWorktree()}
+          >
+            {pushing ? 'Pushing…' : 'Push'}
+            {status !== undefined && status.ahead > 0 ? <span className="button__count">{status.ahead}</span> : null}
+          </button>
+          <button
+            type="button"
+            className="button button--ghost button--small"
             title={`Split right · ${shortcutHint('split-right', modifier)}`}
             onClick={() => void splitFocusedPane('row')}
           >
@@ -91,6 +206,17 @@ export function WorkspaceArea({
           >
             Split down
           </button>
+          {agents.map((agent) => (
+            <button
+              type="button"
+              key={agent.kind}
+              className="button button--ghost button--small"
+              title={`Open a pane running ${agent.command} (${agent.binary})`}
+              onClick={() => void startAgent(agent.command)}
+            >
+              {agent.command}
+            </button>
+          ))}
           <button
             type="button"
             className="button button--small"
@@ -102,42 +228,73 @@ export function WorkspaceArea({
         </div>
       </header>
 
-      <div className="workspace__panes">
-        {layout?.root ? (
-          <PaneTree
-            key={activeWorktreeId}
-            node={layout.root}
-            path={[]}
-            terminals={terminals}
-            focusedTerminalId={layout.focusedTerminalId}
-            onFocus={focusPane}
-            onClose={onClose}
-            onResize={onResize}
-            isAppChord={isAppChord}
-            closeHint={shortcutHint('close-pane', modifier)}
-          />
-        ) : (
-          <div className="placeholder placeholder--inset">
-            <h2 className="placeholder__title">
-              {worktree.state === 'creating' ? 'Preparing the worktree' : 'No terminals here yet'}
-            </h2>
-            <p className="placeholder__body">
-              {worktree.state === 'creating'
-                ? 'Panes appear as soon as the checkout is ready.'
-                : `Start one with ${shortcutHint('new-terminal', modifier)}.`}
-            </p>
-            {worktree.state === 'ready' ? (
-              <button
-                type="button"
-                className="button button--primary"
-                onClick={() => void createTerminal(activeWorktreeId)}
-              >
-                New terminal
-              </button>
-            ) : null}
-          </div>
-        )}
+      <div className="workspace__body">
+        <div className="workspace__panes">
+          {layout?.root ? (
+            <PaneTree
+              key={activeWorktreeId}
+              node={layout.root}
+              path={[]}
+              terminals={terminals}
+              focusedTerminalId={layout.focusedTerminalId}
+              onFocus={focusPane}
+              onClose={onClose}
+              onResize={onResize}
+              isAppChord={isAppChord}
+              closeHint={shortcutHint('close-pane', modifier)}
+              searchTerminalId={paneSearch?.terminalId ?? null}
+              searchToken={paneSearch?.token ?? 0}
+              onCloseSearch={closePaneSearch}
+            />
+          ) : (
+            <div className="placeholder placeholder--inset">
+              <h2 className="placeholder__title">
+                {worktree.state === 'creating' ? 'Preparing the worktree' : 'No terminals here yet'}
+              </h2>
+              <p className="placeholder__body">
+                {worktree.state === 'creating'
+                  ? 'Panes appear as soon as the checkout is ready.'
+                  : `Start one with ${shortcutHint('new-terminal', modifier)}.`}
+              </p>
+              {worktree.state === 'ready' ? (
+                <div className="placeholder__actions">
+                  {agents.map((agent) => (
+                    <button
+                      type="button"
+                      key={agent.kind}
+                      className="button button--primary"
+                      onClick={() => void startAgent(agent.command)}
+                    >
+                      Start {agent.command}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={agents.length === 0 ? 'button button--primary' : 'button'}
+                    onClick={() => void createTerminal(activeWorktreeId)}
+                  >
+                    New terminal
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        <ChangesPanel />
       </div>
     </main>
   )
+}
+
+/**
+ * What the button's badge counts: everything a commit would have to deal with.
+ * Ahead and behind are about the branch rather than the tree, so they are the
+ * status bar's business, not this button's.
+ */
+export function changedCount(
+  status: { staged: number; unstaged: number; untracked: number; conflicted: number } | undefined
+): number {
+  if (!status) return 0
+  return status.staged + status.unstaged + status.untracked + status.conflicted
 }

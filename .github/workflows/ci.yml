@@ -1,0 +1,33 @@
+# The checks, run against branches and trunk.
+#
+# There is deliberately nothing here but a call: the steps live in `build.yml`,
+# which `release.yml` calls too. Whatever passes on a pull request is therefore
+# the same sequence that later produces the downloads, rather than a shorter
+# one that happens to share a name with it.
+name: ci
+
+# A branch is covered by its pull request and the trunk by its pushes, so no
+# commit is checked twice. A full run is three runners each packaging an
+# Electron app; it is worth spending once and not worth spending twice.
+#
+# Tags are absent on purpose. `release.yml` runs on those, and it calls
+# `build.yml` exactly as this does, so a tag matching here too would build
+# everything twice over and publish from only one of the two runs.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A branch only needs its newest commit checked; three runners per superseded
+# push is a lot of machine time to spend on an answer nobody will read.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml

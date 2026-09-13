@@ -1,0 +1,348 @@
+// Rewriting an agent's launch command so a session can be picked up again.
+//
+// Terminals do not survive the app quitting: a PTY is a child process, and
+// killing the app kills it. But for a coding agent the shell was never the
+// valuable part — the conversation was, and the agent already keeps that on
+// disk under a session id of its own. So restoring an agent pane is not a
+// matter of keeping a process alive across a restart. It is a matter of
+// launching the same agent again and handing it back its session id.
+//
+// Two commands per pane, then. The one that starts a session pins the id we
+// will want later; the one that restores it resumes that id. Everything here
+// is about producing those two strings from whatever the user typed, without
+// mangling the rest of their command.
+//
+// The whole module fails open. Anything it cannot model with certainty — an
+// unfamiliar agent, a pipeline, an unterminated quote — comes back unchanged
+// or with the selector simply appended, which is what would have happened if
+// none of this existed.
+
+import { randomUUID } from 'node:crypto'
+import type { AgentKind } from '../../shared/entities'
+
+export type { AgentKind }
+
+/** One flag and whether a separate token follows it carrying its value. */
+type Selector = { flag: string; takesValue: boolean }
+
+type AgentSpec = {
+  /** Executable names, as they appear in command position. */
+  executables: readonly string[]
+  /**
+   * Argv that pins a chosen session id at launch. Absent when the CLI has no
+   * such flag, which is the more common case: those agents mint their own id
+   * and the only honest way to resume them is the directory-scoped form below.
+   */
+  pin?: (sessionId: string) => readonly string[]
+  /** Argv that resumes a session by the id we pinned. */
+  resume?: (sessionId: string) => readonly string[]
+  /**
+   * Argv that resumes the most recent session in this directory. Worth having
+   * even where `resume` exists: a worktree is one task's checkout, so "the
+   * last session here" is very nearly always the right one.
+   */
+  resumeLatest?: readonly string[]
+  /**
+   * What to strip from a stored command before appending our own selector, so
+   * a stale locator can never compete with the authoritative one.
+   */
+  selectors: readonly Selector[]
+}
+
+const AGENTS: Readonly<Record<AgentKind, AgentSpec>> = {
+  claude: {
+    executables: ['claude'],
+    // The one CLI here that lets the caller choose the id up front. That is
+    // worth a lot: every other agent has to be asked afterwards what id it
+    // picked, and an agent that is asked can decline to answer.
+    pin: (sessionId) => ['--session-id', sessionId],
+    resume: (sessionId) => ['--resume', sessionId],
+    resumeLatest: ['--continue'],
+    selectors: [
+      { flag: '--session-id', takesValue: true },
+      { flag: '--resume', takesValue: true },
+      { flag: '-r', takesValue: true },
+      { flag: '--continue', takesValue: false },
+      { flag: '-c', takesValue: false }
+    ]
+  },
+  codex: {
+    executables: ['codex'],
+    resume: (sessionId) => ['resume', sessionId],
+    resumeLatest: ['resume', '--last'],
+    selectors: [{ flag: 'resume', takesValue: true }]
+  },
+  gemini: {
+    executables: ['gemini'],
+    resume: (sessionId) => ['--resume', sessionId],
+    selectors: [{ flag: '--resume', takesValue: true }]
+  },
+  opencode: {
+    executables: ['opencode'],
+    resume: (sessionId) => ['--session', sessionId],
+    selectors: [{ flag: '--session', takesValue: true }]
+  },
+  droid: {
+    executables: ['droid'],
+    resume: (sessionId) => ['--resume', sessionId],
+    selectors: [{ flag: '--resume', takesValue: true }]
+  }
+}
+
+export const AGENT_KINDS = Object.keys(AGENTS) as AgentKind[]
+
+/** True when this agent lets us choose the session id before it starts. */
+export function pinsOwnSessionId(agent: AgentKind): boolean {
+  return AGENTS[agent].pin !== undefined
+}
+
+export function newSessionId(): string {
+  // A UUID because the one CLI that accepts a chosen id insists on one, and
+  // there is no reason for the others to disagree.
+  return randomUUID()
+}
+
+/**
+ * A session id we are willing to put on a command line.
+ *
+ * It reaches us from a stored file that a person can edit, so it is checked
+ * rather than trusted: control characters would corrupt the line, a leading
+ * dash would read as another flag, and an unbounded string is nobody's session
+ * id. The command is built as an argv and quoted, so this is a second line of
+ * defence rather than the only one.
+ */
+export function isUsableSessionId(value: string): boolean {
+  if (value.length === 0 || value.length > 512) return false
+  if (value.startsWith('-')) return false
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x1f || code === 0x7f) return false
+  }
+  return true
+}
+
+export type Span = { start: number; end: number }
+export type Tokenized = { ok: true; tokens: string[]; spans: Span[] } | { ok: false }
+
+// Anything that makes a command line more than a list of words. A command
+// containing one of these is left alone entirely: splicing a token out of a
+// pipeline, a subshell or a redirect can change what it runs.
+const SHELL_OPERATORS = new Set(['|', '&', ';', '<', '>', '(', ')', '\n', '`'])
+
+/**
+ * Splits a command into words, keeping where each one sat in the original.
+ *
+ * The spans are the point. Rebuilding a command by re-quoting its tokens is a
+ * lossy round trip — quoting style, spacing and anything the tokenizer got
+ * slightly wrong all change — so edits are made by cutting and splicing the
+ * original bytes, and every byte outside a removed token survives exactly.
+ */
+export function tokenizeCommand(command: string): Tokenized {
+  const tokens: string[] = []
+  const spans: Span[] = []
+  let index = 0
+
+  while (index < command.length) {
+    const char = command[index] as string
+    if (char === ' ' || char === '\t') {
+      index += 1
+      continue
+    }
+    if (SHELL_OPERATORS.has(char)) return { ok: false }
+    if (char === '$' && command[index + 1] === '(') return { ok: false }
+
+    const start = index
+    let token = ''
+    while (index < command.length) {
+      const current = command[index] as string
+      if (current === ' ' || current === '\t') break
+      if (SHELL_OPERATORS.has(current)) return { ok: false }
+
+      if (current === '\\') {
+        const escaped = command[index + 1]
+        if (escaped === undefined) return { ok: false }
+        token += escaped
+        index += 2
+        continue
+      }
+      if (current === "'" || current === '"') {
+        const close = command.indexOf(current, index + 1)
+        if (close === -1) return { ok: false }
+        const inner = command.slice(index + 1, close)
+        // A double-quoted expansion is still an expansion; the value is not
+        // knowable from the text, so the command is not modelable.
+        if (current === '"' && (inner.includes('$') || inner.includes('`'))) return { ok: false }
+        token += inner
+        index = close + 1
+        continue
+      }
+      if (current === '$') return { ok: false }
+      token += current
+      index += 1
+    }
+
+    tokens.push(token)
+    spans.push({ start, end: index })
+  }
+
+  return { ok: true, tokens, spans }
+}
+
+/**
+ * Where the executable sits, if it is one of `executables`.
+ *
+ * Only command position counts: the first word, a word after `--`, or one
+ * after any number of `NAME=value` prefixes. Matching anywhere would let an
+ * argument that merely ends in `/claude` — a key file, a project directory —
+ * be mistaken for the program being run.
+ */
+export function executableIndex(tokens: readonly string[], executables: readonly string[]): number {
+  let commandPosition = true
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index] as string
+    if (commandPosition) {
+      const base = token.split(/[\\/]/).pop() ?? ''
+      const name = base.replace(/\.(exe|cmd|bat|ps1)$/i, '')
+      if (executables.includes(name)) return index
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) continue
+      commandPosition = false
+    }
+    if (token === '--') commandPosition = true
+  }
+  return -1
+}
+
+/** Which agent this command launches, if any. */
+export function detectAgent(command: string): AgentKind | null {
+  const tokenized = tokenizeCommand(command)
+  if (!tokenized.ok) return null
+  for (const kind of AGENT_KINDS) {
+    if (executableIndex(tokenized.tokens, AGENTS[kind].executables) !== -1) return kind
+  }
+  return null
+}
+
+/**
+ * The command to run the first time, carrying the id we will resume with.
+ *
+ * Returns the command unchanged for an agent that mints its own id — there is
+ * nothing to pin — and for a command that already names a session, because a
+ * caller who has chosen their own session id means it.
+ */
+export function pinSessionCommand(command: string, agent: AgentKind, sessionId: string): string {
+  const spec = AGENTS[agent]
+  if (!spec.pin || !isUsableSessionId(sessionId)) return command
+  if (carriesSelector(command, agent)) return command
+  return spliceSelector(command, agent, spec.pin(sessionId))
+}
+
+/**
+ * The command to run on the way back up.
+ *
+ * With an id, it resumes exactly that session. Without one — an agent that
+ * never told us its id — it falls back to the agent's own "most recent session
+ * here", which in a worktree means the session this pane was running, because
+ * a worktree is one task's checkout and nothing else runs in it.
+ *
+ * Returns null when the agent offers neither, so the caller can start a plain
+ * shell rather than pretend the conversation came back.
+ */
+export function resumeSessionCommand(command: string, agent: AgentKind, sessionId: string | null): string | null {
+  const spec = AGENTS[agent]
+  const argv =
+    sessionId !== null && isUsableSessionId(sessionId) && spec.resume ? spec.resume(sessionId) : spec.resumeLatest
+  if (!argv) return null
+  return spliceSelector(command, agent, argv)
+}
+
+/** Whether the command already names a session for this agent. */
+export function carriesSelector(command: string, agent: AgentKind): boolean {
+  const tokenized = tokenizeCommand(command)
+  if (!tokenized.ok) return false
+  const start = executableIndex(tokenized.tokens, AGENTS[agent].executables)
+  if (start === -1) return false
+  return tokenized.tokens.slice(start + 1).some((token) => matchSelector(AGENTS[agent].selectors, token) !== null)
+}
+
+function matchSelector(selectors: readonly Selector[], token: string): Selector | null {
+  for (const selector of selectors) {
+    if (token === selector.flag) return selector
+    // The `--flag=value` form carries its value already, so nothing follows it.
+    if (token.startsWith(`${selector.flag}=`)) return { ...selector, takesValue: false }
+  }
+  // Deliberately not matched: a joined short form such as `-rABC`. It is
+  // indistinguishable from another option's dash-leading value, and guessing
+  // wrong would cut a live argument out of the command.
+  return null
+}
+
+/**
+ * Replaces whatever session the command named with the one we want.
+ *
+ * Every uncertain case appends instead of splicing, which is the behaviour
+ * that existed before any of this: worst case the agent sees two selectors and
+ * complains, rather than being handed a command with a hole cut in it.
+ */
+function spliceSelector(command: string, agent: AgentKind, argv: readonly string[]): string {
+  const spec = AGENTS[agent]
+  const addition = argv.map(quoteArgument).join(' ')
+  const appended = `${command} ${addition}`
+
+  const tokenized = tokenizeCommand(command)
+  if (!tokenized.ok) return appended
+  const { tokens, spans } = tokenized
+  const start = executableIndex(tokens, spec.executables)
+  if (start === -1) return appended
+
+  // Only whitespace may separate tokens. Anything else between two words is
+  // syntax this module did not model, and splicing around it is not safe.
+  for (let index = 0; index <= tokens.length; index += 1) {
+    const gapStart = index === 0 ? 0 : (spans[index - 1] as Span).end
+    const gapEnd = index === tokens.length ? command.length : (spans[index] as Span).start
+    if (!/^[ \t]*$/.test(command.slice(gapStart, gapEnd))) return appended
+  }
+
+  const cuts: Span[] = []
+  // `--` after the agent's own name is the agent's argument terminator, so our
+  // selector has to go in front of it rather than after.
+  let terminator: number | null = null
+
+  for (let index = start + 1; index < tokens.length; index += 1) {
+    const token = tokens[index] as string
+    if (token === '--') {
+      terminator = (spans[index] as Span).start
+      break
+    }
+    const selector = matchSelector(spec.selectors, token)
+    if (!selector) continue
+
+    let cutStart = (spans[index] as Span).start
+    // Take the space in front of the flag too, but never reach into the token
+    // before it, whose span can end on an escaped space.
+    const previousEnd = index === 0 ? 0 : (spans[index - 1] as Span).end
+    while (cutStart > previousEnd && ' \t'.includes(command[cutStart - 1] as string)) cutStart -= 1
+
+    let cutEnd = (spans[index] as Span).end
+    const next = tokens[index + 1]
+    if (selector.takesValue && next !== undefined && !next.startsWith('-')) {
+      cutEnd = (spans[index + 1] as Span).end
+      index += 1
+    }
+    cuts.push({ start: cutStart, end: cutEnd })
+  }
+
+  let result = command
+  if (terminator !== null) result = `${result.slice(0, terminator)}${addition} ${result.slice(terminator)}`
+  // Back to front, so an earlier cut's offsets are still valid.
+  for (let index = cuts.length - 1; index >= 0; index -= 1) {
+    const cut = cuts[index] as Span
+    result = `${result.slice(0, cut.start)}${result.slice(cut.end)}`
+  }
+  return terminator !== null ? result : `${result} ${addition}`
+}
+
+/** POSIX single-quoting, which is the only form with no escapes inside it. */
+export function quoteArgument(value: string): string {
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}

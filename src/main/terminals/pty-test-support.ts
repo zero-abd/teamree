@@ -5,7 +5,10 @@
 // that never settles. The probe answers "can this environment fork a pty at
 // all" once, cheaply, so those suites can skip instead.
 
+import { writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { spawn } from 'node-pty'
+import { resolveLoginShell, shellFamily } from './shell-environment'
 
 const PROBE_COLS = 20
 const PROBE_ROWS = 5
@@ -36,6 +39,48 @@ export function canSpawnPty(): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * The shell a test pane should be opened with: the one this platform has.
+ *
+ * A test names a shell only because PtySession asks for one, and a name picked
+ * by hand is a second rule about default shells that can disagree with the
+ * app's. This is the app's rule, called from the test.
+ */
+export function testShell(): string {
+  return resolveLoginShell()
+}
+
+/** `text` on a line, then an exit with `code`, spelled for this platform's shell. */
+export function printThenExit(text: string, code: number): string {
+  // `;` separates commands everywhere a pane can land except cmd.exe, which
+  // reads it as part of the argument and would print it instead.
+  return shellFamily(testShell()) === 'cmd' ? `echo ${text}& exit ${code}` : `echo ${text}; exit ${code}`
+}
+
+/**
+ * A command that starts a process of its own, prints its pid, and then keeps
+ * both alive — the shape a process-tree kill has to reach through.
+ *
+ * A script file rather than an inline program: the quoting that would survive
+ * both cmd.exe and a POSIX shell is its own puzzle, and what is under test is
+ * the killing, not the quoting. Returns the command line to run it with.
+ */
+export async function writeProcessTreeProbe(directory: string): Promise<string> {
+  const script = path.join(directory, 'grandchild.cjs')
+  await writeFile(
+    script,
+    "const { spawn } = require('node:child_process')\n" +
+      "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })\n" +
+      "console.log('child:' + child.pid)\n" +
+      'setInterval(() => {}, 1000)\n',
+    'utf8'
+  )
+  // Quoted both sides: a Windows runner puts node under a path with separators
+  // a POSIX shell would read as escapes, and either shell may hand a pane a
+  // temp directory with a space in it.
+  return `"${process.execPath}" "${script}"`
 }
 
 /** Polls `condition` until it holds, rejecting on timeout so a test fails fast

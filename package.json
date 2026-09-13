@@ -1,8 +1,10 @@
 {
   "name": "teamree",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "An ADE built for teamwork",
   "author": "teamree contributors",
+  "homepage": "https://github.com/zero-abd/teamree",
+  "desktopName": "teamree.desktop",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -13,10 +15,11 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "pretest": "node scripts/require-relay-build.mjs",
     "test": "vitest run",
     "lint": "oxlint src",
     "format": "oxfmt -c=.oxfmtrc.json .",
-    "smoke": "npm run build && electron scripts/smoke.mjs",
+    "smoke": "npm run build && node scripts/run-smoke.mjs",
     "postinstall": "node scripts/fix-pty-permissions.mjs",
     "test:watch": "vitest",
     "build:cli": "node scripts/build-cli.mjs",
@@ -27,6 +30,7 @@
     "package:linux": "npm run build && electron-builder --linux --publish never",
     "package:dir": "npm run build && electron-builder --dir --publish never",
     "package:verify": "node scripts/verify-package.mjs",
+    "install:verify": "node scripts/verify-quarantine-advice.mjs",
     "format:check": "oxfmt --check -c=.oxfmtrc.json ."
   },
   "devDependencies": {
@@ -45,6 +49,7 @@
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "node-pty": "^1.1.0",

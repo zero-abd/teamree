@@ -9,7 +9,7 @@ import { createServer } from 'node:net'
 import { mkdtempSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { endpointKey, fitsUnixSocketPath, isPipeEndpoint, resolveEndpoint } from '../../src/main/runtime/socketEndpoint'
 
 /** A profile directory spelled in a script where every character is 3 bytes. */
@@ -104,18 +104,35 @@ describe.skipIf(process.platform === 'win32')('the kernel underneath', () => {
     return current
   }
 
+  /** What a kernel that enforces sun_path says when a path overruns it. */
+  const TOO_LONG = new Set(['ENAMETOOLONG', 'EINVAL'])
+
+  /**
+   * Whether this kernel enforces sun_path at all. Every real one does, which is
+   * the whole reason the limit exists — but a sandboxed filesystem need not:
+   * some accept the path and truncate it internally, which shows up as an
+   * unrelated code (two distinct long paths collide into EADDRINUSE) rather
+   * than a refusal. Anything but a genuine length error means the rejection
+   * below has nothing to prove, not that our limit is wrong.
+   */
+  let enforcesSunPath = true
+  beforeAll(async () => {
+    enforcesSunPath = TOO_LONG.has(await bind(path.join(deepDirectory(200), 'probe.sock')))
+  })
+
   it('accepts what fitsUnixSocketPath allows', async () => {
     const socketPath = path.join(mkdtempSync(path.join(tmpdir(), 'sock-')), 'runtime.sock')
     expect(fitsUnixSocketPath(socketPath)).toBe(true)
     expect(await bind(socketPath)).toBe('ok')
   })
 
-  it('rejects a path that is short in characters but long in bytes', async () => {
+  it('rejects a path that is short in characters but long in bytes', async (ctx) => {
     // 30 CJK characters are 90 bytes: under any character-counted limit, over
     // the byte-counted one the kernel actually enforces.
     const socketPath = path.join(deepDirectory(40), `${'字'.repeat(30)}.sock`)
     expect(socketPath.length).toBeLessThan(105)
     expect(fitsUnixSocketPath(socketPath)).toBe(false)
+    if (!enforcesSunPath) ctx.skip('this kernel does not enforce sun_path')
     expect(await bind(socketPath)).not.toBe('ok')
   })
 })

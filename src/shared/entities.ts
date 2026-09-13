@@ -44,7 +44,162 @@ export type WorktreeStatus = {
   unstaged: number
   untracked: number
   conflicted: number
+  /**
+   * Entries a .gitignore covers, a wholly ignored directory counting as one.
+   *
+   * Not a change, and deliberately not added to any of the counts above — but
+   * removing the checkout deletes them, and git's own idea of "dirty" leaves
+   * them out, so this is the only warning there is. Optional because an answer
+   * that was never given is not the same as a count of zero.
+   */
+  ignored?: number
   /** Wall-clock time of the read, so stale reads are visible to the UI. */
+  readAt: number
+}
+
+/** What git says happened to one path in a worktree. */
+export type WorktreeChangeKind =
+  | 'modified'
+  | 'added'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'typeChanged'
+  | 'untracked'
+  | 'conflicted'
+
+/**
+ * One changed path. `staged` and `unstaged` are not exclusive: a file edited
+ * after it was added is both, and a row that hid one of them would be lying
+ * about what a commit would capture.
+ */
+export type WorktreeChange = {
+  path: string
+  kind: WorktreeChangeKind
+  staged: boolean
+  unstaged: boolean
+  /** Where a rename or copy came from. Absent otherwise. */
+  from?: string
+}
+
+/** Every changed path in a worktree, as of one read. */
+export type WorktreeChanges = {
+  worktreeId: string
+  changes: WorktreeChange[]
+  /** Paths found, which may exceed what `changes` carries. */
+  total: number
+  limit: number
+  truncated: boolean
+  readAt: number
+}
+
+/** A unified diff for a worktree, or for one path in it. */
+export type WorktreeDiff = {
+  worktreeId: string
+  /** The single path this covers, absent when it covers the whole worktree. */
+  path?: string
+  /** True when the patch is of the index rather than the working tree. */
+  staged: boolean
+  patch: string
+  /** True when the patch was cut short at the byte ceiling. */
+  truncated: boolean
+  readAt: number
+}
+
+/**
+ * Whether a worktree's branch would merge into its project's base ref.
+ *
+ * Answered without checking anything out, so it costs nothing to ask about
+ * every worktree at once — which is the point when several of them are attempts
+ * at the same task.
+ */
+export type WorktreeMergePreview = {
+  worktreeId: string
+  /** What it was compared against. */
+  baseRef: string
+  /**
+   * `nothingToMerge`, `clean` and `conflicts` are answers. `unrelated` and
+   * `unavailable` are refusals to guess, and carry a `reason` — because
+   * "nothing conflicts" and "could not tell" look the same to a caller and mean
+   * opposite things.
+   *
+   * `nothingToMerge` is deliberately not called "merged". A branch whose
+   * commits are all in the base and a branch that never made any are the same
+   * fact to git, and claiming the first when it might be the second would have
+   * someone delete a worktree they had not finished with.
+   */
+  state: 'nothingToMerge' | 'clean' | 'conflicts' | 'unrelated' | 'unavailable'
+  /** Commits this branch has that the base does not. */
+  ahead: number
+  /** Paths that would conflict, for `conflicts`. Empty otherwise. */
+  conflicts: string[]
+  reason?: string
+  readAt: number
+}
+
+/** A commit this app made, reported back so the caller can see what landed. */
+export type WorktreeCommit = {
+  worktreeId: string
+  sha: string
+  shortSha: string
+  message: string
+  /**
+   * What the commit actually captured, which is not always what was asked for:
+   * a path staged earlier goes in too, and saying so is the difference between
+   * a report and a guess.
+   */
+  paths: string[]
+  committedAt: number
+}
+
+/** The outcome of pushing a worktree's branch, as it actually went. */
+export type WorktreePush = {
+  worktreeId: string
+  remote: string
+  branch: string
+  /** True when the remote already had every commit; nothing was sent. */
+  alreadyUpToDate: boolean
+  /** What the branch tracks now. */
+  upstream: string
+  /** True when this push is what set that tracking. */
+  setUpstream: boolean
+  /**
+   * Changes left behind in the worktree. Pushing while still editing is
+   * ordinary, but it means what landed is not what is on screen.
+   */
+  uncommitted: number
+  pushedAt: number
+}
+
+/** One commit a worktree made. */
+export type WorktreeCommitSummary = {
+  sha: string
+  shortSha: string
+  author: string
+  /** ISO 8601 as git wrote it, offset and all. */
+  committedAt: string
+  subject: string
+}
+
+/**
+ * What a worktree has done that its base has not, newest first.
+ *
+ * Scoped to `base..branch`: the question is what this worktree produced, and
+ * everything before the fork belongs to everyone.
+ */
+export type WorktreeLog = {
+  worktreeId: string
+  baseRef: string
+  commits: WorktreeCommitSummary[]
+  truncated: boolean
+  /**
+   * Why the branch could not be compared against its base, when it could not:
+   * an unfetched clone, a base deleted on the remote, a repository with no
+   * commits at all. Absent when the log was read — and an empty `commits` list
+   * then means this branch has made none, which is a different thing to put in
+   * front of somebody than not knowing either way.
+   */
+  unavailable?: string
   readAt: number
 }
 
@@ -59,6 +214,26 @@ export type Terminal = {
   /** False once the child process has exited; the pane stays until closed. */
   running: boolean
   exitCode?: number
+  /** Which coding agent this pane runs, when it runs one. */
+  agent?: AgentKind
+  /**
+   * True while output is still arriving. It is the only honest signal this app
+   * has about whether an agent is working: without a hook into the agent's own
+   * protocol, a quiet terminal is a terminal that has stopped saying things,
+   * which is what "waiting for you" looks like from the outside.
+   */
+  busy: boolean
+  /** When output last arrived, for "no update for 4m". */
+  lastOutputAt: number
+  /**
+   * How this terminal came back from a previous run, when it did. `agent` means
+   * a conversation was resumed; `shell` means the pane and its directory came
+   * back but whatever was running did not. Absent for a terminal opened now.
+   *
+   * It clears the moment the user types into the pane: by then they know what
+   * they are looking at, and a badge that never leaves is noise.
+   */
+  restored?: 'shell' | 'agent'
 }
 
 /**
@@ -103,6 +278,133 @@ export type StartPointList = {
   truncated: boolean
 }
 
+/**
+ * The coding agents this app knows how to start and resume.
+ *
+ * Lives here rather than beside the launch logic because it crosses the wire:
+ * the CLI prints it, the GUI keys buttons off it, and a bare `string` in its
+ * place is the one field in this file a caller cannot exhaust.
+ */
+export type AgentKind = 'claude' | 'codex' | 'gemini' | 'opencode' | 'droid'
+
+/** A coding agent this machine can run, found on PATH rather than configured. */
+export type InstalledAgent = {
+  kind: AgentKind
+  /** What to run. */
+  command: string
+  /** Where it was found. */
+  binary: string
+}
+
+/**
+ * Who this installation is, as the roster records it.
+ *
+ * The public key is the identity; the handle is only what it is filed and
+ * displayed under. There is no account behind either — push access to the
+ * repository is what makes a key membership.
+ */
+export type MemberIdentity = {
+  /**
+   * Filename stem under `.teamree/members`, and how the app names this person.
+   *
+   * Null when none could be worked out and none was given, because git has no
+   * configured email to take one from. The key is still this machine's; only
+   * its name is missing, and the user is asked for one.
+   */
+  handle: string | null
+  /** Base64 of the 32-byte X25519 public key. The private half never leaves the machine. */
+  publicKey: string
+}
+
+/** One member of a project: a public key committed to the repository. */
+export type Member = {
+  handle: string
+  publicKey: string
+  /** ISO 8601 date the key was added, exactly as the file records it. */
+  addedAt: string
+  /** Path relative to the project root, so the file can be found in a diff. */
+  file: string
+  /** True when this entry is this installation's own key. */
+  isSelf: boolean
+}
+
+/**
+ * A file under `.teamree/members` that could not be read as a member.
+ *
+ * Reported rather than thrown. One unreadable file is somebody's typo, and a
+ * roster that refused to list nine good members because of it would read as
+ * "there is no team here", which is the one thing it must never wrongly say.
+ */
+export type MemberProblem = {
+  /** Path relative to the project root. */
+  file: string
+  /** What is wrong with it, in words somebody can act on. */
+  reason: string
+}
+
+/** A project's roster, as of one read. */
+export type MemberList = {
+  projectId: string
+  /** Sorted by handle, so two reads of one team compare cleanly. */
+  members: Member[]
+  problems: MemberProblem[]
+  /** Who this installation is, whether or not it is in `members` yet. */
+  self: MemberIdentity
+  /**
+   * Where joining would write, relative to the project root. Null when no
+   * handle could be worked out, because then there is no filename to name.
+   */
+  selfFile: string | null
+  /**
+   * True when this installation's public key is in the roster. Keyed on the
+   * key rather than the handle: the key is the identity, and somebody who
+   * renamed their file is still the same person.
+   */
+  enrolled: boolean
+  /**
+   * Whether a key that arrives by `git pull` is noticed on its own.
+   *
+   * True is the ordinary state: `.teamree` is watched, and a roster that
+   * changed on disk reaches the window without anybody asking. False is not a
+   * fault and must not be shown as one — it means this list is only as fresh as
+   * this read, which is a different sentence and has to stay one.
+   */
+  watched: boolean
+  readAt: number
+}
+
+/**
+ * Where a project's relay is recorded, and what each of the two places said.
+ *
+ * Both halves are reported whatever is in effect, because the two questions a
+ * surprised person actually has are "which URL is this app using" and "why is
+ * it not the one I set". The environment override is named even when it is not
+ * set at all: an app launched from Finder inherits no shell environment, so
+ * "teamree saw no override" is the answer to a question that is otherwise
+ * unanswerable from inside the app.
+ */
+export type RelaySetting = {
+  projectId: string
+  /** Path relative to the project root, as a diff would show it. */
+  file: string
+  /** The URL teamwork would dial, or null when there is none to dial. */
+  url: string | null
+  /** Which of the two places the URL in effect came from. Null when neither did. */
+  source: 'repository' | 'environment' | null
+  /** Why there is no URL in effect, in words to act on. Null when there is one. */
+  problem: string | null
+  /** What the committed file says, read even when the environment is winning. */
+  committed: { url: string | null; problem: string | null }
+  /** The per-machine override, as this process sees it. */
+  override: {
+    /** The variable's name, so a message can say it rather than imply it. */
+    name: string
+    /** Null when this process has no such variable — which is what Finder does. */
+    value: string | null
+  }
+  readAt: number
+}
+
 export type RuntimeStatus = {
   version: string
   /** Socket path or named pipe the runtime is listening on. */
@@ -110,4 +412,314 @@ export type RuntimeStatus = {
   pid: number
   platform: NodeJS.Platform
   startedAt: number
+}
+
+/**
+ * One pane on a teammate's machine, as their runtime reports it.
+ *
+ * Deliberately not a `Terminal`. A `Terminal` carries a cwd, a shell, a column
+ * count and a scrollback position, none of which mean anything on a machine
+ * that is not the one the process is on. What crosses is what the sidebar
+ * reads, and nothing else.
+ */
+export type PeerPane = {
+  /** The owner's id for it. Namespaced by the receiver before it is stored. */
+  id: string
+  /**
+   * The pane's own title and the shell behind it — the two raw facts a name is
+   * made from, rather than the name itself. The reader already owns the rule
+   * that turns them into a label, and sending the label instead would be a
+   * second copy of that rule, on the other machine, free to disagree.
+   */
+  title: string
+  shell: string
+  agent?: AgentKind
+  running: boolean
+  exitCode?: number
+  busy: boolean
+  /**
+   * The size of the owner's pty, so a watcher can letterbox to it.
+   *
+   * Optional because a peer that has not been rebuilt sends none, and a watcher
+   * that guessed 80x24 at one would draw a frame the output does not fit. The
+   * numbers are the owner's and are never negotiated: `docs/teamwork.md` is
+   * explicit that a reader letterboxes rather than resizing a pty under a
+   * program that is only being read.
+   */
+  cols?: number
+  rows?: number
+  /**
+   * Silence as a duration measured by the owner, never as an instant.
+   *
+   * Two machines do not agree about what time it is, and a `lastOutputAt` from
+   * a clock three minutes fast renders as a pane that last spoke in the future.
+   * A duration is true wherever it is read; the receiver adds the time since it
+   * arrived, which is a number it is entitled to.
+   */
+  quietForMs: number
+}
+
+/** One of a teammate's worktrees, with the panes inside it. */
+export type PeerWorktree = {
+  id: string
+  name: string
+  branch: string
+  state: WorktreeState
+  panes: PeerPane[]
+}
+
+/**
+ * A teammate's worktrees in one repository.
+ *
+ * The repository is named by a hash rather than by its remote, because a peer
+ * session is pairwise and covers every repository the two of them happen to
+ * share: sending remotes in the clear would tell a teammate the URLs of
+ * repositories they are not a member of.
+ */
+export type PeerProject = {
+  projectKey: string
+  worktrees: PeerWorktree[]
+}
+
+/** Everything one runtime tells a teammate about itself. Metadata only. */
+export type PeerPresence = {
+  /**
+   * Monotonic per sender. A snapshot that arrives behind one already applied is
+   * dropped: over a link with real latency two reads can overtake each other,
+   * and the older one landing last would freeze the sidebar in a past the
+   * sender has already left.
+   */
+  revision: number
+  /** The handle the sender's own roster files their key under. Display only. */
+  handle: string | null
+  projects: PeerProject[]
+}
+
+/**
+ * How a link to one teammate is going, in the words the window shows.
+ *
+ * `waiting`, `refused` and `unreachable` are three different facts and the UI
+ * says which: "their machine is not connected", "somebody answered and was not
+ * who they should be", and "the relay could not be reached" are the kind of
+ * distinction this codebase keeps rather than collapsing into "offline".
+ */
+export type PeerLinkPhase =
+  /** Reaching the relay. */
+  | 'connecting'
+  /** Parked on the relay; the teammate's machine has not arrived. */
+  | 'waiting'
+  /** Handshake complete against a key from this project's roster. */
+  | 'connected'
+  /** Somebody was there and the handshake did not authenticate them. */
+  | 'refused'
+  /** The relay could not be reached at all. */
+  | 'unreachable'
+  /** Given up: something reconnecting cannot fix, and `detail` says what. */
+  | 'stopped'
+
+/** One teammate, and how this machine is getting on with reaching them. */
+export type PeerLink = {
+  /** Their public key, which is the identity. */
+  publicKey: string
+  /** What the roster files that key under. */
+  handle: string
+  phase: PeerLinkPhase
+  /** Why, in words, whenever the phase is not `connected`. */
+  detail?: string
+  /** When the phase last changed, by this machine's clock. */
+  since: number
+  /** How many times this link has been built, so a flapping one is visible. */
+  attempts: number
+}
+
+/**
+ * Whether teamwork is running for one project, and how.
+ *
+ * `disabledReason` is the honest half: a project with no relay, no origin
+ * remote or no roster is not "offline", it is not configured, and a row that
+ * said "offline" would have somebody looking at their network.
+ */
+export type TeamworkStatus = {
+  projectId: string
+  /** Where the relay is and which of the two places said so. Null when neither did. */
+  relay: { url: string; source: 'repository' | 'environment' } | null
+  /** Why teamwork is not running here, or null when it is. */
+  disabledReason: string | null
+  links: PeerLink[]
+  readAt: number
+}
+
+/** One of a teammate's worktrees, with whose it is attached to it. */
+export type TeammateWorktree = PeerWorktree & {
+  handle: string
+  publicKey: string
+  /** When this was last heard, by this machine's clock. */
+  heardAt: number
+  /**
+   * Whether the link this came over is confirmed and connected right now.
+   *
+   * False is a row out of the local cache: a true picture of what that teammate
+   * was showing when their machine was last reachable, and not a statement
+   * about what it is showing now. Nothing may be done to a pane on a row that
+   * is not live — the peer is not there to do it to.
+   */
+  live: boolean
+}
+
+/**
+ * One teammate on the roster, and whether there is any picture of them at all.
+ *
+ * "Their machine is away" and "nothing has ever been heard from them" are
+ * different facts and read differently: the first has rows behind it, and the
+ * second is a colleague whose app has never been up while yours was.
+ */
+export type TeammateStanding = {
+  handle: string
+  publicKey: string
+  /** Their link is connected and has confirmed key possession. */
+  connected: boolean
+  /** When anything was last heard from them, or null if it never has been. */
+  heardAt: number | null
+}
+
+/**
+ * One person reading one of this machine's panes, right now.
+ *
+ * The whole argument in `docs/teamwork.md` for why "anyone can type" is
+ * survivable is that nothing can be done invisibly, and watching is the first
+ * half of that. So this is not decoration: it is the half of the bargain the
+ * owner is owed, and it is live rather than a log.
+ */
+export type PaneWatcher = {
+  /** What the roster files their key under. */
+  handle: string
+  /** Their public key, which is the identity the handshake authenticated. */
+  publicKey: string
+  /** When they started watching, by this machine's clock. */
+  since: number
+}
+
+/**
+ * One person who has typed into one of this machine's panes.
+ *
+ * The other half of the same bargain, and the half that matters more: a
+ * teammate's keystroke runs as the owner, so the owner is told whose it was
+ * while it happens rather than afterwards. `at` is what makes that live — a
+ * reader compares it with the clock and says "is typing" or "typed", and never
+ * claims somebody is at the keyboard because they once were.
+ *
+ * The counters cover the whole time this runtime has been up, so a pane that
+ * has been typed into says so even when nobody is typing now. `refused` sits
+ * beside `writes` deliberately: somebody still typing at a muted pane is a fact
+ * the owner wants, and it is one that would vanish if only what landed counted.
+ */
+/**
+ * How long after a keystroke somebody is still "typing".
+ *
+ * Here rather than in either half, because the runtime decides when to say a
+ * burst has ended and the window decides whether to draw one, and two numbers
+ * would eventually disagree about whether anybody is at the keyboard.
+ *
+ * A second and a half: long enough to survive somebody thinking mid-command,
+ * short enough that "ana is typing" goes away while she is still in the room.
+ */
+export const TYPING_WINDOW_MS = 1_500
+
+export type PaneTypist = {
+  /** What the roster files their key under. */
+  handle: string
+  /** Their public key, which is the identity the handshake authenticated. */
+  publicKey: string
+  /** Their first keystroke into this pane, by this machine's clock. */
+  since: number
+  /** Their most recent one, which is what makes "is typing" a live answer. */
+  at: number
+  /** Keystrokes that reached the pane. */
+  writes: number
+  /** Bytes that reached the pane. Never the bytes themselves. */
+  bytes: number
+  /** Keystrokes this machine refused: a mute, a pane that had gone, a roster. */
+  refused: number
+}
+
+/** One of this machine's panes, and what everyone else is doing to it. */
+export type WatchedPane = {
+  terminalId: string
+  /** Sorted by handle, so two reads compare cleanly. */
+  watchers: PaneWatcher[]
+  /** Sorted by handle, for the same reason. */
+  typists: PaneTypist[]
+  /**
+   * The owner has stopped remote keystrokes reaching this pane.
+   *
+   * Reported even when nobody is reading or typing, because a mute the owner
+   * cannot see is a mute they cannot lift — and because `docs/teamwork.md` is
+   * explicit that a muted pane still exists. Mute stops the bytes; it does not
+   * hide the worktree.
+   */
+  muted: boolean
+}
+
+/** Every pane of this machine somebody is reading, has typed into, or muted. */
+export type PaneWatchers = {
+  projectId: string
+  /**
+   * Only panes with something to say: a reader, a typist, or a mute. An empty
+   * list means nobody is reading, nobody has typed, and nothing is muted.
+   */
+  panes: WatchedPane[]
+  readAt: number
+}
+
+/**
+ * One remote keystroke, as the owner's own record of it.
+ *
+ * WHAT IT DELIBERATELY DOES NOT HOLD IS THE BYTES. The argument is written out
+ * in `src/main/teamwork/peer/writeLog.ts`, where the file is written; the short
+ * form is that a remote write carries *input*, and input includes what a
+ * terminal deliberately does not echo. Keeping it would turn the owner's audit
+ * trail into a plaintext store of their teammates' passphrases, which is a
+ * worse thing to own than this log is good.
+ */
+export type RemoteWrite = {
+  /** By the owner's clock, which is the only one this record trusts. */
+  at: number
+  handle: string
+  publicKey: string
+  projectId: string
+  terminalId: string
+  /** How much was sent, never what it was. */
+  bytes: number
+  /** How many submissions it carried, so a command is not read as a keypress. */
+  returns: number
+  /** Whether it reached the pane, and what stopped it when it did not. */
+  outcome: RemoteWriteOutcome
+  /** Why it was refused, in the words the teammate was given. Absent when it landed. */
+  reason?: string
+}
+
+/**
+ * `written` is the only one where bytes reached a pty. The rest are the ways
+ * this machine said no, kept apart rather than collapsed into "refused",
+ * because "I muted you" and "that pane is gone" are different answers.
+ */
+export type RemoteWriteOutcome = 'written' | 'muted' | 'no-pane' | 'not-a-member' | 'too-large'
+
+/** The owner's record of what teammates have typed here. */
+export type RemoteWriteLog = {
+  /** Oldest first, so this list's order is the order it happened in. */
+  writes: RemoteWrite[]
+  /** Why the record may be incomplete, or null when nothing has gone wrong. */
+  problem: string | null
+  readAt: number
+}
+
+/** Every teammate's worktrees in one project, as last heard. */
+export type TeammatePresence = {
+  projectId: string
+  /** Sorted by handle then by worktree name, so two reads compare cleanly. */
+  worktrees: TeammateWorktree[]
+  /** Every teammate on this project's roster, those never heard from included. */
+  teammates: TeammateStanding[]
+  readAt: number
 }

@@ -5,12 +5,17 @@
 
 import type {
   Layout,
+  Member,
+  MemberList,
   PaneNode,
   Project,
+  RelaySetting,
+  RemoteWrite,
   StartPoint,
   StartPointList,
   Terminal,
   Worktree,
+  WorktreeChange,
   WorktreeStatus
 } from '@shared/entities'
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
@@ -36,12 +41,115 @@ type FakeTerminal = {
   listeners: Set<(event: TerminalEvent) => void>
 }
 
+/**
+ * Paths the seeded changes are drawn from, cycled so the same worktree always
+ * shows the same files. Invented, but invented once.
+ */
+const SEEDED_PATHS = [
+  'src/search/rankResults.ts',
+  'src/search/index.ts',
+  'src/search/rankResults.test.ts',
+  'src/shell/StatusBar.tsx',
+  'src/styles/tokens.css',
+  'docs/search.md',
+  'scripts/reindex.mjs',
+  'src/server/handlers.ts'
+]
+
+/** The demo's own identity. Invented, like everything else in this file. */
+const SEEDED_HANDLE = 'you'
+/** Two invented teammates: one connected, one whose machine is not. */
+const SEEDED_PEER_KEY = 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='
+const SEEDED_AWAY_KEY = 'Qw8ErTyUiOpAsDfGhJkLzXcVbNm1234567890QwErTy='
+const SEEDED_PUBLIC_KEY = 'EA3VNMgROVtL/oUJhTmpENptwwkAWhc1HD2SIqJTHE4='
+
+/**
+ * The teammate panes this demo can open, and the scrollback each joins at.
+ *
+ * A watcher joining a running pane is shown what it has already said and then
+ * whatever it says next. With no relay and no teammate there is no "next", so
+ * these are the first half only — which is the honest half to invent.
+ */
+const SEEDED_WATCHABLE: Record<string, { handle: string; cols: number; rows: number; scrollback: string }> = {
+  [`peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_1`]: {
+    handle: 'priya',
+    cols: 96,
+    rows: 30,
+    scrollback:
+      'priya@studio compaction % claude\r\n' +
+      '\u001b[38;5;244m· reading src/index/segment.rs\u001b[0m\r\n' +
+      '\u001b[38;5;244m· 412 lines, 3 merge candidates\u001b[0m\r\n' +
+      'compacting segments 0..7\r\n'
+  },
+  [`peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_2`]: {
+    handle: 'priya',
+    cols: 120,
+    rows: 40,
+    scrollback: 'priya@studio compaction % pytest -q\r\n............................\r\n28 passed in 4.11s\r\n'
+  }
+}
+
+function seededMember(handle: string, publicKey: string, addedAt: string): Member {
+  return { handle, publicKey, addedAt, file: `.teamree/members/${handle}.pub`, isSelf: false }
+}
+
+/**
+ * Changed paths made up to match a worktree's counters, so the list and the
+ * chips above it never contradict each other in the demo.
+ */
+function seededChanges(status: WorktreeStatus): WorktreeChange[] {
+  const changes: WorktreeChange[] = []
+  let next = 0
+  const take = (): string => SEEDED_PATHS[next++ % SEEDED_PATHS.length] as string
+
+  for (let index = 0; index < status.conflicted; index += 1) {
+    changes.push({ path: take(), kind: 'conflicted', staged: false, unstaged: true })
+  }
+  for (let index = 0; index < status.staged; index += 1) {
+    changes.push({ path: take(), kind: index === 0 ? 'added' : 'modified', staged: true, unstaged: false })
+  }
+  for (let index = 0; index < status.unstaged; index += 1) {
+    changes.push({ path: take(), kind: 'modified', staged: false, unstaged: true })
+  }
+  for (let index = 0; index < status.untracked; index += 1) {
+    changes.push({ path: take(), kind: 'untracked', staged: false, unstaged: true })
+  }
+  return changes
+}
+
+/** A small believable patch, so the diff pane has something to render. */
+function seededPatch(path: string): string {
+  return [
+    `diff --git a/${path} b/${path}`,
+    'index 3f8a1c2..9b21e40 100644',
+    `--- a/${path}`,
+    `+++ b/${path}`,
+    '@@ -14,7 +14,9 @@',
+    ' export function rankResults(hits: Hit[], query: Query): Hit[] {',
+    '-  return hits.sort((left, right) => right.score - left.score)',
+    '+  const weighted = hits.map((hit) => ({ ...hit, score: hit.score * recency(hit) }))',
+    '+  // Ties went to whichever the index happened to return first, which is',
+    '+  // not stable between runs.',
+    '+  return weighted.sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))',
+    ' }',
+    ''
+  ].join('\n')
+}
+
 export function createSeededRuntimeClient(): RuntimeClient {
   const projects = new Map<string, Project>()
   const worktrees = new Map<string, Worktree>()
   const statuses = new Map<string, WorktreeStatus>()
   const terminals = new Map<string, FakeTerminal>()
   const layouts = new Map<string, Layout>()
+  /** Rosters by project id, so joining one in the demo really does add a row. */
+  const rosters = new Map<string, Member[]>()
+  /** The relay each project meets on, so setting one in the demo takes effect. */
+  const relays = new Map<string, string>()
+  /** Panes muted in the demo. A mute is local, so this one is not a pretence. */
+  const seededMutes = new Set<string>()
+  /** One remote write, so the record's shape is visible without a teammate. */
+  const seededWrites: RemoteWrite[] = []
 
   let connection: ConnectionState = { phase: 'connecting', detail: 'Starting runtime' }
   const connectionListeners = new Set<(state: ConnectionState) => void>()
@@ -89,6 +197,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       shell: '/bin/zsh',
       cols: 80,
       rows: 24,
+      busy: false,
+      lastOutputAt: Date.now(),
       running: true
     }
     const terminal: FakeTerminal = { record, buffer: '', line: '', listeners: new Set() }
@@ -133,6 +243,18 @@ export function createSeededRuntimeClient(): RuntimeClient {
 
   const atlas = seedProject('atlas', '/Users/dev/code/atlas', 'origin/main')
   const ledger = seedProject('ledger-api', '/Users/dev/code/ledger-api', 'origin/trunk')
+
+  // One project the demo's own key is already in, one it is not, because the
+  // difference between those two is the whole of what this dialog shows.
+  rosters.set(atlas.id, [
+    seededMember('ada', 'PkQtFYttlX7oLD8c/tYpNlHWLIflye3t6tMGm0I4iRk=', '2026-04-02'),
+    seededMember('grace', 'tOZqe8RgnJt2KzVOWEfPkfYHQpB1i0Jt7Ojb9vDfjW4=', '2026-05-19'),
+    { ...seededMember('you', SEEDED_PUBLIC_KEY, '2026-08-27'), isSelf: true }
+  ])
+  rosters.set(ledger.id, [seededMember('grace', 'tOZqe8RgnJt2KzVOWEfPkfYHQpB1i0Jt7Ojb9vDfjW4=', '2026-06-11')])
+  // The same split for the other team-wide fact: one project has a relay
+  // committed and one has none, which is what the panel is there to fix.
+  relays.set(atlas.id, 'wss://relay.example/v1/relay')
 
   const search = seedWorktree(atlas, 'incremental search index', 'task/incremental-search', 'ready')
   const themes = seedWorktree(atlas, 'theme tokens pass', 'task/theme-tokens', 'ready')
@@ -236,6 +358,41 @@ export function createSeededRuntimeClient(): RuntimeClient {
 
   finishCreation(flaky.id, false)
 
+  const memberList = (projectId: string): MemberList => {
+    const project = required(projects.get(projectId), 'project')
+    const members = rosters.get(projectId) ?? []
+    const mine = members.find((member) => member.isSelf)
+    const handle = mine?.handle ?? SEEDED_HANDLE
+    return {
+      projectId: project.id,
+      members,
+      problems: [],
+      self: { handle, publicKey: SEEDED_PUBLIC_KEY },
+      selfFile: `.teamree/members/${handle}.pub`,
+      enrolled: mine !== undefined,
+      watched: true,
+      readAt: Date.now()
+    }
+  }
+
+  /** The demo's one team-wide fact, and the environment saying nothing. */
+  const relaySetting = (projectId: string): RelaySetting => {
+    const url = relays.get(projectId) ?? null
+    return {
+      projectId,
+      file: '.teamree/relay',
+      url,
+      source: url === null ? null : 'repository',
+      problem:
+        url === null
+          ? 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
+          : null,
+      committed: { url, problem: null },
+      override: { name: 'TEAMREE_RELAY_URL', value: null },
+      readAt: Date.now()
+    }
+  }
+
   // --- method dispatch ------------------------------------------------------
 
   const handlers: { [M in MethodName]: (params: ParamsOf<M>) => ResultOf<M> } = {
@@ -294,7 +451,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
       finishCreation(worktree.id, /fail/i.test(name))
       return worktree
     },
-    'worktree.remove': ({ worktreeId }) => {
+    'worktree.remove': ({ worktreeId, force }) => {
+      const status = statuses.get(worktreeId)
+      const pending = status ? status.staged + status.unstaged + status.untracked + status.conflicted : 0
+      // The same refusal the real runtime makes, so the confirmation this
+      // provokes is demonstrable rather than only reachable against git.
+      if (!force && pending > 0) {
+        throw Object.assign(
+          new Error(`worktree has ${pending} uncommitted changes; remove with force to discard them`),
+          {
+            code: 'conflict'
+          }
+        )
+      }
       worktrees.delete(worktreeId)
       statuses.delete(worktreeId)
       layouts.delete(worktreeId)
@@ -337,29 +506,348 @@ export function createSeededRuntimeClient(): RuntimeClient {
       statuses.set(worktreeId, status)
       return status
     },
+    'worktree.changes': ({ worktreeId, limit }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const all = status ? seededChanges(status) : []
+      const cap = limit ?? 500
+      return {
+        worktreeId: worktree.id,
+        changes: all.slice(0, cap),
+        total: all.length,
+        limit: cap,
+        truncated: all.length > cap,
+        readAt: Date.now()
+      }
+    },
+    'worktree.commit': ({ worktreeId, message, paths }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const changes = status ? seededChanges(status) : []
+      const captured = paths && paths.length > 0 ? paths : changes.filter((c) => c.staged).map((c) => c.path)
+      // The seeded workspace moves with it: what was committed is no longer a
+      // pending change, so the chips settle the way they would for real.
+      if (status) {
+        seedStatus(worktree, {
+          ahead: status.ahead + 1,
+          behind: status.behind,
+          staged: 0,
+          unstaged: status.unstaged,
+          untracked: status.untracked,
+          conflicted: status.conflicted
+        })
+      }
+      announce({ type: 'worktrees' })
+      const sha = nextId('sha').replace(/[^a-z0-9]/g, '')
+      return {
+        worktreeId,
+        sha,
+        shortSha: sha.slice(0, 7),
+        message,
+        paths: [...captured].sort(),
+        committedAt: Date.now()
+      }
+    },
+    'worktree.push': ({ worktreeId, remote }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const target = remote ?? 'origin'
+      // Nothing ahead means nothing to send, which is the outcome worth seeing
+      // in a demo as much as the other one.
+      const alreadyUpToDate = (status?.ahead ?? 0) === 0
+      if (status && !alreadyUpToDate) {
+        seedStatus(worktree, { ...status, ahead: 0 })
+        announce({ type: 'worktrees' })
+      }
+      return {
+        worktreeId,
+        remote: target,
+        branch: worktree.branch,
+        alreadyUpToDate,
+        upstream: `${target}/${worktree.branch}`,
+        setUpstream: false,
+        uncommitted: (status?.staged ?? 0) + (status?.unstaged ?? 0),
+        pushedAt: Date.now()
+      }
+    },
+    'worktree.log': ({ worktreeId, limit }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const project = projects.get(worktree.projectId)
+      const ahead = statuses.get(worktreeId)?.ahead ?? 0
+      const subjects = [
+        'rank results by recency, not just score',
+        'pull the tie-break out of the comparator',
+        'cover the empty-query case'
+      ]
+      const commits = Array.from({ length: ahead }, (_, index) => {
+        const sha = `${nextId('c').replace(/[^a-z0-9]/g, '')}0000000000000000000000000000`.slice(0, 40)
+        return {
+          sha,
+          shortSha: sha.slice(0, 7),
+          author: 'you',
+          committedAt: new Date(Date.now() - (index + 1) * 1_800_000).toISOString(),
+          subject: subjects[index % subjects.length] as string
+        }
+      })
+      const cap = limit ?? 50
+      return {
+        worktreeId,
+        baseRef: project?.baseRef ?? 'origin/main',
+        commits: commits.slice(0, cap),
+        truncated: commits.length > cap,
+        readAt: Date.now()
+      }
+    },
+    'worktree.mergePreview': ({ worktreeId }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const project = projects.get(worktree.projectId)
+      const status = statuses.get(worktreeId)
+      // Seeded to match the chips: a worktree carrying conflicts is exactly the
+      // one that would not go in cleanly.
+      const conflicted = (status?.conflicted ?? 0) > 0
+      return {
+        worktreeId,
+        baseRef: project?.baseRef ?? 'origin/main',
+        state: conflicted ? 'conflicts' : (status?.ahead ?? 0) === 0 ? 'nothingToMerge' : 'clean',
+        ahead: status?.ahead ?? 0,
+        conflicts: conflicted
+          ? seededChanges(status as WorktreeStatus)
+              .slice(0, status?.conflicted ?? 0)
+              .map((change) => change.path)
+          : [],
+        readAt: Date.now()
+      }
+    },
+    'worktree.diff': ({ worktreeId, path, staged }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const changes = status ? seededChanges(status) : []
+      const wanted = path === undefined ? changes.filter((change) => change.staged === (staged ?? false)) : [{ path }]
+      return {
+        worktreeId: worktree.id,
+        ...(path === undefined ? {} : { path }),
+        staged: staged ?? false,
+        patch: wanted.map((change) => seededPatch(change.path)).join('\n'),
+        truncated: false,
+        readAt: Date.now()
+      }
+    },
 
+    'teamwork.relay': ({ projectId }) => relaySetting(projectId),
+    'teamwork.setRelay': ({ projectId, url }) => {
+      relays.set(projectId, url)
+      announce({ type: 'members' })
+      return relaySetting(projectId)
+    },
+
+    'members.list': ({ projectId }) => memberList(projectId),
+    'members.join': ({ projectId, handle }) => {
+      const roster = rosters.get(projectId) ?? []
+      if (!roster.some((member) => member.isSelf)) {
+        const name = handle ?? SEEDED_HANDLE
+        rosters.set(projectId, [
+          ...roster,
+          { ...seededMember(name, SEEDED_PUBLIC_KEY, new Date().toISOString().slice(0, 10)), isSelf: true }
+        ])
+        announce({ type: 'members' })
+      }
+      return memberList(projectId)
+    },
+
+    // Teamwork, as the demo can honestly show it: a relay named, one teammate
+    // connected and one whose machine is not. Inventing a refused link would be
+    // inventing a security event, so the seeded data has none.
+    'teamwork.status': ({ projectId }) => ({
+      projectId,
+      relay: { url: 'wss://relay.example/v1/relay', source: 'repository' as const },
+      disabledReason: null,
+      links: [
+        {
+          publicKey: SEEDED_PEER_KEY,
+          handle: 'priya',
+          phase: 'connected' as const,
+          since: Date.now() - 900_000,
+          attempts: 1
+        },
+        {
+          publicKey: SEEDED_AWAY_KEY,
+          handle: 'marcus',
+          phase: 'waiting' as const,
+          detail: 'your teammate’s machine is not connected',
+          since: Date.now() - 300_000,
+          attempts: 3
+        }
+      ],
+      readAt: Date.now()
+    }),
+    // Two teammates, because the two cases read differently: priya is
+    // connected, and marcus's laptop is shut — his worktree stays exactly where
+    // it was, out of the local cache, dated and not live.
+    'teamwork.presence': ({ projectId }) => ({
+      projectId,
+      teammates: [
+        { handle: 'marcus', publicKey: SEEDED_AWAY_KEY, connected: false, heardAt: Date.now() - 2_700_000 },
+        { handle: 'priya', publicKey: SEEDED_PEER_KEY, connected: true, heardAt: Date.now() - 4_000 }
+      ],
+      worktrees: [
+        {
+          id: `peer:${SEEDED_AWAY_KEY.slice(0, 12)}:wt_remote_9`,
+          handle: 'marcus',
+          publicKey: SEEDED_AWAY_KEY,
+          name: 'retry budget',
+          branch: 'fix/retry-budget',
+          state: 'ready' as const,
+          heardAt: Date.now() - 2_700_000,
+          live: false,
+          panes: [
+            {
+              id: `peer:${SEEDED_AWAY_KEY.slice(0, 12)}:t_remote_9`,
+              title: 'codex',
+              shell: '/bin/zsh',
+              agent: 'codex' as const,
+              running: true,
+              busy: false,
+              quietForMs: 120_000
+            }
+          ]
+        },
+        {
+          id: `peer:${SEEDED_PEER_KEY.slice(0, 12)}:wt_remote_1`,
+          handle: 'priya',
+          publicKey: SEEDED_PEER_KEY,
+          name: 'index compaction',
+          branch: 'perf/compaction',
+          state: 'ready' as const,
+          heardAt: Date.now() - 4_000,
+          live: true,
+          panes: [
+            {
+              id: `peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_1`,
+              title: 'claude',
+              shell: '/bin/zsh',
+              agent: 'claude' as const,
+              running: true,
+              busy: true,
+              cols: 96,
+              rows: 30,
+              quietForMs: 0
+            },
+            {
+              id: `peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_2`,
+              title: 'pytest',
+              shell: '/bin/zsh',
+              running: true,
+              busy: false,
+              cols: 120,
+              rows: 40,
+              quietForMs: 260_000
+            }
+          ]
+        }
+      ],
+      readAt: Date.now()
+    }),
+
+    // A teammate's pane, as the demo can honestly show one: the scrollback it
+    // joins at and nothing after it. There is no relay here and no teammate, so
+    // inventing live output would be inventing a person.
+    'teamwork.watch': ({ paneId }) => {
+      const pane = SEEDED_WATCHABLE[paneId]
+      if (!pane) throw new Error(`${paneId} is not a teammate’s pane`)
+      return { subscription: nextId('sub'), cols: pane.cols, rows: pane.rows, handle: pane.handle }
+    },
+    // Typing into a teammate's pane, refused here rather than pretended at.
+    // There is no relay and no teammate, so a keystroke has nowhere to land,
+    // and answering "written" would be the one lie this feature must not tell.
+    'teamwork.type': () => {
+      throw new Error('there is no teammate to type to in the demo runtime')
+    },
+    // One teammate reading one of this machine's panes, and one who has typed
+    // into it, so both halves of the owner's bargain are visible in the demo
+    // rather than only in the design.
+    'teamwork.watchers': ({ projectId }) => ({
+      projectId,
+      panes: [...terminals.keys()].slice(0, 1).map((terminalId) => ({
+        terminalId,
+        watchers: [{ handle: 'priya', publicKey: SEEDED_PEER_KEY, since: Date.now() - 120_000 }],
+        typists: [
+          {
+            handle: 'priya',
+            publicKey: SEEDED_PEER_KEY,
+            since: Date.now() - 90_000,
+            at: Date.now() - 40_000,
+            writes: 12,
+            bytes: 48,
+            refused: 0
+          }
+        ],
+        muted: seededMutes.has(terminalId)
+      })),
+      readAt: Date.now()
+    }),
+    // The one thing in this area a demo can do for real: a mute is local, needs
+    // nobody's agreement, and takes effect on a machine that has no peers at all.
+    'teamwork.mute': ({ terminalId, muted }) => {
+      const worktreeId = terminals.get(terminalId)?.record.worktreeId
+      const projectId = worktreeId === undefined ? undefined : worktrees.get(worktreeId)?.projectId
+      if (projectId === undefined) throw new Error(`no pane of this machine with id ${terminalId}`)
+      if (muted) seededMutes.add(terminalId)
+      else seededMutes.delete(terminalId)
+      announce({ type: 'teammates' })
+      return handlers['teamwork.watchers']({ projectId })
+    },
+    // Seeded with one entry so the shape of the record is visible: who, when,
+    // which pane, how much — and, deliberately, not a byte of what was typed.
+    'teamwork.writeLog': ({ limit }) => {
+      const writes = [...seededWrites]
+      return { writes: limit === undefined ? writes : writes.slice(-limit), problem: null, readAt: Date.now() }
+    },
+
+    // PEER-ONLY, and refused here rather than seeded. These are what a teammate
+    // calls over the peer transport; a window asking for one is a bug, and
+    // answering it with invented data would hide that.
+    'peer.presence': () => {
+      throw new Error('peer.presence is a teammate’s call, not a window’s')
+    },
+    'peer.subscribe': () => {
+      throw new Error('peer.subscribe is a teammate’s call, not a window’s')
+    },
+
+    'agent.list': () => [
+      { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
+      { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex' }
+    ],
     'terminal.list': ({ worktreeId }) =>
       [...terminals.values()]
         .map((terminal) => terminal.record)
         .filter((record) => !worktreeId || record.worktreeId === worktreeId),
-    'terminal.create': ({ worktreeId, cols, rows }) => {
-      const record = spawn(worktreeId, 'zsh', [dim('teamree · new session')])
+    // A pane started with a command shows that command, not the shell it would
+    // have been: the demo's job is to look like what the runtime actually does.
+    'terminal.create': ({ worktreeId, cols, rows, command }) => {
+      const record = command
+        ? spawn(worktreeId, command, [accent(`▌ ${command}`), dim('reading the worktree …')])
+        : spawn(worktreeId, 'zsh', [dim('teamree · new session')])
       const terminal = required(terminals.get(record.id), 'terminal')
       terminal.record = { ...record, cols: cols ?? record.cols, rows: rows ?? record.rows }
       const layout = layouts.get(worktreeId)
-        if (!layout?.root) {
-          layouts.set(worktreeId, { worktreeId, root: leaf(record.id), focusedTerminalId: record.id })
-        } else {
-          const root = layout.root
-          const share = root.kind === 'split' && root.direction === 'row' ? 1 / (root.children.length + 1) : 0.5
-          layouts.set(worktreeId, {
-            worktreeId,
-            focusedTerminalId: record.id,
-            root: root.kind === 'split' && root.direction === 'row'
-              ? { ...root, children: [...root.children, leaf(record.id)], sizes: [...root.sizes.map((size) => size * (1 - share)), share] }
+      if (!layout?.root) {
+        layouts.set(worktreeId, { worktreeId, root: leaf(record.id), focusedTerminalId: record.id })
+      } else {
+        const root = layout.root
+        const share = root.kind === 'split' && root.direction === 'row' ? 1 / (root.children.length + 1) : 0.5
+        layouts.set(worktreeId, {
+          worktreeId,
+          focusedTerminalId: record.id,
+          root:
+            root.kind === 'split' && root.direction === 'row'
+              ? {
+                  ...root,
+                  children: [...root.children, leaf(record.id)],
+                  sizes: [...root.sizes.map((size) => size * (1 - share)), share]
+                }
               : { kind: 'split', direction: 'row', children: [root, leaf(record.id)], sizes: [0.5, 0.5] }
-          })
-        }
+        })
+      }
       announce({ type: 'terminals' }, { type: 'layout', worktreeId })
       return terminal.record
     },
@@ -449,6 +937,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
           closed = true
           workspaceWatchers.delete(onEvent)
         }
+      }
+    },
+    async watchPane(projectId, paneId, onEvent) {
+      await sleep(LATENCY_MS)
+      const opened = handlers['teamwork.watch']({ projectId, paneId })
+      // The scrollback, and then silence: a demo with no peer has nothing live
+      // to say, and saying something anyway would be inventing a teammate.
+      onEvent({ type: 'data', data: SEEDED_WATCHABLE[paneId]?.scrollback ?? '' })
+      return {
+        subscription: { close: () => {} },
+        cols: opened.cols,
+        rows: opened.rows,
+        handle: opened.handle
       }
     },
     async subscribeTerminal(terminalId, onEvent) {

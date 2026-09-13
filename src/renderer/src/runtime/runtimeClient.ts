@@ -40,8 +40,24 @@ export async function subscribe<M extends SubscribingMethod>(
   params: ParamsOf<M>,
   onEvent: (event: unknown) => void
 ): Promise<Subscription> {
+  return (await openStream(method, params, onEvent)).subscription
+}
+
+/**
+ * The same thing, keeping whatever else the answer carried.
+ *
+ * Some streams answer with more than an id — a teammate's pane comes back with
+ * the owner's dimensions — and a viewer that had to ask for those separately
+ * would draw one frame at the wrong size before it found out.
+ */
+export async function openStream<M extends SubscribingMethod>(
+  method: M,
+  params: ParamsOf<M>,
+  onEvent: (event: unknown) => void
+): Promise<{ subscription: Subscription; result: ResultOf<M> }> {
   installRouter()
-  const { subscription } = (await call(method, params)) as { subscription: string }
+  const result = await call(method, params)
+  const { subscription } = result as { subscription: string }
 
   listeners.set(subscription, onEvent)
   // The runtime can emit before its response lands, so replay what arrived first.
@@ -49,18 +65,21 @@ export async function subscribe<M extends SubscribingMethod>(
 
   let closed = false
   return {
-    id: subscription,
-    close: async () => {
-      if (closed) return
-      closed = true
-      listeners.delete(subscription)
-      try {
-        await call('unsubscribe', { subscription })
-      } catch (error) {
-        // A stream the runtime already tore down is not a failure to close.
-        if (!(error instanceof RuntimeCallError) || error.code !== 'not_found') throw error
+    subscription: {
+      id: subscription,
+      close: async () => {
+        if (closed) return
+        closed = true
+        listeners.delete(subscription)
+        try {
+          await call('unsubscribe', { subscription })
+        } catch (error) {
+          // A stream the runtime already tore down is not a failure to close.
+          if (!(error instanceof RuntimeCallError) || error.code !== 'not_found') throw error
+        }
       }
-    }
+    },
+    result
   }
 }
 

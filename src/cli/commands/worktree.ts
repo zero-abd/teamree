@@ -130,6 +130,226 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'changes'],
+    summary: 'List the changed paths in a worktree.',
+    details:
+      'The counters in `worktree status` say whether there is anything to look at. This is the looking: ' +
+      'conflicts first, then what is staged, then the rest.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      {
+        name: 'limit',
+        kind: 'number',
+        placeholder: '<count>',
+        description: 'Rows to return before the list reports itself truncated.'
+      }
+    ],
+    examples: ['teamree worktree changes fix-login', 'teamree worktree changes fix-login --json'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const limit = readNumber(context.flags, 'limit')
+      const result = await context.client.call('worktree.changes', {
+        worktreeId: worktree.id,
+        ...(limit === undefined ? {} : { limit })
+      })
+
+      const rows = result.changes.map((change) => [
+        change.kind,
+        change.staged ? (change.unstaged ? 'both' : 'staged') : 'unstaged',
+        change.from === undefined ? change.path : `${change.from} -> ${change.path}`
+      ])
+      const table = formatTable(['KIND', 'WHERE', 'PATH'], rows, 'No changes.')
+      return {
+        data: result,
+        text: result.truncated ? `${table}\n\nShowing ${result.limit} of ${result.total}.` : table
+      }
+    }
+  },
+  {
+    path: ['worktree', 'commit'],
+    summary: 'Commit staged work in a worktree.',
+    details:
+      'Nothing is staged for you beyond the paths you name. With no --path, it commits what is already ' +
+      'staged and refuses if that is nothing — there is deliberately no "commit everything", because a ' +
+      'sweep picks up the one file you did not mean to keep.',
+    args: [
+      { name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true },
+      {
+        name: 'path',
+        description: 'Stage these before committing. Put them after `--` so none is read as a flag.',
+        required: false,
+        variadic: true
+      }
+    ],
+    flags: [{ name: 'message', kind: 'string', alias: 'm', placeholder: '<text>', description: 'The commit message.' }],
+    examples: [
+      'teamree worktree commit fix-login -m "tighten the retry"',
+      'teamree worktree commit fix-login -m "only this" -- src/app.ts src/app.test.ts'
+    ],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const message = requireString(context.flags, 'message')
+      const paths = context.args.slice(1)
+
+      const result = await context.client.call('worktree.commit', {
+        worktreeId: worktree.id,
+        message,
+        ...(paths.length === 0 ? {} : { paths })
+      })
+
+      return {
+        data: result,
+        text: formatFields([
+          ['commit', result.shortSha],
+          ['message', result.message],
+          ['files', String(result.paths.length)],
+          ...result.paths.map((path): [string, string] => ['', path])
+        ])
+      }
+    }
+  },
+  {
+    path: ['worktree', 'push'],
+    summary: "Send a worktree's branch to its remote.",
+    details:
+      'Sets the upstream on the first push. There is deliberately no force: the value of one is overwriting ' +
+      "somebody else's history. Uncommitted work is reported, not blocked — but what lands is then not what " +
+      'is in the worktree.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      { name: 'remote', kind: 'string', placeholder: '<name>', description: 'Where to push. Defaults to origin.' }
+    ],
+    examples: ['teamree worktree push fix-login', 'teamree worktree push fix-login --remote upstream'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const remote = readString(context.flags, 'remote')
+      const result = await context.client.call('worktree.push', {
+        worktreeId: worktree.id,
+        ...(remote === undefined ? {} : { remote })
+      })
+
+      const lines = [
+        result.alreadyUpToDate
+          ? `${result.remote} already had ${result.branch}.`
+          : `Pushed ${result.branch} to ${result.remote}.`
+      ]
+      if (result.setUpstream) lines.push(`${result.branch} now tracks ${result.upstream}.`)
+      if (result.uncommitted > 0) {
+        lines.push(`${result.uncommitted} uncommitted change${result.uncommitted === 1 ? '' : 's'} stayed behind.`)
+      }
+      return { data: result, text: lines.join('\n') }
+    }
+  },
+  {
+    path: ['worktree', 'log'],
+    summary: 'List the commits a worktree has made that its base has not.',
+    details:
+      'Scoped to base..branch, because the question is what this worktree did rather than what is in the ' +
+      'repository. Newest first.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      { name: 'limit', kind: 'number', placeholder: '<count>', description: 'Commits before the list is capped.' }
+    ],
+    examples: ['teamree worktree log fix-login', 'teamree worktree log fix-login --limit 5 --json'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const limit = readNumber(context.flags, 'limit')
+      const log = await context.client.call('worktree.log', {
+        worktreeId: worktree.id,
+        ...(limit === undefined ? {} : { limit })
+      })
+
+      const table = formatTable(
+        ['COMMIT', 'WHEN', 'AUTHOR', 'SUBJECT'],
+        log.commits.map((commit) => [
+          commit.shortSha,
+          commit.committedAt.slice(0, 10),
+          commit.author,
+          commit.subject.split('\n')[0] ?? ''
+        ]),
+        `Nothing committed here that ${log.baseRef} does not already have.`
+      )
+      return { data: log, text: log.truncated ? `${table}\n\nCapped; there are more.` : table }
+    }
+  },
+  {
+    path: ['worktree', 'merges'],
+    summary: 'Say whether a worktree would merge cleanly into its base.',
+    details:
+      'Answered without checking anything out or starting a merge, so it costs the repository nothing and ' +
+      'can be asked about every worktree at once. The answer is in `state` under --json: clean, conflicts, ' +
+      'unrelated, or unavailable.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    examples: ['teamree worktree merges fix-login', 'teamree worktree merges fix-login --json'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const preview = await context.client.call('worktree.mergePreview', { worktreeId: worktree.id })
+
+      const summary = {
+        nothingToMerge: `${worktree.branch} has nothing ${preview.baseRef} does not already have.`,
+        clean: `${worktree.branch} merges cleanly into ${preview.baseRef}.`,
+        conflicts: `${worktree.branch} conflicts with ${preview.baseRef} in ${preview.conflicts.length} file${
+          preview.conflicts.length === 1 ? '' : 's'
+        }:`,
+        unrelated: `Cannot say: ${preview.reason ?? 'no shared history'}.`,
+        unavailable: `Cannot say: ${preview.reason ?? 'git could not answer'}.`
+      }[preview.state]
+
+      const text =
+        preview.state === 'conflicts' ? [summary, ...preview.conflicts.map((path) => `  ${path}`)].join('\n') : summary
+
+      // Exit stays 0 for every answer, including "it would conflict": the
+      // codes mean whether the command ran, and this one ran. A script branches
+      // on `state` from --json rather than on an exit code that would have to
+      // be given a second meaning.
+      return { data: preview, text }
+    }
+  },
+  {
+    path: ['worktree', 'diff'],
+    summary: 'Print the patch for a worktree, or for one path in it.',
+    details:
+      'Untracked files are included when a path names one, since git itself has nothing to compare them ' +
+      'against and would otherwise answer with silence.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      { name: 'path', kind: 'string', placeholder: '<path>', description: 'Restrict the patch to one path.' },
+      { name: 'staged', kind: 'boolean', description: 'Diff the index against HEAD instead of the working tree.' },
+      { name: 'context', kind: 'number', placeholder: '<lines>', description: 'Context lines around each hunk.' },
+      {
+        name: 'max-bytes',
+        kind: 'number',
+        placeholder: '<bytes>',
+        description: 'Ceiling on the patch returned. It is cut at a line boundary.'
+      }
+    ],
+    examples: [
+      'teamree worktree diff fix-login',
+      'teamree worktree diff fix-login --path src/app.ts',
+      'teamree worktree diff fix-login --staged'
+    ],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const patchPath = readString(context.flags, 'path')
+      const staged = readBoolean(context.flags, 'staged')
+      const contextLines = readNumber(context.flags, 'context')
+      const maxBytes = readNumber(context.flags, 'max-bytes')
+
+      const result = await context.client.call('worktree.diff', {
+        worktreeId: worktree.id,
+        ...(patchPath === undefined ? {} : { path: patchPath }),
+        ...(staged ? { staged: true } : {}),
+        ...(contextLines === undefined ? {} : { contextLines }),
+        ...(maxBytes === undefined ? {} : { maxBytes })
+      })
+
+      // The patch goes out as git wrote it, so it can be piped into `git apply`
+      // or read by anything that understands a unified diff.
+      const text = result.patch === '' ? 'No changes.' : result.patch
+      return { data: result, text: result.truncated ? `${text}\n[cut at ${result.patch.length} characters]` : text }
+    }
+  },
+  {
     path: ['worktree', 'wait'],
     summary: 'Block until a worktree finishes being created.',
     details:

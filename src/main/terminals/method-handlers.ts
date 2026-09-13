@@ -20,15 +20,18 @@
 //     the hub and the global `unsubscribe` method keeps working untouched. With
 //     no hub configured the service keeps its own ids instead and pushes events
 //     through the `publish` option, which is how the tests run it headless.
-//   - Failures throw TerminalServiceError, whose `code` is already an ErrorCode;
-//     map it onto the response (see isTerminalServiceError) rather than letting
-//     it fall through as `internal`.
+//   - Failures throw TerminalServiceError, a RuntimeError carrying an ErrorCode,
+//     so the dispatcher puts that code on the wire itself and a caller can
+//     branch on `not_found` instead of reading a message. Nothing here has to
+//     map it, and nothing here may throw a plain Error: that falls through as
+//     `internal` and tells a caller an expected condition was a runtime bug.
 
 import type { z } from 'zod'
 import { Params } from '../../shared/methods'
 import type { ParamsOf, ResultOf, TerminalEvent } from '../../shared/methods'
 import { TerminalServiceError } from './service-error'
 import { ErrorCode } from '../../shared/protocol'
+import { findInstalledAgents } from './agent-discovery'
 import { TerminalSessionManager } from './session-manager'
 import type { StreamChannel, TerminalSessionManagerOptions } from './session-manager'
 
@@ -43,6 +46,7 @@ export type TerminalMethodName =
   | 'terminal.split'
   | 'layout.get'
   | 'layout.set'
+  | 'agent.list'
 
 /** Per-call identity, as the dispatcher passes it to every handler. */
 export type TerminalCallContext = { readonly connectionId: string }
@@ -62,7 +66,8 @@ export const terminalMethodSchemas = {
   'terminal.subscribe': Params.terminalSubscribe,
   'terminal.split': Params.terminalSplit,
   'layout.get': Params.layoutGet,
-  'layout.set': Params.layoutSet
+  'layout.set': Params.layoutSet,
+  'agent.list': Params.agentList
 } as const
 
 /**
@@ -97,6 +102,7 @@ export type TerminalService = {
   /** Kills every PTY. Call before the app quits. */
   shutdown: () => Promise<void>
   /** Drops stored pane leaves whose terminal is gone. Call once at startup. */
+  restoreSessions: () => { restored: number; resumed: number }
   reconcileLayouts: () => number
   /** Escape hatch for callers that need more than the method surface. */
   manager: TerminalSessionManager
@@ -108,6 +114,9 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
 
   const handlers: TerminalHandlers = {
     'terminal.list': async (params) => manager.list(params.worktreeId),
+    // Probed rather than remembered: a list cached at startup goes stale the
+    // first time somebody installs an agent without restarting the app.
+    'agent.list': async () => findInstalledAgents(),
     'terminal.create': async (params) => manager.create(params),
     'terminal.write': async (params) => {
       manager.write(params.terminalId, params.data)
@@ -138,6 +147,7 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
     schemas: terminalMethodSchemas,
     unsubscribe: (subscription) => manager.unsubscribe(subscription),
     shutdown: () => manager.shutdown(),
+    restoreSessions: () => manager.restoreSessions(),
     reconcileLayouts: () => manager.reconcileLayouts(),
     manager
   }
@@ -156,6 +166,7 @@ export function registerTerminalHandlers(registry: MethodRegistry, service: Term
   registry.register('terminal.split', service.schemas['terminal.split'], service.handlers['terminal.split'])
   registry.register('layout.get', service.schemas['layout.get'], service.handlers['layout.get'])
   registry.register('layout.set', service.schemas['layout.set'], service.handlers['layout.set'])
+  registry.register('agent.list', service.schemas['agent.list'], service.handlers['agent.list'])
 }
 
 export type { StreamChannel, TerminalEvent }

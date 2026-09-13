@@ -21,6 +21,17 @@ export type RefreshTargets = {
   projects: boolean
   worktrees: boolean
   terminals: boolean
+  /**
+   * Rosters. The event carries no project id, so this is the one target that
+   * cannot be narrowed from the stream: the reader re-reads the rosters it is
+   * already holding, which are the ones somebody is looking at.
+   */
+  members: boolean
+  /**
+   * Link states and what teammates are showing. Like `members`, the event
+   * carries no project id, so this re-reads the projects on screen.
+   */
+  teammates: boolean
   /** Layouts of exactly these worktrees. Never widened to "every layout". */
   layouts: readonly string[]
   /** Git status of exactly these worktrees. */
@@ -35,6 +46,8 @@ export const NOTHING_TO_REFRESH: RefreshTargets = {
   projects: false,
   worktrees: false,
   terminals: false,
+  members: false,
+  teammates: false,
   layouts: [],
   statuses: [],
   exits: []
@@ -49,6 +62,8 @@ export function isEmptyRefresh(targets: RefreshTargets): boolean {
     !targets.projects &&
     !targets.worktrees &&
     !targets.terminals &&
+    !targets.members &&
+    !targets.teammates &&
     targets.layouts.length === 0 &&
     targets.statuses.length === 0 &&
     targets.exits.length === 0
@@ -68,6 +83,14 @@ export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
       return refreshTargets({ worktrees: true })
     case 'terminals':
       return refreshTargets({ terminals: true })
+    case 'members':
+      return refreshTargets({ members: true })
+    // A roster change moves the link set as well, but it does not need to be
+    // said here: the runtime reconciles its links off the same event and emits
+    // `teammates` when it has, so coupling the two in the client would refetch
+    // once for the roster and once more for the announcement of the same thing.
+    case 'teammates':
+      return refreshTargets({ teammates: true })
     case 'layout':
       return refreshTargets({ layouts: [event.worktreeId] })
     case 'terminalExited':
@@ -83,6 +106,8 @@ export function mergeTargets(a: RefreshTargets, b: RefreshTargets): RefreshTarge
     projects: a.projects || b.projects,
     worktrees: a.worktrees || b.worktrees,
     terminals: a.terminals || b.terminals,
+    members: a.members || b.members,
+    teammates: a.teammates || b.teammates,
     layouts: union(a.layouts, b.layouts),
     statuses: union(a.statuses, b.statuses),
     exits: mergeExits(a.exits, b.exits)

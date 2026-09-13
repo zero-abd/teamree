@@ -1,0 +1,209 @@
+# Every check this project has, on every platform it ships to.
+#
+# This is the whole of it, and it is a reusable workflow rather than a job so
+# that `ci.yml` and `release.yml` run the same steps rather than two copies that
+# drift. A release built by a second, shorter pipeline would be a release nobody
+# had run the packaged-app check against, which is the one check here that can
+# tell a package that built from a package that works.
+#
+# One workflow rather than a fast "lint" job and a separate "package" job,
+# because the failures this project actually had were packaging failures: the
+# suite was green and the Linux artifact could not be built at all. Splitting
+# the cheap checks out would put the expensive, informative half behind a tag
+# and leave it unrun, which is how it got into that state.
+#
+# Each platform is packaged on its own runner out of necessity. node-pty is a
+# native module: it ships prebuilt binaries for macOS and Windows but none for
+# Linux, where `npm ci` compiles one — so a Linux artifact built anywhere else
+# would contain no working PTY at all.
+#
+# Nothing here is signed. Signing needs secrets a fork cannot have; see the
+# comments in electron-builder.yml for what a maintainer adds, and pass them to
+# the packaging step as environment variables.
+name: build
+
+on:
+  workflow_call:
+    inputs:
+      retention-days:
+        description: >-
+          How long the uploaded installers live. A release downloads them within
+          the same run and then attaches them somewhere permanent, so it has no
+          use for a long window; a branch build is kept for a fortnight because
+          somebody may want to try the artifact by hand.
+        type: number
+        default: 14
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    # macOS only, deliberately, and the matrix is kept so adding a platform back
+    # is one block rather than a rewrite.
+    #
+    # Windows and Linux both ran here and both were worth running: between them
+    # they found a missing build step, an absent git identity, CRLF checkouts, an
+    # unsigned sandbox helper, a dozen tests that had only ever run on Linux, and
+    # one real defect where agent discovery followed the host instead of the
+    # platform it was told about. Linux reached green. Windows was still turning
+    # up a new POSIX assumption every run, and the cost of chasing them stopped
+    # being worth it against shipping the one platform this is going to.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS (universal)
+            os: macos-latest
+            package: package:mac
+            # One file, and `if-no-files-found: error` below means a build that
+            # stops producing it fails here rather than publishing nothing.
+            artifacts: dist/*.dmg
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Node 22 rather than the newest release: it is the major Electron 38
+      # embeds, so the CLI bundle, the test suite and the code that actually
+      # ships all run on one runtime.
+      #
+      # `relay/` is a second npm package with its own lockfile, so both are named
+      # here: keyed on the root lockfile alone, a change to the relay's
+      # dependencies would be served a cache that predates it.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            relay/package-lock.json
+
+      # Electron draws into an X display even with the window hidden, so the
+      # smoke test and the packaged-app check both need one. xvfb-run needs
+      # xauth beside it. Installed rather than assumed: which of the two the
+      # runner image happens to carry has changed between image releases.
+      - name: Install a virtual display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth
+
+      # `npm ci` compiles node-pty here on Linux, so a compiler failure surfaces
+      # as an install failure rather than as a terminal that never opens.
+      - name: Install
+        run: npm ci
+
+      # The relay is a separate package with its own dependencies and its own
+      # gitignored build, and the suite below spawns the built thing as a child
+      # process to drive real WebSockets through it. Nothing in the root install
+      # produces it, which is why those tests skipped here on every run before
+      # this step existed.
+      - name: Install the relay
+        run: npm ci
+        working-directory: relay
+
+      # Electron's sandbox helper has to be setuid root, and npm cannot make it
+      # so — it unpacks as the runner's own user. Electron then aborts rather
+      # than run unsandboxed, which is the right call and is how the first CI
+      # run died at the smoke test. Fixed rather than switched off: running the
+      # smoke test without the sandbox would be testing a configuration no user
+      # has.
+      - name: Let Electron's sandbox helper run
+        if: runner.os == 'Linux'
+        run: |
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format
+        run: npm run format:check
+
+      # The acceptance pass drives the CLI as a real executable, so it has to
+      # exist before the suite runs. A developer's checkout usually has one
+      # lying around from an earlier build, which is exactly why this was
+      # invisible until CI ran on a clean tree.
+      - name: Build the CLI the acceptance suite drives
+        run: npm run build:cli
+
+      # Produces `relay/dist/node/index.js`, which is the exact path the peer
+      # tests stat before deciding whether to run. It has to exist before the
+      # suite starts, not merely before the relay is dialled.
+      - name: Build the relay the peer tests drive
+        run: npm run build
+        working-directory: relay
+
+      # The relay's own suite, which had never run here either. It drives real
+      # sockets against the splice, the rendezvous and the rate limits, and it
+      # is seconds rather than minutes.
+      - name: Test the relay
+        run: npm test
+        working-directory: relay
+
+      # Includes the acceptance pass, which drives a real runtime over the real
+      # socket — a unix socket here, a named pipe on Windows.
+      #
+      # `pretest` refuses to start this if the relay build above did not land:
+      # the peer tests skip on a missing `relay/dist`, and a skip that only
+      # prints a warning into a green log is indistinguishable from a pass.
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Boots the built app with the window hidden and asserts the renderer
+      # mounted and the preload bridge is reachable.
+      - name: Smoke test
+        if: runner.os != 'Linux'
+        run: npm run smoke
+
+      - name: Smoke test (headless)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm run smoke
+
+      - name: Package
+        run: npm run ${{ matrix.package }}
+
+      # The packaged tree carries its own copy of the helper, unpacked by the
+      # builder as the runner's user, so it needs the same treatment before the
+      # packaged app will start.
+      - name: Let the packaged app's sandbox helper run
+        if: runner.os == 'Linux'
+        run: |
+          sudo chown root:root dist/linux-unpacked/chrome-sandbox
+          sudo chmod 4755 dist/linux-unpacked/chrome-sandbox
+
+      # The one check that can tell a package that built from a package that
+      # works: it launches the artifact, drives it through the CLI the app
+      # ships, and spawns a real PTY inside it.
+      - name: Verify the packaged app
+        if: runner.os != 'Linux'
+        run: npm run package:verify
+
+      - name: Verify the packaged app (headless)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum npm run package:verify
+
+      # The install instructions are the last thing between a packaged build and
+      # somebody using it, and they were prose nobody had run. This installs the
+      # real bundle at the path the document names, quarantines it both ways a
+      # download arrives, and runs the command read out of the document itself.
+      - name: Verify the install instructions
+        run: npm run install:verify
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: teamree-${{ runner.os }}
+          path: ${{ matrix.artifacts }}
+          # A silent zero-artifact upload would let a packaging regression pass
+          # as a green run.
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

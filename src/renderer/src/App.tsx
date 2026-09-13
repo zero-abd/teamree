@@ -3,10 +3,13 @@
 
 import { useEffect, useMemo } from 'react'
 import { AddProjectDialog } from './dialogs/AddProjectDialog'
-import { CreateWorktreeDialog } from './dialogs/CreateWorktreeDialog'
+import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
+import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
+import { MembersDialog } from './dialogs/MembersDialog'
+import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
@@ -75,8 +78,13 @@ export function App(): React.JSX.Element {
         </div>
       ) : null}
 
+      {dialog?.kind === 'palette' ? <CommandPalette modifier={modifier} /> : null}
+      {dialog?.kind === 'confirm-remove' ? (
+        <ConfirmRemoveDialog worktreeId={dialog.worktreeId} reason={dialog.reason} />
+      ) : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
-      {dialog?.kind === 'create-worktree' ? <CreateWorktreeDialog projectId={dialog.projectId} /> : null}
+      {dialog?.kind === 'members' ? <MembersDialog projectId={dialog.projectId} /> : null}
+      {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
     </div>
   )
 }

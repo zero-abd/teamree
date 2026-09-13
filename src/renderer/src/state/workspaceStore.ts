@@ -3,8 +3,26 @@
 // are open, which pane has focus, how wide the sidebar is).
 
 import { create } from 'zustand'
-import type { Layout, PaneNode, Project, Terminal, Worktree, WorktreeStatus } from '@shared/entities'
+import type {
+  InstalledAgent,
+  Layout,
+  MemberList,
+  PaneNode,
+  PaneWatchers,
+  Project,
+  RelaySetting,
+  TeammatePresence,
+  TeamworkStatus,
+  Terminal,
+  Worktree,
+  WorktreeChanges,
+  WorktreeDiff,
+  WorktreeLog,
+  WorktreeMergePreview,
+  WorktreeStatus
+} from '@shared/entities'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
+import { awaitWorktreeReady } from './awaitWorktreeReady'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import {
@@ -15,9 +33,41 @@ import {
 } from '../shell/sidebarWidth'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 
-export type DialogState = { kind: 'add-project' } | { kind: 'create-worktree'; projectId: string } | null
+export type DialogState =
+  | { kind: 'add-project' }
+  | { kind: 'members'; projectId: string }
+  | { kind: 'new-task'; projectId: string }
+  | { kind: 'palette' }
+  /** Raised only when the runtime has already refused: there is something here to lose. */
+  | { kind: 'confirm-remove'; worktreeId: string; reason: string; intent: RemoveIntent }
+  | null
+
+/**
+ * Why the removal was asked for. A retry removes the old checkout only to
+ * build a new one in its place, and the confirmation has to say so — otherwise
+ * "Discard the work" is followed by a worktree reappearing.
+ */
+export type RemoveIntent = 'remove' | 'retry'
+
+/** What the task composer submits: a description, who runs it, and from where. */
+export type TaskDraft = {
+  projectId: string
+  /** The task as written. Names the worktree and seeds its branch. */
+  task: string
+  startedFrom?: string
+  /** Command for the agent's pane. Absent means the worktree alone. */
+  agentCommand?: string
+}
 
 export type Notice = { id: number; text: string; tone: 'error' | 'info' }
+
+/**
+ * The find bar belongs to one pane at a time — the focused one — so a second
+ * pane claiming it puts the first one's bar away. `token` changes on every
+ * press of the chord, which is how a repeat press re-takes a field that is
+ * already open.
+ */
+export type PaneSearch = { terminalId: string; token: number }
 
 type WorkspaceState = {
   connection: ConnectionState
@@ -26,15 +76,96 @@ type WorkspaceState = {
   projects: Project[]
   worktrees: Worktree[]
   statuses: Record<string, WorktreeStatus>
+  /**
+   * When git reads for a worktree started failing, by worktree id, for the ones
+   * where they still are. A failed read leaves the last good numbers on screen
+   * — they are the best anyone has — and this is what stops the row presenting
+   * them as current, including the merge badge beside them: the status read is
+   * the cheap one every refresh attempts, so it is the honest proxy for whether
+   * this checkout can be read at all.
+   */
+  unreadableSince: Record<string, number>
   terminals: Record<string, Terminal>
   layouts: Record<string, Layout>
+
+  /** Open state of the changes panel, and what it is showing. */
+  /** Whether each ready worktree would merge into its base, as last read. */
+  mergePreviews: Record<string, WorktreeMergePreview>
+
+  changesOpen: boolean
+  changes: Record<string, WorktreeChanges>
+  /** What each worktree has committed that its base has not. */
+  logs: Record<string, WorktreeLog>
+  selectedChangePath: string | null
+  /**
+   * Paths ticked in the panel for the next commit. Held here rather than in
+   * git's index: ticking a box is the user browsing, and browsing should not
+   * stage anything until they say so.
+   */
+  stagedPaths: string[]
+  committing: boolean
+  pushing: boolean
+  /**
+   * Each project's roster, by project id, for the ones somebody has looked at.
+   * Read on demand rather than at bootstrap: a roster is a directory read per
+   * project, and most windows never open one.
+   */
+  members: Record<string, MemberList>
+  /** True while a roster is being read or written, so the dialog can say so. */
+  membersPending: boolean
+  /**
+   * Each project's relay, for the ones somebody has looked at. Read beside the
+   * roster because the two are the same fact about a team: who is on it, and
+   * where they meet.
+   */
+  relays: Record<string, RelaySetting>
+  relayPending: boolean
+  /**
+   * Why the last relay this window tried to write was refused, or null.
+   *
+   * Kept here rather than raised as a notice because the refusal carries the
+   * remedy — the corrected URL to type — and that belongs beside the field it
+   * is about, not in a corner of the window.
+   */
+  relayError: string | null
+  /**
+   * Whether teamwork is running for each project, by project id.
+   *
+   * Absent means "not asked yet", which is deliberately not the same as "off":
+   * an empty entry would have the header claim a project has no relay before
+   * anything had looked.
+   */
+  teamwork: Record<string, TeamworkStatus>
+  /** What each project's teammates are showing, by project id. */
+  teammates: Record<string, TeammatePresence>
+  /**
+   * Who is reading this machine's panes, by project id.
+   *
+   * Read on the same invalidation the rest of teamwork is, because it changes
+   * for the same reason: somebody's link moved, or somebody opened a pane.
+   */
+  watchers: Record<string, PaneWatchers>
+  /** Coding agents this machine can run, probed once at startup. */
+  agents: InstalledAgent[]
+  /** True once the probe has answered, however it answered. Until then an
+   * empty `agents` means "not asked yet", not "none installed". */
+  agentsProbed: boolean
+  diff: WorktreeDiff | null
+  diffPending: boolean
 
   collapsedProjects: Record<string, boolean>
   openWorktreeIds: string[]
   activeWorktreeId: string | null
+  /**
+   * Whether the pane dashboard has the main area. It replaces the panes rather
+   * than sharing the window with them: it is read to decide where to go next,
+   * and every way out of it is a way of going somewhere.
+   */
+  dashboardOpen: boolean
 
   sidebarWidth: number
   sidebarVisible: boolean
+  paneSearch: PaneSearch | null
   dialog: DialogState
   notices: Notice[]
 
@@ -43,12 +174,17 @@ type WorkspaceState = {
   startWatching: () => () => void
 
   addProject: (path: string, name?: string) => Promise<void>
-  createWorktree: (input: { projectId: string; name: string; startedFrom?: string }) => void
+  /** Creates the worktree, waits for it, then starts the agent in it. */
+  startTask: (draft: TaskDraft) => void
   retryWorktree: (worktreeId: string) => void
   removeWorktree: (worktreeId: string) => Promise<void>
+  /** Goes through with a removal git refused, discarding the work in it. */
+  forceRemoveWorktree: (worktreeId: string) => Promise<void>
 
   openWorktree: (worktreeId: string) => Promise<void>
   closeWorktreeTab: (worktreeId: string) => void
+  /** Opens the worktree a pane lives in and puts the focus on that pane. */
+  revealPane: (worktreeId: string, terminalId: string) => Promise<void>
 
   focusPane: (terminalId: string) => void
   /** Adopts a fresh terminal record, e.g. the one a resize answers with. */
@@ -58,8 +194,51 @@ type WorkspaceState = {
   createTerminal: (worktreeId: string) => Promise<void>
   focusNextPane: () => void
   applySplitSizes: (worktreeId: string, path: number[], sizes: number[]) => void
+  /** Opens the find bar over the focused pane, or re-takes it if it is already there. */
+  openPaneSearch: () => void
+  closePaneSearch: () => void
+
+  toggleChanges: () => void
+  /** Shows the patch for one path, or clears the selection when given null. */
+  selectChange: (path: string | null) => void
+  /** Adds or removes one path from what the next commit will capture. */
+  toggleStaged: (path: string) => void
+  /** Every changed path, or none. */
+  setAllStaged: (staged: boolean) => void
+  commitStaged: (message: string) => Promise<void>
+  /** Sends the active worktree's branch to its remote. Never forces. */
+  pushActiveWorktree: () => Promise<void>
+  /** Opens a pane already running one of the agents found on this machine. */
+  startAgent: (command: string) => Promise<void>
+
+  /** Reads one project's roster. */
+  loadMembers: (projectId: string) => Promise<void>
+  /** Reads where one project's relay is recorded, and what each place said. */
+  loadRelay: (projectId: string) => Promise<void>
+  /**
+   * Writes the relay into the repository. Like joining, it writes the file and
+   * stops: pushing it is what makes it the team's.
+   */
+  setRelay: (projectId: string, url: string) => Promise<void>
+  /**
+   * Writes this installation's key into the project. It does not commit and
+   * does not push, and the dialog says so: doing either for somebody would hide
+   * the only step that makes the key mean anything.
+   */
+  joinProject: (projectId: string, handle?: string) => Promise<void>
+  /**
+   * Stops, or restarts, teammates' keystrokes reaching one of this machine's
+   * panes.
+   *
+   * The answer is applied here rather than waited for from the change stream,
+   * because a mute is the one control in this app whose whole value is that it
+   * is instant: a button that took a round trip and a refetch to look pressed
+   * would be pressed twice.
+   */
+  mutePane: (terminalId: string, muted: boolean) => Promise<void>
 
   toggleProject: (projectId: string) => void
+  toggleDashboard: () => void
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
   openDialog: (dialog: NonNullable<DialogState>) => void
@@ -107,7 +286,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             ? state.activeWorktreeId
             : (openWorktreeIds[openWorktreeIds.length - 1] ?? null),
         layouts: keptFor(state.layouts, live),
-        statuses: keptFor(state.statuses, live)
+        statuses: keptFor(state.statuses, live),
+        unreadableSince: keptFor(state.unreadableSince, live),
+        mergePreviews: keptFor(state.mergePreviews, live),
+        logs: keptFor(state.logs, live)
       }
     })
 
@@ -140,9 +322,101 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // One unreadable worktree must not cost the others their chips.
       worktreeIds.map((worktreeId) => runtimeClient.call('worktree.status', { worktreeId }).catch(() => null))
     )
+    const readAt = Date.now()
+    set((state) => {
+      const next = { ...state.statuses }
+      const unreadableSince = { ...state.unreadableSince }
+      statuses.forEach((status, index) => {
+        const worktreeId = worktreeIds[index] as string
+        if (status) {
+          next[status.worktreeId] = status
+          delete unreadableSince[worktreeId]
+          return
+        }
+        // Kept from the first failure rather than refreshed on every one, so
+        // the row can say how long it has been unable to confirm itself.
+        unreadableSince[worktreeId] ??= readAt
+      })
+      return { statuses: next, unreadableSince }
+    })
+  }
+
+  /**
+   * The changed-paths list, read only while the panel is open and only for the
+   * worktree on screen. It is a `git status` per read, and a panel nobody has
+   * opened is not worth one.
+   */
+  /**
+   * The commits this worktree made, read on the same trigger as its changes.
+   *
+   * Without it the panel goes quiet at exactly the wrong moment: an agent that
+   * finishes its work commits it, and every uncommitted change disappears.
+   */
+  const refreshLog = async (worktreeId: string): Promise<void> => {
+    const log = await runtimeClient.call('worktree.log', { worktreeId }).catch(() => null)
+    if (!log) return
+    set((state) => ({ logs: { ...state.logs, [worktreeId]: log } }))
+  }
+
+  const refreshChanges = async (worktreeId: string): Promise<void> => {
+    const changes = await runtimeClient.call('worktree.changes', { worktreeId }).catch(() => null)
+    if (!changes) return
+    const live = new Set(changes.changes.map((change) => change.path))
     set((state) => ({
-      statuses: statuses.reduce((map, status) => (status ? { ...map, [status.worktreeId]: status } : map), {
-        ...state.statuses
+      changes: { ...state.changes, [worktreeId]: changes },
+      // A path that stopped being a change — reverted, or committed from a
+      // terminal — cannot stay ticked for a commit that would then fail.
+      stagedPaths: state.stagedPaths.filter((path) => live.has(path))
+    }))
+  }
+
+  /**
+   * The patch for the selected path. Re-read whenever the tree moves, so the
+   * pane on the right is never describing an older version of the file than the
+   * list on the left.
+   */
+  const refreshDiff = async (worktreeId: string, path: string): Promise<void> => {
+    set({ diffPending: true })
+    const diff = await runtimeClient.call('worktree.diff', { worktreeId, path }).catch(() => null)
+    // The selection can move while a patch is in flight; a late answer for a
+    // path nobody is looking at any more must not replace the current one.
+    const current = get()
+    if (current.selectedChangePath !== path || current.activeWorktreeId !== worktreeId) return
+    set({ diff, diffPending: false })
+  }
+
+  /**
+   * How many merge previews may be in flight at once.
+   *
+   * Each one is a `git merge-tree`, which is fast but is still a process. Ten
+   * worktrees refreshing together would otherwise fan out ten of them on every
+   * file change, and the sidebar is not worth that.
+   */
+  const MERGE_PREVIEW_CONCURRENCY = 4
+
+  /**
+   * Reads mergeability for the worktrees named, a few at a time.
+   *
+   * One unreadable worktree must not cost the others their badge, so each
+   * failure is dropped rather than thrown — the row simply shows nothing, which
+   * is what it showed before the read.
+   */
+  const refreshMergePreviews = async (worktreeIds: string[]): Promise<void> => {
+    if (worktreeIds.length === 0) return
+    const queue = [...worktreeIds]
+    const found: WorktreeMergePreview[] = []
+
+    const worker = async (): Promise<void> => {
+      for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+        const preview = await runtimeClient.call('worktree.mergePreview', { worktreeId: next }).catch(() => null)
+        if (preview) found.push(preview)
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(MERGE_PREVIEW_CONCURRENCY, queue.length) }, worker))
+
+    set((state) => ({
+      mergePreviews: found.reduce((map, preview) => ({ ...map, [preview.worktreeId]: preview }), {
+        ...state.mergePreviews
       })
     }))
   }
@@ -163,10 +437,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.exits.length > 0) markExited(targets.exits)
 
     const stale = new Set(targets.statuses)
-    // Git status is the one thing with no change stream: nothing tells the
-    // runtime that a command edited a file. A worktree list change, or a shell
-    // starting or exiting, is the closest honest signal that the tree moved —
-    // which is why status is re-read on those events rather than on a timer.
+    // The runtime watches each checkout and publishes `worktrees` when its files
+    // move, so status has a change stream of its own now. A terminal starting or
+    // exiting is still worth a read: it is a command boundary, and it costs one
+    // call for the worktrees already on screen.
     if (targets.terminals || targets.exits.length > 0) {
       for (const worktreeId of get().openWorktreeIds) stale.add(worktreeId)
     }
@@ -174,6 +448,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const reads: Promise<unknown>[] = []
     if (targets.projects) reads.push(refreshProjects())
     if (targets.terminals) reads.push(refreshTerminals())
+    if (targets.members) reads.push(refreshMembers(), refreshRelays())
+    if (targets.teammates) reads.push(refreshTeammates())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
       reads.push(
@@ -186,7 +462,91 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     await Promise.all(reads)
     // Last, so a status is never asked for a worktree the list just dropped.
     const live = new Set(get().worktrees.map((worktree) => worktree.id))
-    await refreshStatuses([...stale].filter((worktreeId) => live.has(worktreeId)))
+    const readable = [...stale].filter((worktreeId) => live.has(worktreeId))
+    await refreshStatuses(readable)
+    // After the statuses, because a row without chips has nothing to put a
+    // merge badge beside yet.
+    await refreshMergePreviews(readable)
+
+    // The panel rides the same signal as the chips above it, so an edit made in
+    // a shell — or by an agent through the CLI — moves both at once.
+    const { changesOpen, activeWorktreeId, selectedChangePath } = get()
+    if (!changesOpen || !activeWorktreeId || !readable.includes(activeWorktreeId)) return
+    await Promise.all([refreshChanges(activeWorktreeId), refreshLog(activeWorktreeId)])
+    if (selectedChangePath !== null) await refreshDiff(activeWorktreeId, selectedChangePath)
+  }
+
+  /**
+   * Re-reads the rosters this window is already holding.
+   *
+   * The `members` event names no project, so this is the widest a roster
+   * refetch ever gets — and it is still only the ones somebody has opened,
+   * because nothing puts a roster in the map until they do.
+   */
+  const refreshMembers = async (): Promise<void> => {
+    const projectIds = Object.keys(get().members)
+    if (projectIds.length === 0) return
+    const lists = await Promise.all(
+      // One unreadable roster must not cost the others theirs.
+      projectIds.map((projectId) => runtimeClient.call('members.list', { projectId }).catch(() => null))
+    )
+    set((state) => ({
+      members: lists.reduce((map, list) => (list ? { ...map, [list.projectId]: list } : map), { ...state.members })
+    }))
+  }
+
+  /**
+   * The other half of `.teamree`, on the same signal.
+   *
+   * The runtime's watch covers the whole directory, so the event that says a
+   * key arrived is the same one that says the relay did. Re-read only for the
+   * projects somebody has opened, exactly as the rosters are.
+   */
+  const refreshRelays = async (): Promise<void> => {
+    const projectIds = Object.keys(get().relays)
+    if (projectIds.length === 0) return
+    const settings = await Promise.all(
+      projectIds.map((projectId) => runtimeClient.call('teamwork.relay', { projectId }).catch(() => null))
+    )
+    set((state) => ({
+      relays: settings.reduce((map, setting) => (setting ? { ...map, [setting.projectId]: setting } : map), {
+        ...state.relays
+      })
+    }))
+  }
+
+  /**
+   * Re-reads teamwork for every project this window is showing.
+   *
+   * Every project, not only the ones already held: a link coming up is exactly
+   * the moment a project that had nothing to say starts having something, and
+   * waiting for somebody to open it first would mean the sidebar never showed
+   * a teammate arriving. Both calls are cheap — they read memory the runtime
+   * already holds — and one project failing must not cost the others theirs.
+   */
+  const refreshTeammates = async (): Promise<void> => {
+    const projectIds = get().projects.map((project) => project.id)
+    if (projectIds.length === 0) return
+    const answers = await Promise.all(
+      projectIds.map((projectId) =>
+        Promise.all([
+          runtimeClient.call('teamwork.status', { projectId }).catch(() => null),
+          runtimeClient.call('teamwork.presence', { projectId }).catch(() => null),
+          runtimeClient.call('teamwork.watchers', { projectId }).catch(() => null)
+        ])
+      )
+    )
+    set((state) => {
+      const teamwork = { ...state.teamwork }
+      const teammates = { ...state.teammates }
+      const watchers = { ...state.watchers }
+      for (const [status, presence, reading] of answers) {
+        if (status) teamwork[status.projectId] = status
+        if (presence) teammates[presence.projectId] = presence
+        if (reading) watchers[reading.projectId] = reading
+      }
+      return { teamwork, teammates, watchers }
+    })
   }
 
   const refresher = createWorkspaceRefresher({
@@ -206,6 +566,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       .catch(failed('Could not save the layout'))
   }
 
+  /** The create half of a retry, shared by the plain path and the confirmed one. */
+  const recreateWorktree = async (worktree: Worktree): Promise<void> => {
+    const created = await runtimeClient.call('worktree.create', {
+      projectId: worktree.projectId,
+      name: worktree.name,
+      startedFrom: worktree.startedFrom
+    })
+    set((state) => ({ worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), created] }))
+  }
+
+  /** Drops a worktree from this window once the runtime has really removed it. */
+  const forgetWorktree = (worktreeId: string): void => {
+    useWorkspaceStore.getState().closeWorktreeTab(worktreeId)
+    set((state) => ({ worktrees: state.worktrees.filter((entry) => entry.id !== worktreeId) }))
+  }
+
   const activeLayout = (): Layout | null => {
     const { activeWorktreeId, layouts } = get()
     return activeWorktreeId ? (layouts[activeWorktreeId] ?? null) : null
@@ -218,15 +594,39 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     projects: [],
     worktrees: [],
     statuses: {},
+    unreadableSince: {},
     terminals: {},
     layouts: {},
+
+    mergePreviews: {},
+    members: {},
+    membersPending: false,
+    relays: {},
+    relayPending: false,
+    relayError: null,
+    teamwork: {},
+    teammates: {},
+    watchers: {},
+    changesOpen: false,
+    changes: {},
+    logs: {},
+    selectedChangePath: null,
+    stagedPaths: [],
+    committing: false,
+    pushing: false,
+    agents: [],
+    agentsProbed: false,
+    diff: null,
+    diffPending: false,
 
     collapsedProjects: {},
     openWorktreeIds: [],
     activeWorktreeId: null,
+    dashboardOpen: false,
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
     sidebarVisible: true,
+    paneSearch: null,
     dialog: null,
     notices: [],
 
@@ -242,8 +642,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const status = await runtimeClient.call('status.get', {})
         set({ runtimeVersion: status.version })
+        // Asked once, and never fatal: an app that cannot list agents is still
+        // an app, and the answer only decides which buttons to offer.
+        void runtimeClient
+          .call('agent.list', {})
+          .then((agents) => set({ agents, agentsProbed: true }))
+          .catch(() => set({ agents: [], agentsProbed: true }))
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
+        await refresher.flush()
+        // After the projects exist, because teamwork is read per project and
+        // there is nothing to read it for until the list has landed.
+        refresher.request(refreshTargets({ teammates: true }))
         await refresher.flush()
 
         if (!get().activeWorktreeId) {
@@ -279,59 +689,126 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     /**
-     * Fire and forget: the dialog closes on submit and the new row appears in
-     * its creating state, because a worktree can take tens of seconds.
+     * One action, three steps, none of which the user waits on: the composer
+     * closes immediately and the new row appears in its creating state, because
+     * a worktree can take tens of seconds and the sidebar already narrates that
+     * better than a spinner in a box would.
      */
-    createWorktree({ projectId, name, startedFrom }) {
+    startTask({ projectId, task, startedFrom, agentCommand }) {
       set({ dialog: null })
-      void runtimeClient
-        .call('worktree.create', startedFrom ? { projectId, name, startedFrom } : { projectId, name })
-        .then((worktree) => {
-          set((state) => ({
-            worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), worktree],
-            collapsedProjects: { ...state.collapsedProjects, [projectId]: false }
-          }))
+      const name = task.trim()
+
+      void (async () => {
+        const created = await runtimeClient.call(
+          'worktree.create',
+          startedFrom ? { projectId, name, startedFrom } : { projectId, name }
+        )
+        set((state) => ({
+          worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],
+          collapsedProjects: { ...state.collapsedProjects, [projectId]: false }
+        }))
+
+        // The agent needs a checkout to run in, so the pane waits for one. A
+        // failure here is already on the row, with its reason and its retry.
+        const ready = await awaitWorktreeReady({
+          worktreeId: created.id,
+          read: (worktreeId) => runtimeClient.call('worktree.get', { worktreeId }),
+          watch: (onChange) => runtimeClient.watchWorkspace(onChange)
         })
-        .catch(failed('Could not start the worktree'))
+
+        if (agentCommand) {
+          await runtimeClient.call('terminal.create', { worktreeId: ready.id, command: agentCommand })
+        }
+        await get().openWorktree(ready.id)
+      })().catch(failed('Could not start the task'))
     },
 
+    /**
+     * Builds the checkout again, after removing the one that failed.
+     *
+     * The removal is not forced. A failed row can have a whole checkout behind
+     * it — a create the last restart interrupted is marked failed with its
+     * files still on disk — and pressing Retry is not consent to throw those
+     * away. So the runtime gets to refuse, and the refusal becomes the same
+     * question the sidebar's cross asks.
+     */
     retryWorktree(worktreeId) {
       const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
       if (!worktree) return
-      void runtimeClient
-        .call('worktree.remove', { worktreeId, force: true, deleteBranch: false })
-        .then(() =>
-          runtimeClient.call('worktree.create', {
-            projectId: worktree.projectId,
-            name: worktree.name,
-            startedFrom: worktree.startedFrom
-          })
-        )
-        .then((created) => {
-          set((state) => ({
-            worktrees: [...state.worktrees.filter((entry) => entry.id !== worktreeId), created]
-          }))
-        })
-        .catch(failed('Retry failed'))
+      void (async () => {
+        try {
+          await runtimeClient.call('worktree.remove', { worktreeId, deleteBranch: false })
+        } catch (error) {
+          if (!isRefusal(error)) throw error
+          set({ dialog: { kind: 'confirm-remove', worktreeId, reason: refusalReason(error), intent: 'retry' } })
+          return
+        }
+        await recreateWorktree(worktree)
+      })().catch(failed('Retry failed'))
     },
 
+    /**
+     * Removes a worktree, and asks first when there is something to lose.
+     *
+     * Not forced. The runtime refuses to delete a checkout with work in it and
+     * says so, which is a protection worth keeping rather than defeating: the
+     * only thing between a small cross in a sidebar and somebody's afternoon
+     * is that refusal.
+     */
     async removeWorktree(worktreeId) {
       try {
-        await runtimeClient.call('worktree.remove', { worktreeId, force: true })
-        get().closeWorktreeTab(worktreeId)
-        set((state) => ({ worktrees: state.worktrees.filter((entry) => entry.id !== worktreeId) }))
+        await runtimeClient.call('worktree.remove', { worktreeId })
+        forgetWorktree(worktreeId)
       } catch (error) {
+        // A conflict here means the runtime found something worth asking
+        // about: uncommitted work, or files only a .gitignore knows of.
+        // Anything else is a real failure and is reported as one.
+        if (isRefusal(error)) {
+          set({ dialog: { kind: 'confirm-remove', worktreeId, reason: refusalReason(error), intent: 'remove' } })
+          return
+        }
         failed('Could not remove the worktree')(error)
       }
     },
 
+    async forceRemoveWorktree(worktreeId) {
+      const dialog = get().dialog
+      const retrying =
+        dialog?.kind === 'confirm-remove' && dialog.worktreeId === worktreeId && dialog.intent === 'retry'
+      // Read before the removal, because forgetting the row takes the only
+      // copy of what the replacement has to be built from.
+      const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
+      set({ dialog: null })
+      try {
+        await runtimeClient.call('worktree.remove', { worktreeId, force: true })
+        forgetWorktree(worktreeId)
+        if (retrying && worktree) await recreateWorktree(worktree)
+      } catch (error) {
+        failed(retrying ? 'Retry failed' : 'Could not remove the worktree')(error)
+      }
+    },
+
     async openWorktree(worktreeId) {
+      const switching = get().activeWorktreeId !== worktreeId
       set((state) => ({
         activeWorktreeId: worktreeId,
+        // Opening a worktree is the answer the dashboard was open to ask for,
+        // whichever surface asked it — a row, a tab, the sidebar, the palette.
+        dashboardOpen: false,
         openWorktreeIds: state.openWorktreeIds.includes(worktreeId)
           ? state.openWorktreeIds
-          : [...state.openWorktreeIds, worktreeId]
+          : [...state.openWorktreeIds, worktreeId],
+        // A patch belongs to the worktree it came from; carrying one across a
+        // tab switch would show this worktree's file list beside that one's
+        // diff.
+        // Ticks belong to the worktree they were made in; carrying them across
+        // would stage one worktree's paths against another's index.
+        ...(switching ? { selectedChangePath: null, diff: null, diffPending: false, stagedPaths: [] } : {})
       }))
+      if (get().changesOpen) {
+        void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
+        void refreshLog(worktreeId).catch(() => undefined)
+      }
       // Through the queue like everything else, so opening a tab while an
       // event-driven refetch is in flight cannot interleave the two answers.
       refresher.request(refreshTargets({ terminals: true, layouts: [worktreeId], statuses: [worktreeId] }))
@@ -347,6 +824,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             : state.activeWorktreeId
         return { openWorktreeIds, activeWorktreeId }
       })
+    },
+
+    async revealPane(worktreeId, terminalId) {
+      // Focus is a property of a layout, and the layout for a worktree that was
+      // not open arrives with `openWorktree` — so the focus has to wait for it.
+      await get().openWorktree(worktreeId)
+      get().focusPane(terminalId)
     },
 
     recordTerminal(terminal) {
@@ -376,11 +860,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    /**
+     * Closes a pane, but only once the process behind it is really gone.
+     *
+     * The pane is the only way to reach a PTY and everything running under it,
+     * so taking it off the screen first and asking afterwards would strand an
+     * agent mid-task with no row, no pane and no way back short of quitting.
+     */
     async closeTerminal(terminalId) {
-      const { activeWorktreeId, layouts } = get()
-      const layout = activeWorktreeId ? layouts[activeWorktreeId] : null
-      if (!layout || !activeWorktreeId) return
+      const { activeWorktreeId } = get()
+      if (!activeWorktreeId || !get().layouts[activeWorktreeId]) return
 
+      try {
+        await runtimeClient.call('terminal.close', { terminalId })
+      } catch (error) {
+        failed('Could not close the terminal')(error)
+        return
+      }
+
+      // Re-read: the close was awaited, and the layout can have moved under it.
+      const layout = get().layouts[activeWorktreeId]
+      if (!layout) return
       const nextFocus = neighbourTerminalId(layout.root, terminalId)
       const root = closePane(layout.root, terminalId)
       persistLayout({
@@ -393,12 +893,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         delete terminals[terminalId]
         return { terminals }
       })
-
-      try {
-        await runtimeClient.call('terminal.close', { terminalId })
-      } catch (error) {
-        failed('Could not close the terminal')(error)
-      }
     },
 
     async createTerminal(worktreeId) {
@@ -422,10 +916,200 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (next) persistLayout({ ...layout, focusedTerminalId: next })
     },
 
+    openPaneSearch() {
+      const focused = activeLayout()?.focusedTerminalId
+      if (!focused) return
+      set((state) => ({ paneSearch: { terminalId: focused, token: (state.paneSearch?.token ?? 0) + 1 } }))
+    },
+
+    closePaneSearch() {
+      set({ paneSearch: null })
+    },
+
     applySplitSizes(worktreeId, path, sizes) {
       const layout = get().layouts[worktreeId]
       if (!layout?.root) return
       persistLayout({ ...layout, root: setSizesAt(layout.root, path, sizes) as PaneNode })
+    },
+
+    toggleChanges() {
+      const opening = !get().changesOpen
+      set({ changesOpen: opening })
+      if (!opening) return
+      // Read on the way open rather than kept warm: until the panel is shown,
+      // nothing on screen depends on it.
+      const worktreeId = get().activeWorktreeId
+      if (!worktreeId) return
+      void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
+      void refreshLog(worktreeId).catch(() => undefined)
+    },
+
+    toggleStaged(path) {
+      set((state) => ({
+        stagedPaths: state.stagedPaths.includes(path)
+          ? state.stagedPaths.filter((entry) => entry !== path)
+          : [...state.stagedPaths, path]
+      }))
+    },
+
+    setAllStaged(staged) {
+      const worktreeId = get().activeWorktreeId
+      const rows = worktreeId ? (get().changes[worktreeId]?.changes ?? []) : []
+      set({ stagedPaths: staged ? rows.map((change) => change.path) : [] })
+    },
+
+    async commitStaged(message) {
+      const worktreeId = get().activeWorktreeId
+      const paths = get().stagedPaths
+      if (!worktreeId || paths.length === 0) return
+
+      set({ committing: true })
+      try {
+        const result = await runtimeClient.call('worktree.commit', { worktreeId, message, paths })
+        // The commit can capture more than was ticked: anything staged earlier
+        // in a terminal goes in too. The runtime reports what actually landed,
+        // and saying so is the difference between a notice and a surprise.
+        const extra = result.paths.filter((path) => !paths.includes(path))
+        notify(
+          extra.length === 0
+            ? `Committed ${result.shortSha}: ${result.message}`
+            : `Committed ${result.shortSha}: ${result.message} — including ${extra.length} path${
+                extra.length === 1 ? '' : 's'
+              } already staged`,
+          'info'
+        )
+        // Everything that was ticked is in the commit now, so nothing is left
+        // ticked; the list underneath refetches on the invalidation the runtime
+        // publishes for the write.
+        // The runtime announces the write, so the list and the chips refetch
+        // through the same path everything else does; doing it here as well
+        // would be a second way for this window to disagree with the others.
+        set({ stagedPaths: [], selectedChangePath: null, diff: null })
+      } catch (error) {
+        failed('Could not commit')(error)
+      } finally {
+        set({ committing: false })
+      }
+    },
+
+    async startAgent(command) {
+      const worktreeId = get().activeWorktreeId
+      if (!worktreeId) return
+      try {
+        // Straight through terminal.create: the runtime is what pins the
+        // session id, so a pane started here resumes like any other.
+        const terminal = await runtimeClient.call('terminal.create', { worktreeId, command })
+        set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+        refresher.request(refreshTargets({ layouts: [worktreeId] }))
+        await refresher.flush()
+      } catch (error) {
+        failed('Could not start the agent')(error)
+      }
+    },
+
+    async loadMembers(projectId) {
+      set({ membersPending: true })
+      try {
+        const list = await runtimeClient.call('members.list', { projectId })
+        set((state) => ({ members: { ...state.members, [projectId]: list } }))
+      } catch (error) {
+        failed('Could not read the members of this project')(error)
+      } finally {
+        set({ membersPending: false })
+      }
+    },
+
+    async loadRelay(projectId) {
+      // A refusal is about one attempt at one project, so re-opening the dialog
+      // must not show somebody else's.
+      set({ relayPending: true, relayError: null })
+      try {
+        const setting = await runtimeClient.call('teamwork.relay', { projectId })
+        set((state) => ({ relays: { ...state.relays, [projectId]: setting } }))
+      } catch (error) {
+        failed('Could not read where this project’s relay is')(error)
+      } finally {
+        set({ relayPending: false })
+      }
+    },
+
+    async setRelay(projectId, url) {
+      set({ relayPending: true, relayError: null })
+      try {
+        const setting = await runtimeClient.call('teamwork.setRelay', { projectId, url })
+        set((state) => ({ relays: { ...state.relays, [projectId]: setting } }))
+        // The same half-done state a join leaves behind, said the same way: the
+        // file exists and means nothing to anybody else until it is pushed.
+        notify(`Wrote ${setting.file}. Commit and push it so your team meets there.`, 'info')
+      } catch (error) {
+        // Kept in the dialog rather than raised as a notice: a refusal names
+        // the URL to type instead, and that is only useful beside the field.
+        set({ relayError: error instanceof Error ? error.message : String(error) })
+      } finally {
+        set({ relayPending: false })
+      }
+    },
+
+    async joinProject(projectId, handle) {
+      set({ membersPending: true })
+      try {
+        const list = await runtimeClient.call('members.join', handle ? { projectId, handle } : { projectId })
+        set((state) => ({ members: { ...state.members, [projectId]: list } }))
+        // Said as a notice as well as in the dialog, because the file being
+        // written is the smaller half of what just happened: until it is
+        // committed and pushed, nobody else can see it.
+        if (list.selfFile) notify(`Wrote ${list.selfFile}. Commit and push it to join.`, 'info')
+      } catch (error) {
+        failed('Could not add you to this project')(error)
+      } finally {
+        set({ membersPending: false })
+      }
+    },
+
+    async pushActiveWorktree() {
+      const worktreeId = get().activeWorktreeId
+      if (!worktreeId || get().pushing) return
+
+      set({ pushing: true })
+      try {
+        const result = await runtimeClient.call('worktree.push', { worktreeId })
+        // Three things are worth saying and none of them is "done": whether
+        // anything was actually sent, whether this push is what made the branch
+        // track anything, and what stayed behind uncommitted.
+        const parts = [
+          result.alreadyUpToDate
+            ? `${result.remote} already had ${result.branch}`
+            : `Pushed ${result.branch} to ${result.remote}`
+        ]
+        if (result.setUpstream) parts.push(`now tracking ${result.upstream}`)
+        if (result.uncommitted > 0) {
+          parts.push(`${result.uncommitted} uncommitted change${result.uncommitted === 1 ? '' : 's'} stayed behind`)
+        }
+        notify(`${parts.join(' · ')}.`, 'info')
+      } catch (error) {
+        failed('Could not push')(error)
+      } finally {
+        set({ pushing: false })
+      }
+    },
+
+    selectChange(path) {
+      const worktreeId = get().activeWorktreeId
+      set({ selectedChangePath: path, diff: null, diffPending: path !== null })
+      if (path === null || !worktreeId) return
+      void refreshDiff(worktreeId, path).catch((error: unknown) => {
+        set({ diffPending: false })
+        failed('Could not read the patch')(error)
+      })
+    },
+
+    async mutePane(terminalId, muted) {
+      try {
+        const answer = await runtimeClient.call('teamwork.mute', { terminalId, muted })
+        set((state) => ({ watchers: { ...state.watchers, [answer.projectId]: answer } }))
+      } catch (error) {
+        failed('Could not change this pane’s mute')(error)
+      }
     },
 
     toggleProject(projectId) {
@@ -438,6 +1122,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const clamped = clampSidebarWidth(width)
       set({ sidebarWidth: clamped })
       writeStoredSidebarWidth(storage, clamped)
+    },
+
+    toggleDashboard() {
+      set((state) => ({ dashboardOpen: !state.dashboardOpen }))
     },
 
     toggleSidebar() {
@@ -457,6 +1145,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }
   }
 })
+
+/**
+ * Whether the runtime refused rather than failed.
+ *
+ * A refusal is an answer — there is something in this checkout — and the only
+ * one this window is allowed to turn into a question for the user. Everything
+ * else is a fault, and a fault must never be read as consent.
+ */
+function isRefusal(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === 'conflict'
+}
+
+function refusalReason(error: unknown): string {
+  return error instanceof Error ? error.message : 'this worktree has work in it that is not committed anywhere'
+}
 
 /** Drops entries whose worktree the runtime no longer lists. */
 function keptFor<T>(byWorktree: Record<string, T>, live: Set<string>): Record<string, T> {

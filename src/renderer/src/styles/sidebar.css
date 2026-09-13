@@ -34,31 +34,6 @@
   background: var(--accent);
 }
 
-.sidebar__filter {
-  padding: 0 var(--s4) var(--s3);
-}
-
-.sidebar__filter input {
-  width: 100%;
-  padding: 5px var(--s3);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-input);
-  color: var(--fg);
-  font: inherit;
-  font-size: var(--text-sm);
-}
-
-.sidebar__filter input::placeholder {
-  color: var(--fg-muted);
-}
-
-.sidebar__filter input:focus-visible {
-  outline: none;
-  border-color: var(--accent-line);
-  box-shadow: var(--ring);
-}
-
 .sidebar__scroll {
   flex: 1;
   min-height: 0;
@@ -142,10 +117,67 @@
 }
 
 .project__base {
-  padding: 0 var(--s2) var(--s2) 28px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--fg-muted);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+
+/* One line about whether teamwork is running, in the project's own header.
+   Four tones because there are four different things to say and collapsing
+   them would send somebody to check their network because a colleague shut a
+   laptop. */
+.teamwork {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 1px var(--s2);
+  border-radius: var(--r1);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.teamwork--live {
+  color: var(--success);
+  background: rgb(87 195 138 / 12%);
+}
+
+.teamwork--pending {
+  color: var(--fg-secondary);
+  background: var(--bg-hover);
+}
+
+/* Deliberately unadorned: "nothing is set up here" is a thing to do, not a
+   fault, and colouring it like one would have people looking for a break. */
+.teamwork--off {
+  color: var(--fg-muted);
+}
+
+.teamwork--problem {
+  color: var(--danger);
+  background: rgb(232 97 90 / 12%);
+}
+
+/* The count of a teammate's worktrees, beside the count of your own. Separate
+   numbers because they are separate things: "+3" reads as "and three more that
+   are somebody else's", which is exactly what it means. */
+.project__count--teammate {
+  margin-left: var(--s1);
+  color: var(--accent);
+}
+
+/* The base ref, the teamwork line and the members button share one line, so the
+   header stays two rows tall however much any of them has to say. */
+.project__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 0 var(--s2) var(--s2) 28px;
 }
 
 .project__worktrees {
@@ -216,8 +248,18 @@
   cursor: default;
 }
 
+.worktree__title,
+.worktree__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  min-width: 0;
+}
+
 .worktree__name {
-  max-width: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -225,13 +267,22 @@
   font-size: var(--text-base);
 }
 
+/* Pushed to the row's right edge rather than sitting against the name, so the
+   dots line up into a column that can be read down. */
+.worktree__title .activity {
+  margin-left: auto;
+}
+
 .worktree--creating .worktree__name,
 .worktree--failed .worktree__name {
   color: var(--fg-secondary);
 }
 
+/* Takes the slack on its line, which pushes the chips and the merge badge to
+   the right edge and lets the branch itself be the part that gives way. */
 .worktree__branch {
-  max-width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -375,4 +426,311 @@
 
 .gitchip--conflict .gitchip__bullet {
   background: var(--danger);
+}
+
+/* Files a .gitignore covers. Kept at the muted weight the chips default to:
+   it is not a warning about the work, it is a note about what is on disk. */
+.gitchip--ignored {
+  color: var(--fg-muted);
+}
+
+/* The chips beside it could not be confirmed. Not a warning — nothing is wrong
+   with the repository, the app simply cannot see it — so this is dimmer than
+   the counts rather than louder, and the counts keep their own colour. */
+.gitchip--unconfirmed {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* Whether this worktree can go in. Kept quiet: it sits beside the status chips
+   and must not shout over them, and "unknown" is not a warning — it is the
+   absence of an answer. */
+.worktree__merge {
+  padding: 0 var(--s1);
+  /* It shares its line with the branch now, not with the name, so the branch is
+     what gives way: "no commits" clipped to "no…" says nothing, while a
+     shortened branch is still recognisable. Clipped rather than wrapped if it
+     ever does have to shrink, with the whole sentence in the tooltip. */
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--r1);
+  background: var(--bg-press);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worktree__merge--clean {
+  color: var(--success);
+}
+
+.worktree__merge--conflicts {
+  background: rgb(214 162 74 / 16%);
+  color: var(--warning);
+}
+
+/* Nothing to merge: not a problem and not an achievement, so it stays the
+   quietest thing on the row. */
+.worktree__merge--spent {
+  color: var(--fg-muted);
+}
+
+/* The empty project's own call to action, so the first worktree is one click
+   from where the absence of one is noticed. */
+.project__none-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-bright);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* What each pane in this worktree is doing. The dot is the whole vocabulary:
+   working, waiting, finished, failed — four things, because four things are
+   all this app can honestly tell from watching a PTY. */
+.activity {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 99px;
+  background: var(--fg-muted);
+}
+
+.activity--working {
+  background: var(--accent-bright);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  animation: activity-pulse 1.6s ease-in-out infinite;
+}
+
+.activity--quiet {
+  background: var(--warning);
+}
+
+.activity--done {
+  background: var(--success);
+}
+
+.activity--failed {
+  background: var(--danger);
+}
+
+@keyframes activity-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity--working {
+    animation: none;
+  }
+}
+
+.panes {
+  margin: 0;
+  padding: 0 0 var(--s1) 28px;
+  list-style: none;
+}
+
+.pane-row {
+  width: 100%;
+  padding: 1px var(--s2);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pane-row__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.pane-row:hover {
+  background: var(--bg-hover);
+  color: var(--fg-secondary);
+}
+
+.pane-row__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-row__since {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The last line the pane printed, in the terminal's own typeface: it is a
+   quotation, not a status this app worked out. Indented under the label so the
+   activity dot keeps its own column. */
+.pane-row__evidence {
+  overflow: hidden;
+  padding-left: 15px;
+  /* A step brighter than the label above it: the quoted line is what the row
+     exists to show, and the pane's name is only there to say whose it is. */
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ---------------------------------------------------------------------------
+   A teammate's worktrees.
+
+   They sit under the same project as your own, because that is what they are:
+   the same repository, checked out on somebody else's machine. Everything here
+   exists so a reader is never wrong about two things — whose checkout this is,
+   and that it is not theirs to act on.
+
+   The second one is structural rather than decorative. There is no disabled
+   button anywhere below, because a disabled button is a thing that would work
+   if something were different, and this is a thing that will not. Milestone C
+   makes a pane openable for reading; until then the honest affordance is none.
+   --------------------------------------------------------------------------- */
+
+.worktree--teammate {
+  --teammate-line: var(--accent-line);
+}
+
+/* Indented past your own rows and marked down the left edge, so the point where
+   your checkouts stop is visible without reading a word. */
+.worktree__row--teammate {
+  margin-left: var(--s4);
+  border-left: 2px solid var(--teammate-line);
+  border-radius: 0 var(--r2) var(--r2) 0;
+  background: rgb(139 140 247 / 5%);
+}
+
+.worktree__open--teammate {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 3px var(--s2) 3px var(--s4);
+  cursor: default;
+}
+
+.worktree--teammate .worktree__name {
+  color: var(--fg-secondary);
+}
+
+/* First on its line and in the accent, because whose it is changes what every
+   other fact on the row means. */
+.worktree__owner {
+  flex: 0 0 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.panes--teammate {
+  margin-left: var(--s4);
+  border-left: 2px solid var(--teammate-line);
+}
+
+/* The age of a remembered row, in the muted register the rest of the sidebar
+   uses for what it is not currently confirming. Dimmed rather than hidden is
+   the whole point: it is still there, and it is still theirs. */
+.worktree__stale {
+  flex: 0 0 auto;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.worktree--stale .worktree__row--teammate {
+  border-left-style: dashed;
+  background: transparent;
+}
+
+.worktree--stale .worktree__open--teammate {
+  opacity: 0.72;
+}
+
+/* One line, not a row each: a teammate never heard from has no worktrees to
+   show and may genuinely have none. */
+.project__unheard {
+  padding: 3px var(--s2) 3px var(--s6);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.pane-row--teammate {
+  cursor: default;
+}
+
+.pane-row--teammate:hover {
+  background: transparent;
+}
+
+/* A teammate's pane is the one thing on their row that can be acted on, and
+   only in one direction: it can be read. So it gets a pointer back, and the
+   row it is on says nothing about typing because nothing here types. */
+.pane-row--watchable {
+  cursor: pointer;
+}
+
+.pane-row--watchable:hover {
+  background: var(--bg-hover);
+}
+
+/* The pane this window is currently reading. Marked on the row as well as in
+   the viewer, so closing the viewer is never the only way to know. */
+.pane-row--watching {
+  background: var(--bg-hover);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Who is reading one of *your* panes. In the accent and on the row itself
+   rather than in a tooltip: the design's case for why a project where anyone
+   can type is survivable is that none of it can happen unseen, and a fact
+   behind a hover is a fact somebody can miss. */
+.pane-row__watchers {
+  flex: 0 0 auto;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Somebody typing is louder than somebody reading, because it is: one of them
+   is running commands as you. */
+.pane-row__watchers--typing {
+  color: var(--accent-bright);
+}
+
+/* Quiet, and always there while it is true. A mute the owner cannot see in the
+   list is a mute they will not remember lifting. */
+.pane-row__muted {
+  flex: 0 0 auto;
+  color: var(--warning);
+  font-size: var(--text-xs);
+  font-weight: 600;
 }

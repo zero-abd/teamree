@@ -16,6 +16,10 @@ export type PaneCallbacks = {
   onResize: (path: number[], sizes: number[]) => void
   isAppChord: (event: KeyboardEvent) => boolean
   closeHint: string
+  /** The one pane showing the find bar, if any. */
+  searchTerminalId: string | null
+  searchToken: number
+  onCloseSearch: () => void
 }
 
 export function PaneTree({
@@ -36,7 +40,10 @@ function PaneLeaf({
   onFocus,
   onClose,
   isAppChord,
-  closeHint
+  closeHint,
+  searchTerminalId,
+  searchToken,
+  onCloseSearch
 }: PaneCallbacks & { terminalId: string }): React.JSX.Element {
   const terminal = terminals[terminalId]
   const focused = focusedTerminalId === terminalId
@@ -55,6 +62,18 @@ function PaneLeaf({
         {exited ? (
           <span className="pane__exit">exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}</span>
         ) : null}
+        {terminal?.restored === undefined ? null : (
+          <span
+            className={`pane__restored pane__restored--${terminal.restored}`}
+            title={
+              terminal.restored === 'agent'
+                ? 'This pane came back from the last run with its session resumed.'
+                : 'This pane came back from the last run. The shell is new; whatever it was running is gone.'
+            }
+          >
+            {terminal.restored === 'agent' ? 'resumed' : 'new shell'}
+          </span>
+        )}
         <span className="pane__meta">{terminal ? `${terminal.cols}×${terminal.rows}` : ''}</span>
         <button
           type="button"
@@ -73,6 +92,9 @@ function PaneLeaf({
         focused={focused}
         onFocus={() => onFocus(terminalId)}
         isAppChord={isAppChord}
+        searchOpen={searchTerminalId === terminalId}
+        searchToken={searchToken}
+        onCloseSearch={onCloseSearch}
       />
     </section>
   )

@@ -42,8 +42,30 @@ files:
   # node-pty's build inputs. The prebuilt binaries stay; the C++ sources,
   # vendored dependencies and gyp files that produced them do not.
   - '!node_modules/node-pty/{src,deps,third_party,scripts,binding.gyp}'
-  # Prebuilt binaries for the platforms this artifact is not for are stripped in
-  # scripts/afterpack.mjs, where the target platform and arch are known.
+  # Windows and Linux prebuilds, kept out of the package rather than deleted
+  # from it afterwards — which is not the same thing, and the difference stopped
+  # a universal build dead.
+  #
+  # scripts/afterpack.mjs also prunes foreign prebuilds, and has to: it is the
+  # only place that knows the target of a build. But it runs *after* the asar is
+  # written, so what it deletes stays listed in the archive's header as an
+  # unpacked file that is no longer on disk. Nothing ever looks, for a
+  # single-architecture build, so that was harmless and invisible for as long as
+  # this shipped one. The universal merge enumerates every unpacked entry and
+  # stopped on `prebuilds/win32-arm64/conpty.node` — a Windows binary, in a
+  # macOS build, that the packager had been told about and then had taken away.
+  #
+  # Here rather than under `mac.files`, which looks like the precise way to say
+  # it and is not: a platform-specific `files` replaces this list instead of
+  # adding to it, and the package went from 263 MB to 1.4 GB carrying 2421 test
+  # files. Measured, after reading the merge code and concluding the opposite.
+  #
+  # The cost of saying it globally is that a Windows build would now package no
+  # Windows PTY. It fails loudly when that happens — afterPack checks for the
+  # binary by name and says which platform it is missing — and nobody builds
+  # Windows today. Reviving it means deleting these two lines.
+  - '!node_modules/node-pty/prebuilds/{win32-*,linux-*}'
+  - '!node_modules/node-pty/prebuilds/{win32-*,linux-*}/**'
 
 # The CLI ships next to the app rather than inside the asar: it is executed as a
 # separate process (see resources/cli/teamree), and an archived file cannot be
@@ -79,13 +101,55 @@ mac:
   category: public.app-category.developer-tools
   icon: build/icon.icns
   darkModeSupport: true
-  # Both mac targets name the architecture; the default leaves it off x64.
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  # One download, and therefore no architecture in the name: a universal build
+  # runs on Apple Silicon and on Intel, so there is nothing for somebody to pick
+  # and nothing for them to pick wrong. A menu of four files is a menu three of
+  # whose entries are a mistake waiting to be made by the person least able to
+  # tell — which is anybody who has not thought about what is inside their Mac.
+  #
+  # The cost is honest and it is size: the app carries both architectures. That
+  # buys a download nobody has to think about, and thinking about it is the only
+  # thing the split ever saved.
+  artifactName: ${productName}-${version}.${ext}
   target:
     - target: dmg
-      arch: [arm64, x64]
-    - target: zip
-      arch: [arm64, x64]
+      arch: [universal]
+  # node-pty's prebuilt binaries are the one thing in this app that is
+  # deliberately *not* merged into a fat binary, and this names them so the
+  # merge lets them through.
+  #
+  # Each architecture's slice carries both of them — see scripts/afterpack.mjs
+  # for why: `node-gyp-build` resolves `prebuilds/darwin-<arch>` from
+  # `process.arch` at run time, so a universal app needs both present under
+  # their own names. That makes each file byte-identical in the two slices, and
+  # an identical single-architecture Mach-O is exactly what the merger refuses
+  # by default, because it is usually a mistake: a binary that will not run on
+  # half the machines the artifact claims. Here it is intentional, and this is
+  # how that is said.
+  #
+  # The option is named for x64 and is not limited to it; it governs any Mach-O
+  # the two slices agree on. Everything it does not match — the Electron
+  # framework, the helpers — is still lipo'd into one binary as it should be.
+  x64ArchFiles: '**/node-pty/prebuilds/**'
+
+  # Keep the other platforms' prebuilds out of the package entirely, rather than
+  # deleting them afterwards.
+  #
+  # These are merged with the top-level `files`, not a replacement for them.
+  #
+  # scripts/afterpack.mjs prunes foreign prebuilds too, and has to, because it is
+  # the only place that knows the target for a Windows or Linux build. But it
+  # runs *after* the asar is written, so what it deletes stays listed in the
+  # archive's header as an unpacked file that is no longer on disk. For a
+  # single-architecture build nothing ever looks, so that has been harmless and
+  # invisible. The universal merge enumerates every unpacked entry, and stopped
+  # dead on `prebuilds/win32-arm64/conpty.node` — a Windows binary, in a macOS
+  # build, that the packager had been told about and then had taken away.
+  #
+  # Excluding them here means they are never in the header to begin with.
+  # Windows and Linux keep the hook's pruning and keep the latent dangling
+  # entry; neither is built today, and the fix for them is another two lines
+  # like these rather than a rewrite.
   # Ad-hoc signature. Apple Silicon refuses to launch a Mach-O binary with no
   # signature at all, and electron-builder invalidates the one Electron ships as
   # soon as it rewrites the bundle — so an unsigned build still has to be
@@ -145,6 +209,16 @@ linux:
   icon: build/icons
   category: Development
   synopsis: An ADE built for teamwork
+  # fpm refuses to build a .deb without a maintainer, and package.json's author
+  # has no address. A GitHub noreply address is used on purpose: a Debian control
+  # file must carry something that parses as an address, and this one is real
+  # without being a person's inbox.
+  maintainer: teamree contributors <zero-abd@users.noreply.github.com>
+  # Electron takes its app_id from `desktopName` in package.json, and a desktop
+  # environment matches a running window to its launcher by that id. Syncing the
+  # installed .desktop filename to the same name is what makes the association
+  # hold; StartupWMClass below is the third name that has to agree.
+  syncDesktopName: true
   desktop:
     entry:
       StartupWMClass: teamree
@@ -155,17 +229,28 @@ linux:
       arch: [x64]
 
 deb:
-  # Terminals shell out to git constantly, and an ADE without it is inert.
+  # Split the way dpkg means it, and checked against the built binary rather
+  # than copied from a template: `ldd` on the packaged executable names
+  # libgtk-3, libnss3 and libatspi as link-time dependencies, so the app cannot
+  # start without them. git is here for the same reason — terminals shell out
+  # to it constantly, and an ADE without it is inert.
   depends:
     - git
     - libgtk-3-0
-    - libnotify4
     - libnss3
-    - libxss1
-    - libxtst6
-    - xdg-utils
     - libatspi2.0-0
+  # Not linked. libnotify and libsecret-1 appear only as dlopen names inside the
+  # Electron binary, and xdg-utils is executed by name; each one missing costs a
+  # feature, not the app. Listing them as Depends made the package refuse to
+  # configure on a minimal system that runs teamree perfectly well. apt installs
+  # Recommends by default, so a normal install is unchanged.
+  #
+  # libxss1 and libxtst6 are deliberately absent: they are in electron-builder's
+  # stock list for older Electron, and this build neither links nor dlopens them.
+  recommends:
+    - libnotify4
     - libsecret-1-0
+    - xdg-utils
 
 appImage:
   artifactName: ${productName}-${version}-${arch}.${ext}

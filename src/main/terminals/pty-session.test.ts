@@ -1,13 +1,23 @@
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { TerminalEvent } from '../../shared/methods'
+import { ErrorCode } from '../../shared/protocol'
 import { isProcessAlive } from './process-tree'
 import { PtySession } from './pty-session'
 import type { PtySessionInit } from './pty-session'
 import { canSpawnPty, waitUntil } from './pty-test-support'
+import { isTerminalServiceError } from './service-error'
+import { SHELL_UNRUNNABLE } from './shell-environment'
 
 // Real PTYs, no mocks: the interesting failures here are all in the native layer
 // and in how a shell reacts to signals, and a fake would reproduce neither.
-const describePty = canSpawnPty() ? describe : describe.skip
+// POSIX only, deliberately. Every command below is POSIX shell — `$(seq 1 200)`,
+// `exit 5`, `;` as a separator — and the behaviour under test is what a pty does
+// with them. A Windows equivalent would be a different test rather than a
+// translation of this one, so this skips there instead of failing there, and the
+// Windows-relevant parts of the session live in tests that do run on it.
+const describePty = process.platform !== 'win32' && canSpawnPty() ? describe : describe.skip
 const TEST_TIMEOUT_MS = 20_000
 
 const started: PtySession[] = []
@@ -43,6 +53,25 @@ afterEach(async () => {
 })
 
 describePty('PtySession', () => {
+  it('says the shell could not be started, rather than opening a pane that vanishes', () => {
+    const missing = path.join(os.tmpdir(), 'teamree-no-such-shell')
+
+    let thrown: unknown
+    try {
+      // Windows refuses this inside node-pty's spawn. POSIX does not refuse it
+      // at all: the fork succeeds, the exec fails in the child, and the pane
+      // opens and disappears a moment later with the reason going nowhere. The
+      // caller has to hear the same thing on both.
+      start({ shell: missing, command: 'echo never' })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(isTerminalServiceError(thrown)).toBe(true)
+    expect(isTerminalServiceError(thrown) ? thrown.code : undefined).toBe(ErrorCode.TerminalFailed)
+    expect((thrown as Error).message).toBe(`failed to start ${missing}: ${SHELL_UNRUNNABLE}`)
+  })
+
   it(
     'spawns a command and captures its output',
     async () => {
@@ -123,9 +152,12 @@ describePty('PtySession', () => {
   it(
     'caps scrollback no matter how much the child prints',
     async () => {
-      const cap = 8 * 1024
+      // The ratio is the point, not the volume: 200 lines is about 6.8KB
+      // against a 2KB cap, so most of it must be evicted. The buffer's own
+      // eviction is covered exhaustively, without a PTY, in scrollback.test.ts.
+      const cap = 2 * 1024
       const session = start({
-        command: 'for i in $(seq 1 4000); do echo "chatty line $i padding padding padding"; done',
+        command: 'for i in $(seq 1 200); do echo "chatty line $i padding padding padding"; done',
         scrollbackCapBytes: cap
       })
       const events = collect(session)
@@ -133,8 +165,57 @@ describePty('PtySession', () => {
       await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
       expect(session.retainedBytes).toBeLessThanOrEqual(cap)
       expect(Buffer.byteLength(session.read(), 'utf8')).toBeLessThanOrEqual(cap)
-      expect(session.read()).toContain('chatty line 4000')
+      // The head is gone, which is what eviction means. Whether the very last
+      // line arrived is node-pty's question, not this buffer's, and the test
+      // above answers it at a volume that always drains in time.
       expect(session.read()).not.toContain('chatty line 1 ')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'keeps the last line of a chatty command that exits the moment it has printed it',
+    async () => {
+      // 3000 lines is the volume the tail used to go missing at: enough that
+      // the pty is still holding some of it when the child is reaped. A handful
+      // of runs rather than one, because what used to fail here failed by race
+      // and a single green run would have said nothing.
+      for (let run = 0; run < 5; run++) {
+        const session = start({ command: 'seq 1 3000' })
+        const events = collect(session)
+
+        await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
+        expect(session.read()).toContain('\r\n3000\r\n')
+      }
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'holds the exit event until everything the child printed has arrived',
+    async () => {
+      // The bug this pins down: waitpid returns as soon as the child is reaped,
+      // while its last writes are still in the pty buffer. Emitting exit then
+      // loses the tail — which is exactly what `terminal run` hands back to an
+      // agent. So the invariant is that when exit lands, the scrollback is
+      // already complete.
+      const session = start({
+        command: 'for i in $(seq 1 40); do echo "tail line $i padding padding padding"; done'
+      })
+      const events = collect(session)
+
+      let scrollbackAtExit: string | undefined
+      session.on((event) => {
+        if (event.type === 'exit' && scrollbackAtExit === undefined) scrollbackAtExit = session.read()
+      })
+
+      await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
+
+      expect(scrollbackAtExit).toBeDefined()
+      expect(scrollbackAtExit).toContain('tail line 40 ')
+      // And nothing arrives afterwards to change the answer.
+      const settled = session.read()
+      expect(settled).toBe(scrollbackAtExit)
     },
     TEST_TIMEOUT_MS
   )
@@ -182,6 +263,36 @@ describePty('PtySession', () => {
 
       await waitUntil(() => events.some((event) => event.type === 'exit'), 'exit event')
       expect(() => session.write('too late\n')).toThrow(/exited/)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'reports going quiet for a pane that dies while it is still working',
+    async () => {
+      const edges: { busy: boolean; running: boolean }[] = []
+      const session = start({
+        // Output, then death, well inside the quiet window: the pane is
+        // genuinely busy at the moment it exits.
+        command: 'echo working; exit 5',
+        onActivityChange: (each) => {
+          const { busy, running } = each.snapshot()
+          edges.push({ busy, running })
+        }
+      })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'exit'), 'exit event')
+
+      // Both edges, not just the first. Settling the exit cancels the quiet
+      // countdown that would have reported the second one, so without it a
+      // subscriber watching activity is left holding "busy" for a pane that is
+      // never going to say anything again.
+      expect(edges).toEqual([
+        { busy: true, running: true },
+        { busy: false, running: false }
+      ])
+      expect(session.snapshot()).toMatchObject({ busy: false, running: false, exitCode: 5 })
     },
     TEST_TIMEOUT_MS
   )

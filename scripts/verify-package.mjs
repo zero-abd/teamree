@@ -7,12 +7,14 @@
 // It launches the packaged app against a throwaway user-data directory, drives
 // it through the CLI the app itself ships, opens a real PTY inside it and reads
 // back what the shell printed. The PTY is the point: node-pty needs its native
-// binary and its spawn-helper outside the asar with the executable bit intact,
-// and nothing short of spawning one proves that survived packaging.
+// binary outside the asar, plus an executable spawn-helper on macOS and two
+// backends and a sidecar on Windows, and nothing short of spawning a shell
+// proves all of that survived packaging.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { electronSandboxArgs } from './electron-sandbox.mjs'
 
 const MARKER = `pty-ok-${Math.random().toString(36).slice(2, 10)}`
 const STARTUP_TIMEOUT_MS = 45_000
@@ -75,15 +77,32 @@ if (!existsSync(ptyRoot)) fail(`node-pty is not unpacked from the asar (expected
 const binaryDirs = [
   join(ptyRoot, 'prebuilds', `${process.platform}-${process.arch}`),
   join(ptyRoot, 'build', 'Release')
-].filter((dir) => existsSync(dir))
-if (binaryDirs.length === 0) fail(`node-pty ships no binary for ${process.platform}-${process.arch} in ${ptyRoot}`)
+].filter((dir) => existsSync(join(dir, 'pty.node')))
+if (binaryDirs.length === 0) fail(`node-pty ships no pty.node for ${process.platform}-${process.arch} in ${ptyRoot}`)
+ok(`node-pty binary for ${process.platform}-${process.arch} is unpacked (${binaryDirs[0]})`)
 
-if (process.platform !== 'win32') {
+// macOS only: node-pty builds spawn-helper under `OS=="mac"` and calls it from
+// a `#if defined(__APPLE__)` branch. Linux execvp's in process and ships none.
+if (process.platform === 'darwin') {
   const helper = join(binaryDirs[0], 'spawn-helper')
   if (!existsSync(helper)) fail(`spawn-helper is missing from ${binaryDirs[0]}`)
   const mode = statSync(helper).mode & 0o777
   if (!(mode & 0o111)) fail(`spawn-helper is not executable (mode ${mode.toString(8)})`)
   ok(`spawn-helper is unpacked and executable (mode ${mode.toString(8)})`)
+}
+
+// node-pty chooses its Windows backend at spawn time — ConPTY from conpty.node,
+// or winpty, which needs a DLL and a separate agent executable beside pty.node.
+// A missing one only shows up when a pane refuses to open, so name it here.
+if (process.platform === 'win32') {
+  const required = ['conpty.node', 'pty.node', 'winpty.dll', 'winpty-agent.exe']
+  const missing = required.filter((name) => !existsSync(join(binaryDirs[0], name)))
+  if (missing.length > 0) fail(`node-pty is missing ${missing.join(', ')} from ${binaryDirs[0]}`)
+  const conpty = join(binaryDirs[0], 'conpty')
+  const sidecars = ['conpty.dll', 'OpenConsole.exe'].filter((name) => !existsSync(join(conpty, name)))
+  if (sidecars.length > 0)
+    fail(`node-pty's bundled ConPTY is incomplete: ${sidecars.join(', ')} missing from ${conpty}`)
+  ok('both Windows PTY backends and the bundled ConPTY are unpacked')
 }
 
 // ------------------------------------------------------------- the fixture --
@@ -114,7 +133,7 @@ ok(`fixture repository at ${repo}`)
 // A throwaway --user-data-dir keeps this off the real profile, and keeps the
 // single-instance lock from handing the run to an app the developer already has
 // open. TEAMREE_BACKGROUND_LAUNCH stops the window from stealing focus.
-const child = spawn(app.binary, [`--user-data-dir=${userData}`], {
+const child = spawn(app.binary, [`--user-data-dir=${userData}`, ...electronSandboxArgs()], {
   env: { ...process.env, TEAMREE_BACKGROUND_LAUNCH: '1' },
   stdio: ['ignore', 'pipe', 'pipe']
 })

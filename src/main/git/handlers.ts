@@ -45,6 +45,12 @@ export const GIT_METHODS = [
   'worktree.create',
   'worktree.remove',
   'worktree.status',
+  'worktree.changes',
+  'worktree.diff',
+  'worktree.commit',
+  'worktree.log',
+  'worktree.mergePreview',
+  'worktree.push',
   'worktree.startPoints'
 ] as const
 
@@ -64,6 +70,12 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.create': (params) => service.createWorktree(params),
     'worktree.remove': (params) => service.removeWorktree(params),
     'worktree.status': (params) => service.worktreeStatus(params),
+    'worktree.changes': (params) => service.worktreeChanges(params),
+    'worktree.diff': (params) => service.worktreeDiff(params),
+    'worktree.commit': (params) => service.worktreeCommit(params),
+    'worktree.log': (params) => service.worktreeLog(params),
+    'worktree.mergePreview': (params) => service.worktreeMergePreview(params),
+    'worktree.push': (params) => service.worktreePush(params),
     'worktree.startPoints': (params) =>
       service.listStartPoints(params.projectId, params.limit === undefined ? {} : { limit: params.limit })
   }
@@ -79,6 +91,12 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.create', Params.worktreeCreate, handlers['worktree.create'])
   registry.register('worktree.remove', Params.worktreeRemove, handlers['worktree.remove'])
   registry.register('worktree.status', Params.worktreeStatus, handlers['worktree.status'])
+  registry.register('worktree.changes', Params.worktreeChanges, handlers['worktree.changes'])
+  registry.register('worktree.diff', Params.worktreeDiff, handlers['worktree.diff'])
+  registry.register('worktree.commit', Params.worktreeCommit, handlers['worktree.commit'])
+  registry.register('worktree.log', Params.worktreeLog, handlers['worktree.log'])
+  registry.register('worktree.mergePreview', Params.worktreeMergePreview, handlers['worktree.mergePreview'])
+  registry.register('worktree.push', Params.worktreePush, handlers['worktree.push'])
   registry.register('worktree.startPoints', Params.worktreeStartPoints, handlers['worktree.startPoints'])
   return service
 }

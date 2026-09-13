@@ -4,17 +4,24 @@
 // transport, which is what makes the stream transport-agnostic: the CLI and the
 // GUI both reach the same service, so both mutations announce themselves.
 //
-// Two shapes of producer exist, because the two services differ:
+// Three shapes of producer exist, because the services differ:
 //   - git already emits its own state transitions (including the ones that
 //     happen on a background task, long after the call returned), so that
 //     emitter is simply bridged onto the bus.
-//   - the terminal service has no lifecycle emitter, so its mutating handlers
-//     are re-registered wrapped: the wrapper publishes after the inner handler
+//   - the terminal service announces only one transition of its own — a pane's
+//     process ending, which no call causes — so that rides the manager's exit
+//     report and every other terminal change is a mutating handler
+//     re-registered wrapped: the wrapper publishes after the inner handler
 //     succeeds. Registering a method twice is how the runtime already replaces
 //     placeholders, so this needs nothing new from the registry.
+//   - and the filesystem, which answers to nobody's call at all: files under a
+//     checkout change because of an editor or a build, and a watcher is the
+//     only way to hear about it.
 
 import type { Terminal } from '../../shared/entities'
+import { Params } from '../../shared/methods'
 import type { GitService } from '../git'
+import { degradedWatchReport, WorktreeWatcher, type WorktreeWatcherOptions } from '../git/worktreeWatcher'
 import type { TerminalService } from '../terminals/method-handlers'
 import type { MethodRegistry } from './methodRegistry'
 import type { WorkspaceEventBus } from './workspaceEvents'
@@ -39,6 +46,86 @@ export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () =>
 }
 
 /**
+ * The two git calls that write, wrapped so they announce what they did.
+ *
+ * Every other git producer rides the service's own event emitter, which fires
+ * for projects and for worktree lifecycle transitions and for nothing else. A
+ * commit and a push change what `worktree.status` answers without changing any
+ * record, so without this they are silent: a commit made through the CLI would
+ * leave every open window describing the repository as it was.
+ *
+ * A commit currently gets noticed anyway, because it writes `index` and `HEAD`
+ * and the filesystem watch below picks that up. That is luck rather than
+ * design — a push changes only remote-tracking refs, which live in the common
+ * git directory that no worktree watch covers — and relying on one producer to
+ * cover for another is how a stream quietly stops being trustworthy.
+ */
+export function publishGitWrites(registry: MethodRegistry, git: GitService, bus: WorkspaceEventBus): void {
+  registry.register('worktree.commit', Params.worktreeCommit, async (params) => {
+    const result = await git.worktreeCommit(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
+  registry.register('worktree.push', Params.worktreePush, async (params) => {
+    const result = await git.worktreePush(params)
+    // Ahead and behind moved even when nothing was sent: the remote-tracking
+    // ref is now where the branch is.
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+}
+
+/**
+ * The third producer, and the only one that is not a consequence of a call:
+ * files changing under a checkout because of something outside this app
+ * entirely — an editor saving, a build writing, an agent's `git commit` in a
+ * shell we are not watching the exit of.
+ *
+ * Git status is the one part of a worktree row with no call behind it, so
+ * without this it is only ever as fresh as the last command boundary. The
+ * watcher turns a settled burst of file changes into the same coarse
+ * `worktrees` invalidation every other producer emits, and the client re-reads
+ * the statuses it already knows how to re-read.
+ *
+ * The watch set follows git's own events, so a worktree becoming ready starts
+ * being watched and a removed one stops, without anything polling.
+ *
+ * A watch can also be refused — a filesystem that cannot do it recursively, or
+ * a machine with no inotify instances left, which takes only a handful of
+ * editors and test runners on Linux. The watcher carries on with the git
+ * directory alone when that happens, and this is the point where somebody has
+ * to be told: the chips keep moving on commits and stop moving on edits, and
+ * the difference is invisible from the outside.
+ */
+export function publishWorktreeFileEvents(
+  git: GitService,
+  bus: WorkspaceEventBus,
+  options: Omit<WorktreeWatcherOptions, 'onChange'> = {}
+): { close: () => void } {
+  const watcher = new WorktreeWatcher({
+    onError: (error) => console.warn('[worktrees] a filesystem watch failed', error),
+    onDegraded: (event) => console.warn(`[worktrees] ${degradedWatchReport(event)}`),
+    ...options,
+    onChange: () => bus.emit({ type: 'worktrees' })
+  })
+
+  const resync = (): void => watcher.sync(git.snapshot().worktrees)
+  // Records restored from a previous launch are already ready, so the first
+  // sync has to happen now rather than waiting for a transition that will
+  // never come.
+  resync()
+  const detach = git.events.on(resync)
+
+  return {
+    close: () => {
+      detach()
+      watcher.close()
+    }
+  }
+}
+
+/**
  * Re-registers the terminal and layout methods that change state, each wrapped
  * to publish once the inner handler has succeeded. A failed call changes
  * nothing, so it must announce nothing.
@@ -50,8 +137,17 @@ export function publishTerminalEvents(
 ): void {
   const { handlers, schemas } = terminals
 
+  // A shell exiting on its own is nobody's method call, so the only way to hear
+  // about it is the session's own lifecycle. The manager reports it for every
+  // pane it started, which is what makes a pane restored at startup — started
+  // before any of these handlers exist — announce its exit like any other.
+  terminals.manager.onTerminalExit((terminalId, exitCode) => {
+    bus.emit({ type: 'terminalExited', terminalId, exitCode })
+    // The terminal's own record changed with it: `running` is false now.
+    bus.emit({ type: 'terminals' })
+  })
+
   const announceOpened = (terminal: Terminal): void => {
-    watchForExit(terminals, bus, terminal.id)
     bus.emit({ type: 'terminals' })
     // Opening a pane rewrites the worktree's tree, so the layout changed too.
     bus.emit({ type: 'layout', worktreeId: terminal.worktreeId })
@@ -79,6 +175,19 @@ export function publishTerminalEvents(
     return result
   })
 
+  // The only keystroke worth announcing: the first one into a restored pane,
+  // which retires its badge. Every other write changes nothing a client holds,
+  // and publishing per keystroke would be absurd — hence the manager reporting
+  // whether this particular write mattered rather than a blanket producer.
+  registry.register('terminal.write', schemas['terminal.write'], async (params, call) => {
+    const wasRestored = terminals.manager
+      .list()
+      .some((terminal) => terminal.id === params.terminalId && terminal.restored !== undefined)
+    const result = await handlers['terminal.write'](params, call)
+    if (wasRestored) bus.emit({ type: 'terminals' })
+    return result
+  })
+
   // terminal.resize is deliberately not a producer: the caller already gets the
   // new size back, and a drag-resize would otherwise invalidate the terminal
   // list on every frame.
@@ -86,27 +195,5 @@ export function publishTerminalEvents(
     const layout = await handlers['layout.set'](params, call)
     bus.emit({ type: 'layout', worktreeId: layout.worktreeId })
     return layout
-  })
-}
-
-/**
- * A shell exiting on its own is nobody's method call, so the only way to hear
- * about it is the terminal's own event stream. This attaches one that ignores
- * output and waits for the exit, which is cheap: the session already fans its
- * events out to whatever is listening.
- */
-function watchForExit(terminals: TerminalService, bus: WorkspaceEventBus, terminalId: string): void {
-  let detach = (): void => {}
-  detach = terminals.manager.attachStream(terminalId, {
-    emit: (event) => {
-      if (event.type !== 'exit') return
-      detach()
-      bus.emit({ type: 'terminalExited', terminalId, exitCode: event.exitCode })
-      // The terminal's own record changed with it: `running` is false now.
-      bus.emit({ type: 'terminals' })
-    },
-    // The manager ends this stream when the terminal goes; its own teardown has
-    // already detached us by then.
-    close: () => {}
   })
 }

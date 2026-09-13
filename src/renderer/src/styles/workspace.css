@@ -225,3 +225,374 @@
   color: var(--fg-muted);
   font-size: var(--text-sm);
 }
+
+/* The workspace splits horizontally once the changes panel is open: panes keep
+   every pixel they had, and the panel takes its width from the right. */
+.workspace__body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.button--on {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--fg);
+}
+
+/* The badge on the Changes button. Tabular figures so it does not jitter as the
+   count ticks between one width of number and another. */
+.button__count {
+  margin-left: var(--s2);
+  padding: 0 var(--s1);
+  min-width: 15px;
+  display: inline-block;
+  border-radius: var(--r1);
+  background: var(--bg-press);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.changes {
+  width: 340px;
+  max-width: 46%;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  background: var(--bg-panel);
+}
+
+.changes__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s3) var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+.changes__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-secondary);
+}
+
+.changes__count {
+  padding: 0 var(--s1);
+  border-radius: var(--r1);
+  background: var(--bg-press);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.changes__close {
+  margin-left: auto;
+  padding: var(--s1);
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.changes__close:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.changes__close svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  fill: none;
+}
+
+.changes__empty,
+.changes__note {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.changes__list {
+  margin: 0;
+  padding: var(--s2) 0;
+  list-style: none;
+  overflow-y: auto;
+  /* Half the panel at most: the patch below needs room, and a list that eats
+     the whole side makes the selection pointless. */
+  max-height: 50%;
+  flex: none;
+}
+
+.change {
+  width: 100%;
+  padding: var(--s1) var(--s4);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.change:hover {
+  background: var(--bg-hover);
+}
+
+.change--selected {
+  background: var(--accent-soft);
+}
+
+.change__kind {
+  width: 11px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+.change__kind--added,
+.change__kind--untracked {
+  color: var(--success);
+}
+
+.change__kind--deleted {
+  color: var(--danger);
+}
+
+.change__kind--conflicted {
+  color: var(--warning);
+}
+
+.change__kind--renamed,
+.change__kind--copied,
+.change__kind--typeChanged {
+  color: var(--info);
+}
+
+/* The name is what you are looking for; the directory is how you tell two of
+   them apart. So the name stays put at the end and the directory is what gets
+   clipped when the panel is narrow. */
+.change__path {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.change__dir {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+
+.change__name {
+  flex: none;
+  white-space: nowrap;
+}
+
+.change__where {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.changes__diff {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  background: var(--bg-window);
+}
+
+/* A patch scrolls sideways rather than wrapping, and deliberately: its meaning
+   is in the columns. A wrapped line turns one change into several rows and
+   pushes the +/- gutter out of line, which is the one edge a diff is read down.
+   Sized to its widest line so that a line's highlight runs the whole width of
+   the patch — without this the green and red stop at the panel edge and scrolling
+   right leaves changed text with no colour on it at all. */
+.patch {
+  margin: 0;
+  padding: var(--s2) 0;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  min-width: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.patch__line {
+  padding: 0 var(--s4);
+  white-space: pre;
+}
+
+.patch__line--added {
+  background: rgb(87 195 138 / 12%);
+  color: var(--success);
+}
+
+.patch__line--removed {
+  background: rgb(232 97 90 / 12%);
+  color: var(--danger);
+}
+
+.patch__line--hunk {
+  color: var(--accent);
+}
+
+.patch__line--header,
+.patch__line--note {
+  color: var(--fg-muted);
+}
+
+.patch__line--context {
+  color: var(--fg-secondary);
+}
+
+/* The checkbox sits outside the row button, so clicking a file to read its
+   patch and ticking it for a commit are two different acts. */
+.changes__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding-left: var(--s3);
+}
+
+.change__tick {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.changes__item .change {
+  padding-left: 0;
+}
+
+.changes__commit {
+  padding: var(--s3) var(--s4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  border-top: 1px solid var(--line);
+  background: var(--bg-raised);
+}
+
+.changes__all {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.changes__all input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.changes__message {
+  min-width: 0;
+  flex: 1;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.changes__message:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* The empty pane offers the agents this machine has, then a plain shell. */
+.placeholder__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s2);
+}
+
+/* Said instead of the commit list, never beside it: the point is that there is
+   no list. Kept quiet — this is a gap in what is known, not a fault. */
+.commits__unknown {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--line);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+/* What this worktree committed. Sits below the uncommitted changes because it
+   is the settled half: an agent that finished leaves only this. */
+.commits {
+  flex: none;
+  max-height: 34%;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+
+.commits__title {
+  margin: 0;
+  padding: var(--s3) var(--s4) var(--s2);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.commits__list {
+  margin: 0;
+  padding: 0 0 var(--s2);
+  list-style: none;
+}
+
+.commit {
+  padding: var(--s1) var(--s4);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  font-size: var(--text-sm);
+}
+
+.commit__sha {
+  flex: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.commit__subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-secondary);
+}

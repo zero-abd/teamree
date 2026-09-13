@@ -3,40 +3,113 @@
 // JSON file; reads are synchronous because handlers answer from memory, and
 // writes are coalesced so a burst of mutations costs one rename.
 
+import { rename } from 'node:fs/promises'
 import type { Layout, Project, Worktree } from '../../shared/entities'
+import type { TerminalRecord } from '../terminals/session-restore'
 import { samePath } from '../git/pathIdentity'
-import { readJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
+import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
 import { emptyWorkspaceDocument, parseWorkspaceDocument, type WorkspaceDocument } from './workspaceDocument'
 
 export type WorkspaceSnapshot = {
   projects: Project[]
   worktrees: Worktree[]
   layouts: Layout[]
+  terminals: TerminalRecord[]
+}
+
+/**
+ * Something about the file on disk that the app has to say out loud.
+ *
+ * None of these stops the store working — it holds everything in memory — and
+ * that is exactly the danger: a workspace that opens empty because its file
+ * could not be read looks identical to a first launch, and the first mutation
+ * used to overwrite the only copy.
+ */
+export type StoreProblem =
+  /** The file was there and could not be read. Nothing has been lost yet. */
+  | { kind: 'unreadable'; filePath: string; reason: string }
+  /** Those bytes now live here, because something had to be written. */
+  | { kind: 'keptAside'; filePath: string; keptAt: string }
+  /** Refused to write, so the unreadable file is still whole. */
+  | { kind: 'notWritten'; filePath: string; reason: string }
+  /** Nothing has been saved since; this session's work is in memory only. */
+  | { kind: 'writeFailed'; filePath: string; reason: string }
+
+export function describeStoreProblem(problem: StoreProblem): string {
+  switch (problem.kind) {
+    case 'unreadable':
+      return (
+        `${problem.filePath} could not be read (${problem.reason}), so this window opened with nothing in it. ` +
+        'Your projects and worktrees are still on disk; the file is kept until something needs to be saved.'
+      )
+    case 'keptAside':
+      return `${problem.filePath} could not be read and was kept at ${problem.keptAt} before a new one was written.`
+    case 'notWritten':
+      return (
+        `${problem.filePath} could not be read and could not be moved aside (${problem.reason}), ` +
+        'so nothing is being saved rather than writing over it.'
+      )
+    case 'writeFailed':
+      return `${problem.filePath} could not be written (${problem.reason}); nothing has been saved since.`
+  }
+}
+
+export type WorkspaceStoreOptions = {
+  /** Defaults to reporting; never to silence. */
+  onProblem?: (problem: StoreProblem) => void
+  now?: () => number
 }
 
 export class WorkspaceStore {
   private readonly projects = new Map<string, Project>()
   private readonly worktrees = new Map<string, Worktree>()
   private readonly layouts = new Map<string, Layout>()
+  private readonly terminals = new Map<string, TerminalRecord>()
 
   private queue: Promise<void> = Promise.resolve()
   private queued = false
   private writeError: unknown
+  private reportedWriteFailure = false
+  private readonly onProblem: (problem: StoreProblem) => void
+  private readonly now: () => number
+  /** Set while the file on disk is one this process has refused to overwrite. */
+  private unreadableReason: string | undefined
 
   private constructor(
     readonly filePath: string,
-    document: WorkspaceDocument
+    document: WorkspaceDocument,
+    options: WorkspaceStoreOptions
   ) {
+    this.onProblem = options.onProblem ?? ((problem) => console.error('[workspace]', describeStoreProblem(problem)))
+    this.now = options.now ?? Date.now
     for (const project of document.projects) this.projects.set(project.id, project)
     for (const worktree of document.worktrees) this.worktrees.set(worktree.id, worktree)
     for (const layout of document.layouts) this.layouts.set(layout.worktreeId, layout)
+    for (const terminal of document.terminals) this.terminals.set(terminal.id, terminal)
   }
 
-  /** Opens the file if it is readable, and starts empty if it is not. */
-  static async open(filePath: string): Promise<WorkspaceStore> {
-    const raw = await readJsonFile(filePath)
-    const document = raw === undefined ? emptyWorkspaceDocument() : parseWorkspaceDocument(raw)
-    return new WorkspaceStore(filePath, document)
+  /**
+   * Opens the file, and starts empty where there is nothing to open.
+   *
+   * A file that could not be read is not the same event as no file at all, and
+   * is not treated as one: the store still opens — an app that refuses to start
+   * because of one bad file is worse than one that starts — but it says so, and
+   * it will not write over those bytes until they are safely somewhere else.
+   */
+  static async open(filePath: string, options: WorkspaceStoreOptions = {}): Promise<WorkspaceStore> {
+    const read = await openJsonFile(filePath)
+    const document = read.kind === 'parsed' ? parseWorkspaceDocument(read.value) : emptyWorkspaceDocument()
+    const store = new WorkspaceStore(filePath, document, options)
+    if (read.kind === 'unreadable') {
+      store.unreadableReason = read.reason
+      store.onProblem({ kind: 'unreadable', filePath, reason: read.reason })
+    }
+    return store
+  }
+
+  /** Why the file on disk could not be read, when it could not. */
+  get unreadable(): string | undefined {
+    return this.unreadableReason
   }
 
   listProjects(): Project[] {
@@ -109,8 +182,33 @@ export class WorkspaceStore {
     return layout
   }
 
+  /**
+   * Terminal records, which are descriptions rather than live terminals: the
+   * PTY they name died with the process that started it.
+   */
+  listTerminals(): TerminalRecord[] {
+    return [...this.terminals.values()]
+  }
+
+  putTerminal(terminal: TerminalRecord): TerminalRecord {
+    this.terminals.set(terminal.id, terminal)
+    this.persist()
+    return terminal
+  }
+
+  removeTerminal(terminalId: string): boolean {
+    const removed = this.terminals.delete(terminalId)
+    if (removed) this.persist()
+    return removed
+  }
+
   snapshot(): WorkspaceSnapshot {
-    return { projects: this.listProjects(), worktrees: this.listWorktrees(), layouts: [...this.layouts.values()] }
+    return {
+      projects: this.listProjects(),
+      worktrees: this.listWorktrees(),
+      layouts: [...this.layouts.values()],
+      terminals: this.listTerminals()
+    }
   }
 
   /** Waits for every scheduled write and surfaces the last write failure once. */
@@ -135,14 +233,50 @@ export class WorkspaceStore {
     this.queue = this.queue.then(async () => {
       this.queued = false
       try {
+        if (!(await this.keepUnreadableFile())) return
         await writeJsonFileAtomically(this.filePath, this.document())
+        this.reportedWriteFailure = false
       } catch (error) {
         this.writeError = error
+        // Said the first time rather than at shutdown. A read-only or full disk
+        // means the workspace has stopped persisting for the rest of the
+        // session, and finding that out while quitting is finding it out too
+        // late to do anything about it.
+        if (!this.reportedWriteFailure) {
+          this.reportedWriteFailure = true
+          this.onProblem({ kind: 'writeFailed', filePath: this.filePath, reason: describeError(error) })
+        }
       }
     })
+  }
+
+  /**
+   * Moves an unreadable file out of the way before anything writes over it.
+   *
+   * Returns false when it could not, which stops the write: a file this
+   * process failed to read is still somebody's workspace, and a bad parse is a
+   * far likelier cause than a genuinely empty one. Losing it to recover from
+   * it would be the worst trade in the app.
+   */
+  private async keepUnreadableFile(): Promise<boolean> {
+    if (this.unreadableReason === undefined) return true
+    const keptAt = `${this.filePath}.unreadable-${new Date(this.now()).toISOString().replace(/[:.]/g, '-')}`
+    try {
+      await rename(this.filePath, keptAt)
+    } catch (error) {
+      this.onProblem({ kind: 'notWritten', filePath: this.filePath, reason: describeError(error) })
+      return false
+    }
+    this.unreadableReason = undefined
+    this.onProblem({ kind: 'keptAside', filePath: this.filePath, keptAt })
+    return true
   }
 
   private document(): WorkspaceDocument {
     return { ...emptyWorkspaceDocument(), ...this.snapshot() }
   }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

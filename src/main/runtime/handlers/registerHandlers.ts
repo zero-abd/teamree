@@ -21,20 +21,41 @@
 // (see workspaceEventSources.ts). Publishing at the service, not at a transport,
 // is what lets a GUI subscriber see a mutation the CLI made.
 
+import { dirname } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
 import { GitService, registerGitHandlers } from '../../git'
+import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
+import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import type { TerminalService } from '../../terminals/method-handlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerStatusHandler } from './statusHandler'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
 import { registerWorkspaceSubscribeHandler } from './workspaceSubscribeHandler'
-import { publishGitEvents, publishTerminalEvents } from '../workspaceEventSources'
+import {
+  publishGitEvents,
+  publishGitWrites,
+  publishTerminalEvents,
+  publishWorktreeFileEvents
+} from '../workspaceEventSources'
 
 /** Areas that own live OS resources and must be torn down when the app quits. */
 export type RegisteredAreas = {
   terminals: TerminalService
   git: GitService
+  /** Filesystem watches behind live git status. Released when the app quits. */
+  worktreeFiles: { close: () => void }
+  /**
+   * Filesystem watches on each project's `.teamree`, which is what makes a
+   * teammate's key arriving in a pull reach the app without a restart.
+   */
+  teamworkFiles: { close: () => void }
+  /**
+   * Outbound relay connections, one per teammate. Started after the dispatcher
+   * exists, because a peer that reached a half-built registry would be told a
+   * method does not exist when it merely does not exist yet.
+   */
+  peers: PeerService
 }
 
 export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
@@ -49,10 +70,19 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
     // Terminals open in their worktree's checkout, so the store is the authority
     // on where that is.
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
-    layouts: registry.context.store
+    layouts: registry.context.store,
+    sessions: registry.context.store,
+    // A pane going busy or quiet is the only thing this app knows about what an
+    // agent is doing, and it is what the sidebar reads. Two events per burst of
+    // work, not one per chunk of output.
+    onActivityChange: () => workspaceEvents.emit({ type: 'terminals' })
   })
-  // Layouts outlive the app; the terminals they point at do not. Reconciling on
-  // the way up is what stops the UI rendering panes bound to dead terminals.
+  // Terminals first: each recorded one comes back under the id its panes
+  // already name, and an agent pane comes back with its conversation resumed.
+  terminals.restoreSessions()
+  // Then the layouts, for whatever did not come back — a worktree deleted while
+  // the app was closed, a shell that no longer exists. Without this the UI
+  // renders panes bound to dead ids.
   terminals.reconcileLayouts()
   registerTerminalHandlers(registry, terminals)
   // Wraps the handlers just registered, so every terminal and layout change
@@ -67,6 +97,75 @@ export function registerHandlers(registry: MethodRegistry): RegisteredAreas {
   // Git transitions a worktree on a background task long after the call
   // returned, so its own emitter is the only honest source for those.
   publishGitEvents(git, workspaceEvents)
+  // Committing and pushing change what status answers without moving any
+  // record, so they have to say so themselves.
+  publishGitWrites(registry, git, workspaceEvents)
+  // Git status has no call behind it, so file changes are the only thing that
+  // can keep it honest between one command and the next.
+  const worktreeFiles = publishWorktreeFileEvents(git, workspaceEvents)
 
-  return { terminals, git }
+  // The private key belongs beside the workspace file, in the app's own data
+  // directory, and never anywhere under a repository. That directory is not on
+  // the runtime context, but the store's path is exactly it plus a file name,
+  // and the store is already the authority on where this app keeps things.
+  const dataDir = dirname(registry.context.store.filePath)
+
+  // `.teamree` lives in the primary checkout, and a pull that brings in a
+  // teammate's key or the team's relay is nobody's method call. Without this
+  // both machines sit on the roster they read before the pull, and the runbook
+  // had to tell people to quit the app and open it again.
+  const teamworkWatcher = new TeamreeWatcher({
+    onChange: () => workspaceEvents.emit({ type: 'members' }),
+    onDegraded: (event) => console.warn(`[teamwork] ${degradedTeamreeWatchReport(event)}`)
+  })
+  teamworkWatcher.sync(registry.context.store.listProjects())
+
+  registerTeamworkHandlers(
+    registry,
+    new TeamworkService({
+      store: registry.context.store,
+      dataDir,
+      // So a roster read can say whether it will stay true by itself, rather
+      // than letting a list nothing is following look as live as one that is.
+      watching: (projectId) => teamworkWatcher.watches(projectId),
+      // Writing a member file or a relay is this app's own change to `.teamree`,
+      // and the watch above can be degraded, so the service says so itself.
+      onRosterChange: () => workspaceEvents.emit({ type: 'members' })
+    })
+  )
+
+  const peers = registerPeerHandlers(
+    registry,
+    new PeerService({
+      workspace: {
+        listProjects: () => registry.context.store.listProjects(),
+        listWorktrees: (projectId) => registry.context.store.listWorktrees(projectId),
+        listTerminals: (worktreeId) => terminals.manager.list(worktreeId)
+      },
+      dataDir,
+      subscriptions: registry.context.subscriptions,
+      onChange: () => workspaceEvents.emit({ type: 'teammates' }),
+      // Nothing a peer does should be able to fail quietly here. A snapshot
+      // refused, a watch that could not be started: none of them stop the app,
+      // and without this none of them leave a trace either — which is how a
+      // sidebar showing a teammate's yesterday looks exactly like one showing
+      // their today.
+      onError: (error) => console.error('[teamwork]', error)
+    })
+  )
+  // A teammate's view of this machine rides the same bus everything else does,
+  // so a worktree created on the CLI reaches their sidebar for the same reason
+  // it reaches this window's.
+  workspaceEvents.on((event) => {
+    // `teammates` is this service's own event. Feeding it back in would have a
+    // link changing phase cost every peer a fresh snapshot of a workspace that
+    // did not move.
+    if (event.type === 'teammates') return
+    // A project added or removed changes which checkouts are watched.
+    if (event.type === 'projects') teamworkWatcher.sync(registry.context.store.listProjects())
+    if (event.type === 'projects' || event.type === 'members') void peers.reconcile().catch(() => {})
+    peers.notifyWorkspaceChanged()
+  })
+
+  return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers }
 }

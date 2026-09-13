@@ -18,6 +18,12 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'worktree.create', Params.worktreeCreate)
   placeholder(registry, 'worktree.remove', Params.worktreeRemove)
   placeholder(registry, 'worktree.status', Params.worktreeStatus)
+  placeholder(registry, 'worktree.changes', Params.worktreeChanges)
+  placeholder(registry, 'worktree.diff', Params.worktreeDiff)
+  placeholder(registry, 'worktree.commit', Params.worktreeCommit)
+  placeholder(registry, 'worktree.log', Params.worktreeLog)
+  placeholder(registry, 'worktree.mergePreview', Params.worktreeMergePreview)
+  placeholder(registry, 'worktree.push', Params.worktreePush)
 
   placeholder(registry, 'terminal.list', Params.terminalList)
   placeholder(registry, 'terminal.create', Params.terminalCreate)
@@ -30,6 +36,7 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
 
   placeholder(registry, 'layout.get', Params.layoutGet)
   placeholder(registry, 'layout.set', Params.layoutSet)
+  placeholder(registry, 'agent.list', Params.agentList)
 }
 
 function placeholder<M extends MethodName>(registry: MethodRegistry, method: M, schema: z.ZodType<ParamsOf<M>>): void {

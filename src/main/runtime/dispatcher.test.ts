@@ -113,12 +113,36 @@ describe('dispatcher', () => {
     // Named rather than counted: a bare count tells you a number changed, not
     // which method arrived or went missing.
     expect([...registry.methods()].sort()).toEqual([
+      'agent.list',
       'layout.get',
       'layout.set',
+      'members.join',
+      'members.list',
+      // Reachable over the peer transport and nowhere else. They are in the one
+      // registry because a teammate is another transport onto the catalogue
+      // rather than a catalogue of its own; `PEER_METHODS` in peerTransport.ts
+      // is what makes the two audiences different.
+      'peer.presence',
+      'peer.subscribe',
       'project.add',
       'project.list',
       'project.remove',
       'status.get',
+      // Local, not peer-reachable, and the owner's own: a mute needs nobody's
+      // agreement and the write log never leaves this machine.
+      'teamwork.mute',
+      'teamwork.presence',
+      'teamwork.relay',
+      'teamwork.setRelay',
+      'teamwork.status',
+      // Local, not peer-reachable. `teamwork.watch` and `teamwork.type` are
+      // this machine asking to read and to type into somebody else's pane; what
+      // crosses the wire underneath them is `terminal.subscribe`,
+      // `terminal.read` and `terminal.write` on their runtime.
+      'teamwork.type',
+      'teamwork.watch',
+      'teamwork.watchers',
+      'teamwork.writeLog',
       'terminal.close',
       'terminal.create',
       'terminal.list',
@@ -129,9 +153,15 @@ describe('dispatcher', () => {
       'terminal.write',
       'unsubscribe',
       'workspace.subscribe',
+      'worktree.changes',
+      'worktree.commit',
       'worktree.create',
+      'worktree.diff',
       'worktree.get',
       'worktree.list',
+      'worktree.log',
+      'worktree.mergePreview',
+      'worktree.push',
       'worktree.remove',
       'worktree.startPoints',
       'worktree.status'
