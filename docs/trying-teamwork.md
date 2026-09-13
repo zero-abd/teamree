@@ -103,6 +103,8 @@ one, **Not that** puts the question back.
   not a detail: whatever decides who can push is what decides who is on the
   team. It also has to be a repository each of you cloned — see step 2, because
   the thing that makes two checkouts "the same project" is the origin remote.
+  A URL or a directory on a shared volume both work; step 2 says what each of
+  them has to agree about.
 - A relay, which step 3 sets up. Neither machine needs an address, a port
   forwarded or a hole punched — both dial out to it.
 - Node 20 or newer on both machines, for the example project.
@@ -162,18 +164,30 @@ git push -u origin main spike/json-output
 **The `origin` remote is load-bearing and not a formality.** Project ids are
 generated per installation and mean nothing to anybody else, so what teamree
 uses to decide that your checkout and your teammate's are the same project is a
-hash of the normalised `origin` URL. A project with no origin does not take part
-at all, and says so rather than quietly matching nothing. Normalisation takes
-care of the differences that do not matter — ssh against https, a port, a
-trailing `.git`, the case of the host — so one of you cloning over ssh and the
-other over https is fine.
+hash of the normalised `origin` remote. A project with no origin does not take
+part at all, and says so rather than quietly matching nothing. For a URL,
+normalisation takes care of the differences that do not matter — ssh against
+https, a port, a trailing `.git`, the case of the host — so one of you cloning
+over ssh and the other over https is fine.
+
+**If you share the repository over a mounted volume rather than a URL**, that
+works too, on one condition: both Macs must reach it at the *same absolute
+path*, spelled the same way — `/Volumes/team/example.git` on both, not
+`/Volumes/team/example.git` on yours and `/Users/you/mnt/team/example.git` on
+theirs. Nothing on either machine can tell that one volume mounted at two paths
+is one repository, so the path is the identity, case and `.git` and all. Two
+spellings are two projects and you will simply never see each other. The panel
+prints the exact string it hashes when you set the origin, and the invitation it
+writes for your teammate names the path to mount at; `docs/teamwork.md` has the
+full rule, including what is and is not normalised away.
 
 If you open **Start teamwork** on a checkout that has no usable origin, the
-panel says so at the top and puts an **Origin URL** field and an **Add origin**
+panel says so at the top and puts an **Origin** field and an **Add origin**
 button directly under the sentence, so the fix is where the problem is reported
-rather than in another window. It refuses a path on this disk while you are
-still typing, for the reason above: a path is a perfectly good git remote and a
-useless project identity, because nobody else can clone it.
+rather than in another window. It takes either kind of answer, and refuses the
+paths that could not be an identity for anybody — a relative path, a `~`, a path
+with `..` in it — while you are still typing, saying which it is and what to
+type instead.
 
 **Joiner**:
 
@@ -828,8 +842,8 @@ find yourself opening a port on a laptop, something has gone wrong further back.
 The header says **Teamwork off**, and the tooltip says *this project has no
 origin remote, so teamree cannot tell it is the same repository your teammates
 have*. This is the honest answer rather than a fault: what makes two checkouts
-the same project is a hash of the normalised origin URL, so a checkout with no
-origin cannot be matched to anything.
+the same project is a hash of the normalised origin remote, so a checkout with
+no origin cannot be matched to anything.
 
 ```sh
 cd ~/teamree-example && git remote get-url origin
@@ -842,6 +856,25 @@ is nothing to restart and nothing to wait for. A remote under any
 other name does not count — teamree does not guess at which of several remotes
 you meant, because two peers guessing differently would show each other nothing
 and say nothing about why.
+
+### You share the repository over a volume and never see each other
+
+Both of you are on the relay, both rosters have both keys, both panels say
+**Nobody connected**, and nothing anywhere is red. Check the two origins:
+
+```sh
+cd ~/teamree-example && git remote get-url origin
+```
+
+If they are paths and the two strings are not identical — one of you mounted the
+volume somewhere else, or spelled it with different capitals, or wrote
+`example.git` where the other wrote `example` — then the two machines hashed two
+different projects, computed two different rendezvous points and never looked
+for each other. There is no error to find because neither machine did anything
+wrong. The fix is for both of you to point `origin` at the same string,
+character for character; the **Connected** step says which path it is matching
+on while it waits, which is the panel telling you this before you go looking at
+your wifi.
 
 ### Your clocks disagree
 

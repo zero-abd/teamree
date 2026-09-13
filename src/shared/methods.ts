@@ -254,7 +254,7 @@ export const Params = {
   teamworkSetRelay: z.object({ projectId: z.string().min(1), url: z.string().min(1) }),
 
   /**
-   * Points this checkout's `origin` at the URL everybody cloned.
+   * Points this checkout's `origin` at the remote everybody shares.
    *
    * The one piece of setup that used to be a shell command in a panel. It is
    * here rather than left to the user because the identity of a project is the
@@ -262,9 +262,12 @@ export const Params = {
    * however much of the rest is done — and `git remote add origin <url>` typed
    * into the wrong directory is a thing that happens.
    *
-   * A URL, and never a path: a path on this disk is a perfectly good git remote
-   * and a useless project identity, because nobody else can clone it. Refused
-   * with that sentence rather than accepted and left to fail later.
+   * Either the URL you both cloned or the absolute path a shared volume is
+   * mounted at on both Macs. A path is stored normalised, because those are the
+   * characters a teammate has to match: nothing on either machine can tell that
+   * one volume mounted at two paths is one repository, so the paths agreeing is
+   * the identity. Anything that could not be agreed on — a relative path, a `~`,
+   * a `..` — is refused with what to type instead.
    */
   teamworkSetOrigin: z.object({ projectId: z.string().min(1), url: z.string().min(1) }),
 

@@ -540,6 +540,7 @@ export type TeamworkPublishProgress = {
 export type TeamworkOrigin = {
   projectId: string
   remote: string
+  /** What git was given: a URL as typed, or a path in its normalised spelling. */
   url: string
   /** True when a remote was already there and this replaced its URL. */
   replaced: boolean
@@ -720,9 +721,11 @@ export type TeamworkStatus = {
    * where no relay can ever help, and never say why.
    */
   origin: /**
-   * `url` is `origin` as git has it, so anything that has to *name* the
-   * repository — an invitation to send a teammate, most of all — can say the
-   * URL they are being asked to clone rather than describing it.
+   * `url` is the origin as it is to be named, so anything that has to *name*
+   * the repository — an invitation to send a teammate, most of all — can say
+   * the URL they are being asked to clone rather than describing it. For a
+   * repository shared over a path it is the normalised path, which is the
+   * string their checkout has to match character for character.
    */
   { ok: true; url: string } | { ok: false; reason: string }
   /**

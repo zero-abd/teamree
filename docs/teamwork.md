@@ -374,6 +374,69 @@ project" without ever saying what that meant, and project ids are per-
 installation. A project with no origin is honestly non-participating rather than
 quietly matching nothing.
 
+Most origins are URLs, and for those the normalisation is forgiving on purpose:
+scheme, credentials, port, a trailing `.git` and the case of the host all go, so
+one person cloning over ssh and another over https are on the same project
+without having agreed on anything. What is left is host and path, which is a
+fact about a server both machines can name.
+
+**A repository shared over a filesystem path is a project too, on the terms a
+path can support.** A team whose remote is a bare repository on a mounted volume
+or a file server is an ordinary team, and refusing them was a real hole. What
+they have instead of a server to name is a path, and a path is a fact about a
+*mount*: nothing readable from either Mac can show that `/Volumes/team/app.git`
+here and `/Users/ada/mnt/team/app.git` there are one directory. There is no
+third party to ask, and a volume UUID or an inode answers a question about this
+machine rather than about the repository two people share. So the identity is
+the path itself and the promise is exactly this:
+
+> **Both Macs have to reach the repository at the same absolute path, spelled
+> the same way.** Same path, same project. Different paths, two projects — and
+> neither machine ever sees the other.
+
+That is a narrow promise, and it is kept rather than approximated. It is why so
+little is normalised away from a path: repeated slashes, a trailing slash and a
+`.` segment go, because those name the same directory on every filesystem there
+is, and nothing else does.
+
+- **Case stays**, because macOS volumes are usually case-insensitive and are not
+  always — APFS can be formatted case-sensitive, and a network volume answers to
+  whatever is serving it. Folding case would merge `/Volumes/src/Repo` and
+  `/Volumes/src/repo`, which on such a volume are two repositories. Two
+  teammates who spell it differently not meeting is a bad afternoon; two teams
+  quietly becoming one is a breach, and that is the one that must not happen.
+- **A trailing `.git` stays**, because on a disk `app` and `app.git` are two
+  directories and a bare repository beside a working checkout is exactly how
+  people lay this out. The convention that makes them one repository belongs to
+  hosting services, not to filesystems.
+- **The Unicode form of a name stays**, for the same reason case does. Paste the
+  path you were given rather than retyping it.
+- **Symlinks are not resolved, and a `..` segment is refused** rather than
+  folded. Collapsing `a/link/../b` lexically names a different directory the
+  moment `link` is a symlink, and resolving it for real would make the identity
+  a fact about one Mac's disk instead of about the string both people hold.
+- **A relative path and a `~` are refused outright**, with what to type instead.
+  Neither can name one directory on two machines, so neither can be an identity.
+
+**A path can never be hashed to a URL's key.** A normalised URL is `host/path`
+with a host in it, so it never begins with a slash; a normalised path always
+does. That leading slash is the whole namespace — and it costs nothing, because
+every URL's key is byte-for-byte what it was before paths were allowed here. A
+project key that quietly moved would be a team that quietly stops meeting.
+
+**A path is never a default.** If `origin` is a URL, none of the above applies
+to it.
+
+What none of this can do is notice the mismatch. Two machines that hash
+different keys do not fail to connect; they compute different rendezvous points,
+never look for each other, and both read "nobody is here yet" for as long as
+anybody is willing to wait. So the product says the condition out loud at the
+three moments it can: the field that sets a path origin prints the exact string
+it will hash and what the other person has to match, the invitation names the
+path to mount at, and the **Connected** step, while it is waiting, says that
+this project is matched by its mount path and that a teammate anywhere else will
+never appear.
+
 **A teammate reaches an allow-list, not the whole method catalogue.** The
 transport can carry anything the runtime answers, which includes
 `worktree.remove` and `project.remove`. "Everyone sees everything; anyone can

@@ -14,7 +14,8 @@
 // What that does *not* change is consent, so each of the three is built the
 // same way:
 //
-// **Nothing acts silently.** The origin field says what URL it will set; the
+// **Nothing acts silently.** The origin field says what it will set, and for a
+// path says what the other Mac will have to match to meet this one; the
 // deploy runs in a pane in this window where it can be watched; the push names
 // the files, the message, the remote and the branch before it is pressed, and
 // then reports what git said in git's own words.
@@ -516,21 +517,23 @@ function hintFor(list: MemberList, typed: string, file: string | null): string {
 }
 
 /**
- * The remote everybody cloned, as a field and a button.
+ * The remote everybody shares, as a field and a button.
  *
  * This was `git remote add origin <url>` printed in a panel, in an app that
  * owns git and knows exactly which directory the command belongs in. The
- * refusal is reached while somebody is still typing, because the wrong answer
- * here is not a typo — it is a path on this disk, which is a perfectly good git
- * remote and a useless project identity, and finding that out after a round
- * trip reads as the button being broken.
+ * verdict is reached while somebody is still typing, because the answer here is
+ * rarely a typo: it is a path, and a path is an identity only on a condition
+ * nothing can check afterwards. So a path that will work is accepted and
+ * immediately told what has to be true of the other Mac, in the same breath as
+ * the button that sets it — this is the last moment at which anybody is looking
+ * at the string that matters.
  */
 function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: (url: string) => void }) {
   const [draft, setDraft] = useState('')
   const [why, setWhy] = useState(false)
   // The hint is a description rather than part of the name: a label that
   // swallowed it would have a screen reader announce a paragraph every time the
-  // field took focus, and the field is called "Origin URL".
+  // field took focus, and the field is called "Origin".
   const hint = useId()
   const check = checkOriginDraft(draft)
   // What the field itself refused beats what git last said: the reader is
@@ -545,7 +548,7 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
   return (
     <form className="origin-fix" onSubmit={submit}>
       <label className="field">
-        <span className="field__label">Origin URL</span>
+        <span className="field__label">Origin</span>
         <input
           className="field__input field__input--mono"
           value={draft}
@@ -558,9 +561,14 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
         />
       </label>
       <span className="field__hint" id={hint}>
-        Runs <code>git remote add origin</code> in this checkout. It has to be a URL: your teammates clone it too.
+        Runs <code>git remote add origin</code> in this checkout. The URL you both cloned, or the path a shared volume
+        is mounted at on both Macs.
       </span>
       {refusal === null ? null : <p className="field__error">{refusal}</p>}
+      {/* The condition, in front of the person who is about to accept it, on
+          the one screen where the exact string is still visible. It is a note
+          rather than a refusal: this origin works, and works on terms. */}
+      {check.state === 'ok' && check.note !== null ? <p className="field__note">{check.note}</p> : null}
       <button type="submit" className="button button--primary" disabled={origin.pending || check.state !== 'ok'}>
         {origin.pending ? 'Adding…' : 'Add origin'}
       </button>
@@ -574,7 +582,7 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
           <span className="disclosure__caret" aria-hidden="true">
             {why ? '▾' : '▸'}
           </span>
-          Why a path will not do
+          What has to match
         </button>
         {why ? <p className="disclosure__body">{ORIGIN_DETAIL}</p> : null}
       </div>

@@ -278,29 +278,44 @@ describe('the origin field’s verdict on what has been typed', () => {
   it('accepts the URL forms two people cloning one repository actually use', () => {
     expect(checkOriginDraft('https://github.com/ada/pager.git')).toEqual({
       state: 'ok',
-      url: 'https://github.com/ada/pager.git'
+      url: 'https://github.com/ada/pager.git',
+      kind: 'url',
+      note: null
     })
     expect(checkOriginDraft(' git@github.com:ada/pager.git ')).toEqual({
       state: 'ok',
-      url: 'git@github.com:ada/pager.git'
+      url: 'git@github.com:ada/pager.git',
+      kind: 'url',
+      note: null
     })
   })
 
-  // The one refusal somebody will actually hit, and the reason it is a sentence
-  // rather than a code: a path is a perfectly good git remote and a useless
-  // project identity, because nobody else can clone it.
-  it('refuses a path on this disk, and says why rather than only that', () => {
-    const refused = checkOriginDraft('/Users/ada/code/pager')
-    expect(refused.state).toBe('bad')
-    expect(refused).toMatchObject({ reason: expect.stringMatching(/path on this disk/) })
-    expect(checkOriginDraft('../pager').state).toBe('bad')
-    expect(checkOriginDraft('file:///Users/ada/code/pager').state).toBe('bad')
+  // The answer a team sharing a repository over a volume gets now, and the one
+  // thing they have to be told while the string is still in front of them: the
+  // path is the identity, so the other Mac has to mount it at the same one.
+  it('accepts a shared path, and says what the other Mac has to match', () => {
+    const checked = checkOriginDraft(' file:///Volumes/team/pager.git/ ')
+    expect(checked).toMatchObject({ state: 'ok', kind: 'path', url: '/Volumes/team/pager.git' })
+    expect(checked.state === 'ok' && checked.note).toMatch(/\/Volumes\/team\/pager\.git, character for character/)
   })
 
-  it('refuses anything with no host in it', () => {
+  // The refusals that are left are the paths no two machines could agree on,
+  // and each says which kind of disagreement it would be rather than only that
+  // the answer was wrong.
+  it('refuses a path that means something different on each machine, and says why', () => {
+    expect(checkOriginDraft('/Users/ada/code/pager').state).toBe('ok')
+    expect(checkOriginDraft('../pager')).toMatchObject({ reason: expect.stringMatching(/relative path/) })
+    expect(checkOriginDraft('~/code/pager')).toMatchObject({ reason: expect.stringMatching(/different directory/) })
+    expect(checkOriginDraft('/Volumes/team/../team/pager.git')).toMatchObject({
+      reason: expect.stringMatching(/\.\. segment/)
+    })
+  })
+
+  it('refuses a word that is neither a URL nor a path', () => {
     expect(checkOriginDraft('pager')).toEqual({
       state: 'bad',
-      reason: 'That is not a URL with a host in it, like https://github.com/you/repo.git.'
+      reason:
+        'That is neither a URL with a host in it, like https://github.com/you/repo.git, nor a path starting with /.'
     })
   })
 
@@ -426,6 +441,23 @@ describe('step 5, connected', () => {
     expect(unreachable.summary).toMatch(/teammates may be fine/)
   })
 
+  // Two Macs that mounted the volume at different paths do not fail to
+  // connect — they compute different project keys, look for each other at
+  // different rendezvous points, and wait. This is the only place the panel can
+  // say so, because it is the only symptom there is.
+  it('names the mount path while a path-shared project is waiting for somebody', () => {
+    const onAVolume = status({ origin: { ok: true, url: '/Volumes/team/pager.git' }, links: [link()] })
+    const waiting = step({ ...written, status: onAVolume }, 'connected')
+    expect(waiting.summary).toMatch(/matched by the path it is mounted at, \/Volumes\/team\/pager\.git/)
+    expect(waiting.summary).toMatch(/any other path is on a different project/)
+  })
+
+  it('says nothing about mount paths for a repository with a URL, or once somebody is here', () => {
+    expect(step({ ...written, status: status({ links: [link()] }) }, 'connected').summary).not.toMatch(/mounted at/)
+    const met = status({ origin: { ok: true, url: '/Volumes/team/pager.git' }, links: [link({ phase: 'connected' })] })
+    expect(step({ ...written, status: met }, 'connected').summary).not.toMatch(/mounted at/)
+  })
+
   it('leads with a failed handshake, without saying whose end failed', () => {
     const refused = step({ ...written, status: status({ links: [link({ phase: 'refused' })] }) }, 'connected')
     expect(refused.summary).toMatch(/did not complete/)
@@ -460,9 +492,12 @@ describe('a checkout with no origin', () => {
   it('says what to add in one sentence, and keeps the explanation for whoever asks', () => {
     const flow = startTeamworkFlow({ ...fresh, status: noOrigin })
     expect(flow.blocker).toMatch(/Add the URL you and your teammates both cloned/)
-    expect(flow.blocker).toMatch(/not a path on this disk/)
+    // Both kinds of answer, because the sentence a team on a shared volume used
+    // to get here told them only that their own answer was not allowed.
+    expect(flow.blocker).toMatch(/the absolute path it is mounted at on every Mac/)
     expect(flow.blocker).not.toMatch(/normalised/)
-    expect(ORIGIN_DETAIL).toMatch(/normalised/)
+    expect(ORIGIN_DETAIL).toMatch(/normalise/)
+    expect(ORIGIN_DETAIL).toMatch(/one volume mounted at two paths/)
   })
 
   it('blocks the connected step rather than showing it as merely not done', () => {
@@ -900,6 +935,25 @@ describe('the message to send a teammate', () => {
   // button at all.
   it('is nothing when there is no repository URL to send', () => {
     expect(invite({ originUrl: null, relayUrl: null, projectName: 'pager', handle: 'ada' })).toBeNull()
+  })
+
+  // The only condition a teammate can fail while doing everything else right,
+  // sent to them at the one moment somebody is writing to them about it.
+  it('tells a teammate where to mount a repository that is shared over a path', () => {
+    const text =
+      invite({
+        originUrl: '/Volumes/team/pager.git',
+        relayUrl: 'wss://relay.example/v1/relay',
+        projectName: 'pager',
+        handle: 'ada'
+      }) ?? ''
+    expect(text).toContain('git clone /Volumes/team/pager.git')
+    expect(text).toMatch(/mount it at exactly \/Volumes\/team\/pager\.git/)
+    expect(text).toMatch(/we never see/)
+  })
+
+  it('says nothing about mounting anything when the origin is a URL', () => {
+    expect(invite() ?? '').not.toMatch(/mount/)
   })
 })
 

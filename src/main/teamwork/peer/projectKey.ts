@@ -3,7 +3,11 @@
 // Project ids are generated per installation, so they say nothing across a
 // wire. `docs/teamwork.md` already answers what does: "a project is already a
 // git repository that several people push to". The thing several people push
-// to is the remote, so the remote is the identity.
+// to is the remote, so the remote is the identity — a URL when there is a
+// server to name, and otherwise the path a shared volume is mounted at, which
+// is an identity exactly as far as two Macs spell it the same way. Which
+// foldings are safe, and why a normalised path can never be hashed to a URL's
+// key, is argued once in `@shared/origin` and applied here.
 //
 // It is hashed rather than sent. A session is pairwise — one per pair of
 // teammates, covering every repository the two of them happen to share — so a
@@ -19,13 +23,17 @@ import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import type { GitRunner } from '../../git/gitProcess'
-import { normaliseRemote } from '../../../shared/originUrl'
+import { checkOrigin } from '../../../shared/origin'
 
 /** Domain separation, so this hash can never be mistaken for another one. */
 const KEY_PREFIX = 'teamree/project/v1\n'
 
 export type ProjectKeyResult =
-  /** `url` is `origin` exactly as git has it, for anything that has to name it. */
+  /**
+   * `url` is the origin as it is to be named — git's own spelling of a URL, and
+   * the normalised spelling of a path, which is the one a teammate has to be
+   * given character for character.
+   */
   | { ok: true; key: string; url: string }
   /** Why this project cannot be matched to a teammate's, for the user to read. */
   | { ok: false; reason: string }
@@ -33,11 +41,11 @@ export type ProjectKeyResult =
 /**
  * The remote's identity, spelled one way.
  *
- * The rule itself is in `@shared/originUrl`, because the panel that offers to
- * add an origin has to refuse exactly what this would refuse, and re-exported
- * here because this module is where the rest of the runtime looks for it.
+ * The rule itself is in `@shared/origin`, because the panel that offers to add
+ * an origin has to refuse exactly what this would refuse, and re-exported here
+ * because this module is where the rest of the runtime looks for it.
  */
-export { normaliseRemote } from '../../../shared/originUrl'
+export { normaliseRemote } from '../../../shared/origin'
 
 export function projectKeyFor(normalisedRemote: string): string {
   return createHash('sha256').update(KEY_PREFIX).update(normalisedRemote, 'utf8').digest('hex')
@@ -64,39 +72,19 @@ export async function readProjectKey(runner: GitRunner, projectPath: string): Pr
     return { ok: false, reason: `git could not be asked for the origin remote: ${messageOf(error)}` }
   }
 
-  const normalised = normaliseRemote(remote)
-  if (normalised === undefined) {
-    // Named as its own case rather than left inside "not a URL", because it is
-    // the one shape of origin somebody arrives with on purpose: a repository on
-    // a file server or a shared volume is a perfectly good git remote, is how
-    // plenty of teams already work, and cannot take part here whatever else
-    // they do. Telling them that in the sentence that names their own path is
-    // the difference between a known limitation and an afternoon.
-    return {
-      ok: false,
-      reason: looksLikeAPath(remote)
-        ? `origin is ${remote}, which is a filesystem path rather than a URL — and a project's identity here is a ` +
-          'hash of its origin URL, so a repository shared over a path cannot take part'
-        : `origin is ${remote}, which is not a URL teamree can compare with a teammate’s`
-    }
+  const checked = checkOrigin(remote)
+  if (!checked.ok) {
+    // The refusal names the origin git actually has before it says anything
+    // about it. What is wrong here is never a typing mistake — nobody types
+    // this field, they cloned or they mounted — so the sentence has to be one
+    // somebody can act on without first working out which of their remotes it
+    // is talking about.
+    return { ok: false, reason: `origin is ${remote}, and ${checked.reason}` }
   }
-  return { ok: true, key: projectKeyFor(normalised), url: remote }
-}
-
-/**
- * Whether this remote is somewhere on a disk rather than somewhere on a network.
- *
- * Deliberately broader than `checkOriginUrl`'s test of the same name: this one
- * reads what git already has rather than what somebody is typing, so a bare
- * relative path, a `file://` URL and an absolute one all have to land here.
- */
-function looksLikeAPath(remote: string): boolean {
-  if (/^(?:file:\/\/|~|\.{0,2}\/)/.test(remote)) return true
-  // git reads a remote with no scheme and no scp-style host as a path, and so
-  // does this — but only when there is a separator in it. A bare word is
-  // something nobody meant as either, and calling it a filesystem path would
-  // answer a question this person did not ask.
-  return !remote.includes('://') && !remote.includes(':') && remote.includes('/')
+  // The normalised spelling for a path, git's own for a URL: `checkOrigin` says
+  // why, and an invitation that has to tell a teammate what to match wants the
+  // characters that are being hashed rather than the ones that were typed.
+  return { ok: true, key: projectKeyFor(checked.normalised), url: checked.remote }
 }
 
 /**
