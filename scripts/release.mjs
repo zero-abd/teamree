@@ -110,6 +110,28 @@ export function isPrerelease(tag) {
 }
 
 /**
+ * Where the version's own notes are written, relative to the repository.
+ *
+ * One file per version rather than one file with every version in it, because
+ * the thing being read is the file at a tag — the release body carries it, and
+ * a link into a growing changelog would point a downloader at the section for
+ * whatever shipped later. It is written by hand, and it has to be: nothing here
+ * can work out from a diff which five of the forty commits since the last
+ * release a person downloading this needs to be told about.
+ */
+export function highlightsPath(version) {
+  return join('docs', 'release-notes', `${version}.md`)
+}
+
+/** The version's notes, or null when nobody has written them. */
+export function readHighlights(version, root = REPO_ROOT) {
+  const path = join(root, highlightsPath(version))
+  if (!existsSync(path)) return null
+  const text = readFileSync(path, 'utf8').trim()
+  return text === '' ? null : text
+}
+
+/**
  * Everything wrong with the repository, before a minute of machine time is
  * spent on it.
  *
@@ -132,6 +154,20 @@ export function preflightRefusals(state) {
           .map((line) => `    ${line}`)
           .join('\n') +
         '\n  Commit or stash it. A release built from uncommitted changes cannot be rebuilt by anybody.'
+    )
+  }
+
+  // A release with no notes is the one that reaches people looking exactly like
+  // a release with notes: the body still explains Gatekeeper, still carries the
+  // checksums, and says nothing whatever about why anybody should install it.
+  // Nobody notices afterwards, because there is nothing missing on the page to
+  // notice. So it is asked for here, by name, before a minute is spent.
+  if (state.highlights === null) {
+    refusals.push(
+      `nothing describes what is in ${state.version}. Write ${highlightsPath(state.version)} —\n` +
+        '  what changed, for somebody who is going to download this and use it. It is the top of\n' +
+        '  the release body and the text the app shows when it offers this version to a person\n' +
+        '  still running an older one.'
     )
   }
 
@@ -225,10 +261,20 @@ export function checksumLine(hash, name) {
  * the bundle that is about to be published, so a release cannot claim to be
  * signed because the last one was, or apologise for being unsigned after
  * somebody has gone to the trouble of signing it.
+ *
+ * The one part no machine can generate is what changed, so that is read from
+ * the file `highlightsPath()` names and goes in second — above the signing
+ * section, which is the same paragraph in every release and is also in
+ * `docs/install.md`. The order matters for one reader in particular: the update
+ * card in the window renders this body as text and cuts it at a length, so
+ * whatever is at the top is what somebody still running the old build actually
+ * reads, and what they want from it is why they should bother.
  */
-export function releaseNotes({ tag, repo, checksums, kind }) {
+export function releaseNotes({ tag, repo, checksums, kind, highlights = null }) {
   const signed = isDistributable(kind)
   const lines = [`teamree \`${tag}\`, for macOS. One universal \`.dmg\`: Apple Silicon and Intel both.`, '']
+
+  if (highlights !== null && highlights.trim() !== '') lines.push(highlights.trim(), '')
 
   if (signed) {
     lines.push(
@@ -452,6 +498,10 @@ async function main(argv) {
     version: pkg.version,
     head,
     dirty: git(['status', '--porcelain']).out,
+    // Keyed by the package version rather than by the tag, so a candidate is
+    // released with the notes of the version it is a candidate for instead of
+    // asking somebody to write `0.2.0-rc.1.md` and then write it again.
+    highlights: readHighlights(pkg.version),
     relayInstalled: existsSync(join(REPO_ROOT, 'relay', 'node_modules')),
     ghAuthenticated,
     repo: repoName,
@@ -536,7 +586,7 @@ async function main(argv) {
   const sumsPath = join(dist, 'SHA256SUMS.txt')
   writeFileSync(sumsPath, checksums)
 
-  const notes = releaseNotes({ tag, repo: repoName, checksums, kind })
+  const notes = releaseNotes({ tag, repo: repoName, checksums, kind, highlights: state.highlights })
   const notesPath = join(dist, 'RELEASE_NOTES.md')
   writeFileSync(notesPath, notes)
 

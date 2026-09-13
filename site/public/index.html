@@ -1224,9 +1224,9 @@ demo:video:parked -->
       <p>
         <strong>Check the download against the release.</strong> Compare the output of this
         against <code>SHA256SUMS.txt</code>, published beside the <code>.dmg</code> on the
-        release page. If they agree, the file you have is the file the build produced. Note
-        that it lists the digest under the release&rsquo;s own file name, not the name you
-        downloaded.
+        release page. If they agree, the file you have is the file the build produced. It
+        lists the same digest twice, once under the release&rsquo;s versioned file name and
+        once under the name you downloaded: one image, published under both.
       </p>
       <div class="cmd has-copy">
         <pre tabindex="0" role="region" aria-label="Command to check the download&#39;s checksum. Scrolls horizontally."><code id="cmd-sum">shasum -a 256 teamree-mac-universal.dmg</code></pre>
