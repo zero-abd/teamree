@@ -52,7 +52,14 @@ beforeAll(async () => {
   git(['add', '.'], repoPath)
   git(['commit', '-m', 'initial'], repoPath)
 
-  host = spawn('npx', ['tsx', HOST], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+  // Its own process group, because `npx` puts two wrapper processes between us
+  // and the runtime and does not pass a signal down to it. Killing the wrapper
+  // left the runtime alive holding its socket, its discovery file and an inotify
+  // instance — two orphans per run, and this suite runs often. They accumulated
+  // until the per-user inotify limit was exhausted and every filesystem-watch
+  // test on the machine began failing for reasons that had nothing to do with
+  // the watcher.
+  host = spawn('npx', ['tsx', HOST], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
 
   const discovery = join(userDataDir, 'runtime.json')
   for (let attempt = 0; attempt < 160 && !existsSync(discovery); attempt += 1) await sleep(250)
@@ -60,7 +67,14 @@ beforeAll(async () => {
 }, 90_000)
 
 afterAll(async () => {
-  host?.kill('SIGTERM')
+  // Negative pid: signal the whole group, so the runtime goes with the wrapper.
+  if (host?.pid !== undefined) {
+    try {
+      process.kill(-host.pid, 'SIGTERM')
+    } catch {
+      // Already gone, which is the outcome this wanted anyway.
+    }
+  }
   await sleep(500)
   rmSync(root, { recursive: true, force: true })
 })

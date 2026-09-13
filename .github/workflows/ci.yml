@@ -89,6 +89,18 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Electron's sandbox helper has to be setuid root, and npm cannot make it
+      # so — it unpacks as the runner's own user. Electron then aborts rather
+      # than run unsandboxed, which is the right call and is how the first CI
+      # run died at the smoke test. Fixed rather than switched off: running the
+      # smoke test without the sandbox would be testing a configuration no user
+      # has.
+      - name: Let Electron's sandbox helper run
+        if: runner.os == 'Linux'
+        run: |
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -125,6 +137,15 @@ jobs:
 
       - name: Package
         run: npm run ${{ matrix.package }}
+
+      # The packaged tree carries its own copy of the helper, unpacked by the
+      # builder as the runner's user, so it needs the same treatment before the
+      # packaged app will start.
+      - name: Let the packaged app's sandbox helper run
+        if: runner.os == 'Linux'
+        run: |
+          sudo chown root:root dist/linux-unpacked/chrome-sandbox
+          sudo chmod 4755 dist/linux-unpacked/chrome-sandbox
 
       # The one check that can tell a package that built from a package that
       # works: it launches the artifact, drives it through the CLI the app
