@@ -524,11 +524,18 @@ export type PeerLinkPhase =
   | 'waiting'
   /** Handshake complete against a key from this project's roster. */
   | 'connected'
-  /** Somebody was there and the handshake did not authenticate them. */
+  /** A handshake that did not complete. Which end it failed on is not established. */
   | 'refused'
   /** The relay could not be reached at all. */
   | 'unreachable'
-  /** Given up: something reconnecting cannot fix, and `detail` says what. */
+  /**
+   * Stopped dialling: something reconnecting cannot fix, and `detail` says what.
+   *
+   * Not "never again". Everything that lands here is a fact about the relay,
+   * and a relay is restarted, rolled back and upgraded without this app hearing
+   * about it, so the link looks once more after a long wait — see
+   * `STOPPED_RETRY_MS`. What it is not is a link that keeps trying.
+   */
   | 'stopped'
 
 /** One teammate, and how this machine is getting on with reaching them. */

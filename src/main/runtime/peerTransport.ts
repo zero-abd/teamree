@@ -77,6 +77,30 @@ import { createLineReader, encodeLine } from './peerFraming'
 import type { SubscriptionHub } from './subscriptionHub'
 
 /**
+ * What has to be true about the caller before one admitted method runs.
+ *
+ * Admission was already an allow-list with a safe default. The scoping that
+ * makes a teammate's reach *mean* "the one project we share" was not: it was
+ * two branches further down this file, matching method names by hand, with
+ * nothing joining them to the list. A method added to the list was admitted and
+ * handed to the dispatcher carrying nothing but the id the remote caller named
+ * — no project check at all, and no test failing. That is not hypothetical:
+ * `terminal.read` and `terminal.subscribe` shipped exactly that way the first
+ * time, and the comment recording it is a few hundred lines below.
+ *
+ * So the list is the table of scopes, and a method cannot be on one without
+ * being on the other. The next omission is a type error rather than a hole.
+ *
+ *   * `link` — nothing to scope. The method is about this link and answers with
+ *     what this link is already entitled to.
+ *   * `read-pane` — names a pane, and the owner decides whether this teammate
+ *     may look at it.
+ *   * `write-pane` — names a pane and runs code in it. Judged separately from
+ *     looking, because permitting the two is not the same decision.
+ */
+export type PeerScope = 'link' | 'read-pane' | 'write-pane'
+
+/**
  * What a teammate may ask this runtime to do.
  *
  * Presence, the two reads that let somebody watch a pane — `terminal.read` for
@@ -91,16 +115,18 @@ import type { SubscriptionHub } from './subscriptionHub'
  * statement about panes, not a licence to delete a colleague's worktree.
  *
  * Adding a method here is the deliberate act of handing a teammate a new
- * capability, so the set is spelled out rather than derived.
+ * capability, so the set is spelled out rather than derived — and each entry
+ * names the check that makes that capability mean "one project" rather than
+ * "this machine". See `PeerScope`.
  */
-export const PEER_METHODS: readonly MethodName[] = [
-  'peer.presence',
-  'peer.subscribe',
-  'terminal.read',
-  'terminal.subscribe',
-  'terminal.write',
-  'unsubscribe'
-] as const
+export const PEER_METHODS: Readonly<Partial<Record<MethodName, PeerScope>>> = {
+  'peer.presence': 'link',
+  'peer.subscribe': 'link',
+  unsubscribe: 'link',
+  'terminal.read': 'read-pane',
+  'terminal.subscribe': 'read-pane',
+  'terminal.write': 'write-pane'
+} as const
 
 /**
  * How long a call to the teammate may go unanswered before it is refused.
@@ -302,10 +328,35 @@ export type PeerTransportOptions = {
    * The link can no longer be trusted and must be torn down: a Noise failure, a
    * frame that is not JSON. Both are unrecoverable — a Noise stream has no
    * resynchronisation point — so this is never a warning.
+   *
+   * Not called for a `close` the owner asked for. Tearing a link down on
+   * purpose is not a failure, and a caller that cannot tell the two apart ends
+   * up reporting its own shutdown as something going wrong.
    */
-  onFatal: (reason: string) => void
+  onFatal: (failure: TransportFailure) => void
   /** Failures that cost one call and not the link. */
   onError?: (error: unknown) => void
+}
+
+/**
+ * Why a transport gave up, in the only distinction its caller can act on.
+ *
+ * `unauthenticated` is a frame that did not open under the session keys, or
+ * opened into something that is not a frame. Those keys are held by two
+ * machines and nobody else, so what arrived is not what was sent: a bit
+ * changed, a frame replayed, dropped or reordered between the two sockets.
+ * That is a statement about the trip, and it is the only symptom the one
+ * untrusted component in this design has.
+ *
+ * `local` is this side's own session refusing to encrypt — a fact about this
+ * process, with nothing in it about the peer or about anything in between.
+ *
+ * Separated because the caller puts a sentence on somebody's screen, and the
+ * two of them are sentences about different machines.
+ */
+export type TransportFailure = {
+  reason: string
+  kind: 'unauthenticated' | 'local'
 }
 
 /** The sliver of a clock the outbound pacing and the deadlines need. */
@@ -368,7 +419,13 @@ export type PeerTransport = {
 }
 
 export function createPeerTransport(options: PeerTransportOptions): PeerTransport {
-  const allowed = new Set<string>(options.allowedMethods ?? PEER_METHODS)
+  const scopes: Readonly<Partial<Record<MethodName, PeerScope>>> =
+    options.allowedMethods === undefined
+      ? PEER_METHODS
+      : Object.fromEntries(options.allowedMethods.map((method) => [method, PEER_METHODS[method] ?? 'link']))
+  /** The scope this method runs under, or nothing at all when it is not admitted. */
+  const scopeOf = (method: string | undefined): PeerScope | undefined =>
+    method === undefined ? undefined : scopes[method as MethodName]
   const subscribing = new Set<string>(SUBSCRIBING_METHODS)
   const pending = new Map<
     string,
@@ -443,12 +500,20 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       for (const message of encodeLine(options.session, encodeFrame(frame))) options.send(message)
     } catch (error) {
       // Encryption only fails once the session is already unusable, so there is
-      // nothing left to send an error over.
-      fail(messageOf(error))
+      // nothing left to send an error over. This side's own session, so it says
+      // nothing about the peer and nothing about the relay.
+      fail(messageOf(error), 'local')
     }
   }
 
-  const fail = (reason: string): void => {
+  /**
+   * Releases everything this transport holds. Silent: the caller asked.
+   *
+   * Kept apart from `fail` because a link the owner is taking down and a link
+   * that broke are not the same event, and a transport that reported both the
+   * same way would have every ordinary shutdown arrive somewhere as a fault.
+   */
+  const release = (reason: string): void => {
     if (!live) return
     live = false
     for (const stream of paced.values()) stream.cancel?.()
@@ -459,7 +524,22 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       waiter.reject(new Error(reason))
     }
     pending.clear()
-    options.onFatal(reason)
+  }
+
+  /**
+   * This transport is over and nobody asked for it.
+   *
+   * The reason goes two places on purpose. `onError` is the operator's trace:
+   * a relay quietly breaking every session on a team is indistinguishable from
+   * bad luck unless the words survive somewhere they can be read, and this used
+   * to be discarded at the call site. `onFatal` is the link's cue to say
+   * something true on screen, which needs to know *which* failure this was.
+   */
+  const fail = (reason: string, kind: TransportFailure['kind']): void => {
+    if (!live) return
+    release(reason)
+    options.onError?.(new Error(reason))
+    options.onFatal({ reason, kind })
   }
 
   const announceWatches = (): void => {
@@ -636,6 +716,22 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     const stream = paced.get(subscriptionId)
     if (stream) {
       stream.cancel?.()
+      stream.cancel = undefined
+      // Out before it is let go of, and forced, because there is no later.
+      //
+      // `session-manager.ts` ends a pane's streams *before* it closes the
+      // session, so the producer stops while the pacer is still holding up to a
+      // flush interval of that pane's output, and behind it whatever exit or
+      // title was queued. Deleting the record used to take all of it — the last
+      // thing the pane printed and the code it exited with — and hand the
+      // watcher `lost` and nothing else. `evict` a few lines up refuses to drop
+      // an exit for exactly that reason, and this is the one path where the
+      // stream ends rather than overruns.
+      //
+      // `live` is still true here, and `flush` writes the pending `elided` in
+      // front of whatever survived, so a reader gets the hole as well as the
+      // rest.
+      flush(subscriptionId, stream, true)
       paced.delete(subscriptionId)
     }
     const asked = releasing.delete(subscriptionId)
@@ -664,7 +760,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
 
   const handleRequest = (value: unknown): void => {
     const method = methodOf(value)
-    if (method !== undefined && !allowed.has(method)) {
+    const scope = scopeOf(method)
+    if (method !== undefined && scope === undefined) {
       // Deliberately the same answer a method that does not exist gets. From
       // where the peer stands that is exactly what this is.
       write({
@@ -717,7 +814,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       reserved -= 1
     }
 
-    if (method === 'terminal.write') {
+    if (scope === 'write-pane') {
       // The keystroke's own budget, spent on top of the request's. A person
       // types ten a second; nothing legitimate is refused here, and a flood is
       // refused before it reaches a verdict, a pty, or the owner's log.
@@ -744,7 +841,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     // the caller named, so a teammate on one repository's roster could stream a
     // pane of a project they hold no key for. Typing has been scoped since it
     // was built; this is reading catching up.
-    if (method === 'terminal.read' || method === 'terminal.subscribe') {
+    if (scope === 'read-pane') {
       const terminalId = terminalIdOf(value)
       const verdict = judgeRead(terminalId)
       if (!verdict.ok) {
@@ -784,6 +881,13 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       },
       (error: unknown) => {
         releaseReservation()
+        // Defensive, and only that: the dispatcher this runtime builds turns
+        // every throw into an error response, so nothing reaches here today.
+        // The note taken above is keyed and valued by two strings the far end
+        // chose the length of, and it is only ever removed by an answer coming
+        // back — so a dispatcher that ever did reject would leave one behind
+        // per call, for the life of the link.
+        asked.delete(idOf(value))
         options.onError?.(error)
       }
     )
@@ -849,6 +953,19 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   const judgeRead = (terminalId: string | undefined): RemoteReadVerdict => {
     if (terminalId === undefined) {
       return { ok: false, code: ErrorCode.InvalidParams, message: 'no pane was named' }
+    }
+    // Here as well as in the schema, and for the same reason `judgeWrite` has
+    // it: this runs *before* the schema does, and the id does not stop at the
+    // verdict — it is kept in the map that remembers which pane each of this
+    // link's subscriptions streams, and handed on from there to whoever is told
+    // who is reading. A field a remote caller chooses the length of should be
+    // bounded in one place in this file, not in one of the two that use it.
+    if (terminalId.length > MAX_TERMINAL_ID_CHARS) {
+      return {
+        ok: false,
+        code: ErrorCode.InvalidParams,
+        message: `a pane id may not be longer than ${MAX_TERMINAL_ID_CHARS} characters`
+      }
     }
     const ask = options.onRemoteRead
     if (!ask) {
@@ -970,8 +1087,10 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       } catch (error) {
         // A Noise message that fails to authenticate and a line that is not
         // JSON are the same kind of event: the stream's position is gone and
-        // there is no point from which it could be picked up again.
-        fail(messageOf(error))
+        // there is no point from which it could be picked up again. Both mean
+        // what arrived is not what the peer sent, which is a fact about the
+        // trip between the two machines and not about either end of it.
+        fail(messageOf(error), 'unauthenticated')
         return
       }
       for (const value of values) {
@@ -994,7 +1113,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       try {
         for (const message of encodeLine(options.session, '\n')) options.send(message)
       } catch (error) {
-        fail(messageOf(error))
+        fail(messageOf(error), 'local')
       }
     },
 
@@ -1002,7 +1121,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       return quiet.elapsedMs()
     },
 
-    close: (reason) => fail(reason)
+    close: (reason) => release(reason)
   }
 }
 
