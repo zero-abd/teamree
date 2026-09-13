@@ -36,13 +36,10 @@ function setup(claim: unknown = { claim_type: 'live_human_presence', claim_resul
   }
 }
 describe('human worker enrollment', () => {
-  it('requires the game and a server claim, then binds the proof to team, handle and key', async () => {
+  it('requires a server claim, then binds the proof to team, handle and key', async () => {
     const { enrollment, invitation, provider } = setup()
     const session = enrollment.start(invitation.token)
-    await expect(enrollment.finish(session.id)).rejects.toThrow('both')
-    await expect(enrollment.persona(session.id)).rejects.toThrow('game')
-    expect(() => enrollment.game(session.id, [])).toThrow('route')
-    enrollment.game(session.id, session.sequence)
+    await expect(enrollment.finish(session.id)).rejects.toThrow('Complete Persona verification first')
     expect(await enrollment.persona(session.id)).toEqual({ accessToken: 'access' })
     await enrollment.persona(session.id)
     expect(provider.create).toHaveBeenCalledTimes(1)
@@ -66,7 +63,6 @@ describe('human worker enrollment', () => {
   ])('rejects invalid Persona result %j', async (claim) => {
     const { enrollment, invitation } = setup(claim)
     const session = enrollment.start(invitation.token)
-    enrollment.game(session.id, session.sequence)
     await enrollment.persona(session.id)
     await expect(enrollment.finish(session.id)).rejects.toThrow('did not pass')
     await expect(enrollment.finish(session.id)).rejects.toThrow('did not pass')
@@ -76,7 +72,7 @@ describe('human worker enrollment', () => {
     expect(() => enrollment.start('wrong')).toThrow('Invitation')
     const session = enrollment.start(invitation.token)
     setNow(session.expiresAt)
-    expect(() => enrollment.game(session.id, session.sequence)).toThrow('expired')
+    await expect(enrollment.persona(session.id)).rejects.toThrow('expired')
     await expect(enrollment.finish(session.id)).rejects.toThrow('expired')
   })
   it('limits session creation per invitation', () => {

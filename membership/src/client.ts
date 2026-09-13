@@ -3,7 +3,6 @@ import './style.css'
 
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 let session = ''
-let moves: number[] = []
 let widget: Relay | undefined
 let result: { memberFile: string; handle: string } | undefined
 let busy = false
@@ -32,7 +31,7 @@ async function action(run: () => Promise<void>) {
   }
 }
 function panel(name: string) {
-  for (const id of ['invite', 'game', 'persona', 'done']) element(`${id}-panel`).hidden = id !== name
+  for (const id of ['invite', 'persona', 'done']) element(`${id}-panel`).hidden = id !== name
   const heading = element(`${name}-panel`).querySelector('h2')!
   heading.tabIndex = -1
   heading.focus()
@@ -47,43 +46,12 @@ element('invite-form').addEventListener('submit', (event) => {
   void action(async () => {
     const data = await api('start', { invite: element<HTMLInputElement>('invite').value.trim() })
     session = data.id
-    moves = []
-    element('route').textContent = data.sequence.map((index: number) => data.crew[index]).join(' → ')
-    const crew = element('crew')
-    crew.replaceChildren()
-    data.crew.forEach((name: string, index: number) => {
-      const button = document.createElement('button')
-      button.className = 'crew-card'
-      button.textContent = `${['✦', '▧', '❋', '◎'][index]} ${name}`
-      button.addEventListener('click', () => {
-        if (moves.length >= 4 || busy) return
-        moves.push(index)
-        element('progress').textContent =
-          `${moves.length}/4 selected: ${moves.map((move) => data.crew[move]).join(' → ')}`
-        element<HTMLButtonElement>('game-submit').disabled = moves.length !== 4
-      })
-      crew.append(button)
-    })
     element('step1').classList.add('complete')
-    element('progress').textContent = '0/4 selected'
-    element<HTMLButtonElement>('game-submit').disabled = true
-    panel('game')
-  })
-})
-element('reset').onclick = () => {
-  moves = []
-  element('progress').textContent = '0/4 selected'
-  element<HTMLButtonElement>('game-submit').disabled = true
-}
-element('game-submit').onclick = () =>
-  void action(async () => {
-    await api('game', { id: session, moves })
-    const data = await api('persona', { id: session })
-    element('step2').classList.add('complete')
+    const persona = await api('persona', { id: session })
     panel('persona')
     widget?.destroy()
     widget = new Relay('#relay-container', {
-      accessToken: data.accessToken,
+      accessToken: persona.accessToken,
       theme: 'dark',
       onComplete: () => {
         void finish()
@@ -99,11 +67,12 @@ element('game-submit').onclick = () =>
       }
     })
   })
+})
 function finish() {
   return action(async () => {
     result = await api('finish', { id: session })
     widget?.destroy()
-    element('step3').classList.add('complete')
+    element('step2').classList.add('complete')
     element('instructions').textContent =
       `Save the download as .teamree/members/${result!.handle}.pub in your repository, then commit it and submit it for approval.`
     element('restart').hidden = true

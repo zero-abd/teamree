@@ -31,7 +31,6 @@ it('filters unsigned, forged and revoked roster entries and fails closed on brok
         handle: 'alice',
         publicKey,
         humanPresence: true,
-        gameCompleted: true,
         verifiedAt: 1000
       })
     ).toString('base64url')

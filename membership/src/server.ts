@@ -80,11 +80,6 @@ const server = createServer(async (req, res) => {
         return
       }
       const id = String(body.id)
-      if (path === '/api/game') {
-        enrollment.game(id, body.moves)
-        json(200, { ok: true })
-        return
-      }
       if (path === '/api/persona') {
         json(200, await enrollment.persona(id))
         return
@@ -115,7 +110,7 @@ const server = createServer(async (req, res) => {
     // Do not return SDK responses, tokens, or provider diagnostics to the browser.
     const message =
       error instanceof Error &&
-      /^(Invitation|Too many|Session|Verification|Complete|Game|That route|Persona verification)/.test(error.message)
+      /^(Invitation|Too many|Session|Verification|Complete|Persona verification)/.test(error.message)
         ? error.message
         : 'Unable to complete this step. Retry, or contact your team owner.'
     json(400, { error: message })

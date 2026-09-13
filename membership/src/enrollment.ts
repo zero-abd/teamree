@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt, sign } from 'node:crypto'
+import { createHash, randomBytes, sign } from 'node:crypto'
 
 export interface PersonaGateway {
   create(): Promise<{ relayToken: string; relaySecret: string; relaySessionAccessToken: string }>
@@ -9,15 +9,11 @@ export type Invitation = { token: string; handle: string; publicKey: string; exp
 type Session = {
   invitation: Invitation
   expiresAt: number
-  sequence: number[]
-  game: boolean
-  attempts: number
   persona?: { relayToken: string; relaySecret: string; relaySessionAccessToken: string; privacyPassToken: string }
   busy: boolean
   failed: boolean
   result?: { memberFile: string; credentialId: string; handle: string }
 }
-export const CREW = ['Navigator', 'Builder', 'Gardener', 'Explorer']
 
 export class Enrollment {
   private sessions = new Map<string, Session>()
@@ -45,10 +41,9 @@ export class Enrollment {
       throw new Error('Too many attempts. Try again after the current sessions expire.')
     }
     const id = randomBytes(32).toString('base64url')
-    const sequence = Array.from({ length: 4 }, () => randomInt(CREW.length))
     const expiresAt = Math.min(this.now() + 30 * 60_000, invitation.expiresAt)
-    this.sessions.set(id, { invitation, expiresAt, sequence, game: false, attempts: 0, busy: false, failed: false })
-    return { id, sequence, crew: CREW, expiresAt, handle: invitation.handle, teamId: this.options.teamId }
+    this.sessions.set(id, { invitation, expiresAt, busy: false, failed: false })
+    return { id, expiresAt, handle: invitation.handle, teamId: this.options.teamId }
   }
   private get(id: string) {
     const session = this.sessions.get(id)
@@ -57,21 +52,8 @@ export class Enrollment {
     if (session.failed) throw new Error('Verification did not pass. Start a new attempt or contact your team owner.')
     return session
   }
-  game(id: string, moves: unknown) {
-    const session = this.get(id)
-    if (session.game) return
-    if (++session.attempts > 5) throw new Error('Game attempts exhausted. Start again.')
-    if (
-      !Array.isArray(moves) ||
-      moves.length !== session.sequence.length ||
-      !moves.every((move, index) => move === session.sequence[index])
-    )
-      throw new Error('That route does not match. Try the sequence again.')
-    session.game = true
-  }
   async persona(id: string) {
     const session = this.get(id)
-    if (!session.game) throw new Error('Complete the crew game first.')
     if (session.persona) return { accessToken: session.persona.relaySessionAccessToken }
     if (session.busy) throw new Error('Verification is already being prepared.')
     session.busy = true
@@ -88,7 +70,7 @@ export class Enrollment {
   async finish(id: string) {
     const session = this.get(id)
     if (session.result) return session.result
-    if (!session.game || !session.persona) throw new Error('Complete both verification steps first.')
+    if (!session.persona) throw new Error('Complete Persona verification first.')
     if (session.busy) throw new Error('Verification is being checked. Try again shortly.')
     session.busy = true
     try {
@@ -113,7 +95,6 @@ export class Enrollment {
           handle,
           publicKey,
           humanPresence: true,
-          gameCompleted: true,
           verifiedAt
         })
       ).toString('base64url')

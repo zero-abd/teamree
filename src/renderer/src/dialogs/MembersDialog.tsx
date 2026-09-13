@@ -133,8 +133,8 @@ function SelfPanel({
     <form className="members__self members__self--join" onSubmit={submit}>
       <p className="members__self-head">You are not in this roster yet.</p>
       <p className="field__hint">
-        If your team requires human verification, send this public key to the owner for an invitation. Complete the crew
-        game and Persona check, then add the downloaded member file.
+        If your team requires human verification, send this public key to the owner for an invitation. Complete the
+        Persona check, then add the downloaded member file.
       </p>
       <label className="field">
         <span className="field__label">Your device public key</span>

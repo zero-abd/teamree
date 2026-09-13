@@ -80,7 +80,7 @@ export class TeamworkService {
 
     if (await readHumanPolicy(project.path)) {
       throw new Error(
-        'This team requires human verification. Ask the owner for an invitation, complete the crew game and Persona check, then save the signed member file in .teamree/members/. Your device public key is available in Members.'
+        'This team requires human verification. Ask the owner for an invitation, complete the Persona check, then save the signed member file in .teamree/members/. Your device public key is available in Members.'
       )
     }
 

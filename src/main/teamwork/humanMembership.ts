@@ -45,7 +45,6 @@ export function verifyHumanMembership(
       claim.publicKey === member.publicKey &&
       claim.handle === member.handle &&
       claim.humanPresence === true &&
-      claim.gameCompleted === true &&
       typeof claim.id === 'string' &&
       !policy.revoked.includes(claim.id) &&
       Number.isSafeInteger(claim.verifiedAt) &&

@@ -1,15 +1,13 @@
 # Human-backed workers
 
 An optional enrollment website for Teamree. A worker follows a team invitation,
-plays **Connect the crew**, completes Persona Relay's `live_human_presence`
-verification, and downloads a signed `.pub` member file. The desktop app validates
-the signature when reading the project roster. Existing Noise authentication
-proves possession of the corresponding device key when peers connect.
+completes Persona Relay's `live_human_presence` verification, and downloads a
+signed `.pub` member file. The desktop app validates the signature when reading
+the project roster. Existing Noise authentication proves possession of the
+corresponding device key when peers connect.
 
-The game is a required onboarding interaction, **not a reliable bot detector**.
-It is keyboard accessible, has visible text instructions, and has no speed test.
 Only a successful server-retrieved Persona claim grants the certificate. The
-browser callback, game solution, or a locally edited member file cannot grant it.
+browser callback or a locally edited member file cannot grant it.
 
 ## Run locally
 
@@ -85,7 +83,7 @@ invitation is reusable until it expires, but is restricted to its predetermined
 device key and handle. Sessions and completion responses live in server memory;
 restart requires a new enrollment attempt. Do not run multiple server instances
 without adding a shared session/rate-limit store. Per-process limits permit at
-most three active sessions per invitation and five game guesses per session.
+most three active sessions per invitation.
 
 This adds human verification to device membership. It does not establish legal
 identity, uniqueness, agent ownership records, or additional role permissions.
