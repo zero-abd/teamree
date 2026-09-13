@@ -226,8 +226,11 @@ export function TerminalView({
   // The palette changed, so the emulator's copy of it has to. This reads the
   // custom properties back off the document rather than taking the appearance
   // apart itself, which is what keeps one derivation behind both the chrome and
-  // the panes — and it runs after `App` has written them, because that effect
-  // is above this one in the tree.
+  // the panes — and it runs after `App` has written them because that write is
+  // a *layout* effect. Being above this one in the tree is not what puts it
+  // first; React flushes passive effects child-first, so a plain `useEffect`
+  // there would land after this one and every pane would repaint itself in the
+  // theme before last.
   //
   // Without it, switching a theme repainted the window around panes that stayed
   // the colour they were created in, and the only way to bring them over was to

@@ -4,6 +4,7 @@ import { applicationMenuTemplate } from './appMenu'
 import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
+import { createQuitSequence } from './quitSequence'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
 
 function createWindow(): BrowserWindow {
@@ -64,7 +65,6 @@ function windowBackground(): string {
 }
 
 let runtime: Runtime | undefined
-let stopping = false
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -128,12 +128,22 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   // Quitting waits for the runtime to release its socket and discovery file,
-  // otherwise the next launch inherits a stale endpoint.
+  // otherwise the next launch inherits a stale endpoint — and to write down
+  // what every pane printed, which is the last thing the teardown does and so
+  // the first thing an interrupted one loses. Every quit is held back until
+  // that has finished, including the second ⌘Q from somebody who read the pause
+  // as a key that did nothing; `quitSequence.ts` argues it in full.
+  const onBeforeQuit = createQuitSequence({
+    stop: () => runtime?.stop() ?? Promise.resolve(),
+    quit: () => app.quit()
+  })
   app.on('before-quit', (event) => {
-    if (!runtime || stopping) return
-    stopping = true
-    event.preventDefault()
-    void runtime.stop().finally(() => app.quit())
+    // Nothing has been started yet, so there is nothing to hold a quit for: no
+    // PTY, no socket, no transcript. Left to the sequence it would be one
+    // cancelled quit and one microtask, which is a delay with nothing on the
+    // other end of it.
+    if (!runtime) return
+    onBeforeQuit(event)
   })
 
   app.on('window-all-closed', () => {
