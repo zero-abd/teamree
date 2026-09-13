@@ -18,6 +18,7 @@ import type {
   TeamworkPublishPlan,
   TeamworkStatus,
   Terminal,
+  UpdateState,
   Worktree,
   WorktreeChanges,
   WorktreeDiff,
@@ -258,6 +259,15 @@ type WorkspaceState = {
    * and both belong next to the button that will be pressed again.
    */
   cliError: string | null
+  /**
+   * Whether a newer teamree exists, and whether this one is looking.
+   *
+   * Read at startup like the CLI's status, and re-read whenever the runtime
+   * says the check has something new to say — which it does for checks this
+   * window did not start: the one half a minute after launch, and the one
+   * behind the macOS app menu. Null means nobody has asked yet.
+   */
+  update: UpdateState | null
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
   /** True once the probe has answered, however it answered. Until then an
@@ -349,6 +359,22 @@ type WorkspaceState = {
    * panel.
    */
   dismissCliPrompt: () => Promise<void>
+
+  /** Re-reads what the runtime knows about newer releases. Asks nobody. */
+  loadUpdate: () => Promise<void>
+  /**
+   * Asks GitHub now, because somebody chose to.
+   *
+   * Raises a notice when there is nothing to report, and only then: a check
+   * somebody asked for has to answer even when the answer is "you are current",
+   * while the one the app makes by itself has to be silent unless it found
+   * something. A failed check says so too, because this one was asked for.
+   */
+  checkForUpdates: () => Promise<void>
+  /** Opens the newer release's download in the browser. */
+  downloadUpdate: () => Promise<void>
+  /** Turns the automatic check on or off. Remembered between runs. */
+  setAutomaticUpdates: (automatic: boolean) => Promise<void>
 
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
@@ -670,6 +696,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.terminals) reads.push(refreshTerminals())
     if (targets.members) reads.push(refreshMembers(), refreshRelays())
     if (targets.teammates) reads.push(refreshTeammates())
+    if (targets.updates) reads.push(get().loadUpdate())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
       reads.push(
@@ -879,6 +906,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     cliPending: false,
     cliInstall: null,
     cliError: null,
+    update: null,
     agents: [],
     agentsProbed: false,
     diff: null,
@@ -924,6 +952,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           .call('cli.status', {})
           .then((cli) => set({ cli }))
           .catch(() => {})
+        // And the same again for what the runtime knows about newer releases.
+        // A read out of its memory: it asks GitHub nothing, and whatever its
+        // own check finds arrives later on the change stream.
+        void get().loadUpdate()
 
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
         await refresher.flush()
@@ -1359,6 +1391,61 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // Worth a notice rather than a shrug: an answer that was not written
         // down is an answer that will be asked for again on the next launch.
         failed('Could not record that teamree asked about putting its CLI on your PATH')(error)
+      }
+    },
+
+    async loadUpdate() {
+      try {
+        set({ update: await runtimeClient.call('update.state', {}) })
+      } catch {
+        // Nothing. This is a read of what the runtime already knows, and a
+        // window that cannot perform it simply says nothing about updates —
+        // which is the same silence a check that found nothing produces.
+      }
+    },
+
+    async checkForUpdates() {
+      // Optimistic, so the row the user just pressed says "Checking…" rather
+      // than staying still until a round trip over a slow link completes.
+      const before = get().update
+      if (before) set({ update: { ...before, checking: true } })
+      try {
+        const update = await runtimeClient.call('update.check', {})
+        set({ update })
+        // The card says the rest when there is something to say. This is for
+        // the other two answers, which have nowhere else to appear — and which
+        // somebody who has just chosen "Check for updates" is owed.
+        if (update.available !== null) return
+        if (update.problem !== null) {
+          notify(`Could not check for updates: ${update.problem}`, 'info')
+          return
+        }
+        notify(`teamree ${update.current} is the latest release.`, 'info')
+      } catch (error) {
+        set({ update: before })
+        failed('Could not check for updates')(error)
+      }
+    },
+
+    async downloadUpdate() {
+      try {
+        await runtimeClient.call('update.download', {})
+      } catch (error) {
+        // Said out loud, unlike a failed check: this one is a button somebody
+        // pressed, and a button that does nothing at all is the worst outcome
+        // here — the release page is still reachable by hand.
+        failed('Could not open the download')(error)
+      }
+    },
+
+    async setAutomaticUpdates(automatic) {
+      const before = get().update
+      if (before) set({ update: { ...before, automatic } })
+      try {
+        set({ update: await runtimeClient.call('update.setAutomatic', { automatic }) })
+      } catch (error) {
+        set({ update: before })
+        failed('Could not change whether teamree checks for updates')(error)
       }
     },
 

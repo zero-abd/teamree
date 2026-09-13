@@ -7,6 +7,9 @@ const runtime = await startRuntime({
   userDataDir: process.env.TEAMREE_USER_DATA_DIR,
   version: process.env.TEAMREE_TEST_VERSION ?? '0.0.0-acceptance',
   serveRenderer: false,
+  // The suite has no business asking GitHub anything, and a check firing in the
+  // middle of it would be a network call inside a test that never asked for one.
+  checkForUpdates: false,
   onError: (error) => console.error('RUNTIME_ERROR', error?.message ?? error)
 })
 

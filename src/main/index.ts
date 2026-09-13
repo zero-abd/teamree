@@ -65,7 +65,19 @@ if (!app.requestSingleInstanceLock()) {
     // equivalent never reaches the web contents, so that one item is what the
     // renderer's "Close pane" binding has been losing to. See appMenu.ts.
     Menu.setApplicationMenu(
-      Menu.buildFromTemplate(applicationMenuTemplate({ developing: process.env.ELECTRON_RENDERER_URL !== undefined }))
+      Menu.buildFromTemplate(
+        applicationMenuTemplate({
+          developing: process.env.ELECTRON_RENDERER_URL !== undefined,
+          // Reads `runtime` when it is clicked rather than capturing it now:
+          // the menu is installed before the runtime starts, on purpose, and a
+          // click in the second before it is up does nothing rather than
+          // throwing. The answer reaches the window over the workspace stream,
+          // which is why nothing here touches a BrowserWindow.
+          checkForUpdates: () => {
+            void runtime?.checkForUpdates().catch((error: unknown) => console.warn('[updates]', error))
+          }
+        })
+      )
     )
 
     ipcMain.handle('teamree:select-project-folder', async (event) => {
@@ -81,7 +93,13 @@ if (!app.requestSingleInstanceLock()) {
     // The runtime comes up before any window so the first render can already
     // call it, and so the CLI endpoint exists as early as possible.
     try {
-      runtime = await startRuntime({ userDataDir: app.getPath('userData'), version: APP_VERSION })
+      runtime = await startRuntime({
+        userDataDir: app.getPath('userData'),
+        version: APP_VERSION,
+        // The one way this process opens a browser, handed over explicitly so
+        // that the update check's download link is the only thing that can.
+        openExternal: (url) => shell.openExternal(url)
+      })
     } catch (error) {
       console.error('[runtime] failed to start', error)
     }
