@@ -14,6 +14,8 @@ import {
   type WatchHandle
 } from './worktreeWatcher'
 
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
 /** What the kernel hands back once this user has no inotify instances left. */
 function enospc(): NodeJS.ErrnoException {
   return Object.assign(new Error('ENOSPC: System limit for number of file watchers reached'), { code: 'ENOSPC' })
@@ -486,31 +488,39 @@ describe('WorktreeWatcher', () => {
     created.push(checkout)
     await mkdir(path.join(checkout, 'src'), { recursive: true })
 
+    // darwin hands a new recursive watch the changes of the last ~50ms, so a
+    // watch opened straight after `mkdtemp` is told about its own directory
+    // being created and reports before this test has written anything. Measured
+    // here: 188 replays in 200 attempts at no gap, none at all at 50ms. Waiting
+    // the creation out is what makes the report below evidence of the write.
+    await delay(250)
+
+    let watcher!: WorktreeWatcher
     const reported = new Promise<void>((resolve, reject) => {
-      const watcher = new WorktreeWatcher({
-        onChange: () => {
-          watcher.close()
-          resolve()
-        },
+      watcher = new WorktreeWatcher({
+        onChange: resolve,
         // This is the only test that asks the kernel for a real watch, and a
         // watch is a scarce per-user resource. Left alone it does not fail —
         // it simply never fires, and the run dies thirty seconds later saying
         // nothing at all, sending the next reader hunting a race that is not
         // there.
-        onDegraded: (event) => {
-          watcher.close()
-          reject(new WatchRefused(event))
-        },
+        onDegraded: (event) => reject(new WatchRefused(event)),
         resolveGitDir: () => undefined,
         settleMs: 20,
         minIntervalMs: 0
       })
       watcher.sync([worktree('a', { path: checkout })])
-      // Written after the watch is up, or there would be nothing to notice.
-      setTimeout(() => void writeFile(path.join(checkout, 'src', 'App.tsx'), 'export {}\n'), 50)
     })
 
     try {
+      // The watch has to be listening before the write, and on darwin it starts
+      // some unmeasured time after `sync` returns — the same replay window is
+      // what covers the gap.
+      await delay(50)
+      // Awaited rather than left to a timer. A write still to come when the
+      // test ends lands in a directory `afterEach` has already removed, and an
+      // ENOENT nobody is waiting on fails whichever run it happens to land in.
+      await writeFile(path.join(checkout, 'src', 'App.tsx'), 'export {}\n')
       await reported
     } catch (error) {
       // A machine with nothing left to give proves nothing about this watcher,
@@ -518,6 +528,8 @@ describe('WorktreeWatcher', () => {
       // fault in code that was never run.
       if (error instanceof WatchRefused && error.isResourceShortage) ctx.skip(error.message)
       throw error
+    } finally {
+      watcher.close()
     }
   })
 })

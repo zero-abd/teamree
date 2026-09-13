@@ -81,7 +81,7 @@ import { readRoster } from '../roster'
 import { watchPane } from './paneWatch'
 import { createPeerLink, type LinkScheduler, type PeerLink } from './peerLink'
 import { presenceFor, type PresenceProject, type PresenceSource } from './presence'
-import { readProjectKey } from './projectKey'
+import { originMark, readProjectKey } from './projectKey'
 import { readRelayConfig, type RelayLocation } from './relayUrl'
 import { watchForWake, type WakeWatch } from './wakeWatch'
 import { webSocketDialer, type RelayDialer } from './relaySocket'
@@ -125,7 +125,16 @@ export type PeerServiceOptions = {
 
 type ProjectFacts = {
   projectId: string
+  /** The checkout, kept so a read can ask whether `origin` has moved since. */
+  path: string
   projectKey: string | undefined
+  /**
+   * What git's config looked like when `projectKey` was read from it.
+   *
+   * Everything else here comes out of `.teamree`, which is watched. `origin`
+   * does not, so this is how a read tells a cached key from a stale one.
+   */
+  originMark: string | undefined
   rosterKeys: string[]
   /** Public key to the handle the roster files it under, for display. */
   handles: Map<string, string>
@@ -408,7 +417,15 @@ export class PeerService {
     this.#options.onChange()
   }
 
-  /** Everything a window needs to say whether teamwork is running here. */
+  /**
+   * Everything a window needs to say whether teamwork is running here: a
+   * synchronous read of what the last reconcile found.
+   *
+   * Staying synchronous is the point, because the window asks this for every
+   * project on every refresh. The one fact behind it that nothing invalidates
+   * is therefore checked by the handler, which awaits `refreshIfOriginMoved`
+   * before asking.
+   */
   status(params: ParamsOf<'teamwork.status'>): TeamworkStatus {
     const facts = this.#projects.get(params.projectId)
     if (!facts) throw notFound(`no project with id ${params.projectId}`)
@@ -429,6 +446,31 @@ export class PeerService {
       links,
       readAt: this.#scheduler.now()
     }
+  }
+
+  /**
+   * Re-reads a project if `origin` has moved since the last reconcile.
+   *
+   * Every other fact behind `status` lives in `.teamree`, which is watched and
+   * swept, so a change there reconciles on its own. The origin is git's own
+   * config, nothing here watches it, and "no origin" is the state the runbook
+   * says catches the person setting teamwork up for everybody else — the
+   * example repository is created without a remote and adding one is step two.
+   * So the read that reports it is the read that checks it.
+   *
+   * The check is a `stat`, which is why it can sit in front of a method the
+   * window calls on every refresh; git is asked again only when that `stat`
+   * says the answer could have changed.
+   *
+   * A whole reconcile rather than a re-read of the one project, because an
+   * origin that has become usable gives the project a key, and the key is what
+   * the links are made from: correcting the sentence on screen and leaving
+   * nothing dialled would be a second way to be wrong.
+   */
+  async refreshIfOriginMoved(projectId: string): Promise<void> {
+    const facts = this.#projects.get(projectId)
+    if (!facts || originMark(facts.path) === facts.originMark) return
+    await this.reconcile()
   }
 
   /**
@@ -1180,6 +1222,10 @@ export class PeerService {
   }
 
   async #readProject(project: Project, identityKey: string): Promise<ProjectFacts> {
+    // Stamped before git is asked, never after: a remote added while the
+    // subprocess was running then leaves a mark the next read disagrees with,
+    // which costs one re-read rather than losing the change.
+    const mark = originMark(project.path)
     const [roster, relay, key] = await Promise.all([
       readRoster(project.path).catch(() => ({ entries: [], problems: [] })),
       readRelayConfig(project.path, this.#options.env),
@@ -1189,7 +1235,9 @@ export class PeerService {
     const handles = new Map(roster.entries.map((entry) => [entry.publicKey, entry.handle]))
     const facts: ProjectFacts = {
       projectId: project.id,
+      path: project.path,
       projectKey: key.ok ? key.key : undefined,
+      originMark: mark,
       rosterKeys: roster.entries.map((entry) => entry.publicKey),
       relay: relay.configured ? relay.location : null,
       enrolled: roster.entries.some((entry) => entry.publicKey === identityKey),
