@@ -841,6 +841,27 @@ const realScheduler: TransportScheduler = {
   }
 }
 
+/**
+ * The output one stream frame stands for, in bytes.
+ *
+ * A `data` event is worth what it carries and an `elided` is worth what it says
+ * went missing, because both describe bytes the pane printed — the difference
+ * between them is only whether the wire had room for them. Everything else is a
+ * fact rather than a volume and is worth nothing: an exit is not output.
+ *
+ * Exported because two readers downstream have to weigh a run of frames against
+ * a scrollback that may or may not still hold the same bytes, and a second
+ * opinion about what counts as output is a second answer to the same question.
+ */
+export function outputBytes(event: unknown): number {
+  const data = outputOf(event)
+  if (data !== undefined) return byteLength(data)
+  if (typeof event !== 'object' || event === null) return 0
+  const record = event as { type?: unknown; bytes?: unknown }
+  if (record.type !== 'elided' || typeof record.bytes !== 'number') return 0
+  return Number.isFinite(record.bytes) ? Math.max(0, Math.trunc(record.bytes)) : 0
+}
+
 /** The payload of a `data` event, or undefined for anything that is not one. */
 function outputOf(event: unknown): string | undefined {
   if (typeof event !== 'object' || event === null) return undefined

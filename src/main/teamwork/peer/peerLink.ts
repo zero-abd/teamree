@@ -42,6 +42,7 @@ import type { MethodName, ParamsOf, ResultOf } from '../../../shared/methods'
 import { createInitiatorSession, createResponderSession, isPeerError, type PeerSession } from '../../../shared/peer'
 import {
   createPeerTransport,
+  outputBytes,
   type RemoteReadVerdict,
   type Answered,
   type PeerTransport,
@@ -56,6 +57,15 @@ import { epochAt, epochEndsAt, rendezvousToken, rendezvousUrl, sessionPrologue, 
 
 /** One of the teammate's stream events, and where it sat in the received order. */
 type HeldEvent = { event: unknown; sequence: number }
+
+/**
+ * One stream's frames waiting for whoever asked for them, and what did not fit.
+ *
+ * The bound below is a bound and has to stay one, so a hold that runs long
+ * enough throws output away. `lost` is what that cost, in bytes, and `lostAt` is
+ * the frame it started at — the two things an `elided` is made of.
+ */
+type Unrouted = { events: HeldEvent[]; lost: number; lostAt: number }
 
 /** A quiet pair still has to say something, or the relay's idle deadline ends it. */
 export const KEEPALIVE_MS = 120_000
@@ -164,6 +174,15 @@ export const WAITING_TOO_LONG_DETAIL =
  * writes frames behind the answer rather than after it. The window is one round
  * trip, so these are generous; they are bounds rather than a capacity, and a
  * stream nobody ever claims cannot grow without limit.
+ *
+ * Reaching the event bound throws output away, and that is said rather than
+ * done quietly: the frames that survive are handed over behind an `elided`
+ * carrying what went, the same event the owner's own pacer writes when its
+ * buffer overruns, because it is the same fact — output the pane printed and
+ * this side will never show. A relay that stalls and then hands over a fat
+ * batch is exactly the shape that reaches this, and it reaches it in one
+ * synchronous run of frames, before the continuation that would have attached
+ * the route has had a turn.
  */
 export const MAX_UNROUTED_STREAMS = 16
 export const MAX_UNROUTED_EVENTS = 256
@@ -320,7 +339,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
   /** Streams this side opened on the teammate, by subscription id. */
   const routes = new Map<string, (event: unknown, sequence: number) => void>()
   /** Events for a subscription whose answer has not landed yet, in order. */
-  const unrouted = new Map<string, HeldEvent[]>()
+  const unrouted = new Map<string, Unrouted>()
   let cancelPresenceRoute: (() => void) | undefined
   let connection: RelayConnection | undefined
   let session: PeerSession | undefined
@@ -578,11 +597,21 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     let held = unrouted.get(stream)
     if (!held) {
       if (unrouted.size >= MAX_UNROUTED_STREAMS) return
-      held = []
+      held = { events: [], lost: 0, lostAt: 0 }
       unrouted.set(stream, held)
     }
-    if (held.length >= MAX_UNROUTED_EVENTS) held.shift()
-    held.push({ event, sequence })
+    if (held.events.length >= MAX_UNROUTED_EVENTS) {
+      const dropped = held.events.shift()
+      if (dropped !== undefined) {
+        // The oldest, because the newest output is the output somebody is
+        // waiting to see — the same trade the owner's pacer makes, and counted
+        // in the same units so the two holes read as one number when they land
+        // in the same window.
+        if (held.lost === 0) held.lostAt = dropped.sequence
+        held.lost += outputBytes(dropped.event)
+      }
+    }
+    held.events.push({ event, sequence })
   }
 
   /** Both public call shapes, and the one refusal they share. */
@@ -603,7 +632,12 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
     // look later than it was.
     const held = unrouted.get(subscription)
     unrouted.delete(subscription)
-    for (const { event, sequence } of held ?? []) onEvent(event, sequence)
+    // In front of what outlived it, because that is where the hole is: what went
+    // was in front of everything still here. It carries the sequence of the
+    // first frame dropped, so a reader joining by frame order places the hole
+    // where it happened rather than at the boundary it happens to be read at.
+    if (held !== undefined && held.lost > 0) onEvent({ type: 'elided', bytes: held.lost }, held.lostAt)
+    for (const { event, sequence } of held?.events ?? []) onEvent(event, sequence)
     return () => {
       routes.delete(subscription)
     }
