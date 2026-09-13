@@ -130,7 +130,7 @@ export function Sidebar({ newWorktreeHint }: { newWorktreeHint: string }): React
         {projects.map((project) => {
           const rows = matching.filter((worktree) => worktree.projectId === project.id)
           const isCollapsed = Boolean(collapsed[project.id])
-          const summary = teamworkSummary(teamwork[project.id])
+          const summary = teamworkSummary(teamwork[project.id], now)
           // Under the same project, because that is what they are: the same
           // repository, checked out somewhere else. The rows below make whose
           // they are unmissable, which is what lets them share the list.

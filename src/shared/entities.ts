@@ -528,6 +528,23 @@ export type PeerLink = {
   detail?: string
   /** When the phase last changed, by this machine's clock. */
   since: number
+  /**
+   * When something from them last decrypted, by this machine's clock — and
+   * only once that was long enough ago to mean anything.
+   *
+   * `since` cannot answer this. It is when the *phase* moved, so a link
+   * established three hours ago and silent for four minutes carries the same
+   * `since` as one that is fine, and `connected` on its own asserts health for
+   * the whole of the window before the silence deadline ends it.
+   *
+   * Absent while the link is talking, and absent while it is down. A healthy
+   * link gives the window nothing new to say; a link that is not up has a
+   * `detail` that already says what happened to it, and an age beside that
+   * would be a second, competing account of the same silence. The link decides
+   * when the number is worth carrying, so there is one threshold rather than
+   * one here and another wherever it is drawn.
+   */
+  lastHeardAt?: number
   /** How many times this link has been built, so a flapping one is visible. */
   attempts: number
 }
@@ -573,7 +590,14 @@ export type TeamworkStatus = {
 export type TeammateWorktree = PeerWorktree & {
   handle: string
   publicKey: string
-  /** When this was last heard, by this machine's clock. */
+  /**
+   * When the snapshot this row came out of arrived, by this machine's clock.
+   *
+   * The age of the picture, and deliberately not the age of the silence. Every
+   * pane's quiet time on this row is the owner's own measurement plus whatever
+   * has elapsed since, so a stamp that moved on contact rather than on content
+   * would make an hour-old pane claim to have gone quiet seconds ago.
+   */
   heardAt: number
   /**
    * Whether the link this came over is confirmed and connected right now.
@@ -598,7 +622,19 @@ export type TeammateStanding = {
   publicKey: string
   /** Their link is connected and has confirmed key possession. */
   connected: boolean
-  /** When anything was last heard from them, or null if it never has been. */
+  /**
+   * When their picture was last taken, by this machine's clock, or null if one
+   * never has been.
+   *
+   * The age of the snapshot, not of the contact: it moves when a *changed*
+   * snapshot arrives, so a teammate whose worktrees have been static for an
+   * hour has an hour-old one while their machine is connected and fine. Null
+   * versus a number is the fact this carries — a colleague whose app has never
+   * been up while yours was is not a colleague with no worktrees — and the
+   * number itself is the age of what is shown. How long since anything at all
+   * was heard is the link's business, and `PeerLink.lastHeardAt` is where it
+   * is kept.
+   */
   heardAt: number | null
 }
 
