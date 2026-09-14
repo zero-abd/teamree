@@ -18,6 +18,22 @@ function pendingStop(): { stop: () => Promise<void>; calls: () => number; finish
   }
 }
 
+/**
+ * The error the sequence reported first, asserted to be there rather than
+ * reached through an optional chain.
+ *
+ * `calls[0]?.[0]` reads as safe and is not: on a spy that was never called the
+ * whole expression is `undefined` and the `.message` after it throws a
+ * TypeError naming neither the spy nor the expectation. Every caller has just
+ * asserted the call count, so the honest thing is to say so once, here, where a
+ * failure can be explained.
+ */
+function firstProblem(onProblem: { mock: { calls: unknown[][] } }): Error {
+  const [problem] = onProblem.mock.calls[0] ?? []
+  if (!(problem instanceof Error)) throw new Error('the sequence reported no problem to read a message from')
+  return problem
+}
+
 describe('quitting while the runtime is still letting go', () => {
   it('holds the first quit back and starts the teardown', () => {
     const teardown = pendingStop()
@@ -80,7 +96,7 @@ describe('quitting while the runtime is still letting go', () => {
 
     await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
     expect(onProblem).toHaveBeenCalledTimes(1)
-    expect((onProblem.mock.calls[0]?.[0] as Error).message).toContain('socket')
+    expect(firstProblem(onProblem).message).toContain('socket')
   })
 })
 
@@ -148,7 +164,7 @@ describe('quitting while the app is still starting up', () => {
     // Said out loud: this is the one quit that can leave a pty running, and
     // without a line here nothing would ever explain how.
     expect(onProblem).toHaveBeenCalledTimes(1)
-    expect((onProblem.mock.calls[0]?.[0] as Error).message).toContain('had not finished')
+    expect(firstProblem(onProblem).message).toContain('had not finished')
   })
 
   // A launch that failed is a launch that is over. The failure belongs to

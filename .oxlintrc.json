@@ -1,0 +1,29 @@
+{
+  // Two rules this codebase breaks on purpose, turned off here with the reason,
+  // so that `npm run lint` can be run with --deny-warnings and mean something.
+  //
+  // Without that flag the gate could not fail at all. oxlint reports every rule
+  // it has, correctness ones included, at warning severity and exits 0; a
+  // duplicate object key planted in src/shared/theme.ts was printed and the run
+  // still passed. A gate that cannot say no is the shape the smoke test had.
+  //
+  // Turning the flag on means the twenty-eight warnings standing in the tree
+  // have to be answered rather than scrolled past, and twenty-four of them are
+  // these two rules being wrong about deliberate code. The remaining four were
+  // real and are fixed in the files that carried them.
+  "rules": {
+    // Every `for (const x of [...collection])` in this codebase copies before
+    // it iterates because the body mutates the collection — closing the
+    // connections in a map while walking its keys, destroying the sockets in a
+    // set while walking the set, delivering a frame to listeners any of which
+    // may unsubscribe on the way. Each site already says so in a comment above
+    // it. Taking the spread out, which is what this rule asks for, would turn
+    // all twenty-two into iteration over a collection being modified.
+    "unicorn/no-useless-spread": "off",
+    // Control characters are the subject here, not an accident. The two regexes
+    // this fires on are the sanitizer's own definition of what may survive into
+    // a restored pane, and the check that refuses a path with a control
+    // character in its name. Both have to name the range to do their job.
+    "no-control-regex": "off"
+  }
+}

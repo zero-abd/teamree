@@ -31,11 +31,19 @@ pushes spent the month, after which every pull request carried a red cross that
 was about the allowance rather than about the code — which is the fastest way to
 teach everybody to ignore a red cross.
 
-That sequence has been run on a hosted runner, once, on 13 September 2026: every
-step of it, including `npm run install:verify`. So the instructions in
-[`install.md`](install.md) have been machine-checked rather than only written
-down, which is what that document claims. It is also the only time that will have
-happened until somebody runs it by hand again.
+That sequence has been run on a hosted runner, once, on 13 September 2026. It is
+also the only time that will have happened until somebody runs it by hand again.
+
+One correction to what this paragraph used to say. It claimed that run included
+`npm run install:verify`, and therefore that the instructions in
+[`install.md`](install.md) had been machine-checked rather than only written
+down. They had not been. The script reached its macOS half and died there on an
+unimported `existsSync` — a fault that arrived in the same commit as the script
+and as this claim, so the command has never once completed. What had been run was
+its first half, which compares the document against the release notes and stops
+before the bundle on anything that is not a Mac; that half exits 0, and exiting 0
+was read as the check having passed. The import is fixed, and the macOS half is
+waiting for the first Mac to run it.
 
 Nothing runs on a push, on a pull request or on a tag now, which puts the
 day-to-day checks on whoever is editing.

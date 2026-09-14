@@ -9,7 +9,7 @@
 // worktree that already has panes. A row that looks right and runs nothing is
 // the failure this guards against.
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledAgent, Project, Worktree } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'

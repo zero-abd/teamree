@@ -18,7 +18,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "pretest": "node scripts/require-test-environment.mjs",
     "test": "vitest run",
-    "lint": "oxlint src",
+    "lint": "oxlint --deny-warnings src",
     "format": "oxfmt -c=.oxfmtrc.json .",
     "smoke": "npm run build && node scripts/run-smoke.mjs",
     "postinstall": "node scripts/fix-pty-permissions.mjs",

@@ -476,13 +476,11 @@ describe('typing is a request', () => {
     mount()
     await watch.resolve()
     vi.useFakeTimers()
-    let allow: (() => void) | undefined
-    call.mockImplementation(
-      () =>
-        new Promise<undefined>((resolve) => {
-          allow = () => resolve(undefined)
-        })
-    )
+    // Nothing ever resolves this, and that is the test: the owner's machine
+    // never answers, so the pane has to say so on its own rather than waiting
+    // for a reply that is not coming. The test below is the other half, and it
+    // keeps the resolver because it does answer.
+    call.mockImplementation(() => new Promise<undefined>(() => {}))
 
     await act(async () => {
       for (const key of 'npm test') fakeTerms[0]?.data?.(key)
