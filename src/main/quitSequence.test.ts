@@ -83,3 +83,91 @@ describe('quitting while the runtime is still letting go', () => {
     expect((onProblem.mock.calls[0]?.[0] as Error).message).toContain('socket')
   })
 })
+
+// The other end of the same loss: a quit pressed before the launch has
+// finished, when the panes of the last session are already running and the
+// handle that could kill them does not exist yet.
+describe('quitting while the app is still starting up', () => {
+  /** A launch the test finishes when it chooses, or never. */
+  function pendingLaunch(): { whenStarted: () => Promise<void>; finish: () => void; fail: () => void } {
+    let settle: { resolve: () => void; reject: (error: Error) => void } | undefined
+    const launched = new Promise<void>((resolve, reject) => {
+      settle = { resolve, reject }
+    })
+    return {
+      whenStarted: () => launched,
+      finish: () => settle?.resolve(),
+      fail: () => settle?.reject(new Error('the workspace file would not open'))
+    }
+  }
+
+  it('holds the quit until the launch has finished, and only then tears down', async () => {
+    const launch = pendingLaunch()
+    const teardown = pendingStop()
+    const quit = vi.fn()
+    const preventDefault = vi.fn()
+
+    createQuitSequence({ whenStarted: launch.whenStarted, stop: teardown.stop, quit })({ preventDefault })
+
+    // Held, and nothing torn down yet: what would do the tearing down is what
+    // the launch is still busy producing.
+    expect(preventDefault).toHaveBeenCalledTimes(1)
+    expect(teardown.calls()).toBe(0)
+
+    launch.finish()
+    await vi.waitFor(() => expect(teardown.calls()).toBe(1))
+    expect(quit).not.toHaveBeenCalled()
+
+    teardown.finish()
+    await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
+  })
+
+  // A launch that hangs must not take the quit key with it. The user gets a
+  // pause and then a quit, which is a worse shutdown than a complete one and a
+  // far better outcome than an app that cannot be left.
+  it('stops waiting for a launch that is not coming back, and quits anyway', async () => {
+    const neverStarts = new Promise<void>(() => {})
+    const teardown = pendingStop()
+    const quit = vi.fn()
+    const onProblem = vi.fn()
+
+    createQuitSequence({
+      whenStarted: () => neverStarts,
+      startupGraceMs: 10,
+      stop: teardown.stop,
+      quit,
+      onProblem
+    })({ preventDefault: vi.fn() })
+
+    // The teardown runs anyway, because a launch part-way through may still
+    // have left something reachable behind, and then the quit goes through.
+    await vi.waitFor(() => expect(teardown.calls()).toBe(1))
+    teardown.finish()
+    await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
+
+    // Said out loud: this is the one quit that can leave a pty running, and
+    // without a line here nothing would ever explain how.
+    expect(onProblem).toHaveBeenCalledTimes(1)
+    expect((onProblem.mock.calls[0]?.[0] as Error).message).toContain('had not finished')
+  })
+
+  // A launch that failed is a launch that is over. The failure belongs to
+  // whoever started it, and it says nothing about whether a pty is still
+  // running — which one may well be.
+  it('tears down and quits when the launch failed, without reporting it twice', async () => {
+    const launch = pendingLaunch()
+    const teardown = pendingStop()
+    const quit = vi.fn()
+    const onProblem = vi.fn()
+
+    createQuitSequence({ whenStarted: launch.whenStarted, stop: teardown.stop, quit, onProblem })({
+      preventDefault: vi.fn()
+    })
+    launch.fail()
+
+    await vi.waitFor(() => expect(teardown.calls()).toBe(1))
+    teardown.finish()
+    await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
+    expect(onProblem).not.toHaveBeenCalled()
+  })
+})

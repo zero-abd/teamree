@@ -116,6 +116,12 @@ const ALLOWED = [
     why: 'TEAMREE_SKIP_PTY_TESTS=1: no pane exits, so no exit reaches the stream.'
   },
   {
+    file: 'src/main/quitDuringStartup.test.ts',
+    suite: 'quitting before the app has finished starting',
+    when: ptyOptOut,
+    why: 'TEAMREE_SKIP_PTY_TESTS=1: no pane comes back from the last session, so no quit can race one.'
+  },
+  {
     file: 'src/main/runtime/workspaceSubscription.test.ts',
     suite: 'workspace stream terminal producers',
     when: ptyOptOut,

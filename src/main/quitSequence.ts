@@ -27,6 +27,38 @@
 // the rejection escape — is an unhandled rejection in the main process during
 // shutdown, which says nothing useful about a shutdown that was going to end
 // anyway.
+//
+// A quit pressed during startup is the same loss arrived at from the other end.
+// The panes of the last session come back before the handle that can kill them
+// exists: `restoreSessions()` spawns a pty per recorded pane while `startRuntime`
+// is still opening the scrollback archive, binding the CLI socket and writing
+// the discovery file, so for that second there is a great deal to tear down and
+// nothing to tear it down with. A quit let through then ends the process with
+// those panes still running, and they die of a master fd closing under them —
+// unkilled, their transcripts never written, the discovery file left behind for
+// the next launch to find. So a quit that arrives during a launch waits for the
+// launch to finish and then tears down what it produced. Waiting is the honest
+// shape here because the teardown that works is the one the launch hands back;
+// the alternative is a second teardown that knows every half-built state
+// `startRuntime` passes through, kept in step with it forever, for a window a
+// second wide.
+//
+// That wait has an end. A launch that has not finished within the grace below
+// is not one a user pressing ⌘Q should be held hostage to, and the rule is the
+// one the failing teardown already follows: an app that cannot be quit is the
+// worse failure. When the grace runs out the quit goes ahead with whatever
+// teardown is reachable — which may be none — and says so on the way past.
+
+/**
+ * How long a quit waits for a launch that is still in flight.
+ *
+ * Long enough that a launch doing real work is never cut off — reading the
+ * workspace file, sweeping the scrollback directory and spawning a pane's
+ * worth of pty each take milliseconds, not seconds, even on a slow disk — and
+ * short enough that a launch which is never going to finish costs the user one
+ * pause rather than a process they have to kill from outside.
+ */
+export const STARTUP_GRACE_MS = 5_000
 
 export type QuitSequenceOptions = {
   /**
@@ -37,6 +69,18 @@ export type QuitSequenceOptions = {
   stop: () => Promise<void>
   /** Asks for the quit again once `stop` has finished. `app.quit`. */
   quit: () => void
+  /**
+   * The launch in flight, when there is one: `whenReady` through to the first
+   * window. Awaited before `stop`, so that a quit arriving mid-launch tears
+   * down the panes that launch restored rather than racing them.
+   *
+   * A call rather than a promise, like everything else this is handed, so that
+   * the sequence can be wired where the other handlers are — before there is
+   * any launch to name — and asks only once a quit has actually arrived.
+   */
+  whenStarted?: () => Promise<unknown>
+  /** Overrides {@link STARTUP_GRACE_MS}. For the tests, which cannot wait. */
+  startupGraceMs?: number
   /** Where a teardown that failed goes. Never a dialog: the app is leaving. */
   onProblem?: (error: unknown) => void
 }
@@ -65,6 +109,9 @@ export function createQuitSequence(options: QuitSequenceOptions): (event: Quitta
 
     void (async () => {
       try {
+        if (options.whenStarted !== undefined) {
+          await waitForLaunch(options.whenStarted, options.startupGraceMs ?? STARTUP_GRACE_MS, onProblem)
+        }
         await options.stop()
       } catch (error) {
         onProblem(error)
@@ -73,5 +120,44 @@ export function createQuitSequence(options: QuitSequenceOptions): (event: Quitta
         options.quit()
       }
     })()
+  }
+}
+
+/**
+ * Waits for the launch in flight, and gives up on it after `graceMs`.
+ *
+ * A launch that failed is still a launch that is over, so its rejection is
+ * swallowed here rather than reported: the failure belongs to whoever started
+ * it, and all this needs to know is that the waiting is finished. The teardown
+ * that follows then runs against whatever that launch left behind.
+ *
+ * Nothing is thrown either way, because every outcome leads to the same place —
+ * tear down what can be reached, and quit.
+ */
+async function waitForLaunch(
+  whenStarted: () => Promise<unknown>,
+  graceMs: number,
+  onProblem: (error: unknown) => void
+): Promise<void> {
+  let expiry: ReturnType<typeof setTimeout> | undefined
+  try {
+    const outcome = await Promise.race([
+      whenStarted().then(
+        () => 'launched' as const,
+        () => 'launched' as const
+      ),
+      new Promise<'gave up'>((resolve) => {
+        expiry = setTimeout(() => resolve('gave up'), graceMs)
+      })
+    ])
+    // Worth a line: the teardown about to run is one that may reach nothing,
+    // and this is the only record of why a quit left panes behind.
+    if (outcome === 'gave up') {
+      onProblem(new Error(`the launch had not finished after ${graceMs}ms, so this quit is not waiting for it`))
+    }
+  } finally {
+    // Otherwise the pending timer is one more thing holding a process that has
+    // been asked to leave.
+    clearTimeout(expiry)
   }
 }
