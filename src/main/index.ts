@@ -76,7 +76,13 @@ if (!app.requestSingleInstanceLock()) {
     existing.focus()
   })
 
-  void app.whenReady().then(async () => {
+  // The launch, from `whenReady` to the first window, as one promise — because
+  // a quit arriving in the middle of it has to wait for it. Between
+  // `restoreSessions()` and `startRuntime` resolving there are panes running
+  // that nothing can kill yet, and `quitSequence.ts` makes that argument in
+  // full. Its own failures are logged here rather than left to reject, so that
+  // a launch nobody is waiting on is never an unhandled rejection.
+  const launched = app.whenReady().then(async () => {
     // Before any window: with no menu of its own Electron installs a default
     // one, whose File menu is a single "Close Window" on Cmd+W. A menu key
     // equivalent never reaches the web contents, so that one item is what the
@@ -126,6 +132,11 @@ if (!app.requestSingleInstanceLock()) {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
   })
+  // Nothing awaits `launched` unless a quit arrives while it is in flight,
+  // which is to say almost never. Without this line a launch that threw would
+  // be an unhandled rejection in the main process rather than a line in the
+  // log, on a run where nobody pressed anything.
+  void launched.catch((error: unknown) => console.error('[launch]', error))
 
   // Quitting waits for the runtime to release its socket and discovery file,
   // otherwise the next launch inherits a stale endpoint — and to write down
@@ -133,18 +144,17 @@ if (!app.requestSingleInstanceLock()) {
   // the first thing an interrupted one loses. Every quit is held back until
   // that has finished, including the second ⌘Q from somebody who read the pause
   // as a key that did nothing; `quitSequence.ts` argues it in full.
+  //
+  // A quit that arrives before the launch is done waits for the launch first.
+  // `runtime` being undefined is not the same as nothing being started: by then
+  // `restoreSessions()` has spawned a pty for every pane of the last session,
+  // and the handle that can kill them is what this is waiting for.
   const onBeforeQuit = createQuitSequence({
+    whenStarted: () => launched,
     stop: () => runtime?.stop() ?? Promise.resolve(),
     quit: () => app.quit()
   })
-  app.on('before-quit', (event) => {
-    // Nothing has been started yet, so there is nothing to hold a quit for: no
-    // PTY, no socket, no transcript. Left to the sequence it would be one
-    // cancelled quit and one microtask, which is a delay with nothing on the
-    // other end of it.
-    if (!runtime) return
-    onBeforeQuit(event)
-  })
+  app.on('before-quit', onBeforeQuit)
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()

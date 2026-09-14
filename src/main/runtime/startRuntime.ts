@@ -1,6 +1,12 @@
 // Boots the runtime core and hands back a handle the app shuts down with.
 // Assembly order matters: state, then handlers, then transports, because a
 // client must never reach a dispatcher whose registry is still half-built.
+//
+// An assembly that fails releases what it had already built before it rethrows.
+// Registering the handlers brings the last session's panes back, so by the time
+// anything further can fail there are real processes running and no handle to
+// them anywhere else: a launch that threw and left them behind would be orphaned
+// ptys under a window that never opened.
 
 import { join } from 'node:path'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
@@ -91,46 +97,87 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const areas = registerHandlers(registry, { openExternal, scrollback })
   const dispatch = createDispatcher(registry)
 
-  // After the dispatcher, and deliberately: a teammate reaching a registry that
-  // was still being filled would be told a method does not exist when it merely
-  // did not exist yet. Not awaited, because it reads rosters and asks git for a
-  // remote, and none of that is a reason for a window to open late — and never
-  // fatal, because an app that cannot reach a relay is still an app.
-  areas.peers.attach(dispatch)
-  if (serveTeamwork) void areas.peers.start().catch(report)
-
-  // Nothing is awaited and nothing is requested yet: this sets a timer for half
-  // a minute's time, and the check it eventually makes is best-effort and
-  // silent about failing. Startup must cost nothing for it.
-  if (checkForUpdates) areas.updates.start()
-
   let socketServer: RuntimeSocketServer | undefined
   const discoveryPath = discoveryFilePath(userDataDir)
+  // Replaced once the renderer bridge below is installed. A no-op until then,
+  // which is part of what makes the teardown safe on a runtime only part-way up.
+  let uninstallBridge = (): void => {}
 
-  if (serveCli) {
-    const endpoint = resolveEndpoint(userDataDir)
-    try {
-      socketServer = await startSocketServer({ endpoint, dispatch, subscriptions, onError: report })
-      context.endpoint = socketServer.endpoint
-      await writeDiscoveryFile(discoveryPath, {
-        endpoint: socketServer.endpoint,
-        pid: context.pid,
-        version,
-        startedAt: context.startedAt
-      })
-    } catch (error) {
-      // The GUI is still fully usable without a CLI endpoint, so this is
-      // reported and survived rather than fatal.
-      report(error)
+  // Declared before the rest of the assembly rather than inside the handle,
+  // because the assembly may not reach the handle and this is what releases
+  // what it built. Every step of it works on a runtime that is only part-way
+  // up: the bridge is a no-op until one is installed, the areas exist from the
+  // moment `registerHandlers` returned, and the socket is released only if
+  // there is one.
+  const stop = async (): Promise<void> => {
+    uninstallBridge()
+    // Before anything that takes time: a pending check firing during shutdown
+    // would be a request nobody is left to read the answer to.
+    areas.updates.stop()
+    // First: a relay connection outliving the process it reports on would
+    // have a teammate watching panes that are already being killed below.
+    areas.peers.stop()
+    // Before the PTYs, because a shell dying rewrites files and there is no
+    // point reporting changes nobody is left to read.
+    areas.worktreeFiles.close()
+    areas.teamworkFiles.close()
+    // Kills every PTY before the sockets go, so nothing is orphaned.
+    await areas.terminals.shutdown().catch(report)
+    subscriptions.closeAll()
+    if (socketServer) {
+      await socketServer.close().catch(report)
+      await removeDiscoveryFile(discoveryPath)
     }
+    await store.flush().catch(report)
   }
 
-  // Imported lazily because it pulls in electron, which is absent when the
-  // runtime is driven headlessly by the acceptance suite.
-  let uninstallBridge = (): void => {}
-  if (serveRenderer) {
-    const { installIpcBridge } = await import('./ipcBridge')
-    uninstallBridge = installIpcBridge({ dispatch, subscriptions })
+  try {
+    // After the dispatcher, and deliberately: a teammate reaching a registry that
+    // was still being filled would be told a method does not exist when it merely
+    // did not exist yet. Not awaited, because it reads rosters and asks git for a
+    // remote, and none of that is a reason for a window to open late — and never
+    // fatal, because an app that cannot reach a relay is still an app.
+    areas.peers.attach(dispatch)
+    if (serveTeamwork) void areas.peers.start().catch(report)
+
+    // Nothing is awaited and nothing is requested yet: this sets a timer for half
+    // a minute's time, and the check it eventually makes is best-effort and
+    // silent about failing. Startup must cost nothing for it.
+    if (checkForUpdates) areas.updates.start()
+
+    if (serveCli) {
+      const endpoint = resolveEndpoint(userDataDir)
+      try {
+        socketServer = await startSocketServer({ endpoint, dispatch, subscriptions, onError: report })
+        context.endpoint = socketServer.endpoint
+        await writeDiscoveryFile(discoveryPath, {
+          endpoint: socketServer.endpoint,
+          pid: context.pid,
+          version,
+          startedAt: context.startedAt
+        })
+      } catch (error) {
+        // The GUI is still fully usable without a CLI endpoint, so this is
+        // reported and survived rather than fatal.
+        report(error)
+      }
+    }
+
+    if (serveRenderer) {
+      // Imported lazily because it pulls in electron, which is absent when the
+      // runtime is driven headlessly by the acceptance suite.
+      const { installIpcBridge } = await import('./ipcBridge')
+      uninstallBridge = installIpcBridge({ dispatch, subscriptions })
+    }
+  } catch (error) {
+    // A launch that fails here has already brought the last session's panes
+    // back — `registerHandlers` restores them — and is about to hand back no
+    // handle at all, so this is the last code that can still reach them. Left
+    // alone they would be orphaned ptys under a window that never opened, which
+    // is a worse ending than the failure itself. The failure is still the
+    // caller's to hear about, so it is rethrown once the releasing is done.
+    await stop().catch(report)
+    throw error
   }
 
   return {
@@ -143,26 +190,6 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     checkForUpdates: async () => {
       await areas.updates.check({ force: true })
     },
-    stop: async () => {
-      uninstallBridge()
-      // Before anything that takes time: a pending check firing during shutdown
-      // would be a request nobody is left to read the answer to.
-      areas.updates.stop()
-      // First: a relay connection outliving the process it reports on would
-      // have a teammate watching panes that are already being killed below.
-      areas.peers.stop()
-      // Before the PTYs, because a shell dying rewrites files and there is no
-      // point reporting changes nobody is left to read.
-      areas.worktreeFiles.close()
-      areas.teamworkFiles.close()
-      // Kills every PTY before the sockets go, so nothing is orphaned.
-      await areas.terminals.shutdown().catch(report)
-      subscriptions.closeAll()
-      if (socketServer) {
-        await socketServer.close().catch(report)
-        await removeDiscoveryFile(discoveryPath)
-      }
-      await store.flush().catch(report)
-    }
+    stop
   }
 }
