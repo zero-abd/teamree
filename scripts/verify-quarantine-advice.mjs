@@ -14,11 +14,15 @@
 //
 // Only meaningful on macOS, where quarantine and Gatekeeper exist at all.
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { findPackagedApp } from './packaged-app.mjs'
 import { releaseNotes } from './release.mjs'
 
-const DOC = 'docs/install.md'
+// The document to read the advice out of. Overridable by argument for the same
+// reason `verify-package.mjs` takes a path: the test that proves this script
+// still refuses a document it should refuse has to be able to hand it one, and
+// the alternative is a test that edits docs/install.md underneath a developer.
+const DOC = process.argv[2] ?? 'docs/install.md'
 // What the document tells the reader to install into, and therefore what the
 // command it prints is written against. Asserted below rather than assumed: if
 // the doc starts recommending somewhere else, the substitution this script does
@@ -49,7 +53,15 @@ function run(command, args, options = {}) {
  */
 function documentedCommand() {
   const doc = readFileSync(DOC, 'utf8')
-  const blocks = [...doc.matchAll(/```(?:sh|bash|console)?\n([\s\S]*?)```/g)].map((match) => match[1].trim())
+  // Any info string, not a list of the three this document happened to use.
+  // The list was `sh|bash|console`, and `install.md` has since grown a
+  // ```powershell block: an opening fence the pattern could not match, which
+  // left its closing fence to be read as the next opening one and paired every
+  // fence below it with the wrong partner. The half of the document under that
+  // block was therefore being searched inside out, and a second, contradictory
+  // quarantine command placed anywhere in it was invisible to the refusal two
+  // dozen lines down that exists to catch exactly that.
+  const blocks = [...doc.matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)].map((match) => match[1].trim())
   // Any `xattr` here is advice about this warning; there is nothing else in an
   // install document it could be for. Matched on the tool rather than on the
   // attribute name so that `xattr -cr`, which names no attribute and would
