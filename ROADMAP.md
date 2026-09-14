@@ -431,6 +431,11 @@ the pane existed.
 
 - [x] Each pane's output kept as a capped tail beside the workspace file, one
       small file per pane, written when the pane exits and again on the way out
+- [x] And checkpointed while the pane is still running, which is the pane worth
+      keeping: fifteen seconds after output, armed by the output itself so a
+      pane sitting at a prompt holds no timer and costs nothing, never twice
+      inside the interval however much is printed, and skipped outright when the
+      tail would say what the file already says
 - [x] A restored pane opens on that record, under a line saying what it is and
       above a line saying where the new shell begins — nothing in it can be
       taken for something that is still running
@@ -526,9 +531,20 @@ recorded so none of them is discovered by surprise later.
   the last 128 KiB per pane, reduced to text and colour so that nothing stored can
   act when it is replayed, under a line saying it is a record of a session that has
   ended and above a line saying where the live shell starts. It is written when a
-  pane exits and again when the app quits, so what is still at risk is narrower than
-  it was: a pane that is *running* something when the machine loses power loses
-  whatever it printed since it last exited.
+  pane exits, when the app quits, and — for a pane that is still running — fifteen
+  seconds after the last output it printed.
+
+  That third write is what a crash, a force-quit and a flat battery reach, and it
+  does not make the record complete. **The last fifteen seconds are always at
+  risk**, and on a pane printing steadily that is however many lines fit in
+  fifteen seconds. The record says so itself rather than leaving it to be
+  discovered: the line above a restored pane gives the time the record was last
+  written down, not the time the pane stopped, so a reader can see where it
+  stops being true. Nothing here is a durability guarantee — it is a bound on
+  what is lost, which is a different and smaller promise. The interval is what it
+  is because the alternative is paying for it: a checkpoint is a write per pane
+  that is producing output, and the shorter it gets the more an app full of busy
+  panes writes to disk for a case that is rare.
 
   The process half stands, and it is the larger half. The PTY still dies with the
   app. A command is still never re-issued unless it resumes something, so a pane

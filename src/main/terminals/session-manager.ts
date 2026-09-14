@@ -12,6 +12,7 @@ import type { ParamsOf, TerminalEvent } from '../../shared/methods'
 import { detectAgent, newSessionId, pinSessionCommand, pinsOwnSessionId, type AgentKind } from './agent-command'
 import { appendPane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
+import { CHECKPOINT_SOURCE_BYTES, ScrollbackCheckpoints } from './scrollbackCheckpoints'
 import type { RecordedScrollback } from './scrollbackRecord'
 import { PtySession } from './pty-session'
 import { invalidParams, notFound } from './service-error'
@@ -83,6 +84,12 @@ export type TerminalSessionManagerOptions = {
   /** Pass an archive and they come back showing what they last printed. */
   scrollback?: ScrollbackRepository
   /**
+   * How long after a running pane's output its record is checkpointed. The
+   * default is the one `scrollbackCheckpoints.ts` argues for; a test that would
+   * otherwise wait fifteen seconds for a write asks for a shorter one.
+   */
+  checkpointIntervalMs?: number
+  /**
    * Delivers events for subscriptions opened through subscribe(). Ignored when
    * the caller attaches streams itself via attachStream().
    */
@@ -109,11 +116,25 @@ export class TerminalSessionManager {
   private readonly layouts: LayoutRepository
   private readonly records: SessionRepository
   private readonly scrollback: ScrollbackRepository | undefined
+  private readonly checkpoints: ScrollbackCheckpoints | undefined
 
   constructor(private readonly options: TerminalSessionManagerOptions = {}) {
     this.layouts = options.layouts ?? new InMemoryLayoutRepository()
     this.records = options.sessions ?? new InMemorySessionRepository()
     this.scrollback = options.scrollback
+    // Only with somewhere to write: a manager with no archive has no reason to
+    // hold a timer, and the panes of an in-memory one are not coming back.
+    const archive = options.scrollback
+    this.checkpoints =
+      archive === undefined
+        ? undefined
+        : new ScrollbackCheckpoints({
+            // A pane that has been closed in the interval since the checkpoint
+            // was armed answers nothing, and nothing is written for it.
+            read: (terminalId) => this.sessions.get(terminalId)?.recordedOutput(CHECKPOINT_SOURCE_BYTES),
+            put: (terminalId, text) => archive.put(terminalId, text),
+            ...(options.checkpointIntervalMs === undefined ? {} : { intervalMs: options.checkpointIntervalMs })
+          })
   }
 
   list(worktreeId?: string): Terminal[] {
@@ -392,6 +413,13 @@ export class TerminalSessionManager {
     this.ownSubscriptions.clear()
     await Promise.all(sessions.map((session) => session.close()))
 
+    // After the closes, and before the writes below. A pty being torn down
+    // drains what the child had written and not yet delivered, and that output
+    // arms a checkpoint like any other; left armed it would fire against an
+    // archive that has already been flushed and a process that is leaving.
+    // What it would have written is written here instead, in full.
+    this.checkpoints?.cancelAll()
+
     // After the closes, not before them: closing a pty drains whatever the
     // child had written and not yet delivered — see `pty-tail.ts` — and the
     // last thing a command printed is the part somebody comes back for.
@@ -438,7 +466,7 @@ export class TerminalSessionManager {
     })
 
     this.sessions.set(session.id, session)
-    this.watchForExit(session)
+    this.watchSession(session)
     const snapshot = session.snapshot()
     this.records.putTerminal({
       id: session.id,
@@ -473,8 +501,15 @@ export class TerminalSessionManager {
    * the terminal id and dropped with it, which is the same arrangement the
    * workspace file describes for mutes and standing permissions, and it is what
    * leaves nothing anywhere needing to be swept.
+   *
+   * The pending checkpoint goes first and for the same reason. A checkpoint
+   * armed by the pane's last chunk of output would otherwise fire after the
+   * removal below and write the file back, which is a closed pane's transcript
+   * sitting in the directory until something else sweeps it — and a pane the
+   * user deliberately shut coming back with output on the next launch.
    */
   private forget(terminalId: string): void {
+    this.checkpoints?.cancel(terminalId)
     this.records.removeTerminal(terminalId)
     this.scrollback?.remove(terminalId)
   }
@@ -495,19 +530,36 @@ export class TerminalSessionManager {
     return cloneLayout(this.layouts.putLayout(cloneLayout(layout)))
   }
 
-  private watchForExit(session: PtySession): void {
+  /**
+   * The manager's own subscription to a pane: what it printed, and that it
+   * ended.
+   *
+   * One listener for both, because this runs on the PTY's data path — every
+   * chunk every pane prints passes through here — and the work it does per
+   * chunk has to stay at the level of a map lookup. Arming a checkpoint is that
+   * cheap by construction; see `scrollbackCheckpoints.ts`.
+   */
+  private watchSession(session: PtySession): void {
     let detach = (): void => {}
     detach = session.on((event) => {
+      if (event.type === 'data') {
+        this.checkpoints?.note(session.id)
+        return
+      }
       if (event.type !== 'exit') return
       detach()
+      // Nothing more will be printed, so the checkpoint that was armed by the
+      // last chunk has nothing left to add and the write below is final.
+      this.checkpoints?.cancel(session.id)
       // A pane already out of the registry was closed or shut down on purpose:
       // that removal is what a client was told about, and an exit event for a
       // terminal it can no longer list would be news about nothing.
       if (this.sessions.get(session.id) !== session) return
       // A pane whose process has ended appends nothing more, so this is the
-      // moment its output is final and the cheapest one at which to write it
-      // down. The quit path writes every pane again; this is what stands
-      // between a finished build and an app that never got to quit properly.
+      // moment its output is final and the only one at which a record of it can
+      // be complete. The other two writes bound how much a pane that is still
+      // running can lose; this one is the pane that has finished, written in
+      // full and never written again.
       this.scrollback?.put(session.id, session.recordedOutput())
       for (const listener of this.exitListeners) listener(session.id, event.exitCode)
     })

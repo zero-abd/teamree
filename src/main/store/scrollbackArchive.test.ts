@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -25,7 +25,23 @@ describe('ScrollbackArchive', () => {
     await store.flush()
 
     expect(store.read('term_1')?.text).toBe('built in 4.2s\r\n')
-    expect(store.read('term_1')?.endedAt).toBeGreaterThan(0)
+    expect(store.read('term_1')?.recordedAt).toBeGreaterThan(0)
+  })
+
+  // The field was called `endedAt` before a record could be written while its
+  // pane was still running. A build that upgrades must not date every pane it
+  // restores to the moment of the upgrade.
+  it('reads the date out of a record an older build wrote', async () => {
+    const store = await archive()
+    store.put('term_1', 'placeholder\r\n')
+    await store.flush()
+    await writeFile(
+      join(store.directory, 'term_1.json'),
+      JSON.stringify({ version: 1, endedAt: 1_700_000_000_000, text: 'built in 4.2s\r\n' }),
+      'utf8'
+    )
+
+    expect(store.read('term_1')?.recordedAt).toBe(1_700_000_000_000)
   })
 
   it('has nothing to say about a pane it never heard of', async () => {
@@ -122,6 +138,92 @@ describe('ScrollbackArchive', () => {
 
     expect(await readdir(store.directory).catch(() => [])).toEqual([])
     expect(problems).toHaveLength(10)
+  })
+
+  // A pane is written down when it exits and again when the app quits, and a
+  // running one is checkpointed in between. Most of the time the second and
+  // third of those have nothing new to say.
+  it('does not write a record that would say what the file already says', async () => {
+    const store = await archive()
+    store.put('term_1', 'built in 4.2s\r\n')
+    await store.flush()
+
+    // Stood on from outside, so a write that did happen is unmistakable: the
+    // archive would put its own document back over this.
+    await writeFile(join(store.directory, 'term_1.json'), 'untouched', 'utf8')
+    store.put('term_1', 'built in 4.2s\r\n')
+    await store.flush()
+    expect(await readFile(join(store.directory, 'term_1.json'), 'utf8')).toBe('untouched')
+
+    // Output the pane did not have before is a different record, and that one
+    // is written.
+    store.put('term_1', 'built in 4.2s\r\nand then this\r\n')
+    await store.flush()
+    expect(store.read('term_1')?.text).toContain('and then this')
+  })
+
+  // Two bytes that sanitise to the same record are the same record: a
+  // full-screen program redrawing a spinner prints constantly and says nothing
+  // this directory can keep.
+  it('does not write when everything new was dropped on the way in', async () => {
+    const store = await archive()
+    store.put('term_1', 'waiting\r\n')
+    await store.flush()
+
+    await writeFile(join(store.directory, 'term_1.json'), 'untouched', 'utf8')
+    store.put('term_1', `waiting\r\n${ESC}[2J${ESC}[H${ESC}[6n`)
+    await store.flush()
+    expect(await readFile(join(store.directory, 'term_1.json'), 'utf8')).toBe('untouched')
+  })
+
+  it('writes again after the record it was skipping was removed', async () => {
+    const store = await archive()
+    store.put('term_1', 'output\r\n')
+    store.remove('term_1')
+    store.put('term_1', 'output\r\n')
+    await store.flush()
+
+    expect(store.read('term_1')?.text).toBe('output\r\n')
+  })
+
+  // The skip remembers what reached the disk, so a write that did not reach it
+  // must not be remembered — or a pane would go unwritten until it printed
+  // something new, which for a pane waiting on a prompt is never.
+  it('tries again after a write that failed, even with nothing new to say', async () => {
+    const problems: string[] = []
+    const store = await archive([], problems)
+    store.put('term_1', 'placeholder\r\n')
+    await store.flush()
+
+    // A directory where the record goes: the rename at the end of the write
+    // cannot land on it, and this is a failure the archive survives rather
+    // than throws out of.
+    await rm(join(store.directory, 'term_1.json'))
+    await mkdir(join(store.directory, 'term_1.json'))
+    store.put('term_1', 'built in 4.2s\r\n')
+    await store.flush()
+    expect(problems.join(' ')).toContain('term_1')
+
+    await rm(join(store.directory, 'term_1.json'), { recursive: true })
+    store.put('term_1', 'built in 4.2s\r\n')
+    await store.flush()
+    expect(store.read('term_1')?.text).toBe('built in 4.2s\r\n')
+  })
+
+  // The checkpoint of a running pane and the write of a quitting app can be
+  // handed to this within a tick of each other. Neither may leave a reader
+  // holding half of one record and half of the other.
+  it('leaves one whole record when two writes of one pane arrive together', async () => {
+    const store = await archive()
+    store.put('term_1', 'checkpoint\r\n')
+    store.put('term_1', 'checkpoint\r\nand the last line before the quit\r\n')
+    await store.flush()
+
+    const onDisk = await readFile(join(store.directory, 'term_1.json'), 'utf8')
+    expect(() => JSON.parse(onDisk) as unknown).not.toThrow()
+    expect(store.read('term_1')?.text).toBe('checkpoint\r\nand the last line before the quit\r\n')
+    // And nothing half-written left behind under its own name.
+    expect(await readdir(store.directory)).toEqual(['term_1.json'])
   })
 
   it('drops a pane record when the pane is dropped', async () => {

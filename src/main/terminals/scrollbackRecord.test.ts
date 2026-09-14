@@ -116,7 +116,7 @@ describe('tailFromLineBoundary', () => {
 
 describe('the marks around a record', () => {
   it('says what the output is, and where this session starts', () => {
-    const framed = replayableRecord({ text: 'built in 4.2s\r\n', endedAt: Date.parse('2026-03-04T09:05:00Z') })
+    const framed = replayableRecord({ text: 'built in 4.2s\r\n', recordedAt: Date.parse('2026-03-04T09:05:00Z') })
 
     expect(framed).toContain('record')
     expect(framed).toContain('nothing in it is running')
@@ -131,6 +131,12 @@ describe('the marks around a record', () => {
   it('dates the record, and resets the colour on both sides of itself', () => {
     const at = Date.parse('2026-03-04T09:05:00Z')
     expect(openingMark(at)).toContain(clockLabel(at))
+    // The date is the moment the record was written down, not the moment the
+    // pane stopped: a record checkpointed while its pane was still running ends
+    // wherever the last checkpoint reached, and the mark has to say so rather
+    // than promise the reader the whole of what the pane printed.
+    expect(openingMark(at)).toContain('up to')
+    expect(openingMark(at)).toContain('last written down')
     expect(clockLabel(at)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
     // A record that ended mid-colour must not paint the mark, or the shell.
     expect(openingMark(at).startsWith(`${ESC}[0m`)).toBe(true)
