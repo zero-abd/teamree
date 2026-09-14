@@ -432,7 +432,8 @@ terminal in it and type.
 
 All of that is teamree on its own. The other half — the reason it exists — is
 teamwork: a teammate's worktrees and panes in your sidebar, theirs to watch live
-and to type into, over a relay your team stands up itself.
+and — once you have read what they are sending and allowed it — to type into,
+over a relay your team stands up itself.
 **[`docs/trying-teamwork.md`](trying-teamwork.md)** is the walkthrough, and it is
 honest about the price of entry: two Macs, a relay somebody on the team hosts
 (there is no default and nobody hosts one for you), and each person's public key

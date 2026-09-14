@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>teamree — run coding agents in parallel, one git worktree each</title>
-<meta name="description" content="An ADE built for teamwork. Run several coding agents at once, each in its own git worktree, and keep track of all of them in one window. Split terminals, a CLI the agents can drive, and teammates who can watch and type into each other's panes. Free, for macOS, and the source is on GitHub.">
+<meta name="description" content="An ADE built for teamwork. Run several coding agents at once, each in its own git worktree, and keep track of all of them in one window. Split terminals, a CLI the agents can drive, and teammates who can watch each other's panes and, once the owner allows it, type into them. Free, for macOS, and the source is on GitHub.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#000000">
 <link rel="canonical" href="https://teamree.us/">
@@ -790,7 +790,8 @@ pre[tabindex]{ scrollbar-gutter:stable; }
   <h1>Agentic development, <em>built for teams.</em></h1>
   <p class="lede">
     Every task gets its own git worktree and its own terminals, with a coding agent in
-    each — and your teammates can watch, and type into, any pane from their own machine.
+    each — and your teammates can watch any pane from their own machine, and type into it
+    once you allow them.
   </p>
 
   <div class="cta">
@@ -819,10 +820,21 @@ pre[tabindex]{ scrollbar-gutter:stable; }
       </p>
     </div>
     <figure class="shot">
-      <!-- The media slot. The frame reserves 1400x900 and both an <img> and a
-           <video> fill it absolutely, so landing the demo is one content edit:
-           delete the <img> below and un-comment the <video>. Nothing in the
-           stylesheet moves and nothing on the page reflows.
+      <!-- The media slot. The frame reserves 1400x900 and both the <video> and
+           the <img> inside it fill it absolutely, so replacing one with the
+           other moves nothing in the stylesheet and reflows nothing on the page.
+           The <img> is the fallback a browser that plays neither source lands
+           on, which is why it carries its own alt text.
+
+           BOTH the clip and that still were captured before 0.2.0 and look it:
+           the window in them is the old slate ground rather than the absolute
+           black teamree now ships, the status rail reads "Runtime ready 0.1.2",
+           the teamwork panel is the one that did not ask which end you were on,
+           and a watched pane is still the corner card it stopped being. What
+           they show is otherwise what the aria-label and the alt text say. They
+           want retaking on a Mac; nothing here has to change when they are, as
+           the names do not carry a version.
+
            The width/height are the clip's real intrinsic size, read off the
            decoded video rather than off the filename — videoWidth is 1281, not
            the round 1280 it looks like it should be. That is 1.5622 against the
@@ -830,10 +842,10 @@ pre[tabindex]{ scrollbar-gutter:stable; }
            by cropping about two pixels a side. The reserved ratio stays the
            still's, so the box is the same box either way, and the attributes
            say what the file actually is.
-           The marker is `hero:video:parked`, deliberately NOT the
-           `demo:video:parked` that site/tools/sync-demos.mjs un-parks — that
-           tool reconciles the clip frames against demos/manifest.json, and this
-           frame is not one of them. -->
+           This frame is deliberately not one of the four that
+           site/tools/sync-demos.mjs reconciles against demos/manifest.json, and
+           carries no `demo:video:parked` marker, so that tool leaves its size
+           and its caption alone. -->
       <div class="shot-frame" data-media="tour">
         <video width="1281" height="820" muted loop playsinline preload="metadata" controls
                poster="/demos/showcase.jpg"
@@ -954,6 +966,12 @@ demo:video:parked -->
         resumed; an ordinary pane returns as a shell in the same directory, and its command is
         never re-run.
       </p>
+      <p>
+        The window is absolute black by default, and every colour in it is yours: four presets,
+        forty-two colours you can edit, and a legibility pass over whatever you build, so an
+        editor this open cannot leave teamree unreadable. Terminals follow the window, all
+        sixteen ANSI colours with them.
+      </p>
     </div>
     </div>
   </div>
@@ -1012,7 +1030,7 @@ demo:video:parked -->
   <div class="wrap">
     <div class="sec-head">
       <p class="demo-step">04 &mdash; Teamwork</p>
-      <h2>Watch a teammate's pane. Answer the prompt it is stuck on.</h2>
+      <h2>Watch a teammate's pane. Ask to answer the prompt it is stuck on.</h2>
     </div>
     <div class="demo flip">
     <figure class="demo-figure">
@@ -1024,7 +1042,7 @@ demo:video:parked -->
         <!-- demo:video:parked
 <video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/teamwork.jpg"
-               aria-label="Screen capture: two people connected in teamree, one watching and typing into the other's pane.">
+               aria-label="Screen capture: two people connected in teamree, one typing into the other's pane, and the owner being asked and allowing it before the keystrokes run.">
           <source src="/demos/teamwork.webm" type="video/webm">
           <source src="/demos/teamwork.mp4" type="video/mp4">
         </video>
@@ -1034,8 +1052,11 @@ demo:video:parked -->
     </figure>
     <div class="demo-body">
       <p>
-        A teammate&rsquo;s worktrees appear in your sidebar. You can read what one of their
-        panes is doing and type into it.
+        A teammate&rsquo;s worktrees appear in your sidebar, and one of their panes opens as a
+        pane of your own &mdash; beside your work rather than floating over it, moved, resized
+        and closed like any other, so two teammates side by side is an ordinary thing to do.
+        You can read what a pane is doing and type into it; what you type runs when its owner
+        allows it.
       </p>
       <p>
         <strong>Adding a teammate's key lets them ask to run commands on your machine, as
@@ -1045,8 +1066,11 @@ demo:video:parked -->
         so. It is also built so that none of it can be used invisibly: the pane says it is being
         watched and by whom, typing is attributed live, and every remote write is recorded on
         your machine with who and when. Mute is instant and yours, and answers the question
-        before it is asked. The prompt catches accidents; once you allow somebody, they can run
-        anything. Add the keys of people you would hand an unlocked laptop to.
+        before it is asked. Be plain about what the prompt is: a guard against accident and
+        inattention &mdash; a paste into the wrong window, an answer to a question the pane has
+        already moved past &mdash; and not a boundary against somebody who means you harm, who
+        can be allowed once, legitimately, and then type anything. Add the keys of people you
+        would hand an unlocked laptop to.
       </p>
       <p>
         Every guard sits at the owner&rsquo;s end: their machine refuses unless your key is on
@@ -1083,6 +1107,8 @@ demo:video:parked -->
 <span class="tok-p">teamree</span> team members app         <span class="tok-c"># the roster, as the repository records it</span>
 <span class="tok-p">teamree</span> team watch app ana <span class="tok-f">--follow</span>
 <span class="tok-p">teamree</span> team type app ana <span class="tok-f">--text</span> y <span class="tok-f">--enter</span>
+<span class="tok-p">teamree</span> team requests app        <span class="tok-c"># keystrokes held, waiting on your word</span>
+<span class="tok-p">teamree</span> team allow ask_3         <span class="tok-c"># the answer, from a machine nobody is at</span>
 <span class="tok-p">teamree</span> team write-log            <span class="tok-c"># every remote keystroke, kept</span></code></pre>
       </div>
       <div class="cmd has-copy">
