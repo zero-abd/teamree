@@ -53,6 +53,17 @@ export type OwnerRig = {
   /** The subscription channel a `terminal.subscribe` opened, by pane. */
   pane: (terminalId: string) => { emit: (event: unknown) => void; close: () => void } | undefined
   held: () => number
+  /**
+   * The panes the transport last told the owner this teammate has open.
+   *
+   * The exact seam the owner's "watched by" row is fed from: `PeerService`
+   * keeps nothing of its own about who is reading, it files whatever arrives
+   * here. So a test that wants to know what the owner would be shown asks this
+   * rather than reaching for a window.
+   */
+  watched: () => readonly string[]
+  /** Every scrollback read the dispatcher answered, in order. */
+  reads: () => readonly string[]
 }
 
 export function ownerRig(): OwnerRig {
@@ -62,11 +73,20 @@ export function ownerRig(): OwnerRig {
   const registry = new MethodRegistry(createRuntimeContext({ version: 't', store: {} as never, subscriptions: hub }))
   const written: string[] = []
   const judged: RemoteWriteRequest[] = []
+  const reads: string[] = []
+  let watched: readonly string[] = []
   let dispatched = 0
 
   registry.register('terminal.write', Params.terminalWrite, (params) => {
     written.push(params.data)
     return { written: true as const }
+  })
+  // The scrollback a watcher joins on. Answered out of a buffer on the real
+  // machine, and here out of nothing at all, because what these tests ask of it
+  // is whether it was answered and what the owner was told about it.
+  registry.register('terminal.read', Params.terminalRead, (params) => {
+    reads.push(params.terminalId)
+    return { data: '' }
   })
   registry.register('terminal.subscribe', Params.terminalSubscribe, (params, call) => ({
     subscription: hub.subscribe(call.connectionId, (channel) => {
@@ -107,6 +127,9 @@ export function ownerRig(): OwnerRig {
       judged.push(write)
       return { ok: true }
     },
+    onWatchChange: (terminalIds) => {
+      watched = terminalIds
+    },
     onFatal: () => {}
   })
 
@@ -119,7 +142,9 @@ export function ownerRig(): OwnerRig {
     judged: () => judged,
     written: () => written,
     pane: (terminalId) => panes.get(terminalId),
-    held: () => hub.countFor('peer_owner')
+    held: () => hub.countFor('peer_owner'),
+    watched: () => watched,
+    reads: () => reads
   }
 }
 
