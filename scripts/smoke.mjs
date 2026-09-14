@@ -79,10 +79,18 @@ app.on('window-all-closed', () => {})
 // Attached at construction: the app loads the renderer into the window in the
 // same breath as it creates it, and a listener added after that would miss
 // whatever the first load had to say.
+// Raised only while `checkRendererBoundary` is deliberately provoking the
+// content security policy. Chromium reports a script it refused to run as a
+// console *error*, and a refusal is what that check is asking for — so for the
+// length of it the refusal is collected from the page's own
+// `securitypolicyviolation` event and the console line it also produces is not
+// counted as a fault. Nothing else in this file turns it on.
+let provoking = false
+
 const opened = new Promise((resolve) => {
   app.once('browser-window-created', (_event, window) => {
     window.webContents.on('console-message', (event) => {
-      if (event.level === 'error') failures.push(`console error: ${event.message}`)
+      if (event.level === 'error' && !provoking) failures.push(`console error: ${event.message}`)
     })
     window.webContents.on('did-fail-load', (_loadEvent, code, description) => {
       failures.push(`did-fail-load ${code} ${description}`)
@@ -147,8 +155,84 @@ async function run() {
     'the runtime did not answer a call from the renderer'
   )
 
+  await checkRendererBoundary(window, ask)
   await checkPeerCrypto()
   checkLocalBoundary()
+}
+
+/**
+ * What the window does with bytes it did not write.
+ *
+ * Every line of `docs/renderer-boundary.md` rests on four settings and one
+ * refusal, and none of them can be read off the source with any confidence: a
+ * `webPreferences` is a request, what the window ended up with is a fact, and
+ * the two are only the same until somebody adds a second window or a default
+ * changes under the app. So they are read back off the running window.
+ *
+ * Two of the three settings turn out to pin themselves, which was worth finding
+ * out rather than assuming. Turning the sandbox on breaks the preload outright —
+ * it is an ES module and a sandboxed preload is a classic script — and turning
+ * `contextIsolation` off makes `contextBridge` refuse to run at all; this
+ * harness already fails on a preload that will not load, so neither can be done
+ * quietly. `nodeIntegration` is the one that can: with context isolation still
+ * on, turning it on injects nothing the page can see, the bridge is still there,
+ * the runtime still answers, and every check below this one but the first would
+ * pass. That is the setting this reads back.
+ *
+ * The navigation check is the one that found something. A navigated-to document
+ * keeps this window's preload — which is the whole runtime, the same catalogue
+ * `docs/local-access.md` describes — and brings no policy of its own, because
+ * the app's is a `<meta>` tag in the app's own HTML. That was watched happening
+ * before `will-navigate` existed: the window went to a file written seconds
+ * earlier and `window.teamree.runtime.call('status.get')` answered from it.
+ */
+async function checkRendererBoundary(window, ask) {
+  const prefs = window.webContents.getLastWebPreferences() ?? {}
+  const expected = { contextIsolation: true, nodeIntegration: false, sandbox: false }
+  for (const [setting, want] of Object.entries(expected)) {
+    if (prefs[setting] !== want) failures.push(`webPreferences.${setting} is ${prefs[setting]}, expected ${want}`)
+  }
+
+  // The consequence of the two above, rather than a restatement of them: with
+  // context isolation on and node integration off there is no Node in the page
+  // at all, which is what makes the bridge the only way out of it.
+  const nodeInThePage = JSON.parse(
+    await ask('JSON.stringify([typeof require, typeof process, typeof module, typeof Buffer])')
+  )
+  if (nodeInThePage.some((seen) => seen !== 'undefined')) {
+    failures.push(`the renderer can see Node: require/process/module/Buffer are ${nodeInThePage.join(', ')}`)
+  }
+
+  // The policy in index.html, enforced rather than merely present. `script-src`
+  // is not set there, so this is `default-src 'self'` doing the work — which is
+  // the half of a meta policy worth checking, because a meta policy is also the
+  // half that a navigation leaves behind.
+  provoking = true
+  const refusal = await ask(
+    'new Promise((resolve) => {' +
+      'document.addEventListener("securitypolicyviolation", (event) => resolve(event.effectiveDirective), { once: true });' +
+      'const script = document.createElement("script");' +
+      'script.textContent = "window.__smokeInlineRan = true";' +
+      'document.head.appendChild(script);' +
+      'setTimeout(() => resolve("the inline script was not refused"), 1000)' +
+      '})'
+  )
+  const inlineRan = await ask('Boolean(window.__smokeInlineRan)')
+  provoking = false
+  if (refusal !== 'script-src-elem') failures.push(`an inline script in the renderer was answered with ${refusal}`)
+  if (inlineRan) failures.push('an inline script ran in the renderer, so the content security policy is not enforced')
+
+  // And the refusal the document is mostly about. A page that could navigate
+  // could replace itself with anything and keep the bridge.
+  const onTheApp = window.webContents.getURL()
+  const elsewhere = pathToFileURL(join(root, 'package.json')).href
+  await ask(`(() => { location.href = ${JSON.stringify(elsewhere)}; return "asked" })()`)
+  await new Promise((resolve) => setTimeout(resolve, 1_000))
+  const landed = window.webContents.getURL()
+  if (landed !== onTheApp) failures.push(`the renderer navigated the window to ${landed}`)
+  if (failures.length === 0) {
+    console.log('smoke: renderer has no Node, refuses an inline script, and cannot navigate the window')
+  }
 }
 
 /**

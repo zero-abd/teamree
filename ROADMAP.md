@@ -455,6 +455,19 @@ the pane existed.
 Milestone 1 is complete and verified. These are the honest limits of what it does,
 recorded so none of them is discovered by surprise later.
 
+- **The renderer runs outside Chromium's sandbox.** `sandbox: false` in
+  `src/main/index.ts`, and it is load-bearing rather than an oversight: the
+  preload is an ES module, a sandboxed preload is evaluated as a classic script,
+  and turning it on leaves the window with no bridge at all — watched, not
+  reasoned about. What it costs is that a defect in the code that draws somebody
+  else's terminal output lands with the user's account behind it rather than
+  behind a second wall. Closing it is a build change and not a code one: emit
+  the preload as CommonJS, which with `"type": "module"` means a `.cjs` file and
+  a preload-only `rollupOptions.output.format`. Nothing in
+  `src/preload/index.ts` would have to change.
+  [`docs/renderer-boundary.md`](docs/renderer-boundary.md) argues the whole of
+  it, and is the one place to update when this moves.
+
 - **`teamwork.status` has a third answer now.** This entry used to say the method
   refused a project the store plainly had, for as long as the peer service had not
   reconciled after `project.add`, and that is no longer true. A project that exists

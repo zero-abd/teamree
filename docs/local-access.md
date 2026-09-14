@@ -2,7 +2,11 @@
 
 [`teamwork.md`](teamwork.md) writes down one boundary in detail: what a teammate
 across a relay can reach, with the test named beside every sentence. This is the
-other one, and it had never been written down at all. Every use of the word
+other one, and it had never been written down at all.
+[`renderer-boundary.md`](renderer-boundary.md) is the third, and it meets this
+one at a single sentence: the window's preload bridge serves the same catalogue
+this socket does, so everything below about what a client on the socket can do
+is also what a page in that window could do. Every use of the word
 "trust" in this repository's documentation was about the relay or a teammate,
 and yet the most powerful way into this app is not either of them.
 

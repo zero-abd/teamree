@@ -16,6 +16,12 @@ the [README](../README.md) if you have not seen it before.
   worth being precise about. What protects it, how much of that is inherited
   from the directory it sits in rather than chosen, which permissions were
   measured rather than assumed, and the part no file permission can defend.
+- [**What the window does with bytes it did not write**](renderer-boundary.md) —
+  the other side of the same boundary: a teammate's output, release notes off
+  the internet and stored scrollback all end up in the app's window, and the
+  window holds a bridge to the whole runtime. What the settings on it actually
+  are, why the sandbox is off and what that costs, what a crafted stream can and
+  cannot make the window do, and the one thing this found and fixed.
 
 ## Working with a team
 
