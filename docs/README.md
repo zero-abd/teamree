@@ -38,6 +38,11 @@ Read them in this order. The first is the only one you need in order to try it.
 - [**Cutting a release**](releasing.md) — the one command, everything it refuses
   before it spends a minute on anything, and what signing and notarizing would
   take.
+- [**What only a Mac can check**](mac-checks.md) — the verification this project
+  cannot do for itself: what has to be true before a release is cut, what to
+  press in the app afterwards and what it means if the wrong thing happens, and
+  the gates that have never been watched fail because the machine they fail on is
+  a Mac.
 - [**Release notes**](release-notes/) — one file per version, written by hand and
   read by the release script: what changed, for the person downloading it. The
   release will not be cut without the file for the version being released.

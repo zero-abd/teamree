@@ -670,7 +670,8 @@ recorded so none of them is discovered by surprise later.
   ad-hoc signature damaged the Intel slice, the release would go out green and every
   Intel Mac would open no terminal, which for this app is the whole app. Closing this
   needs an Intel Mac, or `arch -x86_64` on an Apple Silicon one with Rosetta
-  installed.
+  installed. It is the first check in [`docs/mac-checks.md`](docs/mac-checks.md),
+  which is where the rest of the verification that needs a Mac is collected.
 - **Nothing is signed, and the blank is now filled in rather than closed.** There is
   no Apple Developer certificate and no Windows code-signing certificate, so macOS
   refuses the app as being from an unverified developer and Windows shows a SmartScreen
@@ -692,10 +693,14 @@ recorded so none of them is discovered by surprise later.
   operating system can tell them. One half of the macOS instructions is now checked
   rather than asserted: `npm run install:verify` reads the quarantine command out of
   `docs/install.md`, installs a real packaged bundle at the path the document names,
-  quarantines it both ways a download arrives and runs that command verbatim. The
-  pipeline ran it on the macOS leg while there was one; it is a command a maintainer
-  runs by hand now, deliberately outside the release sequence because it writes into
-  `/Applications`. The other half is not checked. The dialogs, the **Open Anyway**
+  quarantines it both ways a download arrives and runs that command verbatim. It is a
+  command a maintainer runs by hand, deliberately outside the release sequence because
+  it writes into `/Applications` — and, correcting what this entry used to say, one
+  that has never yet completed. The pipeline was believed to have run it on the macOS
+  leg while there was one, but the script died there on an unimported `existsSync`; its
+  first half, which compares the document against the release notes and stops before
+  the bundle on anything that is not a Mac, exits 0, and exiting 0 was read as a pass.
+  The import is fixed and the macOS half is waiting for the first Mac to run it. The other half is not checked. The dialogs, the **Open Anyway**
   route through System Settings and the macOS-version differences around it are
   written from Apple's behaviour and the ad-hoc signing the build already does, and
   have not been walked through on a Mac at this commit.
