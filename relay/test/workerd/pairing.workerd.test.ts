@@ -197,6 +197,53 @@ describe.skipIf(unavailable !== null)('the durable object, run by workerd', () =
     expect(await openedByRebuilt).not.toBe(whileResident)
   }, 60_000)
 
+  it('keeps two rendezvous on one deployment from ever meeting', async () => {
+    // One Worker, two pairings, four connections. Each rendezvous names its own
+    // Durable Object — the name is `SHA-256(token)`, so two tokens can only
+    // collide if the hash does — and an object holds one pairing and refuses to
+    // run a second. This is the property a whole team rests on: everybody on it
+    // is dialling the same deployment, and what stops one pair's frames reaching
+    // another's is not that the relay is careful with them but that the two
+    // never share a home. `test/splice.test.ts` holds the same line for the
+    // container host, where one process does hold them all.
+    const left = rendezvousToken()
+    const right = rendezvousToken()
+    const leftA = await joinWorkerdPeer(relay, left)
+    const leftB = await joinWorkerdPeer(relay, left)
+    const rightA = await joinWorkerdPeer(relay, right)
+    const rightB = await joinWorkerdPeer(relay, right)
+    const leftSession = await leftB.waitPaired()
+    const rightSession = await rightB.waitPaired()
+
+    leftA.send(Buffer.from('left'))
+    rightA.send(Buffer.from('right'))
+
+    expect((await leftB.binary.atLeast(1))[0]?.toString()).toBe('left')
+    expect((await rightB.binary.atLeast(1))[0]?.toString()).toBe('right')
+    expect(leftA.binary.items).toHaveLength(0)
+    expect(rightA.binary.items).toHaveLength(0)
+    expect(leftSession.session).not.toBe(rightSession.session)
+  })
+
+  it('answers a health check with a count of nothing, and answers nothing else at all', async () => {
+    const health = await fetch(`${relay.origin}/healthz`)
+
+    // Thinner than the container host's on purpose: a Worker has no global view
+    // of who is connected, and manufacturing one would mean collecting the thing
+    // this relay exists not to collect. There is nowhere in this answer for a
+    // count, an address or a rendezvous to appear.
+    expect(health.status).toBe(200)
+    expect(await health.text()).toBe('{"status":"ok"}')
+
+    // And the only other thing this Worker serves is an upgrade on one path. A
+    // name that is not a hash is not routed to an object at all, which is what
+    // keeps a scan of the URL space from creating one per request.
+    expect((await fetch(`${relay.origin}/`)).status).toBe(404)
+    expect((await fetch(`${relay.origin}/metrics`)).status).toBe(404)
+    expect((await fetch(`${relay.origin}/v1/relay/not-a-rendezvous`)).status).toBe(404)
+    expect((await fetch(`${relay.origin}/v1/relay/${'a'.repeat(64)}`)).status).toBe(426)
+  })
+
   it('gives whoever deployed it no way to read what the pair is saying', async () => {
     const token = rendezvousToken()
     const first = await joinWorkerdPeer(relay, token)

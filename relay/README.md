@@ -20,6 +20,18 @@ The one fallback — [a container you run
 yourself](#if-you-will-not-use-cloudflare-run-the-container) — is at the bottom
 of this file, for teams who will not use Cloudflare at all.
 
+**Every sentence below that says something cannot happen names the test that
+holds it up.** This is infrastructure a team stands up in their own Cloudflare
+account and then never looks at again — nobody audits a relay after the week it
+was deployed — so a limit nobody asserted is a limit that is true until somebody
+edits the line under it. The citations are in the prose rather than in a table at
+the end, and they are there for the next person to weaken one of these sentences:
+the test that would have to go red is named in the line they are changing. Paths
+are relative to this directory, except where they reach into `src/main/teamwork/`,
+which is the client half of the same promise. Going through them found two
+sentences that were wrong; both are corrected in place below, with what they used
+to say, rather than quietly deleted.
+
 ---
 
 ## Deploy the Worker
@@ -60,7 +72,9 @@ deploy.
 `https://` host; the relay is that host with `/v1/relay` on the end, spoken as
 `wss://`. The command does that conversion for you and prints the result, which
 is the line to paste — teamree refuses an `https://` URL rather than guessing at
-the rest of it.
+the rest of it (`src/main/teamwork/peer/relayUrl.test.ts`, "refuses the https URL
+somebody will paste out of their browser" and "refuses the host on its own, which
+dials a path no relay can serve").
 
 Give that URL to everyone on the team by committing it: in teamree, **Teamwork →
 Set the relay for this project → Write relay file**, which writes
@@ -77,12 +91,29 @@ cd ~/teamree-relay
 npx wrangler@4 deploy
 ```
 
-A value the relay cannot parse stops the Worker starting rather than being
-quietly ignored. Only the limits this host can actually enforce are listed, and
-the ones missing from it are named in [Two things this host does not
+**A value the relay cannot parse is refused rather than quietly ignored — but
+this file used to say it stopped the Worker starting, and that is not what
+happens.** A Worker is not a process there is a moment of starting; the deploy
+succeeds, the bundle is fine, and the refusal arrives at the first connection
+instead: every request fails, the upgrade is answered `500`, and nothing is
+relayed until the value is fixed (`test/workerd/configuration.workerd.test.ts`,
+"refuses every request rather than quietly falling back to the default", which is
+that under the real runtime; the rule underneath it is
+`test/operability.test.ts`, "refuses to start on a limit it cannot make sense of
+rather than guessing"). Loud either way, which is the property that matters — a
+relay that fell back to a default is one whose operator believes it is enforcing
+something it is not — but loud at the first connection rather than at the deploy,
+which is worth knowing before you change a number and walk away.
+
+Only the limits this host can actually enforce are listed, and `wrangler.jsonc`
+is held to that list in both directions (`test/hosts.test.ts`, "carries every
+limit this host can enforce, and not one it cannot"). The ones missing from it
+are named in [Two things this host does not
 do](#two-things-this-host-does-not-do) rather than left for you to notice.
 Re-running `teamree-relay deploy` is also safe: it never writes over a file that
-is already there, so an edited limit survives.
+is already there, so an edited limit survives (`test/deployCommand.test.ts`,
+"never writes over a second time, so an edited limit survives a redeploy", and
+"adds back a file somebody deleted without touching the rest").
 
 If you want it on your own domain, add a [custom domain
 route](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
@@ -142,10 +173,14 @@ and hits a wall an hour later is worse off than one that was told up front.
   has its object evicted from memory while both sockets stay connected, and it
   is rebuilt on the next frame. That is why nothing is kept in a field anywhere
   in `src/workers/`, and why the tests throw the object away between every single
-  frame. Against `workerd` locally an object is evicted after about ten seconds
-  of being left alone, and an object whose last connection has gone stops waking
-  itself at all — which it did not always do, and the section on testing says
-  how that was found.
+  frame (`test/hibernation.test.ts`, "splices two peers that were evicted from
+  memory between every frame"; `test/workerd/pairing.workerd.test.ts`, "survives
+  a hibernation wake with the pairing intact", which waits out a real eviction
+  and checks it happened). Against `workerd` locally an object is evicted after
+  about ten seconds of being left alone, and an object whose last connection has
+  gone stops waking itself at all (`test/workerd/deadlines.workerd.test.ts`,
+  "stops waking itself once the rendezvous it was holding is empty") — which it
+  did not always do, and the section on testing says how that was found.
 
 ### Two things this host does not do
 
@@ -156,7 +191,11 @@ that nobody reads the limits table further down as a description of this host.
 `RELAY_MAX_CONNECTIONS`, `RELAY_MAX_CONNECTIONS_PER_ADDRESS` and
 `RELAY_MAX_CONNECTIONS_PER_ADDRESS_PER_MINUTE` are counts across a whole process,
 and a Worker has no process to count across. They are not in `wrangler.jsonc`
-and setting them there would do nothing. What bounds this host instead is that
+(`test/hosts.test.ts`, "leaves out the three counts a process keeps, rather than
+reading and ignoring them") and setting them there would do nothing
+(`test/hibernation.test.ts`, "has no connection cap to spend, because a Worker
+has no process to count across", which sets one and then opens past it). What
+bounds this host instead is that
 **one Durable Object holds at most six sockets**, in two halves that are not
 interchangeable. A bound is needed at all because the object's name in the URL is
 a hash anybody may compute or simply invent — it carries no token and proves
@@ -166,19 +205,53 @@ proportion to how many were attached.
 
 Three sockets may hold the pairing. Two is what a pairing is and the third is the
 peer arriving to displace a stale one, which is how a laptop that slept gets its
-session back. A socket holds one of those only once it has sent a hello whose
-token hashes to this object's own name; that check belongs to this host, and it
-is what stops a hello carrying an invented token from parking a socket here for
-the whole pairing budget.
+session back (`test/hibernation.test.ts`, "still has room for the peer that
+arrives to displace the pair"). A socket holds one of those only once it has sent
+a hello whose token hashes to this object's own name; that check belongs to this
+host, and it is what stops a hello carrying an invented token from parking a
+socket here for the whole pairing budget (`test/hibernation.test.ts`, "turns away
+a hello for a rendezvous it is not the home of";
+`test/workerd/pairing.workerd.test.ts`, "turns away a hello that names a
+rendezvous other than the one in the URL").
 
 The other three are for sockets that have not said anything yet, and when they
 are full an arriving connection displaces the one that has been silent longest —
 told `4007` — rather than being refused itself. The direction matters. A
 connection that is refused an upgrade is handed a transport error and cannot tell
 it from a relay that is not there, so three sockets presenting nothing at all
-must not be able to shut a rendezvous against the teammate it belongs to. What is
-left of the `503` is a rendezvous whose three pairing slots are all held by
-connections that presented its token.
+must not be able to shut a rendezvous against the teammate it belongs to
+(`test/hibernation.test.ts`, "keeps a rendezvous open for its own pair however
+many sockets are aimed at it", which offers two hundred;
+`test/workerd/pairing.workerd.test.ts`, "keeps a rendezvous open for its own
+pair, whatever else is aimed at it", which checks under the real runtime that the
+one displaced is the one that had been silent longest).
+
+**What is left of the `503` is not what this file used to say.** It said a
+rendezvous whose three pairing slots are all held by connections that presented
+its token, and that state cannot arise. A hello that names this object parks,
+pairs, or displaces the pair that was already in it, so the pairing half never
+holds more than two live sockets however many teammates turn up: six arrivals in
+a row and not one of them is refused (`test/hibernation.test.ts`, "never refuses
+an upgrade to a connection that presents its own rendezvous"). What does reach
+the `503` is the other thing counted against those slots — a socket whose
+attachment the object cannot read, which is the runtime taking a connection away
+while the object is still looking at it. Those are never displaced, because the
+object cannot tell whether such a connection is finished, and guessing the other
+way is how the cap gets walked past and how a live peer ends up with nothing
+checking its deadlines. Three of them and the next upgrade is refused
+(`test/hibernation.test.ts`, "refuses an upgrade only when it cannot account for
+what is already attached"). Nobody holding the URL can arrange that, which is
+why the correction is worth making rather than deleting: the refusal is not
+something a stranger can aim at a pair.
+
+That also settles the question a refusal always raises. Somebody who has the URL
+has the hash and nothing else, and what they are told back must not vary with
+whether the two people it belongs to are in there — an answer that only comes
+when the rendezvous is busy is a way to watch a pair you cannot join. A hello
+carrying an invented token gets the same `4000` and the same words at an empty
+object and at one holding a live session, and the pair never hears that it
+happened (`test/hibernation.test.ts`, "answers a hello for another rendezvous the
+same way whether or not the pair is here").
 
 Cloudflare's own per-account and per-request limits are what stand between you
 and a flood of objects; the relay's job is to make each one cheap and bounded,
@@ -186,9 +259,18 @@ and that it does.
 
 **The slow-consumer rule cannot fire.** The runtime does not expose a send-queue
 depth to a Durable Object, so the relay has nothing to measure and never closes
-a peer for not reading. Cloudflare owns that queue instead. The frame-rate and
-byte-rate budgets still apply and are what bound the work. On the container host,
-where the depth is visible, the rule is enforced and tested.
+a peer for not reading. Cloudflare owns that queue instead. Still true, and now
+checked rather than assumed: a peer that asks for three hundred pongs and takes
+none of them is left alone here, at the lowest buffer bound the configuration
+accepts (`test/hibernation.test.ts`, "has no send queue to measure, so nobody
+here is closed for not reading") — which is exactly the peer the container host
+closes. The frame-rate and byte-rate budgets still apply and are what bound the
+work (`test/hibernation.test.ts`, "charges a peer for its control frames as well
+as for its content", "closes a peer sending bytes faster than its budget allows",
+and "refuses a frame over the size cap rather than passing it on"). On the
+container host, where the depth is visible, the rule is enforced and tested
+(`test/limits.test.ts`, "drops a peer that cannot keep up rather than buffering
+without bound" and "closes a peer that is not reading the answers it asked for").
 
 Neither makes this a bad fit. It is close to the shape Durable Objects were built
 for.
@@ -261,15 +343,20 @@ Forward the usual upgrade headers, and give the proxy a read timeout longer than
 `RELAY_IDLE_TIMEOUT_MS` or it will cut quiet sessions before the relay decides
 to. Then set `RELAY_TRUSTED_PROXY_HOPS` to the number of proxies in front, so
 per-address limits count the client rather than counting the proxy as one very
-busy client. Leave it at `0` and the socket address is used, which is the only
-value a client cannot forge — so `0` is the right answer whenever nothing
-trustworthy is adding `X-Forwarded-For`.
+busy client (`test/limits.test.ts`, "counts the address a trusted proxy reports
+rather than the proxy itself"). Leave it at `0` and the socket address is used,
+which is the only value a client cannot forge — so `0` is the right answer
+whenever nothing trustworthy is adding `X-Forwarded-For` (`test/limits.test.ts`,
+"ignores a forwarded address when no proxy is trusted", which is a client trying
+to mint itself a fresh budget with a header).
 
 ### Stopping it
 
 `docker stop` sends `SIGTERM`. The relay stops accepting connections, closes
 every live session with a `1001 going away`, waits for the closing handshakes and
-exits. Peers see an ordinary "come back in a moment", not a dropped socket.
+exits. Peers see an ordinary "come back in a moment", not a dropped socket
+(`test/operability.test.ts`, "closes live sessions with a reason instead of
+dropping them" and "stops accepting new peers while it is stopping").
 
 ---
 
@@ -286,8 +373,13 @@ material and no way to acquire any: `IK` authenticates both static keys, so a
 relay that substituted its own would fail the handshake rather than sit in the
 middle of it. Hosting buys no visibility at all. There are tests for the
 observable half of this — that no payload byte and no rendezvous token reaches a
-log or the health endpoint, on both hosts — but the load-bearing part is the
-encryption, which is not this program's to get wrong.
+log or the health endpoint, on both hosts (`test/operability.test.ts`, "gives
+whoever runs it no way to read what peers are saying" and "keeps no trace of a
+payload in the log even when a peer is closed for sending it";
+`test/hibernation.test.ts` and `test/workerd/pairing.workerd.test.ts`, both
+"gives whoever deployed it no way to read what the pair is saying") — but the
+load-bearing part is the encryption, which is not this program's to get wrong,
+and `src/shared/peer/session.test.ts` is where that lives.
 
 Reading is the claim. **Impersonation is a separate question and it is not
 settled here.** The relay sees every frame, including the handshake ones, and it
@@ -304,19 +396,29 @@ What the operator **does** learn:
   outright. A relay in the middle of two connections inevitably knows there are
   two connections.
 - **Both peers' IP addresses**, as any server learns its clients'. Not logged by
-  default; `RELAY_LOG_CLIENT_ADDRESS=1` turns that on for debugging. On the
-  Worker, Cloudflare sees them regardless.
+  default; `RELAY_LOG_CLIENT_ADDRESS=1` turns that on for debugging. Both
+  directions are asserted, because the default only means something if the
+  address was there to be written down (`test/operability.test.ts`, "does not log
+  a client address unless asked to" and "logs the address itself once an operator
+  turns that on"). On the Worker, Cloudflare sees them regardless.
 - **Timing and volume.** Frame sizes and when they arrive. Noise does not pad,
   so an idle session looks idle and a burst of typing looks like a burst of
   typing. Padding would be the peers' to add, not the relay's.
 - **Nothing else.** No repository name, no branch, no handle, no pane, no file
-  path, no command, no output.
+  path, no command, no output. That is a claim about a shape rather than about
+  any one line, so it is held as one: every field this relay is allowed to emit
+  is listed in `test/operability.test.ts`, "writes no field an operator was not
+  promised", and a new one has to be added there, in front of whoever adds it,
+  before it can reach an operator's stdout.
 
 Logs are JSON lines on stdout. They contain no payload bytes in any form, and no
 rendezvous token: a token is a shared secret, and an operator holding a log of
 them could displace any pairing in it. Correlation still works, through refs —
 short labels derived under a key generated at start-up and discarded at exit. A
-ref names a pairing within one run of the process and is meaningless outside it.
+ref names a pairing within one run of the process and is meaningless outside it
+(`test/operability.test.ts`, "hands the same address a different label in a
+different run", which is both halves: the same label all the way through one run,
+and no way to line two runs up afterwards).
 
 ---
 
@@ -340,7 +442,9 @@ token   = HKDF-SHA256(ikm = shared,
                       length = 32)                   # 64 lowercase hex characters
 ```
 
-The token is what a peer presents in its hello, and it **rotates hourly**.
+The token is what a peer presents in its hello, and it **rotates hourly**
+(`src/main/teamwork/peer/rendezvous.test.ts`, "rotates every hour and is stable
+within one").
 
 **What the app actually derives differs from the sketch above, in `info`.** This
 section described one token per pair of teammates; the app scopes it per project
@@ -358,8 +462,16 @@ and are never told why. What the app derives is:
 info = "teamree/rendezvous/v2" LF <project key> LF <epoch as decimal text>
 ```
 
+Both halves of that are pinned against a fixed vector, so a change to either
+fails loudly rather than quietly stranding every peer on the spelling it had
+before (`src/main/teamwork/peer/rendezvous.test.ts`, "derives from a versioned,
+unambiguous info the README leaves unspecified" and "is different for the same
+pair in a different repository").
+
 The relay itself knows none of this. To it, a rendezvous is 32 opaque bytes, and
-its entire job is to notice that two connections presented the same ones. That is
+its entire job is to notice that two connections presented the same ones
+(`test/lifecycle.test.ts`, "pairs the two peers that present the same rendezvous"
+and "pairs many simultaneous rendezvous without crossing them"). That is
 why the divergence above costs it nothing, and why a team that wanted a different
 scheme again — a fixed token per pair, say — would not have to change a line of
 it. The rule for anyone writing a second client is simply that both ends must
@@ -375,7 +487,11 @@ they reach proxy logs, analytics and error reports — and the token is a
 capability: whoever holds it can claim the pairing. Its hash does not confer
 that. On the Worker host the hash is also what names the Durable Object, which is
 why it has to be in the URL at all: the object must be chosen before the first
-frame arrives. The container host has no use for it and ignores it.
+frame arrives (`src/main/teamwork/peer/rendezvous.test.ts`, "carries the token's
+hash and never the token"). The container host has no use for it and ignores it
+(`test/lifecycle.test.ts`, "pairs on the token alone, whatever the URL claimed
+the rendezvous was", where the two peers send different hints and one of them is
+not a hash at all).
 
 The hash is not nothing, though, and on the Worker host it is worth being exact.
 It names a Durable Object, and an object holds a bounded number of sockets, so
@@ -386,7 +502,8 @@ got the refusal — as an HTTP status, which a WebSocket client cannot read, so
 what the person was shown was that the relay could not be reached. It does not
 buy that now. A socket that has said nothing is displaced by the next arrival
 rather than counted against the pair, and a hello is only honoured by the object
-its own token names.
+its own token names (`test/workerd/pairing.workerd.test.ts`, "keeps a rendezvous
+open for its own pair, whatever else is aimed at it").
 
 What holding the hash still buys is churn — traffic aimed at one object, which is
 a cost to whoever is paying for it — and a narrow race, in which an arriving peer
@@ -402,22 +519,40 @@ the URL before any frame arrives, so a hello carrying some other token would par
 a socket in an object it has no business being in, for the whole pairing budget,
 holding a slot against the two peers whose rendezvous named it. Requiring the
 hello to name the object it landed in costs a legitimate peer nothing — it
-derived the one from the other — and a hello that does not is closed with `4000`.
-The container host pairs on the token alone and has no name to check against; it
-needs none, because there a peer that sends a hint for one pairing and a token
-for another simply lands where its partner is not, which costs only that peer.
+derived the one from the other — and a hello that does not is closed with `4000`
+(`test/workerd/pairing.workerd.test.ts`, "turns away a hello that names a
+rendezvous other than the one in the URL"; `test/hibernation.test.ts`, "turns
+away a hello for a rendezvous it is not the home of", which also checks the hello
+that *does* name it is untouched). The container host pairs on the token alone
+and has no name to check against; it needs none, because there a peer that sends
+a hint for one pairing and a token for another simply lands where its partner is
+not, which costs only that peer (`test/lifecycle.test.ts`, "pairs on the token
+alone, whatever the URL claimed the rendezvous was").
 
 ### What this hides, and what it does not
 
 Hides:
 
 - **The repository.** Nothing derived from its name, remote or contents is sent.
+  What goes into the derivation is a project *key*, which is 32 bytes of hash
+  (`src/main/teamwork/peer/projectKey.test.ts`).
 - **Who the peers are.** No handle, no key, no email, no account. The token is
-  256 bits that look like any other 256 bits.
+  256 bits that look like any other 256 bits (`test/lifecycle.test.ts`, "hangs up
+  on a hello that is a rendezvous of the wrong shape" — the relay accepts one
+  shape and one only, so no token can be told from another by its length or
+  alphabet).
 - **Any link between pairs.** Each pair's token is independent of every other
-  pair's, so the relay cannot tell one team's full mesh from a set of strangers.
+  pair's, so the relay cannot tell one team's full mesh from a set of strangers
+  (`src/main/teamwork/peer/rendezvous.test.ts`, "is different for every pair, so
+  one team's mesh looks like a set of strangers"). On the Worker each of them is
+  a different Durable Object and they never share a home
+  (`test/workerd/pairing.workerd.test.ts`, "keeps two rendezvous on one
+  deployment from ever meeting"; `test/splice.test.ts`, "keeps pairs on different
+  rendezvous from ever seeing each other", for the host where one process does
+  hold them all).
 - **Long-lived identity.** Hourly rotation means no stable identifier for the
-  operator to accumulate against.
+  operator to accumulate against (`src/main/teamwork/peer/rendezvous.test.ts`,
+  "rotates every hour and is stable within one").
 
 Does not hide:
 
@@ -449,30 +584,50 @@ Enough to write another client against, and short on purpose.
 
 1. Connect to `<relay><path>/<sha256-of-token>`.
 2. Send one **text** frame: `{"version":1,"rendezvous":"<64 hex characters>"}`.
-   Unknown fields are ignored. Anything else, or nothing at all within the
-   greeting deadline, and the connection is closed with `4000`. On the Worker
-   host the token must also be the one the URL names — the relay hashes it and
-   compares — which a peer that derived the URL from the token always satisfies.
+   Unknown fields are ignored (`test/lifecycle.test.ts`, "ignores fields it does
+   not know rather than rejecting a newer peer"). Anything else, or nothing at
+   all within the greeting deadline, and the connection is closed with `4000`
+   (`test/lifecycle.test.ts`, "hangs up on a hello that is %s", which is six
+   shapes of wrong, and "hangs up on a connection that opens and says nothing";
+   `test/workerd/deadlines.workerd.test.ts`, "closes a connection that opened and
+   then said nothing at all", for the deadline under the real runtime). On the
+   Worker host the token must also be the one the URL names — the relay hashes it
+   and compares — which a peer that derived the URL from the token always
+   satisfies.
 3. The relay replies with a text frame — `{"t":"waiting"}` if the partner has not
    arrived, and `{"t":"paired","session":"…","initiator":true|false}` when it
    has. Both sides get `paired`; exactly one gets `initiator: true`, which is the
    side that should open the Noise handshake. Two sides opening one at once
-   simply fails, so the relay breaks the tie.
+   simply fails, so the relay breaks the tie (`test/lifecycle.test.ts`,
+   "nominates exactly one side to open the handshake").
 4. From then on every **binary** frame is forwarded verbatim to the partner, and
-   nothing else happens to it.
+   nothing else happens to it (`test/splice.test.ts`, "delivers a peer bytes to
+   its partner unchanged", which sends every byte value there is, and "carries
+   traffic in both directions and keeps each side in order").
 
 Control is text and content is binary, in both directions, with no exceptions.
 That is what makes "the relay does not touch payloads" checkable rather than
 claimed: there is one line that writes a binary frame, and it writes the bytes it
-was given.
+was given (`test/splice.test.ts`, "forwards a payload shaped like a control frame
+without acting on it", which sends the relay its own close frame as content and
+watches it come out the other side; `test/lifecycle.test.ts`, "hangs up on a peer
+that keeps talking in control frames after its hello", for the other direction).
 
 A peer may send `{"t":"ping"}` at any time after its hello and will get
-`{"t":"pong"}` back. On the Worker host the runtime answers it without waking
+`{"t":"pong"}` back (`test/limits.test.ts`, "answers a peer that is keeping up
+with its own pongs"). On the Worker host the runtime answers it without waking
 anything, which is what keeps a quiet pair cheap; the relay learns of it from a
-timestamp the runtime kept, not from the frame. Either way it counts: send one
-more often than `RELAY_IDLE_TIMEOUT_MS` and a session that is otherwise silent
-stays up. On the Worker host this is the only keepalive a peer has, because a
-Durable Object is not given the WebSocket protocol's own ping.
+timestamp the runtime kept, not from the frame
+(`test/workerd/pairing.workerd.test.ts`, "answers a peer keepalive without ever
+waking the object to do it", which pings an object for long enough that it would
+have been evicted and then proves it was; `test/hibernation.test.ts`, "counts
+the keepalive the runtime answered without waking it"). Either way it counts:
+send one more often than `RELAY_IDLE_TIMEOUT_MS` and a session that is otherwise
+silent stays up (`test/lifecycle.test.ts`, "keeps a quiet pair that is sending
+the keepalive the relay documents"; `test/workerd/deadlines.workerd.test.ts`,
+"keeps a pair alive on nothing but the keepalive the runtime answered for it").
+On the Worker host this is the only keepalive a peer has, because a Durable
+Object is not given the WebSocket protocol's own ping.
 
 Control frames from the relay are advisory. A relay that lied in one could, at
 worst, tear a session down — which it could do anyway by hanging up.
@@ -493,14 +648,38 @@ worst, tear a session down — which it could do anyway by hanging up.
 | `1001` | The relay is going away, or has lost the state for this session | Reconnect shortly |
 | `1009` | Frame over the size cap | Fix the client |
 
+Every one of those is sent by a test, because a close code is the only thing a
+client has to go on and one that drifted would be found by somebody's reconnect
+loop rather than by us. In order: `4000`, `test/lifecycle.test.ts`, "hangs up on
+a hello that is %s"; `4001`, "tells the survivor when its partner vanishes without
+closing"; `4002`, "distinguishes being superseded from a partner that simply
+left"; `4003`, `test/limits.test.ts`, "drops a peer that cannot keep up rather
+than buffering without bound"; `4004`, "closes a peer sending frames faster than
+its budget allows"; `4005`, `test/lifecycle.test.ts`, "closes a paired session
+that has shown no sign of life within the idle budget"; `4006`, "sends a peer
+away when nobody has joined it within the pairing budget"; `4007`,
+`test/hibernation.test.ts`, "keeps a rendezvous open for its own pair however
+many sockets are aimed at it"; `4008`, `test/splice.test.ts`, "refuses to carry
+content from a peer that has not been paired yet"; `1001`,
+`test/operability.test.ts`, "closes live sessions with a reason instead of
+dropping them", and `test/hibernation.test.ts`, "sends a survivor back rather
+than blaming it for state the object lost"; `1009`, `test/limits.test.ts`,
+"refuses a frame larger than the cap instead of assembling it", and
+`test/hibernation.test.ts`, "refuses a frame over the size cap rather than
+passing it on", which is the same rule on the host that has no `ws` underneath it
+to have refused the frame first.
+
 `4001` and `4002` are deliberately different. A pair that treated being
 superseded as a partner leaving would reconnect immediately, displace each other,
-and do it again for as long as both were running.
+and do it again for as long as both were running (`test/lifecycle.test.ts`,
+"distinguishes being superseded from a partner that simply left").
 
 `4005` goes to both halves for the same reason. Nobody disconnected — the two of
 them were quiet and both are being reaped for it — so telling either one its
 partner left would be false, and would send it into an immediate reconnect for a
-fault that did not happen.
+fault that did not happen (`test/hibernation.test.ts`, "tells both halves the
+truth when it reaps a pair for silence"; `test/workerd/deadlines.workerd.test.ts`,
+"reaps a silent pair on the alarm and tells both halves the same true thing").
 
 `1001` covers one case worth naming, because the wrong code there is expensive. A
 Durable Object rebuilds its pairing table from what is attached to each socket on
@@ -510,21 +689,30 @@ state says paired, the table no longer agrees, and its next frame — its keepal
 at the latest — finds no partner. That is the relay having lost state, so the
 peer is told to go away and come back. A protocol complaint (`4008`) there reads
 to a client as its own bug, and a client that believes that stops reconnecting
-for the life of the process, for a fault that was never its.
+for the life of the process, for a fault that was never its
+(`test/hibernation.test.ts`, "sends a survivor back rather than blaming it for
+state the object lost", which takes the partner's socket away mid-event and
+checks which of the two codes comes out).
 
 ---
 
 ## Limits, and why each one is where it is
 
 Every one is an environment variable. All of them have a default that is safe to
-deploy unchanged, and a value that cannot be parsed stops the relay starting.
+deploy unchanged, and a value that cannot be parsed is refused rather than
+replaced by the default (`test/operability.test.ts`, "refuses to start on a limit
+it cannot make sense of rather than guessing"). On the container host that is a
+process that exits; on the Worker it is every request failing, for the reason
+[the deploy section](#deploying-again-and-changing-it) gives.
 
 This table is the **container host**. Ten of its eighteen rows have nowhere to
 apply on the Worker, and the "Where" column says which: `both` means the limit is
 enforced on either host, `container` means the Worker has nothing to enforce it
 with and setting the variable there would do nothing at all. The section on path
 1 above says the same in longer form, and `wrangler.jsonc` carries only the rows
-marked `both`.
+marked `both` — which is asserted against this table itself rather than left to
+agree with it by hand (`test/hosts.test.ts`, "carries every limit this host can
+enforce, and not one it cannot").
 
 | Variable | Default | Where | Why |
 | --- | --- | --- | --- |
@@ -549,13 +737,22 @@ marked `both`.
 
 The rate limits are token buckets with a burst equal to one second's budget, so
 a peer that is quiet then sends a batch is fine, and a peer that is never quiet
-is closed.
+is closed (`test/limits.test.ts`, "lets a peer keep sending once its budget has
+refilled", and "counts a control frame against the byte budget as well as the
+frame budget", because a frame nothing charges for is one a peer can send several
+hundred thousand times a second).
 
 `/healthz` reports aggregate counts only — connections, how many are waiting, how
-many sessions. There is nothing per-peer in it. Keep it off the public internet
-anyway, or set `RELAY_HEALTH_TOKEN`. The Worker's version is thinner still
-(`{"status":"ok"}`), because a Worker has no global view and manufacturing one
-would mean collecting the thing this relay exists not to collect.
+many sessions. There is nothing per-peer in it (`test/operability.test.ts`,
+"reports how much is connected without saying who any of it is", which asserts
+the whole body rather than picking at it). Keep it off the public internet
+anyway, or set `RELAY_HEALTH_TOKEN` (`test/operability.test.ts`, "refuses a
+health read with no credential once one is configured"). The Worker's version is
+thinner still (`{"status":"ok"}`), because a Worker has no global view and
+manufacturing one would mean collecting the thing this relay exists not to
+collect (`test/workerd/pairing.workerd.test.ts`, "answers a health check with a
+count of nothing, and answers nothing else at all", which also holds the 404 on
+every other path).
 
 ---
 
@@ -566,7 +763,10 @@ These are not edge cases. They are what two laptops do.
 **A peer vanishes mid-session.** The socket dies without a close frame. The
 survivor is closed with `4001` and the pairing is forgotten. There is nothing to
 preserve: a Noise session cannot outlive its transport, so the pair rebuilds from
-scratch.
+scratch (`test/lifecycle.test.ts`, "tells the survivor when its partner vanishes
+without closing"; `test/workerd/pairing.workerd.test.ts`, "tells a survivor its
+partner left, from an object rebuilt since they paired", which is the same thing
+from an object that never saw the pairing being made).
 
 **A peer reconnects while its old socket is still half-open.** A suspended
 machine's connection reads as open for as long as the network lets it. When a
@@ -576,17 +776,29 @@ ends that session and lets the newcomer wait, and both old peers are closed with
 two anonymous connections that presented the same token, and there is no "side A"
 to slot a reconnect into. Ending the session is the only answer that is right
 whichever of them came back. The old pair then reconnects, and because the
-newcomer is already waiting, they pair on the first try.
+newcomer is already waiting, they pair on the first try (`test/lifecycle.test.ts`,
+"lets a returning peer take over a rendezvous its half-open predecessor still
+holds", and "does not let a superseded peer evict the connection that replaced
+it", which is the late close event arriving afterwards;
+`test/workerd/pairing.workerd.test.ts`, "hands a returning peer its own
+rendezvous back and displaces the pair holding it").
 
 **Two peers race to pair.** Registration happens in one synchronous step, so
 whichever hello is read first parks and the second pairs with it. Both get the
 same session id and opposite `initiator` flags. There is no window in which two
-peers both park.
+peers both park (`test/lifecycle.test.ts`, "pairs two peers that greet in the
+same instant", and "pairs many simultaneous rendezvous without crossing them",
+which offers twelve pairs at once and checks the sessions are twelve).
 
 **One peer arrives long before the other.** It parks, and stays parked. A parked
 connection is kept alive and reaped promptly if it dies, and closed with `4006`
 only once `RELAY_PAIR_TIMEOUT_MS` has gone by — ten minutes by default, after
-which a client reconnects. Set it to `0` to park indefinitely.
+which a client reconnects (`test/lifecycle.test.ts`, "lets a peer park until its
+partner turns up", which takes it to within ten seconds of the budget first, and
+"sends a peer away when nobody has joined it within the pairing budget";
+`test/workerd/deadlines.workerd.test.ts`, "sends an unpaired peer away when
+nobody ever joins it", where the deadline is the runtime's alarm rather than a
+sweep this process drives). Set it to `0` to park indefinitely.
 
 **A peer stops reading.** Its send queue grows. Past `RELAY_MAX_BUFFERED_BYTES`
 it is closed with `4003` and its partner with `4001`. The relay does not buffer
@@ -594,22 +806,34 @@ without bound, does not silently drop frames from the middle of a stream, and
 does not slow the sender down — a Noise stream with a hole in it is over anyway,
 so ending it cleanly is better than any of those. A peer with no partner at all
 is held to the same rule: the pongs it asked for are the relay's writes too, and
-a peer that will not read its own answers is closed rather than queued for. (On
-the Worker host neither rule can fire; see the limits section above.)
+a peer that will not read its own answers is closed rather than queued for
+(`test/limits.test.ts`, "drops a peer that cannot keep up rather than buffering
+without bound", over a real socket that has stopped being read, and "closes a
+peer that is not reading the answers it asked for"). On the Worker host neither
+rule can fire; see the limits section above, which now says so with a test rather
+than only in prose.
 
 **A peer goes quiet but stays connected.** Nothing happens to it, as long as it
 is still there. On the container host the relay pings it at the WebSocket layer
-and cuts it only if two intervals pass with no answer. On the Worker host
+and cuts it only if two intervals pass with no answer (`test/lifecycle.test.ts`,
+"keeps a peer that is quiet but still answering", and "cuts a peer whose socket is
+open but no longer listening"). On the Worker host
 liveness is Cloudflare's, and peers use the `{"t":"ping"}` control frame, which
 the runtime answers without waking anything — and the object reads back the
 timestamp of that answer when it next wakes, so a keepalive it never saw still
-counts as a sign of life. Either way, a pair that is keeping itself alive is left
-alone: `RELAY_IDLE_TIMEOUT_MS` reaps a session that has gone silent altogether,
-not one that is merely not typing.
+counts as a sign of life (`test/hibernation.test.ts`, "counts the keepalive the
+runtime answered without waking it", which is twenty-two rounds of it with the
+object thrown away between each one). Either way, a pair that is keeping itself
+alive is left alone: `RELAY_IDLE_TIMEOUT_MS` reaps a session that has gone silent
+altogether, not one that is merely not typing (`test/lifecycle.test.ts`, "keeps a
+session that is still carrying content").
 
 **Both peers go quiet at once and neither keepalives.** Both are closed with
 `4005` after `RELAY_IDLE_TIMEOUT_MS`. Both, and with the same code: nothing
-disconnected, so neither of them is told its partner did.
+disconnected, so neither of them is told its partner did
+(`test/lifecycle.test.ts`, "closes a paired session that has shown no sign of life
+within the idle budget"; `test/workerd/deadlines.workerd.test.ts`, "reaps a silent
+pair on the alarm and tells both halves the same true thing").
 
 ---
 
@@ -618,7 +842,7 @@ disconnected, so neither of them is told its partner did.
 ```sh
 cd relay
 npm install
-npm test          # 120 tests, including the Worker under a real workerd
+npm test          # 139 tests, including the Worker under a real workerd
 npm run typecheck # both hosts: Node types and Workers types
 npm run build     # the container host's JavaScript, into dist/
 npm run worker:dev # the Worker on localhost, under workerd, deploying nothing
@@ -631,7 +855,12 @@ machine. The exception is `test/workerd/`, which takes roughly a minute, for a
 reason given below.
 
 The container host is tested over **real WebSockets on a real port** — the splice
-itself, every limit, and every awkward case above.
+itself, every limit, and every awkward case above. `test/hosts.test.ts` is the odd
+one out and does not open a socket at all: three of the promises in this file are
+about files rather than about frames — that `wrangler.jsonc` carries only limits
+the Worker can enforce, that `src/core` knows nothing about either host, and that
+nothing is ever stored anywhere — and each of those is undone by an ordinary-
+looking edit rather than by a bug, so they are asserted against the files.
 
 The Durable Object host is tested twice, and it is worth knowing which is which.
 `test/hibernation.test.ts` drives it against a narrow fake of the runtime that
@@ -714,12 +943,18 @@ bin/             what it runs — writes the Worker project into a directory you
                  there is nothing to build it with.
 ```
 
-`src/core` imports nothing from Node and nothing from Cloudflare. That is not
-tidiness; it is the reason there are two hosts and one set of rules, and the
-reason a third would be a small adapter rather than a second implementation. The
-only thing a host must supply is a socket with `send`, `close` and a way to know
-whether it is open — plus somewhere to call `sweep` on a timer.
+`src/core` imports nothing from Node and nothing from Cloudflare
+(`test/hosts.test.ts`, "keeps every rule in a core that imports neither host").
+That is not tidiness; it is the reason there are two hosts and one set of rules,
+the reason a third would be a small adapter rather than a second implementation,
+and the reason `wrangler.jsonc` needs no `nodejs_compat`. The only thing a host
+must supply is a socket with `send`, `close` and a way to know whether it is open
+— plus somewhere to call `sweep` on a timer.
 
 Nothing is stored anywhere, on either host. A live pairing exists while both
 sockets do; when the second one goes, so does it. There is no database to back
-up, no migration to run and nothing on disk to leak.
+up, no migration to run and nothing on disk to leak. The Durable Object has a
+storage API within reach and a SQLite backend behind it, so that is one line of
+somebody's restraint away at all times: the only two members of it this package
+names are when the next sweep is and when to set it for (`test/hosts.test.ts`,
+"asks the Durable Object runtime for nothing but an alarm").

@@ -144,6 +144,92 @@ describe('what running the relay shows you', () => {
     expect(withoutAddresses).toHaveLength(0)
     expect(harness.log.records.some((record) => record.addressRef !== undefined)).toBe(true)
   })
+
+  it('logs the address itself once an operator turns that on', async () => {
+    await start({ logClientAddress: true })
+    await connectPeer(harness)
+
+    // The other half of the default, and what makes the default mean anything:
+    // the address is there to be written down, and not writing it is a choice
+    // the relay makes rather than something it is unable to do. An operator
+    // debugging a connection can have it, and has to ask.
+    const opened = harness.log.records.filter((record) => record.event === 'connection.opened')
+    expect(opened).toHaveLength(1)
+    expect(opened[0]?.address).toEqual(expect.any(String))
+    expect(opened[0]?.addressRef).not.toBe(opened[0]?.address)
+  })
+
+  it('writes no field an operator was not promised', async () => {
+    await start({ maxConnections: 2, maxFramesPerSecond: 1 })
+    const token = rendezvousToken()
+    const first = await joinPeer(harness, token)
+    const second = await joinPeer(harness, token)
+    await first.waitPaired()
+    // A refused upgrade, a rate-limited close and a shutdown, so that the run
+    // below has been through most of what this relay ever has to say.
+    await expect(connectPeer(harness)).rejects.toThrow(/503/)
+    first.send(Buffer.from('once'))
+    first.send(Buffer.from('twice'))
+    await first.waitClosed()
+    await second.waitClosed()
+    await harness.relay.close()
+
+    // "Nothing else. No repository name, no branch, no handle, no pane, no file
+    // path, no command, no output." That claim is about a shape rather than
+    // about any one line, so it is held as a shape: these are every key this
+    // relay is allowed to emit, and a new one has to be added here — in front of
+    // whoever adds it — before it can reach an operator's stdout.
+    const promised = new Set([
+      'ts',
+      'level',
+      'event',
+      'conn',
+      'pair',
+      'session',
+      'code',
+      'framesIn',
+      'framesOut',
+      'ageMs',
+      'addressRef',
+      'address',
+      'reason',
+      'phase',
+      'signal',
+      'superseded',
+      'host',
+      'port',
+      'path'
+    ])
+    const written = new Set(harness.log.records.flatMap((record) => Object.keys(record)))
+
+    expect([...written].filter((key) => !promised.has(key))).toEqual([])
+    // And the run really was a busy one, or the assertion above proves nothing.
+    expect(written.size).toBeGreaterThan(10)
+  })
+
+  it('hands the same address a different label in a different run', async () => {
+    await start()
+    await connectPeer(harness)
+    await connectPeer(harness)
+    const withinOneRun = harness.log.records
+      .filter((record) => record.event === 'connection.opened')
+      .map((record) => record.addressRef)
+    await harness.relay.close()
+
+    await start()
+    await connectPeer(harness)
+    const afterARestart = harness.log.records.find((record) => record.event === 'connection.opened')?.addressRef
+
+    // A ref is a name for something within one run of one process, derived under
+    // a key made at start-up and thrown away at exit. Correlation is what it is
+    // for, so the same address is the same label all the way through one run —
+    // and an operator who kept a year of logs still cannot line two runs up by
+    // it, which is the whole of why an address may appear as one at all.
+    expect(withinOneRun).toHaveLength(2)
+    expect(withinOneRun[0]).toBe(withinOneRun[1])
+    expect(afterARestart).toEqual(expect.any(String))
+    expect(afterARestart).not.toBe(withinOneRun[0])
+  })
 })
 
 describe('stopping', () => {

@@ -140,6 +140,14 @@ const ALLOWED = [
     when: workerdOptOut,
     why: 'TEAMREE_SKIP_WORKERD_TESTS=1: nothing in this run says the real runtime fires the alarm.'
   },
+  {
+    file: 'relay/test/workerd/configuration.workerd.test.ts',
+    when: workerdOptOut,
+    why:
+      'TEAMREE_SKIP_WORKERD_TESTS=1: that a limit the Worker cannot parse refuses every request, ' +
+      'rather than being quietly replaced by the default, is proven in this run only as far as ' +
+      'configFromEnv throwing (relay/test/operability.test.ts).'
+  },
 
   // POSIX-only, and skipped on the one platform this does not ship to. Kept as
   // entries rather than waved through, so that a Windows run still reports

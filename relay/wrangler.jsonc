@@ -25,8 +25,12 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RelayPair"] }],
 
   // The limits this host can enforce, at their defaults. Change one here and
-  // redeploy; a value that cannot be parsed stops the Worker starting rather
-  // than being quietly ignored.
+  // redeploy; a value that cannot be parsed is refused rather than quietly
+  // ignored. Not at deploy time — a Worker has no moment of starting, and the
+  // deploy succeeds — but at the first connection, which is answered 500 and
+  // relays nothing until the value is fixed. README.md carries the same
+  // correction, and relay/test/workerd/configuration.workerd.test.ts holds it
+  // against the real runtime.
   //
   // The ones that are missing are missing on purpose, and README.md says so in
   // the same words: RELAY_MAX_CONNECTIONS, RELAY_MAX_CONNECTIONS_PER_ADDRESS and
