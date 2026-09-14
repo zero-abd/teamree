@@ -1,7 +1,7 @@
 // End-to-end over a real unix socket: the CLI's whole experience of the runtime
 // is this transport, so it is tested against actual connections rather than mocks.
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { connect, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,7 +13,7 @@ import { createDispatcher } from './dispatcher'
 import { registerHandlers } from './handlers/registerHandlers'
 import { MethodRegistry } from './methodRegistry'
 import { createRuntimeContext } from './runtimeContext'
-import { startSocketServer, type RuntimeSocketServer } from './socketServer'
+import { ENDPOINT_MODE, startSocketServer, type RuntimeSocketServer } from './socketServer'
 import { SubscriptionHub } from './subscriptionHub'
 
 type Client = {
@@ -158,6 +158,16 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
     await closed
   })
 
+  it('binds an endpoint no other account may connect to', async () => {
+    // connect(2) on a unix socket is an authorisation check — the kernel asks
+    // for write permission on the file — so this is the whole of who may drive
+    // the runtime from this machine, and it is asserted as an exact mode rather
+    // than as "no worse than": 0755, which is what an ordinary umask leaves
+    // behind, would pass a `& 0o022` test and still be a file the app never
+    // chose the permissions of.
+    expect((await stat(endpoint)).mode & 0o777).toBe(ENDPOINT_MODE)
+  })
+
   it('reclaims a socket file left behind by a crashed runtime', async () => {
     await server.close()
     await writeFile(endpoint, '', 'utf8')
@@ -173,6 +183,54 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
     await client.waitFor(1)
 
     expect(client.frames[0]).toMatchObject({ id: 'z', ok: true })
+    client.socket.destroy()
+  })
+})
+
+// The same claim as above, made where it could actually fail. `listen` takes no
+// mode, so without `restrictEndpoint` the endpoint's permissions are whatever
+// the process umask leaves — 0755 out of a Finder launch, 0777 out of a shell
+// whose profile sets `umask 000`, and the second of those is a socket every
+// account on the machine may connect to. Which of them you get is a property of
+// how the app was started, not of the app, and this is the test that says the
+// app decides.
+describe.skipIf(process.platform === 'win32')('the endpoint under a permissive umask', () => {
+  let directory: string
+  let endpoint: string
+  let server: RuntimeSocketServer
+  let restore: number
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'teamree-socket-umask-'))
+    endpoint = join(directory, 'runtime.sock')
+    restore = process.umask(0o000)
+    server = await startSocketServer({
+      endpoint,
+      // The transport is what is under test here, not the catalogue behind it.
+      dispatch: async (raw) => ({ id: (raw as { id: string }).id, ok: true, result: {} }),
+      subscriptions: new SubscriptionHub()
+    })
+  })
+
+  afterEach(async () => {
+    process.umask(restore)
+    await server.close()
+    await rm(directory, { recursive: true, force: true })
+  })
+
+  it('is owner-only however permissive the umask the app inherited', async () => {
+    expect((await stat(endpoint)).mode & 0o777).toBe(ENDPOINT_MODE)
+  })
+
+  it('is still the socket the CLI connects to and gets an answer on', async () => {
+    // Shutting the door on other accounts must not shut it on this one, which is
+    // the one way a mode this strict could break the product rather than protect
+    // it. The CLI runs as the user the app runs as; that is why 0600 is enough.
+    const client = await openClient(endpoint)
+    client.send(`${JSON.stringify({ id: 'q', method: 'status.get', params: {} })}\n`)
+    await client.waitFor(1)
+
+    expect(client.frames[0]).toMatchObject({ id: 'q', ok: true })
     client.socket.destroy()
   })
 })

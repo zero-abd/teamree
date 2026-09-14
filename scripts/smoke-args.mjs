@@ -24,6 +24,10 @@ export const PEER_BUNDLE_FLAG = '--peer-bundle'
  * what is still running when Electron has exited, and Chromium writes its
  * profile out during shutdown — a directory the app deletes on its own way out
  * is a directory that comes back.
+ *
+ * Named, and deliberately not created: the launcher makes the directory *above*
+ * it and leaves this one to Electron, so that the mode the smoke test reads off
+ * it is the one the app would have on a first launch.
  */
 export const USER_DATA_FLAG = '--smoke-user-data'
 

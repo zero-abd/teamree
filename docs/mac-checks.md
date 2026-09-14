@@ -180,6 +180,37 @@ record to be complete, since a pane's exit writes its own. That is the bound the
 feature promises, not a durability guarantee, and it is on this list only so it
 is not read as the failure in check 2.
 
+## Three permissions only a Mac can confirm
+
+[`local-access.md`](local-access.md) writes down who on this machine can drive
+the runtime, and the short answer is two file permissions. Both were read off a
+real app launch, but that launch was on Linux under the same Chromium and the
+same libuv the Mac build ships, so three links in the chain are still asserted
+rather than seen. None of them blocks a release; the first costs ten seconds.
+
+- **`ls -ld ~/Library`.** Expect `drwx------`. This is the outer of the two
+  directories that keep other accounts away from the socket, and it is macOS's
+  doing rather than this app's — which is exactly why it is worth looking at
+  once instead of repeating it from memory.
+- **The mode Electron gives the user data directory, on a Mac.** `npm run smoke`
+  asserts it and prints it: expect `smoke: user data directory 0700, CLI socket
+  0600`. The smoke test points Electron at a directory that does not exist yet
+  so that the mode it reads is Electron's rather than a temporary directory's,
+  and the run fails if either value is wrong. So this needs nothing done to it —
+  it needs watching once, because a green gate nobody has read is the thing this
+  document exists about.
+- **That macOS refuses a connection to a socket the connecting account cannot
+  write.** This is the mechanism the socket's `0600` depends on, and it was
+  watched happen on Linux one mode at a time: `0777` and `0766` let another
+  account connect, `0755`, `0700` and `0600` refused it with `EACCES`. xnu is
+  believed to make the same check. Confirming it takes a second account and one
+  line — `sudo -u <other> nc -U ~/Library/Application\ Support/teamree/runtime.sock`
+  with teamree running — and expects a permission error rather than a prompt
+  waiting for input. If it *connects*, the socket's mode is decorative on macOS
+  and the second half of `local-access.md` needs rewriting, though nothing
+  changes for a single-user machine, where the directory is what keeps that
+  account out and the mode is never reached.
+
 ## Gates that have never been able to fail here
 
 Every gate in `scripts/release.mjs` was given the defect it claims to catch — the

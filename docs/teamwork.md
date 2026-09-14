@@ -436,7 +436,9 @@ Recorded now, so none of them is a surprise later.
   from. Nothing distinguishes a copied key from the original, and there is no
   revocation short of a roster commit. This is inherent rather than an
   oversight: push access is the trust boundary, and everyone inside it can
-  already run commands as everyone else.
+  already run commands as everyone else. The same is true of the CLI socket, for
+  the same reason and with the same answer — `docs/local-access.md` is that
+  boundary written down, and it is the local one rather than this document's.
 - **A roster change is silent.** Nothing announces that somebody was added. A
   new key becomes another teammate in the **Start teamwork** panel and another
   link in the header's count, indistinguishable from a colleague who was always
