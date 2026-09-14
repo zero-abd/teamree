@@ -10,8 +10,9 @@ public/
   favicon.svg    the application mark, as SVG
   icon-256.png   the same mark as PNG, for apple-touch-icon and older browsers
   og.png         1200x630 social card, generated (see below)
-  screenshot.png the window, copied from docs/screenshot.png
-  demos/         feature clips: <id>.webm, <id>.mp4, <id>.jpg, manifest.json
+  screenshot.png the window; the hero clip's fallback, not docs/screenshot.png
+  demos/         showcase.* the hero tour, plus feature clips: <id>.webm,
+                 <id>.mp4, <id>.jpg, manifest.json
   _headers       security headers and cache lifetimes
   _redirects     /download/mac and /download
 og/
@@ -51,7 +52,19 @@ sh site/og/render.sh        # needs Google Chrome; CHROME=/path/to/chrome to ove
 Four sections carry a short screen capture of the real application: `worktrees`,
 `terminals`, `cli`, `teamwork`. Each ships as `<id>.webm`, `<id>.mp4` and an
 `<id>.jpg` poster, listed in `public/demos/manifest.json` with a width, a height
-and a caption.
+and a caption. The hero carries a fifth, `showcase.*`, which is a tour rather than
+one feature and is not in the manifest — `sync-demos.mjs` leaves it alone.
+
+**Everything captured so far predates 0.2.0 and shows it.** `public/demos/showcase.mp4`,
+`public/demos/showcase.webm`, its poster `public/demos/showcase.jpg` and the
+still `public/screenshot.png` were all shot on 0.1.2: the window in them is the
+old slate ground rather than the absolute black that now ships, the status rail
+reads `Runtime ready 0.1.2`, the teamwork panel is the one that did not ask which
+end you were on, and a teammate's pane is still the corner card it stopped being.
+The prose beside them was corrected; they cannot be, from anywhere but a Mac.
+Retaking them changes nothing else — the names carry no version — and the
+`aria-label` and `alt` text describe what they show rather than how they look, so
+those hold either way.
 
 The page hard-codes each clip's dimensions and caption, because a `<video>`
 without `width`/`height` shifts the layout while it loads, and the page's own
@@ -117,23 +130,14 @@ release but **not** the asset name, so a versioned name would 404 the day the
 next release ships rather than falling back. Verified resolving 302 → 302 → 200
 at 201,721,718 bytes.
 
-Two things about the v0.1.0 release are worth knowing before the next one:
-
-- It carries the same `.dmg` **twice**, as `teamree-0.1.0.dmg` and as
-  `teamree-mac-universal.dmg`. Both resolve. Future releases should publish the
-  version-free name; the versioned one exists because the rename happened after
-  the release was cut.
-- `SHA256SUMS.txt` lists only the **versioned** name, so a reader who downloads
-  `teamree-mac-universal.dmg` finds no line matching their file. The page works
-  around this by printing the digest itself and pointing at that rather than at
-  "the matching line". If a future release regenerates the sums file under the
-  version-free name, that wording can go back to being simpler.
-
-The page prints the SHA-256 of the published `.dmg`, labelled with the version so
-a stale one is visibly stale. For v0.1.0 that is
-`ccf09c74af6ba75a032fee58b11dc578ece77dd3ec38401328fe34a8131bf8d2`, which matches
-`SHA256SUMS.txt`. That digest and the "192 MiB" size are the two things a release
-bump must touch that a `grep` for the version number will not find.
+Every release since v0.1.0 carries the same `.dmg` **twice**, as
+`teamree-<version>.dmg` and as `teamree-mac-universal.dmg`. Both resolve, and
+since v0.1.1 `SHA256SUMS.txt` lists the one digest under both names — so a reader
+who downloaded the version-free file does find the line that matches it. The page
+says exactly that, and prints no digest and no file size of its own: there is now
+nothing on it that a release bump has to touch, which is the point of having none.
+The earlier arrangement, where the page carried v0.1.0's digest and a "192 MiB"
+next to it, is gone; do not put either back.
 
 ## Claims the page makes
 
@@ -164,6 +168,22 @@ written from memory, and three were cut because they did not survive it:
 - **"Windows comes later"** was cut. `ROADMAP.md` is explicit that macOS-only is
   a decision rather than a gap waiting to close, and that the Windows packaging
   has never been built or launched by anybody.
+
+One claim went the other way — it stayed true of the page for longer than it was
+true of the application, which is the worse failure of the two. Through 0.1.x a
+teammate's keystroke landed immediately and the owner's only recourse was a mute
+after the fact, and the page said so. 0.2.0 reversed it: the keystroke is held
+until the owner has read it and allowed it, once, for the session, or always, per
+teammate per pane. The teamwork section was corrected when that shipped, but the
+hero, the `<meta name="description">` and the section's own opening sentence were
+not, and went on promising a reader they could type into a colleague's pane with
+no mention of being asked — a page understating its own protection, which is the
+one direction a security claim must never be wrong in. All four now say the same
+thing, and say the same thing `docs/teamwork.md` does about the limit: the prompt
+is a guard against accident and inattention, not against a teammate who means
+harm, who can be allowed once and then type anything. If the consent model
+changes again, those are the four places, plus the `aria-label` on the parked
+`teamwork` clip.
 
 What on the install path has actually been observed, as opposed to read off a
 string table, is stated on the page itself in the caption under the System
