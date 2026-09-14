@@ -16,6 +16,11 @@
 // build, the suite, the app build and the packaging, and would have reached the
 // first person to run the deploy command.
 //
+// `tests/` was in neither root tsconfig, so a type error in any of the files
+// there passed `npm run typecheck` in silence — including one planted in
+// `gates-can-fail.test.ts`, which is the file that proves the other gates can
+// fail at all.
+//
 // So the question this file asks is a coverage question, and it asks it of the
 // gates rather than of the tsconfigs: it reads `GATES`, follows each gate into
 // the package.json script it runs, collects every tsconfig those scripts hand
@@ -23,7 +28,7 @@
 // contains. Nothing below reads an `include` list. A project that stopped
 // covering a file would fail here however it stopped.
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -100,6 +105,13 @@ function programFiles(project: string): Set<string> {
   )
 }
 
+/** Every `.ts` file under `tests/`, as an absolute path. */
+function everyTestFile(): string[] {
+  return readdirSync(join(REPO_ROOT, 'tests'), { recursive: true, encoding: 'utf8' })
+    .filter((entry) => entry.endsWith('.ts'))
+    .map((entry) => realpathSync(join(REPO_ROOT, 'tests', entry)))
+}
+
 const WORKER = realpathSync(join(REPO_ROOT, 'relay', 'src', 'workers', 'worker.ts'))
 
 let projects: string[] = []
@@ -136,5 +148,14 @@ describe('what the release sequence type-checks', () => {
     expect(relayBuild.has(WORKER)).toBe(false)
     const workerProject = programFiles(join(REPO_ROOT, 'relay', 'tsconfig.workers.json'))
     expect(workerProject.has(WORKER)).toBe(true)
+  })
+
+  it('includes every test file, gates-can-fail.test.ts included', () => {
+    const files = everyTestFile()
+    // A count, so that a `tests/` directory that had quietly emptied could not
+    // satisfy the loop below by having nothing in it.
+    expect(files.length).toBeGreaterThan(20)
+    const unseen = files.filter((file) => !seenByTheRelease.has(file)).map((file) => file.slice(REPO_ROOT.length + 1))
+    expect(unseen, 'a type error in these would pass `npm run typecheck`').toEqual([])
   })
 })

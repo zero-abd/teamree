@@ -13,10 +13,31 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+// Plain ESM so the harness can be started by hand from a checkout, with no
+// build step between editing it and running two peers.
+// @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import { relayIsBuilt, startTwoPeers } from '../../scripts/teamwork/two-peers.mjs'
+// @ts-expect-error -- see above.
 import { memberKeyPath } from '../../scripts/teamwork/identity.mjs'
 
 const RELAY_BUILT = relayIsBuilt()
+
+/**
+ * The two shapes this file reads back off the harness.
+ *
+ * Everything reached through `startTwoPeers` is `any`, because the harness is
+ * plain ESM and has no declarations. Naming the fields the assertions below
+ * actually read is what keeps them meaning anything: `member.handel` would
+ * otherwise type-check and fail at run time, which is the failure this whole
+ * file exists to make impossible for the suites built on the harness.
+ */
+type RosterMember = { handle: string; publicKey: string }
+
+type HarnessPeer = {
+  discovery: { endpoint: string }
+  discoveryPath: string
+  child: { exitCode: number | null; signalCode: NodeJS.Signals | null }
+}
 
 let peers: Awaited<ReturnType<typeof startTwoPeers>>
 
@@ -95,7 +116,7 @@ describe('two peers on one machine', () => {
     await peers.leader.gitPush()
     await peers.joiner.gitPull()
 
-    const roster = await peers.joiner.roster()
+    const roster = (await peers.joiner.roster()) as RosterMember[]
     expect(roster.map((member) => member.handle)).toEqual(['ana'])
     expect(roster[0]?.publicKey).toBe((await peers.leader.whoAmI()).publicKey)
   }, 30_000)
@@ -106,7 +127,8 @@ describe('two peers on one machine', () => {
     await peers.joiner.gitPush()
     await peers.leader.gitPull()
 
-    expect((await peers.leader.roster()).map((member) => member.handle)).toEqual(['ana', 'bo'])
+    const roster = (await peers.leader.roster()) as RosterMember[]
+    expect(roster.map((member) => member.handle)).toEqual(['ana', 'bo'])
   }, 30_000)
 
   it('runs a real PTY in a real worktree of the example repository', async () => {
@@ -158,11 +180,12 @@ describe('two peers on one machine', () => {
   // relay and three clones — so a harness that leaked any of it would poison
   // the run after it rather than fail its own.
   it('tears down completely, leaving no runtime, socket or directory behind', async () => {
-    const endpoints = peers.peers.map((peer) => peer.discovery.endpoint)
+    const started = peers.peers as HarnessPeer[]
+    const endpoints = started.map((peer) => peer.discovery.endpoint)
 
     expect(await peers.stop()).toEqual([])
 
-    for (const peer of peers.peers) {
+    for (const peer of started) {
       expect(peer.child.exitCode === null && peer.child.signalCode === null).toBe(false)
       expect(existsSync(peer.discoveryPath)).toBe(false)
     }

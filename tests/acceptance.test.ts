@@ -8,7 +8,17 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Project, Terminal, Worktree, WorktreeChanges, WorktreeDiff, WorktreeStatus } from '../src/shared/entities'
+import type {
+  Project,
+  Terminal,
+  Worktree,
+  WorktreeChanges,
+  WorktreeCommit,
+  WorktreeDiff,
+  WorktreeLog,
+  WorktreeMergePreview,
+  WorktreeStatus
+} from '../src/shared/entities'
 
 const CLI = join(process.cwd(), 'out/cli/index.js')
 const HOST = join(process.cwd(), 'scripts/acceptance-host.mjs')

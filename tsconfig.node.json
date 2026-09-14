@@ -19,11 +19,22 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   },
+  // `tests/` is here because the gate that guards the release gates lives in
+  // `tests/release/`, and until it was listed a type error anywhere under
+  // `tests/` passed `npm run typecheck` in silence -- including one planted in
+  // the file that proves the other gates can fail.
   "include": [
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
     "electron.vite.config.ts",
-    "src/cli/**/*.ts"
+    "src/cli/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  // The one test that drives the window's store rather than a node module. It
+  // needs the DOM lib and the `@shared/*` aliases, so it is checked by the web
+  // project instead; see the include list there.
+  "exclude": [
+    "tests/paneCloseWriteBack.test.ts"
   ]
 }

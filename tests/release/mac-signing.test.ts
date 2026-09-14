@@ -14,12 +14,19 @@
 // says exactly which steps that leaves unverified rather than leaving the gap
 // implied.
 import { describe, expect, it } from 'vitest'
+// Both are plain ESM because `npm run release` and electron-builder run them
+// as scripts, with no build step between the checkout and the release. On a
+// multi-line import the directive has to sit against the specifier rather than
+// against the statement, because the specifier is the line TypeScript reports
+// the missing declarations on.
 import {
   MAC_SIGNING_VARIABLES,
   certificateName,
   describeMacSigning,
   resolveMacSigning
+  // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 } from '../../scripts/mac-signing.mjs'
+// @ts-expect-error -- see above.
 import { isDistributable, signatureKind, signingReport, soleDmg } from '../../scripts/verify-signing.mjs'
 
 const IDENTITY = 'Developer ID Application: Example Person (AB12CD34EF)'
