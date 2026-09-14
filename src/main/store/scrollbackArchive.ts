@@ -27,8 +27,22 @@
 // have written is refused before its bytes are read; and a record is removed
 // with the pane it belongs to, with a sweep at startup for the ones a crash
 // orphaned. So the whole directory is the panes a person actually has open
-// multiplied by one cap, and nothing else.
+// multiplied by one cap, and nothing else — one file per pane, whether that
+// pane's record was written once or a thousand times.
+//
+// **It is written from three places**: a pane exiting, the app quitting, and a
+// checkpoint taken while a pane is still running, which is what stops a machine
+// losing power mid-build from taking the build's output with it.
+// `scrollbackCheckpoints.ts` owns when the third one happens; what this file
+// owns is that the three cannot get in each other's way. Writes are one chain
+// rather than one per caller, so two of them never reach one path at the same
+// moment; each write is a temp file and a rename, so a reader sees one whole
+// version or the other and never half of either; and a write that would not
+// change the file is skipped, so three callers saying the same thing is one
+// write and the record's own timestamp stays honest about when its output was
+// last new.
 
+import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -105,6 +119,20 @@ export class ScrollbackArchive {
 
   #queue: Promise<void> = Promise.resolve()
   #reportedWriteFailure = false
+  /**
+   * What each pane's file was last asked to hold, as a digest.
+   *
+   * A record is written from three places now — a pane exiting, the app
+   * quitting, and a checkpoint taken while a pane is still running — and they
+   * overlap by design: a pane that exits and is then quit on has produced
+   * nothing in between, and a full-screen program redrawing a spinner produces
+   * bytes that the allowlist reduces to exactly what it reduced them to last
+   * time. Every one of those would be a file rewritten to say what it already
+   * says. Comparing the tail itself would mean holding a second copy of every
+   * pane's record in memory, which is the one thing this module refuses to do,
+   * so what is kept is a digest per open pane and nothing else.
+   */
+  readonly #lastWritten = new Map<string, string>()
 
   private constructor(
     readonly directory: string,
@@ -181,15 +209,21 @@ export class ScrollbackArchive {
       }
       const raw: unknown = JSON.parse(readFileSync(path, 'utf8'))
       if (typeof raw !== 'object' || raw === null) return undefined
-      const { text, endedAt } = raw as Record<string, unknown>
+      const { text, recordedAt, endedAt } = raw as Record<string, unknown>
       if (typeof text !== 'string' || text.length === 0) return undefined
+      // `endedAt` is what a build before checkpoints called this, and it is
+      // still read here rather than versioned away: the two spell one number
+      // the same way, the shape is otherwise unchanged, and an upgrade that
+      // dated every restored pane to the moment of the upgrade would be a
+      // worse answer than reading a field by its old name.
+      const at = typeof recordedAt === 'number' ? recordedAt : endedAt
 
       // Sanitised and capped again here, not only on the way in: the file is the
       // boundary whatever wrote it, and the bytes it holds describe themselves
       // to a terminal rather than to this process.
       const kept = tailFromLineBoundary(sanitizeRecordedOutput(text), MAX_RECORD_BYTES)
       if (kept.length === 0) return undefined
-      return { text: kept, endedAt: typeof endedAt === 'number' && Number.isFinite(endedAt) ? endedAt : this.#now() }
+      return { text: kept, recordedAt: typeof at === 'number' && Number.isFinite(at) ? at : this.#now() }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         this.#onProblem(`could not read the record for ${terminalId}: ${describe(error)}`)
@@ -198,7 +232,15 @@ export class ScrollbackArchive {
     }
   }
 
-  /** Writes the capped, inert tail of `text`. Queued; `flush` waits for it. */
+  /**
+   * Writes the capped, inert tail of `text`. Queued; `flush` waits for it.
+   *
+   * A write that would not change the file is not made at all, which is how
+   * three callers writing the same record stay one file write. The timestamp is
+   * part of what is skipped, deliberately: it says when the pane's output was
+   * last written down, and rewriting it would move it forward without anything
+   * having been printed.
+   */
   put(terminalId: string, text: string): void {
     const path = this.#pathFor(terminalId)
     if (path === undefined) return
@@ -209,21 +251,38 @@ export class ScrollbackArchive {
       return
     }
 
+    const fingerprint = createHash('sha256').update(kept).digest('base64')
+    if (this.#lastWritten.get(terminalId) === fingerprint) return
+    // Taken now rather than when the write lands, so that a second `put` of the
+    // same text is skipped even while the first is still queued — which is
+    // exactly the shape of an exit and a quit arriving together.
+    this.#lastWritten.set(terminalId, fingerprint)
+
     const document = {
       version: SCROLLBACK_RECORD_VERSION,
       terminalId,
-      endedAt: this.#now(),
+      recordedAt: this.#now(),
       text: kept
     }
-    this.#enqueue(async () => {
-      await writeJsonFileAtomically(path, document)
-    }, `could not write the record for ${terminalId}`)
+    this.#enqueue(
+      async () => {
+        await writeJsonFileAtomically(path, document)
+      },
+      `could not write the record for ${terminalId}`,
+      // A write that failed left something else on disk, so the pane must not
+      // be remembered as holding this. Only if nothing newer has been promised
+      // since: a later `put` that succeeds is the truth about the file.
+      () => {
+        if (this.#lastWritten.get(terminalId) === fingerprint) this.#lastWritten.delete(terminalId)
+      }
+    )
   }
 
   /** Drops a pane's record, because the pane itself has been dropped. */
   remove(terminalId: string): void {
     const path = this.#pathFor(terminalId)
     if (path === undefined) return
+    this.#lastWritten.delete(terminalId)
     this.#enqueue(async () => {
       await rm(path, { force: true })
     }, `could not remove the record for ${terminalId}`)
@@ -251,12 +310,13 @@ export class ScrollbackArchive {
    * every pane at once cannot hold a hundred file handles open at the same
    * moment; each write is small and the whole queue is one directory's worth.
    */
-  #enqueue(work: () => Promise<void>, failure: string): void {
+  #enqueue(work: () => Promise<void>, failure: string, onFailure?: () => void): void {
     this.#queue = this.#queue.then(async () => {
       try {
         await work()
         this.#reportedWriteFailure = false
       } catch (error) {
+        onFailure?.()
         // Said once. A full or read-only disk fails every pane on the way out,
         // and one line per pane would bury the reason in the repetition.
         if (this.#reportedWriteFailure) return

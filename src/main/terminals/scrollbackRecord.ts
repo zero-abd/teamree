@@ -32,8 +32,15 @@
 /** One pane's kept output, and when this machine wrote it down. */
 export type RecordedScrollback = {
   text: string
-  /** By this machine's clock, at the moment the record was taken. */
-  endedAt: number
+  /**
+   * By this machine's clock, at the moment the record was taken — which is not
+   * necessarily when the pane stopped printing. A record is written when a pane
+   * exits, when the app quits, and at a checkpoint while the pane is still
+   * running, and only the first of those three is an ending. So this is the
+   * last moment the record is known to be true, and the pane may have printed
+   * more after it that nothing wrote down.
+   */
+  recordedAt: number
 }
 
 const ESC = '\x1b'
@@ -57,21 +64,29 @@ export const INERT_RECORD = /^(?:[^\u0000-\u001f\u007f-\u009f]|[\n\r\t\u0008]|\u
  *
  * Both marks are said in words rather than left to be inferred from a colour,
  * because the one thing a reader must never do here is take a record for a
- * running process. The first line says the output is finished and when it
- * stopped; the last says where this run begins. A record long enough to scroll
+ * running process. The first line says the output is finished and how far it
+ * goes; the last says where this run begins. A record long enough to scroll
  * past its own opening line still has the closing one immediately above the
  * first thing the new shell printed, which is the boundary that actually gets
  * read.
  */
 export function replayableRecord(record: RecordedScrollback): string {
-  return `${openingMark(record.endedAt)}${record.text}${closingMark()}`
+  return `${openingMark(record.recordedAt)}${record.text}${closingMark()}`
 }
 
-/** Said before the record, so it is described before it is read. */
-export function openingMark(endedAt: number): string {
+/**
+ * Said before the record, so it is described before it is read.
+ *
+ * The time is the one thing here a reader can act on, so it is the moment this
+ * was written down rather than the moment the pane stopped — the two are the
+ * same only when the pane exited, and a machine that lost power mid-build wrote
+ * its last checkpoint some seconds before it printed its last line. Saying "up
+ * to 14:32" is a claim this can keep; saying the pane ended then is not.
+ */
+export function openingMark(recordedAt: number): string {
   return (
-    `${RESET}${DIM}[record — what this pane printed before teamree quit at ` +
-    `${clockLabel(endedAt)}; nothing in it is running]${RESET}\r\n`
+    `${RESET}${DIM}[record — what this pane printed, up to ` +
+    `${clockLabel(recordedAt)} when it was last written down; nothing in it is running]${RESET}\r\n`
   )
 }
 

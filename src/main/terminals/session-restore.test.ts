@@ -1,9 +1,9 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Layout } from '../../shared/entities'
-import { ScrollbackArchive } from '../store/scrollbackArchive'
+import { MAX_RECORD_BYTES, ScrollbackArchive } from '../store/scrollbackArchive'
 import { canSpawnPty, waitUntil } from './pty-test-support'
 import { INERT_RECORD } from './scrollbackRecord'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
@@ -143,13 +143,16 @@ describePty('restoring terminals across a restart', () => {
   function manager(
     repositories: LayoutRepository & SessionRepository,
     checkout: string,
-    scrollback?: ScrollbackArchive
+    scrollback?: ScrollbackArchive,
+    /** Shortened from fifteen seconds, so a test can watch a checkpoint happen. */
+    checkpointIntervalMs?: number
   ): TerminalSessionManager {
     const created = new TerminalSessionManager({
       resolveWorktreeCwd: (worktreeId) => (worktreeId === 'wt_1' ? checkout : undefined),
       layouts: repositories,
       sessions: repositories,
-      ...(scrollback === undefined ? {} : { scrollback })
+      ...(scrollback === undefined ? {} : { scrollback }),
+      ...(checkpointIntervalMs === undefined ? {} : { checkpointIntervalMs })
     })
     managers.push(created)
     return created
@@ -354,6 +357,93 @@ describePty('restoring terminals across a restart', () => {
     expect(reopened.read(opened.id)?.text).toContain('AGENT ARGS:')
   }, 20_000)
 
+  // The exit and the quit are both endings, and a machine that loses power has
+  // neither. These four are about the pane that is still running.
+  it('comes back from a crash showing what a running pane had printed', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive, 100)
+    const opened = first.create({ worktreeId: 'wt_1', command: 'echo building-still; sleep 30' })
+    await waitUntil(() => first.read(opened.id).includes('building-still'), 'the command to print')
+    await waitUntil(
+      () => archive.read(opened.id)?.text.includes('building-still') === true,
+      'a checkpoint of a running pane to reach the disk'
+    )
+
+    // Nothing ended. No exit event, no shutdown, no flush — the pane is still
+    // running its command, and the record of it is on disk all the same, which
+    // is the whole of the difference between losing a forty-minute build to a
+    // power cut and not.
+    expect(first.list('wt_1')[0]?.running).toBe(true)
+
+    const reopened = await ScrollbackArchive.open(archive.directory, [opened.id])
+    const second = manager(repositories, checkout, reopened)
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+    expect(second.read(opened.id)).toContain('building-still')
+    expect(second.read(opened.id)).toContain('nothing in it is running')
+  }, 20_000)
+
+  it('stops writing a pane down the moment it stops printing', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive, 50)
+    const opened = first.create({ worktreeId: 'wt_1', command: 'echo one-line; sleep 30' })
+    await waitUntil(() => archive.read(opened.id) !== undefined, 'the first checkpoint')
+
+    // Stood on from outside, so any write at all is unmistakable. A pane
+    // waiting at a prompt is most panes most of the time, and it has to cost
+    // nothing: no write, and no timer waiting to make one.
+    const record = path.join(archive.directory, `${opened.id}.json`)
+    await writeFile(record, 'untouched', 'utf8')
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await archive.flush()
+
+    expect(await readFile(record, 'utf8')).toBe('untouched')
+  }, 20_000)
+
+  it('keeps a running pane inside the same cap a finished one gets', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive, 100)
+    const loud = 'i=0; while [ $i -lt 20000 ]; do echo "line $i"; i=$((i+1)); done; echo done-printing; sleep 30'
+    const opened = first.create({ worktreeId: 'wt_1', command: loud })
+    await waitUntil(
+      () => archive.read(opened.id)?.text.includes('done-printing') === true,
+      'a checkpoint taken after the pane had printed past the cap'
+    )
+
+    const kept = archive.read(opened.id)
+    expect(Buffer.byteLength(kept?.text ?? '', 'utf8')).toBeLessThanOrEqual(MAX_RECORD_BYTES)
+    expect(kept?.text).not.toContain('line 0\r\n')
+    expect(first.list('wt_1')[0]?.running).toBe(true)
+  }, 30_000)
+
+  // Two writers, one path: the checkpoint that the last chunk of output armed,
+  // and the quit writing every pane on its way out.
+  it('quits on a pane that is checkpointing without tearing its record', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive, 10)
+    const noisy = 'while true; do echo tick; sleep 0.05; done'
+    const opened = first.create({ worktreeId: 'wt_1', command: noisy })
+    await waitUntil(() => archive.read(opened.id)?.text.includes('tick') === true, 'checkpoints to be happening')
+
+    await first.shutdown()
+    await archive.flush()
+
+    // One whole record, readable, and nothing half-written left beside it.
+    expect(archive.read(opened.id)?.text).toContain('tick')
+    expect(await readdir(archive.directory)).toEqual([`${opened.id}.json`])
+  }, 20_000)
+
   it('takes a pane record with the pane when the user closes it', async () => {
     const { checkout } = await fakeAgent('unused')
     const repositories = createRepositories()
@@ -367,6 +457,27 @@ describePty('restoring terminals across a restart', () => {
     await first.close(opened.id)
     await archive.flush()
     expect(archive.read(opened.id)).toBeUndefined()
+  }, 20_000)
+
+  // The directory is the panes a person has open multiplied by one cap, and a
+  // checkpoint must not be a way for a pane they closed to get back into it.
+  it('does not put back the record of a pane closed while it was printing', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive, 100)
+    const opened = first.create({ worktreeId: 'wt_1', command: 'while true; do echo tick; sleep 0.05; done' })
+    await waitUntil(() => archive.read(opened.id) !== undefined, 'a checkpoint to have written the record once')
+
+    // Closed while it is still printing, so there is a record on disk and a
+    // checkpoint armed by the chunk that arrived after it.
+    await first.close(opened.id)
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    await archive.flush()
+
+    expect(archive.read(opened.id)).toBeUndefined()
+    expect(await readdir(archive.directory)).toEqual([])
   }, 20_000)
 
   it('opens a pane with nothing above the prompt when its record cannot be read', async () => {
