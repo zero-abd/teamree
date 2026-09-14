@@ -9,6 +9,9 @@
 // own tests while proving nothing.
 
 import { describe, expect, it } from 'vitest'
+// Plain ESM on purpose, and the reason is the subject of this file: the harness
+// has to run without a build step, which is why the format is written twice.
+// @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import { generateIdentity, memberFileText } from '../../scripts/teamwork/identity.mjs'
 import { formatMemberFile, parseMemberFile } from '../../src/main/teamwork/memberFile'
 

@@ -32,6 +32,8 @@ import type {
 import { TYPING_WINDOW_MS } from '../../src/shared/entities'
 import type { WatchedPaneEvent } from '../../src/shared/methods'
 import { ErrorCode } from '../../src/shared/protocol'
+// Plain ESM so the harness can be run by hand from a checkout; see two-peers.test.ts.
+// @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import { relayIsBuilt, startTwoPeers } from '../../scripts/teamwork/two-peers.mjs'
 
 /**

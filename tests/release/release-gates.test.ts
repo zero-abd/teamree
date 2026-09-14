@@ -11,6 +11,10 @@
 // and gh, deliberately: the alternative is a suite that cuts releases.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+// The release script is plain ESM because it is run by `npm run release` from a
+// checkout, before anything has been built. The directive below sits against
+// the specifier rather than against the statement because that is the line
+// TypeScript reports the missing declarations on.
 import {
   GATES,
   STABLE_DMG_NAME,
@@ -24,6 +28,7 @@ import {
   readHighlights,
   releaseNotes,
   tagAgreement
+  // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 } from '../../scripts/release.mjs'
 
 const HEAD = '1f0c3b9a7d4e2f6c8b0a1d3e5f7a9c2b4d6e8f01'
@@ -173,6 +178,7 @@ describe('the gates', () => {
   it('runs every check the release is meant to have passed', () => {
     expect(GATES.map((gate: { name: string }) => gate.name)).toEqual([
       'typecheck',
+      'relay typecheck',
       'format:check',
       'oxlint',
       'build:cli',
@@ -185,9 +191,10 @@ describe('the gates', () => {
     ])
   })
 
-  it('builds the relay in the relay, and everything else at the root', () => {
+  it("runs the relay's own gates in the relay, and everything else at the root", () => {
+    const inTheRelay = ['relay build', 'relay typecheck']
     for (const gate of GATES as Array<{ name: string; cwd?: string }>) {
-      expect(gate.cwd, gate.name).toBe(gate.name === 'relay build' ? 'relay' : undefined)
+      expect(gate.cwd, gate.name).toBe(inTheRelay.includes(gate.name) ? 'relay' : undefined)
     }
   })
 })

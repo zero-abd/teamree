@@ -34,7 +34,10 @@ const CONFIG = readFileSync(join(REPO_ROOT, 'electron-builder.yml'), 'utf8')
 function block(name: string): string {
   const found = new RegExp(`\\n${name}:\\n([\\s\\S]*?)(?=\\n[a-z])`).exec(CONFIG)
   expect(found, `electron-builder.yml has no ${name}: block`).not.toBeNull()
-  return (found as RegExpExecArray)[1]
+  // The `?? ''` is for the type-checker and nothing else: a successful match of
+  // this pattern always carries group 1, but `noUncheckedIndexedAccess` cannot
+  // know that, and the `expect` above has already thrown if there was no match.
+  return (found as RegExpExecArray)[1] ?? ''
 }
 
 describe('what the macOS package is built from', () => {

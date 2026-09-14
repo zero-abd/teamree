@@ -27,7 +27,10 @@ function extraResources(): { from: string; to: string }[] {
   const block = /\nextraResources:\n([\s\S]*?)\n[a-z]/.exec(CONFIG)
   expect(block, 'electron-builder.yml has no extraResources block').not.toBeNull()
   const pairs = []
-  for (const match of (block as RegExpExecArray)[1].matchAll(/- from: (\S+)\n\s+to: (\S+)/g)) {
+  // The `?? ''` is for the type-checker and nothing else: a successful match of
+  // this pattern always carries group 1, but `noUncheckedIndexedAccess` cannot
+  // know that, and the `expect` above has already thrown if there was no match.
+  for (const match of ((block as RegExpExecArray)[1] ?? '').matchAll(/- from: (\S+)\n\s+to: (\S+)/g)) {
     pairs.push({ from: match[1] as string, to: match[2] as string })
   }
   return pairs

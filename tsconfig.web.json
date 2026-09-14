@@ -16,5 +16,25 @@
     "baseUrl": ".",
     "paths": { "@shared/*": ["src/shared/*"] }
   },
-  "include": ["src/renderer/src/**/*.ts", "src/renderer/src/**/*.tsx", "src/shared/**/*.ts", "src/preload/index.d.ts"]
+  // The last two entries are one test and what that test needs. `tests/` as a
+  // whole belongs to the node project; `paneCloseWriteBack.test.ts` is the
+  // exception, because it puts the window's store on one side and the real
+  // main-process terminal service on the other, so it is the only file in the
+  // repository that imports both halves. It is checked here rather than there
+  // because the renderer half is the half that cannot be checked without the
+  // DOM lib and the `@shared/*` aliases above.
+  //
+  // `src/main` comes with it: a composite project has to list every file it
+  // reaches, so the test's main-process imports pull the main tree in. Main is
+  // therefore checked twice, once per project. That costs a few seconds and
+  // hides nothing -- the node project checks the same files without the DOM
+  // lib, which is the check that matters for code that never sees a window.
+  "include": [
+    "src/renderer/src/**/*.ts",
+    "src/renderer/src/**/*.tsx",
+    "src/shared/**/*.ts",
+    "src/preload/index.d.ts",
+    "src/main/**/*.ts",
+    "tests/paneCloseWriteBack.test.ts"
+  ]
 }

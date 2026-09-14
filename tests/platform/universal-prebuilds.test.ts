@@ -17,6 +17,9 @@ import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+// The hook is plain ESM because electron-builder loads it itself, from a
+// config file, with no TypeScript in front of it.
+// @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import afterPack from '../../scripts/afterpack.mjs'
 
 /** electron-builder's Arch enum, which is what a real context carries. */
