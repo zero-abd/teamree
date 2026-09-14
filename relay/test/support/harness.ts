@@ -149,13 +149,24 @@ export class TestPeer {
   }
 }
 
-export async function connectPeer(harness: TestRelay, headers: Record<string, string> = {}): Promise<TestPeer> {
-  const socket = new WebSocket(harness.url, { headers })
+/**
+ * Connects to an exact URL rather than to the relay's own. It exists for the one
+ * thing `harness.url` cannot say: a trailing routing hint. Hosts that have to
+ * choose a home for a connection before its hello arrives are named by one — a
+ * Durable Object is — and a test that this host needs no such name has to be
+ * able to send it a wrong one.
+ */
+export async function connectPeerTo(url: string, headers: Record<string, string> = {}): Promise<TestPeer> {
+  const socket = new WebSocket(url, { headers })
   await new Promise<void>((resolve, reject) => {
     socket.once('open', () => resolve())
     socket.once('error', reject)
   })
   return new TestPeer(socket)
+}
+
+export async function connectPeer(harness: TestRelay, headers: Record<string, string> = {}): Promise<TestPeer> {
+  return connectPeerTo(harness.url, headers)
 }
 
 /** Connects and greets, resolving once the relay has acknowledged the hello. */

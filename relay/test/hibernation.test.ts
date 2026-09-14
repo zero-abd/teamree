@@ -326,6 +326,147 @@ describe('a pairing held by a durable object', () => {
     expect(JSON.parse(second.control[0] ?? '{}')).toMatchObject({ t: 'paired' })
   })
 
+  it('never refuses an upgrade to a connection that presents its own rendezvous', async () => {
+    const token = rendezvousToken()
+    const relay = hibernatingPair({ RELAY_PAIR_TIMEOUT_MS: '600000' }, await rendezvousId(token))
+
+    // Three sockets may hold the pairing, and the third one's whole purpose is
+    // that a peer coming back from a suspend takes its own session over. So the
+    // pairing half never fills from the pair's own side: every hello that names
+    // this object either parks, pairs, or displaces what was here, which leaves
+    // at most two live sockets holding it. Six arrivals in a row, and not one of
+    // them is handed a refusal — which matters because a refused upgrade reaches
+    // a WebSocket client as a transport error it cannot tell from a relay that
+    // is not there.
+    const arrivals: FakeSocket[] = []
+    for (let arrival = 0; arrival < 6; arrival += 1) {
+      const offered = relay.offer()
+      expect(offered.accepted).toBe(true)
+      await relay.say(offered.socket, hello(token))
+      arrivals.push(offered.socket)
+    }
+
+    expect(relay.log.records.some((record) => record.event === 'upgrade.refused')).toBe(false)
+    expect(JSON.parse(arrivals.at(-1)?.control.at(-1) ?? '{}')).toMatchObject({ t: 'paired' })
+  })
+
+  it('refuses an upgrade only when it cannot account for what is already attached', () => {
+    const relay = hibernatingPair()
+    const attached = [relay.connect(), relay.connect(), relay.connect()]
+
+    // A socket whose state the object cannot read is counted against the pairing
+    // half and never displaced: the object cannot tell whether that connection
+    // is finished, and guessing the other way is how the cap gets walked past
+    // and how a live peer ends up with nothing checking its deadlines. Three of
+    // those is the whole of what is left of the 503, and it is not a state
+    // anybody holding the URL can arrange — it is the runtime taking a socket
+    // away while the object is still looking at it.
+    for (const socket of attached) socket.breakAttachment()
+
+    expect(relay.offer().accepted).toBe(false)
+    expect(relay.log.records.some((record) => record.event === 'upgrade.refused')).toBe(true)
+  })
+
+  it('answers a hello for another rendezvous the same way whether or not the pair is here', async () => {
+    const token = rendezvousToken()
+    const name = await rendezvousId(token)
+
+    const empty = hibernatingPair({}, name)
+    const atAnEmptyOne = empty.connect()
+    await empty.say(atAnEmptyOne, hello(rendezvousToken()))
+
+    const busy = hibernatingPair({}, name)
+    const owner = busy.connect()
+    const partner = busy.connect()
+    await busy.say(owner, hello(token))
+    await busy.say(partner, hello(token))
+    const atABusyOne = busy.connect()
+    await busy.say(atABusyOne, hello(rendezvousToken()))
+
+    // Whoever has the URL has the hash, and a hash is not a token. What they are
+    // told back must not vary with whether the two people it belongs to are in
+    // there: an answer that differs when the rendezvous is occupied is a way to
+    // watch a pair you cannot join. Both probes get the same words, and the pair
+    // never hears that either of them happened.
+    expect(atABusyOne.closedWith).toEqual(atAnEmptyOne.closedWith)
+    expect(atABusyOne.control).toEqual(atAnEmptyOne.control)
+    expect(owner.closedWith).toBeUndefined()
+    expect(partner.closedWith).toBeUndefined()
+    expect(partner.control.map((frame) => (JSON.parse(frame) as { t: string }).t)).toEqual(['paired'])
+  })
+
+  it('has no connection cap to spend, because a Worker has no process to count across', () => {
+    // RELAY_MAX_CONNECTIONS is a count across a whole process. It parses here,
+    // because the configuration is shared with the container host, and then
+    // there is nowhere to apply it. What bounds this host instead is the fixed
+    // number of sockets one object will hold. `wrangler.jsonc` leaves the
+    // variable out rather than carrying one the relay reads and then ignores,
+    // and `test/hosts.test.ts` holds the file to that.
+    const relay = hibernatingPair({ RELAY_MAX_CONNECTIONS: '2' })
+
+    expect([relay.offer(), relay.offer(), relay.offer()].map((offered) => offered.accepted)).toEqual([true, true, true])
+  })
+
+  it('has no send queue to measure, so nobody here is closed for not reading', async () => {
+    const relay = hibernatingPair({
+      RELAY_MAX_BUFFERED_BYTES: '65536',
+      RELAY_MAX_FRAME_BYTES: '65536',
+      RELAY_MAX_FRAMES_PER_SECOND: '1000'
+    })
+    const peer = relay.connect()
+    await relay.say(peer, hello(rendezvousToken()))
+
+    // The container host closes exactly this peer — one that asks for pongs and
+    // never takes them off its socket — in `test/limits.test.ts`, "closes a peer
+    // that is not reading the answers it asked for". Here the runtime owns the
+    // send queue and does not expose its depth, so the relay has nothing to
+    // compare against the bound and the rule never fires however low the bound
+    // is set. That is a limitation rather than a decision, README.md says so in
+    // those words, and this is what stops it being quietly untrue in either
+    // direction: if the runtime ever did expose a depth, this would go red and
+    // the paragraph would need rewriting.
+    for (let asked = 0; asked < 300; asked += 1) await relay.say(peer, PING_FRAME)
+
+    expect(peer.closedWith).toBeUndefined()
+    expect(peer.control.filter((frame) => frame === PONG_FRAME)).toHaveLength(300)
+  })
+
+  it('refuses a frame over the size cap rather than passing it on', async () => {
+    const relay = hibernatingPair({ RELAY_MAX_FRAME_BYTES: '4096' })
+    const token = rendezvousToken()
+    const first = relay.connect()
+    const second = relay.connect()
+    await relay.say(first, hello(token))
+    await relay.say(second, hello(token))
+
+    await relay.say(first, new Uint8Array(4097))
+
+    // 1009 is the standard "message too big", so any client understands it
+    // without knowing this relay. The cap is a rule of the relay rather than of
+    // whatever parsed the frame, which is why it is checked on this host too:
+    // there is no `ws` underneath here to have refused it first.
+    expect(first.closedWith?.code).toBe(CloseCode.TooLarge)
+    expect(second.binary).toHaveLength(0)
+  })
+
+  it('closes a peer sending bytes faster than its budget allows', async () => {
+    const relay = hibernatingPair({ RELAY_MAX_FRAME_BYTES: '4096', RELAY_MAX_BYTES_PER_SECOND: '8192' })
+    const token = rendezvousToken()
+    const first = relay.connect()
+    const second = relay.connect()
+    await relay.say(first, hello(token))
+    await relay.say(second, hello(token))
+
+    // The clock does not move, so the bucket never refills: two full frames are
+    // the whole of one second's budget and the third is over it by arithmetic.
+    // With no connection cap and no queue to measure, the two rate budgets are
+    // the whole of what bounds one peer's demand on this object.
+    for (let frame = 0; frame < 3; frame += 1) await relay.say(first, new Uint8Array(4096))
+
+    expect(first.closedWith?.code).toBe(CloseCode.RateLimited)
+    expect(second.binary).toHaveLength(2)
+  })
+
   it('turns away a hello for a rendezvous it is not the home of', async () => {
     const token = rendezvousToken()
     const relay = hibernatingPair({ RELAY_PAIR_TIMEOUT_MS: '600000' }, await rendezvousId(token))

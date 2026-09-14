@@ -30,7 +30,7 @@
 // makes them honest: it fails the run on any skip that is not accounted for, so
 // opting out here shows up there as a permitted absence rather than as silence.
 // It carries a third variable of its own, TEAMREE_SKIP_WORKERD_TESTS=1, for the
-// relay's two Worker suites. That one is not checked here because the relay's
+// relay's three Worker suites. That one is not checked here because the relay's
 // own `workerdUnavailable()` already says precisely why the runtime is missing,
 // and restating it would be two answers to one question.
 //

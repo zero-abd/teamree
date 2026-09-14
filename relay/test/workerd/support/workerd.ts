@@ -85,6 +85,8 @@ export type LogRecord = Record<string, unknown>
 export type WorkerdRelay = {
   /** The URL a peer dials for a rendezvous, named the way the Worker expects. */
   url: (token: string) => string
+  /** The same server over plain HTTP, for the paths that are not an upgrade. */
+  origin: string
   /** Every structured line the Worker has logged, awaitable as it arrives. */
   log: Inbox<LogRecord>
   /**
@@ -193,6 +195,7 @@ export async function startWorkerdRelay(vars: Record<string, string> = {}): Prom
 
   return {
     url: (token) => `ws://127.0.0.1:${port}/v1/relay/${rendezvousName(token)}`,
+    origin: `http://127.0.0.1:${port}`,
     log,
     addressRefOnNextOpen: async () => {
       const already = log.items.length

@@ -6,7 +6,14 @@
 
 import { afterEach, describe, expect, it } from 'vitest'
 import { CloseCode, PING_FRAME } from '../src/core/protocol.js'
-import { connectPeer, joinPeer, rendezvousToken, startTestRelay, type TestRelay } from './support/harness.js'
+import {
+  connectPeer,
+  connectPeerTo,
+  joinPeer,
+  rendezvousToken,
+  startTestRelay,
+  type TestRelay
+} from './support/harness.js'
 
 let harness: TestRelay
 
@@ -94,6 +101,28 @@ describe('pairing', () => {
 
     const closed = await lonely.waitClosed()
     expect(closed.code).toBe(CloseCode.PairTimeout)
+  })
+
+  it('pairs on the token alone, whatever the URL claimed the rendezvous was', async () => {
+    harness = await startTestRelay()
+    const token = rendezvousToken()
+
+    // The trailing segment is a routing hint for a host that has to pick a home
+    // for a connection before its hello arrives — the Worker names a Durable
+    // Object with it, and checks that the hello agrees. This host pairs on the
+    // token and has no name to check against, so two peers who disagree about
+    // the hint, or invent one, still meet. It needs no check of its own because
+    // a peer that sent a hint for one pairing and a token for another would
+    // simply land where its partner is not, which costs only that peer.
+    const first = await connectPeerTo(`${harness.url}/${'0'.repeat(64)}`)
+    first.hello(token)
+    await first.control.atLeast(1)
+    const second = await connectPeerTo(`${harness.url}/a-hint-that-is-not-a-hash`)
+    second.hello(token)
+
+    expect(await second.waitPaired()).toMatchObject({ initiator: true })
+    first.send(Buffer.from('through'))
+    expect((await second.binary.atLeast(1))[0]?.toString()).toBe('through')
   })
 })
 
