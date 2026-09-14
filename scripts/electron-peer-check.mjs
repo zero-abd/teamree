@@ -33,6 +33,7 @@
 import { readFileSync } from 'node:fs'
 import { getCiphers } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
+import { PEER_BUNDLE_FLAG, readNamedArg } from './smoke-args.mjs'
 
 const CORPUS_URL = new URL('../src/shared/peer/noiseVectors.json', import.meta.url)
 
@@ -344,8 +345,14 @@ export async function runPeerCheck(bundleDir) {
 // Run directly: `node scripts/electron-peer-check.mjs <bundleDir>`, or the same
 // under Electron. One JSON line on stdout so a parent process can read it
 // without parsing prose.
+//
+// `--peer-bundle=<dir>` says the same thing and is what `run-smoke.mjs` passes;
+// see smoke-args.mjs for why naming it beats counting to it. The bare
+// positional is still read for the handwritten form above, and reading it by
+// position is safe here in a way it was not there: this branch is only taken
+// when argv[1] is this file, which is to say when nothing was prepended.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const bundleDir = process.argv[2]
+  const bundleDir = readNamedArg(PEER_BUNDLE_FLAG) ?? process.argv[2]
   if (!bundleDir) {
     console.error('electron-peer-check: pass the directory that buildPeerBundle() wrote')
     process.exit(2)
