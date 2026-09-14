@@ -138,6 +138,18 @@ describe('release notes, before anything shows them', () => {
   it('keeps the words and loses the control characters', () => {
     expect(plainText('Line one\r\nLine two\u001b[31m red')).toBe('Line one\nLine two[31m red')
   })
+
+  // The eight-bit forms too. U+009B is CSI and U+009D is OSC — the same
+  // sequences as `ESC [` and `ESC ]` in a single byte each, which is how a
+  // filter written as "drop ESC" gets walked straight past. Nothing renders
+  // these today; it is asserted because the whole worth of the sentence above
+  // is that it is true of the range rather than of the one character somebody
+  // happened to think of.
+  it('loses the eight-bit controls as well as the seven-bit ones', () => {
+    expect(plainText('before\u009b6nafter')).toBe('before6nafter')
+    expect(plainText('title\u009d0;renamed')).toBe('title0;renamed')
+  })
+
   // Markup stays markup: it is not rendered anywhere, and taking it out would
   // quietly rewrite what a maintainer wrote. The card puts this in a text node.
   it('leaves markup exactly as written, because nothing renders it', () => {

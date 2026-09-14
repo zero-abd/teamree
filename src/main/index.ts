@@ -6,6 +6,7 @@ import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
 import { createQuitSequence } from './quitSequence'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
+import { mayOpenExternally, navigationVerdict } from './windowNavigation'
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -30,6 +31,20 @@ function createWindow(): BrowserWindow {
     backgroundColor: windowBackground(),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
+      // Off because the preload is an ES module, not because anything in it
+      // wants Node. A sandboxed preload is evaluated as a classic script, so
+      // `out/preload/index.mjs` fails to load with "Cannot use import statement
+      // outside a module" and the window comes up with no bridge at all — which
+      // is what happens when this line is flipped, watched rather than guessed:
+      // `npm run smoke` reports the `preload-error` and goes red. What the
+      // preload actually touches — `contextBridge`, `ipcRenderer`,
+      // `process.platform`, `process.versions` — a sandboxed preload has.
+      //
+      // It is not free. This renderer runs outside Chromium's own sandbox, so a
+      // defect in the code that draws somebody else's pane is a defect with the
+      // user's account behind it rather than one behind a second wall. Turning
+      // it on means emitting the preload as CommonJS first; `docs/renderer-boundary.md`
+      // has the whole of it.
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -40,10 +55,22 @@ function createWindow(): BrowserWindow {
     if (process.env.TEAMREE_BACKGROUND_LAUNCH !== '1') window.show()
   })
 
-  // Keep external links in the user's browser, never in an app window.
+  // Keep external links in the user's browser, never in an app window — and
+  // never hand macOS anything that is not a web address. See windowNavigation.ts
+  // for what that is worth today, which is honestly not much.
   window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    if (mayOpenExternally(url)) void shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  // And the same answer for a navigation, which `setWindowOpenHandler` never
+  // sees. The window carries the preload bridge onto whatever it lands on, so
+  // the only page allowed in it is the one it already has.
+  window.webContents.on('will-navigate', (event, url) => {
+    const verdict = navigationVerdict(window.webContents.getURL(), url)
+    if (verdict === 'allow') return
+    event.preventDefault()
+    if (verdict === 'external') void shell.openExternal(url)
   })
 
   const devServerUrl = process.env.ELECTRON_RENDERER_URL

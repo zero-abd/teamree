@@ -25,6 +25,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WatchedPaneEvent } from '@shared/methods'
 import { DEFAULT_APPEARANCE, resolvePalette } from '@shared/theme'
 
+/** The escape a terminal's own replies begin with, spelled rather than pasted. */
+const ESC = '\u001b'
+
 /** What the fake emulator reports as its rendered size, for the letterbox. */
 const picture = { width: 800, height: 600 }
 
@@ -220,6 +223,27 @@ function mount(overrides: Partial<Parameters<typeof WatchedPaneView>[0]> = {}): 
   return { onClose, onFocus, onOutput, rerender: (next) => rerender(view(next)), unmount }
 }
 
+/**
+ * One keystroke, as the browser delivers one: the DOM event first, then the
+ * bytes xterm turns it into.
+ *
+ * Both halves matter now. The view sends only what somebody in this window
+ * actually did, and it tells the difference by the event — so a test that
+ * called the emulator's data handler on its own would be testing the case this
+ * view exists to refuse rather than the case it exists to serve. `emits` below
+ * is that other case, stated on purpose.
+ */
+function press(data: string): void {
+  emits(data, { user: true })
+}
+
+/** Bytes leaving the emulator, with or without a person behind them. */
+function emits(data: string, { user }: { user: boolean }): void {
+  const term = fakeTerms.at(-1)
+  if (user) term?.element?.dispatchEvent(new KeyboardEvent('keydown', { key: data, bubbles: true }))
+  term?.data?.(data)
+}
+
 /** Everything the view has put into the pane, as one string. */
 const paneText = (): string => (fakeTerms.at(-1)?.writes ?? []).join('')
 
@@ -279,7 +303,7 @@ describe('the size is the owner’s', () => {
     const watch = armWatch()
     mount()
     await watch.resolve()
-    fakeTerms[0]?.data?.('ls\r')
+    press('ls\r')
     expect(fakeTerms[0]?.resized).toBe(0)
     for (const [method] of call.mock.calls) expect(method).not.toMatch(/resize/)
   })
@@ -401,13 +425,70 @@ describe('typing is a request', () => {
     mount()
     await watch.resolve()
     await act(async () => {
-      fakeTerms[0]?.data?.('l')
-      fakeTerms[0]?.data?.('s')
+      press('l')
+      press('s')
     })
     expect(call.mock.calls).toEqual([
       ['teamwork.type', { projectId: 'p1', paneId: 'priya:t7', data: 'l' }],
       ['teamwork.type', { projectId: 'p1', paneId: 'priya:t7', data: 's' }]
     ])
+  })
+
+  // The emulator answers questions the far end's output asks it — a cursor
+  // report, a device-attributes reply — and xterm delivers those answers on the
+  // same `onData` a keystroke arrives on. Sending them would type the owner's
+  // own output back into the owner's pty under this reader's name, put them in
+  // the owner's audit log as this reader's keystrokes, and, where this reader
+  // has no standing permission, ask the owner to consent to a keystroke nobody
+  // pressed. `handsHere` is the distinction; this is it stated.
+  it('never sends bytes nobody in this window produced', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    await act(async () => {
+      emits('[1;1R', { user: false })
+      emits('[?1;2c', { user: false })
+    })
+    expect(call).not.toHaveBeenCalled()
+    // And the pane says nothing either: there was no keystroke, so there is no
+    // refusal to report and nothing for the header to claim.
+    expect(paneText()).not.toContain('not typed')
+    expect(screen.getByText(/what you type runs on/)).toBeTruthy()
+  })
+
+  // The other half of the same rule, and the reason it is a mark on an action
+  // rather than a filter on the bytes: a reply and a keystroke can be the same
+  // string, so nothing about the data itself could tell them apart.
+  it('sends the same bytes when a person did produce them', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    await act(async () => {
+      press('[1;1R')
+    })
+    expect(call).toHaveBeenCalledWith('teamwork.type', {
+      projectId: 'p1',
+      paneId: 'priya:t7',
+      data: '[1;1R'
+    })
+  })
+
+  // The mark lasts one microtask, and this is why it has to. Somebody watching
+  // a pane is usually somebody who has also typed into it, and a mark that
+  // stayed set after the keystroke would let every reply from that moment on
+  // ride out on the back of it.
+  it('does not let one keystroke license the replies that follow it', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    await act(async () => {
+      press('a')
+    })
+    call.mockClear()
+    await act(async () => {
+      emits(`${ESC}[1;1R`, { user: false })
+    })
+    expect(call).not.toHaveBeenCalled()
   })
 
   // A keystroke that silently went nowhere leaves somebody believing they
@@ -418,7 +499,7 @@ describe('typing is a request', () => {
     await watch.resolve()
     call.mockRejectedValue(new Error('this pane is muted'))
     await act(async () => {
-      fakeTerms[0]?.data?.('x')
+      press('x')
     })
     expect(paneText()).toContain('[not typed: this pane is muted]')
     expect(screen.getByText('this pane is muted')).toBeTruthy()
@@ -431,7 +512,7 @@ describe('typing is a request', () => {
     await watch.resolve()
     call.mockRejectedValue(new Error('this pane is muted'))
     await act(async () => {
-      for (const key of 'aaaaa') fakeTerms[0]?.data?.(key)
+      for (const key of 'aaaaa') press(key)
     })
     expect(paneText().match(/not typed: this pane is muted/g)).toHaveLength(1)
   })
@@ -443,10 +524,10 @@ describe('typing is a request', () => {
     call.mockRejectedValueOnce(new Error('this pane is muted'))
     call.mockRejectedValueOnce(new Error('their process has exited'))
     await act(async () => {
-      fakeTerms[0]?.data?.('a')
+      press('a')
     })
     await act(async () => {
-      fakeTerms[0]?.data?.('b')
+      press('b')
     })
     expect(paneText()).toContain('[not typed: this pane is muted]')
     expect(paneText()).toContain('[not typed: their process has exited]')
@@ -460,11 +541,11 @@ describe('typing is a request', () => {
     vi.useFakeTimers()
     vi.setSystemTime(1_000)
     await act(async () => {
-      fakeTerms[0]?.data?.('a')
+      press('a')
     })
     vi.setSystemTime(1_000 + 4_000)
     await act(async () => {
-      fakeTerms[0]?.data?.('a')
+      press('a')
     })
     expect(paneText().match(/not typed: this pane is muted/g)).toHaveLength(2)
   })
@@ -483,7 +564,7 @@ describe('typing is a request', () => {
     call.mockImplementation(() => new Promise<undefined>(() => {}))
 
     await act(async () => {
-      for (const key of 'npm test') fakeTerms[0]?.data?.(key)
+      for (const key of 'npm test') press(key)
     })
     // Nothing yet: a round trip that is merely a round trip is not news.
     expect(paneText()).not.toContain('waiting')
@@ -512,7 +593,7 @@ describe('typing is a request', () => {
         })
     )
     await act(async () => {
-      fakeTerms[0]?.data?.('x')
+      press('x')
     })
     await act(async () => {
       vi.advanceTimersByTime(1_100)
@@ -534,12 +615,12 @@ describe('typing is a request', () => {
     await watch.resolve()
     call.mockRejectedValueOnce(new Error('this pane is muted'))
     await act(async () => {
-      fakeTerms[0]?.data?.('a')
+      press('a')
     })
     expect(screen.getByText('this pane is muted')).toBeTruthy()
     call.mockResolvedValue(undefined)
     await act(async () => {
-      fakeTerms[0]?.data?.('b')
+      press('b')
     })
     expect(screen.queryByText('this pane is muted')).toBeNull()
     expect(screen.getByText(/what you type runs on priya’s machine/)).toBeTruthy()
