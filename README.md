@@ -146,7 +146,12 @@ teamree worktree changes fix-login
 ```
 
 That is the surface a coding agent needs, and it is the same runtime the window
-draws, so both stay in step.
+draws, so both stay in step. It is also the whole of it — the socket serves every
+method the window uses, where a teammate across a relay gets six — so the socket
+is owner-only, inside a directory macOS and Electron both keep to your account.
+[Who on this machine can drive teamree](docs/local-access.md) is that boundary
+written down: what protects it, what was measured rather than assumed, and the
+part no file permission defends, which is anything already running as you.
 
 ## Working with other people
 

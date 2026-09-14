@@ -10,6 +10,12 @@ the [README](../README.md) if you have not seen it before.
   macOS says about an unsigned build and what that warning actually means,
   putting the `teamree` command on your PATH, and what uninstalling leaves
   behind.
+- [**Who on this machine can drive teamree**](local-access.md) — the `teamree`
+  command talks to the running app over a socket that serves every method the
+  window does, which makes it the most powerful way into the app and the one
+  worth being precise about. What protects it, how much of that is inherited
+  from the directory it sits in rather than chosen, which permissions were
+  measured rather than assumed, and the part no file permission can defend.
 
 ## Working with a team
 

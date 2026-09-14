@@ -13,11 +13,16 @@
 // behind it at all. Booting the real main process is also the only way the
 // assembly in startRuntime.ts is ever exercised outside a unit test.
 //
-// The app is pointed at the throwaway user data directory the launcher made,
+// The app is pointed at the throwaway user data directory the launcher named,
 // before anything else happens. That is not tidiness: the runtime restores the
 // last session's panes from there, so a smoke test that read a developer's
 // workspace would spawn their agents, take the single-instance lock their
 // running copy holds, and write to the file that copy is keeping.
+//
+// That directory does not exist when this starts, which is deliberate and is
+// what lets the last check below mean anything: Electron creates it, so its
+// permissions are the ones a first launch would produce rather than a temporary
+// directory's. See `checkLocalBoundary`.
 //
 // It also runs the peer library's cipher check here, in a genuine Electron main
 // process, which is the process the teamwork feature's handshakes actually
@@ -30,6 +35,7 @@
 // Electron does not pump its event loop until this module finishes evaluating,
 // so everything here hangs off callbacks rather than top-level await.
 import { app } from 'electron'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { runPeerCheck } from './electron-peer-check.mjs'
@@ -142,6 +148,53 @@ async function run() {
   )
 
   await checkPeerCrypto()
+  checkLocalBoundary()
+}
+
+/**
+ * Who on this machine can drive the runtime this launch started.
+ *
+ * The CLI socket serves the whole catalogue — create and remove worktrees,
+ * spawn terminals, read any pane and type into it — so what stands in front of
+ * it is two permissions and nothing else, and both of them are only ever real
+ * in a running app. `docs/local-access.md` is the argument; this is the place
+ * where it is checked against a Mac rather than against a unit test's tmpdir.
+ *
+ * The directory is the half this project does not set. Electron creates the
+ * user data directory 0700 and every unit test that could assert it has a
+ * `mkdtemp` directory, which is 0700 whatever anybody intended — so this is the
+ * only check in the repository where a failure would mean something. If it ever
+ * goes red, the enclosing directory is being made by something other than
+ * Electron (every `mkdir` in this repository would leave 0755) and the local
+ * model is wrong rather than merely undocumented.
+ */
+function checkLocalBoundary() {
+  const mode = (path) => statSync(path).mode & 0o777
+  const octal = (value) => `0${value.toString(8).padStart(3, '0')}`
+
+  const dirMode = mode(userDataDir)
+  if (dirMode !== 0o700) failures.push(`user data directory is ${octal(dirMode)}, expected 0700`)
+
+  const discoveryPath = join(userDataDir, 'runtime.json')
+  if (!existsSync(discoveryPath)) {
+    failures.push('the runtime wrote no runtime.json, so the CLI has no way to find it')
+    return
+  }
+  // Followed rather than assumed: `resolveEndpoint` puts the socket beside this
+  // file, but falls back to a shared directory when the path would not fit in
+  // sun_path, and the point of the mode below is that case.
+  const { endpoint } = JSON.parse(readFileSync(discoveryPath, 'utf8'))
+  if (!existsSync(endpoint)) {
+    failures.push(`runtime.json names ${endpoint}, which does not exist`)
+    return
+  }
+  const endpointMode = mode(endpoint)
+  // ENDPOINT_MODE in src/main/runtime/socketServer.ts, spelled out because this
+  // file is plain JavaScript in an Electron main process and imports no TypeScript.
+  if (endpointMode !== 0o600) failures.push(`CLI socket is ${octal(endpointMode)}, expected 0600`)
+  if (failures.length === 0) {
+    console.log(`smoke: user data directory ${octal(dirMode)}, CLI socket ${octal(endpointMode)}`)
+  }
 }
 
 /**

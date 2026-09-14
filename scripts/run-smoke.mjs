@@ -23,7 +23,14 @@ import { PEER_BUNDLE_FLAG, USER_DATA_FLAG, namedArg } from './smoke-args.mjs'
 import { displayPlan } from './virtual-display.mjs'
 
 const peerBundle = await buildPeerBundle()
-const userDataDir = mkdtempSync(join(tmpdir(), 'teamree-smoke-'))
+// A path inside a throwaway directory rather than the throwaway directory
+// itself, so that the one the app runs against does not exist yet and Electron
+// has to create it. That is the difference between a smoke run that asserts the
+// permissions of `mkdtemp` — which are 0700 by definition and prove nothing —
+// and one that asserts the permissions Electron gives the user data directory,
+// which is what everything in `docs/local-access.md` rests on.
+const smokeRoot = mkdtempSync(join(tmpdir(), 'teamree-smoke-'))
+const userDataDir = join(smokeRoot, 'teamree')
 
 const plan = displayPlan(electron, [
   ...electronSandboxArgs(),
@@ -37,7 +44,7 @@ if (plan.advice) console.error(`run-smoke: ${plan.advice}`)
 const result = spawnSync(plan.command, plan.args, { stdio: 'inherit' })
 
 rmSync(peerBundle, { recursive: true, force: true })
-rmSync(userDataDir, { recursive: true, force: true })
+rmSync(smokeRoot, { recursive: true, force: true })
 
 if (result.error) {
   console.error(`run-smoke: could not launch Electron: ${result.error.message}`)
