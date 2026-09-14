@@ -13,10 +13,11 @@
 // rather than remembered next to it. So this runs every gate the pipeline ran,
 // in one sequence, and stops at the first that says no:
 //
-//   typecheck, format, lint, the relay build, the full suite, the app build,
-//   the smoke test, the macOS package, the packaged-app check against the
-//   unpacked tree, the same check against the copy inside the mounted .dmg,
-//   and a report on what a Mac that downloaded the .dmg would say about it.
+//   typecheck, the relay's own typecheck, format, lint, the relay build, the
+//   full suite, the app build, the smoke test, the macOS package, the
+//   packaged-app check against the unpacked tree, the same check against the
+//   copy inside the mounted .dmg, and a report on what a Mac that downloaded
+//   the .dmg would say about it.
 //
 // The last two are the ones worth keeping when something has to give. The
 // packaged-app check is the only one that can tell a package that built from a
@@ -60,6 +61,15 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
  */
 export const GATES = [
   { name: 'typecheck', args: ['run', 'typecheck'] },
+  // The relay is a second package, and the root typecheck cannot see it: its
+  // Worker entry point is the one file in the project that names Cloudflare
+  // types, so `relay build` excludes it on purpose and only the relay's own
+  // `typecheck` — which runs a second tsc against `@cloudflare/workers-types` —
+  // ever looks at it. Without this line a type error in `src/workers/worker.ts`
+  // passed every gate in this list and shipped: `verify-package.mjs` proves the
+  // file is in the package, and the person who deploys it is the one who finds
+  // out. It costs a second, so it sits with the other cheap checks.
+  { name: 'relay typecheck', args: ['run', 'typecheck'], cwd: 'relay' },
   { name: 'format:check', args: ['run', 'format:check'] },
   { name: 'oxlint', args: ['run', 'lint'] },
   // The acceptance pass drives the CLI as a real executable and throws
