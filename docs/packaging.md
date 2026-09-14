@@ -64,10 +64,14 @@ for — a Windows package with no PTY in it builds cleanly and then opens no
 terminal. Reviving Windows starts with deleting the two exclusion lines that
 comment names.
 
-On Linux, run both the smoke test and `package:verify` under a virtual display:
-`xvfb-run --auto-servernum npm run package:verify`. Electron also refuses to
-start as root unless the sandbox is switched off; the scripts detect that and
-pass `--no-sandbox` themselves, so a container needs no special invocation.
+On Linux, run `package:verify` under a virtual display:
+`xvfb-run --auto-servernum npm run package:verify`. The smoke test arranges its
+own — a machine with no `$DISPLAY` and an `xvfb-run` on `PATH` gets one put in
+front of Electron, and one without is told what it is missing rather than left
+with a segfault to interpret; see `scripts/virtual-display.mjs`. Electron also
+refuses to start as root unless the sandbox is switched off; the scripts detect
+that and pass `--no-sandbox` themselves, so a container needs no special
+invocation.
 
 ## Signing
 
