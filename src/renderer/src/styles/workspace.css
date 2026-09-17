@@ -18,6 +18,11 @@
 
 /* Tabs -------------------------------------------------------------------- */
 
+/* One tab per terminal in the worktree you are looking at — the sidebar is the
+   list of sessions, so the strip is the list of what is running inside the one
+   you opened. The dot is `.activity`, borrowed from the sidebar exactly as the
+   dashboard borrows it: same reading of the same PTY, so a second dot here
+   would be a second vocabulary. */
 .tabs {
   flex-shrink: 0;
   display: flex;
@@ -48,6 +53,9 @@
   background: var(--bg-hover);
 }
 
+/* The surface and the hairline of the board below, and no bottom edge of its
+   own, so the active tab and the pane it points at read as one piece of paper
+   rather than two stacked strips. */
 .tab--active {
   background: var(--bg-panel);
   border-color: var(--line);
@@ -56,10 +64,14 @@
 
 .tab__main {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--s2);
   min-width: 0;
-  max-width: 260px;
+  /* A dot and one label, where this used to be a name beside a branch. The cap
+     is here because the label can be whatever title a shell wrote — a whole
+     command line, sometimes — and one loud pane must not push every other tab
+     off the end of the strip. */
+  max-width: 160px;
   padding: 5px var(--s2) 5px var(--s3);
   border: 0;
   background: transparent;
@@ -73,15 +85,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.tab__branch {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--fg-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
 }
 
 .tab__close {

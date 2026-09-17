@@ -51,7 +51,9 @@ vi.mock('../dashboard/Dashboard', () => ({ Dashboard: () => <div data-testid="da
 // at all, which is the part that lives here.
 vi.mock('../settings/SettingsView', () => ({ SettingsView: () => <div data-testid="settings" /> }))
 vi.mock('../help/HelpView', () => ({ HelpView: () => <div data-testid="help" /> }))
-vi.mock('./WorktreeTabs', () => ({ WorktreeTabs: () => null }))
+// The strip above the panes is `TerminalTabs` now — one tab per pane in the
+// worktree on screen, where it used to be one per open worktree.
+vi.mock('./TerminalTabs', () => ({ TerminalTabs: () => null }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { WorkspaceArea } = await import('./WorkspaceArea')

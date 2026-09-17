@@ -167,6 +167,44 @@ export function cliPanel(status: CliStatus | null): CliPanel {
 }
 
 /**
+ * What the sidebar's button and the palette's entry call this.
+ *
+ * One function because there were two copies of these words and both were the
+ * same copy — "Put teamree on my PATH", said unconditionally, in every state
+ * this can be in. That sentence is true in exactly one of them.
+ *
+ * The state it is worst in is the one people actually meet. A link made once
+ * into a build directory that has since been cleaned, or into a copy of the app
+ * that has been moved or deleted, leaves `/usr/local/bin/teamree` pointing at
+ * nothing: the shell finds the link, follows it, and reports that the command
+ * does not exist. The app knows this exactly — `status.dangling` is that fact —
+ * and was answering it by offering to do the thing that had already been done.
+ * Somebody who can see a teamree on their PATH is then told to put one there,
+ * which reads as an app that cannot tell whether its own link exists, and the
+ * real problem goes unnamed on the one surface that knew it.
+ */
+export function cliActionLabel(status: CliStatus | null): string {
+  if (status?.state !== 'elsewhere') return 'Put teamree on my PATH'
+  // Two different failures under one state, and they need different words: a
+  // link into thin air is broken, a link into another copy works and drives the
+  // wrong app.
+  return status.dangling ? 'Fix the broken teamree command' : 'Point teamree at this app'
+}
+
+/**
+ * The hover text on that button: what is wrong, and then what pressing it does.
+ *
+ * Both halves, because either alone leaves the question the other answers. The
+ * headline names a state and the promise names an effect, and somebody deciding
+ * whether to press a button that will ask for their administrator password is
+ * owed both before they press it.
+ */
+export function cliTitle(status: CliStatus | null): string {
+  const panel = cliPanel(status)
+  return panel.promise === null ? panel.headline : `${panel.headline} ${panel.promise}`
+}
+
+/**
  * Whether the sidebar should offer this at all.
  *
  * Only while there is something to do about it, and only while doing it would

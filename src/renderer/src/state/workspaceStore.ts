@@ -30,6 +30,7 @@ import type {
   WorktreeStatus
 } from '@shared/entities'
 import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
+import { closePaneWarning } from '../dialogs/closePaneModel'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
 import {
   isWatchedPaneId,
@@ -68,6 +69,8 @@ export type DialogState =
   | { kind: 'palette' }
   /** Raised only when the runtime has already refused: there is something here to lose. */
   | { kind: 'confirm-remove'; worktreeId: string; reason: string; intent: RemoveIntent }
+  /** Raised only when the pane is doing work a close would kill. See `closePaneModel`. */
+  | { kind: 'confirm-close-pane'; terminalId: string }
   | null
 
 /**
@@ -448,7 +451,17 @@ type WorkspaceState = {
   /** Adopts a fresh terminal record, e.g. the one a resize answers with. */
   recordTerminal: (terminal: Terminal) => void
   splitFocusedPane: (direction: 'row' | 'column') => Promise<void>
+  /**
+   * Closes a pane, asking first when the close would kill work.
+   *
+   * Every way of closing a pane comes through here — the pane bar's ×, the
+   * close-pane chord, and the × on each tab of the strip above the panes — so
+   * the question is asked here rather than by each button. A guard on the
+   * buttons is a guard somebody adds a fourth button beside.
+   */
   closeTerminal: (terminalId: string) => Promise<void>
+  /** Goes through with it, once the question this app asked has been answered. */
+  forceCloseTerminal: (terminalId: string) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
   focusNextPane: () => void
   applySplitSizes: (worktreeId: string, path: number[], sizes: number[]) => void
@@ -1430,13 +1443,37 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     /**
+     * Closes a pane, once anybody who needs asking has been asked.
+     *
+     * The reasoning underneath is the same one `forceCloseTerminal` carries
+     * about ordering, arrived at from the other side: the pane is the only way
+     * to reach a PTY and everything running under it, so a close that kills a
+     * working process throws that work away with one click and no way back.
+     * `closePaneWarning` decides whether this is one of those — a plain shell
+     * at a prompt still closes without a word, because a question asked on
+     * every close is one people learn to press through.
+     *
+     * The question lives here and not on the buttons. There are three ways to
+     * close a pane now and there will be a fourth, and a guard attached to each
+     * of them is a guard the fourth is written without.
+     */
+    async closeTerminal(terminalId) {
+      const warning = closePaneWarning(get().terminals[terminalId])
+      if (warning !== null) {
+        set({ dialog: { kind: 'confirm-close-pane', terminalId } })
+        return
+      }
+      await get().forceCloseTerminal(terminalId)
+    },
+
+    /**
      * Closes a pane, but only once the process behind it is really gone.
      *
      * The pane is the only way to reach a PTY and everything running under it,
      * so taking it off the screen first and asking afterwards would strand an
      * agent mid-task with no row, no pane and no way back short of quitting.
      */
-    async closeTerminal(terminalId) {
+    async forceCloseTerminal(terminalId) {
       const { activeWorktreeId } = get()
       if (!activeWorktreeId || !get().layouts[activeWorktreeId]) return
 

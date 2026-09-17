@@ -4,7 +4,8 @@
 // it is the ranking: with twenty worktrees open, a palette that matches the
 // right thing third is a palette nobody uses twice.
 
-import type { InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
+import type { CliStatus, InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
+import { cliActionLabel } from '../dialogs/cliInstallModel'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
 
 export type PaletteAction =
@@ -46,6 +47,11 @@ export type PaletteContext = {
   update: UpdateState | null
   /** Shortcut labels, so the palette shows the key that does the same thing. */
   hintFor: (action: PaletteAction) => string
+  /**
+   * How this machine's CLI link stands, which is what one of the actions below
+   * is named after. Null until the first read has answered.
+   */
+  cli: CliStatus | null
 }
 
 /**
@@ -76,14 +82,22 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
       }
     })
 
-  const actions: PaletteItem[] = [...ACTIONS, ...updateActions(context)].map((action) => ({
-    kind: 'action',
-    id: action.id,
-    label: action.label,
-    hint: context.hintFor(action.id),
-    detail: 'Action',
-    search: `${action.label} ${action.keywords}`
-  }))
+  const actions: PaletteItem[] = [...ACTIONS, ...updateActions(context)].map((action) => {
+    // One action is named after a state rather than fixed, because "Put teamree
+    // on my PATH" is the wrong sentence to offer somebody whose PATH already
+    // has a teamree on it that leads nowhere. The keywords stay whatever the
+    // list says: they are what somebody types looking for it, and they must not
+    // move when the label does.
+    const label = action.id === 'install-cli' ? cliActionLabel(context.cli) : action.label
+    return {
+      kind: 'action',
+      id: action.id,
+      label,
+      hint: context.hintFor(action.id),
+      detail: 'Action',
+      search: `${label} ${action.keywords}`
+    }
+  })
 
   return [...worktrees, ...agentItems(context), ...actions]
 }
@@ -183,8 +197,10 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
   },
   {
     id: 'install-cli',
+    // Replaced at build time by `cliActionLabel` when the link is the problem
+    // rather than its absence. This is the wording for the ordinary case.
     label: 'Put teamree on my PATH',
-    keywords: 'cli command line terminal install link symlink usr local bin path agent'
+    keywords: 'cli command line terminal install link symlink usr local bin path agent broken fix dangling'
   }
 ]
 
