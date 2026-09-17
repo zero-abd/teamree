@@ -33,11 +33,13 @@ import { WorktreeRow } from './WorktreeRow'
 export function Sidebar({
   newWorktreeHint,
   searchHint,
-  appearanceHint
+  appearanceHint,
+  helpHint
 }: {
   newWorktreeHint: string
   searchHint: string
   appearanceHint: string
+  helpHint: string
 }): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
@@ -58,6 +60,10 @@ export function Sidebar({
   const teammates = useWorkspaceStore((state) => state.teammates)
   const cli = useWorkspaceStore((state) => state.cli)
   const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
+  const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
+  const helpOpen = useWorkspaceStore((state) => state.helpOpen)
+  const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
+  const toggleHelp = useWorkspaceStore((state) => state.toggleHelp)
   const toggleDashboard = useWorkspaceStore((state) => state.toggleDashboard)
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
@@ -191,6 +197,43 @@ export function Sidebar({
               </svg>
               <span>Appearance</span>
               <kbd>{appearanceHint}</kbd>
+            </button>
+          </li>
+          <li>
+            {/* Last two in the rail, and last on purpose: they are the entries
+                somebody goes looking for rather than the ones they work in.
+                Settings carries no chord — `⌘,` is Appearance's, and it says so
+                one row up — so the palette and this row are the whole of how it
+                is reached. */}
+            <button
+              type="button"
+              className={`rail__link${settingsOpen ? ' rail__link--current' : ''}`}
+              aria-current={settingsOpen ? 'page' : undefined}
+              title="The CLI, updates, text size, and each repository's settings"
+              onClick={toggleSettings}
+            >
+              <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
+                <circle cx="7" cy="7" r="2.1" />
+                <path d="M7 1.5v1.7M7 10.8v1.7M12.1 7h-1.7M3.6 7H1.9M10.6 3.4 9.4 4.6M4.6 9.4l-1.2 1.2M10.6 10.6 9.4 9.4M4.6 4.6 3.4 3.4" />
+              </svg>
+              <span>Settings</span>
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              className={`rail__link${helpOpen ? ' rail__link--current' : ''}`}
+              aria-current={helpOpen ? 'page' : undefined}
+              title="Every shortcut, what a worktree is, and where the CLI is documented"
+              onClick={toggleHelp}
+            >
+              <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
+                <circle cx="7" cy="7" r="5.4" />
+                <path d="M5.4 5.5a1.7 1.7 0 1 1 2.2 1.7c-.4.2-.6.5-.6.9v.4" />
+                <circle cx="7" cy="10.2" r="0.7" />
+              </svg>
+              <span>Help</span>
+              <kbd>{helpHint}</kbd>
             </button>
           </li>
         </ul>

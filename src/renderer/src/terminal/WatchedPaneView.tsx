@@ -170,6 +170,13 @@ export function WatchedPaneView({
   const size = useMemo(() => watchedPaneSize(presence, paneId), [presence, paneId])
   const sizeRef = useRef(size)
   sizeRef.current = size
+  // The reader's own setting, not the owner's. Their columns and rows are
+  // theirs and this view never changes them, but how large those cells are
+  // drawn on *this* screen is a question about this screen — and this pane was
+  // the one surface that ignored the answer, hard-coding 12 while every local
+  // pane followed the setting.
+  const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
+  const fontSizeRef = useRef(fontSize)
   const termRef = useRef<XTerm | null>(null)
   const refitRef = useRef<(() => void) | null>(null)
   const openedAtRef = useRef(0)
@@ -405,7 +412,12 @@ export function WatchedPaneView({
           cursorBlink: false,
           cursorInactiveStyle: 'none',
           fontFamily: TERMINAL_FONT_FAMILY,
-          fontSize: 12,
+          // From the ref and not the value, for the reason `TerminalView` takes
+          // it from a ref: this effect is keyed on the pane, and reading the
+          // size out of the closure would make the emulator — with its
+          // scrollback and its subscription to somebody else's machine — a
+          // thing that had to be torn down and rebuilt to change a number.
+          fontSize: fontSizeRef.current,
           lineHeight: 1.25,
           scrollback: 5000,
           theme: readTerminalTheme(document.documentElement),
@@ -488,6 +500,25 @@ export function WatchedPaneView({
     refitRef.current?.()
     setState((current) => (current.phase === 'watching' ? { phase: 'watching', ...next } : current))
   }, [size])
+
+  /**
+   * Follows the reader's text size, without telling the owner anything.
+   *
+   * Larger cells make a larger picture of the same grid, so the letterboxing
+   * does the rest: the scale changes and their pty never hears about it. This
+   * is the one kind of resize that is safe here — `term.resize` would change
+   * *their* geometry, and is what this view exists not to do.
+   *
+   * The first run is a no-op by construction: the emulator was built at this
+   * size a moment ago, and xterm ignores a write of the value it already holds.
+   */
+  useEffect(() => {
+    fontSizeRef.current = fontSize
+    const term = termRef.current
+    if (term === null || term.options.fontSize === fontSize) return
+    term.options.fontSize = fontSize
+    refitRef.current?.()
+  }, [fontSize])
 
   /**
    * Repaints the emulator when the palette moves under it.
