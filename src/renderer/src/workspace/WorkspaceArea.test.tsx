@@ -47,7 +47,7 @@ vi.mock('../terminal/WatchedPaneView', () => ({
 }))
 vi.mock('./ChangesPanel', () => ({ ChangesPanel: () => null }))
 vi.mock('../dashboard/Dashboard', () => ({ Dashboard: () => <div data-testid="dashboard" /> }))
-vi.mock('./WorktreeTabs', () => ({ WorktreeTabs: () => null }))
+vi.mock('./TerminalTabs', () => ({ TerminalTabs: () => null }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { WorkspaceArea } = await import('./WorkspaceArea')

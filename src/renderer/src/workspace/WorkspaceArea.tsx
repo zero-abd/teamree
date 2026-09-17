@@ -4,13 +4,13 @@
 // The teammates' panes are held out here rather than inside the worktree's own
 // tree for one reason, and it is about their lifetime rather than about the
 // layout. Every navigation in this area replaces what is under it: the pane
-// board takes the whole area, so does teamwork's setup, and switching tabs
-// mounts a different tree. A watched pane put inside any of those would unmount
-// on the next click, and unmounting closes the subscription and reopens it when
-// you come back — the relay's budget paid twice over for a pane nobody stopped
-// watching. So the area is a split: the workspace on one side, a teammate's
-// pane on the other, and the gutter between them is the same gutter that sits
-// between two of your own.
+// board takes the whole area, so does teamwork's setup, and opening another
+// worktree mounts a different tree. A watched pane put inside any of those
+// would unmount on the next click, and unmounting closes the subscription and
+// reopens it when you come back — the relay's budget paid twice over for a pane
+// nobody stopped watching. So the area is a split: the workspace on one side, a
+// teammate's pane on the other, and the gutter between them is the same gutter
+// that sits between two of your own.
 
 import { useCallback, useMemo } from 'react'
 import { teamworkFacts } from '@shared/entities'
@@ -25,7 +25,7 @@ import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { ChangesPanel } from './ChangesPanel'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { terminalTarget } from './terminalTarget'
-import { WorktreeTabs } from './WorktreeTabs'
+import { TerminalTabs } from './TerminalTabs'
 
 export function WorkspaceArea({
   modifier,
@@ -69,7 +69,7 @@ export function WorkspaceArea({
   // A split of one when nobody is being watched, which renders as the workspace
   // filling the area and no gutter at all. Rendered unconditionally all the
   // same: a wrapper that appeared the moment a watch opened would remount the
-  // workspace under it, and with it every terminal in the tab.
+  // workspace under it, and with it every terminal in the open worktree.
   return (
     <SplitFrame className="workspace-split" direction="row" sizes={watchSizes} onResize={setWatchSizes} cells={cells} />
   )
@@ -323,7 +323,7 @@ function WorkspaceMain({
 
   return (
     <main className="workspace">
-      <WorktreeTabs />
+      <TerminalTabs />
 
       <header className="workspace__head">
         <div className="workspace__identity">
