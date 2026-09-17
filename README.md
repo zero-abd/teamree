@@ -61,8 +61,11 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
 - **A worktree per task**, created from any base ref.
 - **Split terminals** per worktree, arbitrarily nested, with a real PTY behind each.
 - **Panes that come back.** A pane running a coding agent returns with its
-  conversation resumed; an ordinary pane returns as a shell in the same directory,
-  and its command is deliberately never re-run.
+  conversation resumed; one nobody ever typed into has no conversation to resume,
+  so its agent is started afresh above what the pane printed last time, and a
+  resume that finds nothing left says so in the pane rather than dying quietly. An
+  ordinary pane returns as a shell in the same directory, and its command is
+  deliberately never re-run.
 - **Which agent needs you.** One view ranks every pane in every worktree by what
   would make you look — failures, then work in progress, then waiting, then
   finished. It is a narrow reading on purpose: teamree watches a PTY, not an

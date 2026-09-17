@@ -60,6 +60,19 @@ const TerminalRecordSchema = z.object({
   command: z.string().min(1).optional(),
   agent: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
   agentSessionId: z.string().min(1).optional(),
+  // Whether anybody ever typed into the pane, which is what the next launch
+  // reads to decide whether the pinned id above names a conversation at all.
+  //
+  // Optional because it has to be, and the absent case is the one to be careful
+  // about: every workspace file already written is missing this field, and the
+  // panes in those files are mostly panes with real conversations behind them.
+  // Absent therefore means unknown rather than no — the restore tries the
+  // resume, and a resume that turns out to find nothing writes `false` here on
+  // its way out, so the pane starts over on the launch after that. Reading
+  // absent as `false` would take the resume away from every pane already on
+  // disk, exactly once, on the launch after an upgrade: the same bug this field
+  // exists to fix, arrived at from the other side.
+  typed: z.boolean().optional(),
   cols: z.number().int().positive(),
   rows: z.number().int().positive(),
   createdAt: z.number()

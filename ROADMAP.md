@@ -134,8 +134,60 @@ disk under a session id.
       stored pane trees need no rewriting
 - [x] Agent panes resume; every other command is dropped for a plain shell,
       because restarting the app is not a request to run a deploy again
+- [x] A pinned id is a reservation and not a conversation, so the record also
+      remembers whether anybody ever typed into the pane. A pane nobody typed
+      into comes back by running its agent again — the old selector stripped out,
+      a fresh id pinned where the CLI allows one — because an agent writes a
+      conversation only once it has one, and resuming an id that names nothing
+      is how a restored pane came back dead
+- [x] Unless the command cannot be read well enough to take the old session out
+      of it: a pipeline, an unclosed quote, an agent reached through something
+      else. Failing open is right everywhere else in that module, where a stray
+      appended selector only makes a CLI complain, and wrong here, because this
+      path also writes down the id it believes is on the line. A plain shell in
+      the right directory is the answer this app already gives to a command it
+      cannot model
+- [x] Typing is the signal rather than output, because every agent prints a
+      banner the moment it starts and only a person typing makes a conversation
+      worth asking for back — which is a fact about agents rather than about one
+      of them, and holds for whichever CLI the pane was running
+- [x] A pane started over does not count as resumed, which is the whole of what
+      it takes for the rest to follow: it is an ordinary restore, so it gets the
+      ordinary replay of what it printed last time, above the fresh agent
+- [x] A resume that does not take is said out loud. A pane that exits non-zero
+      still wearing the resumed badge, within thirty seconds of starting,
+      retracts it, releases the record it was holding back so the old output
+      stands above — sent to whoever is already watching, as well as released,
+      since a view reads once when it mounts and a claim about what is on the
+      screen has to travel by the same path as the thing it claims — and writes a
+      dim bracketed line into its own output. Into the output, because that is
+      what the window paints from, and the pane can die before there is a window
+      to tell. The line says nothing was resumed, that whatever the agent said
+      about why is directly above, that the old output is still here, and that a
+      conversation goes missing for ordinary reasons: deleted, expired, or
+      recorded on another machine
+- [x] Non-zero, and only non-zero. An agent asked to do one thing and print the
+      answer resumes, works and leaves with nothing wrong — and it is the same
+      executable in a different mode, so nothing upstream can tell it apart from
+      the interactive one. A refusal always exits non-zero; that is what keeps
+      every clause of the line above true
+- [x] And it is written down, so it happens once. The pane that was refused
+      records that there is nothing to resume, and the launch after that starts
+      the agent over like any pane with no conversation behind it. Without that
+      the same refusal returns on every launch for the life of the record, with
+      another copy of the explanation stacked into the pane's own output each
+      time — the failure made durable rather than handled
+- [x] Three answers and not two, because this field is newer than the files it is
+      read out of. `false` is this version saying nobody typed; absent is a
+      record written before any of this, which is every record already on disk
+      and mostly panes with real conversations behind them. Absent tries the
+      resume. Reading it as a no would have taken the resume away from every
+      existing pane exactly once, on the launch after an upgrade — the same bug
+      arrived at from the other side
 - [x] The pane says how it got here — resumed, or a new shell — until the user
-      types into it, at which point the badge has said what it had to
+      types into it, at which point the badge has said what it had to, or until a
+      resume that never took retracts it, which is the one case where the badge
+      was wrong rather than merely finished
 
 ## M11 — Which of these can actually go in
 
@@ -445,8 +497,18 @@ the pane existed.
       drops every other sequence, so a stored escape cannot answer a cursor
       report into a shell that never asked, write the clipboard, rename the
       window or reset the emulator on the way in
-- [x] An agent pane that resumes its conversation is not also handed a
-      transcript of it
+- [x] An agent pane that resumes is handed its record and holds it back unshown,
+      rather than being handed nothing. It is not printed while the resume is
+      still expected to work — the conversation is about to come back on its own
+      and twice is worse than once — and it is carried forward on every write, so
+      the record can no longer be overwritten by the one line a failed resume
+      leaves behind. The old arrangement bet the transcript on the resume working,
+      and paid for it the first time one did not
+- [x] The line that closes a replayed record reads
+      `[end of record — the attempt to resume this conversation begins below]`
+      where an attempt to resume is what follows, rather than the usual
+      `[end of record — a new shell starts below]`, because a new shell is not
+      what starts there
 - [x] Pruned with the pane it belongs to, the way a mute is, and swept at
       startup of anything a crash orphaned
 
@@ -565,6 +627,34 @@ recorded so none of them is discovered by surprise later.
   said, rather than running it twice — which is the honest outcome and not a
   workaround for the missing half. Keeping the process itself alive would still mean
   moving PTYs into a daemon that outlives the app, and that has not been done.
+- **A pane whose resume fails comes back dead rather than live.** The pane that
+  is brought back to pick a conversation up runs one command, and if the
+  conversation is not there the agent refuses in a line and exits. Everything
+  around that is now honest — the badge is retracted rather than left standing over
+  a dead pane, the record the pane was holding back is released so what it printed
+  before the restart is above the refusal and is no longer at risk of being written
+  over, and a dim line in the pane says in as many words that nothing was resumed,
+  that the agent's own reason is directly above it, and that a conversation can be
+  gone for ordinary reasons. What none of that does is leave you with a working
+  pane. You are looking at a scrollback, and to carry on you open a new pane in the
+  same directory yourself.
+
+  It is recorded rather than fixed because the obvious fix is a guess about what
+  was wanted. A pane that silently started a fresh conversation in place of the one
+  it could not find would look exactly like a resume that worked, in the one case
+  where the difference matters most: the agent knows nothing of the work being
+  continued, and the first person to notice would be whoever read its answer and
+  believed it. Starting over is what a never-typed pane does, and it is safe there
+  precisely because there was nothing to lose. Here there was something, and it is
+  gone, and saying so and stopping is the smaller wrong. An offer — a line in the
+  pane to press for a fresh conversation in this directory — is the shape the fix
+  would take, and it has not been built.
+
+  It is one launch rather than every launch, at least. The pane writes down that
+  there is nothing to resume, so the launch after the refusal starts the agent
+  over and comes back working, with the failed launch kept above it in the
+  record like any other history. So this costs a restart, in the case where the
+  conversation was already gone, rather than costing the pane.
 - **One download, universal, unsigned.** A decision, recorded so nobody
   "fixes" it back: macOS ships as a single `teamree-<version>.dmg` carrying both
   architectures rather than a menu of four files. The cost is size and it is

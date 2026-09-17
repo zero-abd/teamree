@@ -8,6 +8,7 @@ import {
   pinSessionCommand,
   pinsOwnSessionId,
   quoteArgument,
+  restartSessionCommand,
   resumeSessionCommand,
   tokenizeCommand
 } from './agent-command'
@@ -203,6 +204,73 @@ describe('isUsableSessionId', () => {
     expect(isUsableSessionId('a\nb')).toBe(false)
     expect(isUsableSessionId('a\u0000b')).toBe(false)
     expect(isUsableSessionId('x'.repeat(513))).toBe(false)
+  })
+})
+
+describe('restartSessionCommand', () => {
+  it('cuts out the session that is not there and pins one that is new', () => {
+    const restarted = restartSessionCommand('claude --model opus --session-id old-zzz', 'claude')
+
+    expect(restarted?.command).not.toContain('old-zzz')
+    // Everything that was not about the session survives untouched: this is a
+    // command somebody wrote, and only the one stale part of it is wrong.
+    expect(restarted?.command).toContain('--model opus')
+    expect(restarted?.command).toContain(`--session-id ${restarted?.agentSessionId}`)
+  })
+
+  it('takes out whichever way the old session was named', () => {
+    for (const command of [
+      'claude --resume old-zzz',
+      'claude -c',
+      'claude --continue',
+      'claude --session-id=old-zzz'
+    ]) {
+      const restarted = restartSessionCommand(command, 'claude')
+      expect(restarted?.command, command).not.toContain('old-zzz')
+      expect(restarted?.command, command).not.toContain('--continue')
+      expect(restarted?.command, command).not.toContain(' -c')
+    }
+  })
+
+  it("puts the new session in front of the agent's own argument terminator", () => {
+    const restarted = restartSessionCommand('claude --session-id old-zzz -- a prompt', 'claude')
+
+    expect(restarted?.command).not.toContain('old-zzz')
+    // In front of the terminator, not after it: everything past `--` is the
+    // agent's own argument rather than a flag it will read.
+    const line = restarted?.command ?? ''
+    expect(line.indexOf('--session-id')).toBeLessThan(line.indexOf(' -- '))
+    expect(line).toContain('-- a prompt')
+  })
+
+  // A fresh id every time, because the old one has been handed to the agent
+  // once already and a CLI within its rights to refuse an id it has seen before
+  // would turn one silent failure into another.
+  it('never hands back an id that has been used before', () => {
+    const first = restartSessionCommand('claude', 'claude')
+    const second = restartSessionCommand('claude', 'claude')
+
+    expect(first?.agentSessionId).toBeDefined()
+    expect(first?.agentSessionId).not.toBe(second?.agentSessionId)
+  })
+
+  it('pins nothing for an agent whose CLI mints its own ids', () => {
+    expect(restartSessionCommand('codex', 'codex')).toEqual({ command: 'codex' })
+    expect(restartSessionCommand('codex --model gpt', 'codex')).toEqual({ command: 'codex --model gpt' })
+  })
+
+  // The one place in this module where failing open is wrong. Everywhere else
+  // an unmodelable command comes back with a selector appended and the worst
+  // case is a CLI complaining. Here the caller also writes down the id it
+  // believes is on that line, so an append would leave the dead selector where
+  // it was, add a second, and record a third state agreeing with neither.
+  it('refuses a command it cannot read, rather than appending to it', () => {
+    expect(restartSessionCommand('codex | tee log', 'codex')).toBeNull()
+    expect(restartSessionCommand("claude --session-id 'unclosed", 'claude')).toBeNull()
+    expect(restartSessionCommand('claude $(cat id)', 'claude')).toBeNull()
+    // The agent is in there, but not in command position, so nothing here knows
+    // which of these words is the program or where its flags would go.
+    expect(restartSessionCommand('ssh host claude --session-id old-zzz', 'claude')).toBeNull()
   })
 })
 

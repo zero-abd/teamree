@@ -69,9 +69,56 @@ export const INERT_RECORD = /^(?:[^\u0000-\u001f\u007f-\u009f]|[\n\r\t\u0008]|\u
  * past its own opening line still has the closing one immediately above the
  * first thing the new shell printed, which is the boundary that actually gets
  * read.
+ *
+ * `startsBelow` names what the reader is about to read, because it is not
+ * always a new shell: a pane that came back to resume a conversation and could
+ * not shows this record under the failed attempt instead. A mark that says
+ * "shell" above an agent's refusal is a small lie, and the whole point of
+ * saying these things in words is that they are true.
  */
-export function replayableRecord(record: RecordedScrollback): string {
-  return `${openingMark(record.recordedAt)}${record.text}${closingMark()}`
+export function replayableRecord(record: RecordedScrollback, startsBelow?: string): string {
+  return `${openingMark(record.recordedAt)}${record.text}${closingMark(startsBelow)}`
+}
+
+/**
+ * What follows a record in the ordinary case: the pane was brought back, its
+ * command was deliberately not re-issued, and a shell is what starts.
+ */
+export const NEW_SHELL_BELOW = 'a new shell starts below'
+
+/**
+ * What follows it when the pane was brought back to resume a conversation and
+ * the resume did not take. The record is shown at all only in that case — see
+ * `pty-session.ts`, which withholds it while a resume may still be working.
+ */
+export const FAILED_RESUME_BELOW = 'the attempt to resume this conversation begins below'
+
+/**
+ * Said into a pane whose resume did not take, in place of the conversation.
+ *
+ * Every clause is something this app actually knows. It knows the pane was
+ * brought back to resume rather than opened fresh; it knows the agent ended
+ * before anybody could type into it; it knows the exit code. It does *not*
+ * know why the agent refused — only the agent knows that, and the agent has
+ * just printed it immediately above this line, so the mark points at that
+ * rather than guessing over the top of it.
+ *
+ * The last clause is the one that earns this whole mechanism. A conversation
+ * being gone is not a malfunction: they are deleted, they expire, and they are
+ * recorded on whichever machine held them, so a worktree synced to a second
+ * laptop has none of them. Somebody reading a bare "not found" from a CLI they
+ * did not run has no way to tell that apart from this app losing their work.
+ */
+export function failedResumeMark(exitCode: number, hasRecord: boolean): string {
+  const kept = hasRecord
+    ? ' What the pane printed before the restart is above, under a line of its own, and is all still here.'
+    : ''
+  return (
+    `${RESET}\r\n${DIM}[nothing was resumed — this pane came back to pick a conversation up and the agent ` +
+    `exited with code ${exitCode} before anything could be typed into it; whatever it said about why is ` +
+    `directly above.${kept} A conversation can be gone for ordinary reasons: deleted, expired, or recorded ` +
+    `on another machine. Open a new pane in this directory to start a fresh one.]${RESET}\r\n`
+  )
 }
 
 /**
@@ -91,8 +138,8 @@ export function openingMark(recordedAt: number): string {
 }
 
 /** Said after it, which is the line somebody reads on the way down. */
-export function closingMark(): string {
-  return `${RESET}\r\n${DIM}[end of record — a new shell starts below]${RESET}\r\n`
+export function closingMark(startsBelow: string = NEW_SHELL_BELOW): string {
+  return `${RESET}\r\n${DIM}[end of record — ${startsBelow}]${RESET}\r\n`
 }
 
 /**

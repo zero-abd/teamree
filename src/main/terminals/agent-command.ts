@@ -255,6 +255,52 @@ export function resumeSessionCommand(command: string, agent: AgentKind, sessionI
   return spliceSelector(command, agent, argv)
 }
 
+/**
+ * The command to run when there is nothing to resume: the agent again, from the
+ * top, under an id of its own.
+ *
+ * This is for the pane nobody ever spoke to. An agent writes a conversation
+ * down when it has one, and a pane that was opened and then left alone has
+ * none — so the id pinned for it last time names nothing, and asking to resume
+ * it is asking for a conversation that was never had. Every selector is cut
+ * out and, where the CLI allows it, a fresh id goes in: the pane comes back
+ * where it was, ready, rather than coming back holding an error.
+ *
+ * A new id rather than the old one deliberately. The old one has been handed to
+ * the agent once already, and a CLI within its rights to refuse an id it has
+ * seen before would turn one silent failure into another.
+ *
+ * Null when the command cannot be modelled — a pipeline, an unclosed quote, an
+ * agent reached through `ssh` or `env` in a way `executableIndex` will not
+ * vouch for. This is the one place in this module where failing open is the
+ * wrong move rather than the safe one. Everywhere else an unmodelable command
+ * comes back with the selector appended, and the worst case is a CLI seeing two
+ * of them and complaining. Here the caller *also* writes down the id it thinks
+ * is on that line, so an append would leave the dead selector in place, put a
+ * second one after it, and record an id that may well not be the one the agent
+ * ends up using — a command and a record that disagree, quietly, from then on.
+ * Saying no lets the caller fall back to a plain shell, which it can.
+ */
+export function restartSessionCommand(
+  command: string,
+  agent: AgentKind
+): { command: string; agentSessionId?: string } | null {
+  const spec = AGENTS[agent]
+  const tokenized = tokenizeCommand(command)
+  if (!tokenized.ok) return null
+  if (executableIndex(tokenized.tokens, spec.executables) === -1) return null
+
+  // Nothing to pin, and nothing to strip: a command for an agent that mints its
+  // own ids only reaches this point when it names no session at all, because a
+  // session on the line that this app did not put there is handled a step
+  // earlier and never rewritten. So the command it was launched with is already
+  // the command that starts it over.
+  if (!spec.pin) return { command }
+
+  const agentSessionId = newSessionId()
+  return { command: spliceSelector(command, agent, spec.pin(agentSessionId)), agentSessionId }
+}
+
 /** Whether the command already names a session for this agent. */
 export function carriesSelector(command: string, agent: AgentKind): boolean {
   const tokenized = tokenizeCommand(command)

@@ -186,7 +186,13 @@ export class TerminalSessionManager {
   write(terminalId: string, data: string): boolean {
     const session = this.require(terminalId)
     const wasRestored = session.snapshot().restored !== undefined
+    const wasUntouched = !session.wasTypedInto
     session.write(data)
+    // The first keystroke a pane ever gets is the moment its agent can have a
+    // conversation worth resuming, and the next launch has to know. Written
+    // once per pane rather than once per keystroke: this runs on the typing
+    // path, and the store persists on every put.
+    if (wasUntouched) this.rememberTyped(terminalId)
     return wasRestored
   }
 
@@ -330,10 +336,31 @@ export class TerminalSessionManager {
       // A pane that resumes a conversation is about to print that conversation
       // itself, from the agent's own store, so replaying a transcript into it
       // would show the same exchange twice — once as a record of what the agent
-      // said and once as the agent saying it. The record is kept either way,
-      // because whether a pane can resume is decided at each launch and an
-      // agent that stops being resumable still has a pane to come back to.
-      const kept = launch.resumed ? undefined : this.scrollback?.read(record.id)
+      // said and once as the agent saying it.
+      //
+      // Which is why the record is handed over either way and held rather than
+      // dropped: "about to print it" is a bet on a command that has not run
+      // yet, and this one archive entry is the only copy of what the pane
+      // printed before the restart. Betting it used to lose it outright — a
+      // resume that failed left the pane holding a one-line refusal, and the
+      // next quit wrote *that* back over the transcript. PtySession shows what
+      // it is holding if the resume turns out not to have taken.
+      const kept = this.scrollback?.read(record.id)
+      // A pane starting its agent over has pinned a new id, and the record has
+      // to say so: the old id names nothing, and leaving it there is asking for
+      // the same failed resume on every launch from here on.
+      const restoring: TerminalRecord =
+        launch.repinned === undefined
+          ? record
+          : {
+              ...record,
+              command: launch.repinned.command,
+              agentSessionId: launch.repinned.agentSessionId,
+              // Nobody has typed into this pane yet, and the fresh conversation
+              // it is opening is no more resumable than the last one until they
+              // do.
+              typed: false
+            }
       try {
         this.startSession(
           {
@@ -345,7 +372,7 @@ export class TerminalSessionManager {
             ...(launch.command === undefined ? {} : { command: launch.command }),
             ...(kept === undefined ? {} : { restoredRecord: kept })
           },
-          record,
+          restoring,
           launch.resumed ? 'agent' : 'shell'
         )
         restored += 1
@@ -485,6 +512,19 @@ export class TerminalSessionManager {
       ...((restoring?.agentSessionId ?? launch.agentSessionId)
         ? { agentSessionId: restoring?.agentSessionId ?? launch.agentSessionId }
         : {}),
+      // A pane this version opens says so either way, because it is in a
+      // position to: nobody has typed into a pane that was created a moment
+      // ago, and `false` is a fact about it rather than an absence of one.
+      //
+      // A pane being restored carries whatever its record said, absence
+      // included, and absence is not turned into `false` here. This runs before
+      // the resume it is restoring has had a chance to work or fail, and a
+      // record written before this field existed is a record that may well have
+      // a real conversation behind it — writing `false` over it on the way past
+      // would take the resume away on the launch after that, from a pane that
+      // had just resumed perfectly. What answers the unknown is the outcome,
+      // written by `markNotResumable` when the agent refuses.
+      ...(restoring === undefined ? { typed: false } : restoring.typed === undefined ? {} : { typed: restoring.typed }),
       cols: snapshot.cols,
       rows: snapshot.rows,
       createdAt: restoring?.createdAt ?? Date.now()
@@ -512,6 +552,36 @@ export class TerminalSessionManager {
     this.checkpoints?.cancel(terminalId)
     this.records.removeTerminal(terminalId)
     this.scrollback?.remove(terminalId)
+  }
+
+  /**
+   * Writes down that somebody has typed into this pane.
+   *
+   * Only the agent panes need it, but it is recorded for all of them: a pane
+   * can become an agent pane at any moment by somebody typing the agent's name
+   * into a shell, and a flag that is only true for panes we happened to launch
+   * as agents would be a flag that lies about the others.
+   */
+  private rememberTyped(terminalId: string): void {
+    const stored = this.records.listTerminals().find((record) => record.id === terminalId)
+    if (stored === undefined || stored.typed === true) return
+    this.records.putTerminal({ ...stored, typed: true })
+  }
+
+  /**
+   * Writes down that this pane has no conversation to come back to.
+   *
+   * The same field as above with the opposite answer, and it means the same
+   * thing in both directions: whether asking this pane's agent to resume is
+   * worth doing. A pane that was just refused has had that question answered
+   * for it, and answering it once is the difference between a pane that comes
+   * back working on the next launch and a pane that reproduces the same failure
+   * every time the app starts, forever.
+   */
+  private markNotResumable(terminalId: string): void {
+    const stored = this.records.listTerminals().find((record) => record.id === terminalId)
+    if (stored === undefined || stored.typed === false) return
+    this.records.putTerminal({ ...stored, typed: false })
   }
 
   private require(terminalId: string): PtySession {
@@ -555,6 +625,16 @@ export class TerminalSessionManager {
       // that removal is what a client was told about, and an exit event for a
       // terminal it can no longer list would be news about nothing.
       if (this.sessions.get(session.id) !== session) return
+      // A resume that did not take is worth writing down, and this is the only
+      // moment anything knows it. Without it the pane asks the same agent for
+      // the same missing conversation on every launch for the rest of the
+      // record's life, gets the same refusal, and stacks another copy of the
+      // explanation into its own record each time — the failure made durable
+      // rather than handled. Recorded as "nobody typed into this pane", which
+      // is not a guess but the thing that has just been demonstrated: the
+      // conversation this pane was for is not there, so the next launch starts
+      // the agent over exactly as it does for a pane that never had one.
+      if (session.resumeDidNotTake) this.markNotResumable(session.id)
       // A pane whose process has ended appends nothing more, so this is the
       // moment its output is final and the only one at which a record of it can
       // be complete. The other two writes bound how much a pane that is still
