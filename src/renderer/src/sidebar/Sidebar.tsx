@@ -19,7 +19,7 @@
 
 import { useMemo } from 'react'
 import { teammatesHeard, type PaneWatchers } from '@shared/entities'
-import { offerCliInstall } from '../dialogs/cliInstallModel'
+import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
 import type { PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -351,16 +351,22 @@ export function Sidebar({
 
       {/* The one piece of chrome in this app that argues for itself: it is here
           only while the CLI is not linked to this build, and it goes as soon as
-          it is. The palette reaches the same panel at any time. */}
+          it is. The palette reaches the same panel at any time.
+
+          Both the label and the title are read from the model rather than
+          written here, because what is wrong is not always that there is no
+          link — see `cliActionLabel`. This said "Put teamree on my PATH" at
+          somebody whose PATH already had one, pointing into a build directory
+          that had been deleted. */}
       {offerCliInstall(cli) ? (
         <div className="sidebar__foot">
           <button
             type="button"
             className="sidebar__cli"
-            title={`Link ${cli?.destination ?? 'the teamree CLI'} to this app`}
+            title={cliTitle(cli)}
             onClick={() => openDialog({ kind: 'install-cli' })}
           >
-            Put teamree on my PATH
+            {cliActionLabel(cli)}
           </button>
         </div>
       ) : null}
