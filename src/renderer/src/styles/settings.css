@@ -1,0 +1,352 @@
+/* The settings page: one scrolling column of sections, each a heading, a
+   sentence about what it changes, and the control that changes it.
+
+   It borrows the pane board's head — the same title, lede and corner close —
+   because the two are the same kind of surface and a second chrome would read
+   as a second kind of place. Where it differs is the body: the board is a list
+   read across its full width, and this is prose beside controls, which is
+   unreadable at 1600px. So everything sits in one measured column. */
+
+.settings {
+  overflow-y: auto;
+}
+
+/* The column the head and the body share, so the title sits above the thing it
+   titles rather than out at the window's edge. */
+.settings__column {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.settings__head {
+  flex: none;
+  padding: var(--s4) var(--s5) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.settings__head-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s4);
+}
+
+.settings__identity {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings__title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.settings__lede {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.settings__close {
+  padding: var(--s1);
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.settings__close:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.settings__close svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.settings__body {
+  flex: 1 1 auto;
+  padding: var(--s5) var(--s5) var(--s6);
+}
+
+/* Sections ---------------------------------------------------------------- */
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding-bottom: var(--s5);
+}
+
+.settings-section + .settings-section {
+  padding-top: var(--s5);
+  border-top: 1px solid var(--line);
+}
+
+.settings-section__title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* The sentence under every heading that says what the section actually
+   changes. It is the reason the page is worth reading, so it is set as prose
+   rather than as a caption: full width of the column, generous leading. */
+.settings-section__lede {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+/* The one line that is true right now — the version, the link, the URL being
+   dialled. Brighter than the prose around it because it is what somebody opened
+   the page to read. */
+.settings-fact {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 560;
+}
+
+.settings-note {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.settings-warning {
+  color: var(--warning);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.settings-error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.settings-done {
+  color: var(--success);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* The half-sentence that belongs to a button rather than to the section: when
+   the last check was, where the other page goes. Beside the button, dim. */
+.settings-aside {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+/* What a button will do, penned off from the prose above it so the destination
+   and the password are read rather than skimmed past. The same shape the CLI
+   dialog gives the same two sentences. */
+.settings-promise {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.settings-promise__password {
+  color: var(--fg);
+}
+
+.settings-command {
+  margin: 0;
+  padding: var(--s3);
+  overflow-x: auto;
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* Wraps rather than scrolls: the rows here are a button plus a sentence about
+   it, and a sentence pushed off the right edge of a narrow window is a sentence
+   that was not written. */
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+}
+
+/* Rows and fields --------------------------------------------------------- */
+
+/* Prose on the left, the control that acts on it on the right, and the two
+   stacked once there is no width for both. */
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.settings-row > .settings-note,
+.settings-row > .settings-project__path {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.settings-check {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.settings-check input {
+  flex: none;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-size {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.settings-size__label {
+  flex: none;
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.settings-size__range {
+  flex: 1 1 200px;
+  min-width: 140px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Tabular, so the number does not shuffle the slider sideways as it passes
+   from one digit to two. */
+.settings-size__value {
+  flex: none;
+  min-width: 5ch;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.settings-field__label {
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.settings-field__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+}
+
+/* A field cut into black is read from its border, which is why it has one —
+   the same reasoning the dialog's fields are built on. Monospace because what
+   goes in it is a git ref. */
+.settings-field__input {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 5px var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.settings-field__input::placeholder {
+  color: var(--fg-muted);
+}
+
+.settings-field__input:focus-visible {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: var(--ring);
+}
+
+/* Projects ---------------------------------------------------------------- */
+
+.settings-project {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+}
+
+.settings-project__name {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+/* Breaks anywhere rather than scrolling: a checkout path is long, and a path
+   the reader has to drag a scrollbar along is a path they cannot compare with
+   the one in their terminal at a glance. */
+.settings-project__path {
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.settings-relay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s3);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+}
+
+.settings-relay__title {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* A relay URL is as long as somebody's tunnel hostname, and it sits inside a
+   sentence, so it wraps with the sentence rather than widening the card. */
+.settings-relay .settings-fact {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}

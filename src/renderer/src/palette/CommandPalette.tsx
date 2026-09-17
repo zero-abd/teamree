@@ -16,7 +16,13 @@ const ACTION_SHORTCUTS: Partial<Record<PaletteAction, WorkspaceCommand>> = {
   'split-down': 'split-down',
   'toggle-sidebar': 'toggle-sidebar',
   'open-dashboard': 'open-dashboard',
-  'open-appearance': 'open-appearance'
+  'open-appearance': 'open-appearance',
+  // Settings has no chord and is not given one here. `⌘,` is the appearance
+  // dialog's and is labelled as such in the rail; a second punctuation chord
+  // behind shift is one `KeyboardEvent.key` reports differently per layout,
+  // and a palette row promising a key that does nothing is worse than a row
+  // promising none.
+  'open-help': 'open-help'
 }
 
 export function CommandPalette({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
@@ -98,6 +104,12 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         break
       case 'add-project':
         store.openDialog({ kind: 'add-project' })
+        break
+      case 'open-settings':
+        store.toggleSettings()
+        break
+      case 'open-help':
+        store.toggleHelp()
         break
       case 'install-cli':
         store.openDialog({ kind: 'install-cli' })

@@ -95,7 +95,8 @@ The whole runtime, and the honest answer is the same one `local-access.md` gives
 about the CLI socket.
 
 `src/preload/index.ts` exposes exactly one object. `selectProjectFolder` opens a
-directory picker. `platform` and `versions` are strings. `runtime` is three
+directory picker. `revealPath` asks the OS file manager to show one path and is
+described below. `platform` and `versions` are strings. `runtime` is three
 functions: `call(method, params)`, `onStream(listener)` and `release()`. There
 is no method allow-list on `call` — the window is one of the three transports
 the runtime answers, and unlike the peer link (six methods, `PEER_METHODS`) it
@@ -107,6 +108,23 @@ at when they do those things. But it fixes the shape of everything else in this
 document: **there is no partial compromise of this renderer.** Anything that can
 run script in that page has the machine. Which is why the rest of this is about
 making sure nothing ever does.
+
+`revealPath` is the only thing on the bridge that is not the runtime, and it is
+worth being exact about why it is not a method on it. Revealing a path is an
+action of the window somebody is looking at: the `teamree` command has no file
+manager to drive, and a teammate across a relay must never be able to open a
+window on this machine — so it rides the plain Electron bridge beside the folder
+picker rather than joining a catalogue every transport can reach. What it will
+do is narrow and is decided in the main process, in `src/main/reveal`: an
+absolute path that exists on disk is handed to `shell.showItemInFolder`, and
+anything else comes back as a refusal with a reason. It opens a file manager at
+a directory; it does not open a file, run anything, or answer with the contents
+of anywhere. The guard the folder picker makes — that the invoke came from the
+window's main frame and not a subframe — is made here too.
+
+Against the paragraph above, that adds nothing: a page that could call this
+could already spawn a pty through `runtime.call`. It is listed because the
+enumeration in this section is meant to be complete.
 
 ## The gap that was here: nothing stopped the window navigating
 
@@ -132,9 +150,10 @@ HTML and travels nowhere.
 
 **And nothing in today's renderer can start one.** That was checked rather than
 hoped: every `<form>` in the tree calls `preventDefault` in its submit handler
-(there are five), the only `<a href>` is a constant with `target="_blank"` and
-therefore goes through the window-open handler, and xterm's OSC 8 hyperlinks
-cannot either — see below. So the handler added here defends against nothing
+(there are five), every `<a href>` is a module-level constant carrying
+`target="_blank"` — the update card's install document, and the two repository
+documents the help page links — and therefore goes through the window-open
+handler, and xterm's OSC 8 hyperlinks cannot either — see below. So the handler added here defends against nothing
 that can currently be triggered, and saying otherwise would be dressing it up.
 
 It is here anyway, because the cost of the gap is not proportional to how hard
@@ -339,6 +358,8 @@ the code this document describes.
 | which navigations are allowed, sent to the browser, or refused   | `src/main/windowNavigation.test.ts`                      |
 | only a web address is handed to macOS                            | same                                                     |
 | a stream makes the real emulator send bytes                      | `src/renderer/src/terminal/emulatorReplies.test.ts`      |
+| a path that is not there is refused rather than silently ignored | `src/main/reveal/revealPath.test.ts`                     |
+| a reveal from a subframe is refused                              | same                                                     |
 | no OSC 52, no title change                                       | same                                                     |
 | a person's bytes are sent and a stream's are not                 | same, and `WatchedPaneView.test.tsx`                     |
 | release notes are text, and markup in them stays characters      | `src/renderer/src/updates/UpdateAvailableCard.test.tsx`  |

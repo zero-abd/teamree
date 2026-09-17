@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
+import { modalOnScreen } from '../dialogs/modalLayer'
 import { ACTIVITY_LABEL, ACTIVITY_NOUN, sinceLabel } from '../sidebar/agentRows'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -40,9 +41,19 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      // A modal opened on top owns Escape: dismissing the palette and this view
+      // Anything modal on top owns Escape: dismissing the palette and this view
       // with one press would take away more than the reader asked for.
-      if (useWorkspaceStore.getState().dialog) return
+      //
+      // `modalOnScreen` rather than `dialog`, and that is a fix rather than a
+      // tidy-up. A question about a teammate's keystrokes is not in `dialog` —
+      // nobody in this window opened it — and it is the one modal here that
+      // refuses to be dismissed, so with the old check Escape went straight
+      // past it and closed the board underneath a scrim the owner could not
+      // see through and could not get out of without answering. The window's
+      // own key handler had already been taught this; see `modalLayer.ts`,
+      // which exists because each surface learned only the half it was written
+      // beside.
+      if (modalOnScreen(useWorkspaceStore.getState())) return
       event.preventDefault()
       toggleDashboard()
     }
@@ -52,10 +63,24 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
 
   // Opened from a chord, so the keyboard has to land somewhere it can act:
   // the first row is both the answer to "who needs me" and the way to go there.
+  //
+  // Keyed on whether there is a row to land on rather than on mount alone,
+  // because at the moment this mounts there very often is not: the board is
+  // reachable before `bootstrap` has answered, and the empty state renders no
+  // list at all — so a mount-only effect focused nothing and the rows that
+  // arrived a moment later were unreachable from the keyboard. The ref guard is
+  // what keeps it to once: `rows` is rebuilt on every tick of the clock behind
+  // the "quiet for" column, and a focus call on each of those would drag the
+  // focus back off whatever the reader had moved it to, once a second.
   const list = useRef<HTMLUListElement>(null)
+  const landed = useRef(false)
   useEffect(() => {
-    list.current?.querySelector('button')?.focus()
-  }, [])
+    if (landed.current || rows.length === 0) return
+    const first = list.current?.querySelector('button')
+    if (!first) return
+    landed.current = true
+    first.focus()
+  }, [rows.length])
 
   return (
     <main className="workspace board" aria-label="Every pane">

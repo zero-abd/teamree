@@ -89,6 +89,9 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
         case 'open-appearance':
           store.openDialog({ kind: 'appearance' })
           break
+        case 'open-help':
+          store.toggleHelp()
+          break
       }
     }
 

@@ -8,6 +8,18 @@ import type { Response, StreamEvent } from '../shared/protocol'
 const RPC_CALL_CHANNEL = 'teamree:rpc:call'
 const RPC_STREAM_CHANNEL = 'teamree:rpc:stream'
 const RPC_RELEASE_CHANNEL = 'teamree:rpc:release'
+// And this one with src/main/reveal/revealPath.ts, for the same reason.
+const REVEAL_PATH_CHANNEL = 'teamree:reveal-path'
+
+/**
+ * What the main process answers a reveal with, declared structurally here.
+ *
+ * Not imported from src/main: preload is compiled into both TypeScript
+ * projects, so a type taken from there would drag the whole main-process tree
+ * into the renderer's. The shape is small and the main-process definition is
+ * the one that has to stay in step with it.
+ */
+type RevealResult = { revealed: true } | { revealed: false; reason: string }
 
 // The renderer never sees ipcRenderer: it gets three plain functions over the
 // context bridge. Everything crossing the bridge is structured-cloneable, so the
@@ -46,6 +58,19 @@ const runtime = {
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
+  },
+
+  /**
+   * Asks the OS file manager to show a path — Finder on macOS, Explorer on
+   * Windows, whatever the desktop uses on Linux.
+   *
+   * Never rejects for an ordinary failure. A path that has been deleted or
+   * moved comes back as `{ revealed: false, reason }`, because the main process
+   * checks before it asks the OS: `showItemInFolder` on a missing path is
+   * silent, and a caller that could not tell has nothing to put on screen.
+   */
+  revealPath(path: string): Promise<RevealResult> {
+    return ipcRenderer.invoke(REVEAL_PATH_CHANNEL, path)
   },
   platform: process.platform,
   versions: {

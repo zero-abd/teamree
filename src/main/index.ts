@@ -5,6 +5,7 @@ import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
 import { createQuitSequence } from './quitSequence'
+import { registerRevealHandler } from './reveal/revealPath'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
 import { mayOpenExternally, navigationVerdict } from './windowNavigation'
 
@@ -139,6 +140,18 @@ if (!app.requestSingleInstanceLock()) {
         buttonLabel: 'Select folder'
       })
       return result.canceled ? null : (result.filePaths[0] ?? null)
+    })
+    // "Reveal in Finder", which is the window's own action and not a fact about
+    // the workspace, so it rides this bridge rather than the runtime contract —
+    // the CLI has no file manager and a teammate across the relay must never be
+    // able to open a window here. Everything that can go wrong comes back as a
+    // reason to show, because `shell.showItemInFolder` on a path that is gone
+    // does nothing at all and says nothing about it; see src/main/reveal.
+    registerRevealHandler(ipcMain, {
+      showItemInFolder: (target) => shell.showItemInFolder(target),
+      // The same guard the folder picker above makes: a subframe is not the
+      // window, and must not be able to drive the user's file manager.
+      fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
     })
     // The runtime comes up before any window so the first render can already
     // call it, and so the CLI endpoint exists as early as possible.

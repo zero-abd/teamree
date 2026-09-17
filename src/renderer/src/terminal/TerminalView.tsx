@@ -59,6 +59,9 @@ export function TerminalView({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const termRef = useRef<XTerm | null>(null)
   const searchRef = useRef<SearchAddon | null>(null)
+  // Kept so a font size applied after the pane was built can refit it. The
+  // addon is otherwise entirely the creation effect's business.
+  const fitRef = useRef<FitAddon | null>(null)
   // Filled in from the live palette when the terminal is created; the fallback
   // only stands for the instant before that.
   const decorationsRef = useRef(readSearchDecorations(null))
@@ -66,6 +69,10 @@ export function TerminalView({
   chordRef.current = isAppChord
   const focusedRef = useRef(focused)
   focusedRef.current = focused
+  // The size the next emulator is built at. Seeded from the store so a pane
+  // created while a preference is already in force opens at it rather than
+  // opening at the default and flickering to the right size.
+  const fontSizeRef = useRef(useWorkspaceStore.getState().terminalFontSize)
   const [search, dispatch] = useReducer(paneSearchReducer, EMPTY_PANE_SEARCH)
 
   const watchers = useWorkspaceStore((state) => state.watchers)
@@ -76,6 +83,12 @@ export function TerminalView({
   const typing = useMemo(() => typingNow(attention.typists, now), [attention.typists, now])
   const mutePane = useWorkspaceStore((state) => state.mutePane)
   const appearance = useWorkspaceStore((state) => state.appearance)
+  // Read here rather than baked into the emulator's options once, so that
+  // changing the size in settings reaches panes that have been running for
+  // hours. It is the same bargain the palette above it makes, and for the same
+  // reason: a preference that only applied to panes opened after it was changed
+  // would send people closing their work to see it take effect.
+  const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
 
   useEffect(() => {
     const host = hostRef.current
@@ -89,7 +102,11 @@ export function TerminalView({
       cursorStyle: 'bar',
       cursorInactiveStyle: 'none',
       fontFamily: TERMINAL_FONT_FAMILY,
-      fontSize: 12,
+      // `fontSizeRef` rather than `fontSize`, because this effect is keyed on
+      // the terminal id alone: taking the size from the closure would make the
+      // whole emulator — and its scrollback, and its subscription — a thing
+      // that had to be torn down and rebuilt to change a number.
+      fontSize: fontSizeRef.current,
       lineHeight: 1.25,
       letterSpacing: 0,
       scrollback: 5000,
@@ -101,6 +118,7 @@ export function TerminalView({
 
     const fit = new FitAddon()
     term.loadAddon(fit)
+    fitRef.current = fit
 
     // The limit is shared with the counter, so "1000+" means exactly the point
     // at which the addon stopped looking rather than a number of its own.
@@ -215,6 +233,7 @@ export function TerminalView({
       term.dispose()
       termRef.current = null
       searchRef.current = null
+      fitRef.current = null
     }
   }, [terminalId])
 
@@ -222,6 +241,29 @@ export function TerminalView({
     if (focused) termRef.current?.focus()
     else termRef.current?.blur()
   }, [focused, terminalId])
+
+  // A new size is not just a repaint: a cell got bigger or smaller, so the same
+  // box now holds a different number of columns and rows, and the shell on the
+  // other end is still writing for the old ones. Refitting is what tells it —
+  // `fit()` resizes the emulator, the emulator's own `onResize` above sends
+  // `terminal.resize` to the runtime, and the PTY learns its new geometry. Skip
+  // the refit and an agent's output wraps against a width nothing has any more.
+  //
+  // The first run of this effect is a no-op by construction: the emulator was
+  // created at exactly this size a moment ago, and xterm ignores a write of the
+  // value it already holds.
+  useEffect(() => {
+    fontSizeRef.current = fontSize
+    const term = termRef.current
+    if (!term || term.options.fontSize === fontSize) return
+    term.options.fontSize = fontSize
+    try {
+      fitRef.current?.fit()
+    } catch {
+      // A pane with no box to measure — mid-layout, or detached — keeps the new
+      // size and is refitted by the resize observer as soon as it has one.
+    }
+  }, [fontSize])
 
   // The palette changed, so the emulator's copy of it has to. This reads the
   // custom properties back off the document rather than taking the appearance

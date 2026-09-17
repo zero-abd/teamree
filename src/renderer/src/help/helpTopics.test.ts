@@ -1,0 +1,131 @@
+// The help page's one structural promise: it cannot fall behind the bindings.
+//
+// The keyboard section is grouped, and grouping is where a generated list goes
+// back to being a hand-written one without anybody noticing. A command left out
+// of the partition is gone from the page just as completely as if the page had
+// never mentioned it — the difference is only that it looks derived. So the
+// assertions below are written against `WORKSPACE_SHORTCUTS` itself and never
+// against a list of command names typed out here: naming the commands would
+// make this test exactly the second hand-written table it exists to prevent.
+
+import { describe, expect, it } from 'vitest'
+import type { CliStatus } from '@shared/entities'
+import { CLI_PURPOSE } from '../dialogs/cliInstallModel'
+import { WORKSPACE_SHORTCUTS, type WorkspaceShortcut } from '../keyboard/workspaceShortcuts'
+import { CLI_HELP_COMMAND, cliHelp, shortcutGroups, WORKTREE_PARAGRAPHS } from './helpTopics'
+
+/** Every shortcut the groups hold, flattened back out in group order. */
+function grouped(): WorkspaceShortcut[] {
+  return shortcutGroups().flatMap((group) => [...group.shortcuts])
+}
+
+describe('the shortcut groups', () => {
+  // If the table were ever emptied this whole file would pass by describing
+  // nothing, so the size it is checking is checked first.
+  it('has a table to partition', () => {
+    expect(WORKSPACE_SHORTCUTS.length).toBeGreaterThan(5)
+  })
+
+  it('holds every binding in the table, and each of them once', () => {
+    const commands = grouped().map((shortcut) => shortcut.command)
+    for (const shortcut of WORKSPACE_SHORTCUTS) {
+      expect(commands.filter((command) => command === shortcut.command)).toEqual([shortcut.command])
+    }
+    expect(commands).toHaveLength(WORKSPACE_SHORTCUTS.length)
+  })
+
+  it('invents nothing the table does not have', () => {
+    for (const shortcut of grouped()) {
+      expect(WORKSPACE_SHORTCUTS).toContain(shortcut)
+    }
+  })
+
+  // A heading over nothing is the shape a group takes on its way out, and it
+  // reads to a user as a section that failed to load.
+  it('shows no group with nothing under it', () => {
+    for (const group of shortcutGroups()) expect(group.shortcuts.length).toBeGreaterThan(0)
+  })
+
+  // The partition is over whatever it is given, not over the module-level
+  // table: a binding this file has never heard of still has to come out the
+  // other side.
+  it('partitions a table it is handed, not the one it imported', () => {
+    const one = WORKSPACE_SHORTCUTS[0]
+    expect(one).toBeDefined()
+    const groups = shortcutGroups([one as WorkspaceShortcut])
+    expect(groups.flatMap((group) => [...group.shortcuts])).toEqual([one])
+  })
+})
+
+describe('what a worktree is', () => {
+  it('answers the question rather than gesturing at it', () => {
+    const prose = WORKTREE_PARAGRAPHS.join(' ')
+    expect(prose).toContain('second working directory')
+    expect(prose).toContain('own branch')
+    // The two facts nobody works out unaided, and the two this app is most
+    // likely to be blamed for: where a pane's shell is, and what a removal
+    // takes with it.
+    expect(prose).toContain('starts in that directory')
+    expect(prose).toContain('takes its panes with it')
+  })
+})
+
+describe('the CLI section', () => {
+  it('says what the CLI is for in the words the dialog uses', () => {
+    expect(cliHelp(status({ state: 'linked' })).purpose).toBe(CLI_PURPOSE)
+    expect(cliHelp(null).purpose).toBe(CLI_PURPOSE)
+  })
+
+  it('sends you to the command once the command exists', () => {
+    const help = cliHelp(status({ state: 'linked' }))
+    expect(help.command).toContain(CLI_HELP_COMMAND)
+    expect(help.settings).toBeNull()
+  })
+
+  // The one thing this section must not do. A command that is not on PATH is a
+  // `command not found`, and a help page that produces one has taught its
+  // reader that it does not know what it is talking about.
+  it('never offers the command when a shell could not find it', () => {
+    for (const state of ['absent', 'elsewhere', 'file', 'directory'] as const) {
+      const help = cliHelp(status({ state }))
+      expect(help.command, state).toBeNull()
+      expect(help.settings, state).toContain('Settings')
+    }
+  })
+
+  it('points nowhere at all until the first read has come back', () => {
+    const help = cliHelp(null)
+    expect(help.command).toBeNull()
+    expect(help.settings).toBeNull()
+  })
+
+  // A link that was made and still will not be found is the one case where
+  // "type teamree help" is both the right advice and possibly useless, so the
+  // sentence that says so has to survive into this page.
+  it('carries the warning that the directory is on no PATH it can read', () => {
+    expect(cliHelp(status({ state: 'linked', onPath: null })).caveat).toContain('/etc/paths')
+    expect(cliHelp(status({ state: 'linked', onPath: 'login' })).caveat).toBeNull()
+  })
+})
+
+/** A CLI status that is ordinary in every way except what a test names. */
+function status(patch: Partial<CliStatus> = {}): CliStatus {
+  return {
+    installable: true,
+    platform: 'darwin',
+    source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+    packaged: true,
+    bundle: '/Applications/teamree.app/Contents/Resources/cli/index.js',
+    impermanent: null,
+    destination: '/usr/local/bin/teamree',
+    directory: '/usr/local/bin',
+    state: 'absent',
+    resolved: null,
+    dangling: false,
+    needsAdministrator: true,
+    onPath: 'login',
+    askedAt: null,
+    readAt: 0,
+    ...patch
+  }
+}

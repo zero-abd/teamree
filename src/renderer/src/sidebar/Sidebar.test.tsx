@@ -96,6 +96,8 @@ const toggleProject = vi.fn()
 const openTeamwork = vi.fn()
 const closeTeamwork = vi.fn()
 const toggleDashboard = vi.fn()
+const toggleSettings = vi.fn()
+const toggleHelp = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
@@ -114,7 +116,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
 }
 
 const mount = (): void => {
-  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," />)
+  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," helpHint="⌘/" />)
 }
 
 beforeEach(() => {
@@ -401,5 +403,37 @@ describe('the list itself', () => {
     const list = document.querySelector('.project__worktrees') as HTMLElement
     expect(within(list).getByText('Rewrite the pager')).toBeTruthy()
     expect(within(list).getByText("priya's task")).toBeTruthy()
+  })
+})
+
+// Settings and Help take the main area, and both were reachable only from the
+// empty state until this. A surface with no entry in the rail and no row in the
+// palette is a surface somebody has to already know about, which is the one
+// thing a help page cannot afford to be.
+describe('the rail reaches the window-level surfaces', () => {
+  it('opens settings from the rail', () => {
+    seed({ settingsOpen: false, toggleSettings })
+    mount()
+    const entry = screen.getByRole('button', { name: /Settings/ })
+    expect(entry.getAttribute('aria-current')).toBeNull()
+    act(() => entry.click())
+    expect(toggleSettings).toHaveBeenCalled()
+  })
+
+  it('marks settings as the page you are on while it has the area', () => {
+    seed({ settingsOpen: true, toggleSettings })
+    mount()
+    expect(screen.getByRole('button', { name: /Settings/ }).getAttribute('aria-current')).toBe('page')
+  })
+
+  // Settings deliberately carries no chord — ⌘, is the appearance dialog's, and
+  // the row above says so — so this row must not show one either.
+  it('shows the help chord and offers no chord for settings', () => {
+    seed({ toggleHelp })
+    mount()
+    expect(within(screen.getByRole('button', { name: /Help/ })).getByText('⌘/')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Settings/ }).querySelector('kbd')).toBeNull()
+    act(() => screen.getByRole('button', { name: /Help/ }).click())
+    expect(toggleHelp).toHaveBeenCalled()
   })
 })

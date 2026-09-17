@@ -22,6 +22,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const agents = useWorkspaceStore((state) => state.agents)
   const agentsProbed = useWorkspaceStore((state) => state.agentsProbed)
   const startTask = useWorkspaceStore((state) => state.startTask)
+  const startPointDefaults = useWorkspaceStore((state) => state.startPointDefaults)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   const [projectId, setProjectId] = useState(openedFor)
@@ -33,12 +34,40 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const project = projects.find((entry) => entry.id === projectId)
   const { state: startPoints, reload } = useStartPoints(projectId)
 
-  // The listing lands after the dialog opens, so the base ref it names — and
-  // the sha behind it — replace the placeholder, unless the user has already
-  // put something of their own in the box. Switching project clears `touched`,
-  // which is what lets the new project's base ref take over.
+  // What the box starts out saying, in order of who asked for it.
+  //
+  // A ref stored in settings for this project wins over the repository's base
+  // ref, because it is the same person saying where their branches start and
+  // they said it more recently. When the listing names that ref the option
+  // behind it is attached too, so the picker shows its sha and its badges;
+  // when it does not — a ref that has since been deleted, or one the runtime's
+  // cap dropped — the text stands on its own, which `commitStartPoint` already
+  // treats as a candidate in its own right.
+  //
+  // Otherwise the listing's base ref replaces the placeholder as it lands, as
+  // it always has. Either way nothing overwrites what the user has already put
+  // in the box; switching project clears `touched`, which is what lets the new
+  // project's answer take over.
+  //
+  // The dependency list is `[startPoints, touched]` and must stay that way,
+  // even though the body now also reads `projectId` and the stored refs. This
+  // effect may only act on a listing, and the listing is the thing that arrives
+  // late: adding `projectId` here makes it run the instant the project select
+  // changes, while `startPoints` in this render's closure is still the previous
+  // project's — which put the old repository's base ref back into a box the
+  // select had just cleared. Both of the values read without being listed are
+  // read on the render where the new listing lands, by which time they are the
+  // new project's.
   useEffect(() => {
     if (touched || startPoints.phase !== 'ready') return
+    const preferred = startPointDefaults[projectId]
+    if (preferred !== undefined) {
+      setStartPoint({
+        text: preferred,
+        option: startPoints.list.options.find((option) => option.ref === preferred) ?? null
+      })
+      return
+    }
     const base = startPoints.list.options.find((option) => option.isBase) ?? null
     setStartPoint({ text: base?.ref ?? startPoints.list.baseRef, option: base })
   }, [startPoints, touched])

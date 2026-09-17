@@ -19,6 +19,8 @@ export type PaletteAction =
   | 'add-project'
   | 'install-cli'
   | 'open-appearance'
+  | 'open-settings'
+  | 'open-help'
   | 'check-for-updates'
   | 'toggle-automatic-updates'
 
@@ -175,6 +177,17 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
   },
   { id: 'toggle-sidebar', label: 'Toggle sidebar', keywords: 'hide show projects' },
   { id: 'add-project', label: 'Add project', keywords: 'repository repo folder clone' },
+  // Two surfaces that are about the window rather than about a worktree, and
+  // the palette is the one place somebody looks for a thing whose name they
+  // know and whose location they do not. The keywords carry what people call
+  // these rather than what this app calls them: nobody searches for "help"
+  // when what they want is the key that splits a pane.
+  {
+    id: 'open-settings',
+    label: 'Settings',
+    keywords: 'preferences options config cli path relay start point font size updates reveal'
+  },
+  { id: 'open-help', label: 'Help', keywords: 'shortcuts keys keyboard worktree cli docs how what' },
   {
     id: 'open-appearance',
     label: 'Appearance',

@@ -1,0 +1,172 @@
+/* The help page: the chords, what a worktree is, and where the rest is
+   written. It takes the whole main area, so it is laid out like the pane board
+   rather than like a dialog — the same head, the same close, and a body that
+   scrolls under it.
+
+   The one thing it does that the board does not is hold its prose to a column.
+   A paragraph set across a window this wide is a paragraph whose next line the
+   eye cannot find, and this is the only surface in the app with paragraphs on
+   it. */
+
+.help {
+  overflow-y: auto;
+}
+
+.help__head {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s4) var(--s4) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.help__identity {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.help__title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.help__lede {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.help__close {
+  padding: var(--s1);
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.help__close:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.help__close svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.help__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  padding: var(--s5) var(--s4) var(--s6);
+}
+
+/* The measure. 74 characters is about as wide as a line of this size can be
+   and still be read down rather than scanned across. */
+.help__section {
+  max-width: 74ch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.help__heading {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.help__prose {
+  color: var(--fg-secondary);
+  line-height: 1.6;
+}
+
+/* What is true on this machine right now, as opposed to what is always true.
+   It gets the brighter ink because it is the sentence that changes. */
+.help__state {
+  color: var(--fg);
+}
+
+/* Said only when the command may not be found after all. Warning-coloured
+   rather than red: nothing is broken, and something may be about to not
+   work. */
+.help__caveat {
+  padding: var(--s2) var(--s3);
+  border-left: 2px solid var(--warning);
+  background: var(--bg-raised);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.help__link {
+  color: var(--accent-bright);
+}
+
+/* Keyboard ---------------------------------------------------------------- */
+
+.help-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding-top: var(--s2);
+}
+
+.help-group__title {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.help-group__blurb {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.help-keys {
+  margin: var(--s2) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Two columns with the gap between them drawn, not left empty: a row of a
+   name at the left edge and a chord at the right is a row whose two halves
+   have to be connected by eye every time. The rule is faint enough to be a
+   guide rather than a border. */
+.help-key {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: var(--s2) var(--s2) var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-sm);
+}
+
+.help-key:last-child {
+  border-bottom: 0;
+}
+
+.help-key__what {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-secondary);
+}
+
+.help-key__chord {
+  justify-self: end;
+}
