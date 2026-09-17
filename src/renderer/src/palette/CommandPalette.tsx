@@ -24,6 +24,9 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const agents = useWorkspaceStore((state) => state.agents)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
+  // Names one of the actions: what is wrong with the CLI link decides what the
+  // row offering to fix it is called.
+  const cli = useWorkspaceStore((state) => state.cli)
 
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
@@ -35,12 +38,13 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         projects,
         activeWorktreeId,
         agents,
+        cli,
         hintFor: (action) => {
           const command = ACTION_SHORTCUTS[action]
           return command ? shortcutHint(command, modifier) : ''
         }
       }),
-    [worktrees, projects, activeWorktreeId, agents, modifier]
+    [worktrees, projects, activeWorktreeId, agents, cli, modifier]
   )
 
   const matches = useMemo(() => filterPalette(items, query), [items, query])

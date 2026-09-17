@@ -291,10 +291,19 @@ describe('the CLI offer', () => {
     seed({
       cli: {
         installable: true,
+        packaged: true,
         state: 'absent',
         destination: '/usr/local/bin/teamree',
+        directory: '/usr/local/bin',
         source: '/Applications/teamree.app/cli',
-        onPath: true
+        bundle: '/Applications/teamree.app/cli.js',
+        // Spelled out rather than left off. These are the fields that say the
+        // app is running from somewhere it will still be tomorrow, and an
+        // absent one is not the same as a null one: the panel branches on
+        // `!== null`, so a seed that omits them describes a state this app
+        // never reports and tests a sentence nobody is ever shown.
+        impermanent: null,
+        onPath: 'environment'
       }
     })
     mount()
