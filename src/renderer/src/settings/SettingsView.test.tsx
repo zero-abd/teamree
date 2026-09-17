@@ -1,0 +1,427 @@
+/** @vitest-environment jsdom */
+
+// The settings page, tested for the promises it makes rather than its markup.
+//
+// Four of these are about the page being honest instead of merely present. It
+// must say that an environment variable is beating the repository, because a
+// relay block that showed the winning URL and nothing else is how somebody ends
+// up editing a file that is being ignored. It must not offer a relay field at
+// all, because the teamwork page is where a relay is set and pushed, and a
+// second field here would let somebody do a third of that and stop. It must say
+// that a development build has nothing to compare itself against, rather than
+// offering a check that can only come back empty. And clearing a start point
+// must pass null rather than an empty string, because the store treats those
+// differently on purpose.
+//
+// The other two are about the page being usable: a control that does not write
+// through leaves a page that looks identical and does nothing, and a view with
+// no Escape is a view people hunt for a way out of.
+
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CliStatus, PaneConsent, Project, RelaySetting, UpdateState } from '@shared/entities'
+
+vi.mock('../runtimeClient/currentRuntimeClient', () => ({
+  runtimeClient: {
+    call: () => new Promise(() => {}),
+    watchPane: () => new Promise(() => {}),
+    subscribeTerminal: () => new Promise(() => {}),
+    watchWorkspace: () => ({ close: () => {} }),
+    connection: { phase: 'ready' },
+    onConnectionChange: () => () => {}
+  },
+  RUNTIME_IS_SEEDED: false
+}))
+
+const { useWorkspaceStore } = await import('../state/workspaceStore')
+const { resolvePlatformModifier } = await import('../keyboard/platformModifier')
+const { SettingsView } = await import('./SettingsView')
+
+const INITIAL = useWorkspaceStore.getState()
+const modifier = resolvePlatformModifier('darwin')
+
+const project: Project = { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' }
+/**
+ * A teammate's held keystrokes, waiting on this machine's owner to answer.
+ *
+ * Not in `dialog`: nobody in this window opened it, and it is the one modal
+ * here that refuses to be dismissed. See `dialogs/modalLayer.ts`.
+ */
+const asking: PaneConsent = {
+  projectId: 'p1',
+  requests: [
+    {
+      id: 'c1',
+      projectId: 'p1',
+      terminalId: 't1',
+      handle: 'sam',
+      publicKey: 'k',
+      since: 1,
+      at: 2,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      writes: 3,
+      bytes: 9,
+      preview: 'rm -rf .',
+      clipped: false
+    }
+  ],
+  standing: [],
+  readAt: 2
+}
+
+const linkedCli = (): CliStatus => ({
+  installable: true,
+  platform: 'darwin',
+  source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+  packaged: true,
+  bundle: '/Applications/teamree.app/Contents/Resources/cli/index.js',
+  impermanent: null,
+  destination: '/usr/local/bin/teamree',
+  directory: '/usr/local/bin',
+  state: 'linked',
+  resolved: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+  dangling: false,
+  needsAdministrator: true,
+  onPath: 'login',
+  askedAt: null,
+  readAt: 0
+})
+
+const release = (): UpdateState => ({
+  current: '1.4.0',
+  checkable: true,
+  automatic: true,
+  available: null,
+  checking: false,
+  checkedAt: null,
+  problem: null
+})
+
+const relay = (): RelaySetting => ({
+  projectId: 'p1',
+  file: '.teamree/relay',
+  url: 'wss://relay.example/v1/relay',
+  source: 'repository',
+  problem: null,
+  onDisk: { url: 'wss://relay.example/v1/relay', problem: null },
+  override: { name: 'TEAMREE_RELAY_URL', value: null },
+  deploy: { command: '/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy', reason: null },
+  readAt: 0
+})
+
+const toggleSettings = vi.fn()
+const loadCli = vi.fn()
+const loadUpdate = vi.fn()
+const loadRelay = vi.fn()
+const revealInFinder = vi.fn()
+const setStartPointDefault = vi.fn()
+const setTerminalFontSize = vi.fn()
+const setAutomaticUpdates = vi.fn()
+const checkForUpdates = vi.fn()
+const openTeamwork = vi.fn()
+const openDialog = vi.fn()
+const installCli = vi.fn()
+
+function seed(overrides: Record<string, unknown> = {}): void {
+  useWorkspaceStore.setState(
+    {
+      ...INITIAL,
+      settingsOpen: true,
+      projects: [project],
+      relays: { p1: relay() },
+      cli: linkedCli(),
+      update: release(),
+      toggleSettings,
+      loadCli,
+      loadUpdate,
+      loadRelay,
+      revealInFinder,
+      setStartPointDefault,
+      setTerminalFontSize,
+      setAutomaticUpdates,
+      checkForUpdates,
+      openTeamwork,
+      openDialog,
+      installCli,
+      ...overrides
+    },
+    true
+  )
+}
+
+/** The relay block of the one project this file seeds. */
+function relayBlock(): HTMLElement {
+  const heading = screen.getByRole('heading', { name: 'Relay' })
+  const block = heading.parentElement
+  expect(block, 'the relay heading should sit inside a block').not.toBeNull()
+  return block as HTMLElement
+}
+
+beforeEach(() => {
+  for (const mock of [
+    toggleSettings,
+    loadCli,
+    loadUpdate,
+    loadRelay,
+    revealInFinder,
+    setStartPointDefault,
+    setTerminalFontSize,
+    setAutomaticUpdates,
+    checkForUpdates,
+    openTeamwork,
+    openDialog,
+    installCli
+  ]) {
+    mock.mockReset()
+  }
+  seed()
+})
+
+describe('the page itself', () => {
+  it('is a landmark with a name, and reads both machine facts on arrival', () => {
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByRole('main', { name: 'Settings' })).toBeTruthy()
+    expect(loadCli).toHaveBeenCalled()
+    expect(loadUpdate).toHaveBeenCalled()
+  })
+
+  it('closes on Escape, which is what a reader tries first', () => {
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(toggleSettings).toHaveBeenCalledTimes(1)
+  })
+
+  // The appearance editor this page's own row opens is a modal, and one press
+  // taking both away would take more than was asked for.
+  it('stands aside from Escape while a dialog is on top of it', () => {
+    seed({ dialog: { kind: 'appearance' } })
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(toggleSettings).not.toHaveBeenCalled()
+  })
+
+  // The half of "something modal is on screen" that lives outside `dialog`.
+  // A question raised by another machine cannot be dismissed, so a page closing
+  // underneath it leaves the reader behind a scrim with no way back until they
+  // have answered something they may not have seen arrive.
+  it('stands aside from Escape for a question nobody in this window opened', () => {
+    seed({ consent: { p1: asking } })
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(toggleSettings).not.toHaveBeenCalled()
+  })
+
+  it('has a close button as well, for the reader who never learned the key', () => {
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the panes' }))
+    expect(toggleSettings).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('teamree on your PATH', () => {
+  it('says the link is made, in the install panel’s own words', () => {
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByText('teamree is on your PATH.')).toBeTruthy()
+    expect(screen.getByText(/\/usr\/local\/bin\/teamree leads to this app/)).toBeTruthy()
+  })
+
+  it('offers the link where there is one to make, and presses it through', () => {
+    seed({ cli: { ...linkedCli(), state: 'missing', resolved: null, needsAdministrator: false } })
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Put teamree on my PATH' }))
+    expect(installCli).toHaveBeenCalled()
+  })
+})
+
+describe('updates', () => {
+  it('says this build has nothing to compare against, instead of offering a check', () => {
+    seed({ update: { ...release(), current: '0.0.0-dev', checkable: false } })
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByText(/not a released version/)).toBeTruthy()
+    expect(screen.getByText('This is teamree 0.0.0-dev.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull()
+    expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+
+  it('checks on request, and says when the last one was', () => {
+    seed({ update: { ...release(), checkedAt: Date.now() - 4 * 60_000 } })
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByText('Last checked 4m ago.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check now' }))
+    expect(checkForUpdates).toHaveBeenCalled()
+  })
+
+  it('will not offer a second check while one is in flight', () => {
+    seed({ update: { ...release(), checking: true } })
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByRole('button', { name: 'Checking…' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('turns the automatic check off through the store', () => {
+    render(<SettingsView modifier={modifier} />)
+    const check = screen.getByRole('checkbox')
+    expect((check as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(check)
+    expect(setAutomaticUpdates).toHaveBeenCalledWith(false)
+  })
+
+  it('shows why the last check answered nothing, rather than swallowing it', () => {
+    seed({ update: { ...release(), problem: 'github.com could not be reached' } })
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByText('github.com could not be reached')).toBeTruthy()
+  })
+})
+
+describe('panes', () => {
+  it('writes a new terminal text size through, and says it is remembered here only', () => {
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.change(screen.getByLabelText('Terminal text size'), { target: { value: '17' } })
+    expect(setTerminalFontSize).toHaveBeenCalledWith(17)
+    expect(screen.getByText(/Remembered on this machine only/)).toBeTruthy()
+  })
+
+  it('shows the size it is at, which a slider alone cannot say', () => {
+    seed({ terminalFontSize: 15 })
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByText('15px')).toBeTruthy()
+  })
+})
+
+describe('appearance', () => {
+  // One row, and it leads somewhere. A second set of swatches here would be a
+  // second answer to one question.
+  it('sends the reader to the editor that already exists, and edits nothing itself', () => {
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open the appearance panel' }))
+    expect(openDialog).toHaveBeenCalledWith({ kind: 'appearance' })
+
+    const section = screen.getByRole('heading', { name: 'Appearance' }).parentElement as HTMLElement
+    expect(section.textContent).toContain('the same one ⌘, opens')
+    // No swatch, no colour field, nothing that writes an appearance from here.
+    expect(section.querySelectorAll('input')).toHaveLength(0)
+  })
+})
+
+describe('projects', () => {
+  it('says so in a sentence when there are none, rather than showing an empty list', () => {
+    seed({ projects: [], relays: {} })
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByText(/No repositories yet/)).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Relay' })).toBeNull()
+  })
+
+  it('reveals the repository at its own path, named so the notice can say what failed', () => {
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal in Finder' }))
+    expect(revealInFinder).toHaveBeenCalledWith('/repos/pager', 'the pager repository')
+  })
+
+  it('shows the project’s base ref as the placeholder, so the box says what happens if it is left empty', () => {
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByLabelText('Start new worktrees from').getAttribute('placeholder')).toBe('origin/main')
+  })
+})
+
+describe('the start point a new task is offered first', () => {
+  it('commits what was typed when the field is left', () => {
+    render(<SettingsView modifier={modifier} />)
+    const field = screen.getByLabelText('Start new worktrees from')
+    fireEvent.change(field, { target: { value: 'develop' } })
+    expect(setStartPointDefault).not.toHaveBeenCalled()
+    fireEvent.blur(field)
+    expect(setStartPointDefault).toHaveBeenCalledWith('p1', 'develop')
+  })
+
+  it('commits on Enter too, for the reader who never leaves the keyboard', () => {
+    render(<SettingsView modifier={modifier} />)
+    const field = screen.getByLabelText('Start new worktrees from')
+    fireEvent.change(field, { target: { value: 'release/2026' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(setStartPointDefault).toHaveBeenCalledWith('p1', 'release/2026')
+  })
+
+  // Null, not the empty string: `withStartPoint` removes the entry for null and
+  // an empty string would be a second spelling of "use the base ref" that
+  // nothing else checks for.
+  it('passes null when the preference is cleared', () => {
+    seed({ startPointDefaults: { p1: 'develop' } })
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Use origin/main' }))
+    expect(setStartPointDefault).toHaveBeenCalledWith('p1', null)
+  })
+
+  it('passes null when the field is emptied and left, the same as the button', () => {
+    seed({ startPointDefaults: { p1: 'develop' } })
+    render(<SettingsView modifier={modifier} />)
+    const field = screen.getByLabelText('Start new worktrees from')
+    fireEvent.change(field, { target: { value: '  ' } })
+    fireEvent.blur(field)
+    expect(setStartPointDefault).toHaveBeenCalledWith('p1', null)
+  })
+
+  it('offers nothing to clear when there is nothing set', () => {
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByRole('button', { name: 'Use origin/main' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('says the preference only decides what the composer offers first', () => {
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByText(/Anything typed there still wins/)).toBeTruthy()
+  })
+})
+
+describe('the relay a project meets on', () => {
+  it('reads it, and names where the URL in effect came from', () => {
+    render(<SettingsView modifier={modifier} />)
+    expect(loadRelay).toHaveBeenCalledWith('p1')
+    expect(screen.getByText('Teamwork dials wss://relay.example/v1/relay.')).toBeTruthy()
+    expect(screen.getByText(/comes from \.teamree\/relay, which is in the repository/)).toBeTruthy()
+  })
+
+  it('says in words that the environment is overriding the repository', () => {
+    seed({
+      relays: {
+        p1: {
+          ...relay(),
+          url: 'wss://tunnel.example/v1/relay',
+          source: 'environment',
+          override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' }
+        }
+      }
+    })
+    render(<SettingsView modifier={modifier} />)
+    const block = within(relayBlock())
+    expect(block.getByText(/TEAMREE_RELAY_URL is set to wss:\/\/tunnel\.example\/v1\/relay/)).toBeTruthy()
+    expect(
+      block.getByText(/It is overriding the repository, which says wss:\/\/relay\.example\/v1\/relay in \.teamree/)
+    ).toBeTruthy()
+    expect(block.getByText(/teamree cannot change a variable it was started with/)).toBeTruthy()
+  })
+
+  it('offers no field to edit the relay, and sends the reader where one is set', () => {
+    render(<SettingsView modifier={modifier} />)
+    const block = relayBlock()
+    expect(block.querySelectorAll('input')).toHaveLength(0)
+    expect(block.querySelectorAll('textarea')).toHaveLength(0)
+    fireEvent.click(within(block).getByRole('button', { name: 'Open teamwork for pager' }))
+    expect(openTeamwork).toHaveBeenCalledWith('p1')
+  })
+
+  it('says there is none, and why, rather than showing a blank line', () => {
+    seed({
+      relays: {
+        p1: {
+          ...relay(),
+          url: null,
+          source: null,
+          problem: 'no .teamree/relay in this project',
+          onDisk: { url: null, problem: 'no .teamree/relay in this project' }
+        }
+      }
+    })
+    render(<SettingsView modifier={modifier} />)
+    const block = within(relayBlock())
+    expect(block.getByText('Teamwork has no relay to dial in this repository.')).toBeTruthy()
+    expect(block.getByText('no .teamree/relay in this project')).toBeTruthy()
+  })
+})

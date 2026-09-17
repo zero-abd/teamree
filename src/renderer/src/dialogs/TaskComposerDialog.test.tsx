@@ -163,6 +163,46 @@ describe('what it will not submit', () => {
   })
 })
 
+// Settings lets somebody say where this project's branches start, and the only
+// place that answer can show up is the box below. It is a default and not a
+// rule: it fills the field and the field is still a field.
+describe('the start point somebody set in settings', () => {
+  it('fills the box instead of the repository’s base ref', async () => {
+    seed({ startPointDefaults: { p1: 'feature/pager' } })
+    await open()
+    expect(startPoint().value).toBe('feature/pager')
+  })
+
+  it('belongs to the project it was set for, and does not follow a switch', async () => {
+    seed({ startPointDefaults: { p1: 'feature/pager' } })
+    await open()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'p2' } })
+    await waitFor(() => expect(startPoint().value).toBe('origin/trunk'))
+  })
+
+  // Typed in the box, not stored: a preference that could not be overruled for
+  // one task would send people to settings and back to start one branch
+  // somewhere else.
+  it('is still only a default, and what is typed over it is what is submitted', async () => {
+    seed({ startPointDefaults: { p1: 'feature/pager' } })
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    fireEvent.change(startPoint(), { target: { value: 'origin/main' } })
+    submit().click()
+    expect(startTask).toHaveBeenCalledWith(expect.objectContaining({ startedFrom: 'origin/main' }))
+  })
+
+  // A ref that has been deleted since, or one the runtime's cap dropped, is
+  // still what this person asked for. It goes in the box as text and git gets
+  // the last word, which is a better answer than silently branching from
+  // somewhere they did not choose.
+  it('offers a ref the listing does not carry, rather than falling back to the base', async () => {
+    seed({ startPointDefaults: { p1: 'origin/gone-last-tuesday' } })
+    await open()
+    expect(startPoint().value).toBe('origin/gone-last-tuesday')
+  })
+})
+
 describe('what it submits', () => {
   it('carries the task, the project and the ref the picker settled on', async () => {
     await open()

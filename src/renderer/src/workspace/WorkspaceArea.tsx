@@ -15,10 +15,12 @@
 import { useCallback, useMemo } from 'react'
 import { teamworkFacts } from '@shared/entities'
 import { Dashboard } from '../dashboard/Dashboard'
+import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { PaneTree } from '../panes/PaneTree'
 import { SplitFrame } from '../panes/SplitFrame'
+import { SettingsView } from '../settings/SettingsView'
 import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 import { TeamworkView } from '../teamwork/TeamworkView'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
@@ -117,6 +119,11 @@ function WorkspaceMain({
   const openWorktreeIds = useWorkspaceStore((state) => state.openWorktreeIds)
   const openWorktree = useWorkspaceStore((state) => state.openWorktree)
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
+  const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
+  const helpOpen = useWorkspaceStore((state) => state.helpOpen)
+  const toggleHelp = useWorkspaceStore((state) => state.toggleHelp)
+  const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
+  const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
   const teamwork = useWorkspaceStore((state) => state.teamwork)
 
@@ -170,6 +177,16 @@ function WorkspaceMain({
   // up is a question about a repository, not about the worktree that happens to
   // be open, so it takes the area rather than floating over it.
   if (teamworkProjectId !== null) return <TeamworkView projectId={teamworkProjectId} />
+
+  // And the same for both of these. Settings is read against the machine — what
+  // is on its PATH, what its panes look like, where its checkouts are — and
+  // help is read while doing the thing it describes, which is the one case a
+  // modal is worst at: a scrim over the app is a scrim over the very panes the
+  // reader is trying to apply the sentence to. Ahead of the empty state,
+  // because a window with nothing open is exactly where somebody goes looking
+  // for either of them.
+  if (settingsOpen) return <SettingsView modifier={modifier} />
+  if (helpOpen) return <HelpView modifier={modifier} />
 
   if (!worktree || !activeWorktreeId) {
     // A runtime that never came up leaves a window that looks ordinary and
@@ -315,7 +332,27 @@ function WorkspaceMain({
               <dt>{shortcutHint('open-dashboard', modifier)}</dt>
               <dd>every pane</dd>
             </div>
+            <div>
+              <dt>{shortcutHint('open-help', modifier)}</dt>
+              <dd>how this works</dd>
+            </div>
           </dl>
+
+          {/* The legend above is nine chords offered to somebody who may not
+              yet know what a worktree is, which is the question underneath all
+              of them. These two lines are the way out of that: one goes to the
+              page that answers it — and lists every chord, generated from the
+              same table the legend reads — and the other to the page that
+              settles what this machine is configured to do. Text rather than
+              buttons, because they are not what this state is for. */}
+          <div className="placeholder__actions">
+            <button type="button" className="button button--ghost button--small" onClick={toggleHelp}>
+              How this works
+            </button>
+            <button type="button" className="button button--ghost button--small" onClick={toggleSettings}>
+              Settings
+            </button>
+          </div>
         </div>
       </main>
     )
@@ -328,7 +365,33 @@ function WorkspaceMain({
       <header className="workspace__head">
         <div className="workspace__identity">
           <h1 className="workspace__title">{worktree.name}</h1>
-          <p className="workspace__path">{worktree.path}</p>
+          {/*
+            The path was already printed here and was already the answer to
+            "where is this on disk"; what it was not was a way of getting there.
+            Pressing it opens the checkout in the file manager — the one thing
+            somebody wants from a path they can read but not click.
+
+            Only while the checkout is `ready`, and that is the whole point of
+            the condition rather than tidiness: a worktree still being created
+            has a path recorded and nothing at it yet, and a failed one has a
+            path that was never made. Offering the button in either state would
+            be offering a button whose only possible outcome is the refusal the
+            main process writes for a missing directory. In those states this
+            stays exactly what it was, a line of text.
+          */}
+          {worktree.state === 'ready' ? (
+            <button
+              type="button"
+              className="workspace__path workspace__path--reveal"
+              title={`Show ${worktree.path} in the file manager`}
+              onClick={() => void revealInFinder(worktree.path, `the ${worktree.name} checkout`)}
+            >
+              {worktree.path}
+              <span className="workspace__reveal-hint">Reveal</span>
+            </button>
+          ) : (
+            <p className="workspace__path">{worktree.path}</p>
+          )}
         </div>
         {/*
           Fixed buttons only, and deliberately no button per agent. This row is

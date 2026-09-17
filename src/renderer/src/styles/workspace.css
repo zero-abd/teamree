@@ -151,6 +151,40 @@
   font-size: var(--text-xs);
 }
 
+/* The same line of text, now pressable. It deliberately does not look like a
+   button until the pointer is over it: the path is read far more often than it
+   is pressed, and a filled control here would put a second loud thing beside
+   the worktree's name. */
+button.workspace__path--reveal {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace__reveal-hint {
+  flex: none;
+  opacity: 0;
+  color: var(--accent-bright);
+  font-family: var(--font-ui);
+  transition: opacity 120ms ease;
+}
+
+.workspace__path--reveal:hover .workspace__reveal-hint,
+.workspace__path--reveal:focus-visible .workspace__reveal-hint {
+  opacity: 1;
+}
+
+.workspace__path--reveal:hover,
+.workspace__path--reveal:focus-visible {
+  color: var(--fg-secondary);
+}
+
 .workspace__tools {
   flex-wrap: wrap;
   max-width: 100%;

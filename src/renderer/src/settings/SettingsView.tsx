@@ -1,0 +1,483 @@
+// Everything this copy of teamree is configured to do, on one page.
+//
+// It takes the whole main area for the reason the pane board and teamwork's
+// setup do, and the reason is in what is on it rather than in how big it is.
+// Every section here is about the machine — what is on its PATH, whether it
+// looks for releases, how big the text in its panes is, where its checkouts
+// are — and not one of them is about the worktree whose tab happens to be open.
+// A drawer beside the panes would frame all of it with a tab that has nothing
+// to do with it, and a modal would put a scrim over the panes whose text size
+// somebody is here to change. `WorkspaceArea` gives it the area ahead of the
+// empty state for the other half of the same thought: a window with nothing
+// open is exactly where people go looking for settings.
+//
+// Two things this page deliberately is not. It is not a second colour editor:
+// Appearance is one row and a button that opens the editor that already exists,
+// because two places to set one colour is how the two come to disagree. And it
+// is not a second place to set a relay: the relay block reads, names where the
+// URL came from, and sends you to the teamwork page, which is where setting one
+// is a step in a flow that also writes a key and pushes both files.
+//
+// Nothing here is unmounted that was costing anything, the same as the board:
+// the PTYs live in the runtime, so every pane keeps running and keeps its
+// scrollback while this is up — which is what makes the text-size control
+// honest, since the panes it resizes are still there behind the page.
+
+import { useEffect, useRef, useState } from 'react'
+import type { Project } from '@shared/entities'
+import { cliOutcome, cliPanel, CLI_PURPOSE } from '../dialogs/cliInstallModel'
+import type { PlatformModifier } from '../keyboard/platformModifier'
+import { shortcutHint } from '../keyboard/workspaceShortcuts'
+import { TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
+import { useNow } from '../state/useNow'
+import { modalOnScreen } from '../dialogs/modalLayer'
+import { useWorkspaceStore } from '../state/workspaceStore'
+import { relayPanel, updatePanel } from './settingsModel'
+
+export function SettingsView({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
+  const projects = useWorkspaceStore((state) => state.projects)
+  const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
+  const loadCli = useWorkspaceStore((state) => state.loadCli)
+  const loadUpdate = useWorkspaceStore((state) => state.loadUpdate)
+
+  // Both are read again on open rather than trusted from startup, and for the
+  // same reason: each is a fact about the world outside this window that can
+  // have moved since. A link somebody made in a terminal and a check that ran
+  // an hour ago are exactly what this page is being opened to look at.
+  useEffect(() => {
+    void loadCli()
+    void loadUpdate()
+  }, [loadCli, loadUpdate])
+
+  // Escape is what every reader tries first on a view they opened to look at
+  // something. Capture, for the same reason the chords are captured: a focused
+  // pane must not eat it first.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      // Anything modal on top owns Escape. Dismissing the appearance editor —
+      // which this page's own Appearance row opens — and this page with one
+      // press would take away more than the reader asked for.
+      //
+      // `modalOnScreen` rather than `dialog`, because half of what can be on
+      // top is not in `dialog` at all: a question about a teammate's keystrokes
+      // is raised by another machine, is the one modal here that refuses to be
+      // dismissed, and would otherwise have this page close underneath a scrim
+      // the reader cannot see through. `modalLayer.ts` exists because every
+      // surface that had to stand aside had learned only the half it was
+      // written beside.
+      if (modalOnScreen(useWorkspaceStore.getState())) return
+      event.preventDefault()
+      toggleSettings()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [toggleSettings])
+
+  // Reached from a button elsewhere in the window, so the keyboard has to come
+  // with it: without this, Tab carries on through whatever the reader was in
+  // before, while the page that just opened is unreachable. The region rather
+  // than a control inside it, so the first Tab lands on the first section's own
+  // button and the page's name is read out on arrival.
+  const region = useRef<HTMLElement>(null)
+  useEffect(() => {
+    region.current?.focus()
+  }, [])
+
+  return (
+    <main className="workspace settings" aria-label="Settings" tabIndex={-1} ref={region}>
+      <header className="settings__head">
+        <div className="settings__column settings__head-row">
+          <div className="settings__identity">
+            <h1 className="settings__title">Settings</h1>
+            <p className="settings__lede">
+              What this copy of teamree does on this machine. Everything here takes effect as you change it; there is
+              nothing to save.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="settings__close"
+            title="Back to the panes"
+            aria-label="Back to the panes"
+            onClick={toggleSettings}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M3 3 L9 9 M9 3 L3 9" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div className="settings__body">
+        <div className="settings__column">
+          <CliSection />
+          <UpdatesSection />
+          <PanesSection />
+          <AppearanceSection modifier={modifier} />
+          <ProjectsSection projects={projects} />
+        </div>
+      </div>
+    </main>
+  )
+}
+
+/**
+ * The `teamree` command, and whether a terminal can find it.
+ *
+ * The whole of the judgement is `cliInstallModel`'s, exactly as it is for the
+ * dialog: the same `cliPanel` and the same `cliOutcome`, shown as a section
+ * rather than in a box. Rewriting any of those sentences here would be the
+ * drift the model's own header warns about — two surfaces describing one link
+ * in two ways, one of which is wrong about the password.
+ */
+function CliSection(): React.JSX.Element {
+  const status = useWorkspaceStore((state) => state.cli)
+  const pending = useWorkspaceStore((state) => state.cliPending)
+  const install = useWorkspaceStore((state) => state.cliInstall)
+  const error = useWorkspaceStore((state) => state.cliError)
+  const installCli = useWorkspaceStore((state) => state.installCli)
+
+  const panel = cliPanel(status)
+
+  return (
+    <section className="settings-section" aria-labelledby="settings-cli">
+      <h2 className="settings-section__title" id="settings-cli">
+        teamree on your PATH
+      </h2>
+      <p className="settings-section__lede">{CLI_PURPOSE}</p>
+
+      <p className="settings-fact">{panel.headline}</p>
+      {panel.detail ? <p className="settings-note">{panel.detail}</p> : null}
+
+      {/* What the button will do, and what will ask for a password, penned off
+          above the button rather than left to be discovered by pressing it. */}
+      {panel.promise ? (
+        <div className="settings-promise">
+          <p>{panel.promise}</p>
+          {panel.password ? <p className="settings-promise__password">{panel.password}</p> : null}
+        </div>
+      ) : null}
+
+      {panel.pathWarning ? <p className="settings-warning">{panel.pathWarning}</p> : null}
+
+      {panel.manual ? (
+        <pre className="settings-command">
+          <code>{panel.manual}</code>
+        </pre>
+      ) : null}
+
+      {/* The refusal stays where the button that caused it is: a file in the
+          way and a password not given are both things somebody is about to try
+          again from here. */}
+      {error ? <p className="settings-error">{error}</p> : null}
+      {install && error === null ? <p className="settings-done">{cliOutcome(install)}</p> : null}
+
+      {panel.action ? (
+        <div className="settings-actions">
+          <button type="button" className="button button--primary" disabled={pending} onClick={() => void installCli()}>
+            {pending ? 'Linking…' : panel.action}
+          </button>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+/** Whether teamree goes looking for a newer release, and what it found last time. */
+function UpdatesSection(): React.JSX.Element {
+  const update = useWorkspaceStore((state) => state.update)
+  const checkForUpdates = useWorkspaceStore((state) => state.checkForUpdates)
+  const setAutomaticUpdates = useWorkspaceStore((state) => state.setAutomaticUpdates)
+
+  // The "last checked" line is the one number on this page that changes while
+  // nothing happens, so the page has to re-render itself for it to stay true.
+  const now = useNow()
+  const panel = updatePanel(update, now)
+
+  return (
+    <section className="settings-section" aria-labelledby="settings-updates">
+      <h2 className="settings-section__title" id="settings-updates">
+        Updates
+      </h2>
+      <p className="settings-section__lede">{panel.detail}</p>
+
+      <p className="settings-fact">{panel.headline}</p>
+
+      {panel.offersCheck ? (
+        <>
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={update?.automatic ?? false}
+              onChange={(event) => void setAutomaticUpdates(event.target.checked)}
+            />
+            {/* What the preference actually arms, rather than "check
+                automatically": the runtime makes its first check half a minute
+                after startup and one every six hours after that, and a label
+                that said "on launch" would be describing a check that has not
+                happened yet at the moment somebody reads it. */}
+            <span>Check for a newer release shortly after launch, and every few hours while teamree is open</span>
+          </label>
+
+          <div className="settings-actions">
+            <button
+              type="button"
+              className="button button--small"
+              disabled={update?.checking ?? false}
+              onClick={() => void checkForUpdates()}
+            >
+              {update?.checking ? 'Checking…' : 'Check now'}
+            </button>
+            {panel.lastChecked ? <span className="settings-aside">{panel.lastChecked}</span> : null}
+          </div>
+        </>
+      ) : null}
+
+      {/* Kept rather than raised, the way the store keeps it: a check that could
+          not reach GitHub is not something the reader has to do anything about,
+          and it belongs beside the button that tried. */}
+      {panel.problem ? <p className="settings-warning">{panel.problem}</p> : null}
+    </section>
+  )
+}
+
+/** The one thing about a pane that is a preference rather than a layout. */
+function PanesSection(): React.JSX.Element {
+  const terminalFontSize = useWorkspaceStore((state) => state.terminalFontSize)
+  const setTerminalFontSize = useWorkspaceStore((state) => state.setTerminalFontSize)
+
+  return (
+    <section className="settings-section" aria-labelledby="settings-panes">
+      <h2 className="settings-section__title" id="settings-panes">
+        Panes
+      </h2>
+      <p className="settings-section__lede">
+        The size of the text in every terminal in this window. Panes resize as you move it, including the ones already
+        running.
+      </p>
+
+      <div className="settings-size">
+        <label className="settings-size__label" htmlFor="settings-font-size">
+          Terminal text size
+        </label>
+        <input
+          id="settings-font-size"
+          className="settings-size__range"
+          type="range"
+          min={TERMINAL_FONT_MIN_PX}
+          max={TERMINAL_FONT_MAX_PX}
+          step={1}
+          value={terminalFontSize}
+          onChange={(event) => setTerminalFontSize(Number(event.target.value))}
+        />
+        {/* The number beside the slider, not a tooltip on it: "how big is it
+            now" is the question a slider with no scale cannot answer, and it is
+            the one somebody asks when comparing this window with another. */}
+        <output className="settings-size__value" htmlFor="settings-font-size">
+          {terminalFontSize}px
+        </output>
+      </div>
+
+      <p className="settings-note">
+        Remembered on this machine only. It is kept in this window&rsquo;s own storage rather than in the workspace, so
+        it does not follow you to another computer and a teammate never sees it.
+      </p>
+    </section>
+  )
+}
+
+/**
+ * One row, and it opens something else.
+ *
+ * There is a colour editor already, reached by a chord and by the sidebar's
+ * rail, and it is the only thing in the app that writes an appearance. A second
+ * set of swatches here would be a second answer to one question, which is the
+ * failure the comments around this codebase keep naming — so this row is a
+ * sentence saying what is over there and a button that goes there.
+ */
+function AppearanceSection({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
+
+  return (
+    <section className="settings-section" aria-labelledby="settings-appearance">
+      <h2 className="settings-section__title" id="settings-appearance">
+        Appearance
+      </h2>
+      <p className="settings-section__lede">
+        Themes and colours — the window&rsquo;s ground, its accent, and every colour built on them, terminal palette
+        included — are edited in their own panel.
+      </p>
+
+      <div className="settings-row">
+        <p className="settings-note">
+          This opens that panel — the same one {shortcutHint('open-appearance', modifier)} opens, and the same one
+          behind the sidebar&rsquo;s Appearance link. There is no second copy of it here.
+        </p>
+        <div className="settings-actions">
+          <button type="button" className="button button--small" onClick={() => openDialog({ kind: 'appearance' })}>
+            Open the appearance panel
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ProjectsSection({ projects }: { projects: readonly Project[] }): React.JSX.Element {
+  return (
+    <section className="settings-section" aria-labelledby="settings-projects">
+      <h2 className="settings-section__title" id="settings-projects">
+        Projects
+      </h2>
+      <p className="settings-section__lede">
+        One repository each: where its checkout is, which ref a new task starts from by default, and which relay its
+        teammates meet on.
+      </p>
+
+      {projects.length === 0 ? (
+        <p className="settings-note">
+          No repositories yet. Add one and it gets a block here, with its path, its start point and its relay.
+        </p>
+      ) : (
+        projects.map((project) => <ProjectBlock key={project.id} project={project} />)
+      )}
+    </section>
+  )
+}
+
+function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
+  const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
+
+  return (
+    <article className="settings-project">
+      <h3 className="settings-project__name">{project.name}</h3>
+
+      <div className="settings-row">
+        <p className="settings-project__path">{project.path}</p>
+        <div className="settings-actions">
+          <button
+            type="button"
+            className="button button--small"
+            onClick={() => void revealInFinder(project.path, `the ${project.name} repository`)}
+          >
+            Reveal in Finder
+          </button>
+        </div>
+      </div>
+
+      <StartPoint project={project} />
+      <RelayBlock project={project} />
+    </article>
+  )
+}
+
+/**
+ * Which ref the New task dialog offers first, for this project.
+ *
+ * Held as a draft and written on blur or Enter rather than on every keystroke.
+ * A ref is typed a character at a time and half of one is a ref that does not
+ * exist, so a field that wrote through as it went would spend most of its life
+ * storing a preference nothing can resolve — and `withStartPoint` would be
+ * clearing and re-setting the entry on the way past the empty string.
+ */
+function StartPoint({ project }: { project: Project }): React.JSX.Element {
+  const stored = useWorkspaceStore((state) => state.startPointDefaults[project.id] ?? '')
+  const setStartPointDefault = useWorkspaceStore((state) => state.setStartPointDefault)
+  const [draft, setDraft] = useState(stored)
+
+  // The stored value moving is what puts the trimmed, stored spelling back in
+  // the box after a commit — and it is also what keeps this field right when
+  // the preference is changed from somewhere else in the window.
+  useEffect(() => {
+    setDraft(stored)
+  }, [stored])
+
+  const commit = (): void => {
+    const next = draft.trim()
+    if (next === stored) return
+    // Null rather than the empty string, because the store's `withStartPoint`
+    // treats them differently on purpose: null removes the entry, which is the
+    // only spelling of "use the base ref" anything else checks for.
+    setStartPointDefault(project.id, next.length === 0 ? null : next)
+  }
+
+  const id = `settings-start-point-${project.id}`
+
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor={id}>
+        Start new worktrees from
+      </label>
+      <div className="settings-field__row">
+        <input
+          id={id}
+          className="settings-field__input"
+          type="text"
+          value={draft}
+          placeholder={project.baseRef}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commit()
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="button button--small"
+          disabled={stored.length === 0}
+          onClick={() => setStartPointDefault(project.id, null)}
+        >
+          Use {project.baseRef}
+        </button>
+      </div>
+      <p className="settings-note">
+        This only decides which ref the New task dialog puts in its start-point box first. Anything typed there still
+        wins, and the repository&rsquo;s own base ref, {project.baseRef}, is unchanged either way.
+      </p>
+    </div>
+  )
+}
+
+/**
+ * Where teamwork would dial, read and not written.
+ *
+ * Setting a relay is a step in the teamwork page's flow, and the flow is the
+ * point: it writes a key, writes the relay file, and pushes both, because a
+ * relay in a file nobody has pulled is a team meeting in two places. A field
+ * here would let somebody do a third of that and believe they were done, so
+ * this shows the three facts worth knowing from here — what is being dialled,
+ * which of the two places it came from, and whether the environment is beating
+ * the file — and then points at the page that can change it.
+ */
+function RelayBlock({ project }: { project: Project }): React.JSX.Element {
+  const relay = useWorkspaceStore((state) => state.relays[project.id])
+  const loadRelay = useWorkspaceStore((state) => state.loadRelay)
+  const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
+
+  useEffect(() => {
+    void loadRelay(project.id)
+  }, [loadRelay, project.id])
+
+  const panel = relayPanel(relay)
+
+  return (
+    <div className="settings-relay">
+      <h4 className="settings-relay__title">Relay</h4>
+      <p className="settings-fact">{panel.headline}</p>
+      {panel.detail ? <p className="settings-note">{panel.detail}</p> : null}
+      {panel.override ? <p className="settings-warning">{panel.override}</p> : null}
+      <div className="settings-actions">
+        <button type="button" className="button button--small" onClick={() => openTeamwork(project.id)}>
+          Open teamwork for {project.name}
+        </button>
+        <span className="settings-aside">Where a relay is set, and where the file that names it gets pushed.</span>
+      </div>
+    </div>
+  )
+}

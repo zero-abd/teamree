@@ -16,6 +16,7 @@ export type WorkspaceCommand =
   | 'find-in-pane'
   | 'open-dashboard'
   | 'open-appearance'
+  | 'open-help'
 
 export type WorkspaceShortcut = {
   command: WorkspaceCommand
@@ -38,7 +39,15 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // to be told. It is not in the application menu — see appMenu.ts, which
   // carries Electron's own roles and nothing invented — so the key reaches the
   // renderer rather than being eaten by a menu equivalent.
-  { command: 'open-appearance', chord: { key: ',' }, title: 'Appearance' }
+  { command: 'open-appearance', chord: { key: ',' }, title: 'Appearance' },
+  // Slash, which is what a person presses when they want to be told how
+  // something works, and the one chord in this table that is worth pressing
+  // precisely because you do not know the others yet. Deliberately not a shift
+  // chord: `matchesChord` compares `KeyboardEvent.key`, and on a US layout
+  // shift and a punctuation key produce a different character entirely — the
+  // comma becomes `<` — so a binding written as "shift plus slash" would never
+  // fire for the question mark it was meant to be.
+  { command: 'open-help', chord: { key: '/' }, title: 'Shortcuts and what a worktree is' }
 ]
 
 export function commandForEvent(

@@ -49,6 +49,14 @@ import {
   writeStoredSidebarWidth,
   SIDEBAR_DEFAULT_PX
 } from '../shell/sidebarWidth'
+import {
+  clampTerminalFontSize,
+  readStoredStartPoints,
+  readStoredTerminalFontSize,
+  withStartPoint,
+  writeStoredStartPoints,
+  writeStoredTerminalFontSize
+} from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
 
@@ -370,12 +378,42 @@ type WorkspaceState = {
    * binding it to that tab would be the wrong frame.
    */
   teamworkProjectId: string | null
+  /**
+   * Whether settings has the main area, and whether help does.
+   *
+   * Two booleans beside the two surfaces above, on the same terms and for the
+   * same reason: both are about the app rather than about the worktree that
+   * happens to be open, so neither belongs in a tab, and both are read rather
+   * than worked in — every way out of them is a way of going back to the panes.
+   *
+   * A dialog was the obvious alternative and is the wrong shape for either.
+   * Settings holds a panel that asks macOS for an administrator password, a
+   * per-project field, and a list of what this window is connected to; help is
+   * something people read with one hand while doing the thing it describes.
+   * Neither survives being squeezed into a box that has to be dismissed before
+   * the app can be touched again. Appearance stays a dialog because it is one
+   * choice made and seen instantly against the window behind it, and settings
+   * carries a row that opens it rather than a second copy of it.
+   */
+  settingsOpen: boolean
+  helpOpen: boolean
 
   sidebarWidth: number
   sidebarVisible: boolean
   paneSearch: PaneSearch | null
   dialog: DialogState
   notices: Notice[]
+  /**
+   * How big the text in a pane is, in CSS pixels, and each project's preferred
+   * start point by project id.
+   *
+   * Local to this machine and read from `localStorage` at startup rather than
+   * from the runtime — see `preferences.ts` for why neither is in the workspace
+   * file. Held in the store anyway because a preference nothing re-renders on
+   * is a preference that only applies to panes opened after it was changed.
+   */
+  terminalFontSize: number
+  startPointDefaults: Record<string, string>
 
   /**
    * How this window is painted, as the runtime last told it.
@@ -554,6 +592,27 @@ type WorkspaceState = {
   openTeamwork: (projectId: string) => void
   /** Gives it back, to whatever the window was showing before. */
   closeTeamwork: () => void
+  /** Gives the main area to settings, or takes it back. */
+  toggleSettings: () => void
+  /** The same for help. */
+  toggleHelp: () => void
+  /**
+   * Asks the OS file manager to show a path, and says so when it cannot.
+   *
+   * Not `revealPane`, which is next door and is about this window: that one
+   * opens a worktree's tab and puts the focus on a pane inside the app. This
+   * one leaves the app entirely and is the only thing in the renderer that
+   * touches the filesystem, which is why it goes over the preload bridge to the
+   * main process rather than through the runtime — see `src/main/reveal`.
+   *
+   * `what` names the thing being shown, so the notice raised by a refusal can
+   * say which button was pressed rather than only which path was missing.
+   */
+  revealInFinder: (path: string, what: string) => Promise<void>
+  /** Sets the size of the text in every pane, and remembers it. */
+  setTerminalFontSize: (size: number) => void
+  /** Sets one project's preferred start point, or clears it when given null. */
+  setStartPointDefault: (projectId: string, ref: string | null) => void
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
   /**
@@ -1062,12 +1121,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     activeWorktreeId: null,
     dashboardOpen: false,
     teamworkProjectId: null,
+    // Neither is restored from the last session, deliberately: both are places
+    // you go to answer a question, and reopening the app onto the answer to
+    // yesterday's question is not where anybody left off.
+    settingsOpen: false,
+    helpOpen: false,
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
     sidebarVisible: lastSession.sidebarVisible,
     paneSearch: null,
     dialog: null,
     notices: [],
+    terminalFontSize: readStoredTerminalFontSize(storage),
+    startPointDefaults: readStoredStartPoints(storage),
 
     // The default until the runtime answers, which is the same palette
     // `tokens.css` already painted the first frame in — so the window does not
@@ -1273,9 +1339,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // Opening a worktree is the answer the dashboard was open to ask for,
         // whichever surface asked it — a row, a tab, the sidebar, the palette.
         // The teamwork view goes for the same reason: somebody who has picked a
-        // worktree has asked to be somewhere else.
+        // worktree has asked to be somewhere else. Settings and help go with
+        // them: they are read, not worked in, and picking a worktree is the
+        // clearest possible statement that the reading is over.
         dashboardOpen: false,
         teamworkProjectId: null,
+        settingsOpen: false,
+        helpOpen: false,
         openWorktreeIds: state.openWorktreeIds.includes(worktreeId)
           ? state.openWorktreeIds
           : [...state.openWorktreeIds, worktreeId],
@@ -1981,7 +2051,68 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     toggleDashboard() {
       // Two views, one main area: whichever is asked for takes it.
-      set((state) => ({ dashboardOpen: !state.dashboardOpen, teamworkProjectId: null }))
+      set((state) => ({
+        dashboardOpen: !state.dashboardOpen,
+        teamworkProjectId: null,
+        settingsOpen: false,
+        helpOpen: false
+      }))
+    },
+
+    toggleSettings() {
+      // The same one main area, and the same rule. Pressing the chord again is
+      // how you leave, which is why this toggles rather than opens: a page
+      // opened by a key that does nothing on the second press is a page people
+      // hunt for a close button on.
+      set((state) => ({
+        settingsOpen: !state.settingsOpen,
+        helpOpen: false,
+        dashboardOpen: false,
+        teamworkProjectId: null
+      }))
+    },
+
+    toggleHelp() {
+      set((state) => ({
+        helpOpen: !state.helpOpen,
+        settingsOpen: false,
+        dashboardOpen: false,
+        teamworkProjectId: null
+      }))
+    },
+
+    async revealInFinder(path, what) {
+      // Nothing here decides whether the path is there; the main process does,
+      // because it is the only side that can look. What this decides is what
+      // happens when the answer is no — a notice rather than a thrown error,
+      // because pressing "Reveal in Finder" on a checkout that has been deleted
+      // under you is an ordinary thing to do and not a fault to report.
+      // Guarded the way `storage` above it is: this store is imported by tests
+      // that run under node, where there is no `window` at all and reaching for
+      // one is a ReferenceError rather than an undefined.
+      const reveal = typeof window === 'undefined' ? undefined : window.teamree?.revealPath
+      if (reveal === undefined) {
+        notify(`teamree cannot open ${what} in a file manager from this window.`, 'info')
+        return
+      }
+      try {
+        const result = await reveal(path)
+        if (!result.revealed) notify(`Could not show ${what}: ${result.reason}`, 'info')
+      } catch (error) {
+        failed(`Could not show ${what}`)(error)
+      }
+    },
+
+    setTerminalFontSize(size) {
+      const clamped = clampTerminalFontSize(size)
+      set({ terminalFontSize: clamped })
+      writeStoredTerminalFontSize(storage, clamped)
+    },
+
+    setStartPointDefault(projectId, ref) {
+      const startPointDefaults = withStartPoint(get().startPointDefaults, projectId, ref)
+      set({ startPointDefaults })
+      writeStoredStartPoints(storage, startPointDefaults)
     },
 
     toggleSidebar() {
@@ -2003,7 +2134,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     openTeamwork(projectId) {
-      set({ teamworkProjectId: projectId, dashboardOpen: false })
+      set({ teamworkProjectId: projectId, dashboardOpen: false, settingsOpen: false, helpOpen: false })
     },
 
     closeTeamwork() {

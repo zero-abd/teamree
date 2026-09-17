@@ -67,7 +67,15 @@ describe('the renderer transport names one set of channels', () => {
       ...(await channelsNamedIn('src/main/runtime/ipcChannels.ts')),
       // The folder picker is handled straight off `ipcMain` in the entrypoint
       // rather than through the bridge, and is spelled inline at both ends.
-      ...(await channelsNamedIn('src/main/index.ts'))
+      ...(await channelsNamedIn('src/main/index.ts')),
+      // And "reveal in Finder", which is also handled off `ipcMain` rather than
+      // through the bridge but keeps its channel beside the module that serves
+      // it — the entrypoint imports the registration and never names the
+      // string. Listed explicitly rather than by walking `src/main`, because
+      // the value of this check is that adding a channel makes somebody come
+      // here and say where it is answered: a glob would have quietly adopted
+      // the next one and stopped being a check at all.
+      ...(await channelsNamedIn('src/main/reveal/revealPath.ts'))
     ])
 
     expect([...preload].filter((channel) => !served.has(channel))).toEqual([])

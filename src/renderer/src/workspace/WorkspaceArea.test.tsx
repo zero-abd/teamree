@@ -47,6 +47,10 @@ vi.mock('../terminal/WatchedPaneView', () => ({
 }))
 vi.mock('./ChangesPanel', () => ({ ChangesPanel: () => null }))
 vi.mock('../dashboard/Dashboard', () => ({ Dashboard: () => <div data-testid="dashboard" /> }))
+// Both have their own files. What this one decides is that they take the area
+// at all, which is the part that lives here.
+vi.mock('../settings/SettingsView', () => ({ SettingsView: () => <div data-testid="settings" /> }))
+vi.mock('../help/HelpView', () => ({ HelpView: () => <div data-testid="help" /> }))
 vi.mock('./WorktreeTabs', () => ({ WorktreeTabs: () => null }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
@@ -109,6 +113,9 @@ const createTerminal = vi.fn()
 const startAgent = vi.fn()
 const openWorktree = vi.fn()
 const openTeamwork = vi.fn()
+const revealInFinder = vi.fn()
+const toggleHelp = vi.fn()
+const toggleSettings = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
@@ -120,6 +127,9 @@ function seed(overrides: Record<string, unknown> = {}): void {
       startAgent,
       openWorktree,
       openTeamwork,
+      revealInFinder,
+      toggleHelp,
+      toggleSettings,
       ...overrides
     },
     true
@@ -137,6 +147,9 @@ beforeEach(() => {
   startAgent.mockReset()
   openWorktree.mockReset()
   openTeamwork.mockReset()
+  revealInFinder.mockReset()
+  toggleHelp.mockReset()
+  toggleSettings.mockReset()
   seed()
 })
 
@@ -363,6 +376,68 @@ describe('the toolbar over an open worktree', () => {
 
   it('says whether the changes panel is showing', () => {
     expect(screen.getByRole('button', { name: /^Changes/ }).getAttribute('aria-pressed')).toBe('false')
+  })
+})
+
+// The path under the worktree's name was already the answer to "where is this
+// on disk". What it was not was a way of getting there, which is the only thing
+// anybody wants from a path they can read and cannot click.
+describe('the path to the checkout', () => {
+  const open = (state: Worktree['state']): void => {
+    seed({
+      projects: [project],
+      worktrees: [worktree({ state })],
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout() }
+    })
+    mount()
+  }
+
+  it('opens the checkout in the file manager when it is pressed', () => {
+    open('ready')
+    fireEvent.click(screen.getByRole('button', { name: /repos\/pager-wt\/rewrite/ }))
+    expect(revealInFinder).toHaveBeenCalledWith('/repos/pager-wt/rewrite', 'the Rewrite the pager checkout')
+  })
+
+  // A checkout still being made has a path recorded and nothing at it yet, so
+  // the only possible outcome of pressing this would be the refusal the main
+  // process writes for a directory that is not there. It stays a line of text.
+  it('is not offered while the checkout is not there to open', () => {
+    open('creating')
+    expect(screen.getByText('/repos/pager-wt/rewrite')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /repos\/pager-wt\/rewrite/ })).toBeNull()
+  })
+
+  it('is not offered for a checkout that was never made', () => {
+    open('failed')
+    expect(screen.queryByRole('button', { name: /repos\/pager-wt\/rewrite/ })).toBeNull()
+  })
+})
+
+// One main area, and the two pages added to it are read rather than worked in.
+// The empty state is where somebody with nothing open goes looking for either,
+// so it carries a way to both rather than only a chord to memorise.
+describe('settings and help', () => {
+  it('gives the area to settings, ahead of the empty state somebody opened it from', () => {
+    seed({ projects: [project], settingsOpen: true })
+    mount()
+    expect(screen.getByTestId('settings')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Nothing open' })).toBeNull()
+  })
+
+  it('gives the area to help on the same terms', () => {
+    seed({ projects: [project], helpOpen: true })
+    mount()
+    expect(screen.getByTestId('help')).toBeTruthy()
+  })
+
+  it('offers both from the empty state, not only as chords', () => {
+    seed({ projects: [project] })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'How this works' }))
+    expect(toggleHelp).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(toggleSettings).toHaveBeenCalledOnce()
   })
 })
 
