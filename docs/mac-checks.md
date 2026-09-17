@@ -194,6 +194,11 @@ failure — [`../ROADMAP.md`](../ROADMAP.md) records it under "Known gaps", alon
 with why a pane that quietly started a fresh conversation instead would be the
 worse answer.
 
+Then relaunch once more without touching anything. Expect that pane to come back
+*running*, with a fresh agent above the whole of the failed launch: the refusal
+is written down the first time it happens, so it costs one restart rather than
+recurring on every launch for the life of the pane.
+
 Two failures to catch, neither of them visible in the pane at the time. A pane
 still wearing the resumed badge over a dead agent, with nothing written into it,
 is the whole defect back. And quit once more after looking: the record on disk

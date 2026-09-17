@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Layout } from '../../shared/entities'
+import type { TerminalEvent } from '../../shared/methods'
 import { MAX_RECORD_BYTES, ScrollbackArchive } from '../store/scrollbackArchive'
 import { canSpawnPty, waitUntil } from './pty-test-support'
 import { INERT_RECORD } from './scrollbackRecord'
@@ -43,13 +44,19 @@ describe('restoreLaunch', () => {
   // nothing, so that id names nothing on any disk anywhere, and asking to
   // resume it gets a refusal from the CLI every time for the life of the
   // record. Starting the agent over is the only thing that can work.
-  it('starts the agent over for a pane nobody ever typed into', () => {
-    const launch = restoreLaunch(record({ command: 'claude --session-id abc', agent: 'claude', agentSessionId: 'abc' }))
+  it('starts the agent over for a pane this app knows nobody typed into', () => {
+    // A sentinel with letters outside the hex alphabet on purpose. A fresh id
+    // is a v4 UUID, which is hex and dashes, so an old id spelled in hex can
+    // turn up inside a new one by chance — about one run in a couple of hundred
+    // for three characters, which is a test that fails for nobody's reason.
+    const launch = restoreLaunch(
+      record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz', typed: false })
+    )
 
     expect(launch.resumed).toBe(false)
     // The old id is gone from the command rather than sitting beside the new
     // one, where the CLI would have to choose between them.
-    expect(launch.command).not.toContain('abc')
+    expect(launch.command).not.toContain('old-zzz')
     expect(launch.command).not.toContain('--resume')
     expect(launch.command).toContain('--session-id')
     // And the record has to be rewritten to the id that actually ran, or the
@@ -63,11 +70,43 @@ describe('restoreLaunch', () => {
   // Its "resume the last session here" is worse than useless for a pane that
   // had no session: it would pick up whatever else was run in this directory.
   it('starts an agent that mints its own ids over too, with nothing pinned', () => {
-    expect(restoreLaunch(record({ command: 'codex', agent: 'codex' }))).toEqual({
+    expect(restoreLaunch(record({ command: 'codex', agent: 'codex', typed: false }))).toEqual({
       command: 'codex',
       resumed: false,
       repinned: { command: 'codex' }
     })
+  })
+
+  // The upgrade case, and the one worth being loudest about. Every workspace
+  // file already on disk was written before this field existed, and most of the
+  // panes in them have real conversations behind them. Absent is unknown, not
+  // no — reading it as no would take the resume away from every pane in the
+  // world exactly once, on the launch after an upgrade, which is a worse
+  // version of the bug this whole change is about.
+  it('still tries the resume for a record written before any of this existed', () => {
+    expect(
+      restoreLaunch(record({ command: 'claude --session-id abc', agent: 'claude', agentSessionId: 'abc' }))
+    ).toEqual({ command: 'claude --resume abc', resumed: true })
+    expect(restoreLaunch(record({ command: 'codex', agent: 'codex' }))).toEqual({
+      command: 'codex resume --last',
+      resumed: true
+    })
+  })
+
+  // Failing open is right everywhere else in the rewriting module: the worst a
+  // stray appended selector does is make a CLI complain. It is wrong here,
+  // because this branch also writes down the id it believes is on the line — so
+  // an append would leave the dead one in place, add a second, and record a
+  // third state that matches neither.
+  it('opens a plain shell rather than rewrite a command it could not read', () => {
+    for (const command of [
+      'codex | tee log',
+      'ssh host claude --session-id old-zzz',
+      "claude --session-id 'unclosed"
+    ]) {
+      const agent = command.includes('codex') ? 'codex' : 'claude'
+      expect(restoreLaunch(record({ command, agent, typed: false })), command).toEqual({ resumed: false })
+    }
   })
 
   // A session the caller named themselves is not ours to replace. Nothing here
@@ -145,6 +184,13 @@ function createRepositories(): LayoutRepository & SessionRepository {
   }
 }
 
+/** Everything a subscriber was actually sent, as the bytes it would have drawn. */
+const outputOf = (events: readonly TerminalEvent[]): string =>
+  events
+    .filter((event): event is Extract<TerminalEvent, { type: 'data' }> => event.type === 'data')
+    .map((event) => event.data)
+    .join('')
+
 const describePty = canSpawnPty() ? describe : describe.skip
 
 describePty('restoring terminals across a restart', () => {
@@ -165,12 +211,15 @@ describePty('restoring terminals across a restart', () => {
    * command line gets built — which this shows directly.
    *
    * It also does the one other thing a real agent does that this file has to be
-   * able to provoke: refuse. `loseTheConversation()` leaves a marker the script
-   * checks on startup, and from then on it prints a refusal and exits the way
-   * every one of these CLIs does when it is asked for a session that is not on
-   * the disk. Modelled as something that happens *between* two launches on
-   * purpose, because that is what it is — the conversation was there, and then
-   * it was deleted, or expired, or the worktree was opened on another machine.
+   * able to provoke: refuse. `loseTheConversation()` leaves a marker, and from
+   * then on the script refuses any launch that asks it to *resume* — printing a
+   * line and exiting non-zero, the way every one of these CLIs does when it is
+   * asked for a session that is not on the disk. A launch that asks for nothing
+   * in particular still starts normally, because that is the whole shape of the
+   * thing: the conversation is gone, the agent is not. Modelled as something
+   * that happens *between* two launches on purpose, because that is what it is
+   * — the conversation was there, and then it was deleted, or it expired, or
+   * the worktree was opened on another machine.
    */
   async function fakeAgent(
     name: string
@@ -193,14 +242,16 @@ describePty('restoring terminals across a restart', () => {
     if (windows) {
       await writeFile(
         binary,
-        `@echo off\r\nif exist "${gone}" (\r\n echo ${REFUSAL}\r\n exit /b 1\r\n)\r\n` +
+        '@echo off\r\necho %*| find "--resume" >nul\r\n' +
+          `if not errorlevel 1 if exist "${gone}" (\r\n echo ${REFUSAL}\r\n exit /b 1\r\n)\r\n` +
           'echo AGENT ARGS: %*\r\nping -n 31 127.0.0.1 >nul\r\n',
         'utf8'
       )
     } else {
       await writeFile(
         binary,
-        `#!/bin/sh\nif [ -f "${gone}" ]; then\n  echo "${REFUSAL}"\n  exit 1\nfi\n` +
+        `#!/bin/sh\ncase " $* " in\n  *" --resume "*|*" resume "*)\n    if [ -f "${gone}" ]; then\n` +
+          `      echo "${REFUSAL}"\n      exit 1\n    fi\n    ;;\nesac\n` +
           'echo "AGENT ARGS: $@"\nsleep 30\n',
         'utf8'
       )
@@ -465,6 +516,12 @@ describePty('restoring terminals across a restart', () => {
     // will resume — this count is a count of attempts.
     expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 1 })
 
+    // A window that was already open when the agent gave up. Attached before
+    // the exit, which is the case that reads the pane through the stream rather
+    // than through a read on mount.
+    const streamed: TerminalEvent[] = []
+    second.attachStream(opened.id, { emit: (event) => streamed.push(event), close: () => {} })
+
     await waitUntil(() => second.read(opened.id).includes('nothing was resumed'), 'the pane to say what happened')
     const shown = second.read(opened.id)
 
@@ -488,6 +545,91 @@ describePty('restoring terminals across a restart', () => {
     // "exited 1" is the app asserting something it can see is not true.
     expect(second.list('wt_1')[0]?.restored).toBeUndefined()
     expect(second.list('wt_1')[0]?.running).toBe(false)
+
+    // A subscriber attached at the moment it happened is told the same things,
+    // and told the old output too. Releasing the record only changes what a
+    // read answers, and a view that was already open reads once when it mounts
+    // — so a note saying the output is above, with nothing ever sent, would be
+    // the same false claim in a new place.
+    expect(outputOf(streamed)).toContain('nothing was resumed')
+    expect(outputOf(streamed)).toContain('AGENT ARGS:')
+
+    // And the failure is written down, so it happens once rather than on every
+    // launch forever. The record now says what this launch demonstrated.
+    expect(repositories.listTerminals()[0]?.typed).toBe(false)
+  }, 20_000)
+
+  it('comes back working on the launch after a resume that found nothing', async () => {
+    const { checkout, launch, loseTheConversation } = await fakeAgent('claude')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive)
+    const opened = first.create({ worktreeId: 'wt_1', command: launch })
+    await waitUntil(() => first.read(opened.id).includes('AGENT ARGS:'), 'the agent to print its arguments')
+    first.write(opened.id, 'hello\r')
+    await first.shutdown()
+    await loseTheConversation()
+
+    // The launch that fails.
+    const second = manager(repositories, checkout, await ScrollbackArchive.open(archive.directory, [opened.id]))
+    second.restoreSessions()
+    await waitUntil(() => second.read(opened.id).includes('nothing was resumed'), 'the pane to say what happened')
+    await second.shutdown()
+
+    // The one after it. Nothing has changed on disk except what the app wrote
+    // down about the failure, and that is enough: the pane stops asking for a
+    // conversation that has been shown not to be there and starts the agent
+    // instead. Without this the same refusal comes back on every launch for the
+    // life of the record, with another copy of the explanation stacked into the
+    // pane's own output each time.
+    const third = manager(repositories, checkout, await ScrollbackArchive.open(archive.directory, [opened.id]))
+    expect(third.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+    await waitUntil(
+      () => third.read(opened.id).split('a new shell starts below')[1]?.includes('AGENT ARGS:') === true,
+      'the agent to start over'
+    )
+    expect(third.list('wt_1')[0]?.running).toBe(true)
+
+    // Everything below the record line is this launch, and it is an agent
+    // starting rather than an agent refusing. Above it, the failed launch is
+    // still there in the record — the history is kept, it just stops repeating.
+    const thisLaunch = third.read(opened.id).split('a new shell starts below')[1] as string
+    expect(thisLaunch).toContain('--session-id')
+    expect(thisLaunch).not.toContain(REFUSAL)
+    expect(third.read(opened.id)).toContain(REFUSAL)
+  }, 30_000)
+
+  // An agent asked to do one thing and print the answer resumes, works, and
+  // leaves with nothing wrong — and it is the same executable in a different
+  // mode, so nothing upstream can tell it apart from the interactive one. A
+  // note whose every clause is false is exactly what this change exists to
+  // stop, so the clean exit is the thing that decides it.
+  it('says nothing about an agent that resumed, did its work and exited cleanly', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive)
+    const opened = first.create({ worktreeId: 'wt_1', command: 'echo one-shot answer' })
+    await waitUntil(() => first.read(opened.id).includes('one-shot answer'), 'the command to print')
+    await first.shutdown()
+
+    // Rewritten as the agent pane it is standing in for: typed into, so it
+    // resumes, and its command is one that prints and leaves with zero.
+    const stored = repositories.listTerminals()[0] as TerminalRecord
+    repositories.putTerminal({ ...stored, agent: 'claude', agentSessionId: 'a-real-conversation', typed: true })
+
+    const second = manager(repositories, checkout, await ScrollbackArchive.open(archive.directory, [opened.id]))
+    second.restoreSessions()
+    await waitUntil(() => second.list('wt_1')[0]?.running === false, 'the one-shot to finish')
+
+    expect(second.read(opened.id)).not.toContain('nothing was resumed')
+    // The badge stands, because it is true: that pane did resume.
+    expect(second.list('wt_1')[0]?.restored).toBe('agent')
+    // And nothing was written down against it, so the next launch resumes again
+    // rather than starting a conversation over that was never in trouble.
+    expect(repositories.listTerminals()[0]?.typed).toBe(true)
   }, 20_000)
 
   it('says nothing of the kind about a pane the app itself shut down', async () => {

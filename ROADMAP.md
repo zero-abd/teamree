@@ -140,6 +140,13 @@ disk under a session id.
       a fresh id pinned where the CLI allows one — because an agent writes a
       conversation only once it has one, and resuming an id that names nothing
       is how a restored pane came back dead
+- [x] Unless the command cannot be read well enough to take the old session out
+      of it: a pipeline, an unclosed quote, an agent reached through something
+      else. Failing open is right everywhere else in that module, where a stray
+      appended selector only makes a CLI complain, and wrong here, because this
+      path also writes down the id it believes is on the line. A plain shell in
+      the right directory is the answer this app already gives to a command it
+      cannot model
 - [x] Typing is the signal rather than output, because every agent prints a
       banner the moment it starts and only a person typing makes a conversation
       worth asking for back — which is a fact about agents rather than about one
@@ -147,15 +154,36 @@ disk under a session id.
 - [x] A pane started over does not count as resumed, which is the whole of what
       it takes for the rest to follow: it is an ordinary restore, so it gets the
       ordinary replay of what it printed last time, above the fresh agent
-- [x] A resume that does not take is said out loud. A pane that exits still
-      wearing the resumed badge, within thirty seconds of starting, retracts it,
-      releases the record it was holding back so the old output stands above, and
-      writes a dim bracketed line into its own output — into the output, because
-      that is what the window paints from, and the pane can die before there is a
-      window to tell. The line says nothing was resumed, that whatever the agent
-      said about why is directly above, that the old output is still here, and
-      that a conversation goes missing for ordinary reasons: deleted, expired, or
+- [x] A resume that does not take is said out loud. A pane that exits non-zero
+      still wearing the resumed badge, within thirty seconds of starting,
+      retracts it, releases the record it was holding back so the old output
+      stands above — sent to whoever is already watching, as well as released,
+      since a view reads once when it mounts and a claim about what is on the
+      screen has to travel by the same path as the thing it claims — and writes a
+      dim bracketed line into its own output. Into the output, because that is
+      what the window paints from, and the pane can die before there is a window
+      to tell. The line says nothing was resumed, that whatever the agent said
+      about why is directly above, that the old output is still here, and that a
+      conversation goes missing for ordinary reasons: deleted, expired, or
       recorded on another machine
+- [x] Non-zero, and only non-zero. An agent asked to do one thing and print the
+      answer resumes, works and leaves with nothing wrong — and it is the same
+      executable in a different mode, so nothing upstream can tell it apart from
+      the interactive one. A refusal always exits non-zero; that is what keeps
+      every clause of the line above true
+- [x] And it is written down, so it happens once. The pane that was refused
+      records that there is nothing to resume, and the launch after that starts
+      the agent over like any pane with no conversation behind it. Without that
+      the same refusal returns on every launch for the life of the record, with
+      another copy of the explanation stacked into the pane's own output each
+      time — the failure made durable rather than handled
+- [x] Three answers and not two, because this field is newer than the files it is
+      read out of. `false` is this version saying nobody typed; absent is a
+      record written before any of this, which is every record already on disk
+      and mostly panes with real conversations behind them. Absent tries the
+      resume. Reading it as a no would have taken the resume away from every
+      existing pane exactly once, on the launch after an upgrade — the same bug
+      arrived at from the other side
 - [x] The pane says how it got here — resumed, or a new shell — until the user
       types into it, at which point the badge has said what it had to, or until a
       resume that never took retracts it, which is the one case where the badge
@@ -621,6 +649,12 @@ recorded so none of them is discovered by surprise later.
   gone, and saying so and stopping is the smaller wrong. An offer — a line in the
   pane to press for a fresh conversation in this directory — is the shape the fix
   would take, and it has not been built.
+
+  It is one launch rather than every launch, at least. The pane writes down that
+  there is nothing to resume, so the launch after the refusal starts the agent
+  over and comes back working, with the failed launch kept above it in the
+  record like any other history. So this costs a restart, in the case where the
+  conversation was already gone, rather than costing the pane.
 - **One download, universal, unsigned.** A decision, recorded so nobody
   "fixes" it back: macOS ships as a single `teamree-<version>.dmg` carrying both
   architectures rather than a menu of four files. The cost is size and it is

@@ -377,6 +377,15 @@ describePty('PtySession', () => {
       expect(shown).toContain('exited with code 1')
       expect(shown).toContain('deleted, expired, or recorded on another machine')
       expect(outputOf(events)).toContain('nothing was resumed')
+      // A subscriber that was already attached is sent the held record too. It
+      // only ever reads once, when its view mounts, so un-holding the record
+      // without also sending it would tell this one that the old output is
+      // above while never having sent it a byte of it — the same false claim
+      // this whole mechanism exists to stop, moved somewhere harder to see.
+      expect(outputOf(events)).toContain('what this pane printed last time')
+      expect(outputOf(events).indexOf('what this pane printed last time')).toBeLessThan(
+        outputOf(events).indexOf('nothing was resumed')
+      )
 
       // The held record is let go of in the same moment, above the attempt that
       // failed, and under a line that does not promise a shell that is not
@@ -387,6 +396,24 @@ describePty('PtySession', () => {
 
       // And the pane stops claiming it resumed anything.
       expect(session.snapshot().restored).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'blames nothing for an agent that resumed, did its work and exited cleanly',
+    async () => {
+      // A one-shot: resume, answer, leave with zero. It is the same executable
+      // in a different mode, so nothing upstream can tell it apart from the
+      // interactive one, and every clause of the note would be false about it.
+      const session = start({ command: 'echo the answer', restored: 'agent', restoredRecord: earlier })
+
+      await waitUntil(() => !session.isRunning, 'the one-shot to finish')
+
+      expect(session.read()).not.toContain('nothing was resumed')
+      // The badge stands, because it is true: that pane did resume.
+      expect(session.snapshot().restored).toBe('agent')
+      expect(session.resumeDidNotTake).toBe(false)
     },
     TEST_TIMEOUT_MS
   )

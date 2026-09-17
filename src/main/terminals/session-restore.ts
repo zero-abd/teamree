@@ -44,6 +44,17 @@ export type TerminalRecord = {
    *
    * Deliberately not "the agent produced output": every agent prints a banner.
    * Input is the part that only happens when somebody meant it.
+   *
+   * Three values and not two, which is the part worth being careful about.
+   * `false` is this version saying nobody has typed. Absent is *unknown* — a
+   * record written before this field existed, which is every record in every
+   * workspace file already on disk, including all the panes with real
+   * conversations behind them. Unknown is not the same as no, and treating it
+   * as no would take the resume away from every pane in the world exactly once,
+   * on the launch after an upgrade. So unknown tries the resume, which is safe
+   * now in a way it was not before: a resume that finds nothing says so, and
+   * writes `false` down on its way out, so the pane starts over on the launch
+   * after that rather than failing the same way forever.
    */
   typed?: boolean
   cols: number
@@ -78,15 +89,20 @@ export type RestoreLaunch = {
  * Coming back to a shell in the right directory is both useful and honest; the
  * alternative is a startup that does something nobody asked for.
  *
- * The one agent pane that is *not* resumed is the one nobody ever typed into.
- * Reserving an id at launch is not the same as there being a conversation under
- * it: the agent writes that down when it has something to write, and a pane
- * that was opened and left alone gave it nothing. Asking to resume such an id
- * gets a refusal from the CLI and a dead pane, every time, for the whole life of
- * the record — so that pane is started over instead, under an id of its own.
- * Re-issuing an agent's own launch is not the thing the refusal above is about:
- * starting an agent is what the pane was for, and it does nothing until it is
- * spoken to.
+ * The one agent pane that is *not* resumed is the one this app has written down
+ * that nobody ever typed into. Reserving an id at launch is not the same as
+ * there being a conversation under it: the agent writes that down when it has
+ * something to write, and a pane that was opened and left alone gave it
+ * nothing. Asking to resume such an id gets a refusal from the CLI and a dead
+ * pane, every time, for the whole life of the record — so that pane is started
+ * over instead, under an id of its own. Re-issuing an agent's own launch is not
+ * the thing the refusal above is about: starting an agent is what the pane was
+ * for, and it does nothing until it is spoken to.
+ *
+ * "Written down that nobody typed" and not "no record of anybody typing", which
+ * are the same sentence only if you have forgotten that this field is newer
+ * than the files it is read out of. See `TerminalRecord.typed`: absent means
+ * unknown, and unknown tries.
  */
 export function restoreLaunch(record: TerminalRecord): RestoreLaunch {
   if (record.command === undefined || record.agent === undefined) return { resumed: false }
@@ -105,8 +121,15 @@ export function restoreLaunch(record: TerminalRecord): RestoreLaunch {
     return { command: record.command, resumed: true }
   }
 
-  if (record.typed !== true) {
+  if (record.typed === false) {
     const restart = restartSessionCommand(record.command, record.agent)
+    // The command could not be modelled well enough to take the old session out
+    // of it — a pipeline, a quote that does not close, an agent run through
+    // something else. Re-issuing it would leave a dead session id on the line
+    // and write a different one into the record, so the two would disagree from
+    // here on and nothing would ever notice. A shell in the right directory is
+    // the answer this file already gives to everything it cannot model.
+    if (restart === null) return { resumed: false }
     // `resumed: false` because nothing was: the pane comes back with a fresh
     // agent in it, and the record of what it printed last time replayed above,
     // exactly as an ordinary pane does.

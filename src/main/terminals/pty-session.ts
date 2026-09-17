@@ -531,6 +531,13 @@ export class PtySession {
    */
   private sayIfResumeFailed(exitCode: number): void {
     if (this.restored !== 'agent' || this.closing) return
+    // A clean exit is not a refusal. Every one of these CLIs leaves non-zero
+    // when it will not resume, and an agent asked to do one thing and print the
+    // answer — which is a mode, not a different program, so nothing upstream can
+    // tell it apart from the interactive one — does its work and leaves with
+    // zero. Saying "nothing was resumed" over that would be false in every
+    // clause, which is precisely what this is here to stop.
+    if (exitCode === 0) return
     // Past the window, an agent that ends is an agent that ended: it may well
     // have resumed fine an hour ago, and this app would be inventing a cause.
     if (this.clock() - this.startedAt > RESUME_WINDOW_MS) return
@@ -541,12 +548,39 @@ export class PtySession {
     // conversation was expected to print itself, and it did not.
     this.recordHeld = false
 
+    // Released *and delivered*. Un-holding it only changes what `read()`
+    // answers, and a client reads once when its view mounts — so a window that
+    // was already up when the agent gave up would be told the old output is
+    // above this line while never having been sent a byte of it. The note makes
+    // a claim about what is on the screen, so the thing it claims is there has
+    // to be put there by the same path the claim travels on.
+    //
+    // Emitted rather than appended, deliberately, and it is the one piece of
+    // text here that is not in the scrollback: `read()` builds the record in
+    // from the other side, so appending it would hand a re-mounting view two
+    // copies, and `recordedOutput()` would write a framed record into the next
+    // launch's record — the nesting that `recordedOutput` warns about. The cost
+    // is that a view attached at this moment sees the record below the refusal
+    // rather than above it, where a view mounting later sees it above. Both have
+    // all of it, and in both the record stands above the note that describes it.
+    if (this.record !== undefined) this.emit({ type: 'data', data: replayableRecord(this.record, FAILED_RESUME_BELOW) })
+
     const note = failedResumeMark(exitCode, this.record !== undefined)
     // Appended as well as emitted, so it is in what `terminal.read` answers
     // with. That is the copy that matters here — a subscriber arriving after
     // the exit gets the pane by reading it, not by having been told.
     this.scrollback.append(note)
     this.emit({ type: 'data', data: note })
+  }
+
+  /**
+   * True once this pane has said that the conversation it came back for did not
+   * come back. Read by the manager, which writes that down: a pane whose resume
+   * failed has nothing to resume next time either, and saying so in the record
+   * is what stops it failing the same way on every launch from here on.
+   */
+  get resumeDidNotTake(): boolean {
+    return this.resumeFailed
   }
 
   private emit(event: TerminalEvent): void {

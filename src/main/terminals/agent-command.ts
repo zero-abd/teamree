@@ -269,10 +269,34 @@ export function resumeSessionCommand(command: string, agent: AgentKind, sessionI
  * A new id rather than the old one deliberately. The old one has been handed to
  * the agent once already, and a CLI within its rights to refuse an id it has
  * seen before would turn one silent failure into another.
+ *
+ * Null when the command cannot be modelled — a pipeline, an unclosed quote, an
+ * agent reached through `ssh` or `env` in a way `executableIndex` will not
+ * vouch for. This is the one place in this module where failing open is the
+ * wrong move rather than the safe one. Everywhere else an unmodelable command
+ * comes back with the selector appended, and the worst case is a CLI seeing two
+ * of them and complaining. Here the caller *also* writes down the id it thinks
+ * is on that line, so an append would leave the dead selector in place, put a
+ * second one after it, and record an id that may well not be the one the agent
+ * ends up using — a command and a record that disagree, quietly, from then on.
+ * Saying no lets the caller fall back to a plain shell, which it can.
  */
-export function restartSessionCommand(command: string, agent: AgentKind): { command: string; agentSessionId?: string } {
+export function restartSessionCommand(
+  command: string,
+  agent: AgentKind
+): { command: string; agentSessionId?: string } | null {
   const spec = AGENTS[agent]
-  if (!spec.pin) return { command: spliceSelector(command, agent, []) }
+  const tokenized = tokenizeCommand(command)
+  if (!tokenized.ok) return null
+  if (executableIndex(tokenized.tokens, spec.executables) === -1) return null
+
+  // Nothing to pin, and nothing to strip: a command for an agent that mints its
+  // own ids only reaches this point when it names no session at all, because a
+  // session on the line that this app did not put there is handled a step
+  // earlier and never rewritten. So the command it was launched with is already
+  // the command that starts it over.
+  if (!spec.pin) return { command }
+
   const agentSessionId = newSessionId()
   return { command: spliceSelector(command, agent, spec.pin(agentSessionId)), agentSessionId }
 }
@@ -308,11 +332,7 @@ function matchSelector(selectors: readonly Selector[], token: string): Selector 
 function spliceSelector(command: string, agent: AgentKind, argv: readonly string[]): string {
   const spec = AGENTS[agent]
   const addition = argv.map(quoteArgument).join(' ')
-  // Nothing to add is a caller asking only for the old selectors to go — an
-  // agent with no flag to pin an id, being started over. Appending an empty
-  // string would leave a trailing space in a command that is written down and
-  // read back by a person, which is a small enough thing to simply not do.
-  const appended = addition.length === 0 ? command : `${command} ${addition}`
+  const appended = `${command} ${addition}`
 
   const tokenized = tokenizeCommand(command)
   if (!tokenized.ok) return appended
@@ -358,15 +378,13 @@ function spliceSelector(command: string, agent: AgentKind, argv: readonly string
   }
 
   let result = command
-  if (terminator !== null && addition.length > 0) {
-    result = `${result.slice(0, terminator)}${addition} ${result.slice(terminator)}`
-  }
+  if (terminator !== null) result = `${result.slice(0, terminator)}${addition} ${result.slice(terminator)}`
   // Back to front, so an earlier cut's offsets are still valid.
   for (let index = cuts.length - 1; index >= 0; index -= 1) {
     const cut = cuts[index] as Span
     result = `${result.slice(0, cut.start)}${result.slice(cut.end)}`
   }
-  return terminator !== null || addition.length === 0 ? result : `${result} ${addition}`
+  return terminator !== null ? result : `${result} ${addition}`
 }
 
 /** POSIX single-quoting, which is the only form with no escapes inside it. */

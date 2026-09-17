@@ -512,12 +512,19 @@ export class TerminalSessionManager {
       ...((restoring?.agentSessionId ?? launch.agentSessionId)
         ? { agentSessionId: restoring?.agentSessionId ?? launch.agentSessionId }
         : {}),
-      // Carried across the restart rather than recomputed: a pane that was
-      // typed into last time has a conversation whether or not anybody has
-      // touched it since it came back, and that is the fact the next restore
-      // reads. Only written when true, so a record that has never seen a
-      // keystroke stays as small as it was.
-      ...(restoring?.typed === true ? { typed: true } : {}),
+      // A pane this version opens says so either way, because it is in a
+      // position to: nobody has typed into a pane that was created a moment
+      // ago, and `false` is a fact about it rather than an absence of one.
+      //
+      // A pane being restored carries whatever its record said, absence
+      // included, and absence is not turned into `false` here. This runs before
+      // the resume it is restoring has had a chance to work or fail, and a
+      // record written before this field existed is a record that may well have
+      // a real conversation behind it — writing `false` over it on the way past
+      // would take the resume away on the launch after that, from a pane that
+      // had just resumed perfectly. What answers the unknown is the outcome,
+      // written by `markNotResumable` when the agent refuses.
+      ...(restoring === undefined ? { typed: false } : restoring.typed === undefined ? {} : { typed: restoring.typed }),
       cols: snapshot.cols,
       rows: snapshot.rows,
       createdAt: restoring?.createdAt ?? Date.now()
@@ -541,6 +548,12 @@ export class TerminalSessionManager {
    * sitting in the directory until something else sweeps it — and a pane the
    * user deliberately shut coming back with output on the next launch.
    */
+  private forget(terminalId: string): void {
+    this.checkpoints?.cancel(terminalId)
+    this.records.removeTerminal(terminalId)
+    this.scrollback?.remove(terminalId)
+  }
+
   /**
    * Writes down that somebody has typed into this pane.
    *
@@ -555,10 +568,20 @@ export class TerminalSessionManager {
     this.records.putTerminal({ ...stored, typed: true })
   }
 
-  private forget(terminalId: string): void {
-    this.checkpoints?.cancel(terminalId)
-    this.records.removeTerminal(terminalId)
-    this.scrollback?.remove(terminalId)
+  /**
+   * Writes down that this pane has no conversation to come back to.
+   *
+   * The same field as above with the opposite answer, and it means the same
+   * thing in both directions: whether asking this pane's agent to resume is
+   * worth doing. A pane that was just refused has had that question answered
+   * for it, and answering it once is the difference between a pane that comes
+   * back working on the next launch and a pane that reproduces the same failure
+   * every time the app starts, forever.
+   */
+  private markNotResumable(terminalId: string): void {
+    const stored = this.records.listTerminals().find((record) => record.id === terminalId)
+    if (stored === undefined || stored.typed === false) return
+    this.records.putTerminal({ ...stored, typed: false })
   }
 
   private require(terminalId: string): PtySession {
@@ -602,6 +625,16 @@ export class TerminalSessionManager {
       // that removal is what a client was told about, and an exit event for a
       // terminal it can no longer list would be news about nothing.
       if (this.sessions.get(session.id) !== session) return
+      // A resume that did not take is worth writing down, and this is the only
+      // moment anything knows it. Without it the pane asks the same agent for
+      // the same missing conversation on every launch for the rest of the
+      // record's life, gets the same refusal, and stacks another copy of the
+      // explanation into its own record each time — the failure made durable
+      // rather than handled. Recorded as "nobody typed into this pane", which
+      // is not a guess but the thing that has just been demonstrated: the
+      // conversation this pane was for is not there, so the next launch starts
+      // the agent over exactly as it does for a pane that never had one.
+      if (session.resumeDidNotTake) this.markNotResumable(session.id)
       // A pane whose process has ended appends nothing more, so this is the
       // moment its output is final and the only one at which a record of it can
       // be complete. The other two writes bound how much a pane that is still

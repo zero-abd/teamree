@@ -434,6 +434,123 @@ describe('workspace store', () => {
   })
 
   /**
+   * `typed` decides, on the launch after this one, whether a pane's pinned
+   * session id names a conversation worth resuming at all; the argument for it
+   * is written out on `TerminalRecord` in `session-restore.ts`. Every test of
+   * that decision hands `restoreLaunch` a record built in memory, so not one of
+   * them would notice the field being dropped on the way to the file or on the
+   * way back out of it. Dropped, nothing fails and nothing is logged: every
+   * record reads as never-typed for ever, and every agent pane starts its
+   * conversation over instead of resuming it. So the round trip is the test —
+   * written by one store, read by the next, out of the same bytes on disk.
+   */
+  describe('whether anybody ever typed in a pane, across a restart', () => {
+    const terminal = (id: string, typed?: boolean): TerminalRecord => ({
+      id,
+      worktreeId: 'w1',
+      cwd: '/repos/teamree',
+      shell: '/bin/bash',
+      command: 'claude --session-id s-1',
+      agent: 'claude',
+      agentSessionId: 's-1',
+      // Spread rather than assigned, so "no answer" is a key that is not there
+      // rather than a key holding undefined — which is what the file itself can
+      // represent, and the distinction the tests below are about.
+      ...(typed === undefined ? {} : { typed }),
+      cols: 80,
+      rows: 24,
+      createdAt: 1700000000000
+    })
+
+    it('brings a pane somebody typed in back as one somebody typed in', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(terminal('t1', true))
+      await store.flush()
+
+      // Both halves, because either one alone can lose the field silently: the
+      // bytes that were written, and what a second store makes of them.
+      const written = JSON.parse(await readFile(filePath, 'utf8')) as { terminals: TerminalRecord[] }
+      expect(written.terminals[0]?.typed).toBe(true)
+
+      const reopened = await WorkspaceStore.open(filePath)
+      expect(reopened.listTerminals()).toEqual([terminal('t1', true)])
+    })
+
+    it('leaves a record written before the field existed with no answer, rather than a no', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(terminal('t1'))
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(filePath)
+      const [record] = reopened.listTerminals()
+      expect(record).toEqual(terminal('t1'))
+      // `toEqual` above cannot tell a missing key from one holding undefined,
+      // and it is the missing key that matters: `restoreLaunch` reads absent as
+      // unknown and tries the resume, where it reads `false` as nobody having
+      // spoken and starts the agent over. A record that came back as `false`
+      // because it went through here would take the resume away from every
+      // pane in every workspace file written before the field existed.
+      expect(Object.keys(record ?? {})).not.toContain('typed')
+    })
+
+    it('brings a pane nobody typed in back as a no, which is not the same as no answer', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(terminal('t1', false))
+      store.putTerminal(terminal('t2'))
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(filePath)
+      const byId = new Map(reopened.listTerminals().map((record) => [record.id, record]))
+      expect(byId.get('t1')?.typed).toBe(false)
+      expect(Object.keys(byId.get('t1') ?? {})).toContain('typed')
+      expect(Object.keys(byId.get('t2') ?? {})).not.toContain('typed')
+    })
+
+    // A `false` that survives the trip is what lets a pane stop failing the
+    // same way for ever: a resume that finds no conversation writes the answer
+    // down, and the launch after that starts the agent over instead.
+    it('remembers a no through more than one restart', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(terminal('t1'))
+      await store.flush()
+
+      const second = await WorkspaceStore.open(filePath)
+      second.putTerminal({ ...terminal('t1'), typed: false })
+      await second.flush()
+
+      expect((await WorkspaceStore.open(filePath)).listTerminals()).toEqual([terminal('t1', false)])
+    })
+
+    it('drops a record whose answer is garbage, and keeps the rest of the file', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(
+        path,
+        JSON.stringify({
+          version: 1,
+          projects: [project],
+          terminals: [
+            terminal('t1', true),
+            { ...terminal('t2'), typed: 'yes' },
+            { ...terminal('t3'), typed: 1 },
+            { ...terminal('t4'), typed: null }
+          ]
+        }),
+        'utf8'
+      )
+
+      const store = await WorkspaceStore.open(path)
+
+      // Salvaged row by row like every other list in this file: a row nobody
+      // can read costs that row and nothing around it. The pane is gone rather
+      // than back with a guessed answer, which is the safer of the two — a pane
+      // that does not come back is visible, and a conversation resumed on a
+      // guess is not.
+      expect(store.listTerminals()).toEqual([terminal('t1', true)])
+      expect(store.listProjects()).toEqual([project])
+    })
+  })
+
+  /**
    * Three features landed on the same day, each adding a field to this file and
    * each written on a branch where it was the only new one. On disk they are
    * now neighbours, so the property that matters is the one none of them could
