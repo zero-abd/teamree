@@ -2,9 +2,17 @@
    Watching a teammate's pane.
 
    A window onto somebody else's machine, and it is built to be impossible to
-   mistake for one of your own panes. It floats over the window rather than
-   taking a slot in the pane tree, it says whose it is and that it is read-only
-   in words, and the terminal inside it is the owner's size rather than yours.
+   mistake for one of your own panes. What does that work is the header — whose
+   pane it is, what typing into it does, and whose name is on what you type —
+   together with the terminal inside being the owner's size rather than yours.
+
+   It used to do that work by floating: fixed to the bottom-right corner, 880
+   by 560, above everything, movable by nothing. That made the least legible
+   surface in the app out of the one thing a person opens teamwork to read, and
+   it covered their own panes while doing it. Being stuck in a corner is not
+   what tells you it is somebody else's pane; the sentence in the header is. So
+   it takes the main area now, the way the pane board and the teamwork setup
+   do, and it grows with the window like everything else in it.
 
    The letterboxing is the part that matters and it is not cosmetic:
    `docs/teamwork.md` says a watcher with a smaller window is letterboxed
@@ -14,28 +22,23 @@
    machine — with the frame's own ground showing where it does not reach.
    --------------------------------------------------------------------------- */
 
+/* Composed with `.workspace`, which is what places it in the shell's grid and
+   makes it a column — the same way the teamwork setup takes the area. This adds
+   only what is different: the ground behind the letterboxing, and a clip so a
+   teammate's picture never paints over the status bar. */
 .watch {
-  position: fixed;
-  inset: auto var(--s4) var(--s4) auto;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  width: min(880px, 70vw);
-  height: min(560px, 70vh);
   overflow: hidden;
-  border: 1px solid var(--accent-line);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-pop);
+  background: var(--bg-window);
 }
 
 .watch__head {
   display: flex;
   flex: none;
-  gap: var(--s2);
+  gap: var(--s3);
   align-items: center;
-  padding: var(--s2) var(--s3);
+  padding: var(--s3) var(--s4);
   border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
 }
 
 .watch__title {
@@ -47,7 +50,7 @@
 
 .watch__owner {
   color: var(--accent);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
 }
 
@@ -98,11 +101,17 @@
   position: relative;
   display: flex;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
-  align-items: flex-start;
-  justify-content: flex-start;
-  padding: var(--s2);
+
+  /* Centred, now that there is room to spare around it. A teammate's 80x24
+     pane in a full-width area was hard against the top-left corner with a
+     field of empty ground to its right, which reads as a layout that broke
+     rather than as a picture smaller than its frame. */
+  align-items: center;
+  justify-content: center;
+  padding: var(--s3);
   background: var(--bg-window);
 }
 

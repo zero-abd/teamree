@@ -76,6 +76,19 @@ export type Notice = { id: number; text: string; tone: 'error' | 'info' }
 export type PaneSearch = { terminalId: string; token: number }
 
 /**
+ * A teammate's pane this window has open, named as the sidebar named it.
+ *
+ * One at a time, and that is a budget rather than a simplification: bytes cost
+ * a relay its allowance and `docs/teamwork.md` is explicit that output flows
+ * only for a pane somebody has open. "Open" meaning "was opened once and never
+ * shut" is how that turns into the N² traffic the rule exists to prevent.
+ */
+export type WatchedPane = { projectId: string; paneId: string; label: string; handle: string }
+
+/** How much of a watched pane is kept, to quote its last line from. */
+export const WATCH_TAIL_CHARS = 4_000
+
+/**
  * Which of the teamwork panel's three reads last failed, and what each said.
  * Keyed the way the panel's own input is, so it can be handed over as it is.
  */
@@ -286,6 +299,28 @@ type WorkspaceState = {
    * binding it to that tab would be the wrong frame.
    */
   teamworkProjectId: string | null
+  /**
+   * Which teammate's pane has the main area, or null.
+   *
+   * It used to float over the window from the sidebar, pinned to the bottom
+   * right at a fixed size that nothing could move or resize, on the argument
+   * that a pane on somebody else's machine should be impossible to mistake for
+   * one of yours. The argument is right and the shape was wrong: it made the
+   * one surface you actually read — a teammate's agent, mid-sentence — the
+   * smallest and least movable thing on the screen, and it covered your own
+   * panes to do it. What tells you whose machine you are looking at is the
+   * header and the sentence in it, not the fact that the box is stuck in a
+   * corner. So it takes the area, the way the pane board and the teamwork setup
+   * do, and for the same reason they do.
+   */
+  watchedPane: WatchedPane | null
+  /**
+   * Whatever that pane has said since it was opened.
+   *
+   * Here rather than in the viewer because the sidebar quotes its last line,
+   * and the viewer is mounted in the main area while the row is in the rail.
+   */
+  watchedPaneTail: string
 
   sidebarWidth: number
   sidebarVisible: boolean
@@ -407,6 +442,19 @@ type WorkspaceState = {
   openTeamwork: (projectId: string) => void
   /** Gives it back, to whatever the window was showing before. */
   closeTeamwork: () => void
+  /**
+   * Gives the main area to one teammate's pane.
+   *
+   * Called again with the pane already open, it closes it: the sidebar row that
+   * opens a watch is the same row that stops one, and a reader who has found
+   * their way in by pressing a row should not have to find a different control
+   * to get back out.
+   */
+  openWatchedPane: (pane: WatchedPane) => void
+  /** Stops watching, which is what stops the bytes. */
+  closeWatchedPane: () => void
+  /** Every chunk that reached the viewer, so a sidebar row can quote its last line. */
+  appendWatchedPaneOutput: (data: string) => void
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
   openDialog: (dialog: NonNullable<DialogState>) => void
@@ -893,6 +941,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     activeWorktreeId: null,
     dashboardOpen: false,
     teamworkProjectId: null,
+    watchedPane: null,
+    watchedPaneTail: '',
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
     sidebarVisible: lastSession.sidebarVisible,
@@ -1092,6 +1142,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // worktree has asked to be somewhere else.
         dashboardOpen: false,
         teamworkProjectId: null,
+        // And so does a teammate's pane, which is now one of the things that
+        // can be in front of you rather than a box floating over whatever is.
+        // Leaving it open would keep their bytes crossing a relay to a viewer
+        // that is no longer on the screen.
+        watchedPane: null,
+        watchedPaneTail: '',
         openWorktreeIds: state.openWorktreeIds.includes(worktreeId)
           ? state.openWorktreeIds
           : [...state.openWorktreeIds, worktreeId],
@@ -1612,8 +1668,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     toggleDashboard() {
-      // Two views, one main area: whichever is asked for takes it.
-      set((state) => ({ dashboardOpen: !state.dashboardOpen, teamworkProjectId: null }))
+      // Three views, one main area: whichever is asked for takes it.
+      set((state) => ({
+        dashboardOpen: !state.dashboardOpen,
+        teamworkProjectId: null,
+        watchedPane: null,
+        watchedPaneTail: ''
+      }))
     },
 
     toggleSidebar() {
@@ -1623,11 +1684,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     openTeamwork(projectId) {
-      set({ teamworkProjectId: projectId, dashboardOpen: false })
+      set({ teamworkProjectId: projectId, dashboardOpen: false, watchedPane: null, watchedPaneTail: '' })
     },
 
     closeTeamwork() {
       set({ teamworkProjectId: null })
+    },
+
+    openWatchedPane(pane) {
+      set((state) =>
+        state.watchedPane?.paneId === pane.paneId
+          ? { watchedPane: null, watchedPaneTail: '' }
+          : { watchedPane: pane, watchedPaneTail: '', dashboardOpen: false, teamworkProjectId: null }
+      )
+    },
+
+    closeWatchedPane() {
+      set({ watchedPane: null, watchedPaneTail: '' })
+    },
+
+    appendWatchedPaneOutput(data) {
+      set((state) => ({ watchedPaneTail: (state.watchedPaneTail + data).slice(-WATCH_TAIL_CHARS) }))
     },
 
     openDialog(dialog) {

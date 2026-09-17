@@ -131,12 +131,24 @@ export function WatchedPaneView({
     const letterbox = (): void => {
       const element = term?.element
       if (!alive || !element) return
+      // Measured unscaled and unconstrained, so the reading is the emulator's
+      // own size rather than the last answer this function gave.
       element.style.transform = 'scale(1)'
+      host.style.width = ''
+      host.style.height = ''
       const width = element.offsetWidth
       const height = element.offsetHeight
       if (width === 0 || height === 0) return
       const scale = Math.min(1, frame.clientWidth / width, frame.clientHeight / height)
       element.style.transform = `scale(${scale})`
+      // A transform does not change the room an element takes up in the
+      // layout. Without this the frame would centre the picture's *unscaled*
+      // box — so a teammate's pane larger than this window would be centred as
+      // the big thing it is not, and the visible top-left corner of it would be
+      // pushed out of the frame and clipped. Giving the host the size the
+      // picture actually draws at is what makes the centring true.
+      host.style.width = `${width * scale}px`
+      host.style.height = `${height * scale}px`
     }
 
     /**
@@ -349,7 +361,7 @@ export function WatchedPaneView({
   }, [size])
 
   return (
-    <section className="watch" aria-label={`${handle}’s pane ${label}, which you can type into`}>
+    <main className="workspace watch" aria-label={`${handle}’s pane ${label}, which you can type into`}>
       <header className="watch__head">
         <span className="watch__title">
           <span className="watch__owner">{handle}</span>
@@ -378,7 +390,7 @@ export function WatchedPaneView({
         {state.phase === 'opening' ? <p className="watch__note">Opening {handle}’s pane…</p> : null}
         {state.phase === 'ended' ? <p className="watch__note watch__note--ended">{state.reason}</p> : null}
       </div>
-    </section>
+    </main>
   )
 }
 

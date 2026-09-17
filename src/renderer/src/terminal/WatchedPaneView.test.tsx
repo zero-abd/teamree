@@ -168,7 +168,7 @@ function mount(overrides: Partial<Parameters<typeof WatchedPaneView>[0]> = {}): 
 /** Everything the view has put into the pane, as one string. */
 const paneText = (): string => (fakeTerms.at(-1)?.writes ?? []).join('')
 
-const pane = (): HTMLElement => screen.getByRole('region', { name: /priya/ })
+const pane = (): HTMLElement => screen.getByRole('main', { name: /priya/ })
 
 beforeEach(() => {
   fakeTerms.length = 0
@@ -187,7 +187,7 @@ describe('whose pane this is', () => {
   it('names the owner, the pane and what typing here means, before anything has opened', () => {
     armWatch()
     mount()
-    expect(screen.getByRole('region', { name: 'priya’s pane agent, which you can type into' })).toBeTruthy()
+    expect(screen.getByRole('main', { name: 'priya’s pane agent, which you can type into' })).toBeTruthy()
     expect(within(pane()).getByText('priya')).toBeTruthy()
     expect(screen.getByText('Opening priya’s pane…')).toBeTruthy()
   })

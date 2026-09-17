@@ -465,9 +465,24 @@ function checkIco(relativePath) {
  * they are the same string.
  */
 const INLINED = [
-  { source: 'brand/mark.svg', host: 'site/public/index.html', open: '<symbol id="mark" viewBox="0 0 64 64" fill="currentColor">', close: '</symbol>' },
-  { source: 'brand/mark-small.svg', host: 'site/public/index.html', open: '<symbol id="mark-sm" viewBox="0 0 64 64" fill="currentColor">', close: '</symbol>' },
-  { source: 'brand/wordmark.svg', host: 'site/og/card.html', open: '<svg class="lockup" viewBox="0 0 274 64" fill="currentColor" role="img" aria-label="teamree">', close: '</svg>' }
+  {
+    source: 'brand/mark.svg',
+    host: 'site/public/index.html',
+    open: '<symbol id="mark" viewBox="0 0 64 64" fill="currentColor">',
+    close: '</symbol>'
+  },
+  {
+    source: 'brand/mark-small.svg',
+    host: 'site/public/index.html',
+    open: '<symbol id="mark-sm" viewBox="0 0 64 64" fill="currentColor">',
+    close: '</symbol>'
+  },
+  {
+    source: 'brand/wordmark.svg',
+    host: 'site/og/card.html',
+    open: '<svg class="lockup" viewBox="0 0 274 64" fill="currentColor" role="img" aria-label="teamree">',
+    close: '</svg>'
+  }
 ]
 
 /** An SVG file's drawable content: everything after its header comment, before the closing tag. */
@@ -478,7 +493,11 @@ function vectorBody(text) {
   return text.slice(start + 3, end)
 }
 
-const squash = (text) => text.replace(/<!--[\s\S]*?-->/g, ' ').replace(/\s+/g, ' ').trim()
+const squash = (text) =>
+  text
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 
 function checkInlined({ source, host, open, close }) {
   const vector = read(source)
@@ -517,7 +536,7 @@ function checkInlined({ source, host, open, close }) {
         (found.length === wanted.length
           ? `same length (${found.length} characters), different geometry.`
           : `${found.length} characters against the vector's ${wanted.length}.`) +
-        ' Re-paste everything between the vector\'s header comment and its closing tag.'
+        " Re-paste everything between the vector's header comment and its closing tag."
     )
   }
 }

@@ -5,10 +5,15 @@
 // else's machine.
 //
 // The rows have their own files. What is only true here is the wiring between
-// them — that pressing a teammate's pane opens a viewer for *that* pane, that
-// pressing it again stops watching rather than opening a second one, and that
-// one window watches one pane at a time, which is what keeps "bytes flow on
-// demand" from becoming the N² traffic it exists to prevent.
+// them — that pressing a teammate's pane asks the window to open *that* pane,
+// that pressing it again stops watching rather than opening a second one, and
+// that one window watches one pane at a time, which is what keeps "bytes flow
+// on demand" from becoming the N² traffic it exists to prevent.
+//
+// Where that pane is then drawn is not this file's business and no longer this
+// component's: the viewer takes the main area, so what the sidebar is
+// answerable for is which pane it asked for, and `WorkspaceArea` is answerable
+// for putting it on the screen.
 //
 // It is also where the several ways of having nothing to show are kept apart:
 // no projects, no worktrees, and a teammate on the roster nothing has ever been
@@ -31,18 +36,6 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
     onConnectionChange: () => () => {}
   },
   RUNTIME_IS_SEEDED: false
-}))
-
-// The viewer is exercised in its own file; here it only has to prove which
-// pane the sidebar decided to open, and that it went away again.
-vi.mock('../terminal/WatchedPaneView', () => ({
-  WatchedPaneView: ({ paneId, handle, onClose }: { paneId: string; handle: string; onClose: () => void }) => (
-    <section aria-label={`watching ${handle} ${paneId}`}>
-      <button type="button" onClick={onClose}>
-        Stop watching
-      </button>
-    </section>
-  )
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
@@ -244,13 +237,16 @@ describe('watching a teammate’s pane', () => {
     mount()
   })
 
+  const open = (): { projectId: string; paneId: string; handle: string } | null =>
+    useWorkspaceStore.getState().watchedPane
+
   it('opens nothing until somebody asks for it', () => {
-    expect(screen.queryByRole('region', { name: /watching/ })).toBeNull()
+    expect(open()).toBeNull()
   })
 
   it('opens the pane that was pressed, on its own project', () => {
     act(() => paneOf('priya').click())
-    expect(screen.getByRole('region', { name: 'watching priya priya:t7' })).toBeTruthy()
+    expect(open()).toMatchObject({ projectId: 'p1', paneId: 'priya:t7', handle: 'priya' })
   })
 
   // Bytes cost a relay budget and a reader has one pair of eyes. "Open" meaning
@@ -258,24 +254,30 @@ describe('watching a teammate’s pane', () => {
   it('watches one pane at a time, replacing rather than stacking', () => {
     act(() => paneOf('priya').click())
     act(() => paneOf('ana').click())
-    expect(screen.getAllByRole('region', { name: /watching/ })).toHaveLength(1)
-    expect(screen.getByRole('region', { name: 'watching ana ana:t2' })).toBeTruthy()
+    expect(open()).toMatchObject({ paneId: 'ana:t2', handle: 'ana' })
   })
 
-  // Which is also what makes stopping reachable without reaching for the viewer.
+  // Which is also what makes stopping reachable without reaching for the viewer
+  // — and it matters more now that the viewer is somewhere else on the screen.
   it('stops watching when the same row is pressed again', () => {
     const row = (): HTMLElement => paneOf('priya')
     act(() => row().click())
     expect(row().getAttribute('aria-pressed')).toBe('true')
     act(() => row().click())
-    expect(screen.queryByRole('region', { name: /watching/ })).toBeNull()
+    expect(open()).toBeNull()
     expect(row().getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('stops watching from the viewer itself', () => {
+  // The last line of a teammate's pane is quoted on its sidebar row, and the
+  // viewer that feeds it is mounted in the main area rather than here. So the
+  // tail has to survive the trip through the store, and be dropped when the
+  // watch it belongs to is.
+  it('forgets what a pane said once it is no longer the pane being watched', () => {
     act(() => paneOf('priya').click())
-    act(() => screen.getByRole('button', { name: 'Stop watching' }).click())
-    expect(screen.queryByRole('region', { name: /watching/ })).toBeNull()
+    act(() => useWorkspaceStore.getState().appendWatchedPaneOutput('tests passed'))
+    expect(useWorkspaceStore.getState().watchedPaneTail).toBe('tests passed')
+    act(() => paneOf('ana').click())
+    expect(useWorkspaceStore.getState().watchedPaneTail).toBe('')
   })
 })
 

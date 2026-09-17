@@ -43,6 +43,37 @@ describe('stylesheets', () => {
     expect(empty).toEqual([])
   })
 
+  // A `var(--typo)` is the other way a stylesheet fails with nothing said. The
+  // property is not invalid, so postcss parses it and the formatter is happy;
+  // the browser drops the declaration at computed-value time and the element
+  // silently inherits instead. Written while moving a header out of a floating
+  // card and into the main area: `var(--text-md)`, against a scale that goes
+  // sm, base, lg. It read fine in the diff and would have shipped a heading at
+  // whatever size its parent happened to be.
+  //
+  // A fallback — `var(--x, 12px)` — is an author saying the miss is expected,
+  // so those are left alone. Everything else has to name a property this app
+  // actually defines.
+  it('refers to no custom property it never defines', () => {
+    const defined = new Set<string>()
+    const used: { name: string; sheet: string }[] = []
+
+    for (const name of sheets) {
+      const root = postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name })
+      root.walkDecls((decl) => {
+        if (decl.prop.startsWith('--')) defined.add(decl.prop.trim())
+        // The closing token is what tells the two apart: `var(--x)` has to
+        // resolve, `var(--x, 12px)` has already said what to do when it cannot.
+        for (const [, property] of decl.value.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)) {
+          if (property !== undefined) used.push({ name: property, sheet: name })
+        }
+      })
+    }
+
+    const missing = used.filter((entry) => !defined.has(entry.name))
+    expect(missing.map((entry) => `${entry.sheet}: ${entry.name}`)).toEqual([])
+  })
+
   // Errors raised by a dialog are notices, and a notice under the modal scrim
   // is painted and then covered: the dialog stays open, the button goes live
   // again, and nothing appears. The two numbers live in two files, so the

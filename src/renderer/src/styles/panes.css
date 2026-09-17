@@ -238,8 +238,13 @@
   white-space: nowrap;
 }
 
+/* Brighter than the watchers above it, because these two states are the whole
+   point of this strip and they were indistinguishable: this said
+   `var(--fg-primary)`, which is not a property this app defines, so the browser
+   dropped the declaration and somebody with their hands on your keyboard was
+   painted in exactly the muted grey of somebody only reading. */
 .pane-hands--typing .pane-hands__who {
-  color: var(--fg-primary);
+  color: var(--fg);
 }
 
 /* A mute that is on says so in the word on the button, never only in a colour:

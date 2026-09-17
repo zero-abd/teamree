@@ -33,6 +33,17 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 vi.mock('../panes/PaneTree', () => ({ PaneTree: () => <div data-testid="panes" /> }))
 vi.mock('./ChangesPanel', () => ({ ChangesPanel: () => null }))
 vi.mock('../dashboard/Dashboard', () => ({ Dashboard: () => <div data-testid="dashboard" /> }))
+// The viewer builds a real xterm against a real relay stream; what this file
+// decides is only whether it is on the screen, and which pane it was given.
+vi.mock('../terminal/WatchedPaneView', () => ({
+  WatchedPaneView: ({ paneId, handle, onClose }: { paneId: string; handle: string; onClose: () => void }) => (
+    <div data-testid="watched-pane" data-pane={paneId} data-handle={handle}>
+      <button type="button" onClick={onClose}>
+        Stop watching
+      </button>
+    </div>
+  )
+}))
 vi.mock('./WorktreeTabs', () => ({ WorktreeTabs: () => null }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
@@ -406,5 +417,57 @@ describe('pushing', () => {
     expect(push.disabled).toBe(true)
     fireEvent.click(push)
     expect(pushActiveWorktree).not.toHaveBeenCalled()
+  })
+})
+
+// A teammate's pane used to float over this area from the sidebar, pinned to
+// the bottom-right corner at a size nothing could change. It takes the area now
+// — so what has to be true is that it takes it from whatever else had it, and
+// that it is one of the things a worktree can be opened *instead of*.
+describe('a teammate’s pane', () => {
+  const watched = { projectId: 'p1', paneId: 'priya:t7', label: 'agent', handle: 'priya' }
+
+  it('is not on the screen until one is opened', () => {
+    seed({ projects: [project], worktrees: [worktree()], activeWorktreeId: 'w1', layouts: { w1: layout() } })
+    mount()
+    expect(screen.queryByTestId('watched-pane')).toBeNull()
+    expect(screen.getByTestId('panes')).toBeTruthy()
+  })
+
+  it('takes the area, and takes it from the panes that had it', () => {
+    seed({
+      projects: [project],
+      worktrees: [worktree()],
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout() },
+      watchedPane: watched
+    })
+    mount()
+    const pane = screen.getByTestId('watched-pane')
+    expect(pane.getAttribute('data-pane')).toBe('priya:t7')
+    expect(pane.getAttribute('data-handle')).toBe('priya')
+    expect(screen.queryByTestId('panes')).toBeNull()
+  })
+
+  // The dashboard is read to decide where to go next, so it wins: somebody who
+  // has asked for it has asked to stop looking at this.
+  it('gives the area up to the pane board', () => {
+    seed({
+      projects: [project],
+      worktrees: [worktree()],
+      activeWorktreeId: 'w1',
+      watchedPane: watched,
+      dashboardOpen: true
+    })
+    mount()
+    expect(screen.queryByTestId('watched-pane')).toBeNull()
+    expect(screen.getByTestId('dashboard')).toBeTruthy()
+  })
+
+  it('stops watching from the viewer itself', () => {
+    seed({ projects: [project], worktrees: [worktree()], activeWorktreeId: 'w1', watchedPane: watched })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop watching' }))
+    expect(useWorkspaceStore.getState().watchedPane).toBeNull()
   })
 })

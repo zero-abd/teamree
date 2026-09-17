@@ -7,6 +7,7 @@ import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { PaneTree } from '../panes/PaneTree'
 import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 import { TeamworkView } from '../teamwork/TeamworkView'
+import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { ChangesPanel } from './ChangesPanel'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { terminalTarget } from './terminalTarget'
@@ -52,6 +53,9 @@ export function WorkspaceArea({
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
   const teamwork = useWorkspaceStore((state) => state.teamwork)
+  const watchedPane = useWorkspaceStore((state) => state.watchedPane)
+  const closeWatchedPane = useWorkspaceStore((state) => state.closeWatchedPane)
+  const appendWatchedPaneOutput = useWorkspaceStore((state) => state.appendWatchedPaneOutput)
 
   // Where "open a terminal" would go, and whose teamwork "start teamwork"
   // would set up. Both are read before the early returns below, because hooks
@@ -103,6 +107,27 @@ export function WorkspaceArea({
   // up is a question about a repository, not about the worktree that happens to
   // be open, so it takes the area rather than floating over it.
   if (teamworkProjectId !== null) return <TeamworkView projectId={teamworkProjectId} />
+
+  // And the same again for a teammate's pane, which used to be pinned to the
+  // bottom-right corner of the window at a size nothing could change. What
+  // makes it unmistakably somebody else's is its header saying so, not its
+  // being the smallest thing on the screen — so it gets the room the thing it
+  // shows actually needs. `key` on the pane id so switching between two
+  // teammates' panes builds a new emulator rather than replaying one stream
+  // into the scrollback of another.
+  if (watchedPane !== null) {
+    return (
+      <WatchedPaneView
+        key={watchedPane.paneId}
+        projectId={watchedPane.projectId}
+        paneId={watchedPane.paneId}
+        label={watchedPane.label}
+        handle={watchedPane.handle}
+        onOutput={appendWatchedPaneOutput}
+        onClose={closeWatchedPane}
+      />
+    )
+  }
 
   if (!worktree || !activeWorktreeId) {
     // A runtime that never came up leaves a window that looks ordinary and
