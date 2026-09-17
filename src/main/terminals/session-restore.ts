@@ -11,7 +11,7 @@
 // back as a plain shell in the same directory.
 
 import type { AgentKind } from './agent-command'
-import { resumeSessionCommand } from './agent-command'
+import { carriesSelector, restartSessionCommand, resumeSessionCommand } from './agent-command'
 
 /** One terminal, as much of it as outlives the process that ran it. */
 export type TerminalRecord = {
@@ -30,6 +30,22 @@ export type TerminalRecord = {
   agent?: AgentKind
   /** The session id we pinned at launch, when the agent let us choose one. */
   agentSessionId?: string
+  /**
+   * Whether anybody ever typed into this pane.
+   *
+   * Written down because it is the one thing this app knows for certain about
+   * whether there is a conversation to come back to, and it holds for every
+   * agent rather than for one of them. An id can be pinned before an agent
+   * starts, but the conversation under it is not written until the agent has
+   * something to write — and an agent with nobody talking to it has nothing.
+   * So a pane that was opened and then left alone has no conversation on any
+   * agent's disk, whatever id was reserved for it, and asking to resume one is
+   * asking for something that was never had.
+   *
+   * Deliberately not "the agent produced output": every agent prints a banner.
+   * Input is the part that only happens when somebody meant it.
+   */
+  typed?: boolean
   cols: number
   rows: number
   createdAt: number
@@ -40,6 +56,12 @@ export type RestoreLaunch = {
   command?: string
   /** True when that command picks a conversation back up. */
   resumed: boolean
+  /**
+   * Set when the command differs from the one on the record — the pane is
+   * starting the agent over under a new id — and carries what the record has to
+   * become, so the next launch resumes this run rather than the one before it.
+   */
+  repinned?: { command: string; agentSessionId?: string }
 }
 
 /**
@@ -55,9 +77,41 @@ export type RestoreLaunch = {
  * because the app was restarted — the user quit, they did not ask for it twice.
  * Coming back to a shell in the right directory is both useful and honest; the
  * alternative is a startup that does something nobody asked for.
+ *
+ * The one agent pane that is *not* resumed is the one nobody ever typed into.
+ * Reserving an id at launch is not the same as there being a conversation under
+ * it: the agent writes that down when it has something to write, and a pane
+ * that was opened and left alone gave it nothing. Asking to resume such an id
+ * gets a refusal from the CLI and a dead pane, every time, for the whole life of
+ * the record — so that pane is started over instead, under an id of its own.
+ * Re-issuing an agent's own launch is not the thing the refusal above is about:
+ * starting an agent is what the pane was for, and it does nothing until it is
+ * spoken to.
  */
 export function restoreLaunch(record: TerminalRecord): RestoreLaunch {
   if (record.command === undefined || record.agent === undefined) return { resumed: false }
+
+  // Before any of that: a session on the command line that is not ours is not
+  // ours to touch. A command naming a session with no pinned id of ours behind
+  // it was written that way by whoever opened the pane — `pinSessionCommand`
+  // steps back from this same case rather than argue with it — and a session
+  // somebody chose by hand is one they have reason to think is there. So the
+  // command is re-issued exactly as it was written, which is the only form of
+  // it this app can be sure means what they meant: rewriting it around a
+  // session id we never held is overruling the one person in a position to
+  // know, whether by pinning our own over the top or, as this did until now, by
+  // quietly trading a named session for "the last one here".
+  if (record.agentSessionId === undefined && carriesSelector(record.command, record.agent)) {
+    return { command: record.command, resumed: true }
+  }
+
+  if (record.typed !== true) {
+    const restart = restartSessionCommand(record.command, record.agent)
+    // `resumed: false` because nothing was: the pane comes back with a fresh
+    // agent in it, and the record of what it printed last time replayed above,
+    // exactly as an ordinary pane does.
+    return { command: restart.command, resumed: false, repinned: restart }
+  }
 
   const resume = resumeSessionCommand(record.command, record.agent, record.agentSessionId ?? null)
   // The agent offers no way back at all: a shell in the right place is still

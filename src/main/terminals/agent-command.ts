@@ -255,6 +255,28 @@ export function resumeSessionCommand(command: string, agent: AgentKind, sessionI
   return spliceSelector(command, agent, argv)
 }
 
+/**
+ * The command to run when there is nothing to resume: the agent again, from the
+ * top, under an id of its own.
+ *
+ * This is for the pane nobody ever spoke to. An agent writes a conversation
+ * down when it has one, and a pane that was opened and then left alone has
+ * none — so the id pinned for it last time names nothing, and asking to resume
+ * it is asking for a conversation that was never had. Every selector is cut
+ * out and, where the CLI allows it, a fresh id goes in: the pane comes back
+ * where it was, ready, rather than coming back holding an error.
+ *
+ * A new id rather than the old one deliberately. The old one has been handed to
+ * the agent once already, and a CLI within its rights to refuse an id it has
+ * seen before would turn one silent failure into another.
+ */
+export function restartSessionCommand(command: string, agent: AgentKind): { command: string; agentSessionId?: string } {
+  const spec = AGENTS[agent]
+  if (!spec.pin) return { command: spliceSelector(command, agent, []) }
+  const agentSessionId = newSessionId()
+  return { command: spliceSelector(command, agent, spec.pin(agentSessionId)), agentSessionId }
+}
+
 /** Whether the command already names a session for this agent. */
 export function carriesSelector(command: string, agent: AgentKind): boolean {
   const tokenized = tokenizeCommand(command)
@@ -286,7 +308,11 @@ function matchSelector(selectors: readonly Selector[], token: string): Selector 
 function spliceSelector(command: string, agent: AgentKind, argv: readonly string[]): string {
   const spec = AGENTS[agent]
   const addition = argv.map(quoteArgument).join(' ')
-  const appended = `${command} ${addition}`
+  // Nothing to add is a caller asking only for the old selectors to go — an
+  // agent with no flag to pin an id, being started over. Appending an empty
+  // string would leave a trailing space in a command that is written down and
+  // read back by a person, which is a small enough thing to simply not do.
+  const appended = addition.length === 0 ? command : `${command} ${addition}`
 
   const tokenized = tokenizeCommand(command)
   if (!tokenized.ok) return appended
@@ -332,13 +358,15 @@ function spliceSelector(command: string, agent: AgentKind, argv: readonly string
   }
 
   let result = command
-  if (terminator !== null) result = `${result.slice(0, terminator)}${addition} ${result.slice(terminator)}`
+  if (terminator !== null && addition.length > 0) {
+    result = `${result.slice(0, terminator)}${addition} ${result.slice(terminator)}`
+  }
   // Back to front, so an earlier cut's offsets are still valid.
   for (let index = cuts.length - 1; index >= 0; index -= 1) {
     const cut = cuts[index] as Span
     result = `${result.slice(0, cut.start)}${result.slice(cut.end)}`
   }
-  return terminator !== null ? result : `${result} ${addition}`
+  return terminator !== null || addition.length === 0 ? result : `${result} ${addition}`
 }
 
 /** POSIX single-quoting, which is the only form with no escapes inside it. */

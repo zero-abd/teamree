@@ -11,7 +11,13 @@ import type { TerminalEvent } from '../../shared/methods'
 import { killProcessTree } from './process-tree'
 import { recoverTailOnTeardown } from './pty-tail'
 import { ScrollbackBuffer } from './scrollback'
-import { replayableRecord, tailFromLineBoundary, type RecordedScrollback } from './scrollbackRecord'
+import {
+  FAILED_RESUME_BELOW,
+  failedResumeMark,
+  replayableRecord,
+  tailFromLineBoundary,
+  type RecordedScrollback
+} from './scrollbackRecord'
 import {
   buildShellCommand,
   buildTerminalEnv,
@@ -81,6 +87,20 @@ export const QUIET_AFTER_MS = 4_000
  */
 export const EXITED_RETENTION_BYTES = 256 * 1024
 
+/**
+ * How long after a pane is brought back to resume a conversation an exit still
+ * counts as the resume having failed.
+ *
+ * An agent that will not resume says so and leaves: it reads its own store,
+ * finds nothing under the id, prints a line and exits. That happens in the
+ * first seconds or not at all, so this window is set well past however long a
+ * cold start and a store read can take and nowhere near long enough to reach a
+ * session that ran for a while and then died of something else. The bound is
+ * what makes the mark below a statement rather than a guess — past it, an agent
+ * that ends is an agent that ended, and this app has nothing to add.
+ */
+export const RESUME_WINDOW_MS = 30_000
+
 export type PtySessionInit = {
   id: string
   worktreeId: string
@@ -141,9 +161,26 @@ export class PtySession {
   private restored: 'shell' | 'agent' | undefined
   private busy = false
   private lastOutputAt: number
+  private readonly startedAt: number
   private cancelQuietWatch: (() => void) | undefined
   /** Set when the child has been reaped but its output has not gone quiet. */
   private draining: { exitCode: number; cancelQuiet: () => void; cancelCeiling: () => void } | undefined
+  /**
+   * True while the record this pane came back with is held rather than shown.
+   *
+   * A pane resuming a conversation is about to print that conversation itself,
+   * so replaying a transcript of it would show the same exchange twice. But
+   * "about to" is a bet, and the record is the only copy of what this pane
+   * printed before the restart — so it is held rather than dropped, and let go
+   * of the moment the bet turns out to have been wrong.
+   */
+  private recordHeld: boolean
+  /** True once this pane has said, in the pane, that its resume did not take. */
+  private resumeFailed = false
+  /** True once anybody has typed into this pane; see `TerminalRecord.typed`. */
+  private typedInto = false
+  /** True from the moment close() is called: this pane is being ended on purpose. */
+  private closing = false
 
   private constructor(
     private readonly init: PtySessionInit,
@@ -163,9 +200,11 @@ export class PtySession {
     this.pid = handle.pid
     this.scrollback = new ScrollbackBuffer(init.scrollbackCapBytes)
     this.record = init.restoredRecord
+    this.recordHeld = init.restored === 'agent' && init.restoredRecord !== undefined
     this.title = initialTitle(init, platform)
     this.restored = init.restored
     this.lastOutputAt = (init.now ?? Date.now)()
+    this.startedAt = this.lastOutputAt
 
     this.subscriptions.push(
       handle.onData((chunk) => this.receive(chunk)),
@@ -251,7 +290,17 @@ export class PtySession {
     // Typing into a restored pane is the user taking it over; the badge has
     // said what it had to say by then.
     this.restored = undefined
+    this.typedInto = true
     this.pty.write(data)
+  }
+
+  /**
+   * Whether anybody has typed into this pane, which is what the next launch
+   * needs in order to know there is a conversation to come back to at all.
+   * See `TerminalRecord.typed` for why input rather than output is the question.
+   */
+  get wasTypedInto(): boolean {
+    return this.typedInto
   }
 
   resize(cols: number, rows: number): void {
@@ -280,8 +329,10 @@ export class PtySession {
    */
   read(tailBytes?: number): string {
     const live = this.scrollback.tail(tailBytes)
-    if (this.record === undefined) return live
-    const framed = replayableRecord(this.record)
+    if (this.record === undefined || this.recordHeld) return live
+    // What follows the record is a new shell in the ordinary case, and the
+    // attempt at resuming that did not take in the other one.
+    const framed = replayableRecord(this.record, this.resumeFailed ? FAILED_RESUME_BELOW : undefined)
     if (tailBytes === undefined) return `${framed}${live}`
 
     // A tail short enough to be answered out of this session alone is answered
@@ -317,6 +368,10 @@ export class PtySession {
 
   /** Kills the process tree and releases every listener. Safe to call twice. */
   async close(): Promise<void> {
+    // Before the kill, and the whole reason this flag exists: a pane this app
+    // is ending on purpose is not a pane that failed at anything, and the exit
+    // that follows must not be read as an agent refusing to resume.
+    this.closing = true
     if (this.running) {
       const exited = this.waitForExit(CLOSE_TIMEOUT_MS)
       await killProcessTree(this.pid, this.platform)
@@ -444,6 +499,7 @@ export class PtySession {
     // mid-burst goes busy -> not busy like any other, and a subscriber watching
     // activity must not be left holding the last thing it was told.
     if (wasBusy) this.init.onActivityChange?.(this)
+    this.sayIfResumeFailed(this.exitCode)
     this.emit({ type: 'exit', exitCode: this.exitCode })
     for (const waiter of this.exitWaiters) waiter()
     this.exitWaiters.clear()
@@ -451,6 +507,46 @@ export class PtySession {
     // back of it out of the whole buffer. From here nothing is appended again,
     // so what is kept is only what a later reader can ask for.
     this.scrollback.restrictTo(EXITED_RETENTION_BYTES)
+  }
+
+  /**
+   * Says, in the pane, that the conversation this pane came back for did not
+   * come back — and stops claiming that it did.
+   *
+   * A pane brought back to resume ends one of two ways: somebody takes it over,
+   * which clears the badge on the first keystroke, or it is still wearing that
+   * badge when the process ends. The second one is a pane that was handed a
+   * conversation to pick up and never picked one up, and there is exactly one
+   * honest thing to do with it, which is to say so where the person will be
+   * looking. Nothing else in the app will: the renderer's own exit line is
+   * written by whoever is subscribed at the moment of the exit, and a restore
+   * happens before the window exists, so a pane that dies in its first second
+   * has nobody listening. This goes into the pane's own output instead, which
+   * is what the window paints from whenever it does open.
+   *
+   * The badge is retracted in the same breath. A pane reading "resumed" beside
+   * "exited 1", with a refusal from a CLI as its entire contents, is the app
+   * asserting something it can see is not true — and of everything here that is
+   * the part a person could not work out for themselves.
+   */
+  private sayIfResumeFailed(exitCode: number): void {
+    if (this.restored !== 'agent' || this.closing) return
+    // Past the window, an agent that ends is an agent that ended: it may well
+    // have resumed fine an hour ago, and this app would be inventing a cause.
+    if (this.clock() - this.startedAt > RESUME_WINDOW_MS) return
+
+    this.restored = undefined
+    this.resumeFailed = true
+    // Let go of the record in the same moment. It was held back because the
+    // conversation was expected to print itself, and it did not.
+    this.recordHeld = false
+
+    const note = failedResumeMark(exitCode, this.record !== undefined)
+    // Appended as well as emitted, so it is in what `terminal.read` answers
+    // with. That is the copy that matters here — a subscriber arriving after
+    // the exit gets the pane by reading it, not by having been told.
+    this.scrollback.append(note)
+    this.emit({ type: 'data', data: note })
   }
 
   private emit(event: TerminalEvent): void {

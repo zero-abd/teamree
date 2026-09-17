@@ -186,7 +186,13 @@ export class TerminalSessionManager {
   write(terminalId: string, data: string): boolean {
     const session = this.require(terminalId)
     const wasRestored = session.snapshot().restored !== undefined
+    const wasUntouched = !session.wasTypedInto
     session.write(data)
+    // The first keystroke a pane ever gets is the moment its agent can have a
+    // conversation worth resuming, and the next launch has to know. Written
+    // once per pane rather than once per keystroke: this runs on the typing
+    // path, and the store persists on every put.
+    if (wasUntouched) this.rememberTyped(terminalId)
     return wasRestored
   }
 
@@ -330,10 +336,31 @@ export class TerminalSessionManager {
       // A pane that resumes a conversation is about to print that conversation
       // itself, from the agent's own store, so replaying a transcript into it
       // would show the same exchange twice — once as a record of what the agent
-      // said and once as the agent saying it. The record is kept either way,
-      // because whether a pane can resume is decided at each launch and an
-      // agent that stops being resumable still has a pane to come back to.
-      const kept = launch.resumed ? undefined : this.scrollback?.read(record.id)
+      // said and once as the agent saying it.
+      //
+      // Which is why the record is handed over either way and held rather than
+      // dropped: "about to print it" is a bet on a command that has not run
+      // yet, and this one archive entry is the only copy of what the pane
+      // printed before the restart. Betting it used to lose it outright — a
+      // resume that failed left the pane holding a one-line refusal, and the
+      // next quit wrote *that* back over the transcript. PtySession shows what
+      // it is holding if the resume turns out not to have taken.
+      const kept = this.scrollback?.read(record.id)
+      // A pane starting its agent over has pinned a new id, and the record has
+      // to say so: the old id names nothing, and leaving it there is asking for
+      // the same failed resume on every launch from here on.
+      const restoring: TerminalRecord =
+        launch.repinned === undefined
+          ? record
+          : {
+              ...record,
+              command: launch.repinned.command,
+              agentSessionId: launch.repinned.agentSessionId,
+              // Nobody has typed into this pane yet, and the fresh conversation
+              // it is opening is no more resumable than the last one until they
+              // do.
+              typed: false
+            }
       try {
         this.startSession(
           {
@@ -345,7 +372,7 @@ export class TerminalSessionManager {
             ...(launch.command === undefined ? {} : { command: launch.command }),
             ...(kept === undefined ? {} : { restoredRecord: kept })
           },
-          record,
+          restoring,
           launch.resumed ? 'agent' : 'shell'
         )
         restored += 1
@@ -485,6 +512,12 @@ export class TerminalSessionManager {
       ...((restoring?.agentSessionId ?? launch.agentSessionId)
         ? { agentSessionId: restoring?.agentSessionId ?? launch.agentSessionId }
         : {}),
+      // Carried across the restart rather than recomputed: a pane that was
+      // typed into last time has a conversation whether or not anybody has
+      // touched it since it came back, and that is the fact the next restore
+      // reads. Only written when true, so a record that has never seen a
+      // keystroke stays as small as it was.
+      ...(restoring?.typed === true ? { typed: true } : {}),
       cols: snapshot.cols,
       rows: snapshot.rows,
       createdAt: restoring?.createdAt ?? Date.now()
@@ -508,6 +541,20 @@ export class TerminalSessionManager {
    * sitting in the directory until something else sweeps it — and a pane the
    * user deliberately shut coming back with output on the next launch.
    */
+  /**
+   * Writes down that somebody has typed into this pane.
+   *
+   * Only the agent panes need it, but it is recorded for all of them: a pane
+   * can become an agent pane at any moment by somebody typing the agent's name
+   * into a shell, and a flag that is only true for panes we happened to launch
+   * as agents would be a flag that lies about the others.
+   */
+  private rememberTyped(terminalId: string): void {
+    const stored = this.records.listTerminals().find((record) => record.id === terminalId)
+    if (stored === undefined || stored.typed === true) return
+    this.records.putTerminal({ ...stored, typed: true })
+  }
+
   private forget(terminalId: string): void {
     this.checkpoints?.cancel(terminalId)
     this.records.removeTerminal(terminalId)

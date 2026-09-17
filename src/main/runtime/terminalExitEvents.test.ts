@@ -122,6 +122,11 @@ function recordFor(binary: string, checkout: string): TerminalRecord {
     command: binary,
     agent: 'claude',
     agentSessionId: 'session_from_last_launch',
+    // Typed into last time, so there is a conversation to come back to and this
+    // pane resumes rather than starting its agent over. A pane nobody ever
+    // spoke to takes the other branch and comes back running a fresh agent,
+    // which is not the pane this file is here to watch.
+    typed: true,
     cols: 80,
     rows: 24,
     createdAt: 0

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { TerminalEvent } from '../../shared/methods'
 import { ErrorCode } from '../../shared/protocol'
 import { isProcessAlive } from './process-tree'
-import { EXITED_RETENTION_BYTES, PtySession } from './pty-session'
+import { EXITED_RETENTION_BYTES, PtySession, RESUME_WINDOW_MS } from './pty-session'
 import type { PtySessionInit } from './pty-session'
 import { canSpawnPty, waitUntil } from './pty-test-support'
 import { isTerminalServiceError } from './service-error'
@@ -335,6 +335,102 @@ describePty('PtySession', () => {
       session.write('after\n')
       await waitUntil(() => session.read().includes('after'), 'second echo in scrollback')
       expect(events).toHaveLength(seen)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  /** The previous run's output, for a pane being brought back. */
+  const earlier = { text: 'what this pane printed last time\r\n', recordedAt: Date.parse('2026-03-04T09:05:00Z') }
+
+  it(
+    'holds back the record of a pane that is resuming, without letting go of it',
+    async () => {
+      const session = start({ command: 'cat', restored: 'agent', restoredRecord: earlier })
+
+      // The conversation is about to print itself out of the agent's own store,
+      // so showing a transcript of it as well would be the same exchange twice.
+      expect(session.read()).not.toContain('what this pane printed last time')
+      // Held, though, and not thrown away: this is the only copy of it, and what
+      // gets written down for the next launch has to still have it.
+      expect(session.recordedOutput()).toContain('what this pane printed last time')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'says in the pane when the conversation it came back for never arrived',
+    async () => {
+      const session = start({
+        command: 'echo no such conversation; exit 1',
+        restored: 'agent',
+        restoredRecord: earlier
+      })
+      const events = collect(session)
+
+      await waitUntil(() => !session.isRunning, 'the agent to give up')
+
+      const shown = session.read()
+      // Said in words, and in the pane's own output rather than to whoever
+      // happens to be subscribed: a restored pane can die before there is a
+      // window, and the window paints from what it reads.
+      expect(shown).toContain('nothing was resumed')
+      expect(shown).toContain('exited with code 1')
+      expect(shown).toContain('deleted, expired, or recorded on another machine')
+      expect(outputOf(events)).toContain('nothing was resumed')
+
+      // The held record is let go of in the same moment, above the attempt that
+      // failed, and under a line that does not promise a shell that is not
+      // coming.
+      expect(shown).toContain('what this pane printed last time')
+      expect(shown).toContain('the attempt to resume this conversation begins below')
+      expect(shown).not.toContain('a new shell starts below')
+
+      // And the pane stops claiming it resumed anything.
+      expect(session.snapshot().restored).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'blames nothing for an agent that ran for a while before it died',
+    async () => {
+      // Started inside the window and reaped outside it. Past the window an
+      // agent that ends is an agent that ended — it may well have resumed
+      // perfectly an hour ago — and inventing a cause for it would be this app
+      // saying something it does not know.
+      let clock = 1_000
+      const session = start({
+        command: 'sleep 0.05; exit 1',
+        restored: 'agent',
+        restoredRecord: earlier,
+        now: () => clock
+      })
+      clock += RESUME_WINDOW_MS + 1
+
+      await waitUntil(() => !session.isRunning, 'the agent to exit')
+
+      expect(session.read()).not.toContain('nothing was resumed')
+      // And the record stays held, because nothing has happened to say the
+      // conversation did not come back.
+      expect(session.read()).not.toContain('what this pane printed last time')
+      expect(session.snapshot().restored).toBe('agent')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'says nothing of the kind about a pane that was never resuming anything',
+    async () => {
+      // A restored *shell* exits because somebody ended it, which is not a
+      // failure and has no conversation behind it to be missing.
+      const session = start({ command: 'exit 1', restored: 'shell', restoredRecord: earlier })
+
+      await waitUntil(() => !session.isRunning, 'the command to finish')
+
+      expect(session.read()).not.toContain('nothing was resumed')
+      // A restored shell was always shown its record; that is unchanged.
+      expect(session.read()).toContain('what this pane printed last time')
+      expect(session.read()).toContain('a new shell starts below')
     },
     TEST_TIMEOUT_MS
   )

@@ -60,6 +60,13 @@ const TerminalRecordSchema = z.object({
   command: z.string().min(1).optional(),
   agent: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
   agentSessionId: z.string().min(1).optional(),
+  // Whether anybody ever typed into the pane, which is what the next launch
+  // reads to decide whether the pinned id above names a conversation at all. A
+  // file written before this field existed has no answer and is read as no: the
+  // pane starts its agent over, which is where an id nobody ever spoke to was
+  // always going to end up — by a route that works rather than one that prints
+  // a refusal.
+  typed: z.boolean().optional(),
   cols: z.number().int().positive(),
   rows: z.number().int().positive(),
   createdAt: z.number()

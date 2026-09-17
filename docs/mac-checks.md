@@ -169,6 +169,41 @@ the one thing on this list that could not be reasoned out from the code at all.
 Expect the selection to land under the pointer. If it is offset, the scale is the
 reason, and the offset will grow with the distance from the top left corner.
 
+**8. Make a resume fail, and read what the pane says about it.** Two shapes, and
+the cheap one first: open a pane, start an agent in it, type nothing at all, ⌘Q,
+relaunch. Expect that pane *not* to resume — a pinned session id is a reservation
+and an agent writes a conversation only once somebody has typed one, so a
+never-typed pane comes back running its agent afresh, with what it printed last
+time replayed above under the same record lines as check 2 and no badge claiming
+otherwise. A pane that comes back dead here is the old behaviour, and it is the
+bug this check exists downstream of.
+
+The genuine failure takes one more step, because the case above is now the case
+that no longer fails. Open an agent pane, type something into it and let it
+answer, ⌘Q, then delete that conversation from wherever the CLI in question keeps
+its conversations on disk, and relaunch. Expect the pane to come back, run its
+resume, and be refused in a line by the agent itself, which then exits — and
+expect the app to say so rather than leave you looking at it: the badge stops
+reading resumed, the pane's old output is there above under an
+`[end of record — the attempt to resume this conversation begins below]` line
+rather than the usual one, and a dim bracketed line at the bottom says that
+nothing was resumed, that the agent's own reason is directly above, that the old
+output is all still here, and that a conversation goes missing for ordinary
+reasons. The pane is dead, and that is the recorded behaviour rather than the
+failure — [`../ROADMAP.md`](../ROADMAP.md) records it under "Known gaps", along
+with why a pane that quietly started a fresh conversation instead would be the
+worse answer.
+
+Two failures to catch, neither of them visible in the pane at the time. A pane
+still wearing the resumed badge over a dead agent, with nothing written into it,
+is the whole defect back. And quit once more after looking: the record on disk
+for that pane must still hold what it printed before the restart, not the agent's
+one-line refusal. A resume used to be bet on — the transcript withheld on the
+assumption it would work, then overwritten by the refusal on the next quit — so
+one failed resume destroyed the output it was supposed to be protecting. Check
+`~/Library/Application Support/teamree/scrollback/<terminal-id>.json` if the
+replay on the launch after that looks short.
+
 ### One thing not to mistake for a failure
 
 Force-quit a pane mid-build — Activity Monitor, or `kill -9` — and its transcript
