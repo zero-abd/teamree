@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
+import type { CliStatus, InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
 import { buildPaletteItems, filterPalette, moveSelection, score, type PaletteItem } from './paletteModel'
 
 function worktree(overrides: Partial<Worktree> & { id: string }): Worktree {
@@ -45,6 +45,7 @@ const context = (
   activeWorktreeId: null,
   agents: [],
   update: null,
+  cli: null,
   hintFor: () => '',
   ...overrides
 })
@@ -262,5 +263,58 @@ describe('moveSelection', () => {
 
   it('stays at zero when there is nothing to select', () => {
     expect(moveSelection(0, 0, 1)).toBe(0)
+  })
+})
+
+// "Put teamree on my PATH" is the right offer to somebody who has no teamree on
+// their PATH, and the wrong one to everybody else this row is shown to. The
+// state that matters is a link that exists and leads to a deleted build: the
+// shell finds it, follows it, and says the command does not exist, and the app
+// knew that and offered to do what had already been done.
+describe('the CLI row is named after what is actually wrong', () => {
+  const status = (overrides: Partial<CliStatus> = {}): CliStatus =>
+    ({
+      installable: true,
+      packaged: true,
+      platform: 'darwin',
+      state: 'absent',
+      destination: '/usr/local/bin/teamree',
+      directory: '/usr/local/bin',
+      source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+      bundle: '/Applications/teamree.app/Contents/Resources/cli/cli.js',
+      resolved: null,
+      dangling: false,
+      impermanent: null,
+      needsAdministrator: true,
+      onPath: 'environment',
+      askedAt: null,
+      ...overrides
+    }) as CliStatus
+
+  const labelOf = (cli: CliStatus | null): string | undefined =>
+    buildPaletteItems(context({ cli })).find((item) => item.id === 'install-cli')?.label
+
+  it('offers to make the link when there is none', () => {
+    expect(labelOf(status())).toBe('Put teamree on my PATH')
+  })
+
+  it('offers to repair it when the link is there and leads nowhere', () => {
+    expect(labelOf(status({ state: 'elsewhere', dangling: true, resolved: '/gone/teamree' }))).toBe(
+      'Fix the broken teamree command'
+    )
+  })
+
+  it('says which copy when the link works and drives another one', () => {
+    expect(labelOf(status({ state: 'elsewhere', dangling: false, resolved: '/other/teamree' }))).toBe(
+      'Point teamree at this app'
+    )
+  })
+
+  // The label moves; what somebody types to find it must not.
+  it('is still reachable by the words somebody would type', () => {
+    const broken = buildPaletteItems(context({ cli: status({ state: 'elsewhere', dangling: true }) }))
+    const row = broken.find((item) => item.id === 'install-cli')
+    expect(row?.search).toContain('path')
+    expect(row?.search).toContain('symlink')
   })
 })
