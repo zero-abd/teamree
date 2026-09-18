@@ -39,7 +39,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { runPeerCheck } from './electron-peer-check.mjs'
-import { PEER_BUNDLE_FLAG, USER_DATA_FLAG, readNamedArg } from './smoke-args.mjs'
+import { FIXTURE_REPO_FLAG, PEER_BUNDLE_FLAG, USER_DATA_FLAG, readNamedArg } from './smoke-args.mjs'
 
 const TIMEOUT_MS = 30_000
 const READY_MS = 15_000
@@ -156,6 +156,7 @@ async function run() {
   )
 
   await checkWindowSurfaces(ask)
+  await checkWorktreeSurfaces(ask)
   await checkRendererBoundary(window, ask)
   await checkPeerCrypto()
   checkLocalBoundary()
@@ -213,6 +214,140 @@ async function checkWindowSurfaces(ask) {
     }
     await waitFor(() => heading(title), `pressing ${label} did not put the ${title} surface on screen`)
   }
+}
+
+/**
+ * The surfaces that only exist once there is a worktree open.
+ *
+ * `checkWindowSurfaces` above presses the two buttons that work on a first
+ * launch. Everything else in this window needs a repository, and so until now
+ * the strip of terminal tabs and the behaviour of closing a pane had never been
+ * observed anywhere — they had unit tests, and unit tests render a component
+ * against props they were handed. Whether a pane that the runtime made appears
+ * as a tab is a question about the wiring between them, which is the seam no
+ * unit test on either side can see.
+ *
+ * Driven through `window.teamree.runtime.call` — the renderer's own bridge, the
+ * one the product uses — so that what is being exercised is the path a person
+ * clicking would take, not a back door into the store.
+ *
+ * Skipped, loudly, when the launcher could not build a repository. A check that
+ * quietly does nothing is worse than one that is not there.
+ */
+async function checkWorktreeSurfaces(ask) {
+  const repo = readNamedArg(FIXTURE_REPO_FLAG)
+  if (repo === undefined) {
+    console.log('smoke: no fixture repository, so the worktree surfaces were not checked')
+    return
+  }
+
+  const call = async (method, params) => {
+    const answer = await ask(
+      `window.teamree.runtime.call(${JSON.stringify(method)}, ${JSON.stringify(params)}).then(
+         (response) => JSON.stringify(response),
+         (error) => JSON.stringify({ ok: false, error: String(error) })
+       )`
+    )
+    return JSON.parse(answer)
+  }
+
+  const project = await call('project.add', { path: repo, name: 'smoke' })
+  if (project.ok !== true) {
+    failures.push(`could not add the fixture repository: ${JSON.stringify(project.error ?? project)}`)
+    return
+  }
+
+  const worktree = await call('worktree.create', { projectId: project.result.id, name: 'smoke task' })
+  if (worktree.ok !== true) {
+    failures.push(`could not create a worktree: ${JSON.stringify(worktree.error ?? worktree)}`)
+    return
+  }
+  const worktreeId = worktree.result.id
+
+  // A checkout is made on a thread of its own and the record says `creating`
+  // until it is there. Opening a terminal in one that is not ready is a race
+  // this check would report as a broken window.
+  const ready = await waitFor(async () => {
+    const read = await call('worktree.get', { worktreeId })
+    return read.ok === true && read.result.state === 'ready'
+  }, 'the worktree never became ready, so nothing below it could be checked')
+  if (!ready) return
+
+  // Opened the way a person opens it: by pressing its row in the sidebar. The
+  // runtime making a worktree does not put it on screen, and driving the store
+  // directly would skip the wiring this check exists to exercise.
+  // Pressed the way a person presses it, and only once it can be pressed. The
+  // row is deliberately disabled while the checkout is still being made — there
+  // is nothing to open yet — and the first version of this check clicked it
+  // anyway and reported the window as broken, because a click on a disabled
+  // button succeeds at doing nothing. The runtime saying `ready` is not the same
+  // fact as this window having heard it.
+  const opened = await waitFor(
+    () =>
+      ask(
+        `(() => {
+           const row = [...document.querySelectorAll('button')].find(
+             (node) => node.textContent?.includes('smoke task')
+           )
+           if (!row || row.disabled) return false
+           row.click()
+           return true
+         })()`
+      ),
+    'the worktree never became openable in the sidebar'
+  )
+  if (!opened) return
+
+  // And that pressing it actually took the area. Opening a worktree is supposed
+  // to release whatever else had it — this check runs straight after the one
+  // that leaves Help on screen, which is exactly the case that would otherwise
+  // pass while the panes were nowhere to be seen.
+  await waitFor(
+    () => ask(`document.querySelector('.workspace') !== null && document.querySelector('.help') === null`),
+    'pressing the worktree did not give the main area back to the workspace'
+  )
+
+  const terminal = await call('terminal.create', { worktreeId })
+  if (terminal.ok !== true) {
+    failures.push(`could not open a terminal in the worktree: ${JSON.stringify(terminal.error ?? terminal)}`)
+    return
+  }
+
+  // The strip above the panes carries one tab per pane in the worktree on
+  // screen. Matched on the pane's own title rather than on a count, because a
+  // strip showing some other worktree's panes — which is exactly what this
+  // replaced — would satisfy a count and is the thing being ruled out.
+  const title = terminal.result.title
+  await waitFor(
+    () =>
+      ask(
+        `[...document.querySelectorAll('[role="tablist"] button, .tabs button')].some(
+           (node) => node.textContent?.includes(${JSON.stringify(title)})
+         )`
+      ),
+    `no tab for the pane the runtime opened (${title})`
+  )
+
+  // And the decision that a quiet shell closes on one press. A pane running an
+  // agent, or one still producing output, is asked about first — that is
+  // deliberate, and so is this: a question on every close is one people learn
+  // to press through. A fresh shell is the ordinary case and must not ask.
+  const closed = await ask(
+    `(() => {
+       const button = document.querySelector('.pane__close')
+       if (!button) return false
+       button.click()
+       return true
+     })()`
+  )
+  if (closed !== true) {
+    failures.push('the pane had no close control')
+    return
+  }
+  await waitFor(
+    () => ask('document.querySelector(\'[role="dialog"]\') === null'),
+    'closing a quiet shell put a question on the screen, which it is not supposed to'
+  )
 }
 
 /**

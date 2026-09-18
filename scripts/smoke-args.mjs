@@ -41,3 +41,18 @@ export function readNamedArg(flag, argv = process.argv) {
   const prefix = `${flag}=`
   return argv.find((argument) => argument.startsWith(prefix))?.slice(prefix.length)
 }
+
+/**
+ * A git repository for the window to open, made by the launcher.
+ *
+ * Here rather than in the Electron process because making one is three
+ * synchronous `git` calls and the Electron process is a callback world that
+ * cannot use top-level await — but mostly because the window's own surfaces are
+ * the thing being checked, and a fixture that failed to build inside the checks
+ * would read as the window being broken.
+ *
+ * Optional: a run given no repository does the window-level checks and skips
+ * the ones that need a worktree, rather than failing. That keeps this usable
+ * from anywhere the launcher cannot make one.
+ */
+export const FIXTURE_REPO_FLAG = '--fixture-repo'
