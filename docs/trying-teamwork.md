@@ -242,11 +242,38 @@ working from a clone, the same command is `relay/teamree-relay deploy`.
 > else about the relay lives there so that there is one copy of it and it is the
 > one that is kept true.
 
-**Take the Worker unless you have a specific reason not to.** There is exactly
-one fallback, in that README: a container you run yourself, for a team that will
-not use Cloudflare at all. It is the answer for a team already on one network,
-and it costs more than it looks anywhere else — a relay on a laptop re-inherits
-the NAT problem the relay exists to solve and goes away when the laptop sleeps.
+**Take the Worker unless you have a specific reason not to.** It is one command,
+a permanent address, and nothing to keep running; Cloudflare's free plan is
+enough for a team, because a pair that is connected and quiet has its object
+hibernated and costs nothing at all. The figures, and the date they were last
+checked against Cloudflare's own page, are in that README.
+
+**If you would rather run the relay yourself, that is now one command too:**
+
+```sh
+/Applications/teamree.app/Contents/Resources/relay/teamree-relay serve
+```
+
+It writes the relay into `~/teamree-relay-server`, builds it, runs it, and — the
+part that matters — tells you who can and cannot reach it *before* it starts.
+A relay on this Mac serves whoever can already reach this Mac: a team on one
+office network, a mesh VPN, a rented server, or a tunnel in front of it. Two
+laptops on two different home networks cannot meet on one, and that is the exact
+problem a relay exists to solve, so the app and the command both say so rather
+than letting you find out by having nobody connect. Plain `ws://` is fine for
+this — teamree dials it without complaint, and what crosses a relay is encrypted
+end to end either way.
+
+And whichever way you got one, you can prove it answers before you commit it:
+
+```sh
+teamree-relay check ws://192.168.1.23:8787/v1/relay
+```
+
+That dials the address the way a peer does. It tells "nothing is running" apart
+from "something else is on that port" apart from "the path is wrong", which are
+three different evenings. It proves the machine you ran it on can reach the
+relay and nothing more — a teammate on another network has to run it too.
 
 What you need at the end of it is **one WebSocket URL**, and the command above
 prints it ready to paste. If you got there another way — the container, or

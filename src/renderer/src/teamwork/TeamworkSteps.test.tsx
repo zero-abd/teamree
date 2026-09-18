@@ -23,7 +23,7 @@ import type {
   TeamworkRead
 } from '@shared/entities'
 import { TeamworkSteps, type TeamworkStepsProps } from './TeamworkSteps'
-import { ADD_KEY_BUTTON, KEY_GRANT_WARNING, TEAMWORK_PATHS } from './startTeamwork'
+import { ADD_KEY_BUTTON, KEY_GRANT_WARNING, RELAY_CHECK, RELAY_SERVE, TEAMWORK_PATHS } from './startTeamwork'
 import { teamworkSummary } from '../sidebar/teamworkSummary'
 
 const SELF_KEY = 'c2VsZmtleXNlbGZrZXlzZWxma2V5c2VsZmtleXNlbGZrZXk='
@@ -115,10 +115,10 @@ function render(overrides: Partial<TeamworkStepsProps> = {}): string {
     onRetry: () => {},
     origin: { pending: false, error: null },
     onSetOrigin: () => {},
-    deploy: undefined,
-    onDeployRelay: () => {},
-    onCloseDeploy: () => {},
-    renderDeployPane: () => null,
+    pane: undefined,
+    onStartRelayPane: () => {},
+    onClosePane: () => {},
+    renderRelayPane: () => null,
     publish: { plan: undefined, pending: false, error: null, result: undefined, progress: undefined },
     onPublish: () => {},
     onCancelPublish: () => {},
@@ -313,15 +313,28 @@ describe('choosing a relay', () => {
     expect(shown).toContain('Other ways to get a relay')
   })
 
-  // The paragraphs the feedback named: pricing, what a normalised origin hash
-  // is, and the note about an override a Finder-launched app cannot inherit.
-  // Each is answerable; none of them is a thing to wade through.
+  // The paragraphs the feedback named: what a normalised origin hash is, what a
+  // Durable Object is, and the note about an override a Finder-launched app
+  // cannot inherit. Each is answerable; none of them is a thing to wade through.
+  //
+  // What it costs is no longer on that list. "Is this going to bill me" is the
+  // question somebody has *before* they press a button that makes their account
+  // do something, and sending them to a pricing page to find out was sending
+  // them away from the flow at its most fragile moment. So one sentence answers
+  // it — the shape of the answer, not the figures, which are somebody else's.
   it('leaves the reasoning to relay/README.md rather than printing it', () => {
     const shown = text(render())
     expect(shown).not.toMatch(/Durable Objects/)
-    expect(shown).not.toMatch(/free plan/)
     expect(shown).not.toMatch(/normalised/)
     expect(shown).not.toMatch(/does not inherit your shell/)
+  })
+
+  it('answers what it costs, in one sentence, without becoming a price list', () => {
+    const shown = text(render())
+    expect(shown).toContain('The free plan covers a team.')
+    expect(shown).toContain('they reset at 00:00 UTC')
+    expect(shown).toContain('https://developers.cloudflare.com/durable-objects/platform/pricing/')
+    expect(shown).not.toMatch(/free forever/i)
   })
 
   it('says this build carries no relay, rather than offering a button that cannot work', () => {
@@ -342,6 +355,162 @@ describe('choosing a relay', () => {
 
   it('never suggests anybody but the team hosts the relay', () => {
     expect(text(render())).toMatch(/teamree hosts nothing and runs nothing for you/)
+  })
+})
+
+// Two first-class ways to get a relay, and the honesty tax on the second one.
+//
+// Running one on your own Mac is the fastest way to a working team and a dead
+// end for two people on two home networks. Which of those it is depends on a
+// fact about somebody's network that teamree cannot see, so the whole of this
+// block's value is that the sentence saying so is on screen before the button
+// rather than in a document afterwards.
+describe('running a relay yourself', () => {
+  it('stands beside the deploy rather than inside the other ways', () => {
+    const markup = render()
+    const serve = markup.indexOf('Run a relay yourself')
+    const more = markup.indexOf('Other ways to get a relay')
+    expect(serve).toBeGreaterThan(-1)
+    expect(serve).toBeLessThan(more)
+  })
+
+  it('says who it will not work for, above the button and not after it', () => {
+    const markup = render()
+    const limit = markup.indexOf('Two laptops behind two home routers cannot meet on it')
+    const button = markup.indexOf('Run a relay yourself</button>')
+    expect(limit).toBeGreaterThan(-1)
+    expect(button).toBeGreaterThan(-1)
+    expect(limit).toBeLessThan(button)
+    expect(text(markup)).toContain(RELAY_SERVE.limit)
+  })
+
+  // The command is the runtime's, with the verb swapped — never a guess at a
+  // program, and never hidden: running it yourself is a legitimate answer.
+  it('shows the command it will run, one disclosure away', () => {
+    expect(text(render())).toContain('/apps/teamree.app/Contents/Resources/relay/teamree-relay serve')
+  })
+
+  it('is disabled with the runtime’s own sentence when this build carries no relay', () => {
+    const markup = render({ relay: { ...noRelay(), deploy: { command: null, reason: 'no relay in this build' } } })
+    expect(markup).toContain('Run a relay yourself</button>')
+    expect(markup).not.toContain('teamree-relay serve')
+    expect(text(markup)).toContain('no relay in this build')
+  })
+
+  // A command this file does not recognise is a program nothing here knows, and
+  // stripping its last word off to run a different verb on it would be running
+  // something nobody can predict on somebody's machine.
+  it('is disabled, rather than guessing, when the reported command is not the launcher', () => {
+    const markup = render({
+      relay: { ...noRelay(), deploy: { command: 'npx wrangler deploy --cwd relay', reason: null } }
+    })
+    expect(text(markup)).toContain('This build reports a relay command teamree does not recognise')
+    expect(markup).not.toContain('npx wrangler serve')
+  })
+})
+
+describe('checking a relay', () => {
+  const deployPane = { kind: 'deploy' as const, terminalId: 'term_1', url: null, running: true }
+
+  it('is offered beside the relay this project is configured with', () => {
+    const markup = render({ list: enrolled(), relay: relayOnDisk() })
+    const url = markup.indexOf('wss://relay.example/v1/relay')
+    const check = markup.indexOf('Check this relay</button>')
+    expect(url).toBeGreaterThan(-1)
+    expect(check).toBeGreaterThan(url)
+  })
+
+  it('says what a pass proves, and what it says nothing about', () => {
+    expect(text(render({ list: enrolled(), relay: relayOnDisk() }))).toContain(RELAY_CHECK.proves)
+  })
+
+  // The other place somebody has a URL and a doubt: the one they have typed and
+  // not yet committed to everybody's repository.
+  it('is disabled beside the paste field until something is typed, and says so', () => {
+    const shown = text(render())
+    expect(shown).toContain(RELAY_CHECK.nothing)
+  })
+
+  it('cannot be pressed while a pane is already open, and says which one', () => {
+    const shown = text(render({ list: enrolled(), relay: relayOnDisk(), pane: deployPane }))
+    expect(shown).toContain('A deploy is already open in a pane below')
+  })
+})
+
+// One slot, three things that can be in it. Starting a second is refused rather
+// than allowed to replace the output somebody is reading.
+describe('the one relay pane', () => {
+  it('says which of the three it is holding', () => {
+    const shown = text(render({ pane: { kind: 'serve', terminalId: 'term_2', url: null, running: true } }))
+    expect(shown).toContain('Running a relay on this Mac')
+  })
+
+  it('greys the other buttons while one is open, with the reason beside them', () => {
+    const markup = render({ pane: { kind: 'serve', terminalId: 'term_2', url: null, running: true } })
+    expect(markup).toContain('Deploy a relay</button>')
+    expect(text(markup)).toContain('A relay you are running yourself is already open in a pane below')
+  })
+
+  // The URL is offered rather than written, and what committing *this* one
+  // means is beside the button that commits it.
+  it('offers the URL a relay run here printed, and says what committing it costs', () => {
+    const markup = render({
+      pane: { kind: 'serve', terminalId: 'term_2', url: 'ws://192.168.1.23:8787/v1/relay', running: true }
+    })
+    const shown = text(markup)
+    expect(shown).toContain('The relay is at')
+    expect(shown).toContain('ws://192.168.1.23:8787/v1/relay')
+    expect(markup).toContain('Use this relay URL</button>')
+    expect(shown).toContain(RELAY_SERVE.committing)
+  })
+
+  // A check echoes the URL it was handed. Offering that back would be the panel
+  // pretending to have discovered something.
+  it('offers nothing out of a check pane', () => {
+    const markup = render({
+      list: enrolled(),
+      relay: relayOnDisk(),
+      pane: { kind: 'check', terminalId: 'term_3', url: null, running: false }
+    })
+    expect(markup).toContain('Checking a relay')
+    expect(markup).not.toContain('Use this relay URL</button>')
+  })
+})
+
+// The failure that looks like a bug in the repository and is not: the override
+// is read before the file and an unreadable one leaves the project with no
+// relay at all, while .teamree/relay sits there with a good URL in it.
+describe('an override that is set and cannot be read', () => {
+  const broken = (): RelaySetting => ({
+    ...noRelay(),
+    url: null,
+    source: null,
+    onDisk: { url: 'wss://relay.example/v1/relay', problem: null },
+    override: { name: 'TEAMREE_RELAY_URL', value: 'wss//typo.example/v1/relay' }
+  })
+
+  it('names the variable and the fix, above everything else on the step', () => {
+    const markup = render({ relay: broken() })
+    const said = text(markup)
+    expect(said).toContain('TEAMREE_RELAY_URL is set to wss//typo.example/v1/relay')
+    expect(said).toContain('this project has no relay even though .teamree/relay has one in it')
+    expect(said).toContain('Unset it and start teamree again')
+    // First on the step, because every other sentence here is about a relay
+    // the app is not going to dial.
+    expect(markup.indexOf('TEAMREE_RELAY_URL is set to')).toBeLessThan(
+      markup.indexOf('Change the relay for this project')
+    )
+  })
+
+  // The paragraph at the foot of the step is written for an override that is
+  // winning. This one is not winning, it is breaking, and two paragraphs about
+  // one variable that disagree about what it is doing is worse than one.
+  it('does not also claim the environment is beating the file', () => {
+    expect(text(render({ relay: broken() }))).not.toContain('the environment is beating it for this run')
+  })
+
+  it('says none of that when the override is one teamree can dial', () => {
+    expect(text(render({ list: enrolled(), relay: relayOnDisk() }))).not.toContain('Unset it and start teamree again')
   })
 })
 

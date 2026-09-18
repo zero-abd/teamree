@@ -129,6 +129,13 @@ extraResources:
     to: relay/src/core
   - from: relay/src/workers
     to: relay/src/workers
+  # The Node host, which is what `teamree-relay serve` writes out, builds and
+  # runs for somebody who would rather their relay lived on a machine they can
+  # see than in a Cloudflare account. Same reason as everything above it: a .dmg
+  # user has no clone, so a command that needs these sources has to find them
+  # inside the app or it is a command they cannot run at all.
+  - from: relay/src/node
+    to: relay/src/node
 
 asar: true
 # node-pty loads a .node binary and then execs a sibling `spawn-helper`

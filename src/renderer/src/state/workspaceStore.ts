@@ -41,7 +41,13 @@ import {
   type WatchedPane
 } from '../panes/watchedPanes'
 import { awaitWorktreeReady } from './awaitWorktreeReady'
-import { relayUrlFromOutput } from '../teamwork/startTeamwork'
+import {
+  relayLauncherCommand,
+  RELAY_PANE_URL_SCHEMES,
+  relayUrlFromOutput,
+  type RelayPaneKind,
+  type RelayPaneState
+} from '../teamwork/startTeamwork'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import {
@@ -107,21 +113,24 @@ export type PaneSearch = { terminalId: string; token: number }
 export type TeamworkReadErrors = { list?: string; relay?: string; status?: string }
 
 /**
- * A relay deploy running in a pane in this window.
+ * A relay command running in a pane in this window.
+ *
+ * Deploying a relay, running one here, and checking one are three verbs on the
+ * one launcher, and they share the one pane — so what is kept is which verb it
+ * is as well as which terminal. It was called a deploy while there was only a
+ * deploy; naming it that once it holds three things would be a lie told to
+ * every reader of this file.
  *
  * The pane is an ordinary terminal owned by the runtime, created under an id of
  * its own so it belongs to the project rather than to whichever worktree
  * happened to be open — `.teamree` is in the primary checkout, and a worktree's
  * pane is in the wrong directory for this. Nothing restores it on the next
  * launch, which is right: a finished deploy is not a pane anybody wants back.
+ *
+ * The shape itself is the panel's, imported rather than restated: it is what
+ * the panel renders, and two copies of it would be two things to keep in step.
  */
-export type RelayDeploy = {
-  terminalId: string
-  /** The wss:// URL the deploy printed, once it has printed one. */
-  url: string | null
-  /** False once the command has exited; the pane stays until it is closed. */
-  running: boolean
-}
+export type { RelayPaneKind, RelayPaneState } from '../teamwork/startTeamwork'
 
 /**
  * The worktree id a project's teamwork pane is created under.
@@ -215,14 +224,16 @@ type WorkspaceState = {
    */
   originError: string | null
   /**
-   * The relay deploy running in a pane in this window, by project id.
+   * The relay command running in a pane in this window, by project id.
    *
-   * One per project, because a second deploy of the same relay is never what
-   * somebody meant. The pane is a real terminal owned by the runtime; what is
-   * kept here is which one it is, whether it is still running, and the wss://
-   * URL it printed once it has printed one.
+   * One per project, still: a second deploy of the same relay is never what
+   * somebody meant, and the panel disables the other buttons while one is open
+   * rather than replacing it out from under whoever is reading it. The pane is
+   * a real terminal owned by the runtime; what is kept here is which one it is,
+   * which verb it is running, whether it is still running, and the URL it
+   * printed once it has printed one.
    */
-  relayDeploys: Record<string, RelayDeploy>
+  relayPanes: Record<string, RelayPaneState>
   /**
    * What committing and pushing the two files would do, by project id.
    *
@@ -537,12 +548,18 @@ type WorkspaceState = {
    * step that was blocked goes green without a restart.
    */
   setOrigin: (projectId: string, url: string) => Promise<void>
-  /** Runs the shipped relay deploy in a pane in this window. */
-  startRelayDeploy: (projectId: string) => Promise<void>
+  /**
+   * Runs one of the shipped relay launcher's verbs in a pane in this window.
+   *
+   * `argument` is the URL a check dials and is meaningless to the other two.
+   * Nothing is started while a pane is already open: the panel disables the
+   * buttons for that, and this refuses for the same reason a second time.
+   */
+  startRelayPane: (projectId: string, kind: RelayPaneKind, argument?: string) => Promise<void>
   /** Closes that pane, killing the command if it is still running. */
-  closeRelayDeploy: (projectId: string) => Promise<void>
-  /** Records what the deploy pane has printed so far, and whether it is still up. */
-  noteRelayDeploy: (projectId: string, output: string, running: boolean) => void
+  closeRelayPane: (projectId: string) => Promise<void>
+  /** Records what the pane has printed so far, and whether it is still up. */
+  noteRelayPane: (projectId: string, output: string, running: boolean) => void
   /** Reads what the commit-and-push button would do. */
   loadPublishPlan: (projectId: string) => Promise<void>
   /** Stages the two files, commits them, and pushes. Never more than those files. */
@@ -1094,7 +1111,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     relayError: null,
     originPending: false,
     originError: null,
-    relayDeploys: {},
+    relayPanes: {},
     publishPlans: {},
     publishPending: false,
     publishError: null,
@@ -1841,12 +1858,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async startRelayDeploy(projectId) {
+    async startRelayPane(projectId, kind, argument) {
       const project = get().projects.find((entry) => entry.id === projectId)
-      const command = get().relays[projectId]?.deploy.command
-      // Both of these are already why the button is disabled. Checked again
+      const deployCommand = get().relays[projectId]?.deploy.command
+      // Every one of these is already why the button is disabled. Checked again
       // because a store action is reachable from more than one button.
-      if (!project || !command || get().relayDeploys[projectId]) return
+      if (!project || !deployCommand || get().relayPanes[projectId]) return
+      // The runtime reports one command, because the shared contract types one.
+      // The other two verbs are the same launcher with the verb swapped, and
+      // null when what was reported is not that shape — which is the panel's
+      // second reason for a disabled button, checked here for the same reason.
+      const command = kind === 'deploy' ? deployCommand : relayLauncherCommand(deployCommand, kind, argument)
+      if (command === null) return
       try {
         const terminal = await runtimeClient.call('terminal.create', {
           worktreeId: teamworkPaneWorktreeId(projectId),
@@ -1855,30 +1878,36 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         })
         set((state) => ({
           terminals: { ...state.terminals, [terminal.id]: terminal },
-          relayDeploys: { ...state.relayDeploys, [projectId]: { terminalId: terminal.id, url: null, running: true } }
+          relayPanes: {
+            ...state.relayPanes,
+            [projectId]: { kind, terminalId: terminal.id, url: null, running: true }
+          }
         }))
       } catch (error) {
-        failed('Could not start the relay deploy')(error)
+        failed(kind === 'check' ? 'Could not check that relay' : 'Could not start the relay')(error)
       }
     },
 
-    async closeRelayDeploy(projectId) {
-      const deploy = get().relayDeploys[projectId]
-      if (!deploy) return
+    async closeRelayPane(projectId) {
+      const pane = get().relayPanes[projectId]
+      if (!pane) return
       set((state) => {
-        const { [projectId]: _closed, ...rest } = state.relayDeploys
-        return { relayDeploys: rest }
+        const { [projectId]: _closed, ...rest } = state.relayPanes
+        return { relayPanes: rest }
       })
-      await runtimeClient.call('terminal.close', { terminalId: deploy.terminalId }).catch(() => undefined)
+      await runtimeClient.call('terminal.close', { terminalId: pane.terminalId }).catch(() => undefined)
     },
 
-    noteRelayDeploy(projectId, output, running) {
-      const deploy = get().relayDeploys[projectId]
-      if (!deploy) return
-      const url = relayUrlFromOutput(output)
-      if (deploy.url === url && deploy.running === running) return
+    noteRelayPane(projectId, output, running) {
+      const pane = get().relayPanes[projectId]
+      if (!pane) return
+      // Which schemes count is the pane's own business: a deploy prints wss://
+      // and nothing else, a relay run here is ws:// until something terminates
+      // TLS in front of it, and a check is a report rather than a source.
+      const url = relayUrlFromOutput(output, RELAY_PANE_URL_SCHEMES[pane.kind])
+      if (pane.url === url && pane.running === running) return
       set((state) => ({
-        relayDeploys: { ...state.relayDeploys, [projectId]: { ...deploy, url, running } }
+        relayPanes: { ...state.relayPanes, [projectId]: { ...pane, url, running } }
       }))
     },
 

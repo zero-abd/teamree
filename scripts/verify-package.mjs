@@ -116,7 +116,12 @@ const relayFiles = [
   join(relayRoot, 'bin', 'teamree-relay.mjs'),
   join(relayRoot, 'wrangler.jsonc'),
   join(relayRoot, 'src', 'workers', 'worker.ts'),
-  join(relayRoot, 'src', 'core', 'rendezvous.ts')
+  join(relayRoot, 'src', 'core', 'rendezvous.ts'),
+  // The Node host. `teamree-relay serve` copies this half out and runs it, so
+  // without it that command is one a .dmg user cannot run — and the failure
+  // would be at the end of a write, an install and a build rather than at the
+  // start of one.
+  join(relayRoot, 'src', 'node', 'server.ts')
 ]
 for (const path of relayFiles) {
   if (!existsSync(path)) fail(`the relay is not in the package: ${path} is missing, so a .dmg user still needs a clone`)
@@ -130,13 +135,15 @@ if (process.platform !== 'win32' && !(statSync(relayLauncher).mode & 0o111)) {
 // is not attempted — that needs somebody's Cloudflare account — and `--dry-run`
 // is not either, because it fetches Wrangler from the network.
 {
-  const target = join(mkdtempSync(join(tmpdir(), 'teamree-verify-relay-')), 'relay')
   const isCmd = relayLauncher.endsWith('.cmd')
-  const result = spawnSync(
-    isCmd ? process.env.ComSpec || 'cmd.exe' : relayLauncher,
-    isCmd ? ['/c', relayLauncher, 'deploy', target, '--write-only'] : ['deploy', target, '--write-only'],
-    { encoding: 'utf8', timeout: STEP_TIMEOUT_MS }
-  )
+  const runRelayCommand = (args) =>
+    spawnSync(isCmd ? process.env.ComSpec || 'cmd.exe' : relayLauncher, isCmd ? ['/c', relayLauncher, ...args] : args, {
+      encoding: 'utf8',
+      timeout: STEP_TIMEOUT_MS
+    })
+
+  const target = join(mkdtempSync(join(tmpdir(), 'teamree-verify-relay-')), 'relay')
+  const result = runRelayCommand(['deploy', target, '--write-only'])
   if (result.status !== 0) {
     fail(`the shipped relay command failed to write a project`, `${result.stdout}\n${result.stderr}`)
   }
@@ -145,6 +152,45 @@ if (process.platform !== 'win32' && !(statSync(relayLauncher).mode & 0o111)) {
   }
   rmSync(dirname(target), { recursive: true, force: true })
   ok('the shipped relay command wrote a deployable Worker project from inside the package')
+
+  // And the other half of the same claim: `serve` writes a Node relay project
+  // out of the app's own copy of `src/node` and `src/core`. Stopped at
+  // `--write-only` for the same reason the deploy check is — the steps after it
+  // are `npm install` and a TypeScript build, which need the network and a
+  // minute, and neither of them is what packaging could have broken. What
+  // packaging could have broken is a source file that never made it into the
+  // bundle, and that is exactly what writing the project proves.
+  const serveTarget = join(mkdtempSync(join(tmpdir(), 'teamree-verify-serve-')), 'relay-server')
+  const served = runRelayCommand(['serve', serveTarget, '--write-only'])
+  if (served.status !== 0) {
+    fail(`the shipped relay command failed to write a server project`, `${served.stdout}\n${served.stderr}`)
+  }
+  for (const name of [
+    join('src', 'node', 'index.ts'),
+    join('src', 'node', 'server.ts'),
+    join('src', 'core', 'config.ts'),
+    'package.json',
+    'tsconfig.json',
+    'README.md'
+  ]) {
+    if (!existsSync(join(serveTarget, name))) fail(`the shipped relay command wrote no ${name} into ${serveTarget}`)
+  }
+  // The two files the build depends on being right, read rather than assumed:
+  // `npm run build` compiles `src` to `dist/node/index.js`, and `npm start`
+  // needs the `ws` the server imports to have been asked for.
+  const servedPackage = JSON.parse(readFileSync(join(serveTarget, 'package.json'), 'utf8'))
+  if (servedPackage.dependencies?.ws === undefined) {
+    fail(`the written server project asks for no ws, so it would build and then fail to start`)
+  }
+  if (servedPackage.scripts?.start !== 'node dist/node/index.js') {
+    fail(`the written server project starts with ${servedPackage.scripts?.start}, which is not where the build lands`)
+  }
+  const servedTsconfig = JSON.parse(readFileSync(join(serveTarget, 'tsconfig.json'), 'utf8'))
+  if (servedTsconfig.compilerOptions?.rootDir !== 'src' || servedTsconfig.compilerOptions?.outDir !== 'dist') {
+    fail(`the written server project compiles somewhere other than src -> dist, so npm start would find nothing`)
+  }
+  rmSync(dirname(serveTarget), { recursive: true, force: true })
+  ok('the shipped relay command wrote a runnable Node relay project from inside the package')
 }
 
 // ------------------------------------------------------- static PTY checks --

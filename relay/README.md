@@ -15,10 +15,11 @@ for.
 
 **Deploy it as a Cloudflare Worker.** That is the answer unless you have a
 specific reason otherwise: one command, a permanent address, nothing to babysit,
-and it works from a café and a phone tether because both peers dial out to it.
-The one fallback — [a container you run
-yourself](#if-you-will-not-use-cloudflare-run-the-container) — is at the bottom
-of this file, for teams who will not use Cloudflare at all.
+it works from a café and a phone tether because both peers dial out to it, and
+the free plan is enough for a team ([What it costs](#what-it-costs)). The
+fallback — [run it yourself](#if-you-will-not-use-cloudflare-run-it-yourself) —
+is at the bottom of this file, and is now also one command: for teams who will
+not use Cloudflare at all, or who are all on one network anyway.
 
 **Every sentence below that says something cannot happen names the test that
 holds it up.** This is infrastructure a team stands up in their own Cloudflare
@@ -145,11 +146,39 @@ Workers Paid plans", and the changelog entry ["Durable Objects on Workers Free
 plan"](https://developers.cloudflare.com/changelog/post/2025-04-07-durable-objects-free-tier/).
 
 The free plan's limits are daily and per-account, and exceeding one makes
-further operations of that type fail until 00:00 UTC. A handful of people
-holding pairwise sessions is well inside them; a large team that lives in this
-all day should look at the current numbers on that page before assuming. **We
-have not verified today's exact free-tier figures** — they change — so read them
-there rather than from here.
+further operations of that type fail until 00:00 UTC. **Checked against that
+page on 17 September 2026**, the included daily usage is:
+
+| | Included per day, free plan |
+|---|---|
+| Requests | 100,000 |
+| Duration | 13,000 GB-s |
+| SQLite storage | 5 GB (not daily; a standing total) |
+
+Three things turn those numbers into an answer rather than a table.
+
+**Idle costs nothing.** Duration accrues while an object is executing, and while
+it is idle and *not* eligible for hibernation. Cloudflare's wording: "an idle
+Durable Object that qualifies for hibernation does not incur duration charges,
+even during the brief window before the runtime hibernates it." This relay is
+built for exactly that — `state.acceptWebSocket` rather than a held socket, and
+`setWebSocketAutoResponse` so a keepalive is answered without waking the object
+at all. A pair sitting connected and quiet overnight costs nothing.
+
+**Duration is billed at a flat 128 MB per object**, "regardless of actual
+usage", so 13,000 GB-s/day is about **28 hours of active object time a day** —
+across the account, not per pair.
+
+**WebSocket messages bill 20:1 on the request side**: 100 incoming messages
+count as 5 requests. So 100,000 requests/day is on the order of **two million
+WebSocket messages a day**.
+
+A team is a long way inside all three, and the thing that would move first is
+requests, which is the one with two million messages of headroom. This is not a
+promise that it is free forever — they are Cloudflare's numbers, they move, and
+the page above is the live source. It is a statement that as of that date, for a
+team, the free plan is enough, and that this relay is written to stay on the
+cheap side of it deliberately rather than by luck.
 
 ### Cloudflare's limits, and whether they bite
 
@@ -277,16 +306,32 @@ for.
 
 ---
 
-## If you will not use Cloudflare: run the container
+## If you will not use Cloudflare: run it yourself
 
-**Take the Worker unless you have a specific reason not to.** This is the one
+**Take the Worker unless you have a specific reason not to.** This is the
 fallback, and it is for teams who will not use a hosted runtime at all, or who
 are all on one network anyway. It costs more than it looks: a relay on a laptop
 re-inherits the NAT problem the relay exists to solve, and goes away when the
 laptop sleeps.
 
-Unlike the Worker, **this path does need a clone of this repository** — the
-Dockerfile and the Node host live here and are not shipped inside the app:
+**This no longer needs a clone of this repository.** It used to — that was the
+whole of the complaint — and the Node host now ships inside the app beside the
+Worker's sources, so one command writes the project somewhere you own, builds it
+and runs it:
+
+```sh
+/Applications/teamree.app/Contents/Resources/relay/teamree-relay serve
+```
+
+or, from a clone, `relay/teamree-relay serve`. It writes into
+`~/teamree-relay-server` unless you name somewhere else, installs its one
+dependency, builds it, and prints the addresses it can be reached at before it
+starts listening. `--port` and `--host` change what it binds; `--write-only`
+stops after writing the project. Afterwards, `npm start` in that directory is
+the whole of running it again.
+
+There is also a Dockerfile here, for a machine you keep running rather than one
+you are sitting at. That one does need a clone:
 
 ```sh
 git clone https://github.com/zero-abd/teamree
@@ -295,15 +340,38 @@ docker build -t teamree-relay .
 docker run -d --name teamree-relay -p 8787:8787 --restart unless-stopped teamree-relay
 ```
 
-Check it:
+Check it, either way:
 
 ```sh
+teamree-relay check ws://localhost:8787/v1/relay
+# teamree-relay: ws://localhost:8787/v1/relay answered the WebSocket upgrade. A relay is listening there.
+
 curl -s localhost:8787/healthz
 # {"status":"ok","uptimeMs":1200,"connections":{"total":0,"greeting":0,"waiting":0},"sessions":0}
 ```
 
+`check` dials the address the way a peer does and says what answered, which is
+the difference between "the relay is not running", "something else is on that
+port", and "the path is wrong". It proves the machine you ran it on can reach
+the relay and nothing more — a teammate on another network has to run it too.
+
 The relay endpoint is `ws://<host>:8787/v1/relay`, or `wss://` once there is TLS
-in front of it.
+in front of it. **Plain `ws://` is not a second-class address here**: teamree
+dials it without complaint, and the content crossing it is encrypted end to end
+between the two peers either way, so TLS in front of a relay on a network you
+already trust buys you very little. It matters when the relay is on the public
+internet, where it also stops anyone in the middle learning which two anonymous
+connections were spliced.
+
+**The relay asks nobody who they are.** There is no token, no allowlist and no
+account: anyone who can reach the address can open a connection to it. They
+cannot join your pairing — that needs a rendezvous token derived from a
+Diffie-Hellman between two members' keys, which nobody outside the roster can
+compute — and they cannot read a byte of what crosses it. What they can do is
+take up capacity. On a private network that is nobody. On a public address it is
+anybody, so set `RELAY_MAX_CONNECTIONS` and the per-address limits deliberately,
+and read [Limits, and why each one is where it is](#limits-and-why-each-one-is-where-it-is)
+before you put one on the internet.
 
 ### Everyone on one network
 

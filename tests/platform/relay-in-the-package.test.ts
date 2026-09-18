@@ -17,7 +17,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { TEMPLATE_DIRS, TEMPLATE_FILES } from '../../relay/bin/teamree-relay.mjs'
+import { SERVE_TEMPLATE_DIRS, TEMPLATE_DIRS, TEMPLATE_FILES } from '../../relay/bin/teamree-relay.mjs'
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..')
 const CONFIG = readFileSync(join(REPO_ROOT, 'electron-builder.yml'), 'utf8')
@@ -42,10 +42,22 @@ describe('the relay an installed app ships', () => {
   it('carries the command and every source the Worker is built from', () => {
     const copied = shipped.map((entry) => entry.from)
     for (const path of ['relay/teamree-relay', 'relay/bin/teamree-relay.mjs']) {
-      expect(copied, `${path} is not shipped, so the one command in relay/README.md is not in the app`).toContain(path)
+      expect(copied, `${path} is not shipped, so the commands in relay/README.md are not in the app`).toContain(path)
     }
     for (const path of [...TEMPLATE_FILES, ...TEMPLATE_DIRS]) {
       expect(copied, `the deploy command copies ${path}, which is not shipped`).toContain(`relay/${path}`)
+    }
+  })
+
+  it('carries every source the Node relay is built from, which is the other half of the same promise', () => {
+    // `teamree-relay serve` writes this half out, installs it, builds it and
+    // runs it, for somebody who would rather their relay lived on a machine
+    // they can see. Dropping `relay/src/node` from the packaging list would
+    // leave that command refusing an incomplete package at the moment it is
+    // needed — so it fails here in a second instead.
+    const copied = shipped.map((entry) => entry.from)
+    for (const path of SERVE_TEMPLATE_DIRS) {
+      expect(copied, `the serve command copies ${path}, which is not shipped`).toContain(`relay/${path}`)
     }
   })
 
@@ -59,12 +71,13 @@ describe('the relay an installed app ships', () => {
 
   it('ships nothing that would make the artifact heavy or the project confusing', () => {
     const copied = shipped.map((entry) => entry.from)
-    // node_modules is tens of thousands of files; dist and package.json belong
-    // to the container host, which this command does not deploy.
-    for (const path of ['relay/node_modules', 'relay/dist', 'relay/package.json', 'relay/src/node']) {
+    // node_modules is tens of thousands of files. `dist` and `package.json` are
+    // this package's own build and manifest: `serve` writes a package.json of
+    // its own into the project it creates and builds the sources there, so
+    // shipping these two would put a second, stale answer beside it.
+    for (const path of ['relay/node_modules', 'relay/dist', 'relay/package.json']) {
       expect(copied).not.toContain(path)
     }
-    expect(copied.some((path) => path.startsWith('relay/src/node'))).toBe(false)
   })
 
   it('is committed executable, because the app is not repaired after it is packaged', () => {

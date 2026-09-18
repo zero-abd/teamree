@@ -126,14 +126,29 @@ a team that has not stood one up has no relay, and the app must say so rather
 than quietly reaching somewhere.
 
 There are two ways to stand one up, and both are supported because they fail in
-different directions. A team can **deploy the Worker to their own account**,
-which is one command, needs no server, and works from anywhere because both
-peers dial out to it. Or they can **run the container themselves** on a box, a
-NAS or a laptop — direct if everyone is on one network, and needing a tunnel or a
-port forward to cross the internet. The second option is the one to reach for if
-a team will not use a hosted runtime; it is not the one to lead with, because a
-relay on a laptop re-inherits the NAT problem the relay exists to solve, and goes
-away when the laptop sleeps.
+different directions, so both are a button in the setup panel rather than one
+button and a paragraph of prose. A team can **deploy the Worker to their own
+account**, which is one command, needs no server, and works from anywhere
+because both peers dial out to it. Or they can **run the relay themselves** on a
+box, a NAS or a laptop — direct if everyone is on one network, and needing a
+tunnel or a port forward to cross the internet.
+
+The second is the one to reach for if a team will not use a hosted runtime, or
+is on one network anyway, and it is not the one to lead with, because a relay on
+a laptop re-inherits the NAT problem the relay exists to solve and goes away when
+the laptop sleeps. **That limitation is said where the choice is made**, not in a
+document: an option whose failure is "nobody ever connects and neither machine
+says why" is worse than no option unless the window states, at the moment it is
+offered, exactly who it will and will not serve.
+
+Two facts about a self-hosted relay belong with it, and are on screen for the
+same reason. Plain **`ws://` is a first-class address** — the runtime dials it,
+and content is encrypted end to end either way — so a team on one network needs
+no certificate and no tunnel. And **the relay authenticates nobody**: anybody who
+can reach the address can open a connection, though they cannot join a pairing
+without a rendezvous token derived from two members' keys, and cannot read a byte
+of what crosses it. On a private network that is nobody; on a public address it
+is anybody, which is a thing to know before renting a server rather than after.
 
 It is a small program with no database and no accounts, and it is deliberately
 boring, because:

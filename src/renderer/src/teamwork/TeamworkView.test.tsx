@@ -115,8 +115,8 @@ const loadRelay = vi.fn()
 const loadTeamwork = vi.fn()
 const loadPublishPlan = vi.fn()
 const setOrigin = vi.fn()
-const startRelayDeploy = vi.fn()
-const closeRelayDeploy = vi.fn()
+const startRelayPane = vi.fn()
+const closeRelayPane = vi.fn()
 const publishTeamwork = vi.fn()
 const loadPublishProgress = vi.fn()
 const cancelPublish = vi.fn()
@@ -134,8 +134,8 @@ function seed(overrides: Record<string, unknown> = {}): void {
       loadTeamwork,
       loadPublishPlan,
       setOrigin,
-      startRelayDeploy,
-      closeRelayDeploy,
+      startRelayPane,
+      closeRelayPane,
       publishTeamwork,
       loadPublishProgress,
       cancelPublish,
@@ -173,8 +173,8 @@ beforeEach(() => {
   loadTeamwork.mockReset()
   loadPublishPlan.mockReset()
   setOrigin.mockReset()
-  startRelayDeploy.mockReset()
-  closeRelayDeploy.mockReset()
+  startRelayPane.mockReset()
+  closeRelayPane.mockReset()
   publishTeamwork.mockReset()
   loadPublishProgress.mockReset()
   cancelPublish.mockReset()
@@ -268,17 +268,22 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
   it('starts it in a pane in this window', () => {
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Deploy a relay' }))
-    expect(startRelayDeploy).toHaveBeenCalledWith('p1')
+    expect(startRelayPane).toHaveBeenCalledWith('p1', 'deploy', undefined)
   })
 
   // A control that is grey for a reason nobody can read is the same as one that
-  // does nothing, so the runtime's own sentence is beside it.
-  it('is disabled, with the reason, when this build carries no relay to deploy', () => {
+  // does nothing, so the runtime's own sentence is beside it — beside *each* of
+  // them, now that there are two ways to get a relay. Both come out of the one
+  // project this build either carries or does not, so both go grey together and
+  // both say why: a reader looking at the one they wanted must not have to
+  // infer the reason from the other one.
+  it('disables both ways to a relay, each with the reason, when this build carries none', () => {
     seed({ relays: { p1: { ...noRelay(), deploy: { command: null, reason: 'this build carries no relay project' } } } })
     mount()
-    const button = screen.getByRole('button', { name: 'Deploy a relay' })
-    expect((button as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText(/this build carries no relay project/)).toBeTruthy()
+    for (const name of ['Deploy a relay', 'Run a relay yourself']) {
+      expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
+    }
+    expect(screen.getAllByText(/this build carries no relay project/)).toHaveLength(2)
   })
 
   // The URL is offered rather than written: a relay is a team-wide fact, and a
@@ -287,7 +292,9 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
     const setRelay = vi.fn()
     seed({
       setRelay,
-      relayDeploys: { p1: { terminalId: 'term_9', url: 'wss://ada.workers.dev/v1/relay', running: false } }
+      relayPanes: {
+        p1: { kind: 'deploy', terminalId: 'term_9', url: 'wss://ada.workers.dev/v1/relay', running: false }
+      }
     })
     mount()
     expect(screen.getByText('wss://ada.workers.dev/v1/relay')).toBeTruthy()
@@ -296,10 +303,10 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
   })
 
   it('says the pane can be closed, and closes it', () => {
-    seed({ relayDeploys: { p1: { terminalId: 'term_9', url: null, running: false } } })
+    seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, running: false } } })
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Close this pane' }))
-    expect(closeRelayDeploy).toHaveBeenCalledWith('p1')
+    expect(closeRelayPane).toHaveBeenCalledWith('p1')
   })
 
   // The command still has to be readable: running it yourself is a legitimate
@@ -307,6 +314,73 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
   it('keeps the command itself, one disclosure away', () => {
     mount()
     expect(screen.getByText('/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy')).toBeTruthy()
+  })
+})
+
+// The second first-class way: the same launcher, a different verb, the same
+// pane. It is a button rather than a line in a disclosure because the launcher
+// ships it — and it carries the sentence about who it will not work for,
+// because the panel cannot see anybody's network.
+describe('running a relay on this Mac, as the other button', () => {
+  it('runs the launcher’s serve verb in a pane in this window', () => {
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Run a relay yourself' }))
+    expect(startRelayPane).toHaveBeenCalledWith('p1', 'serve', undefined)
+  })
+
+  it('says who it will not work for, beside the button', () => {
+    mount()
+    expect(screen.getByText(/Two laptops behind two home routers cannot meet on it/)).toBeTruthy()
+  })
+
+  // One slot. Starting a second is refused rather than allowed to replace the
+  // output somebody is in the middle of reading, and the panel says which.
+  it('is disabled while another pane is open, and names the one that is', () => {
+    seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, running: true } } })
+    mount()
+    expect((screen.getByRole('button', { name: 'Run a relay yourself' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getAllByText(/A deploy is already open in a pane below/).length).toBeGreaterThan(0)
+  })
+
+  it('offers the ws:// URL it printed, with what committing that address costs', () => {
+    const setRelay = vi.fn()
+    seed({
+      setRelay,
+      relayPanes: { p1: { kind: 'serve', terminalId: 'term_9', url: 'ws://192.168.1.23:8787/v1/relay', running: true } }
+    })
+    mount()
+    expect(screen.getByText(/only reachable from that network/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Use this relay URL' }))
+    expect(setRelay).toHaveBeenCalledWith('p1', 'ws://192.168.1.23:8787/v1/relay')
+  })
+})
+
+describe('checking a relay from the panel', () => {
+  // Beside the URL this project is actually going to dial: a joiner who pulled
+  // a relay and a starter who just wrote one both want to know whether the
+  // address works, and until now neither had a way to ask.
+  it('dials the configured relay, passing that URL to the launcher', () => {
+    seed({ relays: { p1: relayOnDisk() } })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Check this relay' }))
+    expect(startRelayPane).toHaveBeenCalledWith('p1', 'check', 'wss://relay.example/v1/relay')
+  })
+
+  // The check runs here. A pass read as "the team can meet" would end the
+  // investigation at the wrong machine.
+  it('says what a pass proves and what it does not', () => {
+    seed({ relays: { p1: relayOnDisk() } })
+    mount()
+    expect(screen.getAllByText(/says nothing about anybody else’s network/).length).toBeGreaterThan(0)
+  })
+
+  // Two buttons, two strings, two names: the one beside the configured relay
+  // and the one beside the field are not the same address and must not read as
+  // the same control.
+  it('is disabled with the fix named when nothing has been typed to check', () => {
+    mount()
+    expect((screen.getByRole('button', { name: 'Check the URL you typed' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/Paste one into the field above/)).toBeTruthy()
   })
 })
 
