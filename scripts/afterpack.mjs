@@ -168,12 +168,41 @@ export default async function afterPack(context) {
     log('bundled ConPTY sidecar is complete')
   }
 
-  // --- the shipped CLI launcher has to stay executable ---------------------
+  // --- the shipped launchers have to stay executable ------------------------
+  //
+  // Both of them, and it used to be one. `resources/cli/teamree` was repaired
+  // here and `resources/relay/teamree-relay` was not, which left the second one
+  // standing on nothing but `100755` in git surviving electron-builder's copy.
+  // That is true today and is not a property this hook was asserting.
+  //
+  // The two are run the same way and fail the same way. Neither is exec'd by
+  // Electron: the CLI launcher is what a `/usr/local/bin` symlink points at, and
+  // the relay launcher is handed to a login shell as the first word of a command
+  // line (see `shippedRelayCommand`, which quotes it and appends `deploy`). A
+  // shell asked to run a 0644 file answers "permission denied" and stops, so the
+  // Teamwork panel's one button would be dead for every .dmg user while the
+  // build that produced it looked clean.
+  //
+  // `verify-package.mjs` already refuses a relay launcher without the bit, but
+  // that is an optional step somebody runs; this one runs on every package, and
+  // it repairs rather than reports — which is what the CLI launcher has always
+  // had and what the file beside it was missing.
   if (electronPlatformName !== 'win32') {
-    const launcher = join(resources, 'cli', 'teamree')
-    if (!existsSync(launcher)) throw new Error(`the CLI launcher is missing from ${launcher}.`)
-    chmodSync(launcher, 0o755)
-    log('CLI launcher installed at resources/cli/teamree')
+    // `.cmd` on Windows is not a program, which is why this whole block is
+    // skipped there; on macOS and Linux both of these are `#!/bin/sh` scripts.
+    for (const [what, ...segments] of [
+      ['CLI', 'cli', 'teamree'],
+      ['relay', 'relay', 'teamree-relay']
+    ]) {
+      const launcher = join(resources, ...segments)
+      if (!existsSync(launcher)) throw new Error(`the ${what} launcher is missing from ${launcher}.`)
+      chmodSync(launcher, 0o755)
+      const mode = statSync(launcher).mode
+      if (!(mode & 0o111)) {
+        throw new Error(`could not make ${launcher} executable (mode ${(mode & 0o777).toString(8)}).`)
+      }
+      log(`${what} launcher installed at ${segments.join('/')}, mode ${(mode & 0o777).toString(8)}`)
+    }
   }
 
   log(`packaged app is ${megabytes(directorySize(appOutDir))}`)
