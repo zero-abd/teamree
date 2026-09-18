@@ -13,7 +13,7 @@ import { mkdtemp, rm, mkdir, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { checkOrigin, normaliseRemote, pathIdentityNote } from './origin'
+import { checkOrigin, checkTransport, normaliseRemote, pathIdentityNote } from './origin'
 
 describe('normalising a remote', () => {
   it('makes ssh and https spellings of one repository agree', () => {
@@ -238,6 +238,89 @@ describe('whether a typed origin can be used', () => {
 
   it('says what a word that is neither could have been', () => {
     expect(checkOrigin('pager')).toMatchObject({ ok: false, reason: /nor a path starting with \// })
+  })
+})
+
+describe('the transports teamree hands git', () => {
+  // The test this change exists for. `ext::<command>` is git's remote-helper
+  // syntax and the helper it names runs what it is given, so a string of that
+  // shape is a program and not a place. It used to read as a URL here — host
+  // `ext`, path `:bash` — which made it an identity teamree would write into
+  // somebody's `.git/config` with `teamwork.setOrigin`.
+  //
+  // What it was not, and what nothing here should claim, is a hole that ran
+  // anything: git refuses the `ext` transport unless `protocol.ext.allow` says
+  // otherwise and that is unset on a stock install. The point is that the
+  // refusal was somebody else's default, in another program, that nothing in
+  // this process can read.
+  it('refuses the helper syntax that names a program rather than a place', () => {
+    for (const spelling of ['ext::bash', 'ext::sh -c id', 'EXT::bash', 'hg::https://hg.example/api']) {
+      expect(checkOrigin(spelling), spelling).toMatchObject({
+        ok: false,
+        reason: /is not a transport teamree hands git/
+      })
+    }
+    expect(normaliseRemote('ext::bash')).toBeUndefined()
+  })
+
+  // Which is a different sentence from "that has a space in it", and the right
+  // one: a space in `ext::sh -c id` is the least of what is wrong with it, and
+  // a refusal that named the space would send somebody off to delete it.
+  it('says the transport is wrong rather than the spacing', () => {
+    const checked = checkOrigin('ext::sh -c id')
+    expect(checked).toMatchObject({ ok: false, reason: /"ext" is not a transport/ })
+    expect(checked.ok === false && checked.reason).not.toMatch(/no spaces/)
+  })
+
+  // An allowlist and not a list of the names known to be dangerous, because the
+  // next helper is one nobody here has heard of: a scheme git has no transport
+  // of its own for sends it looking for `git-remote-<scheme>`.
+  it('refuses a scheme it does not mean to hand git, whatever the scheme is', () => {
+    for (const spelling of ['ftp://example.com/api.git', 'rsync://example.com/api.git', 'made-up://example.com/api']) {
+      expect(checkOrigin(spelling), spelling).toMatchObject({ ok: false, reason: /not a transport teamree hands git/ })
+    }
+  })
+
+  // `::` is the helper spelling whichever name is in front of it, so a name
+  // teamree does allow does not make one safe. `https::x` is not https.
+  it('does not let an allowed name in the helper spelling through', () => {
+    expect(checkOrigin('https::evil')).toMatchObject({ ok: false, reason: /not a transport teamree hands git/ })
+  })
+
+  // The test protecting everybody from the one above. Every one of these is a
+  // remote two people cloning one repository really hold, and a transport rule
+  // that refused any of them would be a worse bug than the one it closed —
+  // `gitlab.example:team/api.git` especially, which is scp-style with no user
+  // in it and reads as a scheme called `gitlab.example` to anything matching on
+  // the first colon.
+  it('still accepts every form people actually clone with', () => {
+    for (const remote of [
+      'https://github.com/acme/api.git',
+      'https://ada@github.com/acme/api.git',
+      'HTTPS://GitHub.com/acme/api.git',
+      'http://git.internal/acme/api.git',
+      'ssh://git@github.com/acme/api.git',
+      'ssh://git@github.com:22/acme/api/',
+      'git://example.com/acme/api.git',
+      'git@github.com:acme/api.git',
+      'gitlab.example:team/api.git',
+      '/Volumes/team/api.git',
+      '/Volumes/team share/api.git',
+      '/Volumes/a:b/api.git',
+      'file:///Volumes/team/api.git',
+      'file:/Volumes/team/api.git'
+    ]) {
+      expect(checkOrigin(remote), remote).toMatchObject({ ok: true })
+    }
+  })
+
+  // The same question asked on its own, because `checkCloneable` in
+  // `src/cli/clone.ts` asks it of a remote read straight out of a checkout's
+  // config — which has not been through `checkOrigin` and can be a `file:` URL.
+  it('answers for a remote nothing has read as an origin first', () => {
+    expect(checkTransport('file:///Volumes/team/api.git')).toEqual({ ok: true })
+    expect(checkTransport('  git@github.com:acme/api.git  ')).toEqual({ ok: true })
+    expect(checkTransport('ext::bash')).toMatchObject({ ok: false })
   })
 })
 

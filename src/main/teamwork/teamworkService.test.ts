@@ -431,6 +431,26 @@ describe('adding the origin remote', () => {
     expect(await repo.git(['remote'])).toBe('')
   })
 
+  // The runtime is the layer this had to be fixed in. `ext::<command>` is git's
+  // remote-helper syntax — the helper runs what follows — and it used to read
+  // here as a URL with a host called `ext`, so this method would have written it
+  // into the checkout's config as `origin`. Nothing would have executed on a
+  // stock install, because git refuses that transport unless `protocol.ext.allow`
+  // says otherwise; the refusal was a default belonging to another program that
+  // nothing in this process can see. `checkCloneable` in `src/cli/clone.ts` had
+  // said no to this string for a while, and the window and the runtime cannot
+  // reach `src/cli`, so the list moved to `src/shared/origin.ts` where both
+  // halves of the app ask the one copy of it.
+  it('refuses an origin that names a transport, and leaves the checkout without one', async () => {
+    const { service, project, repo } = await wire()
+
+    await expect(service.setOrigin({ projectId: project.id, url: 'ext::bash' })).rejects.toThrow(
+      /not a transport teamree hands git/
+    )
+
+    expect(await repo.git(['remote'])).toBe('')
+  })
+
   it('refuses anything that is neither', async () => {
     const { service, project } = await wire()
     await expect(service.setOrigin({ projectId: project.id, url: 'pager' })).rejects.toThrow(
