@@ -272,7 +272,17 @@ export class TeamworkService {
     })
     const replaced = existing.exitCode === 0
     const result = await this.#runner.tryRun({
-      args: ['remote', replaced ? 'set-url' : 'add', 'origin', checked.remote],
+      // `--` because the URL is data and git would otherwise be entitled to
+      // read it as a flag. Nothing here is a shell — these are argv entries, so
+      // there was never a quoting hole — but an origin beginning with `-` is an
+      // option to git, and what stopped one reaching this line was `checkOrigin`
+      // in `src/shared/origin.ts` refusing that shape three calls away. Defence
+      // that lives in a distant function and is never mentioned here is defence
+      // that survives exactly until somebody relaxes that function for a good
+      // reason. Both `git remote add` and `git remote set-url` accept the
+      // separator (checked against git 2.50.1), so it costs nothing to say at
+      // the call site what the value is.
+      args: ['remote', replaced ? 'set-url' : 'add', '--', 'origin', checked.remote],
       cwd: project.path
     })
     if (result.exitCode !== 0) {

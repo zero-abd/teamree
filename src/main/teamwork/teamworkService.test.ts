@@ -337,6 +337,65 @@ describe('adding the origin remote', () => {
     expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('https://github.com/ada/pager.git')
   })
 
+  // Two layers, pinned separately and on purpose.
+  //
+  // `checkOrigin` refuses a URL beginning with `-`, and that is the whole of
+  // what has kept an option out of git's argv. But it lives three calls away
+  // from the command, and a defence that cannot be seen from the call site is
+  // one that lasts exactly until somebody relaxes it for a good reason. So the
+  // call site passes `--` as well, and both halves are asserted here — the
+  // refusal, and that the separator genuinely makes git read such a value as
+  // data. A separator that quietly did not work for this subcommand would be
+  // worse than none, because it would look like defence and be decoration.
+  it('refuses an origin that is really a flag, and hands git a separator so it could not be one', async () => {
+    const { service, project, repo } = await wire({})
+
+    await expect(service.setOrigin({ projectId: project.id, url: '--upload-pack=notacommand' })).rejects.toThrow(
+      /not an origin teamree can use/
+    )
+
+    // The call site itself, read off what git was actually handed. Asserting
+    // git's behaviour with a separator typed here by hand would have proved
+    // something about git and nothing about this service — the first version of
+    // this test did exactly that, and deleting the separator from the service
+    // left it green.
+    const asked: string[][] = []
+    const watched = new TeamworkService({
+      store: { getProject: (id) => (id === project.id ? project : undefined) },
+      dataDir: await mkdtemp(path.join(os.tmpdir(), 'teamree-argv-')),
+      runner: {
+        ...repo.runner,
+        tryRun: async (request) => {
+          asked.push([...request.args])
+          return repo.runner.tryRun(request)
+        }
+      },
+      now: () => Date.parse('2026-09-13T10:00:00Z'),
+      env: {},
+      watching: () => false,
+      relayDeploy: () => ({ command: '/somewhere/relay/teamree-relay deploy', reason: null })
+    })
+    await watched.setOrigin({ projectId: project.id, url: 'https://github.com/ada/pager.git' })
+
+    const wrote = asked.find((args) => args[0] === 'remote' && (args[1] === 'add' || args[1] === 'set-url'))
+    expect(wrote).toBeDefined()
+    // Immediately before the two operands, which is the only position that
+    // means "everything after this is data".
+    expect(wrote?.[2]).toBe('--')
+    expect(wrote?.at(-1)).toBe('https://github.com/ada/pager.git')
+
+    // And git really does accept it there, for both spellings of the command —
+    // a separator that were silently unsupported would look like defence and be
+    // decoration.
+    // `set-url` here rather than `add`, because the call above has just made an
+    // origin — which is itself the state this service meets most often.
+    await repo.git(['remote', 'set-url', '--', 'origin', '--upload-pack=notacommand'])
+    expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('--upload-pack=notacommand')
+    await repo.git(['remote', 'remove', 'origin'])
+    await repo.git(['remote', 'add', '--', 'origin', '-also-a-flag'])
+    expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('-also-a-flag')
+  })
+
   // The whole reason somebody reaches this is an origin teamree cannot compare.
   // "There is already an origin" would be the app naming the problem and
   // declining to fix it — so it replaces, and says so.
