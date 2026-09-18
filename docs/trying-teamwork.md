@@ -508,6 +508,46 @@ to somebody who is expecting one. It names the repository to clone, all four
 steps including the push people forget, and what a key in the roster grants,
 because the person receiving it is the one taking that on.
 
+### All of steps 2 to 4 from a shell
+
+Everything above is also four CLI commands, which matters when the person doing
+it is an agent working in a pane rather than somebody reading this page.
+
+**Whoever set it up**, once the relay and their own key are pushed:
+
+```sh
+teamree team invite api
+```
+
+That prints one line with no spaces in it — the repository, the relay, the
+project's name and the sender's handle — and refuses to print anything at all if
+it cannot name all of the first three. An invitation that cannot say where the
+repository is is worse than no invitation.
+
+**The joiner** pastes that line into:
+
+```sh
+teamree team accept "<the line>"
+```
+
+which finds the repository on their Mac or clones it, adds it as a project,
+writes `.teamree/relay`, writes their key into the roster, and pushes — saying
+what it did at each step, and stopping at the first thing it cannot do honestly.
+It refuses rather than overwrite a relay their checkout already names, and
+refuses rather than repoint an origin that names a different repository.
+
+**The line is not a credential.** It carries four facts that are public already
+and are typed by hand today; it grants nothing. `accept` still ends in a push to
+that repository, and a machine that is not allowed to push is refused there in
+git's own words — because being on the team *is* being able to push. And a
+finished `accept` says a key was pushed, never that a teammate is connected:
+that is a fact about somebody else's machine, and `teamree team status api` is
+where it is answered.
+
+If you are doing only the last half by hand, `teamree team publish api` is the
+commit and push on its own, and `--dry-run` names the files, the message, the
+remote and the branch without doing any of it.
+
 ## 5. Both open the project
 
 Add `~/teamree-example` as a project in teamree on both machines, the same way

@@ -1,0 +1,497 @@
+// Doing, in one command, what a joiner does by hand today.
+//
+// `docs/trying-teamwork.md` spends four numbered steps on this: clone the
+// repository, add it as a project, write the relay file, add your key, commit
+// and push. Every one of those is a thing somebody has to be told, in order,
+// in prose, and the step people forget is the last one — which is the only step
+// that actually puts them on the team. That is the whole reason this exists.
+//
+// It lives beside `commands/team.ts` rather than inside it because it is not
+// shaped like the commands there. Every other one asks the runtime a question
+// and lays the answer out; this one is a sequence of acts on somebody's disk and
+// somebody's repository, where the interesting part is what it refuses to do and
+// where it stops. That reasoning is long and it is all here, in one place.
+//
+// Two properties hold throughout, and neither is negotiable.
+//
+// **The link is not a credential.** It carries four public facts and grants
+// nothing. The last step is a push, and a machine that may not push to that
+// repository is refused there in git's own words. There is no path through this
+// file that puts somebody on a roster without pushing a key, and adding one
+// would not be a feature — it would be the end of the only thing that decides
+// who is on a team.
+//
+// **Finishing is not connecting.** A pushed key means a repository changed. It
+// says nothing whatever about whether a teammate's machine is switched on, and
+// the closing sentence says so rather than congratulating anybody on a link that
+// has not been made.
+//
+// Running it twice is safe and is the documented remedy for stopping in the
+// middle: every step below either finds its work already done and says so, or
+// does it.
+
+import { existsSync } from 'node:fs'
+import { isAbsolute, join, resolve } from 'node:path'
+import type { Project, TeamworkRead } from '../shared/entities.js'
+import { checkOrigin, normaliseRemote, pathIdentityNote } from '../shared/origin.js'
+import { parseRelayUrl } from '../shared/relayUrl.js'
+import { readString } from './argv.js'
+import { cloneRepository } from './clone.js'
+import type { CommandContext } from './command-spec.js'
+import { CliError, ExitCode, RuntimeCallError } from './exit.js'
+import { parseInvitation, type Invitation } from './invitation.js'
+import type { CommandOutput } from './output.js'
+import { pathComparisonKey } from './selectors.js'
+
+/** One thing that was done or found already done, in the order it happened. */
+export type AcceptStep = {
+  /** Machine-readable name of the stage, for an agent branching on where it got to. */
+  step: 'link' | 'repository' | 'project' | 'origin' | 'relay' | 'roster' | 'publish'
+  /** What happened, as a sentence. The text output is these, one per line. */
+  outcome: string
+}
+
+/**
+ * How long to wait for teamree to read a project it has only just been given.
+ *
+ * `project.add` writes the project and returns; the reconcile that reads its
+ * `.teamree`, its `origin` and its roster runs off the back of that, afterwards.
+ * Everything below needs the result of that read, so this is a real wait and not
+ * a guard against a hypothetical — and it is bounded, because a runtime that
+ * never reads is a thing to report rather than to hang on.
+ */
+const READ_TIMEOUT_MS = 15_000
+const READ_POLL_MS = 250
+
+export async function acceptInvitation(context: CommandContext): Promise<CommandOutput> {
+  const journey = new Journey()
+
+  const parsed = parseInvitation(context.args[0] as string)
+  if (!parsed.ok) {
+    throw journey.refusal({
+      code: 'bad_invitation',
+      message: `That is not a teamree invitation: ${parsed.reason}.`,
+      hint: parsed.hint
+    })
+  }
+  const invitation = parsed.invitation
+
+  // Both addresses are checked before anything touches the disk. They are the
+  // two fields everything below is built on, and finding out that the relay was
+  // unusable after cloning a repository would be a mess made on the way to a
+  // refusal that was available at the start.
+  const origin = checkOrigin(invitation.origin)
+  if (!origin.ok) {
+    throw journey.refusal({
+      code: 'bad_invitation_origin',
+      message: `The invitation names a repository teamree cannot use: ${origin.reason}.`,
+      hint: 'Ask whoever sent it to run `teamree team invite <project>` again — it refuses to write one of these.',
+      data: { invitation }
+    })
+  }
+  const relay = parseRelayUrl(invitation.relay)
+  if (!relay.ok) {
+    throw journey.refusal({
+      code: 'bad_invitation_relay',
+      message: `The invitation names a relay teamree cannot dial: ${relay.reason}.`,
+      hint: 'Ask whoever sent it to run `teamree team invite <project>` again — it refuses to write one of these.',
+      data: { invitation }
+    })
+  }
+
+  journey.note(
+    'link',
+    `${invitation.from} invites you to ${invitation.project}: the repository at ${origin.remote}, ` +
+      `meeting on ${relay.url}.`
+  )
+
+  const project = await findOrFetch(context, journey, invitation, origin.normalised)
+  const status = await waitUntilRead(context, journey, project)
+
+  // Origin. Everything teamwork does hangs off this one string — two checkouts
+  // are the same project when their normalised origins match — so it is
+  // established rather than assumed. A checkout that already names a *different*
+  // repository is a refusal and never a correction: repointing somebody's origin
+  // because a link said so is exactly the act nobody asked for.
+  if (status.origin.ok) {
+    const here = normaliseRemote(status.origin.url)
+    if (here !== origin.normalised) {
+      throw journey.refusal({
+        code: 'origin_mismatch',
+        message:
+          `${project.name} at ${project.path} has origin ${status.origin.url}, and the invitation names ` +
+          `${origin.remote}. Those are two different projects as far as teamree is concerned.`,
+        hint:
+          'Nothing was changed. If this is meant to be the same repository, check the address with whoever sent ' +
+          'the invitation; if it is not, run this again with --into naming somewhere else to clone into.',
+        data: { projectId: project.id, here: status.origin.url, invited: origin.remote }
+      })
+    }
+    journey.note('origin', `origin already names ${status.origin.url}.`)
+  } else {
+    const set = await context.client.call('teamwork.setOrigin', { projectId: project.id, url: origin.remote })
+    journey.note(
+      'origin',
+      set.replaced
+        ? `Pointed origin at ${set.url}, replacing the remote that was there — it was one teamree could not use.`
+        : `Added origin ${set.url}.`
+    )
+  }
+
+  await settleRelay(context, journey, project, relay.url)
+  await joinRoster(context, journey, project)
+  const published = await publish(context, journey, project, origin)
+
+  return {
+    data: { project, invitation, steps: journey.steps, publish: published },
+    text: [
+      ...journey.steps.map((step) => step.outcome),
+      '',
+      `${project.name} is set up on this machine and your key is in the repository. That is what membership is.`,
+      '',
+      // The sentence this command exists to be careful about.
+      'Nothing here says a teammate is connected. That is a fact about somebody else’s machine and this command ' +
+        `has not observed it — \`teamree team status ${project.name}\` is where it is answered.`,
+      ...(origin.kind === 'path' ? ['', pathIdentityNote(origin.remote)] : [])
+    ].join('\n')
+  }
+}
+
+/**
+ * The checkout this invitation names: the one already here, or a fresh clone.
+ *
+ * "Already here" is decided on the normalised origin and nothing else, because
+ * that is the same test teamwork itself uses to decide two checkouts are one
+ * project. Matching on a directory name would find the wrong repository, and
+ * matching on nothing would clone a second copy of one somebody already has.
+ */
+async function findOrFetch(
+  context: CommandContext,
+  journey: Journey,
+  invitation: Invitation,
+  wanted: string
+): Promise<Project> {
+  const projects = await context.client.call('project.list', {})
+  const matches: Project[] = []
+  const unread: string[] = []
+  for (const candidate of projects) {
+    const status = await context.client.call('teamwork.status', { projectId: candidate.id })
+    // A project teamree has not read yet has no origin to compare, and guessing
+    // one from its name would be the wrong repository found confidently. It is
+    // named in the refusals below instead, so a surprising clone has an
+    // explanation attached to it.
+    if (status.state !== 'read') {
+      unread.push(candidate.name)
+      continue
+    }
+    if (status.origin.ok && normaliseRemote(status.origin.url) === wanted) matches.push(candidate)
+  }
+
+  if (matches.length > 1) {
+    throw journey.refusal({
+      code: 'ambiguous_project',
+      message: `${matches.length} projects on this machine already have that origin: ${matches.map((project) => project.name).join(', ')}.`,
+      hint: 'Nothing was changed. Remove the ones you do not want, or finish the setup in the one you do.',
+      data: { matches: matches.map((project) => ({ id: project.id, name: project.name, path: project.path })) }
+    })
+  }
+  const found = matches[0]
+  if (found !== undefined) {
+    journey.note('repository', `Found it here: ${found.name} at ${found.path}.`)
+    journey.note('project', `${found.name} is already a project.`)
+    return found
+  }
+
+  // Nothing here matched, so say what was not compared before saying what is
+  // about to happen instead. A checkout that turns out to be a second copy of
+  // one this machine already has should come with the reason it was not
+  // recognised, rather than with a surprise.
+  if (unread.length > 0) {
+    journey.note(
+      'repository',
+      `teamree has not read ${unread.join(', ')} yet, so ${
+        unread.length === 1 ? 'that project was' : 'those projects were'
+      } not compared.`
+    )
+  }
+
+  const into = destination(context, journey, invitation)
+  if (existsSync(into)) {
+    // Not a refusal, and deliberately so: "I already cloned it" is the ordinary
+    // case, and the origin check above has just failed to find it only because
+    // teamree was never told about it. Whether it really is the right repository
+    // is settled a few lines further down, against its origin, where a wrong
+    // answer is a sentence naming both addresses rather than a silent adoption.
+    journey.note('repository', `${into} is already here, so nothing was cloned.`)
+  } else {
+    journey.note('repository', `Nothing here has that origin, so this cloned ${invitation.origin} into ${into}.`)
+    const cloned = await cloneRepository({
+      origin: invitation.origin,
+      into,
+      cwd: context.cwd,
+      // git's progress goes to stderr and only when this is not --json. The
+      // promise --json makes is about stdout carrying exactly one document, and
+      // a clone that prints nothing for ten minutes is the failure mode this
+      // whole codebase keeps complaining about — so a person watching gets the
+      // meter and a parser gets its one document, out of two different pipes.
+      ...(context.json ? {} : { onProgress: (line: string) => context.streams.err(`${line}\n`) })
+    })
+    if (!cloned.ok) {
+      throw journey.refusal({
+        code: 'clone_failed',
+        message: cloned.error,
+        hint: cloned.advice,
+        data: { origin: invitation.origin, into, kind: cloned.kind }
+      })
+    }
+  }
+
+  return addProject(context, journey, into, invitation.project)
+}
+
+/** Adds the checkout, or finds the project that is already tracking it. */
+async function addProject(
+  context: CommandContext,
+  journey: Journey,
+  into: string,
+  invitedName: string
+): Promise<Project> {
+  // The project name comes from the invitation when it is free, so that both
+  // sides call the project the same thing. It is skipped when the name is taken,
+  // because two projects with one name is an ambiguous selector for every
+  // command after this — a nicety is not worth breaking `teamree team status`.
+  const existing = await context.client.call('project.list', {})
+  const taken = existing.some((project) => project.name.toLowerCase() === invitedName.toLowerCase())
+
+  try {
+    const added = await context.client.call('project.add', {
+      path: into,
+      ...(taken ? {} : { name: invitedName })
+    })
+    journey.note(
+      'project',
+      taken
+        ? `Added it as ${added.name}; this machine already has a project called ${invitedName}.`
+        : `Added ${added.name} as a project.`
+    )
+    return added
+  } catch (error) {
+    // "already tracks" is the one refusal with an answer other than stopping:
+    // the checkout is here and is a project, and this was told about it a moment
+    // too late to have matched it on origin.
+    if (!(error instanceof RuntimeCallError) || error.code !== 'conflict') throw error
+    const again = await context.client.call('project.list', {})
+    const key = pathComparisonKey(into)
+    const found = again.find((project) => pathComparisonKey(project.path) === key)
+    if (found === undefined) throw error
+    journey.note('project', `${found.name} already tracks ${found.path}.`)
+    return found
+  }
+}
+
+/**
+ * Where to clone, as an absolute path.
+ *
+ * `--into` is taken as it was typed and resolved against the working directory,
+ * which is what every other tool does with a path argument. A leading `~` is
+ * refused rather than resolved: a shell expands one before this ever sees it, so
+ * a `~` that survives to here was quoted, and `./~/api` is not what anybody
+ * meant by it.
+ */
+function destination(context: CommandContext, journey: Journey, invitation: Invitation): string {
+  const asked = readString(context.flags, 'into')
+  if (asked !== undefined) {
+    if (asked.startsWith('~')) {
+      throw journey.refusal({
+        code: 'bad_destination',
+        message: `--into ${asked} starts with a ~, which is a different directory for every account.`,
+        hint: 'Give the path in full, starting with /, or leave --into off and let this clone into the current directory.'
+      })
+    }
+    return isAbsolute(asked) ? asked : resolve(context.cwd, asked)
+  }
+  return join(context.cwd, repositoryName(invitation))
+}
+
+/**
+ * A directory name for a fresh clone, from the repository's own last segment.
+ *
+ * The same name git itself would choose, because a joiner who later types
+ * `git clone` by hand should find the directory where they expect it. The
+ * project name is the fallback rather than the first choice for the same
+ * reason — it is a label somebody typed, and it can be "Ledger (rewrite)".
+ */
+function repositoryName(invitation: Invitation): string {
+  const segments = invitation.origin.replace(/\/+$/, '').split(/[/\\:]/)
+  const last = segments[segments.length - 1] ?? ''
+  const cleaned = last
+    .replace(/\.git$/i, '')
+    .replace(/[^A-Za-z0-9._-]/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+  if (cleaned.length > 0) return cleaned
+  const fallback = invitation.project.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^[-.]+|[-.]+$/g, '')
+  return fallback.length > 0 ? fallback : 'teamree-project'
+}
+
+/** The relay file, written or found already saying the same thing. */
+async function settleRelay(context: CommandContext, journey: Journey, project: Project, wanted: string): Promise<void> {
+  const current = await context.client.call('teamwork.relay', { projectId: project.id })
+  const onDisk = current.onDisk.url === null ? null : parseRelayUrl(current.onDisk.url)
+
+  if (onDisk !== null && onDisk.ok) {
+    if (onDisk.url !== wanted) {
+      // Overwriting this would be the worst kind of quiet success: two halves of
+      // a team dialling two relays never meet, and nothing on either machine
+      // looks broken while it happens.
+      throw journey.refusal({
+        code: 'relay_mismatch',
+        message: `${current.file} in this checkout names ${onDisk.url}, and the invitation names ${wanted}.`,
+        hint:
+          'Nothing was changed. Two relays is two halves of a team that never meet, and neither machine looks ' +
+          'broken while it happens — so settle which one it is with whoever sent the invitation, and run this again.',
+        data: { projectId: project.id, file: current.file, here: onDisk.url, invited: wanted }
+      })
+    }
+    journey.note('relay', `${current.file} already names ${wanted}.`)
+    return
+  }
+
+  const written = await context.client.call('teamwork.setRelay', { projectId: project.id, url: wanted })
+  journey.note(
+    'relay',
+    `Wrote ${written.file}: ${wanted}.` +
+      (written.source === 'environment'
+        ? ` Note that ${written.override.name} is set in this app’s environment, so this machine keeps dialling ${written.url ?? 'nothing'} until it is unset.`
+        : '')
+  )
+}
+
+/** This machine's key in the roster file, written or already there. */
+async function joinRoster(context: CommandContext, journey: Journey, project: Project): Promise<void> {
+  const before = await context.client.call('members.list', { projectId: project.id })
+  const already = before.members.find((member) => member.isSelf)
+  if (before.enrolled && already !== undefined) {
+    journey.note('roster', `This machine’s key is already on the roster as ${already.handle}, in ${already.file}.`)
+    return
+  }
+
+  const handle = readString(context.flags, 'handle')
+  const after = await context.client.call('members.join', {
+    projectId: project.id,
+    ...(handle === undefined ? {} : { handle })
+  })
+  const me = after.members.find((member) => member.isSelf)
+  journey.note(
+    'roster',
+    me === undefined
+      ? 'Wrote this machine’s key, and the roster is not showing it yet.'
+      : `Wrote ${me.file}, filing this machine’s key under ${me.handle}.`
+  )
+}
+
+/** The push, which is the step that actually makes somebody a member. */
+async function publish(
+  context: CommandContext,
+  journey: Journey,
+  project: Project,
+  origin: { remote: string }
+): Promise<unknown> {
+  const plan = await context.client.call('teamwork.publishPlan', { projectId: project.id })
+  if (plan.blocker !== null) {
+    throw journey.refusal({
+      code: 'publish_blocked',
+      message: plan.blocker,
+      hint: `Everything before this is done. Fix that and run \`teamree team publish ${project.name}\`.`,
+      data: { projectId: project.id, plan }
+    })
+  }
+
+  const result = await context.client.call('teamwork.publish', { projectId: project.id })
+  if (!result.push.ok) {
+    const committed =
+      result.commit === null
+        ? 'Nothing new to commit here.'
+        : `The commit was made here (${result.commit.shortSha}) and did not leave this machine.`
+    throw journey.refusal({
+      code: 'push_failed',
+      // git's own words, whole: they are what a person can search for.
+      message: result.push.error,
+      hint:
+        `${committed} ${result.push.advice}` +
+        // The one place this has to be said plainly, because it is the place
+        // somebody discovers that a link did not let them in.
+        (result.push.kind === 'auth' || result.push.kind === 'host-key'
+          ? ` Being on this team is being able to push to ${origin.remote}; the invitation carried no ` +
+            'permission and could not, so this is between you and whoever controls that repository.'
+          : ''),
+      data: { projectId: project.id, publish: result }
+    })
+  }
+
+  journey.note(
+    'publish',
+    result.commit === null
+      ? `Nothing new to commit; ${result.remote} already had ${result.branch}.`
+      : `Committed ${result.commit.shortSha} — “${result.commit.message}” — and pushed ${result.branch} to ${result.remote}.`
+  )
+  return result
+}
+
+/**
+ * Waits for the reconcile a new project sets off.
+ *
+ * Polled rather than subscribed because this is a one-shot wait inside a command
+ * that is about to exit, and a subscription would be a second thing to unwind on
+ * every refusal below it.
+ */
+async function waitUntilRead(context: CommandContext, journey: Journey, project: Project): Promise<TeamworkRead> {
+  const deadline = Date.now() + READ_TIMEOUT_MS
+  for (;;) {
+    const status = await context.client.call('teamwork.status', { projectId: project.id })
+    if (status.state === 'read') return status
+    if (Date.now() >= deadline) {
+      throw journey.refusal({
+        code: 'not_read_yet',
+        message: `teamree has not read ${project.name}’s relay, roster or origin after ${Math.round(READ_TIMEOUT_MS / 1000)} seconds.`,
+        hint:
+          'The project was added and nothing else was changed. Run this again in a moment — every step it has ' +
+          'already done it will find done.',
+        data: { projectId: project.id }
+      })
+    }
+    await sleep(READ_POLL_MS)
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((done) => {
+    const timer = setTimeout(done, ms)
+    timer.unref?.()
+  })
+}
+
+/**
+ * What has been done so far, and the only way out of this flow.
+ *
+ * Every refusal carries the steps that came before it. A command that stops
+ * halfway and reports only the stop leaves somebody unable to tell a clone that
+ * never happened from a key that is written and unpushed — which is the
+ * difference between running it again and going to look at a repository.
+ */
+class Journey {
+  readonly steps: AcceptStep[] = []
+
+  note(step: AcceptStep['step'], outcome: string): void {
+    this.steps.push({ step, outcome })
+  }
+
+  refusal(init: { code: string; message: string; hint: string; data?: Record<string, unknown> }): CliError {
+    return new CliError({
+      code: init.code,
+      message: init.message,
+      exitCode: ExitCode.Failure,
+      hint: init.hint,
+      data: { steps: this.steps, ...init.data }
+    })
+  }
+}

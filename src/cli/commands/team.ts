@@ -10,11 +10,21 @@
 // implemented badly: there is no `layout set`, and there is no command that
 // reads a teammate's pane without naming whose it is.
 
-import type { PeerPane, TeammatePresence, TeammatePresenceRead, TeammateWorktree } from '../../shared/entities.js'
+import type {
+  PeerPane,
+  TeammatePresence,
+  TeammatePresenceRead,
+  TeammateWorktree,
+  TeamworkPublish,
+  TeamworkRead
+} from '../../shared/entities.js'
 import { MAX_REMOTE_WRITE_BYTES, type WatchedPaneEvent } from '../../shared/methods.js'
+import { checkOrigin, pathIdentityNote } from '../../shared/origin.js'
+import { acceptInvitation } from '../acceptInvitation.js'
 import { readBoolean, readNumber, readString, requireString } from '../argv.js'
 import type { CommandContext, CommandSpec } from '../command-spec.js'
 import { CliError, ExitCode, UsageError } from '../exit.js'
+import { formatInvitation } from '../invitation.js'
 import { formatFields, formatTable } from '../output.js'
 import { resolveProject } from '../selectors.js'
 import type { RuntimeClient } from '../transport.js'
@@ -503,6 +513,225 @@ export const teamCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['team', 'publish'],
+    summary: 'Commit and push the teamwork files, which is what makes them the team’s.',
+    details:
+      '`team join` and `team relay set` write files and stop. This is the second act they stop before: it ' +
+      'stages exactly the files the runtime names, commits them, and pushes. Nothing else is staged — it is ' +
+      '`git add` with paths and never `git add -A` — so work you had already staged is left where it was.\n\n' +
+      '--dry-run says what it would do and does none of it: the files, the message, the remote, the branch, ' +
+      'and whether this push is what sets the upstream.\n\n' +
+      'A commit that lands and a push that is refused is one ordinary outcome — a teammate pushed first — and ' +
+      'it is reported as both halves rather than as one failure. Exit is 1 when the push did not land, and ' +
+      '`data.push.kind` is the shape of the refusal to branch on: `rejected` is fixed by pulling, `auth` and ' +
+      '`host-key` are this machine’s credentials and no amount of retrying touches either.\n\n' +
+      'Pushing your key is not the same as a teammate being connected, and this never says it is.',
+    args: [PROJECT_ARG],
+    flags: [
+      {
+        name: 'message',
+        kind: 'string',
+        placeholder: '<text>',
+        description: 'Commit message to use instead of the one the plan proposed.'
+      },
+      { name: 'dry-run', kind: 'boolean', description: 'Print the plan and make no commit and no push.' }
+    ],
+    examples: [
+      'teamree team publish api',
+      'teamree team publish api --dry-run --json',
+      'teamree team publish api --message "Add ana and our relay"'
+    ],
+    run: async (context) => {
+      const project = await resolveProject(context.client, context.args[0] as string)
+      const plan = await context.client.call('teamwork.publishPlan', { projectId: project.id })
+      // The blocker is the runtime's own sentence about why this cannot be
+      // done, already written as something to act on. Passing it through
+      // unchanged is the point: `teamwork.publish` would throw the same words,
+      // and reading the plan first means a --dry-run says them too.
+      if (plan.blocker !== null) {
+        throw new CliError({
+          code: 'publish_blocked',
+          message: plan.blocker,
+          exitCode: ExitCode.Failure,
+          data: { projectId: project.id, plan }
+        })
+      }
+
+      if (readBoolean(context.flags, 'dry-run')) {
+        return {
+          data: { projectId: project.id, dryRun: true, plan },
+          text: [
+            formatFields([
+              ['project', `${project.name} (${project.id})`],
+              ['files', plan.files.join(', ')],
+              ['message', readString(context.flags, 'message') ?? plan.message],
+              ['remote', plan.remote],
+              ['branch', plan.branch ?? '(detached)'],
+              ['upstream', plan.upstream ?? `none - this push would set ${plan.remote}/${plan.branch ?? '?'}`],
+              ['committed', plan.committed ? 'yes - the commit would carry nothing new' : 'no']
+            ]),
+            '',
+            'Nothing was committed and nothing was pushed. Drop --dry-run to do it.'
+          ].join('\n')
+        }
+      }
+
+      const message = readString(context.flags, 'message')
+      const result = await context.client.call('teamwork.publish', {
+        projectId: project.id,
+        ...(message === undefined ? {} : { message })
+      })
+      return publishOutcome(project.name, result)
+    }
+  },
+  {
+    path: ['team', 'invite'],
+    summary: 'Print one pasteable line that tells a teammate where this project is.',
+    details:
+      'It is not a credential and it grants nothing. Membership is push access: a teammate is somebody whose ' +
+      'public key is committed to the repository, and nothing in this line changes who may push. What it ' +
+      'carries is the four public facts that are typed by hand today — where the repository is, where the ' +
+      'relay is, what the project is called, and who is asking — so that `teamree team accept` can act on ' +
+      'them instead of a person retyping them.\n\n' +
+      'One unbroken token with no spaces in it, because it has to survive being pasted into a chat message.\n\n' +
+      'It refuses rather than writing a line with a hole in it. No origin means it cannot name the ' +
+      'repository, which is worse than no invitation at all. No relay means the two machines have nowhere ' +
+      'to meet. And a machine whose own key is not on the roster is inviting somebody to a team it is not ' +
+      'on yet — the invitation would be true and the sender would still be invisible.',
+    args: [PROJECT_ARG],
+    examples: ['teamree team invite api', 'teamree team invite api --json'],
+    run: async (context) => {
+      const project = await resolveProject(context.client, context.args[0] as string)
+      const status = await readTeamwork(context, project.id)
+
+      if (!status.origin.ok) {
+        throw new CliError({
+          code: 'no_origin',
+          message: `${project.name} has no origin teamree can name: ${status.origin.reason}`,
+          exitCode: ExitCode.Failure,
+          hint:
+            'An invitation that cannot say where the repository is is worse than none. Point this checkout at ' +
+            'the repository you both push to — `git remote add origin <url>` in the checkout, or the path a ' +
+            'shared volume is mounted at on both Macs — and run this again.',
+          data: { projectId: project.id, origin: status.origin }
+        })
+      }
+      if (status.relay === null) {
+        const relay = await context.client.call('teamwork.relay', { projectId: project.id })
+        throw new CliError({
+          code: 'no_relay',
+          message: `${project.name} has no relay: ${relay.problem ?? 'nothing names one'}.`,
+          exitCode: ExitCode.Failure,
+          hint:
+            'Two machines behind two routers meet on a relay or not at all, so an invitation without one names ' +
+            'nowhere to meet. ' +
+            (relay.deploy.command === null
+              ? `This build carries no relay to deploy: ${relay.deploy.reason}. `
+              : `Stand one up with \`${relay.deploy.command}\`, then `) +
+            `write it in with \`teamree team relay set ${project.name} <wss url>\`.`,
+          data: { projectId: project.id, relay }
+        })
+      }
+
+      const list = await context.client.call('members.list', { projectId: project.id })
+      const me = list.members.find((member) => member.isSelf)
+      if (!status.enrolled || me === undefined) {
+        throw new CliError({
+          code: 'not_enrolled',
+          message: `This machine’s key is not on ${project.name}’s roster, so it has no invitation to send.`,
+          exitCode: ExitCode.Failure,
+          hint:
+            `Run \`teamree team join ${project.name}\` and then \`teamree team publish ${project.name}\`. Until ` +
+            'that key is pushed, a teammate who accepted this would be on the team and still unable to reach you.',
+          data: { projectId: project.id, enrolled: status.enrolled, self: list.self }
+        })
+      }
+
+      const invitation = {
+        origin: status.origin.url,
+        relay: status.relay.url,
+        project: project.name,
+        from: me.handle
+      }
+      const link = formatInvitation(invitation)
+
+      // Two facts about this particular invitation that are true, are not
+      // refusals, and go wrong silently if nobody says them.
+      const notes: string[] = []
+      if (status.relay.source === 'environment') {
+        // Asked only here, and only for the variable's name: an override is a
+        // per-machine thing to try, and a sentence that said "the environment"
+        // without naming it is one nobody can go and look at.
+        const relay = await context.client.call('teamwork.relay', { projectId: project.id })
+        notes.push(
+          `This relay came from ${relay.override.name} in this app’s environment rather than from the repository. ` +
+            'It is the address this machine dials, so the invitation is true — but nothing has committed it, and ' +
+            'a teammate who accepts this writes it into their checkout. Push `.teamree/relay` so it is the team’s.'
+        )
+      }
+      const originKind = checkOrigin(invitation.origin)
+      if (originKind.ok && originKind.kind === 'path') {
+        notes.push(pathIdentityNote(originKind.remote))
+      }
+
+      return {
+        data: { projectId: project.id, link, invitation, relaySource: status.relay.source, notes },
+        text: [
+          formatFields([
+            ['project', `${project.name} (${project.id})`],
+            ['origin', invitation.origin],
+            ['relay', `${invitation.relay} (${status.relay.source})`],
+            ['from', invitation.from]
+          ]),
+          '',
+          'Send them the last line. It is not a key and it opens nothing: every fact in it is already public, ' +
+            'and whoever accepts it still has to push their own key to this repository to be on the team.',
+          ...notes.flatMap((note) => ['', note]),
+          '',
+          'They run `teamree team accept` with it, or hand it to an agent working beside them.',
+          '',
+          link
+        ].join('\n')
+      }
+    }
+  },
+  {
+    path: ['team', 'accept'],
+    summary: 'Take an invitation and do every manual step it stands in for.',
+    details:
+      'The other half of `team invite`. It finds the repository on this machine or clones it, adds it as a ' +
+      'project, writes the relay, writes this machine’s key into the roster, and pushes — reporting each ' +
+      'step as it goes and stopping at the first one it cannot do honestly.\n\n' +
+      'The link is not a credential and this does not treat it as one. The last step is a push, and a ' +
+      'machine that may not push to that repository is refused there, in git’s own words: membership is push ' +
+      'access and nothing in a link can grant it.\n\n' +
+      'It finishes by saying a key was pushed. It does not say a teammate is connected, because that is a ' +
+      'fact about somebody else’s machine that this command has not observed — `teamree team status` is ' +
+      'where that is answered.\n\n' +
+      'Every refusal names the step it stopped at and leaves the steps before it done; `data.steps` under ' +
+      '--json is that list, on the way out and on the way to an error alike.',
+    args: [{ name: 'link', description: 'The invitation from `teamree team invite`.', required: true }],
+    flags: [
+      {
+        name: 'into',
+        kind: 'string',
+        placeholder: '<path>',
+        description: 'Where to clone, when the repository is not already on this machine.'
+      },
+      {
+        name: 'handle',
+        kind: 'string',
+        placeholder: '<handle>',
+        description: "Name to file your key under; defaults to one derived from git's configured email."
+      }
+    ],
+    examples: [
+      'teamree team accept "teamree://join?v=1&origin=...&relay=...&project=api&from=ana"',
+      'teamree team accept "$INVITE" --into ./api --json'
+    ],
+    run: async (context) => acceptInvitation(context)
+  },
+  {
     path: ['team', 'relay', 'show'],
     summary: "Show where a project's relay is recorded, and what each place says.",
     details:
@@ -969,6 +1198,75 @@ export const teamCommands: readonly CommandSpec[] = [
   }
 ]
 
+/**
+ * What a publish did, in the two halves it can half-fail in.
+ *
+ * The commit is reported whichever way the push went, because a commit that
+ * landed and a push that was refused is the ordinary outcome of a teammate
+ * pushing first — and reporting that as one failure would leave somebody
+ * believing they had made no commit and committing it a second time.
+ *
+ * The failure leaves by the same door every other failure here does, so `--json`
+ * gets the shape it gets everywhere else and the exit code is 1 rather than a
+ * success document with a sad field in it. git's own words are the message;
+ * they are what a person can search for, and paraphrasing them is the one thing
+ * a refused push must not have done to it.
+ */
+function publishOutcome(projectName: string, result: TeamworkPublish): { data: unknown; text: string } {
+  const committed =
+    result.commit === null
+      ? 'Nothing new to commit; the files were already in the repository.'
+      : `Committed ${result.commit.shortSha} — “${result.commit.message}”.`
+
+  if (!result.push.ok) {
+    throw new CliError({
+      code: 'push_failed',
+      message: result.push.error,
+      exitCode: ExitCode.Failure,
+      hint: `${committed} ${result.push.advice}`,
+      data: result
+    })
+  }
+
+  const pushed = result.push.alreadyUpToDate
+    ? `${result.remote} already had ${result.branch}.`
+    : `Pushed ${result.branch} to ${result.remote}${
+        result.push.setUpstream ? `, and set ${result.push.upstream} as its upstream` : ''
+      }.`
+  return {
+    data: result,
+    text: [
+      committed,
+      pushed,
+      `Files: ${result.files.join(', ')}.`,
+      '',
+      // The one sentence this command must not be read as having said.
+      `That is ${projectName}’s roster pushed. Whether a teammate’s machine has been heard from is a different ` +
+        `question, and \`teamree team status ${projectName}\` is where it is answered.`
+    ].join('\n')
+  }
+}
+
+/**
+ * The read facts about a project, or a refusal that says which kind of nothing
+ * this is.
+ *
+ * The twin of `readPresence`, and drawn for the same reason: `unread` is a
+ * project teamree has and has not looked at, which is not the same finding as
+ * "no relay" or "no origin" and must not be reported as one.
+ */
+async function readTeamwork(context: CommandContext, projectId: string): Promise<TeamworkRead> {
+  const status = await context.client.call('teamwork.status', { projectId })
+  if (status.state === 'read') return status
+  throw new CliError({
+    code: 'not_read_yet',
+    message: `teamree has not read ${projectId}’s relay, roster or origin yet.`,
+    exitCode: ExitCode.Failure,
+    hint: 'Ask again in a moment. `teamree team status` says when it has.',
+    data: { projectId, readAt: status.readAt }
+  })
+}
+
 async function muteCommand(context: CommandContext, muted: boolean): Promise<{ data: unknown; text: string }> {
   const terminalId = context.args[0] as string
   const watchers = await context.client.call('teamwork.mute', { terminalId, muted })
@@ -985,3 +1283,29 @@ async function muteCommand(context: CommandContext, muted: boolean): Promise<{ d
     ].join('\n')
   }
 }
+
+// Deliberate absences.
+//
+// **No `team layout set`.** Reading a teammate's layout says what their window
+// is showing; writing one would rearrange it from another machine, and a
+// rearrangement nobody asked for cannot be told from a bug in their own app.
+//
+// **No command that reads a pane without naming whose it is.** Every pane verb
+// takes a teammate, so there is no spelling of these that watches "whoever is
+// around". Watching is visible to the owner, and it is visible because it is
+// always of a named person's pane.
+//
+// **No way to join a team without pushing a key.** `team accept` takes a link,
+// and the link is not a credential: it carries four facts that are public
+// already and it ends in a push that the repository either allows or refuses.
+// There is no bearer token here, no pairing secret, and no code path that adds
+// somebody to a roster they cannot push to. Anything of that shape would move
+// the decision about who is on a team out of the repository, which is the one
+// place every member can already see it — and it would do so for the sake of
+// saving somebody a `git push`.
+//
+// **No `team origin set`.** `teamwork.setOrigin` exists and `team accept` uses
+// it, on a checkout that has no usable origin at all. It is not offered as a
+// verb of its own because pointing an existing origin somewhere else is
+// `git remote set-url`, a command every user of this tool already has, and a
+// second spelling of it here would be a second thing to keep true.

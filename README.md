@@ -126,6 +126,23 @@ until you have been shown who is asking, which pane, and the bytes themselves, a
 have answered. The prompt is for accidents, which is what nearly every bad
 keystroke is. It is not a wall against somebody you should not have added.
 
+Setting that up is two commands and one line of text, from either machine or from
+an agent working in a pane on it:
+
+```sh
+teamree team invite app          # prints one line to send a teammate
+teamree team accept "<that line>"  # on their Mac: clone, configure, join, push
+```
+
+The line is not a credential and it grants nothing. It carries four facts that
+are public already — where the repository is, where the relay is, what the project
+is called and who is asking — because those are what a joiner otherwise has to be
+told in prose. `accept` ends in a push, and a machine that may not push to that
+repository is refused there, in git's own words: membership is push access, and
+nothing in a link can hand it over. A finished `accept` says a key was pushed; it
+does not say a teammate is connected, because that is a fact about somebody else's
+machine. `teamree team status app` is where that is answered.
+
 ## Documentation
 
 [`docs/`](docs/) is indexed in [`docs/README.md`](docs/README.md).
