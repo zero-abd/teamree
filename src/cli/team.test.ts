@@ -567,7 +567,9 @@ describe('team publish', () => {
     const result = await cli.run(['team', 'publish', 'api'])
     expect(result.out).toContain('is a different question')
     expect(result.out).toContain('teamree team status api')
-    expect(result.out).not.toContain('connected')
+    // The claim, not the word: a future sentence about connecting is fine as
+    // long as it is not this command asserting that somebody is.
+    expect(result.out).not.toMatch(/(is|are|now) connected/)
   })
 
   it('passes --message through and omits it when absent', async () => {

@@ -275,16 +275,24 @@ describe('team accept, on a checkout that is already here', () => {
     expect(result.out).toContain('teamree team status api')
   })
 
-  it('sets the origin only on a checkout that has none, and never over one that disagrees', async () => {
-    const missing = await harness(acceptHandler(world({ projects: [], addedOrigin: null })))
-    const added = await missing.run(['team', 'accept', LINK, '--into', scratch()])
-    expect(added.code, added.err).toBe(ExitCode.Success)
-    expect(methodsCalled(missing.stub)).toContain('teamwork.setOrigin')
-
-    const settled = await harness(acceptHandler(world()))
-    await settled.run(['team', 'accept', LINK])
-    expect(methodsCalled(settled.stub)).not.toContain('teamwork.setOrigin')
+  it('leaves the origin alone on a checkout that already names the right repository', async () => {
+    const cli = await harness(acceptHandler(world()))
+    const result = await cli.run(['team', 'accept', LINK])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(methodsCalled(cli.stub)).not.toContain('teamwork.setOrigin')
   })
+
+  it('sets an origin on a checkout it cloned itself, which is the only one it will', async () => {
+    const source = scratch()
+    const repository = join(source, 'api.git')
+    execFileSync('git', ['init', '--bare', '--initial-branch=main', repository], { stdio: 'ignore' })
+
+    const cli = await harness(acceptHandler(world({ projects: [], addedOrigin: null })))
+    const link = formatInvitation({ origin: repository, relay: RELAY_URL, project: 'api', from: 'ana' })
+    const result = await cli.run(['team', 'accept', link, '--into', join(cli.cwd, 'api')])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(methodsCalled(cli.stub)).toContain('teamwork.setOrigin')
+  }, 30_000)
 })
 
 describe('team accept, when it must not go on', () => {
@@ -381,12 +389,84 @@ describe('team accept, when it must not go on', () => {
     expect(result.out).toContain('It replaced what was there, which could not be read as a relay URL')
   })
 
+  it('refuses rather than guess when two projects here already have that origin', async () => {
+    const cli = await harness(
+      acceptHandler(
+        world({
+          projects: [
+            { id: 'p_api', name: 'api', path: '/repos/api', origin: ORIGIN },
+            { id: 'p_api2', name: 'api-again', path: '/repos/api-again', origin: ORIGIN }
+          ]
+        })
+      )
+    )
+    const result = await cli.run(['team', 'accept', LINK])
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(result.err).toContain('api, api-again')
+    expect(result.err).toContain('Nothing was changed')
+  })
+
+  it('names the environment override when the relay it just wrote is not the one this machine dials', async () => {
+    const state = world({ relayOnDisk: null })
+    const cli = await harness(
+      acceptHandler(state, {
+        'teamwork.setRelay': () => ({
+          projectId: 'p_api',
+          file: '.teamree/relay',
+          url: 'wss://tunnel.example/v1/relay',
+          source: 'environment',
+          problem: null,
+          onDisk: { url: RELAY_URL, problem: null },
+          override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' },
+          deploy: { command: 'teamree-relay deploy', reason: null },
+          readAt: NOW
+        })
+      })
+    )
+    const result = await cli.run(['team', 'accept', LINK])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(result.out).toContain('TEAMREE_RELAY_URL is set in this app’s environment')
+    expect(result.out).toContain('keeps dialling wss://tunnel.example/v1/relay')
+  })
+
   it('refuses a --into that starts with a ~, because that is a different directory per account', async () => {
     const cli = await harness(acceptHandler(world({ projects: [] })))
     const result = await cli.run(['team', 'accept', LINK, '--into', '~/src/api'])
     expect(result.code).toBe(ExitCode.Failure)
     expect(result.err).toContain('starts with a ~')
     expect(result.err).toContain('Give the path in full')
+  })
+})
+
+describe('what accept says about the push', () => {
+  it('does not claim the remote already had the branch when the push delivered something', async () => {
+    const cli = await harness(
+      acceptHandler(world({ push: { ok: true, upstream: 'origin/main', setUpstream: true, alreadyUpToDate: false } }), {
+        'teamwork.publish': () => ({
+          projectId: 'p_api',
+          files: ['.teamree/members/me.pub'],
+          // No new commit here, and a push that still carried the user's own
+          // work. The two are different facts and were being reported as one.
+          commit: null,
+          remote: 'origin',
+          branch: 'main',
+          push: { ok: true, upstream: 'origin/main', setUpstream: true, alreadyUpToDate: false },
+          at: NOW
+        })
+      })
+    )
+    const result = await cli.run(['team', 'accept', LINK])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(result.out).toContain('Nothing new to commit here; pushed main to origin')
+    expect(result.out).not.toContain('already had')
+  })
+
+  it('says so when the remote really did already have it', async () => {
+    const cli = await harness(
+      acceptHandler(world({ push: { ok: true, upstream: 'origin/main', setUpstream: false, alreadyUpToDate: true } }))
+    )
+    const result = await cli.run(['team', 'accept', LINK])
+    expect(result.out).toContain('origin already had main')
   })
 })
 
@@ -511,7 +591,7 @@ describe('team accept, when the repository is not on this machine', () => {
     expect(methodsCalled(cli.stub)).not.toContain('project.add')
   }, 30_000)
 
-  it('adopts a directory that is already there rather than refusing or cloning over it', async () => {
+  it('adopts a directory that is already there when its origin says it is the right one', async () => {
     const cli = await harness(acceptHandler(world({ projects: [] })))
     const into = join(cli.cwd, 'api')
     mkdirSync(into)
@@ -520,6 +600,34 @@ describe('team accept, when the repository is not on this machine', () => {
     expect(result.code, result.err).toBe(ExitCode.Success)
     expect(result.out).toContain(`${into} is already here, so nothing was cloned.`)
     expect(methodsCalled(cli.stub)).toContain('project.add')
+    expect(methodsCalled(cli.stub)).not.toContain('teamwork.setOrigin')
+  })
+
+  it('refuses to point a checkout it found at an address out of a link, and pushes nothing', async () => {
+    // The worst thing this command could do. A local-only repository — notes,
+    // dotfiles, a scratch clone with no remote — sitting under a directory name
+    // the link itself chose, given an origin the link names and then pushed,
+    // sends its whole history to whoever wrote the link.
+    const cli = await harness(acceptHandler(world({ projects: [], addedOrigin: null })))
+    const into = join(cli.cwd, 'api')
+    mkdirSync(into)
+
+    const result = await cli.run(['team', 'accept', LINK, '--into', into])
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(result.err).toContain('Nothing says it is the repository this invitation names')
+    expect(result.err).toContain('--into naming a path that does not exist yet')
+    expect(methodsCalled(cli.stub)).not.toContain('teamwork.setOrigin')
+    expect(methodsCalled(cli.stub)).not.toContain('members.join')
+    expect(methodsCalled(cli.stub)).not.toContain('teamwork.publish')
+  })
+
+  it('refuses a --into that names no directory at all', async () => {
+    const cli = await harness(acceptHandler(world({ projects: [] })))
+    for (const value of ['', '.']) {
+      const result = await cli.run(['team', 'accept', LINK, '--into', value])
+      expect(result.code, `--into "${value}"`).toBe(ExitCode.Failure)
+      expect(result.err).toContain('--into names no directory')
+    }
   })
 
   it('finds the project that already tracks the checkout when adding it is refused as a duplicate', async () => {

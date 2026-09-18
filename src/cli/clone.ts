@@ -15,7 +15,7 @@
 
 import { GitCommandError } from '../main/git/errors.js'
 import { createGitRunner } from '../main/git/gitProcess.js'
-import { splitProgress } from '../main/teamwork/publish.js'
+import { splitProgress, sshCommand } from '../main/teamwork/publish.js'
 import { pushFailureKind } from '../main/git/worktreePush.js'
 
 /**
@@ -50,7 +50,7 @@ const MAX_GIT_WORDS = 4000
  */
 const CLONEABLE_SCHEMES = new Set(['http', 'https', 'ssh', 'git'])
 
-export type OriginCheck = { ok: true } | { ok: false; reason: string }
+export type CloneableCheck = { ok: true } | { ok: false; reason: string }
 
 /**
  * Whether this is an address teamree will run git against, or a reason it is not.
@@ -60,7 +60,7 @@ export type OriginCheck = { ok: true } | { ok: false; reason: string }
  * and a remote written into somebody's checkout is executed by the next `git
  * fetch` they run, which is not a thing to leave to whoever sent the link.
  */
-export function checkCloneable(origin: string): OriginCheck {
+export function checkCloneable(origin: string): CloneableCheck {
   // A filesystem path is a directory and cannot name a transport.
   if (origin.startsWith('/')) return { ok: true }
   const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(origin)?.[1]
@@ -118,14 +118,12 @@ export async function cloneRepository(options: CloneOptions): Promise<CloneOutco
   }
 
   const runner = createGitRunner()
-  const configured = await runner.tryRun({
-    args: ['config', '--get', 'core.sshCommand'],
-    cwd: options.cwd,
-    readOnly: true,
-    timeoutMs: 30_000
-  })
-  const base =
-    process.env['GIT_SSH_COMMAND']?.trim() || (configured.exitCode === 0 ? configured.stdout.trim() : '') || 'ssh'
+  // The same ssh a publish uses, read the same way: the caller's own, with the
+  // one thing added that stops it asking this machine's user a question nobody
+  // will see. `cwd` rather than the checkout, because there is no checkout yet —
+  // so what it picks up is the global config and the environment, which is all
+  // there is to pick up before a repository exists.
+  const ssh = await sshCommand(runner, options.cwd)
 
   let result
   try {
@@ -135,7 +133,7 @@ export async function cloneRepository(options: CloneOptions): Promise<CloneOutco
       args: ['clone', '--progress', '--', options.origin, options.into],
       cwd: options.cwd,
       timeoutMs: CLONE_TIMEOUT_MS,
-      env: { GIT_SSH_COMMAND: `${base} -o BatchMode=yes` },
+      env: { GIT_SSH_COMMAND: ssh },
       onStderr: (chunk) => {
         if (options.onProgress) for (const line of splitProgress(chunk)) options.onProgress(line)
       }
@@ -179,9 +177,18 @@ export async function cloneRepository(options: CloneOptions): Promise<CloneOutco
  * there is no ref to be behind when there is no repository yet.
  */
 function cloneFailureKind(stderr: string): CloneFailure {
+  // Asked before the classifier, because `pushFailureKind` reads "repository
+  // not found" as an authentication failure — which is the right reading for a
+  // push, where the repository is one you were pushing to a moment ago, and the
+  // wrong one here, where a typo in an address is the ordinary cause. A caller
+  // branching on `kind` would send somebody to their ssh agent about a URL.
+  if (NOT_FOUND.test(stderr)) return 'other'
   const kind = pushFailureKind(stderr)
   return kind === 'auth' || kind === 'host-key' ? kind : 'other'
 }
+
+/** What git says when there is nothing at the address, in its several spellings. */
+const NOT_FOUND = /repository not found|does not appear to be a git repository|not a git repository/i
 
 /**
  * The one thing to do about a clone that did not happen.
@@ -193,7 +200,7 @@ function cloneFailureKind(stderr: string): CloneFailure {
  */
 function cloneRefusal(stderr: string, origin: string): string {
   const text = stderr.trim()
-  if (/repository not found|does not appear to be a git repository|not a git repository/i.test(text)) {
+  if (NOT_FOUND.test(text)) {
     return (
       `git found no repository at ${origin}. Either the invitation names the wrong place, or this machine is not ` +
       'allowed to see it — check the address with whoever sent the invitation.'

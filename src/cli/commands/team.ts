@@ -625,7 +625,9 @@ export const teamCommands: readonly CommandSpec[] = [
       const cloneable = checkCloneable(status.origin.url)
       if (!cloneable.ok) {
         throw new CliError({
-          code: 'no_origin',
+          // Its own code and not `no_origin`: there is an origin, and an agent
+          // branching on this has a different thing to do about it.
+          code: 'origin_not_cloneable',
           message: `${project.name}'s origin is not one to send a teammate: ${cloneable.reason}.`,
           exitCode: ExitCode.Failure,
           hint: `Point this checkout at the address your team actually clones, then run this again.`,
@@ -736,7 +738,10 @@ export const teamCommands: readonly CommandSpec[] = [
       'fact about somebody else’s machine that this command has not observed — `teamree team status` is ' +
       'where that is answered.\n\n' +
       'Every refusal names the step it stopped at and leaves the steps before it done; `data.steps` under ' +
-      '--json is that list, on the way out and on the way to an error alike.',
+      '--json is that list, on the way out and on the way to an error alike.\n\n' +
+      'A clone can take minutes. Without --json its progress goes to stderr as git prints it; with --json it ' +
+      'is silent until it finishes, because the one document a failure prints goes to stderr too and a meter ' +
+      'in front of it would not parse.',
     args: [{ name: 'link', description: 'The invitation from `teamree team invite`.', required: true }],
     flags: [
       {

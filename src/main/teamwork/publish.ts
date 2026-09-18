@@ -319,8 +319,12 @@ function kindOf(stderr: string, exitCode: number, reported: PushRefStatus | null
  * replacing it: `GIT_SSH_COMMAND` outranks `core.sshCommand`, so a team that
  * sets one in their config would otherwise find teamree quietly pushing with a
  * different key than every other tool on the machine.
+ *
+ * Exported because `teamree team accept` clones, and a clone meets exactly the
+ * same ssh with exactly the same tty behind the app's window. Two copies of this
+ * would be two answers to one question.
  */
-async function sshCommand(runner: GitRunner, cwd: string): Promise<string> {
+export async function sshCommand(runner: GitRunner, cwd: string): Promise<string> {
   const configured = await runner.tryRun({
     args: ['config', '--get', 'core.sshCommand'],
     cwd,

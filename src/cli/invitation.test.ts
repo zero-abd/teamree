@@ -130,6 +130,24 @@ describe('finding the link inside whatever it arrived in', () => {
 })
 
 describe('what an invitation is allowed to carry', () => {
+  it('refuses a field with a control character in it, naming which field', () => {
+    // A percent-encoded escape is still one whitespace-free token, so the format
+    // carries these perfectly well — and every field is printed, one of them
+    // into a .git/config. A link that can move the cursor can erase the line
+    // above it.
+    const link = formatInvitation({ ...ADA, project: 'pager\u001b[2K' })
+    expect(link).not.toMatch(/\s/)
+    expect(refused(link).reason).toBe(
+      'its project has a control character in it, which nothing that is really an invitation has'
+    )
+  })
+
+  it('ignores a parameter it does not know rather than refusing the whole link', () => {
+    // An added field a reader may ignore is not a dropped instruction, which is
+    // what the version is for.
+    expect(accepted(`${formatInvitation(ADA)}&colour=green`)).toEqual(ADA)
+  })
+
   it('takes a token out of an https origin and says it did', () => {
     const stripped = withoutCredentials('https://x-access-token:ghp_secret@github.com/acme/api.git')
     expect(stripped).toEqual({ origin: 'https://github.com/acme/api.git', removed: true })

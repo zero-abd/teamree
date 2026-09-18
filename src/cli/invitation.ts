@@ -67,6 +67,9 @@ export const INVITATION_VERSION = '1'
  */
 const PREFIX = 'teamree://join?'
 
+/** The same literal, for finding it inside a message whatever its case. */
+const PREFIX_PATTERN = /teamree:\/\/join\?/i
+
 /**
  * What a chat client, a shell or a person is likely to have left on the end.
  *
@@ -77,6 +80,9 @@ const PREFIX = 'teamree://join?'
  * `URLSearchParams` percent-encodes anything here that is genuinely part of it.
  */
 const TRAILING = /[>)"'`\].,;:!?]+$/
+
+/** Everything a terminal obeys rather than prints, including DEL. */
+const CONTROL = /[\u0000-\u001F\u007F]/
 
 export function formatInvitation(invitation: Invitation): string {
   const query = new URLSearchParams({
@@ -200,6 +206,20 @@ export function parseInvitation(raw: string): InvitationParse {
   const values: Record<string, string> = {}
   for (const field of required) {
     const value = url.searchParams.get(field)?.trim()
+    // A percent-encoded escape sequence is still one whitespace-free token, so
+    // the format carries control characters perfectly well and every field here
+    // is printed — into this command's own report, into its refusals, and for
+    // the origin into somebody's `.git/config`. A link that can move the cursor
+    // can erase the sentence above it, which is the whole of "never claim
+    // something it does not know" undone by a string somebody was sent.
+    // `src/shared/origin.ts` refuses these in a path origin for the same reason.
+    if (value !== undefined && CONTROL.test(value)) {
+      return {
+        ok: false,
+        reason: `its ${field} has a control character in it, which nothing that is really an invitation has`,
+        hint: 'Ask whoever sent it to run `teamree team invite <project>` again and send what that printed.'
+      }
+    }
     if (value === undefined || value === '') {
       return {
         ok: false,
@@ -230,7 +250,11 @@ export function parseInvitation(raw: string): InvitationParse {
  * query and a `?` that ends a question are told apart by position.
  */
 function findInvitation(raw: string): string | undefined {
-  const at = raw.toLowerCase().indexOf(PREFIX)
+  // Matched case-insensitively against the original rather than against a
+  // lowercased copy: a character whose lowercase is longer than itself — `İ` is
+  // two — shifts every index after it, and the token would then be sliced one
+  // character in and refused as unreadable.
+  const at = PREFIX_PATTERN.exec(raw)?.index ?? -1
   if (at === -1) return undefined
   const token = (raw.slice(at).split(/\s/)[0] as string).replace(TRAILING, '')
   return token.length > PREFIX.length ? token : undefined

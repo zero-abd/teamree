@@ -132,7 +132,8 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
       `meeting on ${relay.url}.`
   )
 
-  const project = await findOrFetch(context, journey, invitation, origin)
+  const found = await findOrFetch(context, journey, invitation, origin)
+  const project = found.project
   const status = await waitUntilRead(context, journey, project)
 
   // Origin. Everything teamwork does hangs off this one string — two checkouts
@@ -155,14 +156,43 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
       })
     }
     journey.note('origin', `origin already names ${status.origin.url}.`)
-  } else {
+  } else if (found.cloned) {
+    // Only ever on a checkout this command made. A clone normally comes out
+    // with its origin already set, so this is the odd case rather than the
+    // ordinary one — but the directory is one nothing else was using, so
+    // writing a remote into it takes nothing away from anybody.
     const set = await context.client.call('teamwork.setOrigin', { projectId: project.id, url: origin.remote })
     journey.note(
       'origin',
       set.replaced
-        ? `Pointed origin at ${set.url}, replacing the remote that was there — it was one teamree could not use.`
+        ? `Pointed origin at ${set.url}, replacing the remote the clone came with.`
         : `Added origin ${set.url}.`
     )
+  } else {
+    // The refusal that matters most in this file.
+    //
+    // A checkout that was already on this machine and has no origin teamree can
+    // read is not a checkout of the repository the link names — it is a
+    // repository about which nothing is known. Pointing its `origin` at an
+    // address out of a message and then pushing would send somebody's entire
+    // local branch to a host whoever wrote the link chose, and a scratch
+    // repository with no remote is exactly the shape that has in it. The
+    // directory name is taken from the link too, so the address and the target
+    // are picked by the same person.
+    //
+    // So: this command sets an origin on a checkout it cloned, and never on one
+    // it found.
+    throw journey.refusal({
+      code: 'origin_missing',
+      message:
+        `${project.name} at ${project.path} was already on this machine and has no origin teamree can read: ` +
+        `${status.origin.reason}. Nothing says it is the repository this invitation names.`,
+      hint:
+        'Nothing was changed. Run this again with --into naming a path that does not exist yet and it will clone ' +
+        `a fresh checkout there; or, if that directory really is the repository, give it the remote yourself with ` +
+        `\`git -C ${project.path} remote add origin ${origin.remote}\` and run this again.`,
+      data: { projectId: project.id, path: project.path, invited: origin.remote, origin: status.origin }
+    })
   }
 
   await settleRelay(context, journey, project, relay.url)
@@ -203,7 +233,7 @@ async function findOrFetch(
    * is what a checkout's own origin is compared against.
    */
   origin: { remote: string; normalised: string }
-): Promise<Project> {
+): Promise<{ project: Project; cloned: boolean }> {
   const projects = await context.client.call('project.list', {})
   const matches: Project[] = []
   const unread: string[] = []
@@ -228,11 +258,11 @@ async function findOrFetch(
       data: { matches: matches.map((project) => ({ id: project.id, name: project.name, path: project.path })) }
     })
   }
-  const found = matches[0]
-  if (found !== undefined) {
-    journey.note('repository', `Found it here: ${found.name} at ${found.path}.`)
-    journey.note('project', `${found.name} is already a project.`)
-    return found
+  const here = matches[0]
+  if (here !== undefined) {
+    journey.note('repository', `Found it here: ${here.name} at ${here.path}.`)
+    journey.note('project', `${here.name} is already a project.`)
+    return { project: here, cloned: false }
   }
 
   // Nothing here matched, so say what was not compared before saying what is
@@ -249,23 +279,30 @@ async function findOrFetch(
   }
 
   const into = destination(context, journey, invitation)
+  let fetched = false
   if (existsSync(into)) {
     // Not a refusal, and deliberately so: "I already cloned it" is the ordinary
-    // case, and the origin check above has just failed to find it only because
-    // teamree was never told about it. Whether it really is the right repository
-    // is settled a few lines further down, against its origin, where a wrong
-    // answer is a sentence naming both addresses rather than a silent adoption.
+    // case, and the origin check above failed to find it only because teamree
+    // was never told about it. Whether it really is the right repository is
+    // settled against its own origin afterwards — and a checkout with no origin
+    // to settle it against is refused there rather than adopted, because
+    // `cloned` below is false for everything that reaches this line.
     journey.note('repository', `${into} is already here, so nothing was cloned.`)
   } else {
     const cloned = await cloneRepository({
       origin: origin.remote,
       into,
       cwd: context.cwd,
-      // git's progress goes to stderr and only when this is not --json. The
-      // promise --json makes is about stdout carrying exactly one document, and
-      // a clone that prints nothing for ten minutes is the failure mode this
-      // whole codebase keeps complaining about — so a person watching gets the
-      // meter and a parser gets its one document, out of two different pipes.
+      // git's progress goes to stderr, and only when this is not --json.
+      //
+      // There is no third pipe. stdout carries the one document, and stderr is
+      // where a failure document goes — every other command in this CLI puts it
+      // there and every caller parses it from there — so a progress meter on
+      // stderr under --json would be a JSON document with a kilobyte of
+      // "Receiving objects: 43%" in front of it. That is a broken contract, not
+      // a nicety, so the meter is what gives way: `--json` says nothing until
+      // the clone is over, and the command's own help says so rather than
+      // leaving somebody to discover ten minutes of silence.
       ...(context.json ? {} : { onProgress: (line: string) => context.streams.err(`${line}\n`) })
     })
     if (!cloned.ok) {
@@ -280,9 +317,10 @@ async function findOrFetch(
     // would say a repository had been copied in exactly the case where it had
     // not, which is the one sentence this list exists to be trusted about.
     journey.note('repository', `Nothing here has that origin, so this cloned ${origin.remote} into ${into}.`)
+    fetched = true
   }
 
-  return addProject(context, journey, into, invitation.project)
+  return { project: await addProject(context, journey, into, invitation.project), cloned: fetched }
 }
 
 /** Adds the checkout, or finds the project that is already tracking it. */
@@ -337,6 +375,16 @@ async function addProject(
 function destination(context: CommandContext, journey: Journey, invitation: Invitation): string {
   const asked = readString(context.flags, 'into')
   if (asked !== undefined) {
+    // `--into ""` and `--into .` both resolve to the working directory, which
+    // would adopt whatever the caller happens to be standing in. Asked for and
+    // never meant.
+    if (asked.trim() === '' || asked.trim() === '.') {
+      throw journey.refusal({
+        code: 'bad_destination',
+        message: '--into names no directory.',
+        hint: 'Give the path to clone into. Leave --into off entirely to clone into the working directory under the repository’s own name.'
+      })
+    }
     if (asked.startsWith('~')) {
       throw journey.refusal({
         code: 'bad_destination',
@@ -472,12 +520,20 @@ async function publish(
     })
   }
 
-  journey.note(
-    'publish',
+  // Two separate facts, and they were being reported as one. "This made no new
+  // commit" is about this machine; "the remote already had it" is `push`'s own
+  // verdict, and a branch carrying the user's own unpushed commits makes the
+  // first true and the second false.
+  const made =
     result.commit === null
-      ? `Nothing new to commit; ${result.remote} already had ${result.branch}.`
-      : `Committed ${result.commit.shortSha} — “${result.commit.message}” — and pushed ${result.branch} to ${result.remote}.`
-  )
+      ? 'Nothing new to commit here'
+      : `Committed ${result.commit.shortSha} — “${result.commit.message}”`
+  const sent = result.push.alreadyUpToDate
+    ? `${result.remote} already had ${result.branch}`
+    : `pushed ${result.branch} to ${result.remote}${
+        result.push.setUpstream ? `, and set ${result.push.upstream} as its upstream` : ''
+      }`
+  journey.note('publish', `${made}; ${sent}.`)
   return result
 }
 
