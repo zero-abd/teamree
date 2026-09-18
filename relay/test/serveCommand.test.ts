@@ -37,6 +37,8 @@ import {
   occupiedBy,
   parseArgs,
   relayDefaultPath,
+  isListeningLine,
+  isTlsFailure,
   serveAnnouncement,
   serveProjectFault,
   serveTemplatePlan,
@@ -404,7 +406,11 @@ describe('what check says happened', () => {
       'teamree-relay: that host name does not resolve from this machine.'
     )
     for (const code of ['ETIMEDOUT', 'EHOSTUNREACH']) {
-      expect(describeCheck(url, { code }).advice).toContain('a firewall or the wrong network looks like')
+      // It said "the name resolves but nothing answered" until a review pointed
+      // out that this timer fires whatever stalled — a resolver that never came
+      // back included — and that an address typed as digits has no name to
+      // resolve in the first place.
+      expect(describeCheck(url, { code }).advice).toContain('a firewall, the wrong network')
     }
   })
 
@@ -521,5 +527,108 @@ describe.skipIf(!RELAY_BUILT)('dialling a relay that is really there', () => {
     const verdict = describeCheck(url, outcome)
     expect(verdict.ok).toBe(false)
     expect(verdict.advice).toBe('teamree-relay: nothing is listening on that port on that host.')
+  })
+})
+
+// Three defects an adversarial review found by running the command rather than
+// reading it. Each one made this print a sentence that was not true.
+describe('the announcement says only what is bound', () => {
+  const lines = (host: string): string[] =>
+    serveAnnouncement({ port: 8787, path: '/v1/relay', addresses: ['10.0.0.5'], host })
+
+  // It printed the machine's LAN address as "the URL to give your team" while
+  // the relay was bound to loopback and refusing every connection on it — under
+  // a line saying anyone who can reach that address can open one.
+  it('offers no team URL when the relay is bound to loopback', () => {
+    const shown = lines('127.0.0.1').join('\n')
+    expect(shown).not.toContain('10.0.0.5')
+    expect(shown).not.toContain('give your team')
+    expect(shown).toContain('nothing outside this Mac can reach it')
+  })
+
+  it('names only the address it was told to bind, when it was told one', () => {
+    const shown = lines('192.168.1.9').join('\n')
+    expect(shown).toContain('ws://192.168.1.9:8787/v1/relay')
+    expect(shown).not.toContain('10.0.0.5')
+  })
+
+  it('still names every address when it is bound to all of them', () => {
+    for (const wildcard of ['0.0.0.0', '::']) {
+      const shown = lines(wildcard).join('\n')
+      expect(shown).toContain('ws://10.0.0.5:8787/v1/relay')
+      expect(shown).toContain('give your team:  ws://10.0.0.5:8787/v1/relay')
+    }
+  })
+
+  // The panel reads the last URL out of this pane and offers it, so which URL
+  // is last is a contract and not a layout choice.
+  it('ends on the only URL that is true, in every binding', () => {
+    for (const [host, expected] of [
+      ['0.0.0.0', 'ws://10.0.0.5:8787/v1/relay'],
+      ['192.168.1.9', 'ws://192.168.1.9:8787/v1/relay'],
+      ['127.0.0.1', 'ws://127.0.0.1:8787/v1/relay']
+    ] as const) {
+      const urls = [
+        ...lines(host)
+          .join('\n')
+          .matchAll(/ws:\/\/[^\s]+/g)
+      ].map((match) => match[0])
+      expect(urls.at(-1)).toBe(expected)
+    }
+  })
+})
+
+describe('what counts as the relay saying it is listening', () => {
+  it('is its own event, and nothing that merely mentions it', () => {
+    expect(isListeningLine('{"level":"info","event":"relay.listening","port":8787}')).toBe(true)
+    expect(isListeningLine('{"level":"error","event":"relay.startFailed","reason":"EADDRINUSE"}')).toBe(false)
+    // Prose that merely names the event is not the event. Matching the quoted
+    // JSON key is what keeps a warning or a stack frame from announcing a URL
+    // for a relay that never bound.
+    expect(isListeningLine('(node:1) Warning: something about relay.listening in prose')).toBe(false)
+  })
+
+  // A line that is not JSON must not throw here: everything after it in the
+  // stream is forwarded by the same handler.
+  it('survives a line that is not JSON at all', () => {
+    expect(() => isListeningLine('    at Object.<anonymous> (/x/y.js:1:1)')).not.toThrow()
+    expect(isListeningLine('')).toBe(false)
+  })
+})
+
+describe('a certificate this machine will not accept', () => {
+  // Reported as "nothing answered … the connection failed before any relay
+  // could answer", which is false twice over: something answered, and it was
+  // this machine that refused it. It is also the ordinary case for the audience
+  // `serve` is written for — a relay with a proxy and an internal certificate.
+  it('is told apart from nothing answering', () => {
+    for (const code of [
+      'DEPTH_ZERO_SELF_SIGNED_CERT',
+      'ERR_TLS_CERT_ALTNAME_INVALID',
+      'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+      'EPROTO'
+    ]) {
+      expect(isTlsFailure(code)).toBe(true)
+      const said = describeCheck('wss://relay.example/v1/relay', { code })
+      expect(said.ok).toBe(false)
+      expect(said.headline).toContain('would not accept its certificate')
+      expect(said.headline).not.toContain('nothing answered')
+      expect(said.advice).toContain('TLS')
+    }
+  })
+
+  it('leaves every other failure saying what it always said', () => {
+    for (const code of ['ECONNREFUSED', 'ENOTFOUND', 'EHOSTUNREACH']) {
+      expect(isTlsFailure(code)).toBe(false)
+      expect(describeCheck('ws://relay.example/v1/relay', { code }).headline).toContain('nothing answered')
+    }
+  })
+
+  // The timer fires whatever stalled, and an address typed as digits has no
+  // name to resolve, so it must not claim the name resolved.
+  it('does not claim a name resolved when it timed out', () => {
+    const said = describeCheck('ws://10.0.0.5:8787/v1/relay', { code: 'ETIMEDOUT' })
+    expect(said.advice).not.toContain('the name resolves')
+    expect(said.advice).toContain('got no answer')
   })
 })

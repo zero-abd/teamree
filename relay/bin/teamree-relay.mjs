@@ -727,15 +727,55 @@ export function lanAddresses(interfaces = networkInterfaces()) {
  * above, so somebody who knows their own network can take a different one, and
  * somebody who does not now has something to try rather than a list to choose
  * from with no basis.
+ *
+ * `host` is what the relay was actually told to bind, and it is here because
+ * leaving it out made this print addresses nothing was listening on. With
+ * `--host 127.0.0.1` the relay serves loopback alone, and this still named the
+ * machine's LAN address and offered it as "the URL to give your team" — an
+ * address that refuses every connection, handed out under a line saying anyone
+ * who can reach it can open one. A bind address is not a detail of how the
+ * relay was started; it is the whole of which of these URLs exist.
  */
-export function serveAnnouncement({ port, path, addresses }) {
+export function serveAnnouncement({ port, path, addresses, host = SERVE_DEFAULT_HOST }) {
   const lines = [SERVE_LIMITATION, SERVE_TRUST]
   const loopback = `ws://127.0.0.1:${port}${path}`
+
+  // Bound to one address rather than to everything. Both of the wildcards mean
+  // "every interface"; anything else is a single address, and the only URL that
+  // can be true is the one naming it.
+  if (host !== '0.0.0.0' && host !== '::') {
+    if (isLoopbackHost(host)) {
+      // The sentence before the URL and the URL last, because the panel reads
+      // the final URL out of this pane and offers it. Loopback is the only
+      // address that is true here, so it is the only one that may be offered —
+      // and it is a real answer for two teamree instances on one Mac, which is
+      // how this gets tested. What it is not is a URL to give anybody else, and
+      // that is said above it rather than left to be discovered.
+      lines.push(
+        'teamree-relay: bound to loopback, so nothing outside this Mac can reach it. Leave --host off, or give ' +
+          'it an address on the network you share, to serve anybody else.'
+      )
+      lines.push(`teamree-relay: on this Mac only:  ${loopback}`)
+      return lines
+    }
+    const only = `ws://${host}:${port}${path}`
+    lines.push(`teamree-relay: bound to          ${only}`)
+    lines.push(`teamree-relay: the URL to give your team:  ${only}`)
+    return lines
+  }
+
   lines.push(`teamree-relay: on this Mac        ${loopback}`)
   for (const address of addresses) lines.push(`teamree-relay: on this network    ws://${address}:${port}${path}`)
+  // Loopback only when this machine has no network address at all. It is the one
+  // URL that is true, and saying so beats offering nothing.
   const team = addresses[0] === undefined ? loopback : `ws://${addresses[0]}:${port}${path}`
   lines.push(`teamree-relay: the URL to give your team:  ${team}`)
   return lines
+}
+
+/** Whether a bind address means "this machine only". */
+export function isLoopbackHost(host) {
+  return host === '127.0.0.1' || host === '::1' || host === 'localhost'
 }
 
 /** npm, spelled the way this platform can spawn it: on Windows it is a shim script and not an executable. */
@@ -759,28 +799,85 @@ function runNpm(target, args) {
  * Node that was found once, by the shell wrapper or by whoever typed `node`, and
  * looking it up a second time is a second chance to find a different one.
  *
- * Signals are deliberately not forwarded. The child is in this process's group,
- * so a Ctrl-C in the terminal reaches it directly and it shuts its sessions down
+ * SIGINT is deliberately not forwarded. The child is in this process's group, so
+ * a Ctrl-C in the terminal reaches it directly and it shuts its sessions down
  * politely; sending it one as well would arrive as a *second* signal, which the
  * relay reads as an operator out of patience and answers by exiting 1
  * mid-shutdown. What this does instead is decline to die first, so the prompt
  * comes back after the relay has actually finished closing rather than before.
- * The cost is a `kill` aimed at this PID alone, which the child never hears —
- * a trade taken because nothing types that and every terminal sends the other.
+ *
+ * SIGTERM *is* forwarded, once, because nothing delivers it to the group. That
+ * was the hole in the reasoning above: `kill`, `pkill`, `kill %1` and every
+ * supervisor send SIGTERM to one pid, the child never heard it, and both
+ * processes survived — re-parented to init, still holding the port. The next
+ * `serve` then died on EADDRINUSE against a relay nobody could see. Forwarded
+ * once and only once, so the second one still means what the relay thinks it
+ * means. Closing the pane from the app was never affected: that sends SIGHUP to
+ * the whole group, which this does not intercept.
+ *
+ * `onListening` is called the first time the child says it is listening. The
+ * announcement used to be printed before this function was called at all, which
+ * meant a relay that never bound — a port already taken is the ordinary case —
+ * still printed a URL under "the URL to give your team", and the app's panel
+ * read it out of the pane and offered to write it into the repository. A URL is
+ * a claim that something is there; it is not made now until something is.
  */
-function runRelay(target, env) {
+function runRelay(target, env, onListening) {
   return new Promise((done) => {
     const child = spawn(process.execPath, [join('dist', 'node', 'index.js')], {
       cwd: target,
       env: { ...process.env, ...env },
-      stdio: 'inherit'
+      // stdout is piped rather than inherited so this can see the relay say it
+      // is listening; every line is written straight on, unchanged and in order,
+      // so what reaches the terminal is what the relay wrote. stderr stays
+      // inherited: nothing here reads it and a pipe would only add a way to
+      // lose it.
+      stdio: ['inherit', 'pipe', 'inherit']
     })
+
+    let announced = false
+    let pending = ''
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk) => {
+      process.stdout.write(chunk)
+      if (announced) return
+      // Line-buffered, because a log line can arrive in pieces and half of one
+      // is not evidence of anything.
+      pending += chunk
+      const lines = pending.split('\n')
+      pending = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!isListeningLine(line)) continue
+        announced = true
+        onListening()
+        break
+      }
+    })
+
     const ignore = () => {}
     process.on('SIGINT', ignore)
-    process.on('SIGTERM', ignore)
+    let forwarded = false
+    process.on('SIGTERM', () => {
+      if (forwarded) return
+      forwarded = true
+      child.kill('SIGTERM')
+    })
+
     child.on('error', (error) => done({ code: 1, error }))
     child.on('close', (code) => done({ code: code ?? 1, error: null }))
   })
+}
+
+/**
+ * Whether one line of the relay's log is it saying it has bound.
+ *
+ * Matched on the event name in its own JSON rather than by parsing every line:
+ * the relay's logger writes one object per line, but a line that is not JSON at
+ * all — a Node warning, a stack trace — must not throw here and stop the
+ * forwarding of everything after it.
+ */
+export function isListeningLine(line) {
+  return line.includes('"event":"relay.listening"')
 }
 
 // --------------------------------------------------------------- checking it --
@@ -883,6 +980,23 @@ export function describeCheck(url, outcome, relayPath = FALLBACK_RELAY_PATH) {
     }
   }
 
+  // TLS before anything else, because the whole of the sentence below is wrong
+  // for it: the relay *did* answer, and this machine refused what it said. A
+  // self-signed or internal certificate is the ordinary case for exactly the
+  // audience this command is for — somebody who ran `serve` and put a proxy in
+  // front of it — and telling them nothing answered sends them to look at the
+  // relay, the port and the firewall, none of which is the problem.
+  if (isTlsFailure(outcome.code)) {
+    return {
+      ok: false,
+      headline: `teamree-relay: ${url} answered, but this machine would not accept its certificate (${outcome.code}).`,
+      advice:
+        'teamree-relay: something is listening and speaking TLS there. The certificate is self-signed, expired, ' +
+        'or not made out to that host name — or the address is plain ws:// behind a wss:// URL. Fix the ' +
+        'certificate, or trust the authority that issued it on every machine that has to meet there.'
+    }
+  }
+
   const headline = `teamree-relay: nothing answered at ${url} (${outcome.code}).`
   if (outcome.code === 'ECONNREFUSED') {
     return { ok: false, headline, advice: 'teamree-relay: nothing is listening on that port on that host.' }
@@ -894,11 +1008,36 @@ export function describeCheck(url, outcome, relayPath = FALLBACK_RELAY_PATH) {
     return {
       ok: false,
       headline,
+      // It used to open "the name resolves but nothing answered". This timer
+      // fires whatever stalled, including a resolver that never came back, and
+      // for an address typed as digits there is no name to resolve at all — so
+      // it claimed to know which half had worked when it knows neither.
       advice:
-        'teamree-relay: the name resolves but nothing answered, which is what a firewall or the wrong network looks like.'
+        'teamree-relay: the dial got no answer before it gave up, which is what a firewall, the wrong network, ' +
+        'or a host that is not up looks like from here.'
     }
   }
   return { ok: false, headline, advice: 'teamree-relay: the connection failed before any relay could answer.' }
+}
+
+/**
+ * Whether a socket error is this machine refusing the certificate.
+ *
+ * By prefix and by substring rather than by a list, because the set is long,
+ * version-dependent and shares one shape: OpenSSL's own reasons arrive
+ * uppercased with `CERT` in them (`DEPTH_ZERO_SELF_SIGNED_CERT`,
+ * `UNABLE_TO_VERIFY_LEAF_SIGNATURE`), and Node's own arrive as `ERR_TLS_*`. A
+ * name this misses is reported as an ordinary failure, which is what it did to
+ * all of them before.
+ */
+export function isTlsFailure(code) {
+  if (typeof code !== 'string') return false
+  return (
+    code.startsWith('ERR_TLS') ||
+    code.includes('CERT') ||
+    code === 'EPROTO' ||
+    code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+  )
 }
 
 /**
@@ -1040,11 +1179,16 @@ async function serve(options, { cwd, root }) {
     fail(`the build exited ${built.code}. The project is at ${tilde(target)}; nothing here has been lost.`)
   }
 
-  console.log('')
-  for (const line of serveAnnouncement({ port, path, addresses: lanAddresses() })) console.log(line)
-  console.log('')
+  // Printed by `runRelay` the moment the relay says it is listening, and never
+  // if it does not get that far.
+  const announce = () => {
+    console.log('')
+    for (const line of serveAnnouncement({ port, path, addresses: lanAddresses(), host })) console.log(line)
+    console.log('')
+  }
 
-  const { code, error } = await runRelay(target, { RELAY_HOST: host, RELAY_PORT: String(port) })
+  console.log('teamree-relay: starting it')
+  const { code, error } = await runRelay(target, { RELAY_HOST: host, RELAY_PORT: String(port) }, announce)
   if (error !== null) {
     fail(`could not start the relay (${error.message}). The project is at ${tilde(target)}.`)
   }
