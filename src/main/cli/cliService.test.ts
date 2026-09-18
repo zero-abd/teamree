@@ -67,6 +67,11 @@ function harness(options: Partial<CliServiceOptions> & { directory: string }): H
     platform: 'darwin',
     env: { PATH: '/usr/bin:/bin' },
     loginPaths: async () => [],
+    // Undefined by default: "the login shell could not be asked", which is the
+    // state in which /etc/paths is consulted at all. A test that wants the
+    // shell consulted says so, rather than every other test in this file
+    // silently starting a real zsh and answering for the machine it runs on.
+    shellPath: () => undefined,
     writable: async () => true,
     administrator: async (command) => {
       escalated.push(command)
@@ -198,6 +203,37 @@ describe('whether the destination is on PATH', () => {
       loginPaths: async () => [bin]
     })
     expect((await service.status()).onPath).toBe('login')
+  })
+
+  // The login shell is the PATH of the terminal somebody will actually type in,
+  // so when it can be asked it is the whole answer — including when the answer
+  // is no.
+  it('takes the login shell’s own PATH over everything else', async () => {
+    const { source, bin } = await scratchApp()
+    const { service } = harness({
+      source,
+      directory: bin,
+      env: { PATH: '/usr/bin:/bin' },
+      shellPath: () => `/opt/homebrew/bin:${bin}:/usr/bin`
+    })
+    expect((await service.status()).onPath).toBe('shell')
+  })
+
+  // The defect this seam exists for. `/etc/paths` is the PATH a shell *starts*
+  // with, and a profile that assigns PATH rather than extending it throws it
+  // away — so /etc/paths said yes, the terminal said no, and the app reported
+  // yes with no hedge, after charging an administrator password for the link.
+  it('believes the shell over /etc/paths when the two disagree', async () => {
+    const { source, bin } = await scratchApp()
+    const { service } = harness({
+      source,
+      directory: bin,
+      env: { PATH: '/usr/bin:/bin' },
+      // What `path_helper` built, and what the profile replaced it with.
+      loginPaths: async () => [bin],
+      shellPath: () => '/opt/homebrew/bin:/usr/bin:/bin'
+    })
+    expect((await service.status()).onPath).toBeNull()
   })
 
   it('says nothing claims it when nothing does', async () => {

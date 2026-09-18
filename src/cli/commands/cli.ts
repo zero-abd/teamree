@@ -27,7 +27,9 @@ function describeState(status: CliStatus): string {
 
 function describePath(status: CliStatus): string {
   if (status.onPath === 'environment') return `yes, ${status.directory} is on this app’s PATH`
-  if (status.onPath === 'login') return `yes, ${status.directory} is in /etc/paths`
+  if (status.onPath === 'shell') return `yes, ${status.directory} is on your login shell’s PATH`
+  if (status.onPath === 'login')
+    return `yes, ${status.directory} is in /etc/paths (your login shell could not be asked)`
   return `no — nothing teamree can read puts ${status.directory} on a PATH`
 }
 

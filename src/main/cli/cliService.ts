@@ -30,6 +30,7 @@ import { access, constants, lstat, mkdir, readFile, readlink, realpath, stat, sy
 import { dirname, join } from 'node:path'
 import type { CliImpermanence, CliInstall, CliPathSource, CliStatus } from '../../shared/entities'
 import { conflict, internal, notFound } from '../runtime/runtimeError'
+import { loginShellPath } from '../terminals/shell-environment'
 import { linkCommand, type AdministratorRunner } from './administrator'
 
 /** Where the link goes. Not configurable; see the note at the top of the file. */
@@ -102,6 +103,14 @@ export type CliServiceOptions = {
   administrator?: AdministratorRunner
   /** The login shell's PATH directories. */
   loginPaths?: () => Promise<string[]>
+  /**
+   * The login shell's own PATH, or undefined when it cannot be asked.
+   *
+   * A seam rather than a direct call so a test can put a machine in the state
+   * that matters — a profile that assigns PATH over the top of `/etc/paths` —
+   * without owning the machine it runs on.
+   */
+  shellPath?: () => string | undefined
   now?: () => number
 }
 
@@ -115,6 +124,7 @@ export class CliService {
   readonly #writable: (directory: string) => Promise<boolean>
   readonly #administrator: AdministratorRunner | undefined
   readonly #loginPaths: () => Promise<string[]>
+  readonly #shellPath: () => string | undefined
   readonly #now: () => number
 
   constructor(options: CliServiceOptions) {
@@ -127,6 +137,9 @@ export class CliService {
     this.#writable = options.writable ?? canWrite
     this.#administrator = options.administrator
     this.#loginPaths = options.loginPaths ?? readLoginPaths
+    // The same probe every pane is built with, and the same cached answer, so
+    // asking here costs nothing after the first shell start.
+    this.#shellPath = options.shellPath ?? (() => loginShellPath({ platform: this.#platform }))
     this.#now = options.now ?? Date.now
   }
 
@@ -293,11 +306,41 @@ export class CliService {
     return { state: entry.isDirectory() ? 'directory' : 'file', resolved: destination, dangling: false }
   }
 
+  /**
+   * Which PATH the destination is on, and which question that answers.
+   *
+   * The order is by how much each source knows. This process's own PATH is
+   * conclusive when it says yes and means nothing when it says no, because an
+   * app opened from the Finder was handed no shell environment at all.
+   *
+   * Then the login shell, which is the whole answer when it can be had: it is
+   * started, it reads the user's profile, and it prints the PATH it ended up
+   * with — the PATH of the terminal they are going to type in. So it is the one
+   * source allowed to say *no*. It was never consulted here before, even though
+   * the same probe runs for every pane and for agent discovery, and the gap
+   * showed: `/etc/paths` was taken as proof, and `/etc/paths` is a starting
+   * PATH that a profile assigning `PATH=` rather than extending it discards.
+   * Somebody in that state was told their directory was on their PATH, shown no
+   * warning, and charged an administrator password for a link their terminal
+   * could not find.
+   *
+   * `/etc/paths` is still read, but only where it is the best thing available —
+   * a shell this app does not know how to ask — and it is reported as itself so
+   * the panel can hedge rather than assert.
+   */
   async #onPath(): Promise<CliPathSource | null> {
     const wanted = withoutTrailingSlash(this.#directory)
     const entries = (this.#env.PATH ?? '').split(':').map(withoutTrailingSlash)
     if (entries.includes(wanted)) return 'environment'
     if (this.#platform !== 'darwin') return null
+
+    const shell = this.#shellPath()
+    if (shell !== undefined) {
+      // Asked and answered. A no here is a real no, and the caller shows the
+      // warning rather than a sentence claiming the command will be found.
+      return shell.split(':').map(withoutTrailingSlash).includes(wanted) ? 'shell' : null
+    }
+
     const login = await this.#loginPaths().catch(() => [])
     return login.map(withoutTrailingSlash).includes(wanted) ? 'login' : null
   }

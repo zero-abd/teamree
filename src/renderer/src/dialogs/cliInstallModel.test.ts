@@ -156,9 +156,9 @@ describe('platforms and builds this cannot serve', () => {
 describe('what happened afterwards', () => {
   /** The basis the success line carries, for the status above: onPath 'login'. */
   const CHECKED =
-    'Checked against /etc/paths, which every login shell’s PATH is built from, and /usr/local/bin is in it. ' +
-    'teamree cannot read your shell profile, so if one sets PATH rather than adds to it, teamree may still not ' +
-    'be found in a terminal.'
+    'Your login shell could not be asked, so this is checked against /etc/paths, and /usr/local/bin is in it. ' +
+    'That is the PATH a shell *starts* with: a profile that sets PATH rather than adding to it replaces it, and ' +
+    'then the command will not be found in a terminal even though the link is fine.'
 
   function install(extra: Partial<CliInstall> = {}): CliInstall {
     return {
@@ -326,10 +326,24 @@ describe('what the line reporting success is standing on', () => {
     }
   }
 
-  it('names /etc/paths as what it checked, and the profile it could not', () => {
+  // This used to assert that the line said "teamree cannot read your shell
+  // profile", which was the sentence appended to every one of these answers —
+  // and was false. teamree starts the login shell and reads the PATH it ends up
+  // with for every pane in the app. The panel was the one place that did not
+  // ask, and it said the app could not.
+  it('names /etc/paths as a fallback, and says what that does not prove', () => {
     const message = cliOutcome(linked({ onPath: 'login' }))
     expect(message).toContain('/etc/paths')
-    expect(message).toContain('shell profile')
+    expect(message).toContain('login shell could not be asked')
+    expect(message).toContain('will not be found in a terminal')
+    expect(message).not.toContain('teamree cannot read your shell profile')
+  })
+
+  // The strong answer, and the one a Mac normally gives now.
+  it('names the login shell’s own PATH when that is what answered', () => {
+    const message = cliOutcome(linked({ onPath: 'shell' }))
+    expect(message).toContain('PATH your login shell reports after reading your profile')
+    expect(message).toContain('a terminal you open will have')
   })
 
   it('names this app’s own PATH when that is what answered', () => {
