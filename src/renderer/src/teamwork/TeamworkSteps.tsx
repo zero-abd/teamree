@@ -63,6 +63,7 @@ import {
 } from '@shared/entities'
 import {
   ADD_KEY_BUTTON,
+  brokenRelayOverride,
   CANCEL_PUBLISH_BUTTON,
   checkOriginDraft,
   checkRelayDraft,
@@ -77,9 +78,17 @@ import {
   PUBLISH_BUTTON,
   publishActivity,
   pushPlan,
+  RELAY_CHECK,
   RELAY_DEPLOY,
   RELAY_LEAD,
+  RELAY_LAUNCHER_UNKNOWN,
   RELAY_OPTIONS,
+  RELAY_PANE_NO_URL,
+  RELAY_PANE_TITLES,
+  RELAY_SERVE,
+  RELAY_SERVE_STOPPED,
+  relayLauncherCommand,
+  relayPaneBusy,
   RETRY_PUBLISH_BUTTON,
   retryHint,
   setupOutcome,
@@ -89,9 +98,10 @@ import {
   TEAMWORK_PATHS,
   type OriginState,
   type PublishState,
-  type RelayDeployState,
   type RelayDraftCheck,
   type RelayOption,
+  type RelayPaneKind,
+  type RelayPaneState,
   type SetupOutcome,
   type StartTeamworkRead,
   type StartTeamworkReadErrors,
@@ -130,16 +140,20 @@ export type TeamworkStepsProps = {
   /** Points this checkout's `origin` at a URL. Validated before it is called. */
   onSetOrigin: (url: string) => void
 
-  /** The deploy running in a pane in this window, or undefined when none is. */
-  deploy: RelayDeployState | undefined
   /**
-   * Starts the deploy in a pane. Never offered when the build carries no relay:
-   * `relay.deploy.command` is null then, and the button is disabled with the
-   * runtime's own sentence beside it.
+   * The relay command running in a pane in this window, or undefined when none
+   * is. One slot, shared by all three verbs, which is why it carries its kind.
    */
-  onDeployRelay: () => void
-  /** Closes the deploy pane. */
-  onCloseDeploy: () => void
+  pane: RelayPaneState | undefined
+  /**
+   * Runs one of the launcher's verbs in a pane. Never offered when the build
+   * carries no relay — `relay.deploy.command` is null then — nor when the
+   * reported command is not a shape the verb can be swapped on, nor while
+   * another pane is open: each is a disabled button and a sentence beside it.
+   */
+  onStartRelayPane: (kind: RelayPaneKind, argument?: string) => void
+  /** Closes the pane. */
+  onClosePane: () => void
   /**
    * Renders the pane itself.
    *
@@ -147,7 +161,7 @@ export type TeamworkStepsProps = {
    * file is otherwise a pure function of its props — which is what lets the
    * whole of what it says be rendered in a test without a canvas.
    */
-  renderDeployPane: (terminalId: string) => React.ReactNode
+  renderRelayPane: (terminalId: string) => React.ReactNode
 
   /** What the commit-and-push button would do, is doing, and last did. */
   publish: PublishState
@@ -372,10 +386,10 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
           pending={props.relayPending}
           error={props.relayError}
           onSet={props.onSetRelay}
-          deploy={props.deploy}
-          onDeploy={props.onDeployRelay}
-          onCloseDeploy={props.onCloseDeploy}
-          renderDeployPane={props.renderDeployPane}
+          pane={props.pane}
+          onStartRelayPane={props.onStartRelayPane}
+          onClosePane={props.onClosePane}
+          renderRelayPane={props.renderRelayPane}
         />
       )
     case 'push':
@@ -592,13 +606,37 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
 }
 
 /**
- * The relay: the button that stands one up, the field that writes one down,
- * and — folded away — every other way to get one.
+ * Why one of the launcher's buttons cannot be pressed, or null when it can.
+ *
+ * Three reasons, in the order they stop being true of a machine: this build
+ * carries no relay at all and the runtime says so in its own words; the command
+ * it does report is not a shape another verb can be swapped onto; a pane is
+ * already open and there is one slot. Every one of them is a sentence beside a
+ * grey button rather than a button that fails when it is pressed, which is the
+ * rule this whole panel is built on.
+ */
+function launcherBlocked(relay: RelaySetting, derived: string | null, pane: RelayPaneState | undefined): string | null {
+  if (relay.deploy.command === null) return relay.deploy.reason
+  if (derived === null) return RELAY_LAUNCHER_UNKNOWN
+  if (pane !== undefined) return relayPaneBusy(pane.kind)
+  return null
+}
+
+/**
+ * The relay: two buttons that produce one, the field that writes one down, the
+ * check that says whether any of it can be reached — and, folded away, every
+ * other way to get one.
  *
  * The order is the change. The deploy used to be several paragraphs of
  * Cloudflare, Durable Object pricing and what `cd relay` means before anything
  * pressable; now it is a button first, with the reasoning behind a disclosure
  * and the rest in `relay/README.md`.
+ *
+ * Running one yourself sits beside the deploy with equal weight rather than
+ * inside "other ways", because the launcher ships it: it is one command and no
+ * account, and for a team on one network it is the better answer. It is not the
+ * better answer for two laptops behind two routers, and that is printed beside
+ * its button rather than left to be discovered.
  */
 function RelayBody({
   path,
@@ -607,10 +645,10 @@ function RelayBody({
   pending,
   error,
   onSet,
-  deploy,
-  onDeploy,
-  onCloseDeploy,
-  renderDeployPane
+  pane,
+  onStartRelayPane,
+  onClosePane,
+  renderRelayPane
 }: {
   path: TeamworkPath | null
   relay: RelaySetting
@@ -619,10 +657,10 @@ function RelayBody({
   pending: boolean
   error: string | null
   onSet: (url: string) => void
-  deploy: RelayDeployState | undefined
-  onDeploy: () => void
-  onCloseDeploy: () => void
-  renderDeployPane: (terminalId: string) => React.ReactNode
+  pane: RelayPaneState | undefined
+  onStartRelayPane: (kind: RelayPaneKind, argument?: string) => void
+  onClosePane: () => void
+  renderRelayPane: (terminalId: string) => React.ReactNode
 }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const check = checkRelayDraft(draft)
@@ -645,25 +683,45 @@ function RelayBody({
           two halves of a team that never meet.
         </p>
       ) : null}
+      {/* The override that is set, unreadable, and silently costing this
+          project its relay. Said first, because every other sentence on this
+          step is about a relay the app is not going to dial. */}
+      {brokenRelayOverride(relay) === null ? null : (
+        <p className="relay-broken-override">{brokenRelayOverride(relay)}</p>
+      )}
       {relay.url === null ? null : (
-        <p className="members__relay-current">
-          <code>{relay.url}</code>
-          <span className="members__relay-source">
-            {relay.source === 'environment' ? `from ${relay.override.name}` : `from ${relay.file}`}
-          </span>
-        </p>
+        <>
+          <p className="members__relay-current">
+            <code>{relay.url}</code>
+            <span className="members__relay-source">
+              {relay.source === 'environment' ? `from ${relay.override.name}` : `from ${relay.file}`}
+            </span>
+          </p>
+          {/* The check, beside the URL this project is actually going to dial.
+              This is the moment it answers a question somebody has: a joiner
+              who pulled a relay and a starter who just wrote one both want to
+              know whether the address works, and neither of them has a way to
+              ask. It is offered beside the paste field too, so a URL can be
+              tried before it is committed as well as after — the two are the
+              same control on two different strings. */}
+          <RelayCheck url={relay.url} relay={relay} pane={pane} onStart={onStartRelayPane} />
+        </>
       )}
       {options ? (
-        <RelayDeploy
-          relay={relay}
-          deploy={deploy}
-          onDeploy={onDeploy}
-          onCloseDeploy={onCloseDeploy}
-          onUse={onSet}
-          pending={pending}
-          renderDeployPane={renderDeployPane}
-        />
+        <>
+          <p className="relay-options__lead">{RELAY_LEAD}</p>
+          {/* Two ways, side by side and equally weighted. Neither is folded
+              away, because they answer different questions — one puts the relay
+              somewhere both of you can always reach, the other puts it on this
+              Mac in a minute with no account — and a reader who cannot see both
+              cannot choose between them. */}
+          <RelayDeploy relay={relay} pane={pane} onStart={onStartRelayPane} />
+          <RelayServe relay={relay} pane={pane} onStart={onStartRelayPane} />
+        </>
       ) : null}
+      {pane === undefined ? null : (
+        <RelayPaneBlock pane={pane} pending={pending} onUse={onSet} onClose={onClosePane} render={renderRelayPane} />
+      )}
       <form className="members__relay" onSubmit={submit}>
         <label className="field">
           <span className="field__label">
@@ -685,9 +743,21 @@ function RelayBody({
         </label>
         {check.state === 'bad' ? <RelayRefusal check={check} onUse={setDraft} /> : null}
         {error === null ? null : <p className="members__relay-error">{error}</p>}
-        <button type="submit" className="button" disabled={pending || check.state !== 'ok'}>
-          {pending ? 'Writing…' : 'Write relay file'}
-        </button>
+        <div className="relay-draft__controls">
+          <button type="submit" className="button" disabled={pending || check.state !== 'ok'}>
+            {pending ? 'Writing…' : 'Write relay file'}
+          </button>
+          {/* Checking before it is written down, which is the cheaper order:
+              an address that answers nothing is worth finding out about before
+              it is a commit in everybody's repository. */}
+          <RelayCheck
+            url={check.state === 'ok' ? check.url : null}
+            label={RELAY_CHECK.draftButton}
+            relay={relay}
+            pane={pane}
+            onStart={onStartRelayPane}
+          />
+        </div>
       </form>
       {options ? <RelayOptions /> : null}
       <Override relay={relay} />
@@ -696,7 +766,7 @@ function RelayBody({
 }
 
 /**
- * The deploy, as a button and a pane rather than a command to take elsewhere.
+ * The deploy, as a button rather than a command to take elsewhere.
  *
  * Three things it will not do. It will not pretend to be enabled when this
  * build carries no relay — the runtime says so and the sentence is the
@@ -705,68 +775,255 @@ function RelayBody({
  * URL the deploy printed into the repository on its own: the URL is offered on
  * a button, because a relay is a team-wide fact and a fact is somebody's to
  * assert.
+ *
+ * The pane it runs in is rendered by `RelayPaneBlock` below rather than here,
+ * because there is one pane and three things that can be in it.
  */
 function RelayDeploy({
   relay,
-  deploy,
-  onDeploy,
-  onCloseDeploy,
-  onUse,
-  pending,
-  renderDeployPane
+  pane,
+  onStart
 }: {
   relay: RelaySetting
-  deploy: RelayDeployState | undefined
-  onDeploy: () => void
-  onCloseDeploy: () => void
-  onUse: (url: string) => void
-  pending: boolean
-  renderDeployPane: (terminalId: string) => React.ReactNode
+  pane: RelayPaneState | undefined
+  onStart: (kind: RelayPaneKind) => void
 }): React.JSX.Element {
-  const { command, reason } = relay.deploy
+  const blocked = launcherBlocked(relay, relay.deploy.command, pane)
   return (
     <div className="relay-deploy">
-      <p className="relay-options__lead">{RELAY_LEAD}</p>
       <p className="relay-deploy__what">{RELAY_DEPLOY.what}</p>
       <button
         type="button"
         className="button button--primary"
-        disabled={command === null || deploy !== undefined}
-        onClick={onDeploy}
+        disabled={blocked !== null}
+        onClick={() => onStart('deploy')}
       >
         {RELAY_DEPLOY.button}
       </button>
       {/* Why it cannot be pressed, always beside it: a control that is grey for
           a reason nobody can read is the same as one that does nothing. */}
-      {command === null ? <p className="relay-deploy__blocked">{reason}</p> : null}
-      <p className="relay-deploy__note">{deploy === undefined ? RELAY_DEPLOY.browser : RELAY_DEPLOY.watching}</p>
-      {command === null ? null : (
+      {blocked === null ? null : <p className="relay-deploy__blocked">{blocked}</p>}
+      <p className="relay-deploy__note">{pane?.kind === 'deploy' ? RELAY_DEPLOY.watching : RELAY_DEPLOY.browser}</p>
+      {/* What it costs, which is the question everybody asks before they press
+          a button that makes an account do something. It is somebody else's
+          price list and it moves, so this says the shape of the answer and
+          points at the page that has the numbers. */}
+      <p className="relay-deploy__note">{RELAY_DEPLOY.free}</p>
+      {relay.deploy.command === null ? null : (
         <details className="relay-deploy__manual">
           <summary>{RELAY_DEPLOY.manual}</summary>
+          <pre className="relay-option__commands">{relay.deploy.command}</pre>
+        </details>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The relay somebody runs on their own machine, with the sentence that says who
+ * it will not work for standing between the description and the button.
+ *
+ * That order is deliberate and it is the whole reason this block is not just a
+ * second copy of the deploy. A relay on this Mac is the fastest way to a working
+ * team and a dead end for two people on two home networks, and which of those it
+ * is depends on a fact about somebody's network that teamree cannot see. So the
+ * limit is not a footnote, not a disclosure and not in a README: it is on screen
+ * above the button, at the only moment where reading it changes what somebody
+ * does.
+ */
+function RelayServe({
+  relay,
+  pane,
+  onStart
+}: {
+  relay: RelaySetting
+  pane: RelayPaneState | undefined
+  onStart: (kind: RelayPaneKind) => void
+}): React.JSX.Element {
+  const command = relay.deploy.command === null ? null : relayLauncherCommand(relay.deploy.command, 'serve')
+  const blocked = launcherBlocked(relay, command, pane)
+  return (
+    <div className="relay-deploy relay-deploy--serve">
+      <p className="relay-deploy__what">{RELAY_SERVE.what}</p>
+      {/* Above the button, never beside the outcome: a limitation somebody
+          meets after the relay is running is a wasted evening, and this one is
+          the exact thing a relay exists to solve. */}
+      <p className="relay-deploy__limit">{RELAY_SERVE.limit}</p>
+      <button type="button" className="button" disabled={blocked !== null} onClick={() => onStart('serve')}>
+        {RELAY_SERVE.button}
+      </button>
+      {blocked === null ? null : <p className="relay-deploy__blocked">{blocked}</p>}
+      <p className="relay-deploy__note">{RELAY_SERVE.watching}</p>
+      {command === null ? null : (
+        <details className="relay-deploy__manual">
+          <summary>{RELAY_SERVE.manual}</summary>
           <pre className="relay-option__commands">{command}</pre>
         </details>
       )}
-      {deploy === undefined ? null : (
-        <div className="relay-deploy__pane">
-          {deploy.url === null ? null : (
-            <p className="relay-deploy__found">
-              The deploy printed <code>{deploy.url}</code>.{' '}
-              <button
-                type="button"
-                className="button button--primary button--small"
-                disabled={pending}
-                onClick={() => onUse(deploy.url as string)}
-              >
-                {RELAY_DEPLOY.use}
-              </button>
-            </p>
-          )}
-          <div className="relay-deploy__terminal">{renderDeployPane(deploy.terminalId)}</div>
-          <button type="button" className="button button--small" onClick={onCloseDeploy}>
-            {deploy.running ? 'Stop and close this pane' : 'Close this pane'}
-          </button>
-        </div>
+    </div>
+  )
+}
+
+/**
+ * Dialling a relay and saying what answered.
+ *
+ * Offered in the two places a person has a URL and a doubt: beside the one this
+ * project is configured with, and beside the one that has just been typed and
+ * not yet written down. They are the same control on two different strings, and
+ * neither moment is the wrong one — the first is the joiner who pulled a relay
+ * and cannot tell whether it is alive, the second is the person about to commit
+ * an address to everybody's repository.
+ *
+ * What a pass means is beside it rather than under it, because the check runs
+ * here: it is a fact about this Mac's network and no other, and a green answer
+ * read as "the team can meet" would end the investigation at the wrong machine.
+ */
+function RelayCheck({
+  url,
+  label = RELAY_CHECK.button,
+  relay,
+  pane,
+  onStart
+}: {
+  /** The URL to dial, or null when there is nothing typed or configured yet. */
+  url: string | null
+  /**
+   * What this one is called. The two can be on screen together and they dial
+   * different addresses, so they are not allowed to share a name.
+   */
+  label?: string
+  relay: RelaySetting
+  pane: RelayPaneState | undefined
+  onStart: (kind: RelayPaneKind, argument?: string) => void
+}): React.JSX.Element {
+  const command =
+    relay.deploy.command === null || url === null ? null : relayLauncherCommand(relay.deploy.command, 'check', url)
+  // Nothing to dial outranks everything else it could say: the fix is in the
+  // field above rather than in the build or in the pane.
+  const blocked = url === null ? RELAY_CHECK.nothing : launcherBlocked(relay, command, pane)
+  return (
+    <span className="relay-check">
+      <button
+        type="button"
+        className="button button--small"
+        disabled={blocked !== null}
+        onClick={() => onStart('check', url as string)}
+      >
+        {label}
+      </button>
+      {blocked === null ? (
+        <span className="relay-check__note">{RELAY_CHECK.proves}</span>
+      ) : (
+        <span className="relay-check__blocked">{blocked}</span>
       )}
+    </span>
+  )
+}
+
+/**
+ * The one pane, whatever is in it.
+ *
+ * One slot per project, as it has always been: a second deploy of the same
+ * relay is never what somebody meant, and replacing a running pane would throw
+ * away the output they are in the middle of reading. So it says which of the
+ * three it is holding, and the buttons that would start another are grey with
+ * that same fact beside them.
+ *
+ * A URL is offered out of it only for the two commands that produce one, and
+ * only while it is true. Three conditions, and the panel checks all three
+ * rather than trusting anything upstream to have done it:
+ *
+ * The verb. A check echoes the URL it was handed, and offering somebody their
+ * own input back as a discovery would be the panel pretending to have found
+ * something. The store will not scrape one out of a check pane — and a check's
+ * scrollback literally contains `teamree-relay: dialling ws://…`, so the day
+ * that rule is loosened by one character this block would offer a URL the check
+ * had just proved dead. It is cheap to also refuse it here, and this is the
+ * side a reader looks at.
+ *
+ * The outcome. A relay you run here is a promise about a process on this Mac,
+ * and a `serve` that has exited is a closed port: the address it printed is
+ * still in the scrollback and answers nothing. Offering it to be written into
+ * everybody's repository is how a team commits an address that worked for one
+ * afternoon. A deploy is the opposite — the pane exiting is how it succeeds,
+ * and the Worker outlives it.
+ *
+ * And having anything at all. A pane that has finished and printed no URL used
+ * to render nothing between its title and its terminal, which reads exactly
+ * like a pane that is still working.
+ */
+function RelayPaneBlock({
+  pane,
+  pending,
+  onUse,
+  onClose,
+  render
+}: {
+  pane: RelayPaneState
+  pending: boolean
+  onUse: (url: string) => void
+  onClose: () => void
+  render: (terminalId: string) => React.ReactNode
+}): React.JSX.Element {
+  const live = pane.kind !== 'check' && (pane.kind !== 'serve' || pane.running)
+  const url = live ? pane.url : null
+  // Everything else this Mac printed, for the person who knows which of their
+  // addresses their teammates can actually reach. Only for a relay run here: a
+  // deploy has one endpoint and a second URL in that pane is a second deploy,
+  // which the offer above already takes as the one that was meant.
+  const alternatives = pane.kind === 'serve' && url !== null ? pane.urls.filter((other) => other !== url) : []
+  return (
+    <div className="relay-deploy__pane">
+      <p className="relay-pane__title">{RELAY_PANE_TITLES[pane.kind]}</p>
+      {url === null ? null : (
+        <>
+          <p className="relay-deploy__found">
+            {pane.kind === 'deploy' ? 'The deploy printed' : 'The relay is at'} <code>{url}</code>.{' '}
+            <button
+              type="button"
+              className="button button--primary button--small"
+              disabled={pending}
+              onClick={() => onUse(url)}
+            >
+              {pane.kind === 'deploy' ? RELAY_DEPLOY.use : RELAY_SERVE.use}
+            </button>
+          </p>
+          {alternatives.length === 0 ? null : (
+            <div className="relay-deploy__addresses">
+              <p className="relay-deploy__limit">{RELAY_SERVE.choice}</p>
+              <ul className="relay-deploy__address-list">
+                {alternatives.map((other) => (
+                  <li key={other}>
+                    <code>{other}</code>{' '}
+                    <button
+                      type="button"
+                      className="button button--small"
+                      disabled={pending}
+                      onClick={() => onUse(other)}
+                    >
+                      Use {other}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {/* What committing *this* address means, beside the button that
+              commits it. Not a refusal: a private address is the right answer
+              for a team that is all on that network, and the wrong one for a
+              team that is not, and only the person reading this knows which. */}
+          {pane.kind === 'serve' ? <p className="relay-deploy__limit">{RELAY_SERVE.committing}</p> : null}
+        </>
+      )}
+      {url !== null || pane.running || pane.kind === 'check' ? null : (
+        <p className="relay-deploy__limit">
+          {pane.kind === 'serve' && pane.url !== null ? RELAY_SERVE_STOPPED : RELAY_PANE_NO_URL}
+        </p>
+      )}
+      <div className="relay-deploy__terminal">{render(pane.terminalId)}</div>
+      <button type="button" className="button button--small" onClick={onClose}>
+        {pane.running ? 'Stop and close this pane' : 'Close this pane'}
+      </button>
     </div>
   )
 }
@@ -884,8 +1141,14 @@ function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element
  * environment — and an answer is a thing to have available, not a thing to put
  * in front of everybody who ever opens this panel.
  */
-function Override({ relay }: { relay: RelaySetting }): React.JSX.Element {
+function Override({ relay }: { relay: RelaySetting }): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
+  // An override that cannot be read is already said in full at the top of the
+  // step, and what is below is written for an override that is *winning*. This
+  // one is not winning, it is breaking, and two paragraphs about one variable
+  // that disagree about what it is doing is worse than one — so this stands
+  // down and leaves the sentence that names the fix on its own.
+  if (brokenRelayOverride(relay) !== null) return null
   if (relay.override.value === null) {
     return (
       <div className="disclosure">

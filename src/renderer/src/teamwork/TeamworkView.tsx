@@ -24,17 +24,17 @@ import { TeamworkSteps } from './TeamworkSteps'
 import type { TeamworkPath } from './startTeamwork'
 
 /**
- * How often the deploy pane is read for the URL it printed.
+ * How often the relay pane is read for what it has printed.
  *
  * The pane streams to xterm, not to this file, so the only way to know what it
  * said is to ask the runtime for its scrollback. Once and a half a second is
- * far below anybody's reading speed and costs one small call while a deploy is
- * on screen and nothing at all when none is.
+ * far below anybody's reading speed and costs one small call while a relay
+ * command is on screen and nothing at all when none is.
  */
-const DEPLOY_POLL_MS = 1_500
+const RELAY_PANE_POLL_MS = 1_500
 
-/** Enough of the tail to hold the endpoint the deploy prints at the very end. */
-const DEPLOY_TAIL_BYTES = 32_768
+/** Enough of the tail to hold the endpoint a deploy or a relay prints at the end. */
+const RELAY_PANE_TAIL_BYTES = 32_768
 
 /**
  * How often a running push is asked what it is doing.
@@ -103,10 +103,10 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   const originPending = useWorkspaceStore((state) => state.originPending)
   const originError = useWorkspaceStore((state) => state.originError)
   const setOrigin = useWorkspaceStore((state) => state.setOrigin)
-  const deploy = useWorkspaceStore((state) => state.relayDeploys[projectId])
-  const startRelayDeploy = useWorkspaceStore((state) => state.startRelayDeploy)
-  const closeRelayDeploy = useWorkspaceStore((state) => state.closeRelayDeploy)
-  const noteRelayDeploy = useWorkspaceStore((state) => state.noteRelayDeploy)
+  const pane = useWorkspaceStore((state) => state.relayPanes[projectId])
+  const startRelayPane = useWorkspaceStore((state) => state.startRelayPane)
+  const closeRelayPane = useWorkspaceStore((state) => state.closeRelayPane)
+  const noteRelayPane = useWorkspaceStore((state) => state.noteRelayPane)
   const publishPlan = useWorkspaceStore((state) => state.publishPlans[projectId])
   const publishPending = useWorkspaceStore((state) => state.publishPending)
   const publishError = useWorkspaceStore((state) => state.publishError)
@@ -116,8 +116,8 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   const publishProgress = useWorkspaceStore((state) => state.publishProgress[projectId])
   const loadPublishProgress = useWorkspaceStore((state) => state.loadPublishProgress)
   const cancelPublish = useWorkspaceStore((state) => state.cancelPublish)
-  const deployRunning = useWorkspaceStore((state) =>
-    deploy === undefined ? false : (state.terminals[deploy.terminalId]?.running ?? false)
+  const paneRunning = useWorkspaceStore((state) =>
+    pane === undefined ? false : (state.terminals[pane.terminalId]?.running ?? false)
   )
 
   // All three read on open. The runtime watches `.teamree` and says when it
@@ -151,7 +151,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   // This is the whole of the fix for "it gets stuck at git push" on this side
   // of the wire: `teamwork.publish` does not answer until the push is over, so
   // the only way to say anything in between is to ask a second question. It is
-  // a poll rather than a subscription for the same reason the deploy pane below
+  // a poll rather than a subscription for the same reason the relay pane below
   // is polled — the thing being watched lives for seconds, and a subscription
   // to set up and tear down for it would be more machinery than the question
   // deserves. `now` moves with it, so the elapsed time on screen is this
@@ -174,10 +174,12 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
     }
   }, [loadPublishProgress, projectId, publishPending])
 
-  // What the deploy pane has printed, asked for while one is on screen and
-  // never otherwise. The endpoint is the last thing the command says and there
-  // is no other way back from a program in a terminal.
-  const terminalId = deploy?.terminalId
+  // What the relay pane has printed, asked for while one is on screen and
+  // never otherwise. The endpoint is the last thing a deploy or a relay says,
+  // and there is no other way back from a program in a terminal. Which of the
+  // three verbs is in the pane decides what may be taken out of it, and that is
+  // the store's business rather than this poll's.
+  const terminalId = pane?.terminalId
   useEffect(() => {
     if (terminalId === undefined) return
     let alive = true
@@ -185,20 +187,20 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
       try {
         const { data } = await runtimeClient.call('terminal.read', {
           terminalId,
-          tailBytes: DEPLOY_TAIL_BYTES
+          tailBytes: RELAY_PANE_TAIL_BYTES
         })
-        if (alive) noteRelayDeploy(projectId, data, useWorkspaceStore.getState().terminals[terminalId]?.running ?? true)
+        if (alive) noteRelayPane(projectId, data, useWorkspaceStore.getState().terminals[terminalId]?.running ?? true)
       } catch {
         // A pane that has gone is the close button's problem, not a poll's.
       }
     }
     void read()
-    const timer = setInterval(() => void read(), DEPLOY_POLL_MS)
+    const timer = setInterval(() => void read(), RELAY_PANE_POLL_MS)
     return () => {
       alive = false
       clearInterval(timer)
     }
-  }, [noteRelayDeploy, projectId, terminalId])
+  }, [noteRelayPane, projectId, terminalId])
 
   // Escape is what every reader tries first on a view they opened to look at
   // something, and it is what the modal this replaced did. Capture, for the
@@ -229,7 +231,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   // The pane is rendered here rather than inside the steps, so the steps stay a
   // pure function of their props and can be rendered whole without a canvas.
   const [paneFocused, setPaneFocused] = useState(false)
-  const renderDeployPane = useCallback(
+  const renderRelayPane = useCallback(
     (id: string): React.ReactNode => (
       <TerminalView
         terminalId={id}
@@ -290,10 +292,10 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
             }}
             origin={{ pending: originPending, error: originError }}
             onSetOrigin={(url) => void setOrigin(projectId, url)}
-            deploy={deploy === undefined ? undefined : { ...deploy, running: deployRunning }}
-            onDeployRelay={() => void startRelayDeploy(projectId)}
-            onCloseDeploy={() => void closeRelayDeploy(projectId)}
-            renderDeployPane={renderDeployPane}
+            pane={pane === undefined ? undefined : { ...pane, running: paneRunning }}
+            onStartRelayPane={(kind, argument) => void startRelayPane(projectId, kind, argument)}
+            onClosePane={() => void closeRelayPane(projectId)}
+            renderRelayPane={renderRelayPane}
             publish={{
               plan: publishPlan,
               pending: publishPending,

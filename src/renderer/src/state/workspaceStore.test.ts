@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { collectTerminalIds } from '../panes/paneLayout'
 
 vi.mock('../runtimeClient/currentRuntimeClient', async () => {
@@ -7,7 +7,14 @@ vi.mock('../runtimeClient/currentRuntimeClient', async () => {
 })
 
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
-import { useWorkspaceStore } from './workspaceStore'
+import {
+  reconcileRelayPanes,
+  teamworkPaneFromWorktreeId,
+  teamworkPaneWorktreeId,
+  useWorkspaceStore,
+  type RelayPaneState
+} from './workspaceStore'
+import type { RelaySetting, Terminal } from '@shared/entities'
 
 it('adds exactly one pane per New terminal action, including with workspace events', async () => {
   const store = useWorkspaceStore.getState()
@@ -352,4 +359,342 @@ it('does not repeat a CLI success line to somebody who reopens the panel', async
 
   expect(useWorkspaceStore.getState().cliInstall).toBeNull()
   expect(useWorkspaceStore.getState().cli).not.toBeNull()
+})
+
+// The three relay-pane actions, against the store rather than against a mock of
+// it.
+//
+// They had no tests at all: the view's tests mock them away, and the panel's
+// render them out of props, so every rule they enforce — one pane at a time,
+// which verb may yield a URL, what a closed pane leaves behind — was enforced
+// by nothing that would notice if it stopped. The one that matters most is the
+// scheme list: a check pane's scrollback says `teamree-relay: dialling ws://…`
+// in so many words, and the panel would offer that URL as a relay to write into
+// everybody's repository.
+/**
+ * Every teamwork pane the seeded runtime is still holding, gone.
+ *
+ * The runtime in these tests is one object shared by the whole file, and a
+ * relay pane is now rebuilt from its list — so a pane a previous test started
+ * and did not close is a pane the next test finds on screen. That is the
+ * reconciliation doing exactly what it is for, and it is also why each of these
+ * has to start from an empty runtime rather than only from an empty store.
+ */
+const closeTeamworkTerminals = async (): Promise<void> => {
+  const open = await runtimeClient.call('terminal.list', {})
+  for (const entry of open) {
+    if (teamworkPaneFromWorktreeId(entry.worktreeId) === null) continue
+    await runtimeClient.call('terminal.close', { terminalId: entry.id })
+  }
+}
+
+describe('the relay pane, in the store that owns it', () => {
+  const LAUNCHER = '/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy'
+
+  const relaySetting = (projectId: string): RelaySetting => ({
+    projectId,
+    file: '.teamree/relay',
+    url: null,
+    source: null,
+    problem: 'no .teamree/relay in this project',
+    onDisk: { url: null, problem: 'no .teamree/relay in this project' },
+    override: { name: 'TEAMREE_RELAY_URL', value: null },
+    deploy: { command: LAUNCHER, reason: null },
+    readAt: 0
+  })
+
+  /** A booted store with a project whose build carries the launcher this panel knows. */
+  const ready = async (): Promise<string> => {
+    const store = useWorkspaceStore.getState()
+    await store.bootstrap()
+    await closeTeamworkTerminals()
+    const projectId = useWorkspaceStore.getState().projects[0]!.id
+    useWorkspaceStore.setState((state) => ({
+      relays: { ...state.relays, [projectId]: relaySetting(projectId) },
+      relayPanes: {}
+    }))
+    return projectId
+  }
+
+  const paneOf = (projectId: string): RelayPaneState => {
+    const pane = useWorkspaceStore.getState().relayPanes[projectId]
+    if (pane === undefined) throw new Error('no relay pane')
+    return pane
+  }
+
+  it('runs the launcher’s verb in a pane of the project’s own, and records which verb it is', async () => {
+    const projectId = await ready()
+    const call = vi.spyOn(runtimeClient, 'call')
+
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'serve', undefined)
+
+    const created = call.mock.calls.find(([method]) => method === 'terminal.create')
+    expect((created?.[1] as { command?: string })?.command).toBe(
+      '/apps/teamree.app/Contents/Resources/relay/teamree-relay serve'
+    )
+    expect((created?.[1] as { worktreeId?: string })?.worktreeId).toBe(teamworkPaneWorktreeId(projectId, 'serve'))
+    expect(paneOf(projectId)).toMatchObject({ kind: 'serve', url: null, urls: [], running: true })
+    expect(useWorkspaceStore.getState().terminals[paneOf(projectId).terminalId]).toBeDefined()
+    call.mockRestore()
+  })
+
+  // One slot. A second command would replace the output somebody is reading,
+  // and for a relay it would also fight the first one for the port.
+  it('refuses a second command while one is open', async () => {
+    const projectId = await ready()
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'serve', undefined)
+    const first = paneOf(projectId).terminalId
+
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'deploy', undefined)
+
+    expect(paneOf(projectId).terminalId).toBe(first)
+    expect(paneOf(projectId).kind).toBe('serve')
+  })
+
+  // The check button is disabled when there is nothing to dial, and that used
+  // to be the only thing standing between a caller and `teamree-relay check`
+  // with no argument — which is not the check anybody asked for, in a pane
+  // titled as though it were.
+  it('refuses a check with no URL to dial, the way the disabled button does', async () => {
+    const projectId = await ready()
+    const call = vi.spyOn(runtimeClient, 'call')
+
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'check', undefined)
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'check', '   ')
+
+    expect(call.mock.calls.filter(([method]) => method === 'terminal.create')).toHaveLength(0)
+    expect(useWorkspaceStore.getState().relayPanes[projectId]).toBeUndefined()
+    call.mockRestore()
+  })
+
+  it('passes the URL to check as one shell word', async () => {
+    const projectId = await ready()
+    const call = vi.spyOn(runtimeClient, 'call')
+
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'check', 'wss://relay.example/v1/relay?x=1')
+
+    const created = call.mock.calls.find(([method]) => method === 'terminal.create')
+    expect((created?.[1] as { command?: string })?.command).toBe(
+      "/apps/teamree.app/Contents/Resources/relay/teamree-relay check 'wss://relay.example/v1/relay?x=1'"
+    )
+    call.mockRestore()
+  })
+
+  it('closes the terminal as well as the slot', async () => {
+    const projectId = await ready()
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'serve', undefined)
+    const terminalId = paneOf(projectId).terminalId
+
+    await useWorkspaceStore.getState().closeRelayPane(projectId)
+
+    expect(useWorkspaceStore.getState().relayPanes[projectId]).toBeUndefined()
+    expect(await runtimeClient.call('terminal.list', {})).not.toContainEqual(
+      expect.objectContaining({ id: terminalId })
+    )
+  })
+
+  it('takes the address a relay run here printed, and every other one it offered', async () => {
+    const projectId = await ready()
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'serve', undefined)
+
+    useWorkspaceStore
+      .getState()
+      .noteRelayPane(
+        projectId,
+        [
+          'teamree-relay: on this Mac        ws://127.0.0.1:8787/v1/relay',
+          'teamree-relay: on this network    ws://192.168.64.1:8787/v1/relay',
+          'teamree-relay: on this network    ws://192.168.1.23:8787/v1/relay',
+          'teamree-relay: the URL to give your team:  ws://192.168.64.1:8787/v1/relay'
+        ].join('\n'),
+        true
+      )
+
+    // The one the relay itself offered, which is the last thing it printed.
+    expect(paneOf(projectId).url).toBe('ws://192.168.64.1:8787/v1/relay')
+    // And all of them, so the person who knows their own network can take a
+    // different one: the relay's own source says its pick is a guess.
+    expect(paneOf(projectId).urls).toEqual([
+      'ws://127.0.0.1:8787/v1/relay',
+      'ws://192.168.64.1:8787/v1/relay',
+      'ws://192.168.1.23:8787/v1/relay'
+    ])
+  })
+
+  // The one that nothing caught. A check prints the URL it was handed, and its
+  // very first line is `teamree-relay: dialling ws://…` — so a scheme list that
+  // let a check yield a URL would put the address the check had just proved
+  // dead under a button offering to write it into everybody's repository.
+  it('never takes a URL out of a check pane, however plainly the check prints one', async () => {
+    const projectId = await ready()
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'check', 'ws://192.168.1.23:8787/v1/relay')
+
+    useWorkspaceStore
+      .getState()
+      .noteRelayPane(
+        projectId,
+        [
+          'teamree-relay: dialling ws://192.168.1.23:8787/v1/relay',
+          'teamree-relay: no answer from ws://192.168.1.23:8787/v1/relay — connection refused',
+          'teamree-relay: also tried wss://192.168.1.23:8787/v1/relay'
+        ].join('\n'),
+        false
+      )
+
+    expect(paneOf(projectId).url).toBeNull()
+    expect(paneOf(projectId).urls).toEqual([])
+  })
+
+  // Only the tail of the scrollback is read, and a relay that is working logs.
+  // Give it long enough and the announcement scrolls out of that window — and
+  // the button somebody was about to press used to vanish out from under them.
+  it('does not forget an address because the relay kept talking', async () => {
+    const projectId = await ready()
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'serve', undefined)
+    const note = useWorkspaceStore.getState().noteRelayPane
+
+    note(projectId, 'teamree-relay: the URL to give your team:  ws://192.168.1.23:8787/v1/relay', true)
+    note(projectId, '{"at":1,"peer":"ada"}\n{"at":2,"peer":"priya"}\n{"at":3,"peer":"ada"}', true)
+
+    expect(paneOf(projectId).url).toBe('ws://192.168.1.23:8787/v1/relay')
+    expect(paneOf(projectId).urls).toEqual(['ws://192.168.1.23:8787/v1/relay'])
+  })
+
+  it('still prefers a newer address to the one it is holding', async () => {
+    const projectId = await ready()
+    await useWorkspaceStore.getState().startRelayPane(projectId, 'deploy', undefined)
+    const note = useWorkspaceStore.getState().noteRelayPane
+
+    note(projectId, 'wss://first.workers.dev/v1/relay', true)
+    note(projectId, 'wss://first.workers.dev/v1/relay ... redeployed ... wss://second.workers.dev/v1/relay', false)
+
+    expect(paneOf(projectId).url).toBe('wss://second.workers.dev/v1/relay')
+    expect(paneOf(projectId).running).toBe(false)
+  })
+
+  it('says nothing about a project with no pane open', () => {
+    useWorkspaceStore.getState().noteRelayPane('no-such-project', 'ws://192.168.1.23:8787/v1/relay', true)
+    expect(useWorkspaceStore.getState().relayPanes['no-such-project']).toBeUndefined()
+  })
+})
+
+// A renderer reload empties this window's memory and leaves every process the
+// runtime started exactly where it was. For a deploy that did not matter — it
+// had finished. For a relay it matters a great deal: the slot is gone, the
+// buttons come back enabled, the pane is in no pane tree so there is no way
+// left to stop it, and the next serve dies on EADDRINUSE against a process
+// nothing on screen admits to.
+describe('the relay pane, against the runtime’s own list of terminals', () => {
+  const terminal = (id: string, worktreeId: string, running = true): Terminal => ({
+    id,
+    worktreeId,
+    title: 'teamree-relay',
+    cwd: '/repos/pager',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running,
+    busy: false,
+    lastOutputAt: 0
+  })
+
+  const listed = (...entries: Terminal[]): Record<string, Terminal> =>
+    Object.fromEntries(entries.map((entry) => [entry.id, entry]))
+
+  it('reads the project and the verb back out of the id the pane was made under', () => {
+    expect(teamworkPaneFromWorktreeId(teamworkPaneWorktreeId('p1', 'serve'))).toEqual({
+      projectId: 'p1',
+      kind: 'serve'
+    })
+    // A project id with a colon in it is still one project id.
+    expect(teamworkPaneFromWorktreeId(teamworkPaneWorktreeId('a:b', 'check'))).toEqual({
+      projectId: 'a:b',
+      kind: 'check'
+    })
+    expect(teamworkPaneFromWorktreeId('wt_12')).toBeNull()
+    expect(teamworkPaneFromWorktreeId('teamwork:p1')).toBeNull()
+    expect(teamworkPaneFromWorktreeId('teamwork:publish:p1')).toBeNull()
+  })
+
+  it('brings a relay this window has forgotten back into its slot, as the verb it is', () => {
+    const rebuilt = reconcileRelayPanes({}, listed(terminal('term_9', teamworkPaneWorktreeId('p1', 'serve'))))
+    expect(rebuilt.p1).toEqual({ kind: 'serve', terminalId: 'term_9', url: null, urls: [], running: true })
+  })
+
+  // The other way round: a slot whose only control reads "Close this pane" for
+  // a pane that is not there.
+  it('drops a slot whose terminal has left the runtime’s list', () => {
+    const open: Record<string, RelayPaneState> = {
+      p1: { kind: 'serve', terminalId: 'term_9', url: 'ws://192.168.1.23:8787/v1/relay', urls: [], running: true }
+    }
+    expect(reconcileRelayPanes(open, listed(terminal('term_1', 'wt_1')))).toEqual({})
+  })
+
+  // Everything the slot has learned is in the slot and nowhere else — the URL
+  // above all, which is scraped out of a pane and is not in any list.
+  it('keeps what an open pane has learned, and takes running off the record', () => {
+    const open: Record<string, RelayPaneState> = {
+      p1: {
+        kind: 'serve',
+        terminalId: 'term_9',
+        url: 'ws://192.168.1.23:8787/v1/relay',
+        urls: ['ws://192.168.1.23:8787/v1/relay'],
+        running: true
+      }
+    }
+    const same = reconcileRelayPanes(open, listed(terminal('term_9', teamworkPaneWorktreeId('p1', 'serve'))))
+    expect(same).toBe(open)
+
+    const exited = reconcileRelayPanes(open, listed(terminal('term_9', teamworkPaneWorktreeId('p1', 'serve'), false)))
+    expect(exited.p1).toEqual({ ...open.p1, running: false })
+  })
+
+  it('leaves an ordinary worktree’s terminals alone', () => {
+    expect(reconcileRelayPanes({}, listed(terminal('term_1', 'wt_1'), terminal('term_2', 'wt_2')))).toEqual({})
+  })
+
+  // And the whole of it through the store, because the reconciliation is only
+  // worth anything if it is actually wired to the read that replaces the list.
+  it('adopts a relay left running by a window that reloaded, and prunes it when it goes', async () => {
+    const store = useWorkspaceStore.getState()
+    await store.bootstrap()
+    await closeTeamworkTerminals()
+    const stop = store.startWatching()
+    try {
+      const projectId = useWorkspaceStore.getState().projects[0]!.id
+      useWorkspaceStore.setState((state) => ({
+        relays: {
+          ...state.relays,
+          [projectId]: {
+            ...state.relays[projectId]!,
+            deploy: { command: '/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy', reason: null }
+          }
+        },
+        relayPanes: {}
+      }))
+      await useWorkspaceStore.getState().startRelayPane(projectId, 'serve', undefined)
+      const terminalId = useWorkspaceStore.getState().relayPanes[projectId]!.terminalId
+
+      // The reload: this window's memory of the pane is gone and the process is
+      // not. The next read of the list is what has to notice.
+      useWorkspaceStore.setState({ relayPanes: {} })
+      const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+      await useWorkspaceStore.getState().createTerminal(worktreeId)
+
+      await vi.waitFor(() =>
+        expect(useWorkspaceStore.getState().relayPanes[projectId]).toMatchObject({
+          kind: 'serve',
+          terminalId,
+          running: true
+        })
+      )
+
+      // And gone from the runtime is gone from the panel: a slot offering to
+      // close a pane that is not there is a button that can only fail.
+      await runtimeClient.call('terminal.close', { terminalId })
+      await vi.waitFor(() => expect(useWorkspaceStore.getState().relayPanes[projectId]).toBeUndefined())
+    } finally {
+      stop()
+    }
+  })
 })

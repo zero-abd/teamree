@@ -16,6 +16,7 @@ import type {
   TeamworkRead
 } from '@shared/entities'
 import {
+  brokenRelayOverride,
   checkOriginDraft,
   checkRelayDraft,
   formatElapsed,
@@ -26,10 +27,19 @@ import {
   PUBLISH_QUIET_MS,
   publishActivity,
   pushPlan,
+  RELAY_CHECK,
   RELAY_DEPLOY,
+  RELAY_LAUNCHER_UNKNOWN,
   RELAY_LEAD,
   RELAY_OPTIONS,
+  RELAY_PANE_URL_SCHEMES,
+  RELAY_SERVE,
+  relayLauncherCommand,
+  relayPaneBusy,
+  RELAY_PANE_NO_URL,
+  RELAY_SERVE_STOPPED,
   relayUrlFromOutput,
+  relayUrlsFromOutput,
   retryHint,
   setupOutcome,
   startTeamworkFlow,
@@ -225,15 +235,27 @@ describe('step 3, the team’s relay', () => {
     }
   })
 
-  // Every option left in the list needs a clone, because the Dockerfile is in
-  // one — and the one that does not is the button, whose command the runtime
-  // reports rather than this file guessing at it. A panel that gave the old
-  // single answer sent half its readers to a directory they do not have.
-  it('says where these commands run, and agrees with relay/README.md that it is a clone', () => {
-    const readme = readFileSync(new URL('../../../../relay/README.md', import.meta.url), 'utf8')
-    for (const option of RELAY_OPTIONS) expect(option.commands.startsWith('cd relay')).toBe(true)
+  // The clone stopped being the universal answer the day the launcher grew a
+  // verb that writes and runs the relay itself. Every option that still prints
+  // a docker command is about a machine teamree is not on, and those do need a
+  // clone; the ones about a machine of your own are the button, and the lead
+  // says so rather than sending half its readers to a directory they have not
+  // got.
+  it('sends people to a clone only for the options that really need one', () => {
+    for (const option of RELAY_OPTIONS) {
+      if (option.commands.includes('docker')) expect(option.commands.startsWith('cd relay')).toBe(true)
+    }
+    expect(RELAY_OPTIONS.find((option) => option.id === 'tunnel')?.commands).not.toMatch(/docker|cd relay/)
+    expect(MORE_RELAYS_LEAD).toMatch(/run on a machine of your own are the button above/)
     expect(MORE_RELAYS_LEAD).toMatch(/clone of the\s+teamree repository/)
-    expect(readme).toMatch(/does need a clone of this repository/)
+  })
+
+  // A LAN address is a fact about a team that is all on that LAN and a dead end
+  // for anybody who is not, and the card is the only place that is ever said.
+  it('says what committing a LAN address costs the person who is not on that network', () => {
+    const mesh = RELAY_OPTIONS.find((option) => option.id === 'mesh')
+    expect(mesh?.keep).toBe('commit')
+    expect(mesh?.address).toMatch(/all on that network, and unreachable for anybody who is not/)
   })
 
   // The command is the runtime's answer now, because it is different in a
@@ -245,33 +267,333 @@ describe('step 3, the team’s relay', () => {
     expect(RELAY_DEPLOY.browser).toMatch(/A browser opens once/)
   })
 
-  it('does not promise the Worker is free, and no longer argues the point in the panel', () => {
+  // "What does it cost" is the question everybody asks before pressing a button
+  // that makes an account do something, and refusing to answer it sent people
+  // to a pricing page to work out whether they dared. So it is answered — with
+  // the shape of the answer and a pointer to the figures, which are somebody
+  // else's and move, and without the promise this project cannot make.
+  it('says the free plan covers a team, and why, without promising free forever', () => {
     const readme = readFileSync(new URL('../../../../relay/README.md', import.meta.url), 'utf8')
-    // The pricing paragraph was several lines in front of the button. It is a
-    // thing to look up, and relay/README.md is where it is looked up.
-    expect(`${RELAY_LEAD} ${RELAY_DEPLOY.what} ${RELAY_DEPLOY.browser}`).not.toMatch(/free/i)
+    expect(RELAY_DEPLOY.free).toMatch(/The free plan covers a team/)
+    expect(RELAY_DEPLOY.free).toMatch(/sleeps while nobody is typing/)
+    expect(RELAY_DEPLOY.free).toMatch(/daily and per Cloudflare account/)
+    expect(RELAY_DEPLOY.free).toMatch(/reset at 00:00 UTC/)
+    expect(RELAY_DEPLOY.free).toMatch(/developers\.cloudflare\.com/)
+    expect(RELAY_DEPLOY.free).not.toMatch(/free forever|always free/i)
+    // The numbers themselves are Cloudflare's and they move, so they live in
+    // the README beside the link rather than in a panel nobody updates.
+    expect(RELAY_DEPLOY.free).not.toMatch(/\d{3,}/)
     expect(readme).toMatch(/pricing/i)
   })
 })
 
-describe('the wss:// URL a finished deploy printed', () => {
+describe('the URL a finished relay command printed', () => {
   it('is read out of what the pane has said', () => {
     expect(
       relayUrlFromOutput(
-        'teamree-relay: deployed. Your relay endpoint is\n\n    wss://teamree-relay.ada.workers.dev/v1/relay\n'
+        'teamree-relay: deployed. Your relay endpoint is\n\n    wss://teamree-relay.ada.workers.dev/v1/relay\n',
+        ['wss']
       )
     ).toBe('wss://teamree-relay.ada.workers.dev/v1/relay')
   })
 
   // Somebody who deploys twice in one pane means the second one.
   it('takes the last one when a pane holds more than one deploy', () => {
-    expect(relayUrlFromOutput('wss://one.example/v1/relay ... later ... wss://two.example/v1/relay')).toBe(
+    expect(relayUrlFromOutput('wss://one.example/v1/relay ... later ... wss://two.example/v1/relay', ['wss'])).toBe(
       'wss://two.example/v1/relay'
     )
   })
 
   it('is null when nothing in the pane is a relay URL', () => {
-    expect(relayUrlFromOutput('Authenticating with Cloudflare... https://dash.cloudflare.com')).toBeNull()
+    expect(relayUrlFromOutput('Authenticating with Cloudflare... https://dash.cloudflare.com', ['wss'])).toBeNull()
+  })
+
+  // The schemes are an argument because the two commands print different ones
+  // and reading either out of either pane would be wrong in both directions: a
+  // deploy that printed a `ws://` is not a deployed relay, and a relay running
+  // on this machine has no certificate and never prints `wss://`. Taking the
+  // wrong one would write an endpoint into the project that nothing answers on.
+  it('reads a plain ws:// endpoint from a relay running here', () => {
+    expect(relayUrlFromOutput('teamree-relay: listening on\n\n    ws://192.168.1.14:8787/v1/relay\n', ['ws'])).toBe(
+      'ws://192.168.1.14:8787/v1/relay'
+    )
+  })
+
+  it('ignores a scheme the command that printed it could not have produced', () => {
+    expect(relayUrlFromOutput('ws://192.168.1.14:8787/v1/relay', ['wss'])).toBeNull()
+    expect(relayUrlFromOutput('wss://teamree-relay.ada.workers.dev/v1/relay', ['ws'])).toBeNull()
+  })
+
+  // `wss` sorted before `ws` on purpose: matched the other way round, the `wss`
+  // URL is read as a `ws` one followed by an `s://` that is not a separator.
+  it('does not read a wss:// URL as a ws:// one when both are allowed', () => {
+    expect(relayUrlFromOutput('wss://teamree-relay.ada.workers.dev/v1/relay', ['ws', 'wss'])).toBe(
+      'wss://teamree-relay.ada.workers.dev/v1/relay'
+    )
+  })
+
+  it('is null when asked for no scheme at all', () => {
+    expect(relayUrlFromOutput('wss://teamree-relay.ada.workers.dev/v1/relay', [])).toBeNull()
+  })
+})
+
+// Which schemes each pane may offer a URL on, said once so the store and the
+// panel cannot drift apart about it.
+describe('which schemes a pane may offer a URL on', () => {
+  it('keeps the deploy where it was, widens the relay run here, and gives a check nothing', () => {
+    expect(RELAY_PANE_URL_SCHEMES.deploy).toEqual(['wss'])
+    expect(RELAY_PANE_URL_SCHEMES.serve).toEqual(['ws', 'wss'])
+    expect(RELAY_PANE_URL_SCHEMES.check).toEqual([])
+  })
+})
+
+// One program, several subcommands, and a runtime contract that types exactly
+// one command. Swapping the verb on a launcher the runtime has already found on
+// disk is safe; guessing at a different program would not be, and neither would
+// rewriting a command this file does not recognise.
+describe('running the shipped launcher with a different verb', () => {
+  const DEPLOY = "'/Applications/teamree.app/Contents/Resources/relay/teamree-relay' deploy"
+
+  it('swaps the verb and leaves the launcher exactly as the runtime reported it', () => {
+    expect(relayLauncherCommand(DEPLOY, 'serve')).toBe(
+      "'/Applications/teamree.app/Contents/Resources/relay/teamree-relay' serve"
+    )
+    expect(relayLauncherCommand('/opt/relay/teamree-relay deploy', 'serve')).toBe('/opt/relay/teamree-relay serve')
+  })
+
+  it('quotes the URL it is given, because a URL reaches a shell', () => {
+    expect(relayLauncherCommand('/opt/relay/teamree-relay deploy', 'check', 'wss://relay.example/v1/relay')).toBe(
+      "/opt/relay/teamree-relay check 'wss://relay.example/v1/relay'"
+    )
+    // A shell would act on every one of these rather than pass it along.
+    expect(relayLauncherCommand('/opt/relay/teamree-relay deploy', 'check', 'wss://h/a b;rm -rf /$HOME')).toBe(
+      "/opt/relay/teamree-relay check 'wss://h/a b;rm -rf /$HOME'"
+    )
+    // The one character single quotes cannot carry: closed, escaped, reopened.
+    expect(relayLauncherCommand('/opt/relay/teamree-relay deploy', 'check', "ws://h/it's")).toBe(
+      "/opt/relay/teamree-relay check 'ws://h/it'\\''s'"
+    )
+  })
+
+  // The strictness is the point: an unrecognised command is a program nothing
+  // here knows, and a button that runs something nobody can predict is exactly
+  // the button this panel refuses to have.
+  it('refuses anything that is not the launcher it knows, rather than guessing', () => {
+    expect(relayLauncherCommand('/opt/relay/teamree-relay', 'serve')).toBeNull()
+    expect(relayLauncherCommand('npx wrangler deploy --cwd relay', 'serve')).toBeNull()
+    expect(relayLauncherCommand('deploy', 'serve')).toBeNull()
+    expect(relayLauncherCommand(' deploy', 'serve')).toBeNull()
+    expect(relayLauncherCommand('', 'check', 'wss://relay.example/v1/relay')).toBeNull()
+  })
+
+  it('says so in one sentence, with the fix, when it will not guess', () => {
+    expect(RELAY_LAUNCHER_UNKNOWN).toMatch(/does not recognise/)
+    expect(RELAY_LAUNCHER_UNKNOWN).toMatch(/stand a relay up yourself and paste its URL below/)
+  })
+})
+
+// The two things the self-hosted block has to say, and the one it must not.
+describe('running a relay on your own machine', () => {
+  it('says who it will not work for, in the same breath as what it is', () => {
+    expect(RELAY_SERVE.limit).toMatch(/only serves machines that can already reach this Mac/)
+    expect(RELAY_SERVE.limit).toMatch(/Two laptops behind two home routers cannot meet on it/)
+    expect(RELAY_SERVE.limit).toMatch(/put a\s+tunnel in front of this one, or deploy one instead/)
+  })
+
+  it('says what committing a private address means, and does not refuse it', () => {
+    expect(RELAY_SERVE.committing).toMatch(/only reachable from that network/)
+    expect(RELAY_SERVE.committing).toMatch(/will never meet the rest of you/)
+  })
+
+  // The rule the whole panel is built on, and the one this option is most
+  // tempting to break: it runs on somebody's Mac, not on ours.
+  it('never suggests teamree hosts or runs one for anybody', () => {
+    expect(RELAY_SERVE.what).toMatch(/teamree hosts nothing and runs nothing for you/)
+    expect(`${RELAY_LEAD} ${RELAY_SERVE.what} ${RELAY_SERVE.limit}`).not.toMatch(/our relay|teamree’s relay/i)
+  })
+
+  // The command says "this needs the network, once" while it is doing it, and
+  // somebody reading the panel deserves the same warning before they press the
+  // button — not a minute of apparently nothing happening, on a laptop that may
+  // well be the one place they cannot get to npm.
+  it('says it needs the network once, and that the first minute is an install', () => {
+    expect(RELAY_SERVE.what).toMatch(/needs the network once/)
+    expect(RELAY_SERVE.what).toMatch(/about a minute on npm before it listens/)
+  })
+
+  // What a pane says when there is nothing to offer. Both are about a command
+  // that is over: one produced no URL at all, the other produced one that has
+  // stopped being true.
+  it('has something true to say about a pane that ended with nothing to give', () => {
+    expect(RELAY_PANE_NO_URL).toMatch(/finished and printed no relay URL/)
+    expect(RELAY_PANE_NO_URL).toMatch(/in the pane above/)
+    expect(RELAY_SERVE_STOPPED).toMatch(/has stopped, so the address it printed answers nothing now/)
+    expect(RELAY_SERVE_STOPPED).toMatch(/no URL here to give your team/)
+  })
+
+  // The relay prints every address this Mac has because it cannot tell which of
+  // them anybody else can reach, and its pick is the first one the OS listed.
+  // The panel says that rather than repeating the guess as a fact.
+  it('says the address it leads with is a guess, and does not pretend to rank them', () => {
+    expect(RELAY_SERVE.choice).toMatch(/teamree cannot tell which of them your teammates can reach/)
+    expect(RELAY_SERVE.choice).toMatch(/the order they are listed in is\s+not a ranking/)
+    expect(RELAY_SERVE.choice).toMatch(/Take whichever is on the network you share/)
+  })
+})
+
+// Which address to commit is a question about somebody's network, and the relay
+// answers it with a guess and prints its working. The panel needs the working.
+describe('every address a relay printed, not only the one it picked', () => {
+  const ANNOUNCEMENT = [
+    'teamree-relay: on this Mac        ws://127.0.0.1:8787/v1/relay',
+    'teamree-relay: on this network    ws://192.168.64.1:8787/v1/relay',
+    'teamree-relay: on this network    ws://192.168.1.23:8787/v1/relay',
+    'teamree-relay: the URL to give your team:  ws://192.168.64.1:8787/v1/relay'
+  ].join('\n')
+
+  it('is every one of them, in the order the pane printed them', () => {
+    expect(relayUrlsFromOutput(ANNOUNCEMENT, ['ws', 'wss'])).toEqual([
+      'ws://127.0.0.1:8787/v1/relay',
+      'ws://192.168.64.1:8787/v1/relay',
+      'ws://192.168.1.23:8787/v1/relay'
+    ])
+  })
+
+  // The announcement repeats its pick on the last line. Offering the same
+  // address twice would read as two different things.
+  it('names each address once, however many times it was printed', () => {
+    expect(relayUrlsFromOutput(ANNOUNCEMENT, ['ws', 'wss']).filter((url) => url.includes('192.168.64.1'))).toHaveLength(
+      1
+    )
+  })
+
+  // And the one the command itself offered is still the last thing it said,
+  // which is what the panel leads with.
+  it('leaves the pick to the last line, as it always did', () => {
+    expect(relayUrlFromOutput(ANNOUNCEMENT, ['ws', 'wss'])).toBe('ws://192.168.64.1:8787/v1/relay')
+  })
+
+  it('is empty for a pane that may offer nothing at all', () => {
+    expect(relayUrlsFromOutput(ANNOUNCEMENT, [])).toEqual([])
+  })
+})
+
+describe('checking a relay', () => {
+  // The check runs here. A pass read as "the team can meet" would end the
+  // investigation at the wrong machine.
+  it('says what a pass proves and what it does not', () => {
+    expect(RELAY_CHECK.proves).toMatch(/runs on this Mac/)
+    expect(RELAY_CHECK.proves).toMatch(/says nothing about anybody else’s\s+network/)
+  })
+
+  it('names the fix when there is no URL to check', () => {
+    expect(RELAY_CHECK.nothing).toMatch(/Paste one into the field above/)
+  })
+
+  // Both can be on screen at once and they dial different addresses, so they
+  // are not allowed to share a name.
+  it('calls the two of them different things', () => {
+    expect(RELAY_CHECK.draftButton).not.toBe(RELAY_CHECK.button)
+  })
+})
+
+// One pane per project, as it has always been. Starting a second is refused
+// rather than allowed to replace the output somebody is reading, and the
+// sentence says which one is open.
+describe('the one pane, when something is already in it', () => {
+  it('names the pane that is open, for each of the three things it can be', () => {
+    expect(relayPaneBusy('deploy')).toMatch(/^A deploy is already open in a pane below/)
+    expect(relayPaneBusy('serve')).toMatch(/^A relay you are running yourself is already open in a pane below/)
+    expect(relayPaneBusy('check')).toMatch(/^A relay check is already open in a pane below/)
+    for (const kind of ['deploy', 'serve', 'check'] as const) {
+      expect(relayPaneBusy(kind)).toMatch(/Close it before starting another/)
+    }
+  })
+})
+
+// The failure that looks like a bug in the repository and is not: the runtime
+// reads the override before the file and stops there, so an override that does
+// not parse leaves the project with no relay at all while .teamree/relay sits
+// in the checkout with a perfectly good URL in it. Nothing anywhere named the
+// variable, so everybody looked at the file.
+describe('an override that is set and cannot be read', () => {
+  /**
+   * The runtime's own reason, in the runtime's own words.
+   *
+   * It matters that this is not the file's reason: `onDisk.problem` is null in
+   * this state, because there is nothing whatever wrong with the file. Reading
+   * the file's half first is what used to put ".teamree/relay does not name a
+   * relay" on screen beside a file that plainly names one.
+   */
+  const BROKEN_REASON =
+    'TEAMREE_RELAY_URL is set to wss//typo.example/v1/relay and is not a URL teamree can dial, so this run has no ' +
+    'relay'
+
+  const broken = (): RelaySetting =>
+    relay({
+      url: null,
+      source: null,
+      problem: BROKEN_REASON,
+      onDisk: { url: 'wss://relay.example/v1/relay', problem: null },
+      override: { name: 'TEAMREE_RELAY_URL', value: 'wss//typo.example/v1/relay' }
+    })
+
+  // Three statements about the relay used to be on screen in this state and two
+  // of them were false: the step ticked itself done because the file names a
+  // relay, and the outcome panel said the file names none. Neither is what is
+  // wrong, and nothing the reader could do to the file would fix it.
+  it('does not let step 3 tick itself done off a file that is not being used', () => {
+    const blocked = step({ ...fresh, relay: broken() }, 'relay')
+    expect(blocked.mark).toBe('blocked')
+    expect(blocked.summary).toBe(`${BROKEN_REASON}.`)
+    expect(blocked.summary).not.toMatch(/Step 4 is what makes it the team’s/)
+  })
+
+  // The same fact, in the panel that summarises the lot — and this one also
+  // feeds the sidebar, so a false sentence here leaves the panel entirely.
+  it('gives the outcome the runtime’s reason rather than one rebuilt from the file', () => {
+    const result = setupOutcome({ list: enrolled(), relay: broken(), status: status() })
+    const fact = result?.facts.find((entry) => entry.label === 'The relay')
+    expect(fact?.state).toBe('no')
+    expect(fact?.detail).toBe(`${BROKEN_REASON}.`)
+    expect(fact?.detail).not.toMatch(/does not name a relay/)
+    expect(result?.head).toBe('Not finished: the relay.')
+  })
+
+  // All three agree now, which is the whole of this fix: the step, the outcome
+  // and the sentence about the variable say one thing between them.
+  it('says the same thing in the step and in the outcome', () => {
+    const input = { list: enrolled(), relay: broken(), status: status() }
+    expect(step(input, 'relay').summary).toBe(
+      setupOutcome(input)?.facts.find((entry) => entry.label === 'The relay')?.detail
+    )
+  })
+
+  it('names the variable, what is wrong with it, and the fix', () => {
+    const said = brokenRelayOverride(broken())
+    expect(said).toMatch(/TEAMREE_RELAY_URL is set to wss\/\/typo\.example\/v1\/relay/)
+    expect(said).toMatch(/not a relay URL teamree can dial/)
+    expect(said).toMatch(/this project has no relay even though \.teamree\/relay has one in it/)
+    expect(said).toMatch(/Unset it and start teamree again/)
+  })
+
+  // Every other state is silent, including the two that look like this one: an
+  // override that works is the step's own business, and a project with nothing
+  // committed has a sentence for that already.
+  it('says nothing about an override that works, or about a project with no relay anywhere', () => {
+    expect(brokenRelayOverride(relayOnDisk())).toBeNull()
+    expect(brokenRelayOverride(relay())).toBeNull()
+    expect(
+      brokenRelayOverride(
+        relay({
+          url: 'wss://tunnel.example/v1/relay',
+          source: 'environment',
+          problem: null,
+          override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' }
+        })
+      )
+    ).toBeNull()
+    expect(brokenRelayOverride(relay({ override: { name: 'TEAMREE_RELAY_URL', value: 'nonsense' } }))).toBeNull()
   })
 })
 

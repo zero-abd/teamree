@@ -224,12 +224,119 @@ export const RELAY_DEPLOY = {
   button: 'Deploy a relay',
   what: 'One command, to your team’s own Cloudflare account. teamree hosts nothing and runs nothing for you.',
   browser: 'A browser opens once, for the Cloudflare sign-in. Nothing is deployed until you are signed in.',
+  /**
+   * What it costs, which is the question everybody asks before they press a
+   * button that makes an account do something.
+   *
+   * The numbers are somebody else's and they move, so they are not printed here
+   * as though they were teamree's: what is said is the shape of the answer — a
+   * pair that is connected and quiet costs nothing, because the relay sleeps
+   * while nobody is typing, and the daily allowances are far above what two
+   * people pass through it — plus where the current figures are. No promise
+   * that it is free forever, because that is not this project's to make.
+   */
+  free:
+    'The free plan covers a team. The relay sleeps while nobody is typing, so a connected, quiet pair costs ' +
+    'nothing, and the included daily allowance is far more than a few people talking through it use. The limits ' +
+    'are daily and per Cloudflare account, and they reset at 00:00 UTC — the current figures are at ' +
+    'https://developers.cloudflare.com/durable-objects/platform/pricing/.',
   /** Said while it runs, because somebody watching a pane deserves to know what finishing looks like. */
   watching: 'It prints a wss:// URL when it finishes, and teamree offers to write that into the repository.',
   /** The label on the button that takes the URL the deploy printed. */
   use: 'Use this relay URL',
   /** Above the command itself, kept for anybody who would rather run it themselves. */
   manual: 'Or run it yourself:'
+} as const
+
+/**
+ * The relay somebody runs on their own machine, in the fewest words that are
+ * still true — and the one sentence that says who it will not work for.
+ *
+ * This is a first-class choice beside the deploy rather than a line in a
+ * disclosure, because the launcher ships it: one command writes the relay
+ * project into a directory somebody owns, builds it and runs it there. It is
+ * the right answer for an office, a VPN, or a machine with a tunnel in front of
+ * it, and it is the wrong answer for two laptops behind two home routers.
+ *
+ * `limit` is the whole reason this constant is not just a button label. Two
+ * Macs that cannot reach each other is the problem a relay exists to solve, so
+ * an option that quietly does not solve it has to say so at the moment somebody
+ * chooses it — not in `relay/README.md`, and not after two people have spent an
+ * evening each waiting for the other. A limitation discovered later is a bug
+ * report; a limitation printed beside the button is a decision.
+ */
+export const RELAY_SERVE = {
+  button: 'Run a relay yourself',
+  what:
+    'One command, on this Mac. It writes a relay into a folder you own, builds it and runs it here. ' +
+    'teamree hosts nothing and runs nothing for you. The first run installs the one dependency it has, so it ' +
+    'needs the network once and spends about a minute on npm before it listens.',
+  limit:
+    'A relay here only serves machines that can already reach this Mac — one office network, or a VPN you are all ' +
+    'on. Two laptops behind two home routers cannot meet on it, which is the whole reason a relay exists: put a ' +
+    'tunnel in front of this one, or deploy one instead.',
+  /** Said while it runs, because somebody watching a pane deserves to know what finishing looks like. */
+  watching: 'It prints the URL to give your team, and teamree offers to write that into the repository.',
+  /** The label on the button that takes the URL the relay printed. */
+  use: 'Use this relay URL',
+  /**
+   * Said beside that button, and not instead of it.
+   *
+   * Committing a private address is a legitimate thing for a team that is all
+   * on one network and a trap for a team that is not, and teamree cannot tell
+   * which this is. So it is not refused — it is named, on the one screen where
+   * the exact address is still in front of the person about to assert it.
+   */
+  committing:
+    'A ws:// address on a private network is only reachable from that network. Commit it and anybody who is not on ' +
+    'that network will never meet the rest of you.',
+  /**
+   * Said above the other addresses the relay printed, when it printed more than
+   * one.
+   *
+   * The relay offers the first address this Mac reports and its own source says
+   * that is a guess: it cannot tell a wifi address from a VPN's or a container
+   * bridge's, and the order the OS lists them in is not a ranking. On a Mac
+   * with Docker Desktop, Parallels or a corporate VPN on it the first one is
+   * routinely an address no teammate can reach — so the panel shows what the
+   * pane printed and lets the person who knows their own network pick, instead
+   * of asserting the guess and being wrong in silence.
+   */
+  choice:
+    'This Mac has more than one address and teamree cannot tell which of them your teammates can reach — a VPN, a ' +
+    'container bridge and a virtual machine all look like a network from here, and the order they are listed in is ' +
+    'not a ranking. The one above is the relay’s own guess. Take whichever is on the network you share:',
+  /** Above the command itself, kept for anybody who would rather run it themselves. */
+  manual: 'Or run it yourself:'
+} as const
+
+/**
+ * Dialling a relay and saying what answered.
+ *
+ * A report rather than a way to get a relay, which is why it is beside the URL
+ * instead of beside the two buttons that produce one. `proves` is the sentence
+ * that keeps it honest: the check runs here, so a pass is a fact about this
+ * Mac's network and about nobody else's. A panel that showed a green tick and
+ * let somebody read it as "the team can meet" would be worse than no check,
+ * because it would end the investigation at the wrong machine.
+ */
+export const RELAY_CHECK = {
+  button: 'Check this relay',
+  /**
+   * The same control, on the string that has been typed and not yet written
+   * down.
+   *
+   * A different label rather than the same one twice: both can be on screen at
+   * once, they dial different addresses, and two buttons with one name is a
+   * page where somebody reading it out has no way to say which is which.
+   */
+  draftButton: 'Check the URL you typed',
+  what: 'Dials it from here and says what answered — a WebSocket upgrade, some other reply, or nothing at all.',
+  proves:
+    'It runs on this Mac, so a pass proves this Mac can reach that relay and says nothing about anybody else’s ' +
+    'network. Everybody who has to meet there has to run it too.',
+  /** Why the button beside the paste field is grey, which is always the same reason. */
+  nothing: 'There is no relay URL to check yet. Paste one into the field above and this wakes up.'
 } as const
 
 /**
@@ -240,10 +347,20 @@ export const RELAY_DEPLOY = {
  */
 export const MORE_RELAYS_BUTTON = 'Other ways to get a relay'
 
-/** Said once, above the folded options, so opening it is an informed choice. */
+/**
+ * Said once, above the folded options, so opening it is an informed choice.
+ *
+ * It used to say every one of these needs a clone of the repository, because
+ * the Dockerfile is in one. That stopped being true the day the launcher grew a
+ * verb that writes and runs the relay itself: a machine you can put teamree on
+ * needs no clone and no container, and the two options that are about *your*
+ * machine say so now. The container is still the honest answer for a server you
+ * keep running, which is the one case where this is administration.
+ */
 export const MORE_RELAYS_LEAD =
   'These are for a team that already has the network, the server, or a reason not to add a Cloudflare account. ' +
-  'Each needs a clone of the teamree repository, because the Dockerfile is in one.'
+  'The two that run on a machine of your own are the button above, one command; the rest needs a clone of the ' +
+  'teamree repository, because the Dockerfile is in one.'
 
 /**
  * Where the resulting URL belongs, which is the part of this decision that is
@@ -301,11 +418,10 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
     tier: 'fallback',
     name: 'A tunnel to a relay on your own machine',
     what:
-      'The fastest way to try this with somebody on another continent. Run the container here and put a tunnel in ' +
-      'front of it; no account, and a public URL in seconds.',
-    commands:
-      'cd relay\ndocker build -t teamree-relay .\ndocker run -d -p 8787:8787 teamree-relay\n' +
-      'cloudflared tunnel --url http://localhost:8787',
+      'The fastest way to try this with somebody on another continent, and the answer to the limit on running one ' +
+      'here. Run the relay with the button above, then put a tunnel in front of it; no account, and a public URL in ' +
+      'seconds.',
+    commands: 'cloudflared tunnel --url http://localhost:8787',
     effort: 'A couple of minutes, and nothing to sign up for.',
     money: 'Free, and up only for as long as the tunnel and this machine are.',
     keep: 'override',
@@ -318,14 +434,17 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
     tier: 'more',
     name: 'A mesh VPN, or a box on the LAN',
     what:
-      'Run the container on any machine the others can already reach — one office network, or Tailscale or ' +
-      'WireGuard. Nothing is exposed publicly. Good if your team already has the network.',
+      'Run the relay on any machine the others can already reach — one office network, or Tailscale or WireGuard. ' +
+      'On a machine with teamree on it that is the button above; on anything else it is the container. Nothing is ' +
+      'exposed publicly. Good if your team already has the network.',
     commands:
       'cd relay\ndocker build -t teamree-relay .\ndocker run -d -p 8787:8787 --restart unless-stopped teamree-relay',
     effort: 'Minutes if the network already exists. If it does not, the network is the work.',
     money: 'Whatever the box costs, which is usually nothing you are not already paying.',
     keep: 'commit',
-    address: 'ws://<that machine>:8787/v1/relay, or wss:// once something is terminating TLS in front of it.'
+    address:
+      'ws://<that machine>:8787/v1/relay, or wss:// once something is terminating TLS in front of it. Stable enough ' +
+      'to commit for a team that is all on that network, and unreachable for anybody who is not.'
   },
   {
     id: 'vps',
@@ -345,23 +464,150 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
 ] as const
 
 /**
- * The `wss://` line a finished deploy printed, out of everything the pane has
- * said.
+ * The override that is set, cannot be read, and has quietly taken this
+ * project's relay away — or null, which is almost always.
+ *
+ * The runtime reads `TEAMREE_RELAY_URL` before the file and stops there: an
+ * override that does not parse leaves the project with no relay at all rather
+ * than falling back to the one that is committed. That is defensible — an
+ * override somebody set is a statement about what this run should dial, and
+ * silently ignoring a broken one would dial something they did not ask for —
+ * and it is invisible, which is not. Every symptom points at the repository:
+ * `.teamree/relay` has a perfectly good URL in it, the step says the project
+ * has no relay, and nothing anywhere names the environment variable that is the
+ * actual cause.
+ *
+ * So the panel names it. All three facts it needs are already in `RelaySetting`
+ * — an override with a value, no URL in force, and a file that does have one —
+ * and the sentence says the variable, what is wrong with it, and the one thing
+ * that fixes it.
+ */
+export function brokenRelayOverride(relay: RelaySetting): string | null {
+  if (relay.override.value === null || relay.url !== null || relay.onDisk.url === null) return null
+  return (
+    `${relay.override.name} is set to ${relay.override.value} in this app’s environment, and it is not a relay URL ` +
+    `teamree can dial — so this project has no relay even though ${relay.file} has one in it. Unset it and start ` +
+    `teamree again, or set it to a URL that parses.`
+  )
+}
+
+/** A scheme a relay is dialled on. Nothing else is ever taken out of a pane. */
+export type RelayUrlScheme = 'ws' | 'wss'
+
+/**
+ * Which schemes each kind of pane may offer a URL on.
+ *
+ * A parameter rather than one widened pattern, because the three panes print
+ * genuinely different things and reading them all the same way would be a
+ * behaviour change to the one that already worked. A deploy to a Worker prints
+ * `wss://` and nothing else, so `ws://` out of a deploy pane is a URL that
+ * appeared in a log line, an error, or somebody's shell prompt — not an
+ * endpoint. A relay somebody runs here is plain `ws://` until they put
+ * something in front of it, so that pane has to accept both. And a check offers
+ * nothing at all: it is a report about a URL that already exists, and the URL
+ * it echoes back is the one it was handed, so treating it as a source would
+ * offer somebody their own input as a discovery.
+ */
+export const RELAY_PANE_URL_SCHEMES: Record<RelayPaneKind, readonly RelayUrlScheme[]> = {
+  deploy: ['wss'],
+  serve: ['ws', 'wss'],
+  check: []
+}
+
+/**
+ * The relay URL a pane printed, out of everything it has said.
  *
  * The last one wins: a person who deploys twice in one pane means the second.
- * Read from the pane's own scrollback rather than from anything the deploy is
- * asked to report, because the deploy is a program in a terminal and this is
+ * Read from the pane's own scrollback rather than from anything the command is
+ * asked to report, because the command is a program in a terminal and this is
  * the only thing it hands back.
  */
-export function relayUrlFromOutput(output: string): string | null {
-  const found = [...output.matchAll(/wss:\/\/[^\s"'<>)\]]+/g)].map((match) => match[0])
-  for (let index = found.length - 1; index >= 0; index -= 1) {
-    const candidate = found[index]
-    if (candidate === undefined) continue
-    const parsed = parseRelayUrl(candidate)
-    if (parsed.ok) return parsed.url
+export function relayUrlFromOutput(output: string, schemes: readonly RelayUrlScheme[]): string | null {
+  const found = relayUrlsInOutput(output, schemes)
+  return found[found.length - 1] ?? null
+}
+
+/**
+ * Every relay URL a pane printed, in the order it printed them and each named
+ * once.
+ *
+ * The one the command itself offers is the last — that is what
+ * `relayUrlFromOutput` takes, and it is the right default. It is also a guess,
+ * and the command that makes it says so in its own source: a machine with
+ * Docker Desktop, Parallels or a VPN on it has several addresses, the order the
+ * OS lists them in is not a ranking, and nothing on either side of this can
+ * tell a wifi address from a container bridge's. The command's answer to that
+ * is to print all of them so the operator can choose; showing only the scraped
+ * one turned a list into a flat assertion, and on the machines where the guess
+ * is wrong it is an assertion no teammate can reach.
+ *
+ * So the whole list comes back and the panel offers it. Named once each because
+ * the announcement repeats its pick on the last line, and a reader offered the
+ * same address twice would reasonably conclude they are two different things.
+ * The order is the order they were printed, which is not a ranking either — the
+ * panel says so rather than implying one by putting them in a list.
+ */
+export function relayUrlsFromOutput(output: string, schemes: readonly RelayUrlScheme[]): string[] {
+  const found: string[] = []
+  for (const url of relayUrlsInOutput(output, schemes)) if (!found.includes(url)) found.push(url)
+  return found
+}
+
+/** Every URL in the pane's scrollback that parses, in the order printed, repeats and all. */
+function relayUrlsInOutput(output: string, schemes: readonly RelayUrlScheme[]): string[] {
+  if (schemes.length === 0) return []
+  // Longest first, so `wss://…` is never matched as `ws` followed by a `s://`
+  // that is not a scheme separator at all.
+  const alternatives = [...schemes].sort((a, b) => b.length - a.length).join('|')
+  const pattern = new RegExp(String.raw`(?:${alternatives}):\/\/[^\s"'<>)\]]+`, 'g')
+  const found: string[] = []
+  for (const match of output.matchAll(pattern)) {
+    const parsed = parseRelayUrl(match[0])
+    if (parsed.ok) found.push(parsed.url)
   }
-  return null
+  return found
+}
+
+/**
+ * The same launcher, with a different verb on it — or null when the command the
+ * runtime reported is not the shape this can safely rewrite.
+ *
+ * Why this is derived here rather than reported alongside the deploy: the
+ * runtime reports exactly one command because `RelaySetting` types exactly one,
+ * and that shape is a frozen contract between the two processes. What ships is
+ * not one command, though — it is one program with several subcommands, and
+ * `deploy`, `serve` and `check` are three verbs on the same launcher at the
+ * same path. Guessing at a *different* program would be unacceptable: nothing
+ * here can know whether it exists, and a button that runs an invented path is
+ * exactly the button this panel refuses to have. Swapping the verb on a program
+ * the runtime has already found on disk is a different thing — the path is the
+ * runtime's answer, and the verb is the launcher's own documented interface.
+ *
+ * The check is therefore strict rather than lenient. A command that does not
+ * end in ` deploy` is not the launcher this file knows about, so it returns
+ * null and the caller disables the control with a sentence, rather than running
+ * something nobody can predict on somebody's machine.
+ *
+ * The argument is shell-quoted because it reaches a shell: the pane is a login
+ * shell with a command in it, and a URL can carry characters — a `?`, a `&`, a
+ * space somebody pasted — that a shell would act on rather than pass along.
+ */
+export function relayLauncherCommand(deployCommand: string, verb: 'serve' | 'check', argument?: string): string | null {
+  const suffix = ' deploy'
+  if (!deployCommand.endsWith(suffix)) return null
+  const launcher = deployCommand.slice(0, -suffix.length)
+  if (launcher.trim() === '') return null
+  return argument === undefined ? `${launcher} ${verb}` : `${launcher} ${verb} ${singleQuote(argument)}`
+}
+
+/**
+ * One shell word, whatever is in it.
+ *
+ * Single quotes protect everything except a single quote, which is closed,
+ * escaped and reopened — the only way a POSIX shell will carry one.
+ */
+function singleQuote(value: string): string {
+  return `'${value.replaceAll("'", String.raw`'\''`)}'`
 }
 
 /**
@@ -373,15 +619,102 @@ export function relayUrlFromOutput(output: string): string | null {
  */
 export const PUBLISH_BUTTON = 'Commit and push'
 
-/** A relay deploy running in a pane in this window, as the panel needs to see it. */
-export type RelayDeployState = {
+/**
+ * Which of the launcher's verbs a pane is running.
+ *
+ * It travels with the pane because one slot holds all three and they are not
+ * interchangeable to a reader: what the pane is doing decides what is said
+ * above it, whether a URL it printed may be offered at all, and which sentence
+ * a second button is disabled with while it is open.
+ */
+export type RelayPaneKind = 'deploy' | 'serve' | 'check'
+
+/** A relay command running in a pane in this window, as the panel needs to see it. */
+export type RelayPaneState = {
+  /** Which verb is running, because one pane slot holds all three. */
+  kind: RelayPaneKind
   /** The pane the command is running in. */
   terminalId: string
-  /** The wss:// URL the deploy printed, once it has printed one. */
+  /** The relay URL the command offered, once it has offered one. Never set for a check. */
   url: string | null
+  /**
+   * Every relay URL the pane printed, `url` among them, in the order printed.
+   *
+   * A relay run on a Mac with a VPN, a container bridge or a virtual machine on
+   * it prints several, and which of them a teammate can reach is a question
+   * about that network which nothing in this app can answer. The command prints
+   * them all for exactly that reason, so the panel offers them all rather than
+   * asserting the one that happens to be first.
+   */
+  urls: string[]
   /** False once the command has exited; the pane stays until it is closed. */
   running: boolean
 }
+
+/**
+ * Why a second relay command cannot be started, naming the one that is open.
+ *
+ * One pane per project, as before: a second deploy of the same relay is never
+ * what somebody meant, and quietly replacing a running one would throw away the
+ * output they are in the middle of reading. So the other buttons go grey — and
+ * a grey button whose reason nobody can read is the same as one that does
+ * nothing, so this says which pane it is and where to find it.
+ */
+export function relayPaneBusy(kind: RelayPaneKind): string {
+  const what =
+    kind === 'deploy' ? 'A deploy is' : kind === 'serve' ? 'A relay you are running yourself is' : 'A relay check is'
+  return `${what} already open in a pane below. Close it before starting another — teamree runs one at a time here.`
+}
+
+/**
+ * Why a verb cannot be run even though this build carries a relay.
+ *
+ * The launcher is found by the runtime and reported as one shell-ready command
+ * ending in ` deploy`. When it does not end in that, nothing here knows what
+ * program it is, and the only honest move is to stop: a panel that stripped the
+ * last word off an unrecognised command and ran a different verb on it would be
+ * running something nobody can predict on somebody's machine.
+ */
+export const RELAY_LAUNCHER_UNKNOWN =
+  'This build reports a relay command teamree does not recognise, so it will not guess at another one — stand a ' +
+  'relay up yourself and paste its URL below.'
+
+/** What the pane says it is, above the terminal itself. */
+export const RELAY_PANE_TITLES: Record<RelayPaneKind, string> = {
+  deploy: 'Deploying a relay',
+  serve: 'Running a relay on this Mac',
+  check: 'Checking a relay'
+}
+
+/**
+ * What the pane says when the command in it is over and there is no URL.
+ *
+ * A pane that has exited and printed nothing to offer used to say nothing at
+ * all: the block rendered its title, its terminal and a close button, and a
+ * person watching a deploy fail read a blank space where the answer should be
+ * and had to work out from the scrollback whether it was still going. Saying
+ * that it finished and produced no relay URL is one sentence, it is true of
+ * every one of the three verbs, and it sends the reader to the only place the
+ * reason can be — the pane itself.
+ */
+export const RELAY_PANE_NO_URL =
+  'This command has finished and printed no relay URL. What went wrong is in the pane above.'
+
+/**
+ * What the pane says about a relay of your own that is no longer running.
+ *
+ * The address a `serve` printed is a promise about a process on this Mac, and
+ * the moment that process exits the promise is void — the port is closed and
+ * anybody dialling it is refused. Offering that URL to be written into the
+ * repository after the fact is how a team commits an address that answered for
+ * one afternoon, so the offer is withdrawn when the pane stops and this is said
+ * in its place. A deploy is not like this: what a deploy prints is a Worker
+ * that outlives the pane that made it, and the pane exiting is how a deploy
+ * succeeds.
+ */
+export const RELAY_SERVE_STOPPED =
+  'The relay in this pane has stopped, so the address it printed answers nothing now. There is no URL here to give ' +
+  'your team until it is running again.'
 
 /** Whether the origin button is busy, and why it was last refused. */
 export type OriginState = { pending: boolean; error: string | null }
@@ -796,7 +1129,15 @@ export function setupOutcome(
       state: relay.url === null ? 'no' : 'yes',
       detail:
         relay.url === null
-          ? sentence(relay.onDisk.problem ?? `${relay.file} does not name a relay`)
+          ? // The runtime's own reason first, and the file's only as a fallback.
+            // These are not the same question: `problem` says why there is no
+            // relay in effect, `onDisk.problem` says what is wrong with the
+            // file — and when a broken override is what took the relay away
+            // there is nothing wrong with the file at all. Reading the file's
+            // half first put ".teamree/relay does not name a relay" on screen
+            // beside a file that plainly names one, and this fact feeds the
+            // sidebar too, so the false sentence left the panel.
+            sentence(relay.problem ?? relay.onDisk.problem ?? `${relay.file} does not name a relay`)
           : `${relay.url}, from ${relay.source === 'environment' ? relay.override.name : relay.file}.`
     },
     {
@@ -1146,6 +1487,18 @@ function relayStep({ relay, failedReads }: StartTeamworkInput): StepCore {
       }
     }
     return { id: 'relay', title, mark: 'todo', summary: 'Reading where this project’s relay is recorded…' }
+  }
+  // An override that does not parse takes the relay away and leaves the file
+  // sitting there with a good URL in it. That state used to reach the reader as
+  // three sentences, two of them false: this step ticked itself done because
+  // the file names one, the outcome panel said the file names none, and the
+  // real reason — the runtime's own — was printed nowhere. The file is not what
+  // is wrong here and nothing this step could do to the file would fix it, so
+  // the mark is `blocked` and the sentence is the runtime's own reason for
+  // having no relay rather than one reconstructed from the two halves.
+  const overridden = brokenRelayOverride(relay)
+  if (overridden !== null) {
+    return { id: 'relay', title, mark: 'blocked', summary: sentence(relay.problem ?? overridden) }
   }
   if (relay.onDisk.url !== null) {
     // What is read is the file in the working tree, so this says the same thing
