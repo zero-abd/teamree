@@ -81,6 +81,13 @@ export type RegisterHandlersOptions = {
    * nothing above their prompt.
    */
   scrollback?: ScrollbackRepository
+  /**
+   * Parent of every checkout the git service creates. Absent, the git service's
+   * own default — `~/.teamree/worktrees` — stands, which is what the app wants
+   * and what every harness with a temporary home does not. See `RuntimeOptions`
+   * in startRuntime.ts for why isolating the store is not enough.
+   */
+  worktreesRoot?: string
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
@@ -123,7 +130,13 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // reaches the workspace stream whichever transport asked for it.
   publishTerminalEvents(registry, terminals, workspaceEvents)
 
-  const git = new GitService({ store: registry.context.store })
+  const git = new GitService({
+    store: registry.context.store,
+    // Spread rather than passed as `undefined`, because `undefined` is a value
+    // the option reader would have to know to ignore; an absent key is the
+    // default, said once, in the service that owns it.
+    ...(options.worktreesRoot === undefined ? {} : { worktreesRoot: options.worktreesRoot })
+  })
   // A worktree removed takes its panes with it, and nothing else does this: a
   // terminal record is dropped only by an explicit close, so without this the
   // agents that were running in the checkout keep running — in a directory

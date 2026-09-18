@@ -25,6 +25,22 @@ export const WORKSPACE_FILE_NAME = 'workspace.json'
 export type RuntimeOptions = {
   userDataDir: string
   version: string
+  /**
+   * Parent of every checkout this runtime creates. Defaults to
+   * `~/.teamree/worktrees`, which is where a person's checkouts belong and
+   * where the app leaves it.
+   *
+   * It is settable because `userDataDir` on its own does not isolate a runtime.
+   * A harness that points the store at a temporary directory and then creates a
+   * worktree still writes the checkout into the real home, under a directory
+   * named after the project — so two harnesses running at once, on one machine,
+   * are two runtimes choosing checkout names in the same directory with neither
+   * able to see the other's records. They pick the same free name, one `git
+   * worktree add` wins, and the loser's test reads a path that is not there or
+   * belongs to somebody else. The debris outlives both: a checkout left in the
+   * user's home for every run that did not get as far as removing it.
+   */
+  worktreesRoot?: string
   /** Off for harnesses that only need the dispatcher. */
   serveCli?: boolean
   /** Off when there is no Electron around, e.g. the headless acceptance suite. */
@@ -71,6 +87,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const {
     userDataDir,
     version,
+    worktreesRoot,
     serveCli = true,
     serveRenderer = true,
     serveTeamwork = true,
@@ -94,7 +111,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const subscriptions = new SubscriptionHub()
   const context = createRuntimeContext({ version, store, subscriptions })
   const registry = new MethodRegistry(context)
-  const areas = registerHandlers(registry, { openExternal, scrollback })
+  const areas = registerHandlers(registry, { openExternal, scrollback, worktreesRoot })
   const dispatch = createDispatcher(registry)
 
   let socketServer: RuntimeSocketServer | undefined

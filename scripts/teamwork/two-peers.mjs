@@ -56,24 +56,30 @@ const TRANSPORT_REMOTE = 'seed'
 /** The relay's own build, which is a separate package with its own `dist/`. */
 const RELAY_ENTRY = join(REPO_ROOT, 'relay', 'dist', 'node', 'index.js')
 
-/**
- * How long an ordered shutdown gets before the tree is killed instead.
+/*
+ * There is no shutdown budget in this file any more, and that is deliberate.
  *
- * It is the *runtime's* budget and not the wrapper's: `npx` puts two processes
- * between here and the runtime, they die the instant the group is signalled,
- * and the runtime under them is still closing ptys and unlinking its socket.
+ * `Peer.stop()` used to give an ordered shutdown a fixed number of milliseconds
+ * — five seconds once, then twenty — and kill the tree when they ran out. Both
+ * numbers were guesses at how long somebody else's process takes to close its
+ * ptys, and both were wrong in the same direction on a machine with other work
+ * on it: the runtime was merely slow, the harness killed it anyway, and the
+ * discovery file the kill left behind was then reported as the runtime having
+ * leaked it. The five second version was caught doing exactly that. Twenty was
+ * the same bug with a longer fuse, and four copies of this suite running at
+ * once was enough to light it.
  *
- * Derived from what the runtime is allowed to spend, not picked. `runtime.stop`
- * closes every pty before it goes near its socket or its discovery file, and one
- * pty's close is itself allowed 2s for SIGHUP, 2s more for SIGKILL and up to 5s
- * for the exit event, plus half a second of output drain — so a pane taking the
- * worst case the runtime is written for cannot reach the file-removal step
- * inside five seconds. This used to be five seconds, which meant the harness's
- * backstop fired at the very moment the runtime's own did: the kill is what
- * left the discovery file behind, and the harness then reported the leak it had
- * just caused. Measured, an ordered shutdown here takes 26-135ms.
+ * What the checks in `TwoPeers.stop()` are about is *order* — that a runtime
+ * unlinks its socket and its discovery file before it exits — and order does
+ * not care how long the exit took. So the wait below is for the exit itself,
+ * with no deadline of its own. A runtime that never exits is a hang rather than
+ * a slow shutdown, and a hang is what vitest's timeout on the hook is for.
+ *
+ * What made the stopwatch feel necessary was the fear of orphans: a harness
+ * that has itself been killed cannot signal anything. That is handled where it
+ * can be handled, by the runtime rather than by its parent — see the stdin
+ * guard in `acceptance-host.mjs`.
  */
-const SHUTDOWN_GRACE_MS = 20_000
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -177,11 +183,12 @@ async function startPeer({ root, origin, handle, log }) {
       ...process.env,
       TEAMREE_USER_DATA_DIR: userDataDir,
       TEAMREE_TEST_VERSION: `0.0.0-${handle}`,
-      // A home each. Worktree checkouts go to `~/.teamree/worktrees` and there
-      // is no setting for it, so two peers sharing this process's home would
-      // put their checkouts in one directory — and every run would leave one
-      // behind in the home of whoever ran the suite, which makes "torn down,
-      // nothing left running" untrue in the one way nobody would notice.
+      // A home each, so that nothing a runtime writes under one is shared with
+      // the other peer or with the person running the suite. The checkouts are
+      // no longer part of that argument — `acceptance-host.mjs` now puts those
+      // under each peer's own `userDataDir` — but a home is read by git and by
+      // npm as well, and "torn down, nothing left running" has to be true of
+      // everything a peer touched and not only of the parts this file lists.
       HOME: home,
       USERPROFILE: home,
       // npm's cache is keyed off the home it is given, so it is named back
@@ -189,7 +196,9 @@ async function startPeer({ root, origin, handle, log }) {
       // network, and this harness has to work offline.
       npm_config_cache: process.env.npm_config_cache ?? join(homedir(), '.npm')
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    // A pipe rather than /dev/null, and never written to: it is how the runtime
+    // learns this process has died. See `acceptance-host.mjs`.
+    stdio: ['pipe', 'pipe', 'pipe'],
     detached: process.platform !== 'win32'
   })
 
@@ -235,8 +244,6 @@ async function startPeer({ root, origin, handle, log }) {
 }
 
 class Peer {
-  /** True when the ordered shutdown ran out of budget and the tree was killed. */
-  hadToBeKilled = false
   /** @type {string | undefined} This peer's own clone, once the runtime has it. */
   projectId = undefined
   /** @type {{ handle: string | null, publicKey: string } | undefined} */
@@ -409,23 +416,16 @@ class Peer {
     const ended = new Promise((resolve) => this.child.once('exit', resolve))
     // SIGTERM asks the runtime to shut its PTYs down in order and to take its
     // discovery file and socket with it, which is the path worth exercising.
-    // SIGKILL is the backstop, not the plan: a harness that always killed would
-    // never notice the day clean shutdown started hanging.
+    // Nothing kills it afterwards: a shutdown that is slow is still ordered,
+    // and the checks in `TwoPeers.stop()` are about what the runtime had done
+    // by the time it went, not about when it went.
     killTree(this.child, 'SIGTERM')
-    const ordered = await this.#wentQuietly()
-    if (!ordered) {
-      // Remembered, because everything the check below then finds — the
-      // discovery file, the socket — is this kill's doing and not the
-      // runtime's. Reporting those as a leak names the wrong culprit.
-      this.hadToBeKilled = true
-      killTree(this.child, 'SIGKILL')
-    }
+    await this.#wentQuietly()
     await ended
   }
 
   /**
-   * Whether the *runtime* has gone, not whether the wrapper that spawned it
-   * has.
+   * Waits for the *runtime* to go, not for the wrapper that spawned it.
    *
    * `npx` sits two processes above the runtime and both die the moment the
    * process group is signalled, while the runtime under them is still closing
@@ -433,14 +433,15 @@ class Peer {
    * the wrapper and then asked whether the discovery file was gone would lose
    * that race under load — and would lose it as "the runtime leaked", which is
    * a lie about the code under test rather than a report about it.
+   *
+   * There is no deadline here on purpose; see the note above. What the exit
+   * is waited for is so that the questions asked afterwards — is the discovery
+   * file gone, is the socket gone — are asked of a runtime that has finished,
+   * which makes them questions about the order it did things in rather than
+   * about how fast this machine happened to be.
    */
   async #wentQuietly() {
-    const deadline = Date.now() + SHUTDOWN_GRACE_MS
-    while (Date.now() < deadline) {
-      if (!isAlive(this.discovery.pid) && !(await exists(this.discoveryPath))) return true
-      await sleep(25)
-    }
-    return false
+    while (isAlive(this.discovery.pid)) await sleep(25)
   }
 }
 
@@ -554,13 +555,6 @@ export class TwoPeers {
       await peer.stop().catch((error) => leftovers.push(`${peer.handle}: ${error.message}`))
       if (peer.child.exitCode === null && peer.child.signalCode === null) {
         leftovers.push(`${peer.handle}: runtime pid ${peer.child.pid} is still running`)
-      }
-      if (peer.hadToBeKilled) {
-        leftovers.push(
-          `${peer.handle}: the runtime did not finish its ordered shutdown in ${SHUTDOWN_GRACE_MS}ms ` +
-            `and was killed, so whatever it had not yet removed is still there${peer.saidSoFar()}`
-        )
-        continue
       }
       // The runtime removes its discovery file and unlinks its socket on a clean
       // shutdown. Either one left behind means the next run inherits a lie.

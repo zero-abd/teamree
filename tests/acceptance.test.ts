@@ -69,7 +69,11 @@ beforeAll(async () => {
   // until the per-user inotify limit was exhausted and every filesystem-watch
   // test on the machine began failing for reasons that had nothing to do with
   // the watcher.
-  host = spawn('npx', ['tsx', HOST], { env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+  // stdin is a pipe rather than /dev/null, and nothing is ever written to it:
+  // it is how the runtime learns this process has gone, so that a suite killed
+  // part-way through does not leave a runtime behind holding a socket and a
+  // discovery file. See `scripts/acceptance-host.mjs`.
+  host = spawn('npx', ['tsx', HOST], { env, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
 
   const discovery = join(userDataDir, 'runtime.json')
   for (let attempt = 0; attempt < 160 && !existsSync(discovery); attempt += 1) await sleep(250)
@@ -122,6 +126,16 @@ describe('milestone 1 acceptance', () => {
 
     expect(worktree?.state, worktree?.error).toBe('ready')
     expect(existsSync(worktree.path)).toBe(true)
+    // Inside this run's own directory and nowhere else. The checkout root is
+    // not part of `userDataDir`, and left at its default it is the person's
+    // `~/.teamree/worktrees` — shared with their real projects, with the smoke
+    // script, and with every other copy of this suite running on the machine.
+    // Two of those pick checkout names out of one directory while reading two
+    // different stores, so they choose the same free name and one of them then
+    // reads a path the other has taken or removed. Asserting the root here is
+    // what keeps that from coming back: a run that can be run twice at once is
+    // a run whose checkouts are somewhere only it can see.
+    expect(worktree.path.startsWith(root)).toBe(true)
   }, 60_000)
 
   it('gives a second worktree of the same name its own branch', () => {
