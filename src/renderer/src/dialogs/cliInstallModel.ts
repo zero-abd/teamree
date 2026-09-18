@@ -305,17 +305,33 @@ export function cliOutcome(install: CliInstall): string {
  * look on the same line that told them the link was made.
  */
 function pathBasis(status: CliStatus): string {
-  const checked =
-    status.onPath === 'environment'
-      ? `Checked against this app’s own PATH, which has ${status.directory} on it.`
-      : status.onPath === 'login'
-        ? `Checked against /etc/paths, which every login shell’s PATH is built from, and ${status.directory} is ` +
-          'in it.'
-        : `Nothing teamree can read puts ${status.directory} on a PATH.`
-  return (
-    `${checked} teamree cannot read your shell profile, so if one sets PATH rather than adds to it, teamree may ` +
-    'still not be found in a terminal.'
-  )
+  if (status.onPath === 'environment') {
+    return (
+      `Checked against this app’s own PATH, which has ${status.directory} on it. That is this process, not your ` +
+      'terminal: an app opened from the Finder inherits no shell environment, so it proves the directory is on a ' +
+      'PATH rather than on yours.'
+    )
+  }
+  // The strong one, and the reason this function was rewritten. teamree starts
+  // the login shell, lets it read the profile, and reads back the PATH it ended
+  // up with — the same probe every pane is built with. It used to say the
+  // opposite of this in as many words: "teamree cannot read your shell
+  // profile", appended to every answer, while the probe had been running for
+  // every terminal in the app all along.
+  if (status.onPath === 'shell') {
+    return (
+      `Checked against the PATH your login shell reports after reading your profile, which is the PATH a terminal ` +
+      `you open will have, and ${status.directory} is on it.`
+    )
+  }
+  if (status.onPath === 'login') {
+    return (
+      `Your login shell could not be asked, so this is checked against /etc/paths, and ${status.directory} is in ` +
+      'it. That is the PATH a shell *starts* with: a profile that sets PATH rather than adding to it replaces it, ' +
+      'and then the command will not be found in a terminal even though the link is fine.'
+    )
+  }
+  return `Nothing teamree can read puts ${status.directory} on a PATH.`
 }
 
 /**

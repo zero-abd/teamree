@@ -1194,15 +1194,27 @@ export type CliLinkState =
   | 'absent'
 
 /**
- * How the destination directory reaches a shell's PATH.
+ * How the destination directory reaches a shell's PATH — and which question was
+ * actually answered, because the three are not equally strong.
  *
- * Two sources because an app opened from Finder inherits none of a shell's
- * environment, so this process's own PATH is evidence of one thing only — that
- * the directory is on it. `login` is `/etc/paths`, which `path_helper` puts on
- * every login shell's PATH, and is what makes "/usr/local/bin is on your PATH"
- * a true statement about the terminal the user will actually type in.
+ * An app opened from Finder inherits none of a shell's environment, so this
+ * process's own PATH (`environment`) is evidence of one thing only: that the
+ * directory is on it.
+ *
+ * `shell` is the login shell's own PATH, asked for by starting it and having it
+ * print what it ended up with after reading the user's profile. That is the
+ * PATH of the terminal they will actually type in, so it is the only source
+ * that can answer the question either way — and the only one that can say no.
+ *
+ * `login` is `/etc/paths`, and it is the fallback for a shell that could not be
+ * asked. It used to be documented here as "what makes '/usr/local/bin is on
+ * your PATH' a true statement about the terminal the user will actually type
+ * in", and that was wrong: `path_helper` builds a *starting* PATH, and a
+ * profile that assigns `PATH=` rather than extending it throws it away. On such
+ * a machine `/etc/paths` says yes, the terminal says no, and the app said yes
+ * with no hedge — after charging an administrator password for the link.
  */
-export type CliPathSource = 'environment' | 'login'
+export type CliPathSource = 'environment' | 'shell' | 'login'
 
 /**
  * Why a link to this app would not outlive the day, when it would not.
