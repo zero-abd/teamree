@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createTempRepo, type TempRepo } from './testRepository'
 import { parseLogRecords, readWorktreeLog } from './worktreeLog'
@@ -187,5 +190,54 @@ describe('reading a worktree’s log from a real repository', () => {
 
     expect(log.commits).toEqual([])
     expect(log.unavailable).toContain('no base ref')
+  })
+
+  // A base ref is discovered rather than typed: `detectBaseRef` falls back to
+  // the branch the primary checkout has out, and a branch name is a fact about
+  // whatever repository somebody cloned. `git check-ref-format` accepts
+  // `refs/heads/--output=x`, and `git log` reads `--output=<path>` as "write
+  // your output into this file" — so a repository could name its trunk after a
+  // file on the reader's disk, and merely listing what a worktree of that clone
+  // has committed would truncate it.
+  it('refuses a base ref that git would read as an option, and writes no file', async () => {
+    const repo = await repository()
+    await repo.git(['checkout', '-q', '-b', 'feature', 'main'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('a day of work')
+    const victim = path.join(repo.base, 'victim.txt')
+    await writeFile(victim, 'this file belongs to somebody else\n', 'utf8')
+
+    const log = await readWorktreeLog(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      baseRef: `--output=${victim}`,
+      branch: 'feature'
+    })
+
+    // Asserted first, because it is the claim: the two names are glued into one
+    // `base..branch` token, so the path git opens is the victim with the branch
+    // stuck on the end of it, and without the refusal above this file exists.
+    expect(existsSync(`${victim}..feature`)).toBe(false)
+    expect(await readFile(victim, 'utf8')).toBe('this file belongs to somebody else\n')
+    expect(log.commits).toEqual([])
+    expect(log.unavailable).toContain('is not a usable git ref')
+  })
+
+  // The branch is glued after the `..` and so cannot lead the token here — it
+  // is held to the same shape anyway, because the same two strings go on to
+  // `readMergePreview`, where the branch *is* an argument of its own, and one
+  // reader of a pair holding only half of it is how the other half gets lost.
+  it('refuses a branch that is not a usable ref either', async () => {
+    const repo = await repository()
+
+    const log = await readWorktreeLog(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      baseRef: 'main',
+      branch: '--output=/dev/null'
+    })
+
+    expect(log.commits).toEqual([])
+    expect(log.unavailable).toContain('is not a usable git ref')
   })
 })

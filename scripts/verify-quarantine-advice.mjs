@@ -88,7 +88,57 @@ function documentedCommand() {
       `This script installs there so it can run the command verbatim.\nGot: ${command}`
     )
   }
+  refuseAnythingButXattr(command)
   return command
+}
+
+/**
+ * Everything one `xattr` invocation can be spelled with, and nothing else.
+ *
+ * Letters, digits, space, and the four punctuation marks a flag, an attribute
+ * name and an absolute path need. Every shell metacharacter there is falls
+ * outside it — `;` `&` `|` `` ` `` `$` `(` `>` `\` and a newline included — so
+ * the question "is this one command" is answered by the character set rather
+ * than by a list of operators somebody has to remember to keep complete.
+ */
+const ONE_PLAIN_COMMAND = /^[A-Za-z0-9 ._/-]+$/
+
+/**
+ * Refuses to hand `/bin/sh` anything that is not the advice.
+ *
+ * The block below runs this string through a shell, on a maintainer's Mac,
+ * against an app this script has just installed at `/Applications`. Running it
+ * verbatim is the whole design — a copy of the command here would drift from
+ * the document and go green while the instruction rotted — but "run what the
+ * document says" and "run whatever is in the document" are two different
+ * programs, and until now this was the second one.
+ *
+ * `docs/install.md` is an ordinary file in the repository. A change to it is a
+ * documentation change, reviewed as prose, by somebody who has no reason to be
+ * reading a fenced block as a payload; a block reading `xattr -dr
+ * com.apple.quarantine /Applications/teamree.app && curl … | sh` satisfies every
+ * other test in this function.
+ *
+ * Nothing was reachable through it as things stand, and the reason is worth
+ * writing down because it is not this function: `agreesWithReleaseNotes` below
+ * requires the documented command to be a substring of a line in
+ * `scripts/release.mjs`, and that line is the bare command, so anything appended
+ * to it disagrees and the script stops. That is a check about two documents
+ * drifting apart. It happens to stand between a docs pull request and a shell,
+ * it was not written to, and it would stop doing so the day somebody reworded
+ * the release notes. A guarantee about what reaches `/bin/sh` belongs beside the
+ * string that reaches it.
+ */
+function refuseAnythingButXattr(command) {
+  const [first] = command.split(' ')
+  if (first !== 'xattr' || !ONE_PLAIN_COMMAND.test(command)) {
+    fail(
+      'the documented command is not a single plain xattr invocation, and this script runs it through a shell.',
+      'Whatever is in that block is executed verbatim on this machine, so it has to be provably one command: ' +
+        `"xattr", then flags, an attribute name and ${INSTALLED_PATH}, with no shell operators and no second ` +
+        `line.\nGot: ${JSON.stringify(command)}`
+    )
+  }
 }
 
 const command = documentedCommand()

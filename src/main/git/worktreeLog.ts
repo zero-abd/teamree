@@ -12,7 +12,7 @@
 
 import type { WorktreeLog } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
-import { comparesAgainstItself } from './repository'
+import { assertRefShape, comparesAgainstItself } from './repository'
 
 /** Commits returned before the list reports itself capped. */
 export const DEFAULT_LOG_LIMIT = 50
@@ -88,6 +88,39 @@ export async function readWorktreeLog(runner: GitRunner, options: LogReadOptions
   // clean exit and no commits rather than with an error.
   if (comparesAgainstItself(options.baseRef)) {
     return nothingKnown('this project has no base ref to compare against, so nothing here can be called new')
+  }
+
+  // Neither of these two names reaches git as an argument of its own — they are
+  // glued into one `base..branch` token — but a token beginning with a dash is
+  // read by git as an option whatever is further along it, and `git log` has one
+  // that writes a file: `--output=<path>`. A base ref of `--output=/somewhere`
+  // therefore turns reading a worktree's commits into truncating a file of
+  // somebody else's choosing, silently, with the panel none the wiser.
+  //
+  // It is not hypothetical and it is not typed by the user. A base ref is
+  // discovered, not entered: `detectBaseRef` falls back to `git symbolic-ref
+  // --short HEAD` when a checkout has no `origin/HEAD` and no `origin/main` or
+  // `origin/master`, and that is the branch name the repository itself carries.
+  // A ref may begin with a dash — `git check-ref-format` accepts
+  // `refs/heads/--output=x` and a clone of a repository whose HEAD points there
+  // checks it out — so the name is a fact about a remote somebody else controls,
+  // which is exactly the trust level an invitation's origin has.
+  //
+  // Checked here rather than trusted from wherever the name came from, because
+  // this is the function that starts the process. `readDivergence` in
+  // worktreeStatus.ts already guards its own range this way and degrades to "no
+  // answer" rather than throwing; a read that cannot be made safely is a read
+  // that was not made, and this list says so in the same place it says so for an
+  // unfetched clone.
+  for (const [ref, label] of [
+    [options.baseRef, 'base ref'],
+    [options.branch, 'branch']
+  ] as const) {
+    try {
+      assertRefShape(ref, label)
+    } catch {
+      return nothingKnown(`${label} "${ref}" is not a usable git ref, so nothing here can be compared against it`)
+    }
   }
 
   // One more than asked for, so "there are others" is known without walking the
