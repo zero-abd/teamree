@@ -307,12 +307,38 @@ export function releaseNotes({ tag, repo, checksums, kind, highlights = null }) 
       'downloaded against `SHA256SUMS.txt` below and you know it is the one this build produced.',
       'It cannot tell you the build is trustworthy — only that what reached you is what left here.',
       '',
-      'macOS will say teamree "cannot be opened because the developer cannot be verified". Move',
-      'the app to `/Applications`, then run once:',
+      // The dialog, in the words macOS 15 and later actually use. The wording
+      // here was the macOS 10.15-14 one — "cannot be opened because the
+      // developer cannot be verified" — which stopped existing three major
+      // versions ago, and which `docs/install.md` and `site/README.md` both
+      // already say is gone. A downloader who reads a sentence that does not
+      // match what is on their screen has to decide which of the two is wrong,
+      // and the thing on the screen is a dialog whose prominent button deletes
+      // the file they just fetched.
+      //
+      // Which is why the Move to Trash line is here at all. The release body is
+      // the *only* text most people will read before they double-click: it is
+      // what the download page shows, and what the update card in the window
+      // renders for somebody still on the old build. Sending them to
+      // docs/install.md for the one sentence that stops them destroying the
+      // download is sending them there too late.
+      'The first time you open it, macOS will refuse, with a dialog whose two buttons are',
+      '**Move to Trash** and **Done**:',
+      '',
+      '> **"teamree" Not Opened**',
+      '>',
+      '> Apple could not verify "teamree" is free of malware that may harm your Mac or',
+      '> compromise your privacy.',
+      '',
+      '**Do not press Move to Trash.** It is the prominent button and it is the wrong one; press',
+      '**Done**. There is no "Open Anyway" button in that dialog — macOS 15 removed the',
+      'Control-click route — so move the app to `/Applications` and then run once:',
       '',
       '```sh',
       'xattr -dr com.apple.quarantine /Applications/teamree.app',
       '```',
+      '',
+      'Open it normally after that and it will not ask again.',
       ''
     )
   }

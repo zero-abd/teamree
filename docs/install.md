@@ -133,15 +133,21 @@ colleague, an AirDrop — marks what is inside it too. Clearing only the bundle
 would work for the download and leave those stopped, with no hint that the
 command had done half its job.
 
-This is checked rather than asserted. `npm run install:verify` in the repository
-installs a real packaged build at the path named above, quarantines it both ways
-a download arrives, and runs the command in this document — read out of this
-file, so the instruction cannot rot into being wrong while the check stays green.
-It last ran green in CI on 13 September 2026, in run `34740171822`, as the step
-"Verify the install instructions". That is the one machine-checked run of it
-there is: the workflows have since been removed, so it is a command a maintainer
-runs — by hand, when this document changes and before a release anybody new will
-follow — rather than something that happens on every commit.
+There is a check for this, and it is worth being exact about what it has and has
+not done. `npm run install:verify` in the repository installs a real packaged
+build at the path named above, quarantines it both ways a download arrives, and
+runs the command in this document — read out of this file, so the instruction
+cannot rot into being wrong while the check stays green. Its first half, which
+compares this document against the release notes, has run green. Its second
+half, the one that touches a real bundle, runs only on a Mac and **has never
+completed**: it died on an unimported `existsSync` that arrived in the same
+commit as the script, and the green CI run this paragraph used to cite was the
+non-macOS early exit being read as a pass. The import is fixed and the run is
+now a command a maintainer types by hand; `docs/mac-checks.md` carries it.
+
+So the sentence above it stands on a person, not on a machine: the `xattr`
+command was run against this build and watched to work, and the dialog is quoted
+off the screen.
 
 There is a route through the interface as well, for anyone who would rather not
 type a command: attempt to open teamree, press **Done**, then go to **System

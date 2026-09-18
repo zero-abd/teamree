@@ -35,8 +35,18 @@ window reflects all of it live.
 
 ## Install
 
-**Coming soon.** Packaged macOS builds are not published yet. Until then, run it
-from source:
+Download the latest disk image — a universal build, Apple Silicon and Intel
+both, and no GitHub account needed:
+
+**<https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg>**
+
+Nothing in it is signed, so the first time you open it macOS will refuse with a
+dialog whose prominent button deletes the download. **Do not press Move to
+Trash**; press **Done**, and read
+[`docs/install.md`](docs/install.md) — it is four paragraphs and it is the
+difference between an app that opens and an app you throw away.
+
+To run it from source instead:
 
 ```sh
 npm install

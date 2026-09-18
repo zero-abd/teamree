@@ -242,6 +242,15 @@ for (const shape of SHAPES) {
 }
 
 run('rm', ['-rf', INSTALLED_PATH])
+// Said as narrowly as it is true. The quarantine applied above is written by
+// hand with `xattr -w`; a real download also writes a LaunchServices record
+// this script cannot fabricate, and nothing here ever launches the app or asks
+// Gatekeeper anything. So what has been proved is that the command in the
+// document removes the attribute from a real bundle, both ways a download marks
+// one — not that the first-launch dialog is what the document says it is. That
+// last part is a person looking at a screen, and `docs/mac-checks.md` is where
+// it is recorded.
 console.log(
-  'verify-quarantine-advice: PASS — the install instructions work on a real packaged app, for both artifacts.'
+  'verify-quarantine-advice: PASS — the documented command clears a real quarantine attribute from a real ' +
+    'packaged app, for both artifacts. It does not launch the app or consult Gatekeeper.'
 )
