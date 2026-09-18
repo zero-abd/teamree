@@ -184,6 +184,18 @@ function createRepositories(): LayoutRepository & SessionRepository {
   }
 }
 
+/**
+ * Whether a file a pane's command writes has got as far as saying `want`.
+ *
+ * Absent reads as "not yet" rather than as an error: a shell redirecting into a
+ * path creates the file before it writes anything into it, so both "there is no
+ * file" and "there is an empty one" are the same moment — the command has not
+ * finished — and a caller waiting for it should see one answer for both.
+ */
+async function markerSays(filePath: string, want: string): Promise<boolean> {
+  return (await readFile(filePath, 'utf8').catch(() => '')).includes(want)
+}
+
 /** Everything a subscriber was actually sent, as the bytes it would have drawn. */
 const outputOf = (events: readonly TerminalEvent[]): string =>
   events
@@ -444,6 +456,16 @@ describePty('restoring terminals across a restart', () => {
     const first = manager(repositories, checkout, archive)
     const opened = first.create({ worktreeId: 'wt_1', command: `echo hello-from-before; echo ran >> ${marker}` })
     await waitUntil(() => first.read(opened.id).includes('hello-from-before'), 'the command to print')
+    // The first of the command's two statements printing is not the command
+    // finishing, and the assertion at the end of this test is about the file
+    // the second one writes. Waiting only for the print left the shutdown
+    // racing `echo ran >> …`: on an idle machine the write always won, and on a
+    // machine with anything else on it the pane was torn down between the
+    // redirection creating the file and the byte reaching it — so the test
+    // ended up reading an empty marker and reporting it as the restore having
+    // eaten the line. Waiting for the file to say what it is for waits for the
+    // thing the rest of this test is about instead of for a moment near it.
+    await waitUntil(() => markerSays(marker, 'ran'), 'the command to finish writing its marker')
     await first.shutdown()
 
     const reopened = await ScrollbackArchive.open(archive.directory, [opened.id])
@@ -460,7 +482,20 @@ describePty('restoring terminals across a restart', () => {
 
     // The output came back; the command did not run again. Restoring a
     // transcript must never be a second deploy.
-    const { readFile } = await import('node:fs/promises')
+    //
+    // Proved by asking the restored shell rather than by reading the marker at
+    // whatever moment the test happened to get here. A probe is typed into the
+    // pane and waited for, and a shell that had been handed the old command
+    // would have run it before it could ever answer this one — so a marker
+    // still one line long once the answer is on the screen is a statement about
+    // what that shell did and in what order, which no amount of load can move.
+    // Reading the file straight after the restore would instead have been a
+    // statement about how far a replay had got in the meantime.
+    second.write(opened.id, "printf 'the restored shell %s\\n' answered\r")
+    await waitUntil(
+      () => second.read(opened.id).includes('the restored shell answered'),
+      'the restored pane’s own shell to answer'
+    )
     expect((await readFile(marker, 'utf8')).trim().split('\n')).toEqual(['ran'])
   }, 20_000)
 
