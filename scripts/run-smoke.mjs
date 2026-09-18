@@ -12,14 +12,14 @@
 // everything else in this file: they want plain Node and a process that is
 // still around afterwards to clean up, and `smoke.mjs` is an Electron main
 // process that has exited by then.
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import electron from 'electron'
 import { electronSandboxArgs } from './electron-sandbox.mjs'
 import { buildPeerBundle } from './peer-bundle.mjs'
-import { PEER_BUNDLE_FLAG, USER_DATA_FLAG, namedArg } from './smoke-args.mjs'
+import { FIXTURE_REPO_FLAG, PEER_BUNDLE_FLAG, USER_DATA_FLAG, namedArg } from './smoke-args.mjs'
 import { displayPlan } from './virtual-display.mjs'
 
 const peerBundle = await buildPeerBundle()
@@ -32,11 +32,40 @@ const peerBundle = await buildPeerBundle()
 const smokeRoot = mkdtempSync(join(tmpdir(), 'teamree-smoke-'))
 const userDataDir = join(smokeRoot, 'teamree')
 
+// A repository for the window to open, so the checks that need a worktree have
+// one. Three synchronous calls, and deliberately outside the Electron process:
+// a fixture that failed to build in there would be reported as the window being
+// broken, which is the opposite of what these checks are for.
+//
+// `-c` rather than `git config`, so nothing is read from or written to whoever
+// is running this. A commit needs an identity and an empty repository has no
+// branch to create a worktree from, hence the empty commit.
+const fixtureRepo = join(smokeRoot, 'repo')
+mkdirSync(fixtureRepo, { recursive: true })
+const fixtureGit = ['-c', 'user.email=smoke@teamree.invalid', '-c', 'user.name=smoke', '-c', 'commit.gpgsign=false']
+const fixtureSteps = [
+  ['init', '-b', 'main'],
+  [...fixtureGit, 'commit', '--allow-empty', '-m', 'initial']
+]
+let fixture = fixtureRepo
+for (const args of fixtureSteps) {
+  const step = spawnSync('git', args, { cwd: fixtureRepo, encoding: 'utf8' })
+  if (step.status !== 0) {
+    // Not fatal. The window-level checks do not need it, and a machine without
+    // a usable git should be told which checks it lost rather than handed a
+    // failure that looks like the app.
+    console.error(`run-smoke: no fixture repository (git ${args[0]} failed), so worktree checks are skipped`)
+    fixture = ''
+    break
+  }
+}
+
 const plan = displayPlan(electron, [
   ...electronSandboxArgs(),
   'scripts/smoke.mjs',
   namedArg(PEER_BUNDLE_FLAG, peerBundle),
-  namedArg(USER_DATA_FLAG, userDataDir)
+  namedArg(USER_DATA_FLAG, userDataDir),
+  ...(fixture === '' ? [] : [namedArg(FIXTURE_REPO_FLAG, fixture)])
 ])
 if (plan.note) console.log(`run-smoke: ${plan.note}`)
 if (plan.advice) console.error(`run-smoke: ${plan.advice}`)
