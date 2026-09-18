@@ -238,6 +238,42 @@ describe('the notes the release carries', () => {
     expect(notes).toContain(checksums)
   })
 
+  // The defect this pins: the notes told a downloader macOS would say teamree
+  // "cannot be opened because the developer cannot be verified". That is the
+  // macOS 10.15-14 string. It has not existed since macOS 15, and both
+  // `docs/install.md` and `site/README.md` already said so in as many words —
+  // site/README.md going as far as "is not used anywhere on the page", which
+  // was true of the page and false of the text with the widest readership
+  // there is. This body is the GitHub release description *and* what
+  // `updateNotice` renders inside the window for somebody still on the old
+  // build, so it is the last thing most people read before they double-click.
+  it('quotes the dialog macOS 15 and later actually shows, not the one it retired', () => {
+    const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'adhoc' })
+    expect(notes).not.toContain('cannot be opened because the developer cannot be verified')
+    expect(notes).toContain('"teamree" Not Opened')
+    expect(notes).toContain('Apple could not verify')
+  })
+
+  // The single most expensive sentence to omit. **Move to Trash** is the
+  // prominent button in that dialog and it deletes the download; a careful
+  // reader reaches for it. `docs/install.md` and the site both carry the
+  // warning, and sending somebody to a second document for it is sending them
+  // there after they have already pressed something.
+  it('tells the reader not to press the button that deletes the download', () => {
+    const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'adhoc' })
+    expect(notes).toContain('Do not press Move to Trash')
+    expect(notes).toContain('press')
+    expect(notes).toContain('Done')
+  })
+
+  // Control-click > Open was the way through for macOS 10.15-14 and macOS 15
+  // removed it. Notes that implied there was a button in the dialog would send
+  // a reader hunting for one that is not there.
+  it('says there is no way through the dialog itself, so nobody hunts for one', () => {
+    const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'adhoc' })
+    expect(notes).toContain('There is no "Open Anyway" button in that dialog')
+  })
+
   it('says so, and gives no quarantine command, when the build is signed and notarized', () => {
     const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'developer-id' })
     expect(notes).toContain('Signed and notarized')
@@ -328,5 +364,23 @@ describe('the name the download button can keep pointing at', () => {
     expect(lines).toHaveLength(2)
     expect(lines.every((line) => line.startsWith(hash))).toBe(true)
     expect(lines[1]).toContain(STABLE_DMG_NAME)
+  })
+
+  // The defect this pins: three releases had been published, the website was
+  // rendering a live Download for macOS button at this exact URL, and the
+  // README — the page anybody arriving at the repository reads first — still
+  // opened its Install section with "Coming soon. Packaged macOS builds are not
+  // published yet." A front door that says there is nothing to download is a
+  // worse failure than a broken link, because nobody goes looking for the file
+  // it did not mention.
+  //
+  // Asserted as the presence of the link rather than the absence of a sentence,
+  // because there is one URL that is correct and an unbounded number of ways to
+  // say the wrong thing about it.
+  it('is the link the README and the install document both hand a reader', () => {
+    const url = `releases/latest/download/${STABLE_DMG_NAME}`
+    for (const document of ['README.md', 'docs/install.md']) {
+      expect(readFileSync(document, 'utf8')).toContain(url)
+    }
   })
 })

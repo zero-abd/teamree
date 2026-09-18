@@ -13,7 +13,7 @@
 // happens per-architecture during a build that electron-builder then merges, so
 // the bug would look like a working build right up until it did not.
 
-import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -40,10 +40,24 @@ async function packagedApp(): Promise<string> {
     await writeFile(join(dir, 'pty.node'), platform, 'utf8')
     await writeFile(join(dir, 'spawn-helper'), '#!/bin/sh\n', { mode: 0o755 })
   }
-  const cli = join(out, 'teamree.app', 'Contents', 'Resources', 'cli')
-  await mkdir(cli, { recursive: true })
-  await writeFile(join(cli, 'teamree'), '#!/bin/sh\n', { mode: 0o755 })
+  // Both launchers, and both written *without* the executable bit: the hook's
+  // job is to put it back, so a fixture that arrives with it already set would
+  // pass whether or not the hook did anything at all.
+  for (const [dir, name] of [
+    ['cli', 'teamree'],
+    ['relay', 'teamree-relay']
+  ]) {
+    const at = join(out, 'teamree.app', 'Contents', 'Resources', dir as string)
+    await mkdir(at, { recursive: true })
+    await writeFile(join(at, name as string), '#!/bin/sh\n', { mode: 0o644 })
+  }
   return out
+}
+
+/** The permission bits on one path under the packaged Resources directory. */
+async function modeOf(appOutDir: string, ...segments: string[]): Promise<number> {
+  const at = join(appOutDir, 'teamree.app', 'Contents', 'Resources', ...segments)
+  return (await stat(at)).mode & 0o777
 }
 
 const context = (appOutDir: string, arch: number): Parameters<typeof afterPack>[0] =>
@@ -107,6 +121,33 @@ describe('what a universal macOS build keeps', () => {
     const out = await packagedApp()
     await rm(join(prebuildsDir(out), 'darwin-x64'), { recursive: true, force: true })
     await expect(afterPack(context(out, ARCH.universal))).rejects.toThrow('darwin-x64')
+  })
+
+  // The defect: this hook repaired the CLI launcher's executable bit and said
+  // nothing about the relay launcher beside it, which shipped with whatever
+  // mode electron-builder's copy happened to preserve. Neither is exec'd by
+  // Electron — the CLI launcher is what a /usr/local/bin symlink points at, and
+  // the relay launcher is the first word of a command line handed to a login
+  // shell — so a 0644 one is "permission denied" in a pane and a dead button in
+  // the Teamwork panel, from a build that looked clean.
+  it('puts the executable bit back on both shipped launchers, not just the CLI', async () => {
+    const out = await packagedApp()
+    expect(await modeOf(out, 'cli', 'teamree')).toBe(0o644)
+    expect(await modeOf(out, 'relay', 'teamree-relay')).toBe(0o644)
+
+    await afterPack(context(out, ARCH.arm64))
+
+    expect(await modeOf(out, 'cli', 'teamree')).toBe(0o755)
+    expect(await modeOf(out, 'relay', 'teamree-relay')).toBe(0o755)
+  })
+
+  // A package with no relay launcher in it is one where the Teamwork panel
+  // offers a command that is not there, and finding that out at the end of a
+  // universal build is fifteen minutes cheaper than finding it out from a user.
+  it('refuses a package the relay launcher never reached', async () => {
+    const out = await packagedApp()
+    await rm(join(out, 'teamree.app', 'Contents', 'Resources', 'relay'), { recursive: true, force: true })
+    await expect(afterPack(context(out, ARCH.arm64))).rejects.toThrow('relay launcher is missing')
   })
 
   it('still drops the platforms this artifact is not for', async () => {
