@@ -45,6 +45,7 @@ import {
   relayLauncherCommand,
   RELAY_PANE_URL_SCHEMES,
   relayUrlFromOutput,
+  relayUrlsFromOutput,
   type RelayPaneKind,
   type RelayPaneState
 } from '../teamwork/startTeamwork'
@@ -124,8 +125,12 @@ export type TeamworkReadErrors = { list?: string; relay?: string; status?: strin
  * The pane is an ordinary terminal owned by the runtime, created under an id of
  * its own so it belongs to the project rather than to whichever worktree
  * happened to be open — `.teamree` is in the primary checkout, and a worktree's
- * pane is in the wrong directory for this. Nothing restores it on the next
- * launch, which is right: a finished deploy is not a pane anybody wants back.
+ * pane is in the wrong directory for this. Nothing is stored across a launch,
+ * which used to be justified as "a finished deploy is not a pane anybody wants
+ * back" — true of a deploy, and false of the relay this window grew the ability
+ * to run. A relay is a process that is meant to still be there tomorrow, so
+ * within a run the slot is rebuilt from the runtime's own list rather than
+ * trusted to survive: see `reconcileRelayPanes`.
  *
  * The shape itself is the panel's, imported rather than restated: it is what
  * the panel renders, and two copies of it would be two things to keep in step.
@@ -139,9 +144,71 @@ export type { RelayPaneKind, RelayPaneState } from '../teamwork/startTeamwork'
  * not a real one: this pane is about the project's primary checkout, which no
  * worktree row owns. The runtime drops a stored pane whose worktree it cannot
  * resolve, so nothing is left behind by it on the next launch.
+ *
+ * The verb is in the id because it is the only place it can be. A `Terminal`
+ * carries its id, its worktree, its directory and a title scraped from the
+ * program name — not the command, and `src/shared` is a frozen contract, so
+ * nothing in a terminal record says whether the pane is deploying, serving or
+ * checking. A window that has been reloaded has to be able to find a relay it
+ * left running and say truthfully what it is, and this is what lets it.
  */
-export function teamworkPaneWorktreeId(projectId: string): string {
-  return `teamwork:${projectId}`
+export function teamworkPaneWorktreeId(projectId: string, kind: RelayPaneKind): string {
+  return `teamwork:${kind}:${projectId}`
+}
+
+/** The project and verb an id made by `teamworkPaneWorktreeId` was made from, or null. */
+export function teamworkPaneFromWorktreeId(worktreeId: string): { projectId: string; kind: RelayPaneKind } | null {
+  const [namespace, kind, ...rest] = worktreeId.split(':')
+  // A project id can hold a colon, so the rest is rejoined rather than taken as
+  // one segment. The verb cannot: it is one of three literals this file writes.
+  const projectId = rest.join(':')
+  if (namespace !== 'teamwork' || projectId === '') return null
+  if (kind !== 'deploy' && kind !== 'serve' && kind !== 'check') return null
+  return { projectId, kind }
+}
+
+/**
+ * The relay panes this window should be showing, given what the runtime says is
+ * actually running.
+ *
+ * Two failures, one reconciliation. A renderer reload empties this map while
+ * the relay it was showing goes on running in the main process: the slot is
+ * gone, the buttons come back enabled, the pane is in no pane tree so there is
+ * no way left to stop it, and the next `serve` dies on `EADDRINUSE` against a
+ * process nothing on screen admits to. And the other way round, a terminal that
+ * leaves the runtime's list — closed from somewhere else, gone with its
+ * process — leaves a slot on screen whose only control reads "Close this pane"
+ * for a pane that is not there.
+ *
+ * So the runtime's list is the truth here as it is everywhere else: a slot
+ * whose terminal is gone is dropped, a teamwork terminal with no slot is
+ * adopted into one, and a slot whose terminal is still listed keeps everything
+ * it has learned — the URL it scraped above all, which is not in the list and
+ * would be thrown away by rebuilding it. An adopted pane starts with no URL and
+ * gets one from the next poll, a second and a half later.
+ */
+export function reconcileRelayPanes(
+  panes: Record<string, RelayPaneState>,
+  terminals: Record<string, Terminal>
+): Record<string, RelayPaneState> {
+  const next: Record<string, RelayPaneState> = {}
+  for (const terminal of Object.values(terminals)) {
+    const owner = teamworkPaneFromWorktreeId(terminal.worktreeId)
+    if (owner === null) continue
+    const kept = panes[owner.projectId]
+    next[owner.projectId] =
+      kept?.terminalId === terminal.id
+        ? // `running` comes off the record rather than being kept: it is the one
+          // fact in the slot the runtime is the authority on.
+          kept.running === terminal.running
+          ? kept
+          : { ...kept, running: terminal.running }
+        : { kind: owner.kind, terminalId: terminal.id, url: null, urls: [], running: terminal.running }
+  }
+  const unchanged =
+    Object.keys(next).length === Object.keys(panes).length &&
+    Object.entries(next).every(([projectId, pane]) => panes[projectId] === pane)
+  return unchanged ? panes : next
 }
 
 type WorkspaceState = {
@@ -745,10 +812,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   }
 
   const refreshTerminals = async (): Promise<void> => {
-    const terminals = await runtimeClient.call('terminal.list', {})
+    const listed = await runtimeClient.call('terminal.list', {})
     // Replaced wholesale rather than merged: the runtime's list is the whole
     // truth, and a terminal closed elsewhere has to leave this map.
-    set({ terminals: Object.fromEntries(terminals.map((terminal) => [terminal.id, terminal])) })
+    const terminals = Object.fromEntries(listed.map((terminal) => [terminal.id, terminal]))
+    // And the relay pane is reconciled against the same truth in the same
+    // breath, because it is the one slot in this store that points at a
+    // terminal and was never checked against the list it came from.
+    set((state) => ({ terminals, relayPanes: reconcileRelayPanes(state.relayPanes, terminals) }))
   }
 
   const refreshLayout = async (worktreeId: string): Promise<void> => {
@@ -1864,6 +1935,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Every one of these is already why the button is disabled. Checked again
       // because a store action is reachable from more than one button.
       if (!project || !deployCommand || get().relayPanes[projectId]) return
+      // And so is this one. The check button is disabled with `RELAY_CHECK.nothing`
+      // when there is no URL to dial, and until now that sentence was the only
+      // thing standing between a caller and `<launcher> check` with no argument
+      // — a command that is not the check anybody asked for, in a pane titled
+      // as though it were.
+      if (kind === 'check' && (argument === undefined || argument.trim() === '')) return
       // The runtime reports one command, because the shared contract types one.
       // The other two verbs are the same launcher with the verb swapped, and
       // null when what was reported is not that shape — which is the panel's
@@ -1872,7 +1949,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (command === null) return
       try {
         const terminal = await runtimeClient.call('terminal.create', {
-          worktreeId: teamworkPaneWorktreeId(projectId),
+          worktreeId: teamworkPaneWorktreeId(projectId, kind),
           cwd: project.path,
           command
         })
@@ -1880,7 +1957,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           terminals: { ...state.terminals, [terminal.id]: terminal },
           relayPanes: {
             ...state.relayPanes,
-            [projectId]: { kind, terminalId: terminal.id, url: null, running: true }
+            [projectId]: { kind, terminalId: terminal.id, url: null, urls: [], running: true }
           }
         }))
       } catch (error) {
@@ -1891,11 +1968,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     async closeRelayPane(projectId) {
       const pane = get().relayPanes[projectId]
       if (!pane) return
+      // The terminal goes first and the slot second, now that the slot is
+      // rebuilt from the runtime's list: dropping it first leaves a window in
+      // which a refresh sees a live teamwork terminal with no slot and dutifully
+      // adopts the pane the user just closed straight back onto the screen.
+      await runtimeClient.call('terminal.close', { terminalId: pane.terminalId }).catch(() => undefined)
       set((state) => {
         const { [projectId]: _closed, ...rest } = state.relayPanes
         return { relayPanes: rest }
       })
-      await runtimeClient.call('terminal.close', { terminalId: pane.terminalId }).catch(() => undefined)
     },
 
     noteRelayPane(projectId, output, running) {
@@ -1904,10 +1985,20 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Which schemes count is the pane's own business: a deploy prints wss://
       // and nothing else, a relay run here is ws:// until something terminates
       // TLS in front of it, and a check is a report rather than a source.
-      const url = relayUrlFromOutput(output, RELAY_PANE_URL_SCHEMES[pane.kind])
-      if (pane.url === url && pane.running === running) return
+      const schemes = RELAY_PANE_URL_SCHEMES[pane.kind]
+      // Only the tail of the scrollback is read, and a relay that is working
+      // logs: give it long enough and the announcement scrolls out of the
+      // window this is looking at, the scrape comes back empty and the button
+      // somebody was about to press disappears out from under them. The address
+      // did not stop being the address because the pane kept talking, so a URL
+      // once found is kept until the pane is closed. Anything later that scrapes
+      // still wins — a second deploy in one pane means the second one.
+      const found = relayUrlFromOutput(output, schemes)
+      const url = found ?? pane.url
+      const urls = found === null ? pane.urls : relayUrlsFromOutput(output, schemes)
+      if (pane.url === url && pane.running === running && sameUrls(pane.urls, urls)) return
       set((state) => ({
-        relayPanes: { ...state.relayPanes, [projectId]: { ...pane, url, running } }
+        relayPanes: { ...state.relayPanes, [projectId]: { ...pane, url, urls, running } }
       }))
     },
 
@@ -2248,6 +2339,18 @@ function isRefusal(error: unknown): boolean {
 
 function refusalReason(error: unknown): string {
   return error instanceof Error ? error.message : 'this worktree has work in it that is not committed anywhere'
+}
+
+/**
+ * Whether two scrapes of a pane found the same addresses in the same order.
+ *
+ * The pane is polled every second and a half, so almost every read finds
+ * exactly what the last one did. Comparing before setting is what keeps a
+ * running relay from re-rendering the panel forty times a minute over a list
+ * that has not moved.
+ */
+function sameUrls(before: string[], after: string[]): boolean {
+  return before.length === after.length && before.every((url, index) => url === after[index])
 }
 
 /** Drops entries whose worktree the runtime no longer lists. */

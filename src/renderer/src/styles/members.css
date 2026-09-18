@@ -679,6 +679,31 @@
   line-height: 1.55;
 }
 
+/* The other addresses this Mac printed. A list rather than prose because the
+   reader's job here is to recognise one of their own networks in it, and a
+   column of addresses is what that job wants. */
+.relay-deploy__addresses {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.relay-deploy__address-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relay-deploy__address-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2);
+}
+
 /* Which of the three verbs this pane is holding. There is one slot, so the
    pane has to say what is in it. */
 .relay-pane__title {

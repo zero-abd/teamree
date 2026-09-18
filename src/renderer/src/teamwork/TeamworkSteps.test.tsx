@@ -23,7 +23,16 @@ import type {
   TeamworkRead
 } from '@shared/entities'
 import { TeamworkSteps, type TeamworkStepsProps } from './TeamworkSteps'
-import { ADD_KEY_BUTTON, KEY_GRANT_WARNING, RELAY_CHECK, RELAY_SERVE, TEAMWORK_PATHS } from './startTeamwork'
+import {
+  ADD_KEY_BUTTON,
+  KEY_GRANT_WARNING,
+  RELAY_CHECK,
+  RELAY_PANE_NO_URL,
+  RELAY_SERVE,
+  RELAY_SERVE_STOPPED,
+  TEAMWORK_PATHS,
+  type RelayPaneState
+} from './startTeamwork'
 import { teamworkSummary } from '../sidebar/teamworkSummary'
 
 const SELF_KEY = 'c2VsZmtleXNlbGZrZXlzZWxma2V5c2VsZmtleXNlbGZrZXk='
@@ -132,6 +141,26 @@ function render(overrides: Partial<TeamworkStepsProps> = {}): string {
   }
   return renderToStaticMarkup(<TeamworkSteps {...props} />)
 }
+
+/** One relay pane, in whichever of its states the test is about. */
+const pane = (overrides: Partial<RelayPaneState> & Pick<RelayPaneState, 'kind'>): RelayPaneState => ({
+  terminalId: 'term_2',
+  url: null,
+  urls: [],
+  running: true,
+  ...overrides
+})
+
+/**
+ * The labels of the buttons that cannot be pressed.
+ *
+ * Asserting on `Deploy a relay</button>` says only that the button is on the
+ * page, which it is in every state this panel has — so the test named for
+ * greying it out passed whether or not it was grey. This reads the attribute
+ * that actually decides it.
+ */
+const disabledButtons = (markup: string): string[] =>
+  [...markup.matchAll(/<button[^>]*\sdisabled=""[^>]*>(.*?)<\/button>/g)].map((match) => text(match[1] ?? '').trim())
 
 /** Undoes the escaping the markup applies, so assertions read like the page. */
 const text = (markup: string): string =>
@@ -410,7 +439,7 @@ describe('running a relay yourself', () => {
 })
 
 describe('checking a relay', () => {
-  const deployPane = { kind: 'deploy' as const, terminalId: 'term_1', url: null, running: true }
+  const deployPane = pane({ kind: 'deploy', terminalId: 'term_1' })
 
   it('is offered beside the relay this project is configured with', () => {
     const markup = render({ list: enrolled(), relay: relayOnDisk() })
@@ -441,13 +470,17 @@ describe('checking a relay', () => {
 // than allowed to replace the output somebody is reading.
 describe('the one relay pane', () => {
   it('says which of the three it is holding', () => {
-    const shown = text(render({ pane: { kind: 'serve', terminalId: 'term_2', url: null, running: true } }))
+    const shown = text(render({ pane: pane({ kind: 'serve' }) }))
     expect(shown).toContain('Running a relay on this Mac')
   })
 
+  // Disabled, and not merely present: the whole point of the sentence beside it
+  // is that the button it is about cannot be pressed, and `Deploy a relay` is on
+  // the page either way.
   it('greys the other buttons while one is open, with the reason beside them', () => {
-    const markup = render({ pane: { kind: 'serve', terminalId: 'term_2', url: null, running: true } })
-    expect(markup).toContain('Deploy a relay</button>')
+    const markup = render({ pane: pane({ kind: 'serve' }) })
+    expect(markup).toContain('disabled=""')
+    expect(disabledButtons(markup)).toContain('Deploy a relay')
     expect(text(markup)).toContain('A relay you are running yourself is already open in a pane below')
   })
 
@@ -455,7 +488,7 @@ describe('the one relay pane', () => {
   // means is beside the button that commits it.
   it('offers the URL a relay run here printed, and says what committing it costs', () => {
     const markup = render({
-      pane: { kind: 'serve', terminalId: 'term_2', url: 'ws://192.168.1.23:8787/v1/relay', running: true }
+      pane: pane({ kind: 'serve', url: 'ws://192.168.1.23:8787/v1/relay', urls: ['ws://192.168.1.23:8787/v1/relay'] })
     })
     const shown = text(markup)
     expect(shown).toContain('The relay is at')
@@ -465,15 +498,97 @@ describe('the one relay pane', () => {
   })
 
   // A check echoes the URL it was handed. Offering that back would be the panel
-  // pretending to have discovered something.
-  it('offers nothing out of a check pane', () => {
+  // pretending to have discovered something — and the guard is here as well as
+  // in the store, because a check's own scrollback says `dialling ws://…` and
+  // one loosened scheme list upstream would put a dead relay on this screen
+  // under a button that writes it into everybody's repository.
+  it('offers nothing out of a check pane, even one that somehow carries a URL', () => {
     const markup = render({
       list: enrolled(),
       relay: relayOnDisk(),
-      pane: { kind: 'check', terminalId: 'term_3', url: null, running: false }
+      pane: pane({ kind: 'check', terminalId: 'term_3', running: false, url: 'ws://10.0.0.4:8787/v1/relay' })
     })
     expect(markup).toContain('Checking a relay')
     expect(markup).not.toContain('Use this relay URL</button>')
+    expect(text(markup)).not.toContain('The relay is at')
+  })
+
+  // A relay you run here is a promise about a process on this Mac. The moment
+  // that process exits the port is closed, and the address still sitting in the
+  // scrollback answers nothing — so the offer goes away rather than inviting
+  // somebody to commit an address that worked for one afternoon.
+  it('withdraws the offer when the relay it was running has stopped, and says why', () => {
+    const markup = render({
+      pane: pane({
+        kind: 'serve',
+        running: false,
+        url: 'ws://192.168.1.23:8787/v1/relay',
+        urls: ['ws://192.168.1.23:8787/v1/relay']
+      })
+    })
+    expect(markup).not.toContain('Use this relay URL</button>')
+    expect(text(markup)).toContain(RELAY_SERVE_STOPPED)
+  })
+
+  // The opposite case, and the reason the gate is on the verb rather than on
+  // `running`: a deploy exiting is how a deploy succeeds, and the Worker it made
+  // outlives the pane that made it.
+  it('keeps offering what a finished deploy printed, because that outlives the pane', () => {
+    const markup = render({
+      pane: pane({
+        kind: 'deploy',
+        running: false,
+        url: 'wss://teamree-relay.ada.workers.dev/v1/relay',
+        urls: ['wss://teamree-relay.ada.workers.dev/v1/relay']
+      })
+    })
+    expect(markup).toContain('Use this relay URL</button>')
+    expect(text(markup)).toContain('The deploy printed')
+  })
+
+  // A finished pane with nothing to show used to render a blank space between
+  // its title and its terminal, which reads exactly like a pane still working.
+  it('says so when a command has finished and printed no relay URL', () => {
+    expect(text(render({ pane: pane({ kind: 'deploy', running: false }) }))).toContain(RELAY_PANE_NO_URL)
+  })
+
+  it('says none of that while the command is still running', () => {
+    const shown = text(render({ pane: pane({ kind: 'deploy' }) }))
+    expect(shown).not.toContain(RELAY_PANE_NO_URL)
+    expect(shown).not.toContain(RELAY_SERVE_STOPPED)
+  })
+})
+
+// The relay prints every address this Mac has and offers the first, and its own
+// source says that first one is a guess: it cannot tell a wifi address from a
+// VPN's or a container bridge's. On a Mac with Docker Desktop, Parallels or a
+// corporate VPN the guess is routinely an address no teammate can reach, so the
+// panel shows the list rather than the assertion.
+describe('a Mac with more than one address', () => {
+  const several = (): TeamworkStepsProps['pane'] =>
+    pane({
+      kind: 'serve',
+      url: 'ws://192.168.64.1:8787/v1/relay',
+      urls: ['ws://127.0.0.1:8787/v1/relay', 'ws://192.168.64.1:8787/v1/relay', 'ws://192.168.1.23:8787/v1/relay']
+    })
+
+  it('offers every other address the pane printed, each with a button of its own', () => {
+    const markup = render({ pane: several() })
+    expect(markup).toContain('Use ws://192.168.1.23:8787/v1/relay</button>')
+    expect(markup).toContain('Use ws://127.0.0.1:8787/v1/relay</button>')
+    // The one already offered above is not offered twice.
+    expect(markup).not.toContain('Use ws://192.168.64.1:8787/v1/relay</button>')
+  })
+
+  it('says the one it leads with is a guess, and that the order is not a ranking', () => {
+    expect(text(render({ pane: several() }))).toContain(RELAY_SERVE.choice)
+  })
+
+  it('says none of that when the relay printed one address', () => {
+    const markup = render({
+      pane: pane({ kind: 'serve', url: 'ws://192.168.1.23:8787/v1/relay', urls: ['ws://192.168.1.23:8787/v1/relay'] })
+    })
+    expect(text(markup)).not.toContain(RELAY_SERVE.choice)
   })
 })
 

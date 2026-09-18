@@ -36,7 +36,10 @@ import {
   RELAY_SERVE,
   relayLauncherCommand,
   relayPaneBusy,
+  RELAY_PANE_NO_URL,
+  RELAY_SERVE_STOPPED,
   relayUrlFromOutput,
+  relayUrlsFromOutput,
   retryHint,
   setupOutcome,
   startTeamworkFlow,
@@ -408,6 +411,71 @@ describe('running a relay on your own machine', () => {
     expect(RELAY_SERVE.what).toMatch(/teamree hosts nothing and runs nothing for you/)
     expect(`${RELAY_LEAD} ${RELAY_SERVE.what} ${RELAY_SERVE.limit}`).not.toMatch(/our relay|teamree’s relay/i)
   })
+
+  // The command says "this needs the network, once" while it is doing it, and
+  // somebody reading the panel deserves the same warning before they press the
+  // button — not a minute of apparently nothing happening, on a laptop that may
+  // well be the one place they cannot get to npm.
+  it('says it needs the network once, and that the first minute is an install', () => {
+    expect(RELAY_SERVE.what).toMatch(/needs the network once/)
+    expect(RELAY_SERVE.what).toMatch(/about a minute on npm before it listens/)
+  })
+
+  // What a pane says when there is nothing to offer. Both are about a command
+  // that is over: one produced no URL at all, the other produced one that has
+  // stopped being true.
+  it('has something true to say about a pane that ended with nothing to give', () => {
+    expect(RELAY_PANE_NO_URL).toMatch(/finished and printed no relay URL/)
+    expect(RELAY_PANE_NO_URL).toMatch(/in the pane above/)
+    expect(RELAY_SERVE_STOPPED).toMatch(/has stopped, so the address it printed answers nothing now/)
+    expect(RELAY_SERVE_STOPPED).toMatch(/no URL here to give your team/)
+  })
+
+  // The relay prints every address this Mac has because it cannot tell which of
+  // them anybody else can reach, and its pick is the first one the OS listed.
+  // The panel says that rather than repeating the guess as a fact.
+  it('says the address it leads with is a guess, and does not pretend to rank them', () => {
+    expect(RELAY_SERVE.choice).toMatch(/teamree cannot tell which of them your teammates can reach/)
+    expect(RELAY_SERVE.choice).toMatch(/the order they are listed in is\s+not a ranking/)
+    expect(RELAY_SERVE.choice).toMatch(/Take whichever is on the network you share/)
+  })
+})
+
+// Which address to commit is a question about somebody's network, and the relay
+// answers it with a guess and prints its working. The panel needs the working.
+describe('every address a relay printed, not only the one it picked', () => {
+  const ANNOUNCEMENT = [
+    'teamree-relay: on this Mac        ws://127.0.0.1:8787/v1/relay',
+    'teamree-relay: on this network    ws://192.168.64.1:8787/v1/relay',
+    'teamree-relay: on this network    ws://192.168.1.23:8787/v1/relay',
+    'teamree-relay: the URL to give your team:  ws://192.168.64.1:8787/v1/relay'
+  ].join('\n')
+
+  it('is every one of them, in the order the pane printed them', () => {
+    expect(relayUrlsFromOutput(ANNOUNCEMENT, ['ws', 'wss'])).toEqual([
+      'ws://127.0.0.1:8787/v1/relay',
+      'ws://192.168.64.1:8787/v1/relay',
+      'ws://192.168.1.23:8787/v1/relay'
+    ])
+  })
+
+  // The announcement repeats its pick on the last line. Offering the same
+  // address twice would read as two different things.
+  it('names each address once, however many times it was printed', () => {
+    expect(relayUrlsFromOutput(ANNOUNCEMENT, ['ws', 'wss']).filter((url) => url.includes('192.168.64.1'))).toHaveLength(
+      1
+    )
+  })
+
+  // And the one the command itself offered is still the last thing it said,
+  // which is what the panel leads with.
+  it('leaves the pick to the last line, as it always did', () => {
+    expect(relayUrlFromOutput(ANNOUNCEMENT, ['ws', 'wss'])).toBe('ws://192.168.64.1:8787/v1/relay')
+  })
+
+  it('is empty for a pane that may offer nothing at all', () => {
+    expect(relayUrlsFromOutput(ANNOUNCEMENT, [])).toEqual([])
+  })
 })
 
 describe('checking a relay', () => {
@@ -449,13 +517,57 @@ describe('the one pane, when something is already in it', () => {
 // in the checkout with a perfectly good URL in it. Nothing anywhere named the
 // variable, so everybody looked at the file.
 describe('an override that is set and cannot be read', () => {
+  /**
+   * The runtime's own reason, in the runtime's own words.
+   *
+   * It matters that this is not the file's reason: `onDisk.problem` is null in
+   * this state, because there is nothing whatever wrong with the file. Reading
+   * the file's half first is what used to put ".teamree/relay does not name a
+   * relay" on screen beside a file that plainly names one.
+   */
+  const BROKEN_REASON =
+    'TEAMREE_RELAY_URL is set to wss//typo.example/v1/relay and is not a URL teamree can dial, so this run has no ' +
+    'relay'
+
   const broken = (): RelaySetting =>
     relay({
       url: null,
       source: null,
+      problem: BROKEN_REASON,
       onDisk: { url: 'wss://relay.example/v1/relay', problem: null },
       override: { name: 'TEAMREE_RELAY_URL', value: 'wss//typo.example/v1/relay' }
     })
+
+  // Three statements about the relay used to be on screen in this state and two
+  // of them were false: the step ticked itself done because the file names a
+  // relay, and the outcome panel said the file names none. Neither is what is
+  // wrong, and nothing the reader could do to the file would fix it.
+  it('does not let step 3 tick itself done off a file that is not being used', () => {
+    const blocked = step({ ...fresh, relay: broken() }, 'relay')
+    expect(blocked.mark).toBe('blocked')
+    expect(blocked.summary).toBe(`${BROKEN_REASON}.`)
+    expect(blocked.summary).not.toMatch(/Step 4 is what makes it the team’s/)
+  })
+
+  // The same fact, in the panel that summarises the lot — and this one also
+  // feeds the sidebar, so a false sentence here leaves the panel entirely.
+  it('gives the outcome the runtime’s reason rather than one rebuilt from the file', () => {
+    const result = setupOutcome({ list: enrolled(), relay: broken(), status: status() })
+    const fact = result?.facts.find((entry) => entry.label === 'The relay')
+    expect(fact?.state).toBe('no')
+    expect(fact?.detail).toBe(`${BROKEN_REASON}.`)
+    expect(fact?.detail).not.toMatch(/does not name a relay/)
+    expect(result?.head).toBe('Not finished: the relay.')
+  })
+
+  // All three agree now, which is the whole of this fix: the step, the outcome
+  // and the sentence about the variable say one thing between them.
+  it('says the same thing in the step and in the outcome', () => {
+    const input = { list: enrolled(), relay: broken(), status: status() }
+    expect(step(input, 'relay').summary).toBe(
+      setupOutcome(input)?.facts.find((entry) => entry.label === 'The relay')?.detail
+    )
+  })
 
   it('names the variable, what is wrong with it, and the fix', () => {
     const said = brokenRelayOverride(broken())

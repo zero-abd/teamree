@@ -83,8 +83,10 @@ import {
   RELAY_LEAD,
   RELAY_LAUNCHER_UNKNOWN,
   RELAY_OPTIONS,
+  RELAY_PANE_NO_URL,
   RELAY_PANE_TITLES,
   RELAY_SERVE,
+  RELAY_SERVE_STOPPED,
   relayLauncherCommand,
   relayPaneBusy,
   RETRY_PUBLISH_BUTTON,
@@ -927,9 +929,28 @@ function RelayCheck({
  * three it is holding, and the buttons that would start another are grey with
  * that same fact beside them.
  *
- * A URL is offered out of it only for the two commands that produce one. A
- * check echoes the URL it was handed, and offering somebody their own input
- * back as a discovery would be the panel pretending to have found something.
+ * A URL is offered out of it only for the two commands that produce one, and
+ * only while it is true. Three conditions, and the panel checks all three
+ * rather than trusting anything upstream to have done it:
+ *
+ * The verb. A check echoes the URL it was handed, and offering somebody their
+ * own input back as a discovery would be the panel pretending to have found
+ * something. The store will not scrape one out of a check pane — and a check's
+ * scrollback literally contains `teamree-relay: dialling ws://…`, so the day
+ * that rule is loosened by one character this block would offer a URL the check
+ * had just proved dead. It is cheap to also refuse it here, and this is the
+ * side a reader looks at.
+ *
+ * The outcome. A relay you run here is a promise about a process on this Mac,
+ * and a `serve` that has exited is a closed port: the address it printed is
+ * still in the scrollback and answers nothing. Offering it to be written into
+ * everybody's repository is how a team commits an address that worked for one
+ * afternoon. A deploy is the opposite — the pane exiting is how it succeeds,
+ * and the Worker outlives it.
+ *
+ * And having anything at all. A pane that has finished and printed no URL used
+ * to render nothing between its title and its terminal, which reads exactly
+ * like a pane that is still working.
  */
 function RelayPaneBlock({
   pane,
@@ -944,7 +965,13 @@ function RelayPaneBlock({
   onClose: () => void
   render: (terminalId: string) => React.ReactNode
 }): React.JSX.Element {
-  const url = pane.url
+  const live = pane.kind !== 'check' && (pane.kind !== 'serve' || pane.running)
+  const url = live ? pane.url : null
+  // Everything else this Mac printed, for the person who knows which of their
+  // addresses their teammates can actually reach. Only for a relay run here: a
+  // deploy has one endpoint and a second URL in that pane is a second deploy,
+  // which the offer above already takes as the one that was meant.
+  const alternatives = pane.kind === 'serve' && url !== null ? pane.urls.filter((other) => other !== url) : []
   return (
     <div className="relay-deploy__pane">
       <p className="relay-pane__title">{RELAY_PANE_TITLES[pane.kind]}</p>
@@ -961,12 +988,37 @@ function RelayPaneBlock({
               {pane.kind === 'deploy' ? RELAY_DEPLOY.use : RELAY_SERVE.use}
             </button>
           </p>
+          {alternatives.length === 0 ? null : (
+            <div className="relay-deploy__addresses">
+              <p className="relay-deploy__limit">{RELAY_SERVE.choice}</p>
+              <ul className="relay-deploy__address-list">
+                {alternatives.map((other) => (
+                  <li key={other}>
+                    <code>{other}</code>{' '}
+                    <button
+                      type="button"
+                      className="button button--small"
+                      disabled={pending}
+                      onClick={() => onUse(other)}
+                    >
+                      Use {other}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {/* What committing *this* address means, beside the button that
               commits it. Not a refusal: a private address is the right answer
               for a team that is all on that network, and the wrong one for a
               team that is not, and only the person reading this knows which. */}
           {pane.kind === 'serve' ? <p className="relay-deploy__limit">{RELAY_SERVE.committing}</p> : null}
         </>
+      )}
+      {url !== null || pane.running || pane.kind === 'check' ? null : (
+        <p className="relay-deploy__limit">
+          {pane.kind === 'serve' && pane.url !== null ? RELAY_SERVE_STOPPED : RELAY_PANE_NO_URL}
+        </p>
       )}
       <div className="relay-deploy__terminal">{render(pane.terminalId)}</div>
       <button type="button" className="button button--small" onClick={onClose}>

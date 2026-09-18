@@ -11,7 +11,7 @@
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { MemberList, Project, RelaySetting, TeamworkPublishPlan, TeamworkStatus } from '@shared/entities'
+import type { MemberList, Project, RelaySetting, Terminal, TeamworkPublishPlan, TeamworkStatus } from '@shared/entities'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -43,6 +43,27 @@ const roster = (): MemberList => ({
   enrolled: false,
   watched: true,
   readAt: 0
+})
+
+/**
+ * A pane's terminal as the runtime lists it.
+ *
+ * The view takes `running` off the terminal rather than off the pane — the
+ * runtime is the authority on whether a process is alive — so a test about a
+ * relay that is up has to seed one, and one about a relay that has stopped has
+ * to seed it stopped.
+ */
+const terminal = (id: string, running: boolean): Terminal => ({
+  id,
+  worktreeId: 'teamwork:serve:p1',
+  title: 'teamree-relay',
+  cwd: '/repos/pager',
+  shell: '/bin/zsh',
+  cols: 80,
+  rows: 24,
+  running,
+  busy: false,
+  lastOutputAt: 0
 })
 
 const noRelay = (): RelaySetting => ({
@@ -293,7 +314,13 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
     seed({
       setRelay,
       relayPanes: {
-        p1: { kind: 'deploy', terminalId: 'term_9', url: 'wss://ada.workers.dev/v1/relay', running: false }
+        p1: {
+          kind: 'deploy',
+          terminalId: 'term_9',
+          url: 'wss://ada.workers.dev/v1/relay',
+          urls: ['wss://ada.workers.dev/v1/relay'],
+          running: false
+        }
       }
     })
     mount()
@@ -303,7 +330,7 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
   })
 
   it('says the pane can be closed, and closes it', () => {
-    seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, running: false } } })
+    seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, urls: [], running: false } } })
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Close this pane' }))
     expect(closeRelayPane).toHaveBeenCalledWith('p1')
@@ -336,22 +363,43 @@ describe('running a relay on this Mac, as the other button', () => {
   // One slot. Starting a second is refused rather than allowed to replace the
   // output somebody is in the middle of reading, and the panel says which.
   it('is disabled while another pane is open, and names the one that is', () => {
-    seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, running: true } } })
+    seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, urls: [], running: true } } })
     mount()
     expect((screen.getByRole('button', { name: 'Run a relay yourself' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getAllByText(/A deploy is already open in a pane below/).length).toBeGreaterThan(0)
   })
 
+  const servePane = (running: boolean): Record<string, unknown> => ({
+    terminals: { term_9: terminal('term_9', running) },
+    relayPanes: {
+      p1: {
+        kind: 'serve',
+        terminalId: 'term_9',
+        url: 'ws://192.168.1.23:8787/v1/relay',
+        urls: ['ws://192.168.1.23:8787/v1/relay'],
+        running
+      }
+    }
+  })
+
   it('offers the ws:// URL it printed, with what committing that address costs', () => {
     const setRelay = vi.fn()
-    seed({
-      setRelay,
-      relayPanes: { p1: { kind: 'serve', terminalId: 'term_9', url: 'ws://192.168.1.23:8787/v1/relay', running: true } }
-    })
+    seed({ setRelay, ...servePane(true) })
     mount()
     expect(screen.getByText(/only reachable from that network/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Use this relay URL' }))
     expect(setRelay).toHaveBeenCalledWith('p1', 'ws://192.168.1.23:8787/v1/relay')
+  })
+
+  // The address a relay printed is a promise about a process on this Mac, and
+  // the runtime is who knows whether that process is still there. A serve that
+  // has exited leaves a closed port and a URL still sitting in the scrollback,
+  // and offering it would be how a team commits an address that worked once.
+  it('takes the offer away once the runtime says that relay has stopped', () => {
+    seed(servePane(false))
+    mount()
+    expect(screen.queryByRole('button', { name: 'Use this relay URL' })).toBeNull()
+    expect(screen.getByText(/The relay in this pane has stopped/)).toBeTruthy()
   })
 })
 
