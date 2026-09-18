@@ -77,7 +77,19 @@ export declare function relayEndpointFrom(output: string, relayPath?: string): s
 export declare function wranglerCommand(target: string): { command: string; args: string[] }
 export declare function npmCommand(): string
 export declare function lanAddresses(interfaces?: Record<string, InterfaceAddress[] | undefined>): string[]
-export declare function serveAnnouncement(where: { port: number; path: string; addresses: string[] }): string[]
+export declare function serveAnnouncement(where: {
+  port: number
+  path: string
+  addresses: string[]
+  /** What the relay was told to bind. Decides which of these URLs exist at all. */
+  host?: string
+}): string[]
+/** Whether a bind address means "this machine only". */
+export declare function isLoopbackHost(host: string): boolean
+/** Whether one line of the relay's log is it saying it has bound. */
+export declare function isListeningLine(line: string): boolean
+/** Whether a socket error is this machine refusing the far end's certificate. */
+export declare function isTlsFailure(code: unknown): boolean
 export declare function checkTargetFault(url: string, relayPath?: string): string | null
 export declare function describeCheck(url: string, outcome: CheckOutcome, relayPath?: string): CheckVerdict
 export declare function checkRelay(url: string, options?: { timeoutMs?: number }): Promise<CheckOutcome>
