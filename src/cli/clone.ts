@@ -28,6 +28,53 @@ const CLONE_TIMEOUT_MS = 10 * 60_000
 /** git's own words, capped so a wall of them cannot become the whole answer. */
 const MAX_GIT_WORDS = 4000
 
+/**
+ * The transports teamree will hand git when the address came out of a link.
+ *
+ * git's remote syntax is not only addresses. `ext::<command>` is a transport
+ * that runs a command, and there are others like it — they exist so that people
+ * can bolt their own protocol onto git, and they are entirely reasonable in a
+ * config file somebody wrote. They are not reasonable in a string that arrived
+ * in a chat message. A current git refuses `ext` of its own accord, and that is
+ * exactly the kind of defence to have two of: the allowlist here does not depend
+ * on which git is installed or on what `protocol.*.allow` says in somebody's
+ * config.
+ *
+ * `checkOrigin` is the other half and runs first; it is about whether two
+ * checkouts could agree on an identity, which is a different question from
+ * whether this is safe to execute, and it answers yes to `ext::sh`.
+ *
+ * An scp-style remote — `git@host:path` — carries no scheme at all and is
+ * allowed by falling through, which is why this tests for a scheme rather than
+ * for a prefix.
+ */
+const CLONEABLE_SCHEMES = new Set(['http', 'https', 'ssh', 'git'])
+
+export type OriginCheck = { ok: true } | { ok: false; reason: string }
+
+/**
+ * Whether this is an address teamree will run git against, or a reason it is not.
+ *
+ * Called before anything is done with an invitation's origin and again inside
+ * `cloneRepository`, because the same string also reaches `teamwork.setOrigin` —
+ * and a remote written into somebody's checkout is executed by the next `git
+ * fetch` they run, which is not a thing to leave to whoever sent the link.
+ */
+export function checkCloneable(origin: string): OriginCheck {
+  // A filesystem path is a directory and cannot name a transport.
+  if (origin.startsWith('/')) return { ok: true }
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(origin)?.[1]
+  if (scheme === undefined) return { ok: true }
+  if (CLONEABLE_SCHEMES.has(scheme.toLowerCase())) return { ok: true }
+  return {
+    ok: false,
+    reason:
+      `"${scheme}" is not a transport teamree will clone over. git's remote syntax includes transports that run ` +
+      'commands, so an address that arrived in a message is held to http, https, ssh, git, an scp-style ' +
+      'host:path, or a path on this Mac'
+  }
+}
+
 export type CloneFailure = 'auth' | 'host-key' | 'timeout' | 'other'
 
 export type CloneOutcome =
@@ -58,6 +105,18 @@ export type CloneOptions = {
  * turns that wait into a refusal with a sentence in it.
  */
 export async function cloneRepository(options: CloneOptions): Promise<CloneOutcome> {
+  // Checked again here rather than trusted from the caller: this is the function
+  // that starts the process, so this is where the guarantee has to hold.
+  const cloneable = checkCloneable(options.origin)
+  if (!cloneable.ok) {
+    return {
+      ok: false,
+      kind: 'other',
+      error: cloneable.reason,
+      advice: 'Ask whoever sent the invitation for the address they clone this repository with themselves.'
+    }
+  }
+
   const runner = createGitRunner()
   const configured = await runner.tryRun({
     args: ['config', '--get', 'core.sshCommand'],

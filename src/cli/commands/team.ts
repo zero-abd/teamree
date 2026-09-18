@@ -21,10 +21,11 @@ import type {
 import { MAX_REMOTE_WRITE_BYTES, type WatchedPaneEvent } from '../../shared/methods.js'
 import { checkOrigin, pathIdentityNote } from '../../shared/origin.js'
 import { acceptInvitation } from '../acceptInvitation.js'
+import { checkCloneable } from '../clone.js'
 import { readBoolean, readNumber, readString, requireString } from '../argv.js'
 import type { CommandContext, CommandSpec } from '../command-spec.js'
 import { CliError, ExitCode, UsageError } from '../exit.js'
-import { formatInvitation } from '../invitation.js'
+import { formatInvitation, withoutCredentials } from '../invitation.js'
 import { formatFields, formatTable } from '../output.js'
 import { resolveProject } from '../selectors.js'
 import type { RuntimeClient } from '../transport.js'
@@ -616,6 +617,21 @@ export const teamCommands: readonly CommandSpec[] = [
           data: { projectId: project.id, origin: status.origin }
         })
       }
+      // An origin that names a transport rather than an address is a thing this
+      // checkout may legitimately have, and it is not a thing to put somebody
+      // else's name on and send them. `team accept` refuses the same string at
+      // the other end; refusing it here means nobody hands one out believing it
+      // works.
+      const cloneable = checkCloneable(status.origin.url)
+      if (!cloneable.ok) {
+        throw new CliError({
+          code: 'no_origin',
+          message: `${project.name}'s origin is not one to send a teammate: ${cloneable.reason}.`,
+          exitCode: ExitCode.Failure,
+          hint: `Point this checkout at the address your team actually clones, then run this again.`,
+          data: { projectId: project.id, origin: status.origin }
+        })
+      }
       if (status.relay === null) {
         const relay = await context.client.call('teamwork.relay', { projectId: project.id })
         throw new CliError({
@@ -647,8 +663,12 @@ export const teamCommands: readonly CommandSpec[] = [
         })
       }
 
+      // The origin as the repository is to be named, and never as this machine
+      // happens to reach it: an https remote can carry a token, and this line is
+      // going into somebody's chat window.
+      const shareable = withoutCredentials(status.origin.url)
       const invitation = {
-        origin: status.origin.url,
+        origin: shareable.origin,
         relay: status.relay.url,
         project: project.name,
         from: me.handle
@@ -667,6 +687,13 @@ export const teamCommands: readonly CommandSpec[] = [
           `This relay came from ${relay.override.name} in this app’s environment rather than from the repository. ` +
             'It is the address this machine dials, so the invitation is true — but nothing has committed it, and ' +
             'a teammate who accepts this writes it into their checkout. Push `.teamree/relay` so it is the team’s.'
+        )
+      }
+      if (shareable.removed) {
+        notes.push(
+          `This checkout reaches the repository with a credential embedded in its origin. The line below names ` +
+            `${shareable.origin} without it, because a credential of yours is not a fact about the repository and ` +
+            'your teammate uses their own.'
         )
       }
       const originKind = checkOrigin(invitation.origin)

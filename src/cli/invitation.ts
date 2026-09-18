@@ -106,6 +106,39 @@ function terminate(query: string): string {
   return query.endsWith('.') ? `${query.slice(0, -1)}%2E` : query
 }
 
+/**
+ * The repository's address with this machine's credential taken out of it.
+ *
+ * An `origin` of `https://x-access-token:ghp_…@github.com/acme/api.git` is an
+ * ordinary thing for a checkout to have, and it is a secret belonging to one
+ * person on one machine. An invitation is a line somebody pastes into a chat
+ * window, so putting that string in it verbatim would be handing a token to a
+ * room — and it would be doing it under the heading "everything in this is
+ * public", which is worse than doing it plainly.
+ *
+ * Only http and https, because those are the schemes where the part before the
+ * `@` is a credential. In `git@github.com:acme/api.git` and in
+ * `ssh://git@host/path` it is the ssh user, it is not secret, and removing it
+ * would produce an address that does not work.
+ *
+ * `removed` is reported rather than swallowed: a person whose origin carries a
+ * token should be told that the line they are about to send is not the string
+ * their own `git remote -v` prints.
+ */
+export function withoutCredentials(origin: string): { origin: string; removed: boolean } {
+  if (!/^https?:\/\//i.test(origin)) return { origin, removed: false }
+  let url: URL
+  try {
+    url = new URL(origin)
+  } catch {
+    return { origin, removed: false }
+  }
+  if (url.username === '' && url.password === '') return { origin, removed: false }
+  url.username = ''
+  url.password = ''
+  return { origin: url.toString(), removed: true }
+}
+
 export type InvitationParse =
   | { ok: true; invitation: Invitation }
   /**

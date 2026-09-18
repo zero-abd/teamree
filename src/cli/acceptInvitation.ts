@@ -36,9 +36,9 @@ import type { Project, TeamworkRead } from '../shared/entities.js'
 import { checkOrigin, normaliseRemote, pathIdentityNote } from '../shared/origin.js'
 import { parseRelayUrl } from '../shared/relayUrl.js'
 import { readString } from './argv.js'
-import { cloneRepository } from './clone.js'
+import { checkCloneable, cloneRepository } from './clone.js'
 import type { CommandContext } from './command-spec.js'
-import { CliError, ExitCode, RuntimeCallError } from './exit.js'
+import { asCliError, CliError, ExitCode, RuntimeCallError } from './exit.js'
 import { parseInvitation, type Invitation } from './invitation.js'
 import type { CommandOutput } from './output.js'
 import { pathComparisonKey } from './selectors.js'
@@ -65,7 +65,19 @@ const READ_POLL_MS = 250
 
 export async function acceptInvitation(context: CommandContext): Promise<CommandOutput> {
   const journey = new Journey()
+  try {
+    return await accept(context, journey)
+  } catch (thrown) {
+    // Every way out of this flow carries what was already done, including the
+    // ways this file did not write: a runtime that refuses `members.join`
+    // because git has no configured email is a refusal at the roster step, and
+    // reporting it without the four steps before it would leave somebody unable
+    // to tell it from a refusal at the first one.
+    throw journey.attach(thrown)
+  }
+}
 
+async function accept(context: CommandContext, journey: Journey): Promise<CommandOutput> {
   const parsed = parseInvitation(context.args[0] as string)
   if (!parsed.ok) {
     throw journey.refusal({
@@ -89,6 +101,21 @@ export async function acceptInvitation(context: CommandContext): Promise<Command
       data: { invitation }
     })
   }
+  // An origin `checkOrigin` is happy with can still be a transport that runs a
+  // command rather than an address that names a repository. That is fine in a
+  // config file somebody wrote and is not fine in a string that arrived in a
+  // message, and this is the last moment before it reaches either git or the
+  // `origin` remote of somebody's checkout.
+  const cloneable = checkCloneable(origin.remote)
+  if (!cloneable.ok) {
+    throw journey.refusal({
+      code: 'bad_invitation_origin',
+      message: `The invitation names a repository teamree will not act on: ${cloneable.reason}.`,
+      hint: 'Ask whoever sent it for the address they clone this repository with themselves.',
+      data: { invitation }
+    })
+  }
+
   const relay = parseRelayUrl(invitation.relay)
   if (!relay.ok) {
     throw journey.refusal({
@@ -356,10 +383,18 @@ async function settleRelay(context: CommandContext, journey: Journey, project: P
     return
   }
 
+  // A file that is there and cannot be read as a relay is replaced rather than
+  // refused — there is no URL in it to disagree with — but it is replaced out
+  // loud, because overwriting something the team committed is not a thing to do
+  // in a sentence that reads as though the file had been missing.
+  const replaced =
+    onDisk === null || onDisk.ok
+      ? ''
+      : ` It replaced what was there, which could not be read as a relay URL: ${onDisk.reason}.`
   const written = await context.client.call('teamwork.setRelay', { projectId: project.id, url: wanted })
   journey.note(
     'relay',
-    `Wrote ${written.file}: ${wanted}.` +
+    `Wrote ${written.file}: ${wanted}.${replaced}` +
       (written.source === 'environment'
         ? ` Note that ${written.override.name} is set in this app’s environment, so this machine keeps dialling ${written.url ?? 'nothing'} until it is unset.`
         : '')
@@ -483,6 +518,26 @@ class Journey {
 
   note(step: AcceptStep['step'], outcome: string): void {
     this.steps.push({ step, outcome })
+  }
+
+  /**
+   * Any other failure, with the steps put back on it.
+   *
+   * A refusal this file wrote already carries them and is returned untouched;
+   * anything else — a runtime error, a socket that went away — keeps its own
+   * code, message, hint and exit code and gains the list.
+   */
+  attach(thrown: unknown): CliError {
+    const error = asCliError(thrown)
+    const data: unknown = error.data
+    if (typeof data === 'object' && data !== null && 'steps' in data) return error
+    return new CliError({
+      code: error.code,
+      message: error.message,
+      exitCode: error.exitCode,
+      ...(error.hint === undefined ? {} : { hint: error.hint }),
+      data: { steps: this.steps, ...(data === undefined ? {} : { detail: data }) }
+    })
   }
 
   refusal(init: { code: string; message: string; hint: string; data?: Record<string, unknown> }): CliError {

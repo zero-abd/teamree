@@ -10,7 +10,7 @@
 // this CLI acting on half an instruction.
 
 import { describe, expect, it } from 'vitest'
-import { formatInvitation, parseInvitation, type Invitation } from './invitation.js'
+import { formatInvitation, parseInvitation, withoutCredentials, type Invitation } from './invitation.js'
 
 const ADA: Invitation = {
   origin: 'https://github.com/ada/pager.git',
@@ -125,6 +125,25 @@ describe('finding the link inside whatever it arrived in', () => {
   it('unwraps the angle brackets, backticks and parentheses people paste links inside', () => {
     for (const message of [`see <${link}>`, `run \`${link}\``, `the invitation (${link}) is fresh`]) {
       expect(accepted(message), message).toEqual(ADA)
+    }
+  })
+})
+
+describe('what an invitation is allowed to carry', () => {
+  it('takes a token out of an https origin and says it did', () => {
+    const stripped = withoutCredentials('https://x-access-token:ghp_secret@github.com/acme/api.git')
+    expect(stripped).toEqual({ origin: 'https://github.com/acme/api.git', removed: true })
+  })
+
+  it('leaves the ssh user alone, because that is not a secret and the address needs it', () => {
+    for (const origin of ['git@github.com:acme/api.git', 'ssh://git@github.com/acme/api.git']) {
+      expect(withoutCredentials(origin)).toEqual({ origin, removed: false })
+    }
+  })
+
+  it('leaves an ordinary https origin and a path exactly as they were', () => {
+    for (const origin of ['https://github.com/acme/api.git', '/Volumes/team/api.git']) {
+      expect(withoutCredentials(origin)).toEqual({ origin, removed: false })
     }
   })
 })

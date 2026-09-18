@@ -746,6 +746,33 @@ describe('team invite', () => {
     expect(result.out).toContain('Push `.teamree/relay` so it is the team’s.')
   })
 
+  it('takes a credential out of the origin before putting it in a line somebody pastes', async () => {
+    const cli = await harness(
+      teamHandler({
+        'teamwork.status': () => ({
+          ...STATUS,
+          origin: { ok: true, url: 'https://x-access-token:ghp_secret@github.com/acme/api.git' }
+        })
+      })
+    )
+    const result = await cli.run(['team', 'invite', 'api'])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(result.out).not.toContain('ghp_secret')
+    expect(result.out).toContain('https://github.com/acme/api.git')
+    // Said rather than done quietly: the line is not what `git remote -v` prints.
+    expect(result.out).toContain('a credential embedded in its origin')
+  })
+
+  it('refuses to hand out an origin that names a transport rather than an address', async () => {
+    const cli = await harness(
+      teamHandler({ 'teamwork.status': () => ({ ...STATUS, origin: { ok: true, url: 'ext::sh' } }) })
+    )
+    const result = await cli.run(['team', 'invite', 'api'])
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(result.err).toContain('not a transport teamree will clone over')
+    expect(result.out).toBe('')
+  })
+
   it('tells a teammate the mount path when the repository is a directory rather than a URL', async () => {
     const cli = await harness(
       teamHandler({
@@ -1154,6 +1181,9 @@ describe('exit codes and usage', () => {
       ['team', 'status'],
       ['team', 'members'],
       ['team', 'join'],
+      ['team', 'publish'],
+      ['team', 'invite'],
+      ['team', 'accept'],
       ['team', 'relay', 'show'],
       ['team', 'relay', 'set', 'api'],
       ['team', 'watch', 'api'],

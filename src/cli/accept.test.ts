@@ -360,6 +360,27 @@ describe('team accept, when it must not go on', () => {
     expect(result.err).toContain('the invitation carried no permission and could not')
   })
 
+  it('refuses an origin that names a transport rather than an address, and starts no git', async () => {
+    // `ext::<command>` is git remote syntax that runs a command. `checkOrigin`
+    // is happy with it — it is a perfectly good identity — so the refusal has to
+    // be its own, and it has to come before anything is executed or written.
+    const cli = await harness(acceptHandler(world({ projects: [] })))
+    const hostile = formatInvitation({ origin: 'ext::sh', relay: RELAY_URL, project: 'api', from: 'ana' })
+    const result = await cli.run(['team', 'accept', hostile, '--into', join(cli.cwd, 'api')])
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(result.err).toContain('not a transport teamree will clone over')
+    expect(existsSync(join(cli.cwd, 'api'))).toBe(false)
+    expect(methodsCalled(cli.stub)).not.toContain('project.add')
+    expect(methodsCalled(cli.stub)).not.toContain('teamwork.setOrigin')
+  })
+
+  it('says out loud when it replaced a relay file nothing could read', async () => {
+    const cli = await harness(acceptHandler(world({ relayOnDisk: 'not a url at all' })))
+    const result = await cli.run(['team', 'accept', LINK])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(result.out).toContain('It replaced what was there, which could not be read as a relay URL')
+  })
+
   it('refuses a --into that starts with a ~, because that is a different directory per account', async () => {
     const cli = await harness(acceptHandler(world({ projects: [] })))
     const result = await cli.run(['team', 'accept', LINK, '--into', '~/src/api'])
@@ -404,6 +425,30 @@ describe('team accept and --json', () => {
     expect(document.error.code).toBe('relay_mismatch')
     // The difference between "nothing happened" and "it stopped at the relay".
     expect(document.error.data.steps.map((step) => step.step)).toEqual(['link', 'repository', 'project', 'origin'])
+  })
+
+  it('keeps the steps on a refusal the runtime raised rather than this command', async () => {
+    const cli = await harness(
+      acceptHandler(world({ enrolled: false }), {
+        'members.join': () => {
+          throw new StubError(
+            'invalid_params',
+            'git has no user.email configured in /repos/api, so there is no name to file your key under'
+          )
+        }
+      })
+    )
+    const result = await cli.run(['team', 'accept', LINK, '--json'])
+    expect(result.code).toBe(ExitCode.Failure)
+    const document = failureDocument(result.err)
+    expect(document.error.code).toBe('invalid_params')
+    expect(document.error.data.steps.map((step) => step.step)).toEqual([
+      'link',
+      'repository',
+      'project',
+      'origin',
+      'relay'
+    ])
   })
 })
 
