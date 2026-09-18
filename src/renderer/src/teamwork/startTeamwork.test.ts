@@ -634,6 +634,17 @@ describe('the origin field’s verdict on what has been typed', () => {
     })
   })
 
+  // The window is the half of the app that could not reach the transport
+  // allowlist while it lived in `src/cli`, so this pins that it does now: the
+  // field says no to `ext::<command>` in the field, before the button is
+  // pressed and long before git is handed anything.
+  it('refuses a transport in the field, where the allowlist used to be out of reach', () => {
+    expect(checkOriginDraft('ext::bash')).toMatchObject({
+      state: 'bad',
+      reason: expect.stringMatching(/not a transport teamree hands git/)
+    })
+  })
+
   it('refuses a word that is neither a URL nor a path', () => {
     expect(checkOriginDraft('pager')).toEqual({
       state: 'bad',

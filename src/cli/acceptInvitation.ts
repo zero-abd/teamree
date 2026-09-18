@@ -101,11 +101,13 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
       data: { invitation }
     })
   }
-  // An origin `checkOrigin` is happy with can still be a transport that runs a
-  // command rather than an address that names a repository. That is fine in a
-  // config file somebody wrote and is not fine in a string that arrived in a
-  // message, and this is the last moment before it reaches either git or the
-  // `origin` remote of somebody's checkout.
+  // The same allowlist again, on the spelling `checkOrigin` handed back rather
+  // than on the one the invitation carried. `checkOrigin` refuses a transport
+  // itself now — so on this path the answer is already known — and it is asked
+  // here anyway because this is the boundary where a string somebody was sent
+  // stops being text and becomes an argument to git, and a flow that is correct
+  // only because of a check in another layer is a flow that breaks quietly the
+  // day that layer is relaxed for some good reason. It is one list, asked twice.
   const cloneable = checkCloneable(origin.remote)
   if (!cloneable.ok) {
     throw journey.refusal({

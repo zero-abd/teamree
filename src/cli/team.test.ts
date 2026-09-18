@@ -771,7 +771,7 @@ describe('team invite', () => {
     )
     const result = await cli.run(['team', 'invite', 'api'])
     expect(result.code).toBe(ExitCode.Failure)
-    expect(result.err).toContain('not a transport teamree will clone over')
+    expect(result.err).toContain('not a transport teamree hands git')
     expect(result.out).toBe('')
   })
 

@@ -369,14 +369,16 @@ describe('team accept, when it must not go on', () => {
   })
 
   it('refuses an origin that names a transport rather than an address, and starts no git', async () => {
-    // `ext::<command>` is git remote syntax that runs a command. `checkOrigin`
-    // is happy with it — it is a perfectly good identity — so the refusal has to
-    // be its own, and it has to come before anything is executed or written.
+    // `ext::<command>` is git remote syntax that names a program rather than a
+    // place. The allowlist that refuses it is `checkTransport` in
+    // `src/shared/origin.ts`, reached from here through `checkCloneable`; what
+    // this test is about is that the refusal lands before anything is executed
+    // or written.
     const cli = await harness(acceptHandler(world({ projects: [] })))
     const hostile = formatInvitation({ origin: 'ext::sh', relay: RELAY_URL, project: 'api', from: 'ana' })
     const result = await cli.run(['team', 'accept', hostile, '--into', join(cli.cwd, 'api')])
     expect(result.code).toBe(ExitCode.Failure)
-    expect(result.err).toContain('not a transport teamree will clone over')
+    expect(result.err).toContain('not a transport teamree hands git')
     expect(existsSync(join(cli.cwd, 'api'))).toBe(false)
     expect(methodsCalled(cli.stub)).not.toContain('project.add')
     expect(methodsCalled(cli.stub)).not.toContain('teamwork.setOrigin')

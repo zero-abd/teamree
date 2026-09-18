@@ -35,6 +35,13 @@
 //
 // **A path is never a default.** The origin is whatever git already has. An
 // origin that is a URL is read as a URL and nothing about it changes.
+//
+// One rule here is not about identity at all. `checkTransport` asks whether the
+// remote is a place or a program, which is a different question from whether two
+// checkouts could agree on it — and it is here because *every* process that
+// writes an origin has to ask it. The CLI had its own copy and the window and
+// the runtime could not reach it, so `teamwork.setOrigin` wrote whatever
+// `checkOrigin` said yes to.
 
 /** What kind of place an origin names, once it is known to be usable. */
 export type OriginKind = 'url' | 'path'
@@ -94,6 +101,12 @@ export function checkOrigin(raw: string): OriginCheck {
     if (!path.ok) return path
     return { ok: true, kind: 'path', remote: path.path, normalised: path.path }
   }
+  // Before the rule about spaces, because `ext::sh -c id` has a space in it and
+  // "a remote URL has no spaces in it" would be a true sentence about the wrong
+  // thing: the transport is what is wrong with it, and the person reading the
+  // refusal is better off told that than sent to delete a space.
+  const transport = checkTransport(remote)
+  if (!transport.ok) return transport
   if (/\s/.test(remote)) return { ok: false, reason: 'a remote URL has no spaces in it' }
   const normalised = normaliseUrl(remote)
   if (normalised === undefined) {
@@ -104,6 +117,63 @@ export function checkOrigin(raw: string): OriginCheck {
     }
   }
   return { ok: true, kind: 'url', remote, normalised }
+}
+
+/**
+ * The transports teamree will hand git, as a list of what it means to allow.
+ *
+ * `file` is here because a repository on a mounted volume is an ordinary
+ * teamree origin. `checkOrigin` reads `file:` as the path it names long before
+ * this is asked, so inside this file the entry is never reached; it is for a
+ * caller that holds a remote straight out of somebody's `.git/config` and asks
+ * only this question about it, which has to get the same answer.
+ */
+const TRANSPORTS = new Set(['https', 'http', 'ssh', 'git', 'file'])
+
+export type TransportCheck = { ok: true } | { ok: false; reason: string }
+
+/**
+ * Whether the remote names a transport teamree means to allow, or a reason it
+ * does not.
+ *
+ * git's remote syntax is not only addresses. `<name>::<address>` hands the rest
+ * of the string to a program called `git-remote-<name>` — `ext::<command>` is
+ * the one of those that runs whatever it is given — and a URL whose scheme git
+ * has no transport of its own for is sent looking for the same kind of helper
+ * by the same name. Both spellings therefore name a program rather than a
+ * place, which is a perfectly reasonable thing in a config file somebody wrote
+ * by hand and is not a reasonable thing in a string that arrived in a message
+ * or in a field. A current git refuses `ext` of its own accord unless
+ * `protocol.ext.allow` says otherwise, and that default is exactly the kind of
+ * thing not to be the only defence: it belongs to another program, it is
+ * configurable, and nothing here can see what it is set to.
+ *
+ * So this is an allowlist and not a list of the dangerous names, because the
+ * next helper is one nobody here has heard of.
+ *
+ * What it is careful about is the difference between a transport and a host.
+ * git reads `host:path` — with no scheme and no slash before the colon — as ssh
+ * to that host, and `gitlab.example:team/api.git` is a remote real teams have;
+ * a rule that read everything before a colon as a transport name would refuse
+ * it. So a transport is only named where git itself reads one: scheme
+ * characters followed by `://` or by `::`. Everything else falls through to the
+ * grammar in `checkOrigin`, which decides whether it is an address at all.
+ */
+export function checkTransport(raw: string): TransportCheck {
+  const named = /^([A-Za-z][A-Za-z0-9+.-]*)(::|:\/\/)/.exec(raw.trim())
+  if (named === null) return { ok: true }
+  const name = (named[1] ?? '').toLowerCase()
+  // `::` is the helper spelling whatever follows it, so a name is allowed only
+  // in the spelling that is a URL: `https::` is not https.
+  if (named[2] === '://' && TRANSPORTS.has(name)) return { ok: true }
+  return {
+    ok: false,
+    reason:
+      `"${name}" is not a transport teamree hands git. git's remote syntax includes spellings that name a ` +
+      'program rather than a place — `name::address` hands the address to one, and a scheme git has no transport ' +
+      'of its own for sends it looking for one — so an origin is held to https, http, ssh, git, file, an ' +
+      'scp-style host:path, or a path on this Mac'
+  }
 }
 
 /**
