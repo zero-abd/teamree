@@ -132,7 +132,7 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
       `meeting on ${relay.url}.`
   )
 
-  const project = await findOrFetch(context, journey, invitation, origin.normalised)
+  const project = await findOrFetch(context, journey, invitation, origin)
   const status = await waitUntilRead(context, journey, project)
 
   // Origin. Everything teamwork does hangs off this one string — two checkouts
@@ -196,7 +196,13 @@ async function findOrFetch(
   context: CommandContext,
   journey: Journey,
   invitation: Invitation,
-  wanted: string
+  /**
+   * The origin as `checkOrigin` spells it, and never as the invitation typed it.
+   * `remote` is what git is given — for a path that is the normalised spelling,
+   * which is also the string `checkCloneable` was asked about — and `normalised`
+   * is what a checkout's own origin is compared against.
+   */
+  origin: { remote: string; normalised: string }
 ): Promise<Project> {
   const projects = await context.client.call('project.list', {})
   const matches: Project[] = []
@@ -211,7 +217,7 @@ async function findOrFetch(
       unread.push(candidate.name)
       continue
     }
-    if (status.origin.ok && normaliseRemote(status.origin.url) === wanted) matches.push(candidate)
+    if (status.origin.ok && normaliseRemote(status.origin.url) === origin.normalised) matches.push(candidate)
   }
 
   if (matches.length > 1) {
@@ -251,9 +257,8 @@ async function findOrFetch(
     // answer is a sentence naming both addresses rather than a silent adoption.
     journey.note('repository', `${into} is already here, so nothing was cloned.`)
   } else {
-    journey.note('repository', `Nothing here has that origin, so this cloned ${invitation.origin} into ${into}.`)
     const cloned = await cloneRepository({
-      origin: invitation.origin,
+      origin: origin.remote,
       into,
       cwd: context.cwd,
       // git's progress goes to stderr and only when this is not --json. The
@@ -268,9 +273,13 @@ async function findOrFetch(
         code: 'clone_failed',
         message: cloned.error,
         hint: cloned.advice,
-        data: { origin: invitation.origin, into, kind: cloned.kind }
+        data: { origin: origin.remote, into, kind: cloned.kind }
       })
     }
+    // Noted after the clone and not before it. A step written down on the way in
+    // would say a repository had been copied in exactly the case where it had
+    // not, which is the one sentence this list exists to be trusted about.
+    journey.note('repository', `Nothing here has that origin, so this cloned ${origin.remote} into ${into}.`)
   }
 
   return addProject(context, journey, into, invitation.project)

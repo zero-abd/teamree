@@ -471,6 +471,35 @@ describe('team accept, when the repository is not on this machine', () => {
     })
   }, 30_000)
 
+  it('clones a file:// origin at the path it names, rather than refusing its scheme', async () => {
+    const source = scratch()
+    const repository = join(source, 'api.git')
+    execFileSync('git', ['init', '--bare', '--initial-branch=main', repository], { stdio: 'ignore' })
+
+    // `checkOrigin` turns a file:// URL into the path it names, and that path is
+    // what git is given. Handing git the URL instead would be refused by the
+    // transport allowlist, for a repository that is perfectly ordinary.
+    const cli = await harness(acceptHandler(world({ projects: [], addedOrigin: repository })))
+    const into = join(cli.cwd, 'api')
+    const link = formatInvitation({ origin: `file://${repository}`, relay: RELAY_URL, project: 'api', from: 'ana' })
+
+    const result = await cli.run(['team', 'accept', link, '--into', into])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(existsSync(join(into, '.git'))).toBe(true)
+  }, 30_000)
+
+  it('does not write down a clone that did not happen', async () => {
+    const cli = await harness(acceptHandler(world({ projects: [] })))
+    const missing = join(cli.cwd, 'nowhere.git')
+    const link = formatInvitation({ origin: missing, relay: RELAY_URL, project: 'api', from: 'ana' })
+
+    const result = await cli.run(['team', 'accept', link, '--into', join(cli.cwd, 'api'), '--json'])
+    expect(result.code).toBe(ExitCode.Failure)
+    const document = failureDocument(result.err)
+    expect(document.error.code).toBe('clone_failed')
+    expect(document.error.data.steps.map((step) => step.step)).toEqual(['link'])
+  }, 30_000)
+
   it('reports git’s own words when the clone does not happen', async () => {
     const cli = await harness(acceptHandler(world({ projects: [] })))
     const missing = join(cli.cwd, 'nowhere.git')
