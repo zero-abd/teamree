@@ -174,6 +174,45 @@ describe('previewing a merge against a real repository', () => {
     expect(preview.conflicts).toEqual([])
   })
 
+  // Four commands below take these two names as positional arguments, and a ref
+  // is allowed to begin with a dash: `git check-ref-format` accepts
+  // `refs/heads/--anything`, and a clone of a repository whose HEAD points at
+  // one checks it out, so `detectBaseRef` can hand this a name the far end of a
+  // network chose. Whether any option `merge-base` or `merge-tree` happens to
+  // have is worth having is not a question to keep re-answering as git grows
+  // new ones.
+  it('refuses a base ref git would read as an option rather than a revision', async () => {
+    const repo = await repository()
+    await branch(repo, 'feature', 'new.txt', 'hello\n')
+
+    const preview = await readMergePreview(repo.runner, {
+      worktreeId: 'wt',
+      repoPath: repo.repoPath,
+      baseRef: '--output=/dev/null',
+      branch: 'feature'
+    })
+
+    expect(preview.state).toBe('unavailable')
+    expect(preview.reason).toContain('is not a usable git ref')
+    expect(preview.reason).toContain('--output=/dev/null')
+    expect(preview.ahead).toBe(0)
+  })
+
+  it('refuses a branch git would read as an option rather than a revision', async () => {
+    const repo = await repository()
+
+    const preview = await readMergePreview(repo.runner, {
+      worktreeId: 'wt',
+      repoPath: repo.repoPath,
+      baseRef: 'main',
+      branch: '--all'
+    })
+
+    expect(preview.state).toBe('unavailable')
+    expect(preview.reason).toContain('is not a usable git ref')
+    expect(preview.reason).toContain('--all')
+  })
+
   it('says so when the two sides share no history at all', async () => {
     const repo = await repository()
     await repo.git(['checkout', '-q', '--orphan', 'stranger'])

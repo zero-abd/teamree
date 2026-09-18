@@ -14,6 +14,7 @@
 
 import type { WorktreeMergePreview } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
+import { assertRefShape } from './repository'
 
 /**
  * What the porcelain says, in the `-z` form.
@@ -86,6 +87,38 @@ export async function readMergePreview(runner: GitRunner, options: MergePreviewO
   const base = { worktreeId: options.worktreeId, baseRef: options.baseRef, readAt, ahead: 0 }
   const run = { cwd: options.repoPath, readOnly: true, timeoutMs: 60_000 } as const
   const signal = options.signal ? { signal: options.signal } : {}
+
+  // Four git commands below take these two names as bare positional arguments,
+  // and a name beginning with a dash is an option rather than a revision — which
+  // is a thing a ref is genuinely allowed to be. `git check-ref-format` accepts
+  // `refs/heads/--anything`, and a clone of a repository whose HEAD points at
+  // one checks it out, so `detectBaseRef` can hand this function a base ref the
+  // other end of a network chose. Whether any option reachable from `merge-base`
+  // or `merge-tree` is worth having is not a question to answer per command and
+  // then re-answer whenever git grows one.
+  //
+  // Refused here, at the function that starts the processes, rather than trusted
+  // from whoever assembled the record: `readDivergence` in worktreeStatus.ts and
+  // `pushWorktree` in worktreePush.ts already hold their own refs to this shape,
+  // and a preview is the third reader of the same two strings. `unavailable`
+  // rather than a throw, because that is what this function already does with
+  // every question it cannot answer, and a caller that branches on `state` needs
+  // no new case for this one.
+  for (const [ref, label] of [
+    [options.baseRef, 'base ref'],
+    [options.branch, 'branch']
+  ] as const) {
+    try {
+      assertRefShape(ref, label)
+    } catch {
+      return {
+        ...base,
+        state: 'unavailable',
+        conflicts: [],
+        reason: `${label} "${ref}" is not a usable git ref, so nothing can be merged against it`
+      }
+    }
+  }
 
   const resolved = await runner.tryRun({
     args: ['rev-parse', '--verify', '--quiet', `${options.baseRef}^{commit}`],
