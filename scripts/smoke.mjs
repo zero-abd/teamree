@@ -155,9 +155,64 @@ async function run() {
     'the runtime did not answer a call from the renderer'
   )
 
+  await checkWindowSurfaces(ask)
   await checkRendererBoundary(window, ask)
   await checkPeerCrypto()
   checkLocalBoundary()
+}
+
+/**
+ * That the surfaces which take the main area can actually be reached.
+ *
+ * Everything else in this file proves the window is alive and correctly walled
+ * off. None of it proves anybody can get anywhere, and that is a real gap: a
+ * surface can have a component, a store action, a full set of passing unit
+ * tests, and no way in. Settings and Help both shipped in exactly that state —
+ * reachable from the empty state and from each other, and absent from the rail
+ * and the palette, so anybody with a worktree open could not get to either. The
+ * unit tests were green throughout, because each one rendered the component it
+ * was about.
+ *
+ * So this presses the buttons. It is deliberately the shallowest possible
+ * version of that — is the control there, does pressing it put the surface on
+ * screen, and does the surface have its own heading — because a smoke test that
+ * asserted layout would break on every honest change and be deleted. What it
+ * pins is the thing unit tests structurally cannot: the wiring between a rail
+ * button and the area it is supposed to fill.
+ *
+ * Run against the first-launch state, with no repository added, which is the
+ * one state this harness has. Both of these are window-level surfaces rather
+ * than worktree ones, so that is exactly where they have to work.
+ */
+async function checkWindowSurfaces(ask) {
+  // By the words on them rather than by class or position: the label is the
+  // thing a person looks for, and a selector that survived a renamed class
+  // while the button said something else would be worse than no check.
+  const press = (label) =>
+    ask(
+      `(() => {
+        const found = [...document.querySelectorAll('button')].find(
+          (button) => button.textContent?.trim().startsWith(${JSON.stringify(label)})
+        )
+        if (!found) return false
+        found.click()
+        return true
+      })()`
+    )
+
+  const heading = (text) =>
+    ask(`[...document.querySelectorAll('h1')].some((node) => node.textContent?.trim() === ${JSON.stringify(text)})`)
+
+  for (const [label, title] of [
+    ['Settings', 'Settings'],
+    ['Help', 'Help']
+  ]) {
+    if (!(await press(label))) {
+      failures.push(`no ${label} control in the window, so the surface cannot be reached`)
+      continue
+    }
+    await waitFor(() => heading(title), `pressing ${label} did not put the ${title} surface on screen`)
+  }
 }
 
 /**
