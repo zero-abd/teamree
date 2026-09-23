@@ -157,15 +157,25 @@ it('commits only the ticked paths, and unticks them afterwards', async () => {
   call.mockRestore()
 })
 
-it('refuses to commit with nothing ticked or no message', async () => {
+it('commits every listed change when nothing is ticked, and nothing when there is none', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
   await store.openWorktree(worktreeId)
+  if (!changesOnScreen(useWorkspaceStore.getState())) useWorkspaceStore.getState().toggleChanges()
+  await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[worktreeId]).toBeDefined())
+  const listed = useWorkspaceStore.getState().changes[worktreeId]!.changes.map((change) => change.path)
+  expect(listed.length).toBeGreaterThan(0)
 
   const call = vi.spyOn(runtimeClient, 'call')
-  // Nothing ticked: the store does not ask the runtime to decide for it.
-  await useWorkspaceStore.getState().commitStaged('has a message')
+  expect(await useWorkspaceStore.getState().commitStaged('has a message')).toBe(true)
+  expect(call.mock.calls.find(([method]) => method === 'worktree.commit')?.[1]).toMatchObject({ paths: listed })
+
+  call.mockClear()
+  useWorkspaceStore.setState((state) => ({
+    changes: { ...state.changes, [worktreeId]: { ...state.changes[worktreeId]!, changes: [] } }
+  }))
+  expect(await useWorkspaceStore.getState().commitStaged('has a message')).toBe(false)
   expect(call.mock.calls.filter(([method]) => method === 'worktree.commit')).toHaveLength(0)
   call.mockRestore()
 })
@@ -208,7 +218,7 @@ it('pushes the active worktree and says what actually happened', async () => {
   // The outcome reaches the user, rather than the push happening in silence.
   const notice = useWorkspaceStore.getState().notices.at(-1)
   expect(notice?.tone).toBe('info')
-  expect(notice?.text).toMatch(/pushed|already had/i)
+  expect(notice?.text).toMatch(/^(Pushed|Up to date)$/)
   expect(useWorkspaceStore.getState().pushing).toBe(false)
   call.mockRestore()
 })

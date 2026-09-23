@@ -2,7 +2,7 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WorktreeLog, WorktreePush, WorktreeStatus } from '@shared/entities'
+import type { WorktreeChange, WorktreeLog, WorktreePush, WorktreeStatus } from '@shared/entities'
 import { fileLeavesIn } from '@shared/filePane'
 
 const call = vi.fn()
@@ -74,6 +74,23 @@ function seed(overrides: Partial<WorktreeStatus> = {}): void {
   )
 }
 
+const rows: WorktreeChange[] = [
+  { path: 'README.md', kind: 'modified', staged: false, unstaged: true },
+  { path: 'src/app.ts', kind: 'untracked', staged: false, unstaged: true },
+  { path: 'src/gone.ts', kind: 'deleted', staged: false, unstaged: true }
+]
+
+function withChanges(changes: WorktreeChange[]): void {
+  useWorkspaceStore.setState({
+    changes: { w1: { worktreeId: 'w1', changes, total: changes.length, limit: 500, truncated: false, readAt: 0 } }
+  })
+}
+
+/** What the runtime throws for a refused push: one clause, git's words in `data`. */
+function refusal(label: string, detail: string): Error {
+  return Object.assign(new Error(label), { data: { detail } })
+}
+
 /** A push that answers when the test says so. */
 function pendingPush(): PromiseWithResolvers<WorktreePush> {
   const push = Promise.withResolvers<WorktreePush>()
@@ -103,28 +120,159 @@ describe('pushing from the changes tab', () => {
     expect(screen.queryByRole('button', { name: 'Push' })).toBeNull()
   })
 
-  it('says why a push failed on one line, and offers no force', async () => {
+  it('says why a push failed once, in one clause beside the button, with git’s words behind it', async () => {
     const push = pendingPush()
     render(<ChangesTab />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
-    await act(async () => push.reject(new Error('rejected: non-fast-forward')))
+    const said = "fatal: '/tmp/missing.git' does not appear to be a git repository"
+    await act(async () => push.reject(refusal('Remote not found', said)))
 
-    expect(screen.getByRole('alert').textContent).toBe('rejected: non-fast-forward')
-    expect(screen.getByRole('button', { name: 'Push' })).toHaveProperty('disabled', false)
-    expect(screen.queryByRole('button', { name: /force/i })).toBeNull()
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toBe('Remote not found')
+    expect(alert.parentElement?.lastElementChild?.textContent).toBe('Push')
+    const error = screen.getByRole('button', { name: 'Remote not found' })
+    expect(error.title).toBe(said)
+    expect(useWorkspaceStore.getState().notices).toEqual([])
+
+    const copyToClipboard = vi.fn(async () => {})
+    act(() => useWorkspaceStore.setState({ copyToClipboard }))
+    fireEvent.click(error)
+    expect(copyToClipboard).toHaveBeenCalledWith(said, 'the error')
   })
 
-  it('publishes a branch with no upstream, even with nothing ahead', () => {
-    seed({ upstream: null, ahead: 0 })
+  it('offers neither force nor a pull that does not exist when the remote is ahead', async () => {
+    const push = pendingPush()
     render(<ChangesTab />)
-    expect(screen.getByRole('button', { name: 'Publish branch' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+    await act(async () => push.reject(refusal('Rejected: remote is ahead', 'rejected (fetch first)')))
+
+    expect(screen.getByRole('alert').textContent).toBe('Rejected: remote is ahead')
+    expect(screen.getByRole('button', { name: 'Push' })).toHaveProperty('disabled', false)
+    expect(screen.queryByRole('button', { name: /force|pull/i })).toBeNull()
+  })
+
+  it('says a failure git never explained as one clause too', async () => {
+    const push = pendingPush()
+    render(<ChangesTab />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+    await act(async () => push.reject(new Error('worktree w1 is not ready for pushing')))
+
+    expect(screen.getByRole('alert').textContent).toBe('Push failed')
+    expect(screen.getByRole('button', { name: 'Push failed' }).title).toBe('worktree w1 is not ready for pushing')
+  })
+
+  it('brings the Changes tab up when a push from elsewhere fails', async () => {
+    const push = pendingPush()
+    useWorkspaceStore.setState({ rightPanelOpen: false, rightPanelTab: 'files' })
+
+    const pushing = useWorkspaceStore.getState().pushActiveWorktree()
+    await act(async () => {
+      push.reject(refusal('Offline', 'Could not resolve host: example.invalid'))
+      await pushing
+    })
+
+    expect(useWorkspaceStore.getState()).toMatchObject({ rightPanelOpen: true, rightPanelTab: 'changes' })
+    expect(useWorkspaceStore.getState().notices).toEqual([])
+  })
+
+  it('toasts Pushed, and nothing more, when it lands', async () => {
+    const push = pendingPush()
+    render(<ChangesTab />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+    await act(async () => push.resolve({ ...pushed, setUpstream: true, uncommitted: 2 }))
+
+    const [notice] = useWorkspaceStore.getState().notices
+    expect(notice).toMatchObject({
+      text: 'Pushed',
+      tone: 'info',
+      action: { label: 'Open review', url: pushed.reviewUrl }
+    })
+  })
+
+  it('hides Publish on a worktree with nothing in it', () => {
+    seed({ upstream: null, ahead: 0 })
+    useWorkspaceStore.setState({ logs: { w1: { ...log, commits: [] } } })
+    render(<ChangesTab />)
+    expect(screen.queryByRole('button', { name: 'Publish branch' })).toBeNull()
   })
 
   it('offers nothing when the upstream has every commit', () => {
     seed({ ahead: 0 })
     render(<ChangesTab />)
     expect(screen.queryByRole('button', { name: /push|publish|review/i })).toBeNull()
+  })
+})
+
+describe('which button is the next step', () => {
+  const primary = (name: string): boolean => screen.getByRole('button', { name }).classList.contains('button--primary')
+
+  it('is Commit while there are changes, with Push beside it quiet', () => {
+    withChanges(rows)
+    render(<ChangesTab />)
+    expect(primary('Commit All')).toBe(true)
+    expect(primary('Push')).toBe(false)
+  })
+
+  it('is Push once everything is committed and some of it is not on the remote', () => {
+    seed({ ahead: 2 })
+    render(<ChangesTab />)
+    expect(primary('Push')).toBe(true)
+  })
+
+  it('is Commit, with Publish quiet, on a new branch that has only edits', () => {
+    seed({ upstream: null, ahead: 0 })
+    withChanges(rows)
+    render(<ChangesTab />)
+    expect(primary('Commit All')).toBe(true)
+    expect(primary('Publish branch')).toBe(false)
+  })
+
+  it('is Publish on a new branch with commits and nothing uncommitted', () => {
+    seed({ upstream: null, ahead: 1 })
+    render(<ChangesTab />)
+    expect(primary('Publish branch')).toBe(true)
+  })
+})
+
+describe('committing', () => {
+  it('commits every listed change, new files included, when nothing is ticked, and only the ticked ones otherwise', () => {
+    withChanges(rows)
+    render(<ChangesTab />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include src/app.ts in the next commit' }))
+    expect(screen.queryByRole('button', { name: 'Commit All' })).toBeNull()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include src/app.ts in the next commit' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Commit All' }))
+    expect(call).toHaveBeenCalledWith('worktree.commit', {
+      worktreeId: 'w1',
+      message: 'Rank',
+      paths: ['README.md', 'src/app.ts', 'src/gone.ts']
+    })
+  })
+
+  it('switches to Commit once a file is ticked', () => {
+    withChanges(rows)
+    render(<ChangesTab />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include README.md in the next commit' }))
+    expect(screen.getByRole('button', { name: 'Commit' })).toBeTruthy()
+  })
+
+  // An agent that only created files is the common case: its work must be one click from a commit.
+  it('commits all on a worktree whose only changes are new files', () => {
+    withChanges([{ path: 'src/app.ts', kind: 'untracked', staged: false, unstaged: true }])
+    render(<ChangesTab />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
+
+    const commitAll = screen.getByRole('button', { name: 'Commit All' })
+    expect(commitAll).toHaveProperty('disabled', false)
+    fireEvent.click(commitAll)
+    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', paths: ['src/app.ts'] })
   })
 })
 
@@ -173,6 +321,20 @@ describe('ticking every file', () => {
     expect(all).toHaveProperty('checked', true)
     expect(screen.getByText('2/2')).toBeTruthy()
     expect(screen.queryByText(/selected/)).toBeNull()
+  })
+
+  it('is mixed while only some are ticked', () => {
+    withChanges(rows)
+    render(<ChangesTab />)
+    const all = screen.getByRole('checkbox', { name: 'All' }) as HTMLInputElement
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include README.md in the next commit' }))
+    expect(all.indeterminate).toBe(true)
+    expect(all.checked).toBe(false)
+
+    fireEvent.click(all)
+    expect(all.indeterminate).toBe(false)
+    expect(all.checked).toBe(true)
   })
 })
 

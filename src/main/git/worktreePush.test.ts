@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import type { PushFailureData } from '../../shared/entities'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
 import { createTempRepo, type TempRepo } from './testRepository'
-import { parsePushStatus, pushFailureKind, pushRefusal, pushWorktree } from './worktreePush'
+import { parsePushStatus, pushFailureKind, pushFailureLabel, pushRefusal, pushWorktree } from './worktreePush'
 
 describe('parsePushStatus', () => {
   const refspec = 'refs/heads/work:refs/heads/work'
@@ -107,6 +108,30 @@ describe('pushRefusal', () => {
   })
 })
 
+describe('pushFailureLabel', () => {
+  it('names the failure in one clause from what git said', () => {
+    const missing =
+      "fatal: '/private/tmp/x/missing.git' does not appear to be a git repository\nfatal: Could not read from remote repository."
+    expect(pushFailureLabel(missing)).toBe('Remote not found')
+    expect(pushFailureLabel('remote: Repository not found.\nfatal: repository not found')).toBe('Remote not found')
+    expect(pushFailureLabel('fatal: Authentication failed for https://example.invalid/x.git')).toBe('Sign-in failed')
+    expect(pushFailureLabel('git@example.invalid: Permission denied (publickey).')).toBe('Sign-in failed')
+    expect(pushFailureLabel(' ! [rejected]   main -> main (fetch first)')).toBe('Rejected: remote is ahead')
+    expect(pushFailureLabel('Fehler', { flag: '!', summary: '[rejected] (non-fast-forward)' })).toBe(
+      'Rejected: remote is ahead'
+    )
+    expect(pushFailureLabel(' ! [remote rejected] main -> main (pre-receive hook declined)')).toBe('Rejected by remote')
+    expect(pushFailureLabel("fatal: unable to access 'https://x/': Could not resolve host: x")).toBe('Offline')
+    expect(
+      pushFailureLabel(
+        'ssh: connect to host x port 22: Network is unreachable\nfatal: Could not read from remote repository.'
+      )
+    ).toBe('Offline')
+    expect(pushFailureLabel('Host key verification failed.')).toBe('Unknown host key')
+    expect(pushFailureLabel('fatal: the remote end hung up unexpectedly')).toBe('Push failed')
+  })
+})
+
 describe('pushing to a real remote', () => {
   const repos: TempRepo[] = []
   afterEach(async () => {
@@ -118,6 +143,8 @@ describe('pushing to a real remote', () => {
     repos.push(repo)
     return repo
   }
+
+  const detailOf = (failure: unknown): string => ((failure as GitServiceError).data as PushFailureData).detail
 
   const push = async (repo: TempRepo, branch: string, remote?: string): ReturnType<typeof pushWorktree> =>
     pushWorktree(repo.runner, {
@@ -226,7 +253,19 @@ describe('pushing to a real remote', () => {
     const failure = await push(repo, 'feature').catch((error: unknown) => error)
 
     expect(failure).toBeInstanceOf(GitServiceError)
-    expect((failure as GitServiceError).message).toContain('has commits that feature does not')
+    expect((failure as GitServiceError).message).toBe('Rejected: remote is ahead')
+    expect(detailOf(failure)).toContain('[rejected]')
+  })
+
+  it('says a remote that is not there in one clause, with git’s words kept', async () => {
+    const repo = await repository()
+    await repo.git(['checkout', '-q', '-b', 'feature'])
+    await repo.git(['remote', 'add', 'origin', `${repo.repoPath}-missing.git`])
+
+    const failure = await push(repo, 'feature').catch((error: unknown) => error)
+
+    expect((failure as GitServiceError).message).toBe('Remote not found')
+    expect(detailOf(failure)).toContain('does not appear to be a git repository')
   })
 
   // A local bare repository as remote, whose `url` is the address the repository
@@ -291,8 +330,9 @@ describe('pushing to a real remote', () => {
 
     const failure = await push(repo, 'feature', 'upstream').catch((error: unknown) => error)
 
-    expect((failure as GitServiceError).message).toContain('no remote called "upstream"')
-    expect((failure as GitServiceError).message).toContain('origin')
+    expect((failure as GitServiceError).message).toBe('Remote not found')
+    expect(detailOf(failure)).toContain('no remote called "upstream"')
+    expect(detailOf(failure)).toContain('origin')
   })
 
   it('says so when there is nowhere to push at all', async () => {
@@ -301,7 +341,8 @@ describe('pushing to a real remote', () => {
 
     const failure = await push(repo, 'feature').catch((error: unknown) => error)
 
-    expect((failure as GitServiceError).message).toContain('no remotes')
+    expect((failure as GitServiceError).message).toBe('No remote')
+    expect(detailOf(failure)).toContain('no remotes')
   })
 
   // git hands a worktree branch the base ref as upstream, and `ahead` is measured

@@ -281,6 +281,9 @@ export type WorktreePush = {
   pushedAt: number
 }
 
+/** `data` of a failed `worktree.push`, whose message is one clause: git's whole refusal. */
+export type PushFailureData = { detail: string }
+
 /** One commit a worktree made. */
 export type WorktreeCommitSummary = {
   sha: string

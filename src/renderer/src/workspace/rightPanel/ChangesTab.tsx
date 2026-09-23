@@ -25,6 +25,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const pushing = useWorkspaceStore((state) => state.pushing)
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
   const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
   // Per worktree: the panel is not remounted on tab change, and a message could land on the wrong diff.
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -36,17 +37,20 @@ export function ChangesTab(): React.JSX.Element | null {
 
   const rows = changes?.changes ?? []
   const ticked = new Set(stagedPaths)
-  const allTicked = rows.length > 0 && rows.every((change) => ticked.has(change.path))
-  const canCommit = ticked.size > 0 && message.trim().length > 0 && !committing
+  const tickedCount = rows.filter((change) => ticked.has(change.path)).length
+  const allTicked = rows.length > 0 && tickedCount === rows.length
+  const canCommit = rows.length > 0 && message.trim().length > 0 && !committing
 
-  const offer = pushOffer(status, push)
+  const offer = pushOffer(status, push, rows.length > 0)
+  // One primary at a time: commit what is uncommitted first, then send it.
+  const pushIsNext = rows.length === 0 && (status?.ahead ?? 0) > 0
   const discard = (path: string): void => openDialog({ kind: 'confirm-discard', worktreeId, path })
 
   const commit = (): void => {
     if (!canCommit) return
     // The message is the one thing the app cannot reconstruct; only a commit that landed clears it.
-    void commitStaged(message).then(() => {
-      if (useWorkspaceStore.getState().stagedPaths.length === 0) setMessage('')
+    void commitStaged(message).then((landed) => {
+      if (landed) setMessage('')
     })
   }
 
@@ -59,9 +63,11 @@ export function ChangesTab(): React.JSX.Element | null {
             {` · ↑${status.ahead} ↓${status.behind}`}
           </span>
           {push?.phase === 'failed' ? (
-            <p className="changes__pushError" role="alert" title={push.error}>
-              {push.error}
-            </p>
+            <span className="changes__pushError" role="alert">
+              <button type="button" title={push.detail} onClick={() => void copyToClipboard(push.detail, 'the error')}>
+                {push.error}
+              </button>
+            </span>
           ) : null}
           {offer?.kind === 'review' ? (
             <button type="button" className="button button--small" onClick={() => openInBrowser(offer.url)}>
@@ -70,7 +76,7 @@ export function ChangesTab(): React.JSX.Element | null {
           ) : offer ? (
             <button
               type="button"
-              className="button button--primary button--small"
+              className={`button button--small${pushIsNext ? ' button--primary' : ''}`}
               disabled={pushing}
               onClick={() => void pushActiveWorktree()}
             >
@@ -150,11 +156,18 @@ export function ChangesTab(): React.JSX.Element | null {
         <div className="changes__commit">
           <div className="changes__all">
             <label>
-              <input type="checkbox" checked={allTicked} onChange={() => setAllStaged(!allTicked)} />
+              <input
+                type="checkbox"
+                checked={allTicked}
+                ref={(box) => {
+                  if (box) box.indeterminate = tickedCount > 0 && !allTicked
+                }}
+                onChange={() => setAllStaged(!allTicked)}
+              />
               All
             </label>
             <span className="changes__allCount">
-              {ticked.size}/{rows.length}
+              {tickedCount}/{rows.length}
             </span>
           </div>
           <input
@@ -172,7 +185,7 @@ export function ChangesTab(): React.JSX.Element | null {
             }}
           />
           <button type="button" className="button button--primary button--small" disabled={!canCommit} onClick={commit}>
-            {committing ? 'Committing…' : 'Commit'}
+            {committing ? 'Committing…' : tickedCount > 0 ? 'Commit' : 'Commit All'}
           </button>
         </div>
       ) : null}
@@ -215,9 +228,16 @@ const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish branch', '
 export type PushOffer = { kind: 'push' | 'publish' } | { kind: 'review'; url: string }
 
 /** The header's one button: send what the remote lacks, else open the review the last push made. */
-export function pushOffer(status: WorktreeStatus | undefined, push: PushState | undefined): PushOffer | null {
+export function pushOffer(
+  status: WorktreeStatus | undefined,
+  push: PushState | undefined,
+  hasChanges: boolean
+): PushOffer | null {
   if (!status || status.missing) return null
-  if (status.upstream === null) return { kind: 'publish' }
+  // A new branch with nothing in it has nothing to publish.
+  if (status.upstream === null) {
+    return status.ahead > 0 || hasChanges || push?.phase === 'pushing' ? { kind: 'publish' } : null
+  }
   if (status.ahead > 0 || push?.phase === 'pushing') return { kind: 'push' }
   if (push?.phase === 'pushed' && push.reviewUrl !== undefined) return { kind: 'review', url: push.reviewUrl }
   return null

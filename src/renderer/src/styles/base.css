@@ -110,8 +110,11 @@ kbd {
   transform: translateY(0.5px);
 }
 
+/* One look for every button that cannot be pressed, whatever it would be when it can. */
 .button:disabled {
-  opacity: 0.45;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--fg-muted);
   cursor: default;
 }
 
@@ -131,6 +134,10 @@ kbd {
   background: transparent;
   border-color: transparent;
   color: var(--fg-secondary);
+}
+
+.button--ghost:disabled {
+  border-color: transparent;
 }
 
 .button--ghost:hover:not(:disabled) {

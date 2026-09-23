@@ -15,6 +15,7 @@ import type {
   PaneNode,
   PaneWatchers,
   Project,
+  PushFailureData,
   RelaySetting,
   TeammatePresence,
   TeamworkPublish,
@@ -172,11 +173,11 @@ export type Notice = {
   action?: { label: string; url: string }
 }
 
-/** The last push of one worktree, as the Changes tab shows it. */
+/** The last push of one worktree, as the Changes tab shows it. A failure is one clause, and git's words. */
 export type PushState =
   | { phase: 'pushing' }
   | { phase: 'pushed'; reviewUrl?: string }
-  | { phase: 'failed'; error: string }
+  | { phase: 'failed'; error: string; detail: string }
 
 /** The find bar belongs to the focused pane. `token` changes on every press, which is how a repeat press re-takes an open field. */
 export type PaneSearch = { terminalId: string; token: number }
@@ -482,7 +483,8 @@ type WorkspaceState = {
   toggleStaged: (path: string) => void
   /** Every changed path, or none. */
   setAllStaged: (staged: boolean) => void
-  commitStaged: (message: string) => Promise<void>
+  /** Commits the ticked paths, or every listed change (new files too) when none is ticked; true when it landed. */
+  commitStaged: (message: string) => Promise<boolean>
   /** Puts one hunk into the index, or takes it out. The hunk is exactly what was on screen; the runtime refuses it if the file moved on. */
   applyHunk: (worktreeId: string, path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
   /** Throws away a path's unstaged change, or one unstaged hunk. The index is never touched. */
@@ -1922,8 +1924,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async commitStaged(message) {
       const worktreeId = get().activeWorktreeId
-      const paths = get().stagedPaths
-      if (!worktreeId || paths.length === 0) return
+      if (!worktreeId) return false
+      const ticked = get().stagedPaths
+      // The list is `git status` without ignored files, so this is `git add -A` for what is on screen.
+      const paths = ticked.length > 0 ? ticked : (get().changes[worktreeId]?.changes ?? []).map((change) => change.path)
+      if (paths.length === 0) return false
 
       set({ committing: true })
       try {
@@ -1942,8 +1947,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // Nothing is left ticked; the list refetches on the invalidation the runtime publishes, and
         // doing it here too would be a second way for this window to disagree with the others.
         set({ stagedPaths: [], selectedChangePath: null })
+        return true
       } catch (error) {
         failed('Could not commit')(error)
+        return false
       } finally {
         set({ committing: false })
       }
@@ -2340,19 +2347,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       setPush({ phase: 'pushing' })
       try {
         const result = await runtimeClient.call('worktree.push', { worktreeId })
-        // Three things worth saying, none of them "done": what was sent, whether this set the upstream, what stayed behind.
-        const parts = [
-          result.alreadyUpToDate
-            ? `${result.remote} already had ${result.branch}`
-            : `Pushed ${result.branch} to ${result.remote}`
-        ]
-        if (result.setUpstream) parts.push(`now tracking ${result.upstream}`)
-        if (result.uncommitted > 0) {
-          parts.push(`${result.uncommitted} uncommitted change${result.uncommitted === 1 ? '' : 's'} stayed behind`)
-        }
-        // The push result carries the review page, derived from the remote's URL and absent for a host teamree cannot name.
         notify(
-          parts.join(' · '),
+          result.alreadyUpToDate ? 'Up to date' : 'Pushed',
           'info',
           result.reviewUrl === undefined ? undefined : { label: 'Open review', url: result.reviewUrl }
         )
@@ -2364,8 +2360,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           return { statuses: { ...state.statuses, [worktreeId]: { ...status, ahead: 0, upstream: result.upstream } } }
         })
       } catch (error) {
-        setPush({ phase: 'failed', error: error instanceof Error ? error.message : String(error) })
-        failed('Could not push')(error)
+        setPush(pushFailure(error))
+        // Said once, beside the button: brought into view rather than repeated as a notice.
+        if (!changesOnScreen(get()) && get().activeWorktreeId === worktreeId) get().showRightPanelTab('changes')
       } finally {
         set({ pushing: false })
       }
@@ -2721,6 +2718,15 @@ useWorkspaceStore.subscribe((state, previous) => {
  */
 function isRefusal(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === 'conflict'
+}
+
+/** A refused push carries its clause and git's words; anything else is a clause of our own over its message. */
+function pushFailure(error: unknown): PushState {
+  const message = error instanceof Error ? error.message : String(error)
+  const detail = (error as { data?: Partial<PushFailureData> } | null)?.data?.detail
+  return typeof detail === 'string'
+    ? { phase: 'failed', error: message, detail }
+    : { phase: 'failed', error: 'Push failed', detail: message }
 }
 
 function refusalReason(error: unknown): string {

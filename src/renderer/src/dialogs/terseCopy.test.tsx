@@ -39,6 +39,9 @@ const { relayPanel } = await import('../settings/settingsModel')
 const { TeamworkSteps } = await import('../teamwork/TeamworkSteps')
 const { checkOriginDraft, checkRelayDraft } = await import('../teamwork/startTeamwork')
 const { muteTitle } = await import('../terminal/TerminalView')
+const { ChangesTab } = await import('../workspace/rightPanel/ChangesTab')
+const { runtimeClient } = await import('../runtimeClient/currentRuntimeClient')
+const { pushFailureLabel } = await import('../../../main/git/worktreePush')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -367,6 +370,67 @@ describe('the pane mute button', () => {
 function oneLine(reason: string): boolean {
   return !SENTENCE_STOP.test(reason) && reason.split(' · ').length <= 2 && reason.length <= 90
 }
+
+describe('pushing from the Changes tab', () => {
+  const refusals = [
+    "fatal: '/tmp/missing.git' does not appear to be a git repository\nfatal: Could not read from remote repository.",
+    'fatal: Authentication failed for https://example.invalid/x.git',
+    "fatal: could not read Username for 'https://x': terminal prompts disabled",
+    ' ! [rejected]   main -> main (fetch first)\nhint: Updates were rejected because the remote contains work',
+    ' ! [remote rejected] main -> main (pre-receive hook declined)',
+    "fatal: unable to access 'https://x/': Could not resolve host: x",
+    'Host key verification failed.',
+    'fatal: the remote end hung up unexpectedly',
+    ''
+  ]
+
+  it('says a failure in one clause, git’s words kept out of the text', () => {
+    for (const stderr of refusals) {
+      const label = pushFailureLabel(stderr)
+      expect(oneLine(label) && !label.includes(' · ') && label.split(' ').length <= 4, `${stderr}: ${label}`).toBe(true)
+
+      seed({ statuses: { w1: pushStatus() }, pushes: { w1: { phase: 'failed', error: label, detail: stderr } } })
+      const { unmount } = render(<ChangesTab />)
+      expect(document.querySelector('[role=alert]')?.textContent).toBe(label)
+      expect(sentenceStops(document.body)).toEqual([])
+      unmount()
+    }
+  })
+
+  it('toasts one word when the push lands', async () => {
+    for (const alreadyUpToDate of [false, true]) {
+      seed({ statuses: { w1: pushStatus() } })
+      const call = vi.spyOn(runtimeClient, 'call').mockResolvedValueOnce({
+        worktreeId: 'w1',
+        remote: 'origin',
+        branch: 'rewrite-the-pager',
+        alreadyUpToDate,
+        upstream: 'origin/rewrite-the-pager',
+        setUpstream: true,
+        uncommitted: 3,
+        pushedAt: 0
+      } as never)
+      await useWorkspaceStore.getState().pushActiveWorktree()
+      expect(useWorkspaceStore.getState().notices.map((notice) => notice.text)).toEqual([
+        alreadyUpToDate ? 'Up to date' : 'Pushed'
+      ])
+      call.mockRestore()
+    }
+  })
+})
+
+const pushStatus = () => ({
+  worktreeId: 'w1',
+  branch: 'rewrite-the-pager',
+  upstream: 'origin/rewrite-the-pager',
+  ahead: 1,
+  behind: 0,
+  staged: 0,
+  unstaged: 0,
+  untracked: 0,
+  conflicted: 0,
+  readAt: 0
+})
 
 describe('typed-URL validation', () => {
   it('refuses every bad origin in one line', () => {
