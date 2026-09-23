@@ -1,12 +1,5 @@
-// xterm needs literal colours, but the palette belongs in CSS. This reads the
-// custom properties so the emulator and the chrome around it can never drift
-// apart — including when the palette changes under a running terminal, which is
-// what makes switching themes reach panes that are already open.
-//
-// All sixteen ANSI colours are mapped, not the eight the interface happens to
-// reuse. An unmapped entry does not go unthemed, it silently keeps xterm's own
-// default, which is how a window could end up drawing bright green from one
-// palette beside green from another.
+// xterm needs literal colours; this reads the CSS custom properties so emulator and chrome never drift.
+// All sixteen ANSI colours are mapped: an unmapped one silently keeps xterm's default.
 
 import type { ISearchOptions } from '@xterm/addon-search'
 import type { ITheme } from '@xterm/xterm'
@@ -75,13 +68,8 @@ export function readTerminalTheme(root: Element | null): ITheme {
 type SearchDecorations = NonNullable<ISearchOptions['decorations']>
 
 /**
- * Search highlights reuse the selection colour, because a match is a selection
- * the user did not have to make by hand. The active one is told apart by an
- * accent border rather than a filled accent background: xterm draws the cell's
- * own text over the decoration, and a bright fill would bury it.
- *
- * The addon parses these itself and only understands #RRGGBB, so every entry
- * must map to a solid hex token.
+ * Search highlights reuse the selection colour; the active match gets an accent border, since a fill
+ * would bury the text drawn over it. The addon only parses #RRGGBB, so every entry must be solid hex.
  */
 const SEARCH_VARIABLE_BY_KEY: Record<keyof Required<SearchDecorations>, string> = {
   matchBackground: '--term-selection',

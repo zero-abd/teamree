@@ -1,25 +1,7 @@
 /** @vitest-environment jsdom */
 
-// The strip along the top of the workspace, and the one promise it makes.
-//
-// What used to be here was a tab per open worktree: a second and worse copy of
-// the sidebar's middle level, mixing the panes of every worktree somebody had
-// opened into one row. The strip now belongs to the worktree you are in, and
-// most of this file is about that boundary holding — a tab from another
-// worktree appearing here is the exact complaint the change answers, and it
-// must fail loudly rather than quietly re-arrive.
-//
-// Then there being one answer to where the next keystroke goes. The selected
-// tab is read from the same `focusedTerminalId` the focused pane border is read
-// from, and a teammate's watched pane holding the focus means no tab of yours is
-// selected. Two selected things would be two answers.
-//
-// And the three buttons at the end of it, which are the only place in the
-// window a pane can be split or opened with a pointer. They were in the
-// worktree header, above this strip, beside a filesystem path and the pane
-// board — four commands in a row, every one of them with a home elsewhere. The
-// tests below say where they are now and what they act on, so a tidy-up cannot
-// leave the window with no clickable way to split a pane at all.
+// The strip belongs to the open worktree only; its selected tab is the focused pane (none while a
+// watched pane has focus); and its end buttons are the only pointer way to split or open a pane.
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -126,11 +108,7 @@ beforeEach(() => {
 })
 
 describe('the worktree the strip belongs to', () => {
-  // Two worktrees open, each with panes of its own, and only one of them is the
-  // one somebody is looking at. This is the whole complaint the change answers:
-  // the old strip listed every open worktree at once, so the row above the
-  // panes described sessions that were not on screen. If a tab from `w2` ever
-  // shows up here again, this is the test that has to stop it.
+  // Two worktrees open; a tab from `w2` appearing here is the regression this guards.
   const twoWorktrees = (): void => {
     seed({
       activeWorktreeId: 'w1',
@@ -161,9 +139,7 @@ describe('the worktree the strip belongs to', () => {
     expect(screen.queryByText('codex')).toBeNull()
   })
 
-  // The tree is the order the panes read on screen, and the order
-  // `focus-next-pane` steps through them. The records are keyed by id and carry
-  // no order worth sorting a strip by, so the two are built here to disagree.
+  // Tree order, not record order; built here to disagree.
   it('lists them in the order the split tree puts them, not the order the records arrived', () => {
     seed({
       activeWorktreeId: 'w1',
@@ -192,10 +168,7 @@ describe('the worktree the strip belongs to', () => {
     expect(tabNames()).toEqual(['first', 'second', 'third'])
   })
 
-  // The board paints 'terminal' on the bar of a pane whose record has not come
-  // back yet, and the strip is a directory of the board. A directory that lists
-  // one entry fewer than the thing it describes teaches a reader to stop
-  // trusting it.
+  // A leaf without its record still gets a tab, named as the board paints it.
   it('still gives a tab to a leaf whose terminal record has not arrived', () => {
     seed({
       activeWorktreeId: 'w1',
@@ -206,9 +179,7 @@ describe('the worktree the strip belongs to', () => {
     expect(tabNames()).toEqual(['npm test', 'terminal'])
   })
 
-  // The sidebar calls this pane `claude`, and so does the strip. A pane named
-  // two things in one window is two answers about one pane, and nothing on
-  // screen says which of them the app believes.
+  // The sidebar's name, not a second one.
   it('calls a pane by the name of the agent running in it', () => {
     seed({
       activeWorktreeId: 'w1',
@@ -227,9 +198,7 @@ describe('which tab is the selected one', () => {
       .filter((tab) => tab.getAttribute('aria-selected') === 'true')
       .map((tab) => tab.textContent)
 
-  // One fact painted twice: the tab marked selected and the border drawn round
-  // a pane are both `layout.focusedTerminalId`, so the strip and the board can
-  // never disagree about where typing lands.
+  // Both the selected tab and the focused border read `layout.focusedTerminalId`.
   it('selects the tab of the pane holding the focus', () => {
     seed({
       activeWorktreeId: 'w1',
@@ -240,11 +209,7 @@ describe('which tab is the selected one', () => {
     expect(selectedNames()).toEqual(['claude'])
   })
 
-  // A teammate's watched pane is what takes the focus off every pane of yours,
-  // and the strip has to say so by selecting nothing. A selected tab beside a
-  // focused border somewhere else would be the second answer this arrangement
-  // exists to avoid — and it is the same test `WorkspaceArea` applies before it
-  // hands a focused id to the pane tree.
+  // A watched pane holding focus selects no tab, as `WorkspaceArea` draws no focused border.
   it('selects no tab at all while a teammate’s watched pane holds the focus', () => {
     seed({
       activeWorktreeId: 'w1',
@@ -269,22 +234,14 @@ describe('what a tab does when it is pressed', () => {
     mount()
   }
 
-  // A tab is a jump to a pane, not a choice of which pane to show: every leaf
-  // of a split tree is on screen at once, so there is no visibility for a tab
-  // to own. What it can do is move the focus, and it moves it through the same
-  // action the chords and the pane click use.
+  // A tab moves focus through the same action the chords and the pane click use.
   it('focuses that pane', () => {
     twoPanes()
     fireEvent.click(screen.getByRole('tab', { name: 'claude' }))
     expect(focusPane).toHaveBeenCalledExactlyOnceWith('t2')
   })
 
-  // `closeTerminal` and not some softer hide, because there is exactly one
-  // process behind a tab and behind the pane it names, and it is the same
-  // close the pane's own bar offers. A tab that hid a pane while its pty ran on
-  // would invent a state the layout tree has no leaf for, the runtime has no
-  // record of, and `teamree terminal list` has no word for: a pane nobody can
-  // see and nobody can reach, still holding a shell.
+  // `closeTerminal`, not a hide: a hidden-but-running pane has no leaf and no record.
   it('closes that pane, and the process in it, from the close button', () => {
     twoPanes()
     fireEvent.click(screen.getByRole('button', { name: 'Close pane claude' }))
@@ -292,8 +249,7 @@ describe('what a tab does when it is pressed', () => {
     expect(focusPane).not.toHaveBeenCalled()
   })
 
-  // The button is an x in a strip of them, so the only thing that says which
-  // pane it throws away is its accessible name.
+  // The accessible name is the only thing saying which pane the x closes.
   it('says which pane the close button closes, and that closing is what it does', () => {
     twoPanes()
     expect(screen.getByRole('button', { name: 'Close pane npm test' })).toBeTruthy()
@@ -301,10 +257,7 @@ describe('what a tab does when it is pressed', () => {
   })
 })
 
-// Four buttons used to sit in the header above this strip: a pane board, two
-// splits and a new terminal. The board belongs to the rail, and these three
-// belong here — on the strip that already draws which pane is current, which is
-// the pane every one of them acts on.
+// The split and new-pane buttons live on the strip, next to the current pane they act on.
 describe('the pane buttons at the end of the strip', () => {
   const onePane = (): void => {
     seed({
@@ -327,8 +280,7 @@ describe('the pane buttons at the end of the strip', () => {
     expect(splitFocusedPane).toHaveBeenCalledExactlyOnceWith('column')
   })
 
-  // The `+` is a menu now, so a plain press opens nothing on its own: the
-  // chord is still the one-press way to a terminal.
+  // The `+` is a menu; the chord is still the one-press way to a terminal.
   it('opens the menu rather than a pane when pressed', () => {
     onePane()
     fireEvent.click(screen.getByRole('button', { name: 'New pane' }))
@@ -336,9 +288,7 @@ describe('the pane buttons at the end of the strip', () => {
     expect(createTerminal).not.toHaveBeenCalled()
   })
 
-  // They are icons, so the hover names what they do — and only that. The
-  // chords are taught in the menu bar, in Help, in the palette and on the
-  // front door; a fifth place was the strip explaining itself.
+  // Hover names the action only; chords are taught elsewhere.
   it('names what each one does on hover, and no chord', () => {
     onePane()
     expect(screen.getByRole('button', { name: 'Split right' }).getAttribute('title')).toBe('Split right')
@@ -353,8 +303,6 @@ describe('the pane buttons at the end of the strip', () => {
     expect(words.filter((text) => text.length > 0)).toEqual(['npm test'])
   })
 
-  // An icon with no label is a button nothing on screen names, and a screen
-  // reader would read three of them as "button, button, button".
   it('says what each one does, for anything that cannot see the icon', () => {
     onePane()
     for (const name of ['Split right', 'Split down', 'New pane']) {
@@ -364,11 +312,7 @@ describe('the pane buttons at the end of the strip', () => {
   })
 })
 
-// The `+` opens a menu of what can be started in this worktree: a terminal,
-// then one row per agent the runtime found on this machine, then the way to
-// the agent settings. The agents are whatever `agent.list` answered — the
-// store's `agents` — and nothing else, so a machine without codex gets no
-// codex row rather than a row that fails.
+// The `+` menu: a terminal, one row per agent `agent.list` found, then agent settings.
 describe('the menu the + opens', () => {
   const onePane = (overrides: Record<string, unknown> = {}): void => {
     seed({
@@ -415,9 +359,7 @@ describe('the menu the + opens', () => {
     expect(startAgent).not.toHaveBeenCalled()
   })
 
-  // The same store action the palette's "Start codex here" row calls, with
-  // the same argument: one way to start an agent in the worktree in front of
-  // you, however it was asked for.
+  // The same store action the palette's "Start codex here" row calls.
   it('starts the chosen agent through the store, and closes', () => {
     onePane()
     fireEvent.click(within(open()).getByRole('menuitem', { name: 'codex' }))
@@ -474,9 +416,7 @@ describe('the menu the + opens', () => {
   })
 })
 
-// The gap the whole feature is for: three agents started on three approaches
-// read `claude`, `claude`, `claude`, and the strip is what somebody is looking
-// at when they wish one of them said which was the auth refactor.
+// Renaming is what tells `claude`, `claude`, `claude` apart.
 describe('naming a pane', () => {
   const threeAgents = (): void => {
     seed({
@@ -496,17 +436,14 @@ describe('naming a pane', () => {
     expect(tabNames()).toEqual(['claude 1', 'claude 2', 'auth refactor'])
   })
 
-  // A button rather than a double-click alone: a name is the one thing on this
-  // strip somebody has to be able to set without a mouse.
+  // A button as well as double-click, so a name can be set without a mouse.
   it('opens the field from a button that says which pane it renames', () => {
     threeAgents()
     fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 2' }))
     expect(screen.getByRole('textbox', { name: 'Pane name' })).toBeTruthy()
   })
 
-  // The panes a person renames are exactly the ones the app named, and the
-  // field opened empty for those: the strip drew `claude 1`, the field read the
-  // stored label, and there was none.
+  // App-named panes have an empty stored label; the field used to open blank for them.
   it('opens the field holding the name the tab shows, selected', () => {
     threeAgents()
     fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
@@ -516,8 +453,7 @@ describe('naming a pane', () => {
     expect(field.selectionEnd).toBe('claude 1'.length)
   })
 
-  // Enter on the untouched field is not a rename: storing `claude 1` as a
-  // label would freeze the number the strip made up.
+  // Storing `claude 1` would freeze the number the strip made up.
   it('does not store the app’s own name back as a label', () => {
     threeAgents()
     fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
@@ -547,9 +483,7 @@ describe('naming a pane', () => {
     expect(screen.queryByRole('textbox', { name: 'Pane name' })).toBeNull()
   })
 
-  // The field sits in a strip whose every other control takes the focus away,
-  // and a name thrown away because somebody reached for the pane they were
-  // naming would be the worst of the three possible answers.
+  // Blur commits: every other control in the strip takes focus away.
   it('keeps what was typed when the focus leaves the field', () => {
     threeAgents()
     fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
@@ -559,8 +493,7 @@ describe('naming a pane', () => {
     expect(renamePane).toHaveBeenCalledExactlyOnceWith('t1', 'pager streaming')
   })
 
-  // Shortened where it is drawn and nowhere behind it: the tooltip and the
-  // record both still have the whole of what somebody typed.
+  // Shortened where drawn; tooltip and record keep it whole.
   it('shortens a long name on the tab and keeps all of it in the hover text', () => {
     const long = 'rewrite the pager so it streams instead of buffering'
     seed({
@@ -577,9 +510,7 @@ describe('naming a pane', () => {
   })
 })
 
-// The strip is the top edge of the window's main column now — the row the
-// macOS window buttons sit on once the sidebar is away — so it is also the
-// only place a sidebar that has been hidden can be brought back with a pointer.
+// The strip is the window's top edge, so it holds the control that brings a hidden sidebar back.
 describe('the way back to the sidebar', () => {
   it('offers to show the sidebar from the strip’s left end while it is hidden', () => {
     seed({ sidebarVisible: false })
@@ -600,8 +531,7 @@ describe('the way back to the sidebar', () => {
     expect(screen.queryByRole('button', { name: 'Show sidebar' })).toBeNull()
   })
 
-  // No worktree, no panes, and still a strip: with nothing in it, it is what
-  // the window is dragged by and what the expand control sits in.
+  // Still a strip with nothing in it: the drag region and the expand control.
   it('keeps the strip with nothing to list in it', () => {
     seed({ sidebarVisible: false })
     mount()
@@ -611,10 +541,7 @@ describe('the way back to the sidebar', () => {
 })
 
 describe('when there are no panes to list', () => {
-  // An empty strip lists nothing: a `role="tablist"` labelled "Terminals in
-  // this worktree" above a worktree with nothing in it announces a region that
-  // has nothing to announce. The strip itself stays, because it is the window's
-  // top edge, but the list and the pane buttons in it do not.
+  // No tablist when empty; the strip itself stays.
   it('renders nothing when the worktree you are in has no layout yet', () => {
     seed({ activeWorktreeId: 'w1', terminals: byId(terminal({ id: 't1', title: 'npm test' })) })
     mount()
@@ -627,9 +554,7 @@ describe('when there are no panes to list', () => {
     expect(screen.queryByRole('tablist')).toBeNull()
   })
 
-  // Terminals from worktrees that are open but not the one being looked at are
-  // still in the store. With no active worktree there is no session for the
-  // strip to be a directory of, and listing those would be the old behaviour.
+  // No active worktree, no session to list, even with other worktrees' terminals in the store.
   it('renders nothing when no worktree is open at all', () => {
     seed({
       layouts: { w2: layout('w2', row('t8'), 't8') },
@@ -641,10 +566,7 @@ describe('when there are no panes to list', () => {
   })
 })
 
-// The mark the sidebar draws, on the same panes and read the same way: a pane
-// that has printed since this person last had it in front of them. The strip is
-// what somebody is looking at while an agent works beside them in the next
-// pane, so it is where a tab going quietly unread would cost the most.
+// The sidebar's unread mark, on the same panes.
 describe('panes that have printed since they were read', () => {
   it('marks the tab of a pane that spoke while another had the focus', () => {
     seed({

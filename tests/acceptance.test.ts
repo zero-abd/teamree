@@ -1,7 +1,5 @@
-// The acceptance test for milestone 1: the whole product, driven the way an
-// agent would drive it. Nothing is mocked. The runtime runs as a real process,
-// git runs against a real repository, and every assertion goes through the
-// built CLI over the same socket a coding agent would use.
+// The whole product driven the way an agent would: a real runtime process, a real repository, and every
+// assertion through the built CLI over the agent's socket. Nothing is mocked.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
@@ -51,28 +49,16 @@ beforeAll(async () => {
   env = { ...process.env, TEAMREE_USER_DATA_DIR: userDataDir }
 
   execFileSync('git', ['init', '-b', 'main', repoPath])
-  // On the repository itself, not just on this file's own git calls: the
-  // commits that matter here are made by the app, through its own CLI, and it
-  // uses whatever identity the machine has. A fresh CI runner has none, so a
-  // fixture that configured only its own commands passed locally and failed
-  // there with "Author identity unknown".
+  // On the repository itself: the app commits through its own CLI with the machine's identity, which a
+  // fresh runner lacks.
   git(['config', 'user.email', 'test@teamree.local'], repoPath)
   git(['config', 'user.name', 'teamree test'], repoPath)
   writeFileSync(join(repoPath, 'README.md'), '# demo\n')
   git(['add', '.'], repoPath)
   git(['commit', '-m', 'initial'], repoPath)
 
-  // Its own process group, because `npx` puts two wrapper processes between us
-  // and the runtime and does not pass a signal down to it. Killing the wrapper
-  // left the runtime alive holding its socket, its discovery file and an inotify
-  // instance — two orphans per run, and this suite runs often. They accumulated
-  // until the per-user inotify limit was exhausted and every filesystem-watch
-  // test on the machine began failing for reasons that had nothing to do with
-  // the watcher.
-  // stdin is a pipe rather than /dev/null, and nothing is ever written to it:
-  // it is how the runtime learns this process has gone, so that a suite killed
-  // part-way through does not leave a runtime behind holding a socket and a
-  // discovery file. See `scripts/acceptance-host.mjs`.
+  // Its own process group: `npx` does not pass signals down, and orphaned runtimes once exhausted the
+  // inotify limit. stdin is a pipe so the runtime notices this process going (acceptance-host.mjs).
   host = spawn('npx', ['tsx', HOST], { env, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
 
   const discovery = join(userDataDir, 'runtime.json')
@@ -86,7 +72,7 @@ afterAll(async () => {
     try {
       process.kill(-host.pid, 'SIGTERM')
     } catch {
-      // Already gone, which is the outcome this wanted anyway.
+      // Already gone.
     }
   }
   await sleep(500)
@@ -126,15 +112,7 @@ describe('milestone 1 acceptance', () => {
 
     expect(worktree?.state, worktree?.error).toBe('ready')
     expect(existsSync(worktree.path)).toBe(true)
-    // Inside this run's own directory and nowhere else. The checkout root is
-    // not part of `userDataDir`, and left at its default it is the person's
-    // `~/.teamree/worktrees` — shared with their real projects, with the smoke
-    // script, and with every other copy of this suite running on the machine.
-    // Two of those pick checkout names out of one directory while reading two
-    // different stores, so they choose the same free name and one of them then
-    // reads a path the other has taken or removed. Asserting the root here is
-    // what keeps that from coming back: a run that can be run twice at once is
-    // a run whose checkouts are somewhere only it can see.
+    // Inside this run's directory, not `~/.teamree/worktrees`, so concurrent runs cannot pick the same name.
     expect(worktree.path.startsWith(root)).toBe(true)
   }, 60_000)
 
@@ -151,8 +129,7 @@ describe('milestone 1 acceptance', () => {
   })
 
   it('names the changed paths and prints the patch for one of them', () => {
-    // scratch.txt is untracked, which is the case plain `git diff` answers with
-    // silence — and the case a fresh branch is usually full of.
+    // Untracked, which plain `git diff` answers with silence.
     const changes = cli<WorktreeChanges>(['worktree', 'changes', worktree.id])
     expect(changes.changes.map((change) => change.path)).toContain('scratch.txt')
     expect(changes.changes.find((change) => change.path === 'scratch.txt')?.kind).toBe('untracked')
@@ -163,9 +140,7 @@ describe('milestone 1 acceptance', () => {
 
   it('commits only the path it was given, and says what landed', () => {
     writeFileSync(join(worktree.path, 'kept.txt'), 'keep me\n')
-    // No `--` here: it would terminate flag parsing and swallow the --json the
-    // harness appends, which is exactly what `--` is supposed to do. It is only
-    // needed for a path that could be read as a flag.
+    // No `--`: it would swallow the --json the harness appends.
     const committed = cli<WorktreeCommit>(['worktree', 'commit', worktree.id, '--message', 'keep this one', 'kept.txt'])
 
     expect(committed.paths).toEqual(['kept.txt'])
@@ -177,8 +152,6 @@ describe('milestone 1 acceptance', () => {
   })
 
   it('shows what the worktree committed, which nothing else would say', () => {
-    // The commit above left the changes list empty for that path. Without a log
-    // the app would have nothing at all to show for the work.
     const log = cli<WorktreeLog>(['worktree', 'log', worktree.id])
     expect(log.commits.map((commit) => commit.subject)).toContain('keep this one')
     expect(log.commits[0]?.shortSha).toHaveLength(7)
@@ -186,8 +159,7 @@ describe('milestone 1 acceptance', () => {
 
   it('says whether the worktree would merge back without trying it', () => {
     const preview = cli<WorktreeMergePreview>(['worktree', 'merges', worktree.id])
-    // One commit was made above, so there is something to merge and it merges
-    // cleanly — and asking must leave the repository exactly as it was.
+    // One commit above, so it merges cleanly, and asking must leave the repository untouched.
     expect(preview.state).toBe('clean')
     expect(preview.ahead).toBe(1)
     expect(preview.baseRef).toBe(project.baseRef)
@@ -210,18 +182,8 @@ describe('milestone 1 acceptance', () => {
       '--enter'
     ])
 
-    // Polled, like every other wait in this file, rather than slept against.
-    // A shell is not on a schedule: a fixed sleep makes the deadline part of
-    // the assertion, so a loaded machine — and this repository runs its suite
-    // alongside packaging builds — reports a pane that was merely slow as a
-    // product defect, and prints a missing marker instead of "it never came".
-    // Polling makes the deadline the failure mode and costs nothing when the
-    // shell answers in the usual few hundred milliseconds.
-    //
-    // The budget is wall-clock rather than a count of turns, because each turn
-    // spawns the CLI: a fixed 80 turns costs 20s of sleeping plus however long
-    // 80 process launches take, which overran the case's own timeout and
-    // reported "test timed out" instead of showing what the pane did hold.
+    // Polled against a wall-clock budget, not slept: a loaded machine should report "never came", not a
+    // slow pane as a defect, and a turn count overran the case's own timeout.
     let data = ''
     const ready = (): boolean => data.includes('TEAMREE_MARKER_OK') && data.includes(worktree.branch)
     const deadline = Date.now() + 20_000
@@ -249,8 +211,7 @@ describe('milestone 1 acceptance', () => {
   })
 
   it('runs a command to completion and reports its real exit code', () => {
-    // The deterministic path an agent should use: the command owns its process,
-    // so completion is a real exit rather than a guess from output going quiet.
+    // The deterministic path: the command owns its process, so completion is a real exit.
     const result = cli<{ exitCode: number | null; output: string }>([
       'terminal',
       'run',
@@ -278,15 +239,8 @@ describe('milestone 1 acceptance', () => {
   })
 
   it("takes the removed worktree's terminals with it, rather than leaving them running", async () => {
-    // The panes opened above were still running when the row went. Nothing
-    // else closes them: the sidebar only walks worktrees and the dashboard
-    // drops panes whose worktree is gone, so a pane left alive here is an
-    // agent still working in a directory that no longer exists, reachable
-    // only by id and still counted in the status bar.
-    //
-    // Polled rather than asserted at once: the close is started off the
-    // worktree.removed event, so it is in flight while the remove is
-    // answering.
+    // Removing the worktree must close its panes (nothing else will); polled, since the close starts off
+    // the worktree.removed event.
     let stranded = cli<Terminal[]>(['terminal', 'list']).filter((row) => row.worktreeId === worktree.id)
     for (let attempt = 0; attempt < 20 && stranded.length > 0; attempt += 1) {
       await sleep(250)

@@ -1,13 +1,5 @@
-// The owner's peer transport with an attacker on the far end, for the tests in
-// this directory that are about what the transport itself refuses.
-//
-// The Noise session and the framing are the real ones; only the relay is gone,
-// because what is under test is what the runtime does with the plaintext. The
-// attacker frames its own bytes rather than using a transport, so it can put as
-// many requests in one Noise message as fit — which is the whole point of
-// several of these tests.
-//
-// Not a `.test.ts`, so vitest does not collect it as a suite of its own.
+// The owner's peer transport with an attacker on the far end: real Noise session and framing, no relay.
+// The attacker frames its own bytes so it can pack many requests into one message. Not a `.test.ts`.
 
 import { Params } from '../../src/shared/methods'
 import { createInitiatorSession, createResponderSession, generateStaticKeyPair } from '../../src/shared/peer'
@@ -53,14 +45,7 @@ export type OwnerRig = {
   /** The subscription channel a `terminal.subscribe` opened, by pane. */
   pane: (terminalId: string) => { emit: (event: unknown) => void; close: () => void } | undefined
   held: () => number
-  /**
-   * The panes the transport last told the owner this teammate has open.
-   *
-   * The exact seam the owner's "watched by" row is fed from: `PeerService`
-   * keeps nothing of its own about who is reading, it files whatever arrives
-   * here. So a test that wants to know what the owner would be shown asks this
-   * rather than reaching for a window.
-   */
+  /** The panes the transport last reported this teammate has open, the seam the "watched by" row reads. */
   watched: () => readonly string[]
   /** Every scrollback read the dispatcher answered, in order. */
   reads: () => readonly string[]
@@ -81,9 +66,7 @@ export function ownerRig(): OwnerRig {
     written.push(params.data)
     return { written: true as const }
   })
-  // The scrollback a watcher joins on. Answered out of a buffer on the real
-  // machine, and here out of nothing at all, because what these tests ask of it
-  // is whether it was answered and what the owner was told about it.
+  // Answered out of nothing: the tests ask only whether it was answered and what the owner was told.
   registry.register('terminal.read', Params.terminalRead, (params) => {
     reads.push(params.terminalId)
     return { data: '' }
@@ -104,8 +87,7 @@ export function ownerRig(): OwnerRig {
 
   const owner = createPeerTransport({
     session: ownerSession,
-    // Decrypted straight back into text, so the attacker sees the answers the
-    // way its own line reader would.
+    // Decrypted back to text, as the attacker's own line reader would see it.
     send: (message) => {
       tail += Buffer.from(attackerSession.decrypt(message)).toString('utf8')
       for (;;) {

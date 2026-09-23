@@ -1,14 +1,5 @@
-// What everything this app spawned is costing, on the rail and in a panel.
-//
-// The button says one number — resident memory across every pane and the app
-// itself — because that is the figure a laptop's fan is about. The panel says
-// the rest: each worktree's panes, each pane's share of a core over the last
-// minute and its memory, the processes under it, and one thing to do about a
-// row, which is to ask it to stop. The app's own processes are the last row,
-// with nothing to press: `system.kill` refuses them whatever a window asks.
-//
-// Sampled slowly while the panel is closed, so the number on the rail is never
-// stale by more than a few seconds, and every two seconds while it is open.
+// What everything this app spawned costs: resident memory on the rail, per-pane CPU and memory in the
+// panel, with a Kill per row (the app's own row has none). Sampled slowly while closed, every 2s open.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ResourceProcess, SystemResources } from '@shared/entities'
@@ -83,8 +74,7 @@ export function ResourcesControl(): React.JSX.Element {
     })
   }
 
-  // Two presses: the first arms the row, the second signals it. A row armed
-  // and left alone goes back to being a row.
+  // Two presses: the first arms the row, which disarms if left alone.
   const kill = async (pid: number): Promise<void> => {
     if (disarm.current !== null) clearTimeout(disarm.current)
     if (armed !== pid) {
@@ -224,11 +214,7 @@ export function ResourcesControl(): React.JSX.Element {
 const SPARK_W = 54
 const SPARK_H = 12
 
-/**
- * The last thirty readings as one line. Scaled to the row's own peak with a
- * floor, so a pane idling at two percent is a flat line near the bottom and
- * not a mountain range of noise; the number beside it says the magnitude.
- */
+/** The last thirty readings as a line, scaled to the row's peak with a floor so idle is flat. */
 function Sparkline({ values }: { values: readonly number[] }): React.JSX.Element {
   const peak = Math.max(10, ...values)
   const step = SPARK_W / (SPARKLINE_SAMPLES - 1)

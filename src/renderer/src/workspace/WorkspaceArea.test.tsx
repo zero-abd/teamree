@@ -1,26 +1,8 @@
 /** @vitest-environment jsdom */
 
-// The surface somebody is actually looking at when there is nothing to look at.
-//
-// Three quite different situations all produce an empty right-hand side, and
-// the app is only honest if it tells them apart: a runtime that never came up,
-// a first run with no repository, and a window with worktrees but none open.
-// Getting that wrong is the worst failure in the app that is not a crash — a
-// dead runtime rendered as an ordinary empty state leaves somebody pressing
-// chords at a window that will never answer.
-//
-// The header that used to sit over the panes is here too, as an absence. It
-// was two lines once — a name, sixty characters of path, six buttons — then one
-// line of two counts, and now nothing: every fact it carried is printed by the
-// sidebar's selected row, the status bar or the row's menu, so the area over a
-// worktree is its panes and nothing else.
-//
-// And the slot a teammate's pane takes beside all of it. That pane used to
-// float over the window; the thing to prove now is that it is laid out as an
-// ordinary sibling of the workspace — a cell with a gutter, which is what makes
-// it draggable — and that it stays put through the navigations that replace
-// everything else in this area, because unmounting it would close and reopen a
-// stream nobody stopped watching.
+// What an empty right-hand side says: a dead runtime, a first run, and worktrees with none open are told
+// apart. No header over the panes. A teammate's pane is an ordinary sibling cell with a gutter, and
+// survives the navigations that replace everything else here.
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -41,8 +23,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 // Each has its own coverage; none of them decides which placeholder is right.
 vi.mock('../panes/PaneTree', () => ({ PaneTree: () => <div data-testid="panes" /> }))
-// Standing in for the whole viewer, which is exercised in its own file: what
-// this one decides is which panes exist and where they sit, not what is in them.
+// The viewer is tested in its own file; this decides which panes exist and where.
 vi.mock('../terminal/WatchedPaneView', () => ({
   WatchedPaneView: ({ handle, paneId }: { handle: string; paneId: string }) => (
     <div data-testid={`watched-${handle}-${paneId}`} />
@@ -50,15 +31,11 @@ vi.mock('../terminal/WatchedPaneView', () => ({
 }))
 vi.mock('./rightPanel/RightPanel', () => ({ RightPanel: () => null }))
 vi.mock('../dashboard/Dashboard', () => ({ Dashboard: () => <div data-testid="dashboard" /> }))
-// Both have their own files. What this one decides is that they take the area
-// at all, which is the part that lives here.
+// Tested elsewhere; this checks only that they take the area.
 vi.mock('../settings/SettingsView', () => ({ SettingsView: () => <div data-testid="settings" /> }))
 vi.mock('../help/HelpView', () => ({ HelpView: () => <div data-testid="help" /> }))
-// The strip above the panes is `TerminalTabs` now — one tab per pane in the
-// worktree on screen, where it used to be one per open worktree.
 vi.mock('./TerminalTabs', () => ({ TerminalTabs: () => null }))
-// jsdom has no browser to open; what matters is that the welcome asks the one
-// path that does.
+// jsdom has no browser; the welcome must use the one path that does.
 vi.mock('../shell/openInBrowser', () => ({ openInBrowser: vi.fn() }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
@@ -141,9 +118,7 @@ beforeEach(() => {
 })
 
 describe('when there is nothing open', () => {
-  // The status bar says this in three words at the bottom of the screen. This
-  // is where somebody is looking, and every shortcut the ordinary empty state
-  // would offer is inert.
+  // Where somebody is looking, and every shortcut would be inert.
   it('says the runtime is not running, and offers no chord that cannot answer', () => {
     seed({ projects: [project], connection: { phase: 'offline', detail: 'the runtime exited with code 1' } })
     mount()
@@ -159,16 +134,14 @@ describe('when there is nothing open', () => {
     expect(screen.getByRole('heading', { name: 'The runtime is not running' })).toBeTruthy()
   })
 
-  // A dead runtime outranks a first run: with nothing answering, "add project"
-  // is a button that cannot work.
+  // A dead runtime outranks a first run: "add project" cannot work.
   it('prefers the dead runtime to the welcome when both are true', () => {
     seed({ projects: [], connection: { phase: 'offline' } })
     mount()
     expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
   })
 
-  // The genuine first run: the mark, the name, and the one action that can
-  // work. A task needs a project to make its worktree in, so that button waits.
+  // First run: the task button waits for a project.
   it('welcomes a first run with the mark and the one action that can work', () => {
     seed({ projects: [] })
     mount()
@@ -181,8 +154,7 @@ describe('when there is nothing open', () => {
     expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
   })
 
-  // The same welcome once there is a project, with the task button live: the
-  // composer is where an agent is chosen, so nothing here names one.
+  // With a project the task button is live; agents are chosen in the composer.
   it('offers a new task in the project once there is one, and no agent by name', () => {
     seed({ projects: [project], agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }] })
     mount()
@@ -226,10 +198,7 @@ describe('a worktree with no panes in it', () => {
     expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
   })
 
-  // The owner's note on the old state: "it should be like create project or
-  // open project, no need to have buttons for claude, codex". A terminal is a
-  // different thing from an agent, so it stays; the agents are the composer's
-  // and the panes tab's to offer.
+  // No agent buttons; a terminal is not an agent, so it stays.
   it('offers a plain terminal once the checkout is ready, and no agent by name', () => {
     seed({
       projects: [project],
@@ -246,8 +215,7 @@ describe('a worktree with no panes in it', () => {
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
   })
 
-  // Ready on paper, gone from disk: a terminal offered here would fail with a
-  // path, which is the notice this whole shape was found by.
+  // Ready on paper, gone from disk: a terminal here would fail with a path.
   it('offers no terminal in a worktree whose checkout is missing', () => {
     seed({ projects: [project], worktrees: [worktree({ missing: true })], activeWorktreeId: 'w1' })
     mount()
@@ -256,10 +224,7 @@ describe('a worktree with no panes in it', () => {
   })
 })
 
-// The header row that sat between the strip and the panes is gone: a name the
-// sidebar's selected row and the status bar both already print, a folder icon
-// the row menu already carries, and two counts the status bar already reads.
-// The area over a worktree is its panes and nothing else.
+// No header between the strip and the panes; everything it said is printed elsewhere.
 describe('over an open worktree', () => {
   beforeEach(() => {
     seed({
@@ -288,9 +253,7 @@ describe('over an open worktree', () => {
   })
 })
 
-// One main area, and the two pages added to it are read rather than worked in.
-// The empty state is where somebody with nothing open goes looking for either,
-// so it carries a way to both rather than only a chord to memorise.
+// Settings and help take the area; the empty state links to both.
 describe('settings and help', () => {
   it('gives the area to settings, ahead of the empty state somebody opened it from', () => {
     seed({ projects: [project], settingsOpen: true })
@@ -326,8 +289,7 @@ describe('a teammate’s pane beside your own', () => {
     mount()
   }
 
-  // No gutter and no second cell: a window nobody is watching from must look
-  // exactly as it did before any of this existed.
+  // Nobody watched: no gutter, no second cell.
   it('takes no room at all while nobody is being watched', () => {
     openWorktreeWith([])
     expect(document.querySelectorAll('.workspace-split > .split__cell')).toHaveLength(1)
@@ -347,9 +309,7 @@ describe('a teammate’s pane beside your own', () => {
     expect(screen.getAllByRole('separator')).toHaveLength(2)
   })
 
-  // The claim the whole change rests on: it is resized by the same handle, the
-  // same arithmetic and the same arrow keys as two of your own panes, because
-  // it is literally the same component doing it.
+  // Resized by the same component, so the same handle, arithmetic and arrow keys.
   it('is resized by the gutter, and the width is the window’s to keep', () => {
     const setWatchSizes = vi.fn()
     seed({
@@ -361,7 +321,7 @@ describe('a teammate’s pane beside your own', () => {
       setWatchSizes
     })
     mount()
-    // jsdom has no layout, so the axis a drag divides has to be stated.
+    // jsdom has no layout; the drag axis is stated.
     const split = document.querySelector('.workspace-split') as HTMLElement
     Object.defineProperty(split, 'clientWidth', { get: () => 1000 })
     fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowLeft' })
@@ -371,9 +331,7 @@ describe('a teammate’s pane beside your own', () => {
     expect((sizes[0] ?? 0) + (sizes[1] ?? 0)).toBeCloseTo(1)
   })
 
-  // Every navigation in this area replaces what is under it. A watched pane
-  // that went with it would close its subscription and reopen it on the way
-  // back, which is the relay budget paid twice for a pane nobody closed.
+  // Navigating must not close and reopen a watched pane's subscription.
   it('stays where it is when the pane board takes the area', () => {
     openWorktreeWith([watch('priya', 'priya:t7')])
     act(() => {
@@ -383,10 +341,7 @@ describe('a teammate’s pane beside your own', () => {
     expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
   })
 
-  // The other navigation that takes the whole area, and the one most likely to
-  // be running for minutes at a time: a push streams its progress here while
-  // somebody watches a teammate work beside it. The setup panel is a cell of
-  // the same split for exactly that reason, rather than a layer over it.
+  // Teamwork setup is a cell of the same split, so a push's progress sits beside a watched pane.
   it('stays where it is when teamwork setup takes the area', () => {
     openWorktreeWith([watch('priya', 'priya:t7')])
     act(() => {
@@ -396,8 +351,6 @@ describe('a teammate’s pane beside your own', () => {
     expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
   })
 
-  // The window somebody is most likely to be watching a teammate from is the
-  // one with nothing of their own open.
   it('stays where it is with no worktree open at all', () => {
     seed({ projects: [project], watches: [watch('priya', 'priya:t7')] })
     mount()
@@ -406,11 +359,7 @@ describe('a teammate’s pane beside your own', () => {
   })
 })
 
-// The list under the welcome names each command the way the menu bar names it,
-// and it is generated from the same table, so a rebind or a rename in one
-// place cannot leave a stale word here. One wording per command — and no more
-// than three rows, because this is the one surface in the window that teaches
-// chords besides the menu bar, the palette and the help page.
+// Generated from the menu's table, so labels cannot go stale; at most three rows.
 describe('the welcome’s shortcut list and the menu bar use one set of words', () => {
   it('names every command exactly as the menu bar names it, with its chord', async () => {
     const { menuBarSpec } = await import('../menu/menuBar')
@@ -430,9 +379,7 @@ describe('the welcome’s shortcut list and the menu bar use one set of words', 
   })
 })
 
-// Under the shortcuts and quiet, because it is not what the window is for.
-// Through the one path anything here takes to the browser, so the main
-// process's answer about where a link may go is the answer here too.
+// Through the one browser path, so main's link policy applies.
 describe('the star', () => {
   it('opens the repository through the window’s one browser path', async () => {
     const { openInBrowser } = await import('../shell/openInBrowser')

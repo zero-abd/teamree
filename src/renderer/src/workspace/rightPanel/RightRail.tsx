@@ -1,19 +1,9 @@
-// The three icons that pick what the right panel shows, and the one that puts
-// it away.
-//
-// Drawn twice, and both are this component: across the top of the panel while
-// it is open, and down the window's right edge while it is closed. The closed
-// form is what keeps the panel findable — a panel that vanished entirely would
-// be reachable only by the chord, and the whole reason it has a files tab is
-// that somebody looked for one and did not find it.
+// The icons that pick the right panel's tab and the one that closes it; drawn atop the open panel and
+// down the right edge when closed, so the panel stays findable.
 
 import type { RightPanelTab } from './rightPanelState'
 
-/**
- * What the badge on Changes counts: everything a commit would have to deal
- * with. Ahead and behind are about the branch rather than the tree, so they
- * are the status bar's business, not this badge's.
- */
+/** What the Changes badge counts: what a commit would deal with; ahead/behind belong to the status bar. */
 export function changedCount(
   status: { staged: number; unstaged: number; untracked: number; conflicted: number } | undefined
 ): number {

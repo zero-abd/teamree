@@ -1,20 +1,8 @@
-// The refusals, which are the only part of releasing that has to be right.
-//
-// A release script that publishes correctly and refuses incorrectly is a
-// nuisance; one that refuses correctly and publishes incorrectly has put a file
-// in front of people. So what is tested here is every condition under which
-// `scripts/release.mjs` declines — and the two that would be invisible
-// afterwards: a tag that names a version the package does not carry, and a
-// commit nobody else has.
-//
-// These are pure functions over a plain object rather than tests that drive git
-// and gh, deliberately: the alternative is a suite that cuts releases.
+// Every condition under which `scripts/release.mjs` refuses, as pure functions over a plain object
+// rather than a suite that drives git and gh and cuts releases.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-// The release script is plain ESM because it is run by `npm run release` from a
-// checkout, before anything has been built. The directive below sits against
-// the specifier rather than against the statement because that is the line
-// TypeScript reports the missing declarations on.
+// Plain ESM run before any build; the directive sits on the specifier, where TypeScript reports it.
 import {
   GATES,
   STABLE_DMG_NAME,
@@ -71,9 +59,7 @@ describe('the tag and the version have to agree', () => {
     }
   })
 
-  // A candidate is a release of the version it is a candidate for, so demanding
-  // that package.json say `0.2.0-rc.1` would mean shipping a version string no
-  // release ever carries.
+  // A candidate releases its base version; package.json never carries `-rc.1`.
   it('accepts a pre-release of the version the package carries', () => {
     expect(tagAgreement('v0.2.0-rc.1', '0.2.0')).toBeNull()
     expect(tagAgreement('v0.3.0-rc.1', '0.2.0')).not.toBeNull()
@@ -97,10 +83,7 @@ describe('what stops a release before any of it runs', () => {
     expect(refusal).toContain('scratch.txt')
   })
 
-  // The one refusal about the page rather than about the build. A release whose
-  // notes nobody wrote looks, on the releases page, exactly like one whose notes
-  // somebody wrote — there is no gap in it to notice — so the absence has to be
-  // caught here or not at all.
+  // A release with no notes looks complete on the page, so the absence is caught here or not at all.
   it('refuses a version nothing describes, and names the file to write', () => {
     const refusals = preflightRefusals(ready({ version: '0.4.0', tag: 'v0.4.0', highlights: null }))
     expect(refusals.join()).toContain('docs/release-notes/0.4.0.md')
@@ -110,15 +93,12 @@ describe('what stops a release before any of it runs', () => {
     expect(preflightRefusals(ready({ relayInstalled: false })).join()).toContain('cd relay && npm ci')
   })
 
-  // Checked before the build and on a dry run too: it is the step most likely
-  // to fail and the cheapest to ask about.
+  // Checked before the build and on a dry run too.
   it('refuses when gh cannot authenticate', () => {
     expect(preflightRefusals(ready({ ghAuthenticated: false })).join()).toContain('gh auth login')
   })
 
-  // Two different failures, told apart: a signed-in maintainer whose remote is
-  // not GitHub was previously sent to `gh auth login`, which would not have
-  // helped.
+  // Two failures told apart: a non-GitHub remote is not a `gh auth login` problem.
   it('refuses, differently, when no GitHub repository can be worked out', () => {
     const refusals = preflightRefusals(ready({ repo: null }))
     expect(refusals.join()).toContain('GH_REPO=owner/name')
@@ -142,8 +122,7 @@ describe('what stops a release before any of it runs', () => {
     expect(preflightRefusals(ready({ remoteTag: OTHER })).join()).toContain('origin')
   })
 
-  // The one that would be found much later: a release tag on a commit that
-  // exists in this checkout and nowhere else.
+  // A tag on a commit that exists only in this checkout.
   it('refuses a HEAD that is not on origin', () => {
     expect(preflightRefusals(ready({ remoteHeads: [OTHER] })).join()).toContain('not the tip of any branch on origin')
   })
@@ -173,8 +152,7 @@ describe('the command line', () => {
 })
 
 describe('the gates', () => {
-  // Named rather than counted, so that quietly dropping one is a failing test
-  // rather than a shorter run nobody notices.
+  // Named, not counted, so dropping one fails.
   it('runs every check the release is meant to have passed', () => {
     expect(GATES.map((gate: { name: string }) => gate.name)).toEqual([
       'typecheck',
@@ -199,20 +177,14 @@ describe('the gates', () => {
   })
 })
 
-// The version in package.json is the only source of truth for what is being
-// released, and this is the one thing that has to move with it. Checked in the
-// suite rather than only at release time so that the bump and the notes land in
-// the same change: `npm run release` would refuse a version nothing describes,
-// but it would refuse it on a Mac, minutes into a sequence, to somebody who
-// thought they were cutting a release.
+// The version's notes must land with the bump, not be discovered minutes into a release on a Mac.
 describe('every version this package has been is described', () => {
   const version = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version as string
 
   it(`has notes for ${version} at ${highlightsPath(version)}`, () => {
     const highlights = readHighlights(version)
     expect(highlights, `write ${highlightsPath(version)}`).not.toBeNull()
-    // Long enough to be an account of something. A file holding a heading and
-    // nothing under it would satisfy "not null" and tell a downloader nothing.
+    // Long enough to describe something; a bare heading would pass "not null".
     expect((highlights as string).length).toBeGreaterThan(200)
   })
 
@@ -229,8 +201,7 @@ describe('the notes the release carries', () => {
     expect(checksums).toBe(`${'a'.repeat(64)}  teamree-0.1.0.dmg`)
   })
 
-  // The notes are generated from the signature on the bundle that is about to
-  // be published, so a release cannot inherit the last one's paragraph.
+  // Generated from the bundle's signature, so a release cannot inherit the last one's paragraph.
   it('explains Gatekeeper when the build is ad-hoc signed', () => {
     const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'adhoc' })
     expect(notes).toContain('Nothing here is signed')
@@ -238,15 +209,8 @@ describe('the notes the release carries', () => {
     expect(notes).toContain(checksums)
   })
 
-  // The defect this pins: the notes told a downloader macOS would say teamree
-  // "cannot be opened because the developer cannot be verified". That is the
-  // macOS 10.15-14 string. It has not existed since macOS 15, and both
-  // `docs/install.md` and `site/README.md` already said so in as many words —
-  // site/README.md going as far as "is not used anywhere on the page", which
-  // was true of the page and false of the text with the widest readership
-  // there is. This body is the GitHub release description *and* what
-  // `updateNotice` renders inside the window for somebody still on the old
-  // build, so it is the last thing most people read before they double-click.
+  // The notes quoted the macOS 10.15-14 dialog, gone since macOS 15. This body is also what the
+  // in-window update card shows, so it is the last thing most people read before double-clicking.
   it('quotes the dialog macOS 15 and later actually shows, not the one it retired', () => {
     const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'adhoc' })
     expect(notes).not.toContain('cannot be opened because the developer cannot be verified')
@@ -254,11 +218,7 @@ describe('the notes the release carries', () => {
     expect(notes).toContain('Apple could not verify')
   })
 
-  // The single most expensive sentence to omit. **Move to Trash** is the
-  // prominent button in that dialog and it deletes the download; a careful
-  // reader reaches for it. `docs/install.md` and the site both carry the
-  // warning, and sending somebody to a second document for it is sending them
-  // there after they have already pressed something.
+  // Move to Trash is the prominent button and deletes the download; the warning must be in the body.
   it('tells the reader not to press the button that deletes the download', () => {
     const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'adhoc' })
     expect(notes).toContain('Do not press Move to Trash')
@@ -266,9 +226,7 @@ describe('the notes the release carries', () => {
     expect(notes).toContain('Done')
   })
 
-  // Control-click > Open was the way through for macOS 10.15-14 and macOS 15
-  // removed it. Notes that implied there was a button in the dialog would send
-  // a reader hunting for one that is not there.
+  // Control-click > Open was removed in macOS 15.
   it('says there is no way through the dialog itself, so nobody hunts for one', () => {
     const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'adhoc' })
     expect(notes).toContain('There is no "Open Anyway" button in that dialog')
@@ -280,10 +238,7 @@ describe('the notes the release carries', () => {
     expect(notes).not.toContain('xattr')
   })
 
-  // Above the signing section, because the update card in the window shows this
-  // body as text and cuts it at a length: what is at the top is what somebody
-  // running the old build reads, and the Gatekeeper paragraph is the same in
-  // every release and in docs/install.md besides.
+  // Above the signing section: the update card cuts the body at a length.
   it('puts what changed at the top, before the paragraph every release shares', () => {
     const notes = releaseNotes({
       tag: 'v0.2.0',
@@ -296,8 +251,7 @@ describe('the notes the release carries', () => {
     expect(notes.indexOf('What changed since 0.1.2')).toBeLessThan(notes.indexOf('Nothing here is signed'))
   })
 
-  // scripts/verify-quarantine-advice.mjs calls it this way, to read the
-  // quarantine command back out of a body it does not care about the rest of.
+  // How verify-quarantine-advice.mjs reads the command back out of the body.
   it('is still a whole set of notes when no highlights are handed to it', () => {
     const notes = releaseNotes({ tag: 'v0.1.0', repo: 'owner/teamree', checksums, kind: 'adhoc' })
     expect(notes).toContain('xattr -dr com.apple.quarantine /Applications/teamree.app')
@@ -345,11 +299,7 @@ describe('what it says before it does anything', () => {
   })
 })
 
-// The link on the download button points at this name and nothing else, so the
-// property that matters is not what it is called but that what it is called
-// cannot go stale. `releases/latest/download/<name>` finds the newest release
-// and then looks for that exact filename inside it, which is why a name with a
-// version in it breaks on the day the next version ships.
+// The download link's name must not go stale: `releases/latest/download/<name>` needs a version-free name.
 describe('the name the download button can keep pointing at', () => {
   it('carries no version, so a newer release cannot orphan the link', () => {
     expect(STABLE_DMG_NAME).not.toMatch(/\d+\.\d+\.\d+/)
@@ -366,17 +316,8 @@ describe('the name the download button can keep pointing at', () => {
     expect(lines[1]).toContain(STABLE_DMG_NAME)
   })
 
-  // The defect this pins: three releases had been published, the website was
-  // rendering a live Download for macOS button at this exact URL, and the
-  // README — the page anybody arriving at the repository reads first — still
-  // opened its Install section with "Coming soon. Packaged macOS builds are not
-  // published yet." A front door that says there is nothing to download is a
-  // worse failure than a broken link, because nobody goes looking for the file
-  // it did not mention.
-  //
-  // Asserted as the presence of the link rather than the absence of a sentence,
-  // because there is one URL that is correct and an unbounded number of ways to
-  // say the wrong thing about it.
+  // The README said "Coming soon" three releases after the button went live. Asserted as the link's
+  // presence, since there are unbounded wrong sentences and one right URL.
   it('is the link the README and the install document both hand a reader', () => {
     const url = `releases/latest/download/${STABLE_DMG_NAME}`
     for (const document of ['README.md', 'docs/install.md']) {

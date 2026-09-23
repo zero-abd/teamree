@@ -1,21 +1,8 @@
 /** @vitest-environment jsdom */
 
-// The settings page, tested for the promises it makes rather than its markup.
-//
-// Four of these are about the page being honest instead of merely present. It
-// must say that an environment variable is beating the repository, because a
-// relay block that showed the winning URL and nothing else is how somebody ends
-// up editing a file that is being ignored. It must not offer a relay field at
-// all, because the teamwork page is where a relay is set and pushed, and a
-// second field here would let somebody do a third of that and stop. It must say
-// that a development build has nothing to compare itself against, rather than
-// offering a check that can only come back empty. And clearing a start point
-// must pass null rather than an empty string, because the store treats those
-// differently on purpose.
-//
-// The other two are about the page being usable: a control that does not write
-// through leaves a page that looks identical and does nothing, and a view with
-// no Escape is a view people hunt for a way out of.
+// The settings page's promises: say when an env var beats the repository's relay, offer no relay field,
+// say a dev build has nothing to check against, clear a start point with null, write through, and
+// close on Escape.
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -41,12 +28,7 @@ const INITIAL = useWorkspaceStore.getState()
 const modifier = resolvePlatformModifier('darwin')
 
 const project: Project = { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' }
-/**
- * A teammate's held keystrokes, waiting on this machine's owner to answer.
- *
- * Not in `dialog`: nobody in this window opened it, and it is the one modal
- * here that refuses to be dismissed. See `dialogs/modalLayer.ts`.
- */
+/** A teammate's held keystrokes; not in `dialog` and not dismissable (`dialogs/modalLayer.ts`). */
 const asking: PaneConsent = {
   projectId: 'p1',
   requests: [
@@ -197,8 +179,7 @@ describe('the page itself', () => {
     expect(loadUpdate).toHaveBeenCalled()
   })
 
-  // Reached from the strip's + menu as "Agent settings…": the page opens with
-  // that section in view rather than at the top with the answer below the fold.
+  // Opened at that section from the strip's + menu, not at the top.
   it('scrolls to the section it was opened at, once, and forgets it', () => {
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView
@@ -222,8 +203,7 @@ describe('the page itself', () => {
     expect(toggleSettings).toHaveBeenCalledTimes(1)
   })
 
-  // The appearance editor this page's own row opens is a modal, and one press
-  // taking both away would take more than was asked for.
+  // The appearance editor is a modal; one press must not close both.
   it('stands aside from Escape while a dialog is on top of it', () => {
     seed({ dialog: { kind: 'appearance' } })
     render(<SettingsView modifier={modifier} />)
@@ -231,10 +211,7 @@ describe('the page itself', () => {
     expect(toggleSettings).not.toHaveBeenCalled()
   })
 
-  // The half of "something modal is on screen" that lives outside `dialog`.
-  // A question raised by another machine cannot be dismissed, so a page closing
-  // underneath it leaves the reader behind a scrim with no way back until they
-  // have answered something they may not have seen arrive.
+  // A remote question outside `dialog`: the page must not close under its scrim.
   it('stands aside from Escape for a question nobody in this window opened', () => {
     seed({ consent: { p1: asking } })
     render(<SettingsView modifier={modifier} />)
@@ -249,9 +226,7 @@ describe('the page itself', () => {
   })
 })
 
-// One line of state and a button. The section led with four lines of prose
-// about where `/usr/local/bin/teamree` pointed, over one button; the line says
-// where it points and the button says what it does.
+// One line of state and a button.
 describe('teamree on your PATH', () => {
   const cliSection = (): HTMLElement => screen.getByRole('region', { name: 'teamree on your PATH' })
 
@@ -337,17 +312,14 @@ describe('panes', () => {
 })
 
 describe('appearance', () => {
-  // One row, and it leads somewhere. A second set of swatches here would be a
-  // second answer to one question.
+  // One row that leads to the editor, no second set of swatches.
   it('sends the reader to the editor that already exists, and edits nothing itself', () => {
     render(<SettingsView modifier={modifier} />)
     fireEvent.click(screen.getByRole('button', { name: 'Open the appearance panel' }))
     expect(openDialog).toHaveBeenCalledWith({ kind: 'appearance' })
 
     const section = screen.getByRole('heading', { name: 'Appearance' }).parentElement as HTMLElement
-    // No chord on the button: ⌘, opens the page this button is on, and the
-    // theme editor is reached from here, from the View menu and from the
-    // palette. An empty tooltip would be worse than none.
+    // No chord (⌘, is this page) and no empty tooltip.
     expect(screen.getByRole('button', { name: 'Open the appearance panel' }).getAttribute('title')).toBeNull()
     expect(section.textContent).not.toContain('There is no second copy')
     // No swatch, no colour field, nothing that writes an appearance from here.
@@ -397,8 +369,7 @@ describe('what a new worktree carries over from the primary checkout', () => {
     expect(setProjectPaths).toHaveBeenCalledWith('p1', { copiedPaths: ['.env', '.env.local'] })
   })
 
-  // An empty field is how a list is cleared, and the store turns the empty
-  // array into an absent field. Nothing is written for a field nobody edited.
+  // An empty field clears the list (the store drops the field); untouched fields write nothing.
   it('writes an empty list when the field is emptied, and nothing when it is not', () => {
     seed({ projects: [{ ...project, linkedPaths: ['node_modules'] }] })
     render(<SettingsView modifier={modifier} />)
@@ -453,9 +424,7 @@ describe('the start point a new task is offered first', () => {
     expect(setStartPointDefault).toHaveBeenCalledWith('p1', 'release/2026')
   })
 
-  // Null, not the empty string: `withStartPoint` removes the entry for null and
-  // an empty string would be a second spelling of "use the base ref" that
-  // nothing else checks for.
+  // Null, not '': `withStartPoint` removes the entry for null.
   it('passes null when the preference is cleared', () => {
     seed({ startPointDefaults: { p1: 'develop' } })
     render(<SettingsView modifier={modifier} />)
@@ -477,10 +446,7 @@ describe('the start point a new task is offered first', () => {
     expect(screen.getByRole('button', { name: 'Use origin/main' }).hasAttribute('disabled')).toBe(true)
   })
 
-  // The buttons above it name the ref they would use, which is the whole of
-  // what this preference does; the paragraph that used to sit under them said
-  // it again and then reassured the reader that the repository's own base ref
-  // was untouched.
+  // The buttons name the ref they would use; no paragraph under them.
   it('captions the start point with nothing at all', () => {
     render(<SettingsView modifier={modifier} />)
     expect(screen.queryByText(/What the New task dialog offers first/)).toBeNull()
@@ -541,11 +507,7 @@ describe('the relay a project meets on', () => {
   })
 })
 
-// The two per-machine agent preferences, and the one thing on this page that
-// is neither a label nor a control: the line a pane will run. A field holding
-// a fragment of a command line cannot be checked by looking at it — where the
-// fragment lands is the whole question — so the page composes the line with
-// the same function the runtime composes it with and shows the result.
+// The two per-machine agent preferences, and the command line composed by the runtime's own function.
 describe('the agent you always use', () => {
   it('offers the installed agents, and first-found as the way to mean no preference', () => {
     seed({ agents: [claude, codex] })
@@ -563,9 +525,7 @@ describe('the agent you always use', () => {
     render(<SettingsView modifier={modifier} />)
 
     const section = screen.getByRole('heading', { name: 'Agents' }).parentElement as HTMLElement
-    // One line per field, in the fields' own order, so the line under a field
-    // is never a line some other field explains. The agent nobody has typed
-    // anything for shows the command as it stands.
+    // One line per field in field order; an untouched agent shows the command as it stands.
     expect([...section.querySelectorAll('code')].map((node) => node.textContent)).toEqual([
       'claude --model opus',
       'codex'
@@ -584,8 +544,7 @@ describe('the agent you always use', () => {
     expect(setAgentArgs).toHaveBeenCalledWith('claude', '--permission-mode plan')
   })
 
-  // Null rather than the empty string, for the same reason the start point
-  // above passes null: the store treats the two differently on purpose.
+  // Null, as with the start point above.
   it('clears an agent’s arguments rather than storing an empty string', () => {
     seed({ agents: [claude], agentArgs: { claude: '--model opus' } })
     render(<SettingsView modifier={modifier} />)
