@@ -503,17 +503,22 @@ async function checkWorktreeSurfaces(ask) {
 
   // The `+` opens a menu rather than a pane: a terminal first, then one row
   // per agent the runtime found on this machine — whatever `agent.list` says,
-  // so the check reads the same list — then the way to the agent settings.
+  // so the check reads the same list, by the kind on each row's glyph — then
+  // the way to the agent settings.
   const beforeStrip = await tabCount()
   if (!(await pressLabel('New pane'))) {
     failures.push('the pane strip has no New pane control, so no pointer can open a pane')
     return
   }
   const menuRows = () =>
-    ask(`[...document.querySelectorAll('[role="menu"] .row-menu__label')].map((node) => node.textContent)`)
+    ask(
+      `[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(
+         (item) => item.querySelector('[data-agent]')?.dataset.agent ?? item.querySelector('.row-menu__label')?.textContent
+       )`
+    )
   await waitFor(async () => ((await menuRows()) ?? []).length > 0, 'pressing + on the pane strip opened no menu')
   const agents = (await call('agent.list', {})).result ?? []
-  const expectedRows = ['New terminal', 'New markdown', ...agents.map((agent) => agent.command), 'Agent settings…']
+  const expectedRows = ['New terminal', 'New markdown', ...agents.map((agent) => agent.kind), 'Agent settings…']
   const rows = await menuRows()
   if (JSON.stringify(rows) !== JSON.stringify(expectedRows)) {
     failures.push(`the + menu lists ${JSON.stringify(rows)}, not ${JSON.stringify(expectedRows)}`)

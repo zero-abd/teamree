@@ -8,7 +8,7 @@ export function AgentGlyph({ kind }: { kind: AgentKind }): React.JSX.Element {
   const harness = HARNESSES[kind] as Harness | undefined
   const name = harnessName(kind)
   return (
-    <svg className="agent-glyph" viewBox="0 0 24 24" role="img" aria-label={name}>
+    <svg className="agent-glyph" viewBox="0 0 24 24" role="img" aria-label={name} data-agent={kind}>
       <title>{name}</title>
       <path d={harness?.path ?? NEUTRAL_PATH} fillRule={harness?.evenOdd === true ? 'evenodd' : undefined} />
     </svg>
