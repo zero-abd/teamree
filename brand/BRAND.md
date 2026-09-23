@@ -143,14 +143,14 @@ The mark:
 
 Header. At scroll 0: full width, flush, 60px tall, transparent over the
 vignette: lockup on the left, `Worktrees · Panes · Teamwork · Install` and a
-`GitHub` button on the right. Past 80px of scroll it becomes a fixed, centred
-pill: 48px tall, at most 760px wide, `--tile` at 80% over `backdrop-filter:
-blur(16px)`, one `--line` border, radius 999px, holding the same lockup, links
-and button. The change is one transition on width, height, top, radius and
-background, on a `linear()` spring (or 320ms `cubic-bezier(.2,0,0,1)` where
-`linear()` is unsupported), driven by a scroll listener so a reversed scroll
-reverses it mid-flight. Under `prefers-reduced-motion` it switches with no
-transition. On phones both states hold the lockup and a `Menu` disclosure; the
+`GitHub` button on the right. Past 32px of scroll it becomes a fixed, centred
+pill (back below 8px): 48px tall, 12px from the top, at most 760px wide, `--tile`
+at 80% over `backdrop-filter: blur(16px)`, one `--line` border, radius 999px,
+holding the same lockup, links and button. The row never resizes: the lockup
+and links translate inward while the pill fades in and narrows from the row's
+width with its edges riding on them, all in one 640ms `cubic-bezier(.2,.8,.2,1)`
+that a reversed scroll reverses mid-flight. Under `prefers-reduced-motion` the
+contents switch at once and the pill cross-fades in 200ms. On phones both states hold the lockup and a `Menu` disclosure; the
 pill is 48px tall and spans the width less 16px each side.
 
 Footer. One row: the lockup on its tile at the left; `Source · Releases · MIT ·
