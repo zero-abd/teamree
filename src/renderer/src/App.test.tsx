@@ -94,6 +94,43 @@ describe('the notice layer', () => {
     fireEvent.click(buttons[1] as HTMLElement)
     expect(dismissNotice).toHaveBeenCalledExactlyOnceWith(2)
   })
+
+  // A push that made a review possible says so where the push result is said,
+  // and the button is the whole offer: a verb, and the address behind it.
+  it('offers the one thing a notice can do, and opens it beside the app', () => {
+    const url = 'https://github.com/o/r/compare/main...work?expand=1'
+    const opened: Array<string | undefined> = []
+    vi.stubGlobal(
+      'open',
+      vi.fn((target?: string | URL) => {
+        opened.push(typeof target === 'string' ? target : target?.toString())
+        return null
+      })
+    )
+    seed({
+      notices: [
+        {
+          id: 1,
+          text: 'Pushed work to origin · now tracking origin/work.',
+          tone: 'info',
+          action: { label: 'Open review', url }
+        }
+      ]
+    })
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open review' }))
+    // `window.open`, which is the window's one way to the browser — the main
+    // process decides what is handed to the OS, once, in windowNavigation.ts.
+    expect(opened).toEqual([url])
+    vi.unstubAllGlobals()
+  })
+
+  it('offers nothing to do when the notice carries no action', () => {
+    seed({ notices: [{ id: 1, text: 'Pushed work to origin.', tone: 'info' }] })
+    render(<App />)
+    expect(screen.queryByRole('button', { name: 'Open review' })).toBeNull()
+  })
 })
 
 describe('which dialog is on screen', () => {

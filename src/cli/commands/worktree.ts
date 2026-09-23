@@ -303,7 +303,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
     summary: "Send a worktree's branch to its remote.",
     details:
       'Sets the upstream on the first push. There is no force push. Uncommitted work is reported, not ' +
-      'blocked, and stays behind.',
+      'blocked, and stays behind. Prints a review URL when the remote is a forge it recognises.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     flags: [
       { name: 'remote', kind: 'string', placeholder: '<name>', description: 'Where to push. Defaults to origin.' }
@@ -326,6 +326,9 @@ export const worktreeCommands: readonly CommandSpec[] = [
       if (result.uncommitted > 0) {
         lines.push(`${result.uncommitted} uncommitted change${result.uncommitted === 1 ? '' : 's'} stayed behind.`)
       }
+      // On its own line and nothing else on it, because the next thing that
+      // happens to it is a click or a copy.
+      if (result.reviewUrl !== undefined) lines.push(result.reviewUrl)
       return { data: result, text: lines.join('\n') }
     }
   },

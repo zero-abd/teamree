@@ -20,6 +20,7 @@ import { firstQuestion } from './dialogs/modalLayer'
 import { RemoteKeystrokesDialog } from './dialogs/RemoteKeystrokesDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
+import { openInBrowser } from './shell/openInBrowser'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
 import { TitleBar } from './shell/TitleBar'
@@ -119,6 +120,18 @@ export function App(): React.JSX.Element {
           {notices.map((notice) => (
             <div className={`notice notice--${notice.tone}`} key={notice.id}>
               <span className="notice__text">{notice.text}</span>
+              {notice.action === undefined ? null : (
+                // The verb is the whole button. What it would open is in the
+                // sentence beside it, and a notice is not the place for a
+                // second sentence explaining the first.
+                <button
+                  type="button"
+                  className="notice__action"
+                  onClick={() => openInBrowser(notice.action?.url ?? '')}
+                >
+                  {notice.action.label}
+                </button>
+              )}
               <button
                 type="button"
                 className="notice__close"

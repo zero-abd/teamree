@@ -37,6 +37,7 @@ import {
   type PlatformModifier
 } from '../keyboard/platformModifier'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
+import { openInBrowser } from '../shell/openInBrowser'
 import { sinceLabel, typedBy, watchedBy } from '../sidebar/agentRows'
 import { hasBeenTyped, paneAttention, typingNow, type PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
@@ -489,21 +490,10 @@ const INTERRUPT = '\u0003'
 /**
  * Opens a link a pane printed, in the browser and never in this window.
  *
- * `window.open` and deliberately not a preload channel of its own. Whether a
- * URL is something this machine hands to the OS is already decided, once, in
- * `src/main/windowNavigation.ts`, and that decision is reached through the
- * window-open handler — which sees this call, opens the address beside the app,
- * and denies the window. A channel would have been a second answer to the same
- * question in a second file, and the bridge is an enumeration worth keeping
- * short (`docs/renderer-boundary.md`).
- *
- * So there is no scheme check here. Not an omission: a check on this side would
- * be that second answer, quietly disagreeing with the real one the first time
- * either moved.
+ * The same call every other link in the window makes — see
+ * `src/renderer/src/shell/openInBrowser.ts` for why there is exactly one of it.
  */
-export function openPaneLink(url: string): void {
-  window.open(url, '_blank', 'noopener')
-}
+export const openPaneLink = openInBrowser
 
 /**
  * What a click on an OSC 8 hyperlink does.

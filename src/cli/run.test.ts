@@ -388,6 +388,55 @@ describe('text output', () => {
   })
 })
 
+describe('a push that opened a review', () => {
+  const pushed =
+    (extra: Record<string, unknown> = {}): StubHandler =>
+    (method, params) => {
+      if (method === 'project.list') return PROJECTS
+      if (method === 'worktree.list') return WORKTREES
+      if (method === 'worktree.push') {
+        void params
+        return {
+          worktreeId: 'wt_1',
+          remote: 'origin',
+          branch: 'feature/fix-login',
+          alreadyUpToDate: false,
+          upstream: 'origin/feature/fix-login',
+          setUpstream: true,
+          uncommitted: 0,
+          pushedAt: 1700000000000,
+          ...extra
+        }
+      }
+      throw new StubError('unknown_method', method)
+    }
+
+  const REVIEW = 'https://github.com/o/r/compare/main...feature%2Ffix-login?expand=1'
+
+  // On a line of its own and nothing else on it: the next thing that happens to
+  // a URL in a terminal is a click or a copy, and both want the whole line.
+  it('prints the review URL on its own line', async () => {
+    const cli = await harness(pushed({ reviewUrl: REVIEW }))
+    const result = await cli.run(['worktree', 'push', 'fix-login'])
+    expect(result.out.split('\n')).toContain(REVIEW)
+  })
+
+  it('carries it in --json, where a script can read it', async () => {
+    const cli = await harness(pushed({ reviewUrl: REVIEW }))
+    const document = soleJsonDocument((await cli.run(['worktree', 'push', 'fix-login', '--json'])).out)
+    expect((document['data'] as { reviewUrl?: string }).reviewUrl).toBe(REVIEW)
+  })
+
+  // A remote teamree cannot name is not an error and not a guess; it is a push
+  // with nothing extra said about it.
+  it('says nothing extra when the remote is not a forge it knows', async () => {
+    const cli = await harness(pushed())
+    const result = await cli.run(['worktree', 'push', 'fix-login'])
+    expect(result.out).toContain('Pushed feature/fix-login to origin.')
+    expect(result.out).not.toContain('http')
+  })
+})
+
 describe('selectors and flags reach the runtime', () => {
   it('resolves a worktree name to its id', async () => {
     const cli = await harness()
