@@ -97,6 +97,7 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'next-worktree': { section: 'view' },
   'open-dashboard': { section: 'view' },
   'toggle-sidebar': { section: 'view' },
+  'toggle-right-panel': { section: 'view' },
   // The theme editor, which used to be the thing `Settings…` opened. It is a
   // view of the window rather than a setting of the machine, and this is the
   // menu somebody looks in for how the window looks.

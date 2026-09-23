@@ -392,6 +392,7 @@ async function checkMenuBar(ask) {
     // now has an item of its own under View and no chord at all.
     ['Settings\u2026', 'CommandOrControl+,'],
     ['All panes', 'CommandOrControl+E'],
+    ['Toggle right panel', 'CommandOrControl+J'],
     // The four moves. Worth reading off a running app rather than trusting the
     // unit tests, because these are the ones whose chords are not characters:
     // the arrows and Return are spelled for Electron's parser rather than for
@@ -916,6 +917,47 @@ async function checkPatch(ask, worktreeId) {
   // any other in the window, and every one of them is a palette token used on a
   // ground it was not designed for until this says otherwise.
   await checkContrast(ask, 'the patch')
+
+  await checkFilesTab(ask)
+}
+
+/**
+ * That the files tab lists the checkout the runtime made, with the letter the
+ * changes tab printed a moment ago beside the file the CLI changed — `M`,
+ * because the fixture commits `note.ts` before the CLI edits it.
+ *
+ * The tree is read one directory per call through `worktree.files`, which is
+ * the seam this proves: a real directory, listed by the runtime, drawn by the
+ * window — and git's verdict on the file, read off the same list the patch
+ * came from, on the same row.
+ */
+async function checkFilesTab(ask) {
+  const pressed = await ask(
+    `(() => {
+       const tab = document.querySelector('[role="tab"][aria-label^="Files"]')
+       if (!tab) return false
+       tab.click()
+       return true
+     })()`
+  )
+  if (pressed !== true) {
+    failures.push('the right panel offers no Files tab')
+    return
+  }
+
+  await waitFor(
+    () =>
+      ask(
+        `[...document.querySelectorAll('[role="tree"] .tree__row')].some(
+           (row) => row.textContent?.startsWith('note.ts') && row.querySelector('.tree__status')?.textContent === 'M'
+         )`
+      ),
+    'the files tab never listed note.ts with the modified mark beside it'
+  )
+
+  // Back to the changes tab, which is where the checks after this one expect
+  // the panel to be.
+  await ask(`document.querySelector('[role="tab"][aria-label^="Changes"]')?.click()`)
 }
 
 /**

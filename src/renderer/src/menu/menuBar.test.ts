@@ -30,7 +30,6 @@ const EMPTY: CommandState = {
   watches: [],
   focusedWatchId: null,
   statuses: {},
-  changesOpen: false,
   pushing: false
 }
 
@@ -136,6 +135,7 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'next-worktree',
       'open-dashboard',
       'toggle-sidebar',
+      'toggle-right-panel',
       'open-appearance'
     ])
     expect(sectionOrder('window')).toEqual([
@@ -184,6 +184,7 @@ describe('what the menu bar says can be done', () => {
       'commit-changes': false,
       'push-worktree': false,
       'toggle-sidebar': true,
+      'toggle-right-panel': false,
       'open-palette': true,
       'open-dashboard': true,
       'open-appearance': true,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorktreeLog } from '@shared/entities'
-import { directoryOf, draftFor, emptyChangesLabel, fileNameOf, withDraft } from './ChangesPanel'
+import { directoryOf, draftFor, emptyChangesLabel, fileNameOf, withDraft } from './ChangesTab'
+import { changedCount } from './RightRail'
 
 describe('emptyChangesLabel', () => {
   const log = (partial: Partial<WorktreeLog>): WorktreeLog => ({

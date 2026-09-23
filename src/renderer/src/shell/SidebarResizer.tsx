@@ -1,52 +1,23 @@
-// The sidebar's edge. It is a real separator widget: draggable with a pointer,
-// nudgeable with the arrow keys, and reachable from the keyboard alone.
+// The sidebar's edge: `EdgeResizer`, bound to the sidebar's width.
 
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { EdgeResizer } from './EdgeResizer'
 import { SIDEBAR_MAX_PX, SIDEBAR_MIN_PX } from './sidebarWidth'
-import { usePointerDrag } from '../panes/usePointerDrag'
-
-const NUDGE_PX = 16
 
 export function SidebarResizer(): React.JSX.Element {
   const width = useWorkspaceStore((state) => state.sidebarWidth)
   const setSidebarWidth = useWorkspaceStore((state) => state.setSidebarWidth)
-  const startDrag = usePointerDrag()
-
-  const beginDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
-    const startX = event.clientX
-    const startWidth = width
-
-    const move = (moveEvent: PointerEvent): void => {
-      setSidebarWidth(startWidth + (moveEvent.clientX - startX))
-    }
-    startDrag(event, 'col-resize', move, (upEvent) => {
-      if (upEvent) move(upEvent)
-    })
-  }
-
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault()
-      setSidebarWidth(width - NUDGE_PX)
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault()
-      setSidebarWidth(width + NUDGE_PX)
-    }
-  }
 
   return (
-    <div
+    <EdgeResizer
       className="shell__resizer"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize sidebar"
-      aria-valuenow={width}
-      aria-valuemin={SIDEBAR_MIN_PX}
-      aria-valuemax={SIDEBAR_MAX_PX}
-      tabIndex={0}
-      onPointerDown={beginDrag}
-      onKeyDown={onKeyDown}
-      onDoubleClick={() => setSidebarWidth(SIDEBAR_MIN_PX)}
+      label="Resize sidebar"
+      width={width}
+      min={SIDEBAR_MIN_PX}
+      max={SIDEBAR_MAX_PX}
+      onWidth={setSidebarWidth}
+      grows="rightward"
+      resetTo={SIDEBAR_MIN_PX}
     />
   )
 }

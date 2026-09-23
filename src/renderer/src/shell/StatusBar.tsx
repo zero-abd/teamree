@@ -29,7 +29,9 @@ export function StatusBar({ modifier }: { modifier: PlatformModifier }): React.J
     state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
   )
   const totalTerminals = useWorkspaceStore((state) => Object.keys(state.terminals).length)
-  const changesOpen = useWorkspaceStore((state) => state.changesOpen)
+  // Pressed while the changes tab is what the right panel shows: that is the
+  // one state the click below closes rather than opens.
+  const changesOpen = useWorkspaceStore((state) => state.rightPanelOpen && state.rightPanelTab === 'changes')
   const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
 
   const paneCount = collectTerminalIds(layout?.root ?? null).length

@@ -23,7 +23,6 @@ const EMPTY: CommandState = {
   watches: [],
   focusedWatchId: null,
   statuses: {},
-  changesOpen: false,
   pushing: false
 }
 
@@ -100,12 +99,13 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     stepWorktree: vi.fn(),
     openPaneSearch: vi.fn(),
     toggleSidebar: vi.fn(),
+    toggleRightPanel: vi.fn(),
     toggleDashboard: vi.fn(),
     toggleHelp: vi.fn(),
     openDialog: vi.fn(),
     closeDialog: vi.fn(),
     toggleSettings: vi.fn(),
-    toggleChanges: vi.fn(),
+    showRightPanelTab: vi.fn(),
     pushActiveWorktree: vi.fn(async () => {})
   } as unknown as CommandActions & Record<string, ReturnType<typeof vi.fn>>
 }
@@ -217,6 +217,16 @@ describe('what a window can be asked to do', () => {
   })
 })
 
+describe('the right panel', () => {
+  // The panel shows one worktree's files, changes and panes, so with no
+  // worktree open there is nothing for it to show and the item is grey.
+  it('can be toggled only with a worktree open', () => {
+    expect(isCommandAvailable('toggle-right-panel', EMPTY)).toBe(false)
+    expect(isCommandAvailable('toggle-right-panel', { ...WORKING, layouts: {} })).toBe(true)
+    expect(isCommandAvailable('toggle-right-panel', WORKING)).toBe(true)
+  })
+})
+
 describe('running a command', () => {
   it('does what each of them says', () => {
     const cases: Array<[WorkspaceCommand, string, unknown[]]> = [
@@ -226,6 +236,7 @@ describe('running a command', () => {
       ['new-terminal', 'createTerminal', ['w1']],
       ['new-worktree', 'openDialog', [{ kind: 'new-task', projectId: 'p1' }]],
       ['toggle-sidebar', 'toggleSidebar', []],
+      ['toggle-right-panel', 'toggleRightPanel', []],
       ['focus-next-pane', 'focusNextPane', []],
       ['focus-previous-pane', 'focusPreviousPane', []],
       ['expand-pane', 'toggleExpandedPane', []],
@@ -331,15 +342,13 @@ describe('the commands that were in no menu', () => {
     runWorkspaceCommand('push-worktree' as WorkspaceCommand, pushing)
     expect(pushing.pushActiveWorktree).toHaveBeenCalledTimes(1)
 
-    // Commit needs a message, and the message box is in the changes panel — so
-    // the command opens it. Already open, it leaves it open rather than
-    // toggling the panel shut under somebody who asked to commit.
+    // Commit needs a message, and the message box is on the changes tab — so
+    // the command shows that tab. Shown rather than toggled: with the tab
+    // already up, this leaves it up rather than putting the panel away under
+    // somebody who asked to commit.
     const changes = workspace(DIRTY)
     runWorkspaceCommand('commit-changes' as WorkspaceCommand, changes)
-    expect(changes.toggleChanges).toHaveBeenCalledTimes(1)
-
-    const open = workspace({ ...DIRTY, changesOpen: true } as CommandState)
-    runWorkspaceCommand('commit-changes' as WorkspaceCommand, open)
-    expect(open.toggleChanges).not.toHaveBeenCalled()
+    expect(changes.showRightPanelTab).toHaveBeenCalledExactlyOnceWith('changes')
+    expect(changes.toggleRightPanel).not.toHaveBeenCalled()
   })
 })

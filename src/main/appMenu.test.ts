@@ -97,7 +97,6 @@ const EMPTY: CommandState = {
   watches: [],
   focusedWatchId: null,
   statuses: {},
-  changesOpen: false,
   pushing: false
 }
 

@@ -32,6 +32,15 @@ export function paneAttention(byProject: Readonly<Record<string, PaneWatchers>>,
   return NO_ATTENTION
 }
 
+/** What everybody else is doing to each pane of one project, keyed by terminal id. */
+export function attentionByPane(watchers: PaneWatchers | undefined): Record<string, PaneAttention> {
+  const byPane: Record<string, PaneAttention> = {}
+  for (const pane of watchers?.panes ?? []) {
+    byPane[pane.terminalId] = { watchers: pane.watchers, typists: pane.typists, muted: pane.muted }
+  }
+  return byPane
+}
+
 /** Whoever's last keystroke is recent enough to call them still at the keyboard. */
 export function typingNow(typists: readonly PaneTypist[], now: number): PaneTypist[] {
   return typists.filter((typist) => now - typist.at <= TYPING_WINDOW_MS)

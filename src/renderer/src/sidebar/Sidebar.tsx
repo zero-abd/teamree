@@ -18,9 +18,9 @@
 // ends up with two answers to "where is it".
 
 import { useEffect, useMemo } from 'react'
-import { teammatesHeard, type PaneWatchers } from '@shared/entities'
+import { teammatesHeard } from '@shared/entities'
 import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
-import type { PaneAttention } from '../state/paneAttention'
+import { attentionByPane } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -313,7 +313,7 @@ export function Sidebar({
             // repository, checked out somewhere else. The rows below make whose
             // they are unmissable, which is what lets them share the list.
             const theirs = teammateRows(teammatesHeard(teammates[project.id])?.worktrees ?? [], now, watchEvidence)
-            const reading = watchersByPane(watching[project.id])
+            const reading = attentionByPane(watching[project.id])
             // Teammates on the roster this machine has never heard a word from.
             // Not the same as away, and not the same as having no worktrees.
             const unheard = unheardTeammates(teammates[project.id])
@@ -475,15 +475,6 @@ export function Sidebar({
 /** The panes of one project this window has open, for the rows to mark. */
 function watchingIn(watches: readonly { projectId: string; paneId: string }[], projectId: string): string[] {
   return watches.filter((watch) => watch.projectId === projectId).map((watch) => watch.paneId)
-}
-
-/** What everybody else is doing to each pane, in the shape a row reads. */
-function watchersByPane(watchers: PaneWatchers | undefined): Record<string, PaneAttention> {
-  const byPane: Record<string, PaneAttention> = {}
-  for (const pane of watchers?.panes ?? []) {
-    byPane[pane.terminalId] = { watchers: pane.watchers, typists: pane.typists, muted: pane.muted }
-  }
-  return byPane
 }
 
 /**
