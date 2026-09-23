@@ -316,18 +316,17 @@ class Peer {
     if (this.child.exitCode !== null || this.child.signalCode !== null) return
 
     const ended = new Promise((resolve) => this.child.once('exit', resolve))
-    // SIGTERM is the ordered shutdown path worth exercising; nothing kills it
-    // afterwards, since the checks in `TwoPeers.stop()` are about order not time.
-    killTree(this.child, 'SIGTERM')
+    // The runtime alone, not the group: tsx's wrapper, signalled too, SIGKILLs a child that
+    // has not acknowledged within 60ms, which a runtime under load misses. Wrappers follow it out.
+    if (process.platform === 'win32') killTree(this.child, 'SIGTERM')
+    else signalRuntime(this.discovery.pid)
     await this.#wentQuietly()
     await ended
   }
 
   /**
-   * Waits for the *runtime* to go, not the npx wrappers above it, which die the
-   * moment the group is signalled while the runtime is still unlinking its
-   * socket. Waiting on the wrapper loses that race under load as "leaked".
-   * No deadline on purpose; see the note at the top.
+   * Waits for the *runtime* to go, not the npx wrappers above it, which a tree kill
+   * ends first. No deadline on purpose; see the note at the top.
    */
   async #wentQuietly() {
     while (isAlive(this.discovery.pid)) await sleep(25)
@@ -447,6 +446,15 @@ function killTree(child, signal) {
       return
     }
     process.kill(-child.pid, signal)
+  } catch {
+    // Already gone.
+  }
+}
+
+/** SIGTERMs one process; ESRCH means it is already gone. */
+function signalRuntime(pid) {
+  try {
+    process.kill(pid, 'SIGTERM')
   } catch {
     // Already gone.
   }
