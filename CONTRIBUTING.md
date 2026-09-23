@@ -62,6 +62,14 @@ unexplained skip fails the run.
 A method signature lives in `src/shared`, so changing one breaks every caller at
 compile time rather than at runtime. That is deliberate.
 
+## Comments
+
+A comment is for what the code cannot say: an OS quirk, a race, a wire contract,
+a measured number, a bug and the mechanism that keeps it from returning. Doc
+comments on exported symbols are one or two lines. No history ("this used to",
+"the first attempt") and no restating of the line beneath. Long design reasoning
+goes in [`ROADMAP.md`](ROADMAP.md) or the pull request body, not the tree.
+
 ## Pull requests
 
 Describe what changed and why. If it changes behaviour somebody could see, say
