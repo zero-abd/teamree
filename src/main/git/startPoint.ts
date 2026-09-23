@@ -71,7 +71,12 @@ export type ResolvedStartPoint = {
   sha: string
   shortSha: string
   refName?: string
-  /** Remote-tracking ref the new branch should follow, e.g. `origin/main`. */
+  /**
+   * The remote-tracking ref this start point is, e.g. `origin/main`; absent for
+   * every other kind. A fact about where the work began, not an upstream: a new
+   * branch is created with `--no-track`, and what it tracks is decided by the
+   * push that first puts it on a remote. See `worktreePush.ts`.
+   */
   track?: string
   /** True when the ref had to be fetched before it could be resolved. */
   fetched: boolean

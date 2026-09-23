@@ -135,6 +135,48 @@ describe('worktree.status', () => {
     expect(status.unstaged).toBe(0)
     expect(status.untracked).toBe(0)
   })
+
+  // The defect this pair of numbers was confused by: `ahead` is what the push
+  // button sends and belongs to the upstream; `behind` is how far the base has
+  // moved on and belongs to the base ref. They were the same number for as long
+  // as the upstream was the base, and a push that fixed the first would have
+  // silently taken the second with it.
+  it('reads what is left to push from the upstream and what is left to merge from the base', async () => {
+    const repo = await createTempRepo({ withRemote: true })
+    repos.push(repo)
+    const service = new GitService({ worktreesRoot: repo.worktreesRoot })
+    services.push(service)
+
+    const project = await service.addProject({ path: repo.repoPath })
+    const pending = await service.createWorktree({ projectId: project.id, name: 'push me' })
+    const worktree = await service.whenSettled(pending.id)
+    expect(worktree.state, worktree.error).toBe('ready')
+
+    await repo.write('work.ts', 'export const a = 1\n', worktree.path)
+    await repo.commit('work in the worktree', worktree.path)
+
+    // The base moves on twice and the remote hears about it: this is the `2
+    // behind` the sidebar draws, and it must survive the push.
+    await repo.write('base-one.ts', '1\n')
+    await repo.commit('base one')
+    await repo.write('base-two.ts', '2\n')
+    await repo.commit('base two')
+    await repo.git(['push', 'origin', 'main'])
+
+    const before = await service.worktreeStatus({ worktreeId: worktree.id })
+    expect(before.ahead).toBe(1)
+    expect(before.behind).toBe(2)
+
+    const pushed = await service.worktreePush({ worktreeId: worktree.id })
+    expect(pushed.upstream).toBe('origin/push-me')
+
+    // The branch now tracks itself on the remote, so there is nothing left to
+    // send — and the base is still two commits ahead of it.
+    expect(await repo.git(['rev-parse', '--abbrev-ref', '@{upstream}'], worktree.path)).toBe('origin/push-me')
+    const after = await service.worktreeStatus({ worktreeId: worktree.id })
+    expect(after.ahead).toBe(0)
+    expect(after.behind).toBe(2)
+  })
 })
 
 describe('divergence against a base ref', () => {

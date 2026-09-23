@@ -14,6 +14,11 @@
 // still editing is ordinary, and refusing would be wrong — but what lands is
 // then not what the user is looking at, and that is worth saying out loud.
 //
+// It leaves the branch tracking the branch it just wrote. "How much is left to
+// push" is measured against whatever the upstream is, so a branch still
+// tracking the base it was cut from reads as one commit behind the remote after
+// the commit has landed on it — see `tracksSomethingElse`.
+//
 // And it says where the work can now be read. A push is the moment a review
 // becomes possible, and the page that starts one is derivable from the remote's
 // URL — see `reviewUrl.ts`, which guesses at nothing and asks the forge nothing.
@@ -73,6 +78,7 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
   const uncommitted = parseChangeRecords(status.stdout).filter((change) => change.kind !== 'untracked').length
 
   const before = await upstreamOf(runner, options.worktreePath, options.branch, options.signal)
+  const claiming = tracksSomethingElse(before, remote, options.branch, options.baseRef)
 
   const refspec = `refs/heads/${options.branch}:refs/heads/${options.branch}`
   // An explicit refspec, because `push.default` is a user setting and a push
@@ -84,7 +90,7 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
   // for a rejection. git leaves those untranslated, unlike the prose on stderr
   // that used to be matched here.
   const pushed = await runner.tryRun({
-    args: ['push', '--porcelain', ...(before === null ? ['--set-upstream'] : []), remote, refspec],
+    args: ['push', '--porcelain', ...(claiming ? ['--set-upstream'] : []), remote, refspec],
     cwd: options.worktreePath,
     timeoutMs: PUSH_TIMEOUT_MS,
     ...signal
@@ -97,6 +103,12 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
 
   const review = await reviewPage(runner, options, remote)
 
+  // Read rather than assumed. These two fields are the caller's only account of
+  // what the branch tracks now, and one that said `origin/<branch>` because the
+  // flag was passed — rather than because git wrote the config — would be a
+  // sentence on screen about a thing that had not happened.
+  const after = await upstreamOf(runner, options.worktreePath, options.branch, options.signal)
+
   return {
     worktreeId: options.worktreeId,
     remote,
@@ -105,9 +117,8 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
     // was already there", which a caller that cannot tell them apart reports
     // wrongly to somebody.
     alreadyUpToDate: reported?.flag === '=',
-    upstream:
-      (await upstreamOf(runner, options.worktreePath, options.branch, options.signal)) ?? `${remote}/${options.branch}`,
-    setUpstream: before === null,
+    upstream: after ?? before ?? `${remote}/${options.branch}`,
+    setUpstream: after !== null && after !== before,
     uncommitted,
     ...(review === undefined ? {} : { reviewUrl: review }),
     pushedAt: (options.now ?? Date.now)()
@@ -139,6 +150,35 @@ async function reviewPage(runner: GitRunner, options: PushOptions, remote: strin
     baseRef: options.baseRef,
     remote
   })
+}
+
+/**
+ * Whether this push should be the thing that decides what the branch tracks.
+ *
+ * Two cases, and only two. A branch that tracks nothing: the push is the first
+ * time there is anything on the remote to track. And a branch whose upstream is
+ * the project's base ref — which is what a checkout cut from `origin/main` used
+ * to inherit, and what every worktree made before this change still carries.
+ * That upstream is nobody's decision; it is where the work started, and leaving
+ * it there is what made `ahead` keep counting a commit the remote already had.
+ *
+ * Everything else is left alone. An upstream pointing at some other branch on
+ * some other remote is a person's choice, and a push is not the moment to
+ * overrule it.
+ */
+function tracksSomethingElse(
+  upstream: string | null,
+  remote: string,
+  branch: string,
+  baseRef: string | undefined
+): boolean {
+  if (upstream === null) return true
+  if (upstream === `${remote}/${branch}`) return false
+  if (baseRef === undefined) return false
+  // A base ref is usually already remote-qualified (`origin/main`); a project
+  // whose primary checkout has no remote names a local branch instead, and a
+  // branch tracking `origin/<that>` is tracking the same thing by its other name.
+  return upstream === baseRef || upstream === `${remote}/${baseRef}`
 }
 
 /** What the branch already tracks, or null when it tracks nothing. */

@@ -734,13 +734,22 @@ export class GitService {
       ourCheckout = true
       // The resolved sha, never the name: git's own DWIM must not get a second
       // vote after we have already decided what the name meant.
+      //
+      // `--no-track` because the upstream is what "how much is left to push"
+      // is measured against, and a branch cut from origin/main that inherits
+      // origin/main as its upstream reports a commit still to send after the
+      // push that sent it. How far the base has moved on is a separate
+      // question, asked separately in `worktreeStatus.ts`; the upstream is left
+      // for the push to set, to the branch the push actually wrote.
+      //
+      // Explicit rather than implied by a sha start point: `branch.autoSetupMerge`
+      // is a user setting, and `always` sets tracking from a local branch too.
       await this.#runner.run({
-        args: ['worktree', 'add', '-b', worktree.branch, worktree.path, start.sha],
+        args: ['worktree', 'add', '--no-track', '-b', worktree.branch, worktree.path, start.sha],
         cwd: project.path,
         signal,
         timeoutMs: this.#createTimeoutMs
       })
-      if (start.track) await this.#trackUpstream(project, worktree.branch, start.track)
       // Before 'ready', deliberately. A pane opens on the transition, so a
       // checkout that flipped first and was linked afterwards would be handed
       // to an agent for as long as the copying took — and `npm test` in that
@@ -811,24 +820,6 @@ export class GitService {
       console.error(`[git] could not run the setup command for worktree ${worktree.id}`, error)
       return undefined
     }
-  }
-
-  /**
-   * Points the new branch at the remote-tracking ref it came from, so push,
-   * pull and ahead/behind all work without the user configuring anything. Done
-   * explicitly rather than by handing `worktree add` the ref name, because the
-   * ref name would reopen the interpretation we just closed. Failure here is
-   * not worth discarding a good checkout over; the branch simply has no
-   * upstream, which the user can set later.
-   */
-  async #trackUpstream(project: Project, branch: string, upstream: string): Promise<void> {
-    await this.#runner
-      .tryRun({
-        args: ['branch', `--set-upstream-to=${upstream}`, branch],
-        cwd: project.path,
-        timeoutMs: 60_000
-      })
-      .catch(() => undefined)
   }
 
   /**

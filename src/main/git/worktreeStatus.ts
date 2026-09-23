@@ -2,9 +2,10 @@
 //
 // One `git status --porcelain=v2 --branch` answers every counter at once, which
 // is the whole reason for choosing v2 over plumbing several commands together.
-// A second command runs only in the one case v2 cannot cover: a branch with no
-// upstream, where `branch.ab` is absent and ahead/behind are measured against
-// the project's base ref instead.
+// A second command runs for the one thing v2 cannot answer: `branch.ab` is
+// measured against the upstream, and `behind` here means how far the project's
+// base ref has moved on without this worktree. Those are the same question only
+// while the upstream is the base ref, and a pushed branch tracks itself.
 
 import type { WorktreeStatus } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
@@ -170,11 +171,23 @@ export async function readWorktreeStatus(runner: GitRunner, options: StatusReadO
   })
   const parsed = parsePorcelainV2(stdout, options.prepared)
 
-  if (!parsed.upstream && options.baseRef) {
+  // The two numbers answer different questions and are measured against
+  // different refs. `ahead` is what the push button sends, so it belongs to the
+  // upstream. `behind` is how far the project's base has moved on without this
+  // worktree, so it belongs to the base ref — and once a push has pointed the
+  // upstream at the branch's own branch on the remote, git's own `branch.ab`
+  // has nothing left to say about the base at all.
+  //
+  // The extra command is skipped in the one case where it would only repeat
+  // what `git status` already answered: a branch tracking the base ref, which
+  // is every worktree made before this app stopped setting that tracking.
+  if (options.baseRef !== undefined && parsed.upstream !== options.baseRef) {
     const divergence = await readDivergence(runner, options.worktreePath, options.baseRef, options.signal)
     if (divergence) {
-      parsed.ahead = divergence.ahead
       parsed.behind = divergence.behind
+      // With no upstream there is nothing else `ahead` could mean, and what
+      // this worktree has that the base does not is the closest thing to it.
+      if (parsed.upstream === null) parsed.ahead = divergence.ahead
     }
   }
 

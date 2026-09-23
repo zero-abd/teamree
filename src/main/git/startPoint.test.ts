@@ -234,7 +234,11 @@ describe('worktree.create start points', () => {
     expect(await started('from sha', first.slice(0, 10))).toBe(first)
   })
 
-  it('sets the new branch to track the remote branch it started from', async () => {
+  // The branch it started from is history, not an upstream. Inheriting it as
+  // one is what made "how much is left to push" keep counting commits the
+  // remote already had: see `worktreePush.ts`, which sets the tracking to the
+  // branch it actually wrote.
+  it('records the remote branch it started from without tracking it', async () => {
     const repo = await newRepo({ withRemote: true })
     await pushFromElsewhere(repo, 'api-rewrite')
     const service = newService(repo)
@@ -248,7 +252,13 @@ describe('worktree.create start points', () => {
     const ready = await service.whenSettled(pending.id)
 
     expect(ready.state).toBe('ready')
-    expect(await repo.git(['rev-parse', '--abbrev-ref', `${ready.branch}@{upstream}`])).toBe('origin/api-rewrite')
+    const upstream = await repo.runner.tryRun({
+      args: ['rev-parse', '--abbrev-ref', `${ready.branch}@{upstream}`],
+      cwd: repo.repoPath,
+      readOnly: true
+    })
+    expect(upstream.exitCode).not.toBe(0)
+    expect(service.startPointFor(ready.id)?.track).toBe('origin/api-rewrite')
     expect(service.startPointFor(ready.id)?.fetched).toBe(true)
   })
 

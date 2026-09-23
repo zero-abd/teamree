@@ -210,8 +210,8 @@ async function harness(options: HarnessOptions = {}): Promise<Harness> {
   return created
 }
 
-async function repository(): Promise<TempRepo> {
-  const repo = await createTempRepo()
+async function repository(options: { withRemote?: boolean } = {}): Promise<TempRepo> {
+  const repo = await createTempRepo(options)
   repos.push(repo)
   return repo
 }
@@ -305,6 +305,36 @@ describe('git writes as producers', () => {
       // Nothing about the worktree record changed, so this event can only have
       // come from the write announcing itself.
       await watcher.waitFor(has('worktrees'), 'the invalidation for a commit')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  // A push moves only remote-tracking refs, which live in the common git
+  // directory no worktree watch covers — so this is the one route the chips
+  // have to the new numbers, and without it they wait for the next poll.
+  it(
+    'announces a push, which the filesystem watch would never see',
+    async () => {
+      const repo = await repository({ withRemote: true })
+      const app = await harness({ repo })
+      const project = await app.call<Project>('c1', 'project.add', { path: repo.repoPath })
+      const worktree = await app.call<Worktree>('c1', 'worktree.create', { projectId: project.id, name: 'push me' })
+      const ready = await app.git.whenSettled(worktree.id)
+      expect(ready.state, ready.error).toBe('ready')
+      await writeFile(join(ready.path, 'new.txt'), 'work\n')
+      await app.call('c1', 'worktree.commit', {
+        worktreeId: worktree.id,
+        message: 'something to send',
+        paths: ['new.txt']
+      })
+
+      const watcher = await app.watch('c1')
+      await settle()
+      watcher.clear()
+
+      await app.call('c1', 'worktree.push', { worktreeId: worktree.id })
+
+      await watcher.waitFor(has('worktrees'), 'the invalidation for a push')
     },
     TEST_TIMEOUT_MS
   )
