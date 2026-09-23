@@ -174,6 +174,21 @@ describe('the ipc bridge, against a real registry', () => {
     expect(response).toMatchObject({ id: 'r1', ok: true, result: { version: '9.9.9', endpoint: '/tmp/fake.sock' } })
   })
 
+  it('stops dispatching once uninstalled, but still answers: a call made while quitting gets a frame, not a missing handler', async () => {
+    const window = fakeWindow(1)
+    uninstall()
+    // Electron's own behaviour on a channel with no handler is to log an error
+    // in the main process and reject the page's invoke with its wording; this
+    // is the frame the page gets instead.
+    expect(handlers.has(RPC_CALL_CHANNEL)).toBe(true)
+    const response = await invoke(window.contents, { id: 'late', method: 'status.get', params: {} })
+    expect(response).toEqual({ id: 'late', ok: false, error: { code: 'internal', message: 'teamree is quitting.' } })
+    // And the release listener really is gone, rather than merely replaced.
+    expect(listeners.has(RPC_RELEASE_CHANNEL)).toBe(false)
+    // A bridge installed afterwards takes the channel back without complaint.
+    uninstall = installIpcBridge({ dispatch: createDispatcher(new MethodRegistry(context)), subscriptions: hub })
+  })
+
   it('reports an unknown method rather than throwing across the bridge', async () => {
     const window = fakeWindow(1)
     const response = await invoke(window.contents, { id: 'r2', method: 'nope.nope', params: {} })
@@ -217,11 +232,5 @@ describe('the ipc bridge, against a real registry', () => {
 
     release(window.contents)
     expect(hub.size).toBe(0)
-  })
-
-  it('stops serving the channels once uninstalled', () => {
-    uninstall()
-    expect(handlers.has(RPC_CALL_CHANNEL)).toBe(false)
-    expect(listeners.has(RPC_RELEASE_CHANNEL)).toBe(false)
   })
 })
