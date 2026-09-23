@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EVIDENCE_MAX_CHARS, evidenceLine, replayLines } from './outputEvidence'
+import { EVIDENCE_MAX_CHARS, evidenceInRows, evidenceLine, replayLines } from './outputEvidence'
 
 const ESC = '\x1b'
 const BEL = '\x07'
@@ -220,5 +220,44 @@ describe('evidenceLine, over an agent’s own chrome', () => {
   it('drops the bullet an agent opens each message with', () => {
     expect(evidenceLine('⏺ Added to calc.js:3')).toBe('Added to calc.js:3')
     expect(evidenceLine('• Edited calc.js (+1 -0)')).toBe('Edited calc.js (+1 -0)')
+  })
+})
+
+// Rows as an emulator draws an agent's screen: a message is its bulleted head and the indented rows under it.
+describe('evidenceInRows, over an agent’s screen', () => {
+  it('quotes the head of the message an indented row belongs to', () => {
+    const rows = ['⏺ Added to calc.js:3:', '', '  export function subtract(a, b) { return a', '  - b }', '']
+    expect(evidenceInRows(rows)).toBe('Added to calc.js:3:')
+  })
+
+  it('skips the recap and the line that times the turn', () => {
+    const rows = [
+      '⏺ Added subtract to calc.js',
+      '',
+      '✻ Churned for 7s · done 5:18 PM',
+      '',
+      '※ recap: Goal was to add a subtract',
+      '  function to calc.js. That is done.',
+      '  (disable recaps in /config)'
+    ]
+    expect(evidenceInRows(rows)).toBe('Added subtract to calc.js')
+    expect(evidenceInRows(['3 tests passed', '※ recap: all green'])).toBe('3 tests passed')
+  })
+
+  // Codex keeps its model and directory under the composer, indented as if they were part of it.
+  it('skips what hangs under the composer', () => {
+    const rows = ['• Added subtract to calc.js', '', '› Write tests for @filename', '', '  gpt-5.6 default · ~/calc']
+    expect(evidenceInRows(rows)).toBe('Added subtract to calc.js')
+    expect(evidenceInRows(['3 tests passed', '❯ ', '  and a second typed line'])).toBe('3 tests passed')
+  })
+
+  it('leaves an indented line alone when no message heads it', () => {
+    expect(evidenceInRows(['Error: boom', '    at run (calc.js:3)'])).toBe('at run (calc.js:3)')
+  })
+
+  it('reads the same through the stream replay', () => {
+    expect(evidenceLine('• Edited calc.js (+1 -0)\r\n    3 +export const sub = (a, b) => a - b\r\n')).toBe(
+      'Edited calc.js (+1 -0)'
+    )
   })
 })

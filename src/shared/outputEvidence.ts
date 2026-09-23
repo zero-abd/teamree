@@ -29,11 +29,36 @@ export function evidenceLine(output: string, maxChars: number = EVIDENCE_MAX_CHA
   // A full-screen program addresses the whole grid; one row of it means nothing.
   if (inAlternateScreen(output)) return null
 
-  const lines = replayLines(output)
-  const first = Math.max(0, lines.length - MAX_LINES_SCANNED)
-  for (let index = lines.length - 1; index >= first; index--) {
-    const candidate = tidy(lines[index] ?? '')
-    if (candidate.length > 0 && !isUninformative(candidate)) return truncate(candidate, maxChars)
+  return evidenceInRows(replayLines(output), maxChars)
+}
+
+/** The last of `rows` that says something: `replayLines`' output, or the rows of an emulator's screen. */
+export function evidenceInRows(rows: readonly string[], maxChars: number = EVIDENCE_MAX_CHARS): string | null {
+  const first = Math.max(0, rows.length - MAX_LINES_SCANNED)
+  for (let index = rows.length - 1; index >= first; index--) {
+    const candidate = tidy(rows[index] ?? '')
+    if (candidate.length === 0 || isUninformative(candidate)) continue
+
+    const head = messageHead(rows, index, first)
+    if (head === null) return truncate(candidate, maxChars)
+    const headRow = (rows[head] ?? '').trim()
+    // A recap or a composer is not output, and neither is anything indented under it.
+    if (CHROME_HEAD.test(headRow)) {
+      index = head
+      continue
+    }
+    const said = tidy(headRow)
+    return truncate(LEADING_BULLET.test(headRow) && !isUninformative(said) ? said : candidate, maxChars)
+  }
+  return null
+}
+
+/** The unindented row an indented one hangs under, across blank rows, or null when it is not indented. */
+function messageHead(rows: readonly string[], index: number, first: number): number | null {
+  if (!/^\s/u.test(rows[index] ?? '')) return null
+  for (let above = index - 1; above >= first; above--) {
+    const row = rows[above] ?? ''
+    if (row.trim().length > 0 && !/^\s/u.test(row)) return above
   }
   return null
 }
@@ -169,6 +194,12 @@ const LEADING_SPINNER = /^[⠀-⣿]+[ \t]+/
 /** The mark an agent opens each message with. */
 const LEADING_BULLET = /^[•⏺●][ \t]*/u
 
+/** Opens Claude's recap of a turn. */
+const RECAP_GLYPH = '※'
+
+/** A row whose indented rows below belong to it and are chrome too: a recap, or a composer. */
+const CHROME_HEAD = /^(?:※|[❯›](?:\s|$))/u
+
 /** Codex's composer glyph: from here on the line is the composer drawn over the output, never output. */
 const COMPOSER_GLYPH = '›'
 
@@ -183,14 +214,15 @@ const FRAME = /^[\u2500-\u259f]{2}/u
 /** A composer's line: what sits there was typed or suggested, not printed. */
 const COMPOSER_LINE = /^[❯›] /u
 
-/** The status lines agents keep at the foot of the screen: modes, key hints, context left. */
+/** The status lines agents draw around their output: modes, key hints, context left, how long a turn took. */
 const AGENT_FOOTERS = [
   /\(shift\+tab to cycle\)/iu,
   /\? for shortcuts/u,
   /\besc to interrupt\b/iu,
   /\b\d+% context left\b/iu,
   /⏎ send/u,
-  /\(disable recaps in \/config\)/u
+  /\(disable recaps in \/config\)/u,
+  /^✻ \p{L}+ for \d/u
 ]
 
 /** The asides the app writes around a restored pane's record (see `scrollbackRecord.ts`); not the program's output. */
@@ -200,7 +232,7 @@ const OWN_MARK = /^\[(?:record — up to |end of record — |resume refused — 
 function isUninformative(line: string): boolean {
   if (!/[\p{L}\p{N}]/u.test(line)) return true
   if (FRAME.test(line) || COMPOSER_LINE.test(line) || AGENT_FOOTERS.some((footer) => footer.test(line))) return true
-  return OWN_MARK.test(line) || isBarePrompt(line)
+  return OWN_MARK.test(line) || line.startsWith(RECAP_GLYPH) || isBarePrompt(line)
 }
 
 function isBarePrompt(line: string): boolean {

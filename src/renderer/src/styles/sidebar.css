@@ -451,6 +451,20 @@
   margin-left: auto;
 }
 
+/* The branch's facts, on the title line when there is no branch line: at the
+   right edge, and just left of the dot when there is one. */
+.worktree__facts {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
+  margin-left: auto;
+}
+
+.worktree__facts + .activity {
+  margin-left: 0;
+}
+
 .worktree--creating .worktree__name,
 .worktree--failed .worktree__name {
   color: var(--fg-secondary);

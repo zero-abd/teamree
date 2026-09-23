@@ -23,7 +23,7 @@ export function GitStatusChips({ status }: { status: WorktreeStatus | undefined 
   const description = stale ? `${stale.detail} ${counts}` : counts
 
   return (
-    <span className="gitchips" title={description} aria-label={`git status: ${description}`}>
+    <span className="gitchips" role="img" title={description} aria-label={`git status: ${description}`}>
       {summary.ahead > 0 ? (
         <span className="gitchip">
           <span className="gitchip__glyph" aria-hidden="true">

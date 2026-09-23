@@ -4,8 +4,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Terminal } from '@shared/entities'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
+import { shownScreen } from '../terminal/shownPanes'
 import { EVIDENCE_TAIL_BYTES, forgetClosed, terminalsToRead, type EvidenceRead } from './evidenceReads'
-import { evidenceLine } from '@shared/outputEvidence'
+import { replayScreen, SCREEN_ROWS_READ, screenEvidence } from './paneScreen'
 
 /** How often the policy is consulted; shorter than the per-pane interval so a new pane is read promptly. */
 const TICK_MS = 500
@@ -28,12 +29,18 @@ export function usePaneEvidence(
       // Marked before the call, not after: a slow read must not be issued twice.
       reads.current[terminal.id] = { readAt: Date.now(), wasRunning: terminal.running }
       try {
-        const { data } = await runtimeClient.call('terminal.read', {
-          terminalId: terminal.id,
-          tailBytes: EVIDENCE_TAIL_BYTES
-        })
+        // A mounted pane's own emulator already holds its screen; any other has its tail replayed onto one.
+        const screen =
+          shownScreen(terminal.id, SCREEN_ROWS_READ) ??
+          (await replayScreen(
+            (
+              await runtimeClient.call('terminal.read', { terminalId: terminal.id, tailBytes: EVIDENCE_TAIL_BYTES })
+            ).data,
+            terminal.cols,
+            terminal.rows
+          ))
         if (stopped) return
-        const line = evidenceLine(data)
+        const line = screenEvidence(screen, terminal)
         setEvidence((current) => (current[terminal.id] === line ? current : { ...current, [terminal.id]: line }))
       } catch {
         // A pane can close between the tick and the read; nothing shown is the same as nothing to show.

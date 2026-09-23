@@ -5,10 +5,10 @@
 import type { Terminal } from '@shared/entities'
 
 /**
- * How much of the tail to ask for: enough to walk back past a prompt, blank
- * lines and a redrawn progress line; the retained scrollback is a thousand times this.
+ * How much of the tail to ask for: enough for an emulator to rebuild the rows a
+ * full-screen agent last redrew, not only the few it touched since; a small slice of the retained scrollback.
  */
-export const EVIDENCE_TAIL_BYTES = 4096
+export const EVIDENCE_TAIL_BYTES = 64 * 1024
 
 /** Floor on the spacing between reads of one pane; not every frame of a spinner. */
 export const EVIDENCE_INTERVAL_MS = 1500
