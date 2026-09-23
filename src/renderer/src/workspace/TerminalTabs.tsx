@@ -1,12 +1,13 @@
 // The strip along the top of the workspace: the open worktree's panes (what and how is `paneTabs`),
 // plus the actions a tab reaches. It is the window's top edge and drag region on this side, so it is
-// always drawn; it lists panes only while panes are under it. The end buttons split, close and start
-// (`+` opens a menu of what can start here), and a tab is where a pane gets renamed.
+// always drawn; it lists panes only while panes are under it. The end buttons split and start (`+`
+// opens a menu of what can start here) whenever a worktree is open, and a tab is where a pane gets renamed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { hasCheckout } from '@shared/entities'
 import { FileGlyph } from '../files/FileView'
 import { paneTabs, paneTabTitle } from './paneTabs'
-import { startMenuItems } from './startMenu'
+import { useStartMenuItems } from './startMenu'
 import { PaneGlyph } from '../agents/glyphs'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { dotClass, dotTone, truncateName } from '../sidebar/agentRows'
@@ -20,11 +21,11 @@ const MENU_GAP_PX = 4
 
 export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
-  const createTerminal = useWorkspaceStore((state) => state.createTerminal)
-  const newMarkdown = useWorkspaceStore((state) => state.newMarkdown)
-  const startAgent = useWorkspaceStore((state) => state.startAgent)
-  const openSettings = useWorkspaceStore((state) => state.openSettings)
-  const agents = useWorkspaceStore((state) => state.agents)
+  // Refused only for a worktree known to have no checkout yet.
+  const noCheckout = useWorkspaceStore((state) => {
+    const worktree = state.worktrees.find((entry) => entry.id === state.activeWorktreeId)
+    return worktree !== undefined && !hasCheckout(worktree)
+  })
   const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
   const layout = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
@@ -54,6 +55,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   }, [])
   // The sidebar's reading, so the strip and the row agree.
   const unread = useUnreadPanes()
+  const startItems = useStartMenuItems(activeWorktreeId, modifier)
 
   const tabs = panesShown ? paneTabs(layout?.root ?? null, terminals) : []
 
@@ -182,21 +184,16 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
         </div>
       )}
 
-      {/* Icons rather than words, and at the end of the strip rather than above
-          it: three buttons wide is the most a row of panes can spare, and each
-          of them is a row the palette already carries and the menu bar already
-          names with its chord. The hover says what the button does and nothing
-          more — the chords are taught in the menu bar, Help, the palette and
-          the front door, and a strip that named them too was a fifth place.
-          Only beside tabs: with no pane to split, the placeholder under the
-          strip is already offering to open one. */}
-      {tabs.length === 0 ? null : (
+      {/* Icons at the strip's end: the palette and the menu bar carry the words and chords. Kept with no
+          panes too, where there is nothing to split yet. */}
+      {activeWorktreeId === null || !panesShown ? null : (
         <div className="tabs__actions">
           <button
             type="button"
             className="tabs__action"
             title="Split right"
             aria-label="Split right"
+            disabled={tabs.length === 0}
             onClick={() => void splitFocusedPane('row')}
           >
             <svg viewBox="0 0 12 12" aria-hidden="true">
@@ -208,15 +205,13 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
             className="tabs__action"
             title="Split down"
             aria-label="Split down"
+            disabled={tabs.length === 0}
             onClick={() => void splitFocusedPane('column')}
           >
             <svg viewBox="0 0 12 12" aria-hidden="true">
               <path d="M1.5 2 H10.5 V10 H1.5 Z M1.5 6 H10.5" />
             </svg>
           </button>
-          {/* Null only while nothing is open, and the strip has already returned
-            nothing by then — a pane cannot be listed in a worktree there is
-            none of. */}
           <button
             ref={plus}
             type="button"
@@ -225,7 +220,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
             aria-label="New pane"
             aria-haspopup="menu"
             aria-expanded={menuAt !== null}
-            disabled={activeWorktreeId === null}
+            disabled={noCheckout}
             onClick={() => {
               if (menuAt !== null) {
                 closeMenu()
@@ -243,18 +238,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
       )}
 
       {menuAt === null || activeWorktreeId === null ? null : (
-        <RowMenu
-          label="New pane"
-          anchor={menuAt}
-          opener={plus.current}
-          onClose={closeMenu}
-          items={startMenuItems(agents, modifier, {
-            newTerminal: () => void createTerminal(activeWorktreeId),
-            newMarkdown: () => newMarkdown(activeWorktreeId),
-            startAgent: (command) => void startAgent(command),
-            openAgentSettings: () => openSettings('agents')
-          })}
-        />
+        <RowMenu label="New pane" anchor={menuAt} opener={plus.current} onClose={closeMenu} items={startItems} />
       )}
     </div>
   )

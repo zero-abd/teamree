@@ -223,7 +223,8 @@ kbd {
 
 /* A harness's mark, filled in the text colour. The menu's icons are stroked, so it says so twice. */
 .agent-glyph,
-.row-menu__icon svg.agent-glyph {
+.row-menu__icon svg.agent-glyph,
+.worktree-start__icon svg.agent-glyph {
   flex: none;
   width: 14px;
   height: 14px;

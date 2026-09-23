@@ -3,7 +3,7 @@
 // The strip belongs to the open worktree only; its selected tab is the focused pane (none while a
 // watched pane has focus); and its end buttons are the only pointer way to split or open a pane.
 
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledAgent, Layout, PaneNode, Terminal } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
@@ -550,6 +550,48 @@ describe('the way back to the sidebar', () => {
 })
 
 describe('when there are no panes to list', () => {
+  // The empty worktree view offers the same rows; the strip still has its end buttons.
+  it('keeps the + and the splits in a worktree with no panes, with nothing to split', () => {
+    seed({ activeWorktreeId: 'w1', layouts: { w1: layout('w1', null, null) }, agents: [claude] })
+    mount()
+    expect((screen.getByRole('button', { name: 'Split right' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Split down' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'New pane' }))
+    expect(
+      within(screen.getByRole('menu', { name: 'New pane' })).getByRole('menuitem', { name: 'Claude Code' })
+    ).toBeTruthy()
+  })
+
+  it('offers no + while the checkout is still being prepared', () => {
+    seed({
+      activeWorktreeId: 'w1',
+      worktrees: [
+        {
+          id: 'w1',
+          projectId: 'p1',
+          name: 'Rewrite the pager',
+          branch: 'rewrite-the-pager',
+          path: '/repos/pager-wt/rewrite',
+          startedFrom: 'origin/main',
+          state: 'creating',
+          createdAt: 0
+        }
+      ]
+    })
+    mount()
+    expect((screen.getByRole('button', { name: 'New pane' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('has no end buttons with no worktree open, or while settings have the area', () => {
+    seed()
+    mount()
+    expect(screen.queryByRole('button', { name: 'New pane' })).toBeNull()
+    cleanup()
+    seed({ activeWorktreeId: 'w1', settingsOpen: true })
+    mount()
+    expect(screen.queryByRole('button', { name: 'New pane' })).toBeNull()
+  })
+
   // No tablist when empty; the strip itself stays.
   it('renders nothing when the worktree you are in has no layout yet', () => {
     seed({ activeWorktreeId: 'w1', terminals: byId(terminal({ id: 't1', title: 'npm test' })) })
