@@ -5,6 +5,7 @@
 import type { PaneNode, Terminal } from '@shared/entities'
 import { filePaneName, isFileLeaf } from '@shared/filePane'
 import { freshAgentLabel } from '@shared/paneRestore'
+import { minExtent, type Box } from '@shared/paneRoom'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { ACTIVITY_LABEL, activityOf, dotClass, dotTone, paneAgent, paneNames } from '../sidebar/agentRows'
 import { TerminalView } from '../terminal/TerminalView'
@@ -32,6 +33,8 @@ export type PaneCallbacks = {
   searchTerminalId: string | null
   searchToken: number
   onCloseSearch: () => void
+  /** The least a pane may be dragged to, chrome included; unmeasured, a small fraction stands. */
+  minPane?: Box
 }
 
 export function PaneTree({
@@ -200,11 +203,13 @@ function PaneSplit({
   onResize,
   ...callbacks
 }: PaneCallbacks & { node: Extract<PaneNode, { kind: 'split' }>; path: number[] }): React.JSX.Element {
+  const { minPane } = callbacks
   return (
     <SplitFrame
       direction={node.direction}
       sizes={node.sizes}
       onResize={(sizes) => onResize(path, sizes)}
+      minPx={minPane && node.children.map((child) => minExtent(child, node.direction, minPane))}
       cells={node.children.map((child, index) => ({
         key: paneKey(child, index),
         node: <PaneTree node={child} path={[...path, index]} onResize={onResize} {...callbacks} />

@@ -224,6 +224,34 @@ describe('which tab is the selected one', () => {
   })
 })
 
+describe('a strip with more tabs than fit', () => {
+  it('scrolls the selected tab into view', () => {
+    const ids = ['t1', 't2', 't3', 't4', 't5', 't6']
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row(...ids), 't1') },
+      terminals: byId(...ids.map((id) => terminal({ id, title: `job ${id}` })))
+    })
+    // jsdom lays nothing out: the list is 300px wide, each tab 100px, side by side.
+    const rect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        const index = [...(this.parentElement?.children ?? [])].indexOf(this)
+        const [left, right] = this.classList.contains('tabs__list') ? [0, 300] : [index * 100, index * 100 + 100]
+        return { left, right, top: 0, bottom: 38, width: right - left, height: 38, x: left, y: 0 } as DOMRect
+      })
+    try {
+      mount()
+      const list = screen.getByRole('tablist')
+      expect(list.scrollLeft).toBe(0)
+      act(() => useWorkspaceStore.setState({ layouts: { w1: layout('w1', row(...ids), 't6') } }))
+      expect(list.scrollLeft).toBe(300)
+    } finally {
+      rect.mockRestore()
+    }
+  })
+})
+
 describe('what a tab does when it is pressed', () => {
   const twoPanes = (): void => {
     seed({

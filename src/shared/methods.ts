@@ -516,7 +516,11 @@ export const Params = {
     prompt: z.string().min(1).max(MAX_AGENT_ARGS_CHARS).optional(),
     cwd: z.string().min(1).optional(),
     cols: z.number().int().positive().optional(),
-    rows: z.number().int().positive().optional()
+    rows: z.number().int().positive().optional(),
+    /** The pane grid as the window draws it, in CSS pixels, so the pane lands where there is room. */
+    area: z.object({ width: z.number().positive(), height: z.number().positive() }).optional(),
+    /** The least a pane may be given in `area`, chrome included (`MIN_PANE_CELLS`). */
+    minPane: z.object({ width: z.number().positive(), height: z.number().positive() }).optional()
   }),
   terminalWrite: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),

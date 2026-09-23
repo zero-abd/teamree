@@ -165,6 +165,30 @@ describePty('terminal handlers', () => {
   )
 
   it(
+    'lands each new pane in the most room, so four make a 2x2 grid',
+    async () => {
+      const service = newService()
+      const area = { width: 1000, height: 800 }
+      const ids: string[] = []
+      for (let i = 0; i < 4; i++) {
+        const terminal = await service.handlers['terminal.create']({ worktreeId: WORKTREE, area })
+        ids.push(terminal.id)
+      }
+      const [a, b, c, d] = ids.map((terminalId) => ({ kind: 'leaf', terminalId }))
+      expect((await service.handlers['layout.get']({ worktreeId: WORKTREE })).root).toEqual({
+        kind: 'split',
+        direction: 'row',
+        sizes: [0.5, 0.5],
+        children: [
+          { kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [a, c] },
+          { kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [b, d] }
+        ]
+      })
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'collapses the layout when a split pane is closed',
     async () => {
       const service = newService()

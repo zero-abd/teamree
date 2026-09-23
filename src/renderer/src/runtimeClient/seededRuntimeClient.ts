@@ -24,10 +24,13 @@ import type {
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
 import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '@shared/theme'
 import { leaf, splitPane } from '../panes/paneLayout'
+import { placePane, placePaneWithin } from '@shared/paneRoom'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
 
 const CREATE_MS = 2600
 const LATENCY_MS = 45
+/** The grid a pane is placed on when the window sent none. */
+const DEMO_AREA = { width: 1200, height: 800 }
 
 let counter = 0
 const nextId = (prefix: string): string => `${prefix}_${(++counter).toString(36).padStart(4, '0')}`
@@ -1153,7 +1156,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
         .map((terminal) => terminal.record)
         .filter((record) => !worktreeId || record.worktreeId === worktreeId),
     // A pane started with a command shows that command, as the runtime does.
-    'terminal.create': ({ worktreeId, cols, rows, command, label }) => {
+    'terminal.create': ({ worktreeId, cols, rows, command, label, area, minPane }) => {
       const record = command
         ? spawn(worktreeId, command, [accent(`▌ ${command}`), dim('reading the worktree …')])
         : spawn(worktreeId, 'zsh', [dim('teamree · new session')])
@@ -1164,34 +1167,14 @@ export function createSeededRuntimeClient(): RuntimeClient {
         rows: rows ?? record.rows,
         ...(label === undefined ? {} : { label })
       }
-      const layout = layouts.get(worktreeId)
-      if (!layout?.root) {
-        layouts.set(worktreeId, {
-          worktreeId,
-          root: leaf(record.id),
-          focusedTerminalId: record.id
-        })
-      } else {
-        const root = layout.root
-        const share = root.kind === 'split' && root.direction === 'row' ? 1 / (root.children.length + 1) : 0.5
-        layouts.set(worktreeId, {
-          worktreeId,
-          focusedTerminalId: record.id,
-          root:
-            root.kind === 'split' && root.direction === 'row'
-              ? {
-                  ...root,
-                  children: [...root.children, leaf(record.id)],
-                  sizes: [...root.sizes.map((size) => size * (1 - share)), share]
-                }
-              : {
-                  kind: 'split',
-                  direction: 'row',
-                  children: [root, leaf(record.id)],
-                  sizes: [0.5, 0.5]
-                }
-        })
-      }
+      const root = layouts.get(worktreeId)?.root ?? null
+      const added = leaf(record.id)
+      layouts.set(worktreeId, {
+        worktreeId,
+        focusedTerminalId: record.id,
+        root:
+          (minPane && area && placePaneWithin(root, added, area, minPane)) || placePane(root, added, area ?? DEMO_AREA)
+      })
       announce({ type: 'terminals' }, { type: 'layout', worktreeId })
       return terminal.record
     },

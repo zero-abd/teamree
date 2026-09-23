@@ -64,6 +64,18 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
 
   const focusedTerminalId = focusedWatchId === null ? layout?.focusedTerminalId : null
 
+  // The list scrolls under a fixed end; the tab being worked in is never the one scrolled away.
+  const list = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const strip = list.current
+    const tab = strip?.querySelector<HTMLElement>('.tab--active')
+    if (!strip || !tab) return
+    const box = strip.getBoundingClientRect()
+    const at = tab.getBoundingClientRect()
+    if (at.left < box.left) strip.scrollLeft += at.left - box.left
+    else if (at.right > box.right) strip.scrollLeft += at.right - box.right
+  }, [focusedTerminalId, tabs.length])
+
   return (
     <div className="tabs">
       {/* First in the strip, so that on macOS it is what comes right after the
@@ -83,7 +95,16 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
       {/* An empty list is no list: a `role="tablist"` with nothing in it would
           announce a region that has nothing to announce. */}
       {tabs.length === 0 ? null : (
-        <div className="tabs__list" role="tablist" aria-label="Terminals in this worktree">
+        <div
+          ref={list}
+          className="tabs__list"
+          role="tablist"
+          aria-label="Terminals in this worktree"
+          onWheel={(event) => {
+            // A mouse wheel only scrolls vertically, and the list has no vertical to scroll.
+            if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
+          }}
+        >
           {tabs.map((tab) => {
             const active = tab.terminalId === focusedTerminalId
             const isUnread = unread.has(tab.terminalId)
