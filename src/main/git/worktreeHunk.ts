@@ -153,7 +153,7 @@ function countLines(hunk: HunkInput): { old: number; new: number } {
  * A tab ends the file name on a `---`/`+++` line and a newline ends the line, so
  * either silently renames the file. Git C-quotes such a path; refusing is the honest half.
  */
-function assertCarriablePath(path: string): void {
+export function assertCarriablePath(path: string): void {
   if (!/[\t\n\r]/.test(path)) return
   throw new GitServiceError(
     ErrorCode.InvalidParams,

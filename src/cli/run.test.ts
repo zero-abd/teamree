@@ -563,6 +563,36 @@ describe('selectors and flags reach the runtime', () => {
     expect(cli.stub.received.some((call) => call.method === 'worktree.stageHunk')).toBe(false)
   })
 
+  it('discards a whole path, or the hunk --hunk names of the unstaged patch', async () => {
+    const patch = ['diff --git a/src/app.ts b/src/app.ts', '--- a/src/app.ts', '+++ b/src/app.ts']
+    const hunks = [...patch, '@@ -1,1 +1,1 @@', '-one', '+ONE', '@@ -9,1 +9,1 @@', '-nine', '+NINE', ''].join('\n')
+    const cli = await harness((method, params) => {
+      if (method === 'worktree.diff') {
+        return { worktreeId: 'wt_1', path: 'src/app.ts', staged: false, patch: hunks, truncated: false, readAt: 1 }
+      }
+      if (method === 'worktree.discardPath' || method === 'worktree.discardHunk') {
+        const outcome = method === 'worktree.discardHunk' ? 'hunk' : 'restored'
+        return { worktreeId: 'wt_1', path: 'src/app.ts', outcome, discardedAt: 1 }
+      }
+      return defaultHandler(method, params, { id: '', emit: () => {}, respond: () => {} })
+    })
+
+    expect((await cli.run(['worktree', 'discard', 'fix-login', '--path', 'src/app.ts'])).code).toBe(ExitCode.Success)
+    expect(cli.stub.received.at(-1)).toMatchObject({
+      method: 'worktree.discardPath',
+      params: { worktreeId: 'wt_1', path: 'src/app.ts' }
+    })
+
+    await cli.run(['worktree', 'discard', 'fix-login', '--path', 'src/app.ts', '--hunk', '2'])
+    expect(cli.stub.received.filter((call) => call.method === 'worktree.diff').at(-1)).toMatchObject({
+      params: { staged: false }
+    })
+    expect(cli.stub.received.at(-1)).toMatchObject({
+      method: 'worktree.discardHunk',
+      params: { path: 'src/app.ts', hunk: { oldStart: 9, lines: [{ text: 'nine' }, { text: 'NINE' }] } }
+    })
+  })
+
   it('needs a path to stage a hunk of', async () => {
     const cli = await harness()
     const result = await cli.run(['worktree', 'stage-hunk', 'fix-login', '--hunk', '1'])
@@ -971,7 +1001,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(58)
+    expect(data.commands.length).toBe(59)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

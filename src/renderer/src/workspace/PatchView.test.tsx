@@ -45,6 +45,8 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { ChangesTab } = await import('./rightPanel/ChangesTab')
 const { readStoredDiffLayout } = await import('../state/preferences')
+const { ConfirmDiscardDialog } = await import('../dialogs/ConfirmDiscardDialog')
+type ConfirmDiscardProps = Parameters<typeof ConfirmDiscardDialog>[0]
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -259,6 +261,51 @@ describe('staging one hunk from the patch', () => {
     await userEvent.click(button)
 
     expect(call.mock.calls.filter((one) => one[0] === 'worktree.stageHunk')).toHaveLength(1)
+  })
+})
+
+describe('discarding one hunk from the patch', () => {
+  it('offers Discard beside Stage on the working half only', () => {
+    useWorkspaceStore.setState({ stagedDiff })
+    render(<ChangesTab />)
+
+    const stage = screen.getByRole('button', { name: 'Stage' })
+    const discard = screen.getByRole('button', { name: 'Discard' })
+    expect(discard.parentElement).toBe(stage.parentElement)
+    expect(screen.getAllByRole('button', { name: 'Discard' })).toHaveLength(1)
+  })
+
+  it('asks first, then reverses the hunk that was clicked', async () => {
+    useWorkspaceStore.setState({ diff: { ...diff, patch: TWO_HUNKS } })
+    render(<ChangesTab />)
+    const { default: userEvent } = await import('@testing-library/user-event')
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Discard' })[1] as HTMLElement)
+    expect(call).not.toHaveBeenCalled()
+    const dialog = useWorkspaceStore.getState().dialog
+    expect(dialog).toMatchObject({ kind: 'confirm-discard', worktreeId: 'wt', path: 'src/rank.ts' })
+
+    render(<ConfirmDiscardDialog {...(dialog as ConfirmDiscardProps)} />)
+    expect(screen.getByRole('dialog', { name: 'Discard this hunk of src/rank.ts?' })).toBeTruthy()
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Discard' }))
+
+    expect(call).toHaveBeenCalledWith('worktree.discardHunk', {
+      worktreeId: 'wt',
+      path: 'src/rank.ts',
+      hunk: expect.objectContaining({ oldStart: 210, oldCount: 6, newStart: 210, newCount: 7 })
+    })
+  })
+
+  // An added or deleted file's patch is the whole file; that goes as a file, not a hunk.
+  it('offers no hunk discard for a file that was added', () => {
+    useWorkspaceStore.setState({
+      diff: {
+        ...diff,
+        patch: 'diff --git a/n.ts b/n.ts\nnew file mode 100644\n--- /dev/null\n+++ b/n.ts\n@@ -0,0 +1 @@\n+x\n'
+      }
+    })
+    render(<ChangesTab />)
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
   })
 })
 

@@ -412,6 +412,44 @@ export const worktreeCommands: readonly CommandSpec[] = [
     run: async (context) => applyHunkCommand(context, false)
   },
   {
+    path: ['worktree', 'discard'],
+    summary: "Throw away a file's unstaged change, or one hunk of it.",
+    details:
+      'The index is never written, so what is staged stays. A tracked file goes back to its staged, else ' +
+      'committed, content; an untracked file goes to the Trash. With --hunk, hunks are numbered as ' +
+      '`teamree worktree diff --path <file>` prints them.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      {
+        name: 'path',
+        kind: 'string',
+        placeholder: '<path>',
+        description: 'The file to discard.',
+        required: true
+      },
+      { name: 'hunk', kind: 'number', placeholder: '<n>', description: 'Only this hunk of that file, from 1.' }
+    ],
+    examples: [
+      'teamree worktree discard fix-login --path src/app.ts',
+      'teamree worktree discard fix-login --path src/app.ts --hunk 2'
+    ],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const patchPath = requireString(context.flags, 'path')
+      if (readNumber(context.flags, 'hunk') === undefined) {
+        const result = await context.client.call('worktree.discardPath', { worktreeId: worktree.id, path: patchPath })
+        return { data: result, text: formatFields([[result.outcome, patchPath]]) }
+      }
+      const { wanted, hunk } = await readHunk(context, worktree.id, patchPath, false)
+      const result = await context.client.call('worktree.discardHunk', {
+        worktreeId: worktree.id,
+        path: patchPath,
+        hunk: wireHunk(hunk)
+      })
+      return { data: result, text: formatFields([['discarded', `hunk ${wanted} of ${patchPath}`]]) }
+    }
+  },
+  {
     path: ['worktree', 'push'],
     summary: "Send a worktree's branch to its remote.",
     details:
@@ -718,37 +756,9 @@ function renderPane(node: PaneNode, indent: string, focused: string | null): str
 async function applyHunkCommand(context: CommandContext, staged: boolean): Promise<{ data: unknown; text: string }> {
   const worktree = await resolveWorktree(context.client, context.args[0] as string)
   const patchPath = requireString(context.flags, 'path')
-  const wanted = readNumber(context.flags, 'hunk') ?? 1
-  if (!Number.isInteger(wanted) || wanted < 1) {
-    throw new CliError({ code: 'usage', message: '--hunk counts from 1.', exitCode: ExitCode.Usage })
-  }
-
   // Read against the side being changed: staging counts hunks of the working
   // tree, unstaging counts hunks of the index.
-  const diff = await context.client.call('worktree.diff', {
-    worktreeId: worktree.id,
-    path: patchPath,
-    staged: !staged
-  })
-  const hunks = parsePatch(diff.patch).flatMap((file) => file.hunks)
-  const hunk = hunks[wanted - 1]
-  if (hunk === undefined) {
-    throw new CliError({
-      code: 'not_found',
-      message:
-        hunks.length === 0
-          ? `No ${staged ? '' : 'staged '}hunks in ${patchPath}.`
-          : `${patchPath} has ${hunks.length} hunk${hunks.length === 1 ? '' : 's'}; there is no ${wanted}.`,
-      exitCode: ExitCode.Failure
-    })
-  }
-  if (diff.truncated) {
-    throw new CliError({
-      code: 'conflict',
-      message: `The patch for ${patchPath} was cut short, so its hunks cannot be numbered reliably.`,
-      exitCode: ExitCode.Failure
-    })
-  }
+  const { wanted, hunk } = await readHunk(context, worktree.id, patchPath, !staged)
 
   const result = await context.client.call(staged ? 'worktree.stageHunk' : 'worktree.unstageHunk', {
     worktreeId: worktree.id,
@@ -763,6 +773,41 @@ async function applyHunkCommand(context: CommandContext, staged: boolean): Promi
       ['lines', `+${result.added} -${result.removed}`]
     ])
   }
+}
+
+/** The `--hunk`th hunk of one side of a path's patch, read just now. */
+async function readHunk(
+  context: CommandContext,
+  worktreeId: string,
+  patchPath: string,
+  fromIndex: boolean
+): Promise<{ wanted: number; hunk: PatchHunk }> {
+  const wanted = readNumber(context.flags, 'hunk') ?? 1
+  if (!Number.isInteger(wanted) || wanted < 1) {
+    throw new CliError({ code: 'usage', message: '--hunk counts from 1.', exitCode: ExitCode.Usage })
+  }
+
+  const diff = await context.client.call('worktree.diff', { worktreeId, path: patchPath, staged: fromIndex })
+  const hunks = parsePatch(diff.patch).flatMap((file) => file.hunks)
+  const hunk = hunks[wanted - 1]
+  if (hunk === undefined) {
+    throw new CliError({
+      code: 'not_found',
+      message:
+        hunks.length === 0
+          ? `No ${fromIndex ? 'staged ' : ''}hunks in ${patchPath}.`
+          : `${patchPath} has ${hunks.length} hunk${hunks.length === 1 ? '' : 's'}; there is no ${wanted}.`,
+      exitCode: ExitCode.Failure
+    })
+  }
+  if (diff.truncated) {
+    throw new CliError({
+      code: 'conflict',
+      message: `The patch for ${patchPath} was cut short, so its hunks cannot be numbered reliably.`,
+      exitCode: ExitCode.Failure
+    })
+  }
+  return { wanted, hunk }
 }
 
 /** A parsed hunk with the parser's own bookkeeping left off. */

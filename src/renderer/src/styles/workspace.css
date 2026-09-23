@@ -662,6 +662,15 @@
   opacity: 0.5;
 }
 
+/* Before Stage, and red only once the header is under the pointer. */
+.patch__discard + .patch__stage {
+  margin-inline-start: var(--s1);
+}
+
+.patch__hunkHead:hover .patch__discard {
+  color: var(--danger);
+}
+
 /* Which half of the patch is underneath. Drawn only when both halves are there;
    see ChangesPanel. */
 .changes__half {
@@ -796,6 +805,35 @@
 
 .changes__item .change {
   padding-left: 0;
+}
+
+/* Out of sight until the row is pointed at or tabbed to; the right-click menu offers the same. */
+.change__discard {
+  flex: none;
+  margin-inline-end: var(--s3);
+  padding: 0 var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--danger);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.changes__item:hover .change__discard,
+.change__discard:focus-visible {
+  opacity: 1;
+}
+
+.change__discard:hover {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+.changes__item:hover .change__discard:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .changes__commit {

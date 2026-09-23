@@ -203,6 +203,9 @@ describe('dispatcher', () => {
       'worktree.commit',
       'worktree.create',
       'worktree.diff',
+      // Local: throws work away on this machine's disk.
+      'worktree.discardHunk',
+      'worktree.discardPath',
       // Local: a directory listing of this machine's checkout is its own to show.
       'worktree.files',
       'worktree.findFiles',

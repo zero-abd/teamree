@@ -24,7 +24,8 @@ export function PatchView({
   layout,
   action,
   busy = false,
-  onHunk
+  onHunk,
+  onDiscard
 }: {
   patch: string
   truncated: boolean
@@ -34,6 +35,8 @@ export function PatchView({
   /** True while one is in flight, so a second click cannot race the first. */
   busy?: boolean
   onHunk?: (file: PatchFile, hunk: PatchHunk) => void
+  /** Offers `Discard` on each hunk of a modified or renamed file; a whole-file change is discarded as a file. */
+  onDiscard?: (file: PatchFile, hunk: PatchHunk) => void
 }): React.JSX.Element {
   // Once per patch: the panel re-renders on every refresh tick and a patch is thousands of lines.
   const files = useMemo(() => parsePatch(patch), [patch])
@@ -76,6 +79,9 @@ export function PatchView({
                     // one stages whole — the runtime refuses a hunk of either,
                     // so the control is not offered for them here.
                     { action, onHunk: () => onHunk(file, hunk) })}
+                {...(onDiscard === undefined || (file.status !== 'modified' && file.status !== 'renamed')
+                  ? {}
+                  : { onDiscard: () => onDiscard(file, hunk) })}
               />
             ))
           )}
@@ -92,7 +98,8 @@ function HunkView({
   layout,
   action,
   busy,
-  onHunk
+  onHunk,
+  onDiscard
 }: {
   hunk: PatchHunk
   language: SyntaxLanguage | null
@@ -100,6 +107,7 @@ function HunkView({
   action?: HunkAction
   busy: boolean
   onHunk?: () => void
+  onDiscard?: () => void
 }): React.JSX.Element {
   return (
     <details className="patch__hunk" open>
@@ -110,20 +118,11 @@ function HunkView({
         {/* The header in a span of its own, so the control beside it is not
             part of the line somebody reads the position off. */}
         <span className="patch__hunkAt">{hunk.header}</span>
+        {onDiscard === undefined ? null : (
+          <HunkButton label="Discard" busy={busy} onClick={onDiscard} className="patch__stage patch__discard" />
+        )}
         {action === undefined || onHunk === undefined ? null : (
-          <button
-            type="button"
-            className="patch__stage"
-            disabled={busy}
-            // Inside a `summary`, a click folds the hunk unless the button stops it.
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              onHunk()
-            }}
-          >
-            {action}
-          </button>
+          <HunkButton label={action} busy={busy} onClick={onHunk} className="patch__stage" />
         )}
       </summary>
       <div className="patch__lines">
@@ -144,6 +143,34 @@ function HunkView({
             ))}
       </div>
     </details>
+  )
+}
+
+function HunkButton({
+  label,
+  busy,
+  onClick,
+  className
+}: {
+  label: string
+  busy: boolean
+  onClick: () => void
+  className: string
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={className}
+      disabled={busy}
+      // Inside a `summary`, a click folds the hunk unless the button stops it.
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onClick()
+      }}
+    >
+      {label}
+    </button>
   )
 }
 

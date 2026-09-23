@@ -232,6 +232,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         openExternal: (url) => shell.openExternal(url),
         downloadsDirectory: app.getPath('downloads'),
         openPath: (path) => shell.openPath(path),
+        trashItem: (path) => shell.trashItem(path),
         onAgentNotice: (notice) => notices?.deliver(notice),
         // `teamree quit`: only `app.quit` runs `before-quit`. See quitSequence.ts.
         requestQuit: () => app.quit()

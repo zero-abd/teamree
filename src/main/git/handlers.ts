@@ -25,6 +25,8 @@ export const GIT_METHODS = [
   'worktree.commit',
   'worktree.stageHunk',
   'worktree.unstageHunk',
+  'worktree.discardPath',
+  'worktree.discardHunk',
   'worktree.log',
   'worktree.mergePreview',
   'worktree.push',
@@ -56,6 +58,8 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.commit': (params) => service.worktreeCommit(params),
     'worktree.stageHunk': (params) => service.worktreeStageHunk(params),
     'worktree.unstageHunk': (params) => service.worktreeUnstageHunk(params),
+    'worktree.discardPath': (params) => service.worktreeDiscardPath(params),
+    'worktree.discardHunk': (params) => service.worktreeDiscardHunk(params),
     'worktree.log': (params) => service.worktreeLog(params),
     'worktree.mergePreview': (params) => service.worktreeMergePreview(params),
     'worktree.push': (params) => service.worktreePush(params),
@@ -83,6 +87,8 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.commit', Params.worktreeCommit, handlers['worktree.commit'])
   registry.register('worktree.stageHunk', Params.worktreeStageHunk, handlers['worktree.stageHunk'])
   registry.register('worktree.unstageHunk', Params.worktreeUnstageHunk, handlers['worktree.unstageHunk'])
+  registry.register('worktree.discardPath', Params.worktreeDiscardPath, handlers['worktree.discardPath'])
+  registry.register('worktree.discardHunk', Params.worktreeDiscardHunk, handlers['worktree.discardHunk'])
   registry.register('worktree.log', Params.worktreeLog, handlers['worktree.log'])
   registry.register('worktree.mergePreview', Params.worktreeMergePreview, handlers['worktree.mergePreview'])
   registry.register('worktree.push', Params.worktreePush, handlers['worktree.push'])

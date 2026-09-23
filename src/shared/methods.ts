@@ -34,6 +34,7 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeDiff,
+  WorktreeDiscard,
   WorktreeFileMatches,
   WorktreeFiles,
   WorktreeHunkStage,
@@ -265,6 +266,21 @@ export const Params = {
   }),
   /** The same in reverse: takes one hunk of the staged patch back out of the index. */
   worktreeUnstageHunk: z.object({
+    worktreeId: z.string().min(1),
+    path: z.string().min(1).max(4096),
+    hunk: Hunk
+  }),
+
+  /**
+   * Throws away a path's unstaged change. Tracked: back to the staged, else committed,
+   * content. Untracked: moved to the Trash. The index is never written.
+   */
+  worktreeDiscardPath: z.object({
+    worktreeId: z.string().min(1),
+    path: z.string().min(1).max(4096)
+  }),
+  /** Reverses one hunk of the unstaged patch out of the file on disk; a staged hunk is refused. */
+  worktreeDiscardHunk: z.object({
     worktreeId: z.string().min(1),
     path: z.string().min(1).max(4096),
     hunk: Hunk
@@ -606,6 +622,8 @@ export type MethodContract = {
   'worktree.commit': { params: z.infer<typeof Params.worktreeCommit>; result: WorktreeCommit }
   'worktree.stageHunk': { params: z.infer<typeof Params.worktreeStageHunk>; result: WorktreeHunkStage }
   'worktree.unstageHunk': { params: z.infer<typeof Params.worktreeUnstageHunk>; result: WorktreeHunkStage }
+  'worktree.discardPath': { params: z.infer<typeof Params.worktreeDiscardPath>; result: WorktreeDiscard }
+  'worktree.discardHunk': { params: z.infer<typeof Params.worktreeDiscardHunk>; result: WorktreeDiscard }
   'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
   'worktree.log': { params: z.infer<typeof Params.worktreeLog>; result: WorktreeLog }
   'worktree.mergePreview': {
