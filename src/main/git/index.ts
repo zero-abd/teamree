@@ -27,6 +27,13 @@ export {
   sortChanges
 } from './worktreeChanges'
 export { lacksWriteTree, parseMergeTree, readMergePreview } from './mergePreview'
+export {
+  DEFAULT_FILES_LIMIT,
+  DEFAULT_FIND_LIMIT,
+  findWorktreeFiles,
+  readWorktreeFiles,
+  resolveInsideWorktree
+} from './worktreeFiles'
 export { commitWorktree } from './worktreeCommit'
 export { applyHunk, hunkPatch } from './worktreeHunk'
 export { DEFAULT_LOG_LIMIT, parseLogRecords, readWorktreeLog } from './worktreeLog'

@@ -61,6 +61,7 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'open-palette': 'around',
   'open-dashboard': 'around',
   'toggle-sidebar': 'around',
+  'toggle-right-panel': 'around',
   'open-appearance': 'app',
   'open-settings': 'app',
   'open-help': 'app',

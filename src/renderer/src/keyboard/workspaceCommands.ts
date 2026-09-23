@@ -25,6 +25,7 @@
 // because the menu bar is reachable while a modal is up.
 
 import type { ConsentRequest, Layout, WorktreeStatus } from '@shared/entities'
+import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { collectTerminalIds } from '../panes/paneLayout'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
@@ -54,8 +55,6 @@ export type CommandState = {
    * the header chips are drawn from, read here rather than restated.
    */
   statuses: Readonly<Record<string, Partial<WorktreeStatus>>>
-  /** Whether the changes panel is already open, which decides whether Commit… opens it. */
-  changesOpen: boolean
   /** A push already in flight, which is the one thing that makes Push inert. */
   pushing: boolean
 }
@@ -72,12 +71,13 @@ export type CommandActions = {
   stepWorktree: (step: 1 | -1) => void
   openPaneSearch: () => void
   toggleSidebar: () => void
+  toggleRightPanel: () => void
   toggleDashboard: () => void
   toggleHelp: () => void
   openDialog: (dialog: NonNullable<DialogState>) => void
   closeDialog: () => void
   toggleSettings: () => void
-  toggleChanges: () => void
+  showRightPanelTab: (tab: RightPanelTab) => void
   pushActiveWorktree: () => Promise<void>
 }
 
@@ -154,6 +154,10 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
       // watch, so it counts as something the command can do.
       return state.focusedWatchId !== null || activeLayout(state)?.focusedTerminalId != null
     case 'new-terminal':
+      return state.activeWorktreeId !== null
+    case 'toggle-right-panel':
+      // The panel shows one worktree's files, changes and panes; with none
+      // open it has nothing to show and the item says so.
       return state.activeWorktreeId !== null
     case 'new-worktree':
       return projectForNewTask(state) !== undefined
@@ -246,6 +250,9 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'toggle-sidebar':
       store.toggleSidebar()
       break
+    case 'toggle-right-panel':
+      store.toggleRightPanel()
+      break
     case 'focus-next-pane':
       store.focusNextPane()
       break
@@ -280,11 +287,11 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       store.toggleSettings()
       break
     case 'commit-changes':
-      // The message box is in the changes panel, so this is the command that
-      // puts the panel on screen. Opens rather than toggles: somebody who asked
-      // to commit with the panel already up meant to commit, and closing it
+      // The message box is on the changes tab, so this is the command that
+      // puts that tab on screen. Shows rather than toggles: somebody who asked
+      // to commit with the tab already up meant to commit, and closing it
       // under them would be the opposite of what they pressed.
-      if (!store.changesOpen) store.toggleChanges()
+      store.showRightPanelTab('changes')
       break
     case 'push-worktree':
       void store.pushActiveWorktree()

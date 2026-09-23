@@ -6,6 +6,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', async () => {
   return { runtimeClient: createSeededRuntimeClient() }
 })
 
+import { changesOnScreen } from '../workspace/rightPanel/rightPanelState'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import {
   reconcileRelayPanes,
@@ -53,7 +54,7 @@ it('reads the changed paths only once the panel is open, and the patch only once
 
   // Closed, it costs nothing: a `git status` per refresh for a panel nobody is
   // looking at is exactly the kind of thing that makes an app feel heavy.
-  expect(useWorkspaceStore.getState().changesOpen).toBe(false)
+  expect(changesOnScreen(useWorkspaceStore.getState())).toBe(false)
   expect(changesCalls()).toBe(0)
 
   useWorkspaceStore.getState().toggleChanges()
@@ -86,7 +87,7 @@ it('does not carry one worktree’s patch across to another worktree', async () 
   const [first, second] = [ready[0]!, ready[1]!]
 
   await store.openWorktree(first.id)
-  if (!useWorkspaceStore.getState().changesOpen) useWorkspaceStore.getState().toggleChanges()
+  if (!changesOnScreen(useWorkspaceStore.getState())) useWorkspaceStore.getState().toggleChanges()
   await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[first.id]).toBeDefined())
 
   const path = useWorkspaceStore.getState().changes[first.id]!.changes[0]?.path
@@ -136,7 +137,7 @@ it('commits only the ticked paths, and unticks them afterwards', async () => {
   await store.bootstrap()
   const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
   await store.openWorktree(worktreeId)
-  if (!useWorkspaceStore.getState().changesOpen) useWorkspaceStore.getState().toggleChanges()
+  if (!changesOnScreen(useWorkspaceStore.getState())) useWorkspaceStore.getState().toggleChanges()
   await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[worktreeId]?.changes.length).toBeGreaterThan(1))
 
   const rows = useWorkspaceStore.getState().changes[worktreeId]!.changes
@@ -175,7 +176,7 @@ it('drops a tick for a path that stopped being a change', async () => {
   await store.bootstrap()
   const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
   await store.openWorktree(worktreeId)
-  if (!useWorkspaceStore.getState().changesOpen) useWorkspaceStore.getState().toggleChanges()
+  if (!changesOnScreen(useWorkspaceStore.getState())) useWorkspaceStore.getState().toggleChanges()
   await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[worktreeId]).toBeDefined())
 
   const real = useWorkspaceStore.getState().changes[worktreeId]!.changes[0]!.path

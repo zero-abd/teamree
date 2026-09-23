@@ -149,6 +149,43 @@ export type WorktreeChanges = {
   readAt: number
 }
 
+/** What one entry of a worktree directory is, as `lstat` sees it. */
+export type WorktreeFileKind = 'file' | 'dir' | 'symlink'
+
+/**
+ * One entry of one directory in a worktree. A name, never a path: the caller
+ * asked for a directory and knows which, and nothing here is read recursively.
+ */
+export type WorktreeFileEntry = {
+  name: string
+  kind: WorktreeFileKind
+  /** True when git's ignore rules cover it, so a listing can draw it dimmed. */
+  ignored: boolean
+}
+
+/** One directory of a worktree, as of one read. Never its contents. */
+export type WorktreeFiles = {
+  worktreeId: string
+  /** The directory listed, relative to the worktree root; `''` is the root. */
+  path: string
+  /** Directories first, then the rest, each half in name order. */
+  entries: WorktreeFileEntry[]
+  /** True when the directory holds more than `entries` carries. */
+  truncated: boolean
+  readAt: number
+}
+
+/** The paths in a worktree whose name matches a query, as of one read. */
+export type WorktreeFileMatches = {
+  worktreeId: string
+  query: string
+  /** Relative to the worktree root, in path order. */
+  paths: string[]
+  /** True when more matched than `paths` carries. */
+  truncated: boolean
+  readAt: number
+}
+
 /** A unified diff for a worktree, or for one path in it. */
 export type WorktreeDiff = {
   worktreeId: string

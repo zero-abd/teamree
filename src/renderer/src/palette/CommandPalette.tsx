@@ -56,7 +56,6 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
   const watches = useWorkspaceStore((state) => state.watches)
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const statuses = useWorkspaceStore((state) => state.statuses)
-  const changesOpen = useWorkspaceStore((state) => state.changesOpen)
   const pushing = useWorkspaceStore((state) => state.pushing)
   const offered = useMemo(
     () =>
@@ -74,23 +73,10 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
           watches,
           focusedWatchId,
           statuses,
-          changesOpen,
           pushing
         })
       }),
-    [
-      items,
-      consent,
-      projects,
-      worktrees,
-      activeWorktreeId,
-      layouts,
-      watches,
-      focusedWatchId,
-      statuses,
-      changesOpen,
-      pushing
-    ]
+    [items, consent, projects, worktrees, activeWorktreeId, layouts, watches, focusedWatchId, statuses, pushing]
   )
 
   const matches = useMemo(() => filterPalette(offered, query), [offered, query])
@@ -126,6 +112,9 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
     switch (item.id) {
       case 'toggle-changes':
         store.toggleChanges()
+        break
+      case 'show-files':
+        store.showRightPanelTab('files')
         break
       case 'add-project':
         store.openDialog({ kind: 'add-project' })

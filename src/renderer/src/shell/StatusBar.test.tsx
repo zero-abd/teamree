@@ -86,9 +86,18 @@ describe('the git segment', () => {
   })
 
   it('says whether the panel is showing', () => {
-    seed({ statuses: { w1: status({ unstaged: 1 }) }, changesOpen: true })
+    seed({ statuses: { w1: status({ unstaged: 1 }) }, rightPanelOpen: true, rightPanelTab: 'changes' })
     mount()
     expect(screen.getByRole('button', { name: 'Changes, 1 uncommitted' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  // The panel open on another tab is not the changes panel showing: a click
+  // then brings the changes tab up rather than putting the panel away, and a
+  // pressed button would promise the opposite.
+  it('is not pressed while the panel shows another tab', () => {
+    seed({ statuses: { w1: status({ unstaged: 1 }) }, rightPanelOpen: true, rightPanelTab: 'files' })
+    mount()
+    expect(screen.getByRole('button', { name: 'Changes, 1 uncommitted' }).getAttribute('aria-pressed')).toBe('false')
   })
 
   // A clean tree is still a fact worth a button: the panel is where the last

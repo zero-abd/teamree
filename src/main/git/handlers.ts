@@ -48,6 +48,8 @@ export const GIT_METHODS = [
   'worktree.status',
   'worktree.changes',
   'worktree.diff',
+  'worktree.files',
+  'worktree.findFiles',
   'worktree.commit',
   'worktree.stageHunk',
   'worktree.unstageHunk',
@@ -76,6 +78,8 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.status': (params) => service.worktreeStatus(params),
     'worktree.changes': (params) => service.worktreeChanges(params),
     'worktree.diff': (params) => service.worktreeDiff(params),
+    'worktree.files': (params) => service.worktreeFiles(params),
+    'worktree.findFiles': (params) => service.worktreeFindFiles(params),
     'worktree.commit': (params) => service.worktreeCommit(params),
     'worktree.stageHunk': (params) => service.worktreeStageHunk(params),
     'worktree.unstageHunk': (params) => service.worktreeUnstageHunk(params),
@@ -100,6 +104,8 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.status', Params.worktreeStatus, handlers['worktree.status'])
   registry.register('worktree.changes', Params.worktreeChanges, handlers['worktree.changes'])
   registry.register('worktree.diff', Params.worktreeDiff, handlers['worktree.diff'])
+  registry.register('worktree.files', Params.worktreeFiles, handlers['worktree.files'])
+  registry.register('worktree.findFiles', Params.worktreeFindFiles, handlers['worktree.findFiles'])
   registry.register('worktree.commit', Params.worktreeCommit, handlers['worktree.commit'])
   registry.register('worktree.stageHunk', Params.worktreeStageHunk, handlers['worktree.stageHunk'])
   registry.register('worktree.unstageHunk', Params.worktreeUnstageHunk, handlers['worktree.unstageHunk'])

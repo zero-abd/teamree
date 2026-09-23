@@ -5,26 +5,20 @@
 // agent's work leaves you with when you come back to a worktree it has been
 // busy in for ten minutes.
 //
+// One tab of the right panel now. The rail above it carries the name, the
+// count and the way to put it away, so none of those is repeated here; what is
+// here is the list, the commit box, the commits and the patch, exactly as they
+// were when this was a panel of its own.
+//
 // It rides the same invalidation as everything else, so an edit made in a pane
 // two inches to the left moves this list without anyone asking it to.
 
 import { useState } from 'react'
-import { useWorkspaceStore } from '../state/workspaceStore'
-import { PatchView } from './PatchView'
-import type { DiffLayout } from '../state/preferences'
-import type { WorktreeChange, WorktreeLog } from '@shared/entities'
-
-/** One letter per kind, the way git itself abbreviates them. */
-const KIND_LETTER: Record<WorktreeChange['kind'], string> = {
-  modified: 'M',
-  added: 'A',
-  deleted: 'D',
-  renamed: 'R',
-  copied: 'C',
-  typeChanged: 'T',
-  untracked: '?',
-  conflicted: '!'
-}
+import { useWorkspaceStore } from '../../state/workspaceStore'
+import { PatchView } from '../PatchView'
+import { KIND_LABEL, KIND_LETTER } from './changeKinds'
+import type { DiffLayout } from '../../state/preferences'
+import type { WorktreeLog } from '@shared/entities'
 
 /** The two layouts, and the two words that offer them. */
 const LAYOUTS: readonly [DiffLayout, string][] = [
@@ -32,19 +26,7 @@ const LAYOUTS: readonly [DiffLayout, string][] = [
   ['split', 'Side by side']
 ]
 
-const KIND_LABEL: Record<WorktreeChange['kind'], string> = {
-  modified: 'Modified',
-  added: 'Added',
-  deleted: 'Deleted',
-  renamed: 'Renamed',
-  copied: 'Copied',
-  typeChanged: 'Type changed',
-  untracked: 'Untracked',
-  conflicted: 'Conflicted'
-}
-
-export function ChangesPanel(): React.JSX.Element | null {
-  const open = useWorkspaceStore((state) => state.changesOpen)
+export function ChangesTab(): React.JSX.Element | null {
   const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const changes = useWorkspaceStore((state) => (worktreeId ? state.changes[worktreeId] : undefined))
   const selectedPath = useWorkspaceStore((state) => state.selectedChangePath)
@@ -56,7 +38,6 @@ export function ChangesPanel(): React.JSX.Element | null {
   const diffLayout = useWorkspaceStore((state) => state.diffLayout)
   const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
   const selectChange = useWorkspaceStore((state) => state.selectChange)
-  const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
   const stagedPaths = useWorkspaceStore((state) => state.stagedPaths)
   const toggleStaged = useWorkspaceStore((state) => state.toggleStaged)
   const setAllStaged = useWorkspaceStore((state) => state.setAllStaged)
@@ -70,7 +51,7 @@ export function ChangesPanel(): React.JSX.Element | null {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const message = draftFor(drafts, worktreeId)
 
-  if (!open || !worktreeId) return null
+  if (!worktreeId) return null
 
   const setMessage = (next: string): void => setDrafts((current) => withDraft(current, worktreeId, next))
 
@@ -92,17 +73,7 @@ export function ChangesPanel(): React.JSX.Element | null {
   }
 
   return (
-    <aside className="changes" aria-label="Changes in this worktree">
-      <header className="changes__head">
-        <h2 className="changes__title">Changes</h2>
-        {changes ? <span className="changes__count">{changes.total}</span> : null}
-        <button type="button" className="changes__close" aria-label="Hide changes" onClick={toggleChanges}>
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M3 3 L9 9 M9 3 L3 9" />
-          </svg>
-        </button>
-      </header>
-
+    <section className="changes" aria-label="Changes in this worktree">
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
@@ -267,7 +238,7 @@ export function ChangesPanel(): React.JSX.Element | null {
           </div>
         </>
       )}
-    </aside>
+    </section>
   )
 }
 

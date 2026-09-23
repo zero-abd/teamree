@@ -34,7 +34,7 @@ import { SettingsView } from '../settings/SettingsView'
 import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 import { TeamworkView } from '../teamwork/TeamworkView'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
-import { ChangesPanel } from './ChangesPanel'
+import { RightPanel } from './rightPanel/RightPanel'
 import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { terminalTarget } from './terminalTarget'
@@ -419,7 +419,7 @@ function WorkspaceView({
           )}
         </div>
 
-        <ChangesPanel />
+        <RightPanel modifier={modifier} />
       </div>
     </main>
   )

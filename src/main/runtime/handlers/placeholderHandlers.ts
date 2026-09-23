@@ -20,6 +20,8 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'worktree.status', Params.worktreeStatus)
   placeholder(registry, 'worktree.changes', Params.worktreeChanges)
   placeholder(registry, 'worktree.diff', Params.worktreeDiff)
+  placeholder(registry, 'worktree.files', Params.worktreeFiles)
+  placeholder(registry, 'worktree.findFiles', Params.worktreeFindFiles)
   placeholder(registry, 'worktree.commit', Params.worktreeCommit)
   placeholder(registry, 'worktree.stageHunk', Params.worktreeStageHunk)
   placeholder(registry, 'worktree.unstageHunk', Params.worktreeUnstageHunk)

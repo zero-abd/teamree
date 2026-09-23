@@ -20,6 +20,7 @@ import type {
   UpdateState,
   Worktree,
   WorktreeChange,
+  WorktreeFileEntry,
   WorktreeStatus
 } from '@shared/entities'
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
@@ -125,6 +126,30 @@ function seededChanges(status: WorktreeStatus): WorktreeChange[] {
     changes.push({ path: take(), kind: 'untracked', staged: false, unstaged: true })
   }
   return changes
+}
+
+/**
+ * One directory of the invented tree, read off the same paths the changes are
+ * drawn from so a file the changes list names is a file the tree has.
+ * `node_modules` is there and ignored, because a tree with nothing dimmed does
+ * not show what dimming is for.
+ */
+function seededDirectory(directory: string): WorktreeFileEntry[] {
+  const prefix = directory === '' ? '' : `${directory}/`
+  const names = new Map<string, WorktreeFileEntry>()
+  for (const file of [...SEEDED_PATHS, 'README.md', 'package.json', '.gitignore', 'node_modules/.package-lock.json']) {
+    if (!file.startsWith(prefix)) continue
+    const rest = file.slice(prefix.length)
+    const cut = rest.indexOf('/')
+    const name = cut === -1 ? rest : rest.slice(0, cut)
+    if (names.has(name)) continue
+    names.set(name, { name, kind: cut === -1 ? 'file' : 'dir', ignored: name === 'node_modules' })
+  }
+  return [...names.values()].sort(
+    (left, right) =>
+      (left.kind === 'dir' ? 0 : 1) - (right.kind === 'dir' ? 0 : 1) ||
+      left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
+  )
 }
 
 /** A small believable patch, so the diff pane has something to render. */
@@ -756,6 +781,31 @@ export function createSeededRuntimeClient(): RuntimeClient {
               .slice(0, status?.conflicted ?? 0)
               .map((change) => change.path)
           : [],
+        readAt: Date.now()
+      }
+    },
+    'worktree.files': ({ worktreeId, path, limit }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const entries = seededDirectory(path ?? '')
+      const cap = limit ?? 2000
+      return {
+        worktreeId: worktree.id,
+        path: path ?? '',
+        entries: entries.slice(0, cap),
+        truncated: entries.length > cap,
+        readAt: Date.now()
+      }
+    },
+    'worktree.findFiles': ({ worktreeId, query, limit }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const wanted = query.trim().toLowerCase()
+      const cap = limit ?? 200
+      const paths = wanted === '' ? [] : SEEDED_PATHS.filter((entry) => entry.toLowerCase().includes(wanted)).sort()
+      return {
+        worktreeId: worktree.id,
+        query,
+        paths: paths.slice(0, cap),
+        truncated: paths.length > cap,
         readAt: Date.now()
       }
     },

@@ -1,0 +1,412 @@
+/* The panel on the right of the panes: a rail of three icon tabs, and under it
+   the worktree's files, its changes, or its panes.
+
+   Closed, the panel is the rail alone, down the window's right edge, so the
+   tabs stay findable. Open, the rail sits across the top and the body takes
+   the width somebody dragged it to. */
+
+.panel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-width: 60%;
+  background: var(--bg-panel);
+}
+
+.panel--closed {
+  width: 30px;
+  border-left: 1px solid var(--line);
+  background: var(--bg-rail);
+}
+
+/* The seam between the panes and the panel: the same line and the same target
+   as the sidebar's, growing the other way. */
+.panel__resizer {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  width: 1px;
+  background: var(--line);
+  cursor: col-resize;
+  touch-action: none;
+  transition: background var(--motion-fast) var(--ease);
+}
+
+.panel__resizer::after {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
+}
+
+.panel__resizer:hover,
+.panel__resizer:focus-visible {
+  background: var(--accent);
+}
+
+.panel__resizer:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.panel__rail {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s1);
+  padding: var(--s1) var(--s2);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-rail);
+}
+
+.panel__rail--edge {
+  flex: 1;
+  flex-direction: column;
+  padding: var(--s2) 0;
+  border-bottom: 0;
+}
+
+.panel__tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.panel__rail--edge .panel__tabs {
+  flex-direction: column;
+}
+
+.panel__tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.panel__tab svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.panel__tab:hover,
+.panel__tab:focus-visible {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.panel__tab--current {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+/* A count in the corner of the icon. Tabular figures so it does not jitter as
+   the count ticks between one width of number and another. */
+.panel__badge {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  min-width: 12px;
+  padding: 0 3px;
+  border-radius: 99px;
+  background: var(--bg-press);
+  color: var(--fg-secondary);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  line-height: 12px;
+  text-align: center;
+}
+
+/* Down the edge there is no room to the right of the icon, so the count sits
+   inside the rail's own width. */
+.panel__rail--edge .panel__badge {
+  right: -1px;
+}
+
+.panel__fold {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.panel__rail--edge .panel__fold {
+  margin-top: auto;
+  margin-left: 0;
+}
+
+.panel__fold svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.panel__fold:hover,
+.panel__fold:focus-visible {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.panel__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* One row of controls above a tab's content: a field, a count, a button. */
+.panel__toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.panel__toolbarText {
+  flex: 1;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.panel__tool {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.panel__tool svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.panel__tool:hover,
+.panel__tool:focus-visible {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.panel__empty,
+.panel__note {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  list-style: none;
+}
+
+/* Files ------------------------------------------------------------------- */
+
+.tree {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tree__find {
+  flex: 1;
+  min-width: 0;
+  padding: var(--s1) var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.tree__find:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.tree__list {
+  flex: 1;
+  margin: 0;
+  padding: var(--s2) 0;
+  min-height: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.tree__item {
+  display: flex;
+  align-items: center;
+}
+
+/* One row, indented by its depth — which the row writes onto itself, and
+   which is declared here so a row that forgot to is at the root rather than
+   nowhere. The chevron and the leaf's blank keep the names in one column
+   under each folder. */
+.tree__row {
+  --depth: 0;
+
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--s1);
+  min-width: 0;
+  padding: 2px var(--s2) 2px calc(var(--s3) + var(--depth) * 14px);
+  border: 0;
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tree__row:hover,
+.tree__row:focus-visible {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.tree__row--dir {
+  color: var(--fg);
+}
+
+.tree__row--found {
+  padding-left: var(--s3);
+}
+
+/* Git's own verdict, drawn as git draws it: still there, and not the point. */
+.tree__item--ignored .tree__row {
+  color: var(--fg-muted);
+  opacity: 0.55;
+}
+
+.tree__leaf {
+  flex: none;
+  width: 10px;
+}
+
+.tree__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree__dir {
+  color: var(--fg-muted);
+}
+
+.tree__kind {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* The letter the changes tab prints, at the end of the row. */
+.tree__status {
+  margin-left: auto;
+}
+
+/* A folder with changes somewhere inside it says so with a dot rather than a
+   count: the count is on the file, once the folder is open. */
+.tree__under {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-left: auto;
+  border-radius: 99px;
+  background: var(--warning);
+}
+
+/* Shown on hover, and to the keyboard always. */
+.tree__reveal {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: var(--s1);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.tree__item:hover .tree__reveal,
+.tree__reveal:focus-visible {
+  opacity: 1;
+}
+
+.tree__reveal:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.tree__reveal svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+/* Panes ------------------------------------------------------------------- */
+
+.panel__panes {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The sidebar indents its pane rows under a worktree name; here there is no
+   name above them, so they start at the edge. */
+.panes--panel {
+  flex: 1;
+  min-height: 0;
+  padding: var(--s2) var(--s2);
+  overflow: auto;
+}

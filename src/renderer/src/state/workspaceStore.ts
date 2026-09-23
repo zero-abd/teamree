@@ -85,6 +85,15 @@ import type { PatchHunk } from '@shared/patch'
 import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
+import {
+  changesOnScreen,
+  readStoredRightPanel,
+  readStoredRightPanelWidth,
+  clampRightPanelWidth,
+  writeStoredRightPanel,
+  writeStoredRightPanelWidth,
+  type RightPanelTab
+} from '../workspace/rightPanel/rightPanelState'
 
 export type DialogState =
   | { kind: 'add-project' }
@@ -288,11 +297,20 @@ type WorkspaceState = {
    */
   paneSeenAt: PaneSeen
 
-  /** Open state of the changes panel, and what it is showing. */
   /** Whether each ready worktree would merge into its base, as last read. */
   mergePreviews: Record<string, WorktreeMergePreview>
 
-  changesOpen: boolean
+  /**
+   * The panel on the right of the panes: files, changes or panes of the
+   * worktree on screen. Which tab and whether it is open are this machine's
+   * habit and are remembered with its width; what the tab shows is the
+   * worktree's and is read fresh. `changesOnScreen` in `rightPanelState.ts`
+   * is the one question the refresh asks of these two.
+   */
+  rightPanelOpen: boolean
+  rightPanelTab: RightPanelTab
+  rightPanelWidth: number
+
   changes: Record<string, WorktreeChanges>
   /** What each worktree has committed that its base has not. */
   logs: Record<string, WorktreeLog>
@@ -663,7 +681,17 @@ type WorkspaceState = {
   openPaneSearch: () => void
   closePaneSearch: () => void
 
+  /**
+   * Opens the right panel on the changes tab, or closes it when that is what
+   * is showing. Every control that opened the changes panel before the panel
+   * had tabs comes through here.
+   */
   toggleChanges: () => void
+  /** Opens the right panel, or closes it, on whichever tab it last showed. */
+  toggleRightPanel: () => void
+  /** Opens the right panel on one tab. */
+  showRightPanelTab: (tab: RightPanelTab) => void
+  setRightPanelWidth: (width: number) => void
   /** Shows the patch for one path, or clears the selection when given null. */
   selectChange: (path: string | null) => void
   /** Adds or removes one path from what the next commit will capture. */
@@ -896,6 +924,7 @@ const storage = typeof window === 'undefined' ? undefined : window.localStorage
 
 /** What the last window in this installation was showing, read once at startup. */
 const lastSession = readStoredSession(storage)
+const lastPanel = readStoredRightPanel(storage)
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const notify = (text: string, tone: Notice['tone'] = 'error', action?: Notice['action']): void => {
@@ -1053,6 +1082,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }))
   }
 
+  /** The changes list and the commit log, for a panel that has just come on screen. */
+  const readChangesNow = (worktreeId: string): void => {
+    void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
+    void refreshLog(worktreeId).catch(() => undefined)
+  }
+
   /**
    * The patch for the selected path. Re-read whenever the tree moves, so the
    * pane on the right is never describing an older version of the file than the
@@ -1185,8 +1220,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     // The panel rides the same signal as the chips above it, so an edit made in
     // a shell — or by an agent through the CLI — moves both at once.
-    const { changesOpen, activeWorktreeId, selectedChangePath } = get()
-    if (!changesOpen || !activeWorktreeId || !readable.includes(activeWorktreeId)) return
+    const { activeWorktreeId, selectedChangePath } = get()
+    if (!changesOnScreen(get()) || !activeWorktreeId || !readable.includes(activeWorktreeId)) return
     await Promise.all([refreshChanges(activeWorktreeId), refreshLog(activeWorktreeId)])
     if (selectedChangePath !== null) await refreshDiff(activeWorktreeId, selectedChangePath)
   }
@@ -1409,7 +1444,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     watchSizes: [],
     watchTails: {},
     focusedWatchId: null,
-    changesOpen: false,
+    rightPanelOpen: lastPanel.open,
+    rightPanelTab: lastPanel.tab,
+    rightPanelWidth: readStoredRightPanelWidth(storage),
     changes: {},
     logs: {},
     selectedChangePath: null,
@@ -1731,10 +1768,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             }
           : {})
       }))
-      if (get().changesOpen) {
-        void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
-        void refreshLog(worktreeId).catch(() => undefined)
-      }
+      if (changesOnScreen(get())) readChangesNow(worktreeId)
       // Through the queue like everything else, so opening a tab while an
       // event-driven refetch is in flight cannot interleave the two answers.
       refresher.request(refreshTargets({ terminals: true, layouts: [worktreeId], statuses: [worktreeId] }))
@@ -2005,15 +2039,36 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     toggleChanges() {
-      const opening = !get().changesOpen
-      set({ changesOpen: opening })
+      const { rightPanelOpen, rightPanelTab } = get()
+      if (rightPanelOpen && rightPanelTab === 'changes') get().toggleRightPanel()
+      else get().showRightPanelTab('changes')
+    },
+
+    toggleRightPanel() {
+      const opening = !get().rightPanelOpen
+      set({ rightPanelOpen: opening })
+      writeStoredRightPanel(storage, { open: opening, tab: get().rightPanelTab })
       if (!opening) return
       // Read on the way open rather than kept warm: until the panel is shown,
       // nothing on screen depends on it.
       const worktreeId = get().activeWorktreeId
-      if (!worktreeId) return
-      void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
-      void refreshLog(worktreeId).catch(() => undefined)
+      if (worktreeId && changesOnScreen(get())) readChangesNow(worktreeId)
+    },
+
+    showRightPanelTab(tab) {
+      const wasShowing = changesOnScreen(get())
+      set({ rightPanelOpen: true, rightPanelTab: tab })
+      writeStoredRightPanel(storage, { open: true, tab })
+      const worktreeId = get().activeWorktreeId
+      // A tab that draws changes reads them on arrival, unless the tab it
+      // replaced was already drawing the same list.
+      if (worktreeId && changesOnScreen(get()) && !wasShowing) readChangesNow(worktreeId)
+    },
+
+    setRightPanelWidth(width) {
+      const clamped = clampRightPanelWidth(width)
+      set({ rightPanelWidth: clamped })
+      writeStoredRightPanelWidth(storage, clamped)
     },
 
     toggleStaged(path) {

@@ -406,7 +406,6 @@ describe('every command the menu has is a row in the palette', () => {
     watches: [],
     focusedWatchId: null,
     statuses: {},
-    changesOpen: false,
     pushing: false
   }
 

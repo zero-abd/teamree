@@ -48,7 +48,7 @@ vi.mock('../terminal/WatchedPaneView', () => ({
     <div data-testid={`watched-${handle}-${paneId}`} />
   )
 }))
-vi.mock('./ChangesPanel', () => ({ ChangesPanel: () => null }))
+vi.mock('./rightPanel/RightPanel', () => ({ RightPanel: () => null }))
 vi.mock('../dashboard/Dashboard', () => ({ Dashboard: () => <div data-testid="dashboard" /> }))
 // Both have their own files. What this one decides is that they take the area
 // at all, which is the part that lives here.

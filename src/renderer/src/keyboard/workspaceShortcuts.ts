@@ -11,6 +11,7 @@ export type WorkspaceCommand =
   | 'new-terminal'
   | 'new-worktree'
   | 'toggle-sidebar'
+  | 'toggle-right-panel'
   | 'focus-next-pane'
   | 'focus-previous-pane'
   | 'expand-pane'
@@ -49,6 +50,10 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'new-terminal', chord: { key: 't' }, title: 'New terminal' },
   { command: 'new-worktree', chord: { key: 'n' }, title: 'New task' },
   { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Toggle sidebar' },
+  // The panel on the other side — files, changes and panes of the worktree on
+  // screen. J, because it is the letter the editors people run in these panes
+  // already use for the panel beside the editor, and it is free.
+  { command: 'toggle-right-panel', chord: { key: 'j' }, title: 'Toggle right panel' },
   // Brackets, the pair every app that walks a list of things uses for it, and
   // unshifted for the reason the help chord below is: `matchesChord` compares
   // `KeyboardEvent.key`, and on a US layout shift and a bracket produce a brace

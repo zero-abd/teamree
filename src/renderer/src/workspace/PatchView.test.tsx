@@ -43,7 +43,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { ChangesPanel } = await import('./ChangesPanel')
+const { ChangesTab } = await import('./rightPanel/ChangesTab')
 const { readStoredDiffLayout } = await import('../state/preferences')
 
 const INITIAL = useWorkspaceStore.getState()
@@ -112,7 +112,8 @@ const stagedDiff: WorktreeDiff = {
 beforeEach(() => {
   useWorkspaceStore.setState({
     ...INITIAL,
-    changesOpen: true,
+    rightPanelOpen: true,
+    rightPanelTab: 'changes',
     activeWorktreeId: 'wt',
     changes: { wt: changes },
     selectedChangePath: 'src/rank.ts',
@@ -127,7 +128,7 @@ beforeEach(() => {
 
 describe('the patch in the changes panel', () => {
   it('puts a line number beside every line, on both sides', () => {
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
 
     const numbers = [...document.querySelectorAll('.patch__num')].map((cell) => cell.textContent)
     // Old and new for each of the six lines the hunk carries, with the addition
@@ -138,7 +139,7 @@ describe('the patch in the changes panel', () => {
   // The sentence this whole change is for: the third line of the hunk is line
   // 212, and the screen has to be able to say so.
   it('gives the line somebody would cite its real number', () => {
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
 
     const row = [...document.querySelectorAll('.patch__row')].find((node) =>
       node.textContent?.includes('// one comment')
@@ -147,7 +148,7 @@ describe('the patch in the changes panel', () => {
   })
 
   it('shows the hunk header as its own separator, not as a line of the file', () => {
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
 
     const header = document.querySelector('.patch__hunkAt')
     expect(header?.textContent).toBe('@@ -210,6 +210,7 @@ export function rank(rows: Row[]): Row[] {')
@@ -155,7 +156,7 @@ describe('the patch in the changes panel', () => {
   })
 
   it('folds a file away, and folds a hunk away inside it', () => {
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
 
     expect(document.querySelector('details.patch__file')).not.toBeNull()
     expect(document.querySelector('details.patch__hunk')).not.toBeNull()
@@ -165,7 +166,7 @@ describe('the patch in the changes panel', () => {
   // back as a keyword and reached the DOM as its own span. Which shade of
   // magenta it is is the palette's business, and the smoke gate measures it.
   it('colours the code it recognises, and leaves the rest as text', () => {
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
 
     const keywords = [...document.querySelectorAll('.patch__tok--keyword')].map((node) => node.textContent)
     expect(keywords).toContain('const')
@@ -176,12 +177,12 @@ describe('the patch in the changes panel', () => {
   })
 
   it('lays the patch out in two columns when asked, and remembers it', async () => {
-    const { rerender } = render(<ChangesPanel />)
+    const { rerender } = render(<ChangesTab />)
     expect(document.querySelector('.patch--inline')).not.toBeNull()
 
     const { default: userEvent } = await import('@testing-library/user-event')
     await userEvent.click(screen.getByRole('button', { name: 'Side by side' }))
-    rerender(<ChangesPanel />)
+    rerender(<ChangesTab />)
 
     expect(document.querySelector('.patch--split')).not.toBeNull()
     // Every row has both sides, and the addition's old half is the gap.
@@ -194,7 +195,7 @@ describe('the patch in the changes panel', () => {
 describe('staging one hunk from the patch', () => {
   it('stages the hunk that was clicked, and not the one above it', async () => {
     useWorkspaceStore.setState({ diff: { ...diff, patch: TWO_HUNKS } })
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
 
     const stage = screen.getAllByRole('button', { name: 'Stage' })
     expect(stage).toHaveLength(2)
@@ -217,7 +218,7 @@ describe('staging one hunk from the patch', () => {
   // Folding the hunk away is the one thing a click on a `summary` does by
   // default, and it is not what the button is for.
   it('leaves the hunk open when its control is used', async () => {
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
     const hunk = document.querySelector('details.patch__hunk') as HTMLDetailsElement
     expect(hunk.open).toBe(true)
 
@@ -229,7 +230,7 @@ describe('staging one hunk from the patch', () => {
 
   it('offers Unstage on the staged half and Stage on the working one', async () => {
     useWorkspaceStore.setState({ stagedDiff })
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
 
     expect(screen.getByRole('button', { name: 'Unstage' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Stage' })).toBeTruthy()
@@ -245,12 +246,12 @@ describe('staging one hunk from the patch', () => {
   })
 
   it('names neither half when nothing is staged', () => {
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
     expect(document.querySelectorAll('.changes__half')).toHaveLength(0)
   })
 
   it('stops a second click while the first is still in flight', async () => {
-    render(<ChangesPanel />)
+    render(<ChangesTab />)
     const { default: userEvent } = await import('@testing-library/user-event')
     const button = screen.getByRole('button', { name: 'Stage' })
 

@@ -24,6 +24,7 @@ import { automaticUpdatesLabel } from '../updates/updateNotice'
 export type PaletteAction =
   | WorkspaceCommand
   | 'toggle-changes'
+  | 'show-files'
   | 'add-project'
   | 'install-cli'
   | 'check-for-updates'
@@ -226,6 +227,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'open-palette': 'go to worktree command palette search anything',
   'open-dashboard': 'all panes agents dashboard overview attention waiting failed working everywhere',
   'toggle-sidebar': 'toggle sidebar hide show projects',
+  'toggle-right-panel': 'toggle right panel hide show files changes panes',
   // The page with everything about this machine on it. The keywords are what
   // people call the things that live there rather than what this app calls
   // them: somebody looking for the CLI link or the relay is not typing
@@ -243,6 +245,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
 /** The rows that are the palette's own, with no command and no menu item. */
 const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[] = [
   { id: 'toggle-changes', label: 'Show changes', keywords: 'diff git status files review changes' },
+  { id: 'show-files', label: 'Show files', keywords: 'tree folder directory explorer browse open panel' },
   { id: 'add-project', label: 'Add project', keywords: 'add project repository repo folder clone' },
   {
     id: 'install-cli',
