@@ -645,8 +645,8 @@ describe('the relay a project meets on', () => {
   it('reads it, and names where the URL in effect came from', () => {
     render(<SettingsView modifier={modifier} />)
     expect(loadRelay).toHaveBeenCalledWith('p1')
-    expect(screen.getByText('Teamwork dials wss://relay.example/v1/relay.')).toBeTruthy()
-    expect(screen.getByText('From .teamree/relay.')).toBeTruthy()
+    expect(screen.getByText('wss://relay.example/v1/relay')).toBeTruthy()
+    expect(screen.getByText('From .teamree/relay')).toBeTruthy()
   })
 
   it('says in words that the environment is overriding the repository', () => {
@@ -662,9 +662,9 @@ describe('the relay a project meets on', () => {
     })
     render(<SettingsView modifier={modifier} />)
     const block = within(relayBlock())
-    expect(block.getByText(/TEAMREE_RELAY_URL is set to wss:\/\/tunnel\.example\/v1\/relay/)).toBeTruthy()
-    expect(block.getByText(/\.teamree\/relay says wss:\/\/relay\.example\/v1\/relay/)).toBeTruthy()
-    expect(block.getByText(/Unset it and relaunch teamree/)).toBeTruthy()
+    expect(
+      block.getByText(/TEAMREE_RELAY_URL=wss:\/\/tunnel\.example\/v1\/relay overrides \.teamree\/relay/)
+    ).toBeTruthy()
   })
 
   it('offers no field to edit the relay, and sends the reader where one is set', () => {
@@ -683,15 +683,14 @@ describe('the relay a project meets on', () => {
           ...relay(),
           url: null,
           source: null,
-          problem: 'no .teamree/relay in this project',
-          onDisk: { url: null, problem: 'no .teamree/relay in this project' }
+          problem: 'no .teamree/relay',
+          onDisk: { url: null, problem: 'no .teamree/relay' }
         }
       }
     })
     render(<SettingsView modifier={modifier} />)
     const block = within(relayBlock())
-    expect(block.getByText('Teamwork has no relay to dial in this repository.')).toBeTruthy()
-    expect(block.getByText('no .teamree/relay in this project')).toBeTruthy()
+    expect(block.getByText('No .teamree/relay')).toBeTruthy()
   })
 })
 

@@ -32,12 +32,12 @@ export function ConfirmRemoveDialog({ worktreeId, reason }: { worktreeId: string
     >
       {pending > 0 ? (
         <p className="confirm__detail">
-          {pending} uncommitted change{pending === 1 ? '' : 's'} will be deleted. There is no undo.
+          {pending} uncommitted change{pending === 1 ? '' : 's'}
         </p>
       ) : null}
       {ignored > 0 ? (
         <p className="confirm__detail">
-          {ignored} ignored file{ignored === 1 ? '' : 's'} or folder{ignored === 1 ? '' : 's'} will go too.
+          {ignored} ignored file{ignored === 1 ? '' : 's'} or folder{ignored === 1 ? '' : 's'}
         </p>
       ) : null}
       {worktree ? <p className="confirm__path">{worktree.path}</p> : null}

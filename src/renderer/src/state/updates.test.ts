@@ -48,7 +48,7 @@ it('says so when a check somebody asked for finds nothing, because silence would
   await useWorkspaceStore.getState().checkForUpdates()
 
   expect(call).toHaveBeenCalledWith('update.check', {})
-  expect(notices()).toEqual(['teamree 0.1.0 is the latest release.'])
+  expect(notices()).toEqual(['teamree 0.1.0 is the latest release'])
 })
 
 it('says nothing extra when the check found something: the card is the answer', async () => {

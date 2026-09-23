@@ -52,10 +52,10 @@ const noRelay = (): RelaySetting => ({
   file: '.teamree/relay',
   url: null,
   source: null,
-  problem: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on',
+  problem: 'no .teamree/relay',
   onDisk: {
     url: null,
-    problem: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
+    problem: 'no .teamree/relay'
   },
   override: { name: 'TEAMREE_RELAY_URL', value: null },
   deploy: { command: '/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy', reason: null },
@@ -297,7 +297,7 @@ describe('choosing a relay', () => {
     const shown = text(render())
     expect(shown).toContain('Deploy a relay')
     expect(shown).toContain('/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy')
-    expect(shown).toContain('Opens a browser to sign in to Cloudflare; deploys to your team’s account.')
+    expect(shown).toContain('Cloudflare sign-in in your browser')
   })
 
   it('puts no other option in front of anybody who has not asked for one', () => {
@@ -338,7 +338,6 @@ describe('choosing a relay', () => {
   })
 
   it('never suggests anybody but the team hosts the relay', () => {
-    expect(text(render())).toMatch(/deploys to your team’s account/)
     expect(text(render())).not.toMatch(/our relay|teamree’s relay/i)
   })
 })
@@ -356,7 +355,7 @@ describe('running a relay yourself', () => {
 
   it('says who it will not work for, above the button and not after it', () => {
     const markup = render()
-    const limit = markup.indexOf('Only reachable from machines that can already reach this Mac')
+    const limit = markup.indexOf('Same LAN or VPN only')
     const button = markup.indexOf('Run a relay yourself</button>')
     expect(limit).toBeGreaterThan(-1)
     expect(button).toBeGreaterThan(-1)
@@ -381,7 +380,7 @@ describe('running a relay yourself', () => {
     const markup = render({
       relay: { ...noRelay(), deploy: { command: 'npx wrangler deploy --cwd relay', reason: null } }
     })
-    expect(text(markup)).toContain('This build reports a relay command teamree does not recognise')
+    expect(text(markup)).toContain('Unrecognised relay command')
     expect(markup).not.toContain('npx wrangler serve')
   })
 })
@@ -409,7 +408,7 @@ describe('checking a relay', () => {
 
   it('cannot be pressed while a pane is already open, and says which one', () => {
     const shown = text(render({ list: enrolled(), relay: relayOnDisk(), pane: deployPane }))
-    expect(shown).toContain('A deploy is already open in a pane below')
+    expect(shown).toContain('Deploy pane open below')
   })
 })
 
@@ -425,7 +424,7 @@ describe('the one relay pane', () => {
     const markup = render({ pane: pane({ kind: 'serve' }) })
     expect(markup).toContain('disabled=""')
     expect(disabledButtons(markup)).toContain('Deploy a relay')
-    expect(text(markup)).toContain('A relay you are running yourself is already open in a pane below')
+    expect(text(markup)).toContain('Relay pane open below')
   })
 
   // Offered rather than written, with what committing it means beside the button.
@@ -434,7 +433,7 @@ describe('the one relay pane', () => {
       pane: pane({ kind: 'serve', url: 'ws://192.168.1.23:8787/v1/relay', urls: ['ws://192.168.1.23:8787/v1/relay'] })
     })
     const shown = text(markup)
-    expect(shown).toContain('The relay is at')
+    expect(shown).toContain('Relay at')
     expect(shown).toContain('ws://192.168.1.23:8787/v1/relay')
     expect(markup).toContain('Use this relay URL</button>')
     expect(shown).toContain(RELAY_SERVE.committing)
@@ -478,7 +477,7 @@ describe('the one relay pane', () => {
       })
     })
     expect(markup).toContain('Use this relay URL</button>')
-    expect(text(markup)).toContain('The deploy printed')
+    expect(text(markup)).toContain('Deployed at')
   })
 
   // A finished pane with nothing to show reads exactly like one still working.
@@ -537,10 +536,9 @@ describe('an override that is set and cannot be read', () => {
   it('names the variable and the fix, above everything else on the step', () => {
     const markup = render({ relay: broken() })
     const said = text(markup)
-    expect(said).toContain('TEAMREE_RELAY_URL is set to wss//typo.example/v1/relay')
-    expect(said).toContain('this project has no relay even though .teamree/relay has one')
-    // First on the step: every other sentence is about a relay the app will not dial.
-    expect(markup.indexOf('TEAMREE_RELAY_URL is set to')).toBeLessThan(
+    expect(said).toContain('TEAMREE_RELAY_URL=wss//typo.example/v1/relay is not a relay URL and hides .teamree/relay')
+    // First on the step: every other line is about a relay the app will not dial.
+    expect(markup.indexOf('TEAMREE_RELAY_URL=wss//typo')).toBeLessThan(
       markup.indexOf('Change the relay for this project')
     )
   })
@@ -559,16 +557,15 @@ describe('a checkout with no origin', () => {
   const noOrigin = status({
     origin: {
       ok: false,
-      reason: 'this project has no origin remote, so teamree cannot tell it is the same repository your teammates have'
+      reason: 'no origin remote'
     },
-    disabledReason: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
+    disabledReason: 'no .teamree/relay'
   })
 
   // Otherwise the step sits at "not connected" for ever while the person checks their wifi.
   it('says so at the top, and puts the field that fixes it there too', () => {
     const shown = text(render({ status: noOrigin }))
-    expect(shown).toContain('This checkout cannot take part yet.')
-    expect(shown).toMatch(/no origin remote/)
+    expect(shown).toMatch(/No origin remote/)
     expect(shown).toContain('Origin')
     expect(shown).toContain('Add origin')
     // Both kinds of answer are one disclosure away, rather than in the banner.
@@ -598,8 +595,7 @@ describe('the button the project header sends people to', () => {
 describe('before anything has been read', () => {
   it('says it is reading rather than reporting nothing as “not set up”', () => {
     const shown = text(render({ list: undefined, relay: undefined, status: undefined }))
-    expect(shown).toMatch(/Reading this machine’s identity/)
-    expect(shown).toMatch(/Reading where this project’s relay is recorded/)
+    expect(shown.match(/Reading…/g)?.length).toBe(3)
     expect(render({ list: undefined, relay: undefined, status: undefined })).not.toContain(JOIN_BUTTON)
   })
 })
@@ -625,7 +621,7 @@ describe('a roster nothing is watching', () => {
   // The sweep is the floor under a lost watch: the roster catches up on a timer.
   it('says the list is only as fresh as this read, rather than telling somebody to reopen it', () => {
     const shown = text(render({ list: roster({ watched: false }), relay: relayOnDisk() }))
-    expect(shown).toContain('only as fresh as this read')
+    expect(shown).toContain('Not watching · may be stale')
     expect(shown).not.toMatch(/Open this dialog again after a pull/)
   })
 })
@@ -670,7 +666,7 @@ describe('the question asked before the steps', () => {
   it('marks the one the repository points at, with the fact behind it, and picks neither', () => {
     const markup = render({ path: null, list: enrolled(), relay: relayOnDisk() })
     expect(markup).toContain('path-option--suggested')
-    expect(text(markup)).toContain('.teamree/relay is already in this checkout')
+    expect(text(markup)).toContain('.teamree/relay already here')
     // Both are still buttons: nothing has been decided for anybody.
     expect(markup).toContain('Start a team here</button>')
     expect(markup).toContain('Join a team I was invited to</button>')
@@ -700,7 +696,7 @@ describe('the question asked before the steps', () => {
       }
     })
     expect(text(working)).not.toContain('Which of these are you doing?')
-    expect(text(working)).toContain('Teamwork is working in this repository.')
+    expect(text(working)).toContain('Teamwork is working')
   })
 
   // People pick the wrong one, and a choice that cannot be unmade is a trap.
@@ -733,7 +729,7 @@ describe('what a step puts on screen', () => {
   // Two relays is two halves of a team that never meet.
   it('warns a joiner whose team has not pushed a relay yet, before offering them one', () => {
     const shown = text(render({ path: 'join' }))
-    const warning = shown.indexOf('Nobody has pushed .teamree/relay yet')
+    const warning = shown.indexOf('.teamree/relay not pushed yet')
     expect(warning).toBeGreaterThan(-1)
     expect(warning).toBeLessThan(shown.indexOf('Deploy a relay'))
   })
@@ -804,12 +800,12 @@ describe('a push that is taking its time', () => {
   // The sentence that makes a hang actionable instead of mysterious.
   it('says when git has gone quiet for longer than a working push does', () => {
     const shown = text(render(running({ lastOutputAt: 40_000 })))
-    expect(shown).toMatch(/git has printed nothing for 1m 00s/)
-    expect(shown).toMatch(/waiting for a credential/)
+    expect(shown).toMatch(/No output for 1m 00s/)
+    expect(shown).toMatch(/credential prompt/)
   })
 
   it('says git has printed nothing at all rather than showing an empty line', () => {
-    expect(text(render(running({ output: [] })))).toContain('git has not printed anything yet.')
+    expect(text(render(running({ output: [] })))).toContain('No output yet')
   })
 })
 
@@ -867,7 +863,7 @@ describe('a push that did not land', () => {
     )
     expect(shown).toContain('credential.helper osxkeychain')
     expect(shown).toContain('terminal prompts disabled')
-    expect(shown).toContain('nothing in this window changes it')
+    expect(shown).toContain('Fix the credential outside teamree')
   })
 
   it('tells somebody who stopped one that nothing was sent, and that the commit is still here', () => {
@@ -882,7 +878,7 @@ describe('a push that did not land', () => {
       )
     )
     expect(shown).toContain('Committed abc1234')
-    expect(shown).toContain('Nothing was sent')
+    expect(shown).toContain('Nothing sent')
   })
 
   // "Was that normal?" is unanswerable without the number.
@@ -904,7 +900,7 @@ describe('a push that did not land', () => {
         )
       )
     )
-    expect(shown).toContain('Took 1m 00s')
+    expect(shown).toContain('· 1m 00s')
   })
 })
 
@@ -926,7 +922,7 @@ describe('how it ends', () => {
   })
 
   it('names the one thing left to do', () => {
-    expect(text(render(finished({ list: roster() })))).toContain('Step 2 writes it: Add my key')
+    expect(text(render(finished({ list: roster() })))).toContain('Step 2: Add my key')
   })
 
   // There is no invitation in this protocol, which is why the person setting it up has to write one.

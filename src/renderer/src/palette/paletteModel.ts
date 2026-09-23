@@ -77,7 +77,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
       id: action.id,
       label,
       hint: context.hintFor(action.id),
-      detail: 'Action',
+      detail: '',
       search: `${label} ${action.keywords}`
     }
   })
@@ -102,7 +102,7 @@ function agentItems(context: PaletteContext): PaletteItem[] {
     id: agent.command,
     label: `Start ${agent.command} in this worktree`,
     hint: active.name,
-    detail: 'Opens a pane here',
+    detail: '',
     // No "agent": the matcher takes the first word-start it can, and "this" before "here" once sent
     // "claude this worktree" past the h. "agents" reaches the all-panes view.
     search: `Start ${agent.command} here in this worktree pane`

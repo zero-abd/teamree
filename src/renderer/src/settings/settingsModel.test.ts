@@ -78,8 +78,8 @@ describe('what the page says about updates', () => {
 describe('what the page says about a relay', () => {
   it('names the file the URL came from, so it is clear the team shares it', () => {
     const panel = relayPanel(relay())
-    expect(panel.headline).toBe('Teamwork dials wss://relay.example/v1/relay.')
-    expect(panel.detail).toBe('From .teamree/relay.')
+    expect(panel.headline).toBe('wss://relay.example/v1/relay')
+    expect(panel.detail).toBe('From .teamree/relay')
     expect(panel.override).toBeNull()
   })
 
@@ -88,12 +88,12 @@ describe('what the page says about a relay', () => {
       relay({
         url: null,
         source: null,
-        problem: 'no .teamree/relay in this project',
+        problem: 'no .teamree/relay',
         onDisk: { url: null, problem: null }
       })
     )
-    expect(panel.headline).toContain('no relay to dial')
-    expect(panel.detail).toBe('no .teamree/relay in this project')
+    expect(panel.headline).toBe('No .teamree/relay')
+    expect(panel.detail).toBeNull()
   })
 
   it('says the environment is beating the file, and that a relaunch is the way back', () => {
@@ -104,8 +104,9 @@ describe('what the page says about a relay', () => {
         override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' }
       })
     )
-    expect(panel.override).toContain('.teamree/relay says wss://relay.example/v1/relay')
-    expect(panel.override).toContain('Unset it and relaunch teamree')
+    expect(panel.override).toBe(
+      'TEAMREE_RELAY_URL=wss://tunnel.example/v1/relay overrides .teamree/relay (wss://relay.example/v1/relay) until unset and relaunched'
+    )
   })
 
   // The same variable, in a checkout that names no relay of its own. Saying it
@@ -117,12 +118,11 @@ describe('what the page says about a relay', () => {
         url: 'wss://tunnel.example/v1/relay',
         source: 'environment',
         problem: null,
-        onDisk: { url: null, problem: 'no .teamree/relay in this project' },
+        onDisk: { url: null, problem: 'no .teamree/relay' },
         override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' }
       })
     )
-    expect(panel.override).toContain('.teamree/relay names no relay')
-    expect(panel.override).not.toContain('says wss://')
+    expect(panel.override).toContain('overrides .teamree/relay (empty)')
   })
 
   it('says it is still reading rather than answering for a project it has not read', () => {
@@ -187,8 +187,8 @@ describe('cliLine', () => {
   // The button carries a password prompt, and the hover is where that is said.
   it('says on the button what it does and whether a password is coming', () => {
     const line = cliLine(status({ state: 'absent', resolved: null }))
-    expect(line.title).toMatch(/Links \/usr\/local\/bin\/teamree/)
-    expect(line.title).toMatch(/administrator password/)
+    expect(line.title).toMatch(/^\/usr\/local\/bin\/teamree → /)
+    expect(line.title).toMatch(/Administrator password/)
   })
 
   it('has no button where this app cannot link, and says what to type', () => {

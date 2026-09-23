@@ -26,9 +26,9 @@ export function mergeBadge(preview: WorktreeMergePreview | undefined): MergeBadg
       return {
         label: 'merges',
         tone: 'clean',
-        detail: `${preview.ahead} commit${
-          preview.ahead === 1 ? '' : 's'
-        } that merge into ${preview.baseRef} without conflicts.`
+        detail: `${
+          preview.ahead === 1 ? '1 commit merges' : `${preview.ahead} commits merge`
+        } cleanly into ${preview.baseRef}`
       }
     case 'conflicts':
       return {

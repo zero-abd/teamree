@@ -24,7 +24,7 @@ export class WorktreeNotReady extends Error {
 
 export class WorktreeReadyTimeout extends Error {
   constructor(timeoutMs: number) {
-    super(`The worktree was still being created ${Math.round(timeoutMs / 1000)}s later.`)
+    super(`Worktree still being created after ${Math.round(timeoutMs / 1000)}s`)
     this.name = 'WorktreeReadyTimeout'
   }
 }

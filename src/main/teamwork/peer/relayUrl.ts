@@ -88,12 +88,7 @@ export async function readRelayFile(projectPath: string): Promise<RelayFileRead>
   try {
     text = await readFile(join(projectPath, ...RELAY_FILE_SEGMENTS), 'utf8')
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return {
-        ok: false,
-        reason: `no ${RELAY_FILE_NAME} in this project, so teamree does not know which relay your team meets on`
-      }
-    }
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { ok: false, reason: `no ${RELAY_FILE_NAME}` }
     return { ok: false, reason: `${RELAY_FILE_NAME} could not be read: ${errorCode(error)}` }
   }
 

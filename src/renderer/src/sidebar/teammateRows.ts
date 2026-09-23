@@ -97,8 +97,5 @@ export function unheardTeammates(presence: TeammatePresence | undefined): string
 export function unheardTitle(handles: readonly string[]): string {
   const who = handles.join(', ')
   const verb = handles.length === 1 ? 'is' : 'are'
-  return (
-    `${who} ${verb} on this project’s roster. Nothing has been heard from them, ` +
-    'so there is no picture of their worktrees here — not even an old one.'
-  )
+  return `${who} ${verb} on the roster · nothing heard yet, so no worktrees to show`
 }

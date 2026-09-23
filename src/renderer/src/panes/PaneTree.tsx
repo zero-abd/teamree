@@ -157,13 +157,11 @@ function restoredBadge(terminal: Terminal): string {
 function restoredTitle(terminal: Terminal): string {
   switch (terminal.restored) {
     case 'agent':
-      return 'This pane came back from the last run with its session resumed.'
+      return 'Restored · session resumed'
     case 'restarted':
-      return `This pane came back from the last run. No conversation to resume; a ${freshAgentLabel(
-        terminal.agent ?? 'agent'
-      )} is running.`
+      return `Restored · nothing to resume, ${freshAgentLabel(terminal.agent ?? 'agent')} running`
     default:
-      return 'This pane came back from the last run. The shell is new; whatever it was running is gone.'
+      return 'Restored · new shell, previous process gone'
   }
 }
 

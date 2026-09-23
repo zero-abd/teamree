@@ -32,35 +32,27 @@ describe('before anything is pressed', () => {
   it('says where the link goes and what it will point at', () => {
     const panel = cliPanel(status())
     expect(panel.action).toBe('Put teamree on my PATH')
-    expect(panel.promise).toContain('/usr/local/bin/teamree')
-    expect(panel.detail).toContain(APP_CLI)
+    expect(panel.promise).toBe(`/usr/local/bin/teamree → ${APP_CLI}`)
   })
 
-  it('does not tell a checkout that its CLI ships inside the app, and says what a link there costs', () => {
+  it('links a checkout’s CLI where it is', () => {
     const panel = cliPanel(status({ packaged: false, source: CHECKOUT_CLI, bundle: `${CHECKOUT_CLI}.mjs` }))
     expect(panel.action).toBe('Put teamree on my PATH')
-    expect(panel.detail).toContain(CHECKOUT_CLI)
-    expect(panel.detail).not.toContain('ships inside this app')
-    // The reason the first-run offer stays quiet here, said where the button is.
-    expect(panel.detail).toContain('move')
+    expect(panel.promise).toContain(CHECKOUT_CLI)
   })
 
   it('says a password is coming, in one line, before it is asked for', () => {
     const panel = cliPanel(status({ needsAdministrator: true }))
-    expect(panel.password).toBe('macOS will ask for your administrator password; /usr/local/bin needs one.')
+    expect(panel.password).toBe('Administrator password for /usr/local/bin')
   })
 
   it('says when no password will be asked for, which is the common case with Homebrew', () => {
-    expect(cliPanel(status({ needsAdministrator: false })).password).toBe(
-      'No password: /usr/local/bin is writable as you.'
-    )
+    expect(cliPanel(status({ needsAdministrator: false })).password).toBe('No password')
   })
 
   it('warns when the link will be made somewhere no shell looks', () => {
     const panel = cliPanel(status({ onPath: null }))
-    expect(panel.pathWarning).toBe(
-      'Nothing teamree can read puts /usr/local/bin on a PATH, so your shell may not find the command.'
-    )
+    expect(panel.pathWarning).toBe('/usr/local/bin not on PATH')
     expect(panel.action).toBe('Put teamree on my PATH')
   })
 
@@ -73,17 +65,16 @@ describe('before anything is pressed', () => {
 describe('a link that is already there', () => {
   it('says it is done and offers nothing to press', () => {
     const panel = cliPanel(status({ state: 'linked', resolved: APP_CLI }))
-    expect(panel.headline).toBe('teamree is on your PATH.')
+    expect(panel.headline).toBe('On your PATH')
+    expect(panel.detail).toBe(`/usr/local/bin/teamree → ${APP_CLI}`)
     expect(panel.action).toBeNull()
   })
 
   it('names the other teamree when the link leads to one', () => {
     const older = '/Users/ann/Downloads/teamree.app/Contents/Resources/cli/teamree'
     const panel = cliPanel(status({ state: 'elsewhere', resolved: older }))
-    expect(panel.headline).toContain('a different copy of teamree')
-    expect(panel.detail).toContain(older)
-    // The whole point of naming it: the command works, and it drives that one.
-    expect(panel.detail).toContain('drives that copy')
+    expect(panel.headline).toBe('Linked to another copy')
+    expect(panel.detail).toBe(`/usr/local/bin/teamree → ${older}`)
     expect(panel.action).toBe('Point it at this app')
     expect(panel.promise).toContain(APP_CLI)
   })
@@ -92,13 +83,13 @@ describe('a link that is already there', () => {
 describe('something in the way', () => {
   it('refuses a regular file and says what is there', () => {
     const panel = cliPanel(status({ state: 'file', resolved: '/usr/local/bin/teamree' }))
-    expect(panel.headline).toBe('There is a regular file at /usr/local/bin/teamree.')
-    expect(panel.detail).toBe('Move it aside and open this again.')
+    expect(panel.headline).toBe('/usr/local/bin/teamree is a regular file — move it aside')
+    expect(panel.detail).toBeNull()
     expect(panel.action).toBeNull()
   })
 
   it('says the same of a directory', () => {
-    expect(cliPanel(status({ state: 'directory' })).headline).toContain('a directory at')
+    expect(cliPanel(status({ state: 'directory' })).headline).toContain('is a directory')
   })
 })
 
@@ -110,8 +101,8 @@ describe('a CLI nothing has built yet', () => {
 
   it('names the command that builds it rather than offering to link it', () => {
     const panel = cliPanel(unbuilt())
-    expect(panel.headline).toBe('The teamree CLI has not been built yet.')
-    expect(panel.detail).toContain(CHECKOUT_CLI)
+    expect(panel.headline).toBe('CLI not built')
+    expect(panel.detail).toBe(CHECKOUT_CLI)
     expect(panel.manual).toBe('npm run build:cli')
     expect(panel.action).toBeNull()
     expect(panel.password).toBeNull()
@@ -133,15 +124,14 @@ describe('platforms and builds this cannot serve', () => {
     const panel = cliPanel(
       status({ installable: false, platform: 'linux', source: '/opt/teamree/resources/cli/teamree' })
     )
-    expect(panel.headline).toContain('only')
-    expect(panel.headline).toContain('macOS')
+    expect(panel.headline).toBe('Not installable on linux')
     expect(panel.action).toBeNull()
     expect(panel.manual).toBe('sudo ln -sf /opt/teamree/resources/cli/teamree /usr/local/bin/teamree')
   })
 
   it('says so when the build has no CLI in it at all', () => {
     const panel = cliPanel(status({ source: null }))
-    expect(panel.headline).toContain('no CLI inside it')
+    expect(panel.headline).toBe('No CLI in this build')
     expect(panel.action).toBeNull()
     expect(panel.manual).toBeNull()
   })
@@ -154,7 +144,7 @@ describe('platforms and builds this cannot serve', () => {
 
 describe('what happened afterwards', () => {
   /** The basis the success line carries, for the status above: onPath 'login'. */
-  const CHECKED = '/usr/local/bin is in /etc/paths; your login shell could not be asked.'
+  const CHECKED = '/usr/local/bin in /etc/paths (login shell not asked)'
 
   function install(extra: Partial<CliInstall> = {}): CliInstall {
     return {
@@ -167,23 +157,19 @@ describe('what happened afterwards', () => {
   }
 
   it('names the link, what it leads to, and what that was checked against', () => {
-    expect(cliOutcome(install())).toBe(`/usr/local/bin/teamree now points at ${APP_CLI}. ${CHECKED}`)
-  })
-
-  it('says a password was given, when one was', () => {
-    expect(cliOutcome(install({ administrator: true }))).toContain('An administrator password was given.')
+    expect(cliOutcome(install())).toBe(`Linked /usr/local/bin/teamree → ${APP_CLI} · ${CHECKED}`)
   })
 
   it('treats an existing correct link as success rather than as an error', () => {
     expect(cliOutcome(install({ outcome: 'already-linked' }))).toBe(
-      `/usr/local/bin/teamree already pointed at this app, so nothing was changed. ${CHECKED}`
+      `Already linked: /usr/local/bin/teamree → ${APP_CLI} · ${CHECKED}`
     )
   })
 
   it('says what the link used to point at when it replaced one', () => {
     const older = '/Users/ann/Downloads/teamree.app/Contents/Resources/cli/teamree'
     const message = cliOutcome(install({ outcome: 'replaced', replaced: older }))
-    expect(message).toContain(`no longer at ${older}`)
+    expect(message).toContain(`replacing ${older}`)
   })
 })
 
@@ -219,8 +205,8 @@ describe('whether the sidebar offers it', () => {
 
     // And what it routes to: which state it is, what to do instead, no control.
     const panel = cliPanel(fromTheImage)
-    expect(panel.headline).toContain('mounted volume')
-    expect(panel.detail).toContain('Applications')
+    expect(panel.headline).toContain('disk image')
+    expect(panel.headline).toContain('Applications')
     expect(panel.action).toBeNull()
   })
 
@@ -237,19 +223,18 @@ describe('the offer made once, unprompted, on first run', () => {
     const offer = cliOffer(status({ needsAdministrator: true }))
     expect(offer).not.toBeNull()
     expect(offer?.promise).toContain('/usr/local/bin/teamree')
-    expect(offer?.password).toContain('administrator password')
+    expect(offer?.password).toContain('Administrator password')
     // The same sentences the panel uses, so the two cannot drift apart.
     expect(offer?.promise).toBe(cliPanel(status({ needsAdministrator: true })).promise)
     expect(offer?.password).toBe(cliPanel(status({ needsAdministrator: true })).password)
     expect(offer?.accept).toBe('Put teamree on my PATH')
     expect(offer?.decline).toBe('No thanks')
-    expect(offer?.once).toContain('once')
   })
 
   it('says the other thing when the link exists and leads to another copy', () => {
     const older = '/Users/ann/Downloads/teamree.app/Contents/Resources/cli/teamree'
     const offer = cliOffer(status({ state: 'elsewhere', resolved: older }))
-    expect(offer?.headline).toContain('different copy')
+    expect(offer?.headline).toContain('another copy')
     expect(offer?.accept).toBe('Point it at this app')
   })
 
@@ -285,19 +270,18 @@ describe('the offer made once, unprompted, on first run', () => {
 describe('an app that is not where it will be tomorrow', () => {
   it('names the disk image instead of offering to link out of it', () => {
     const panel = cliPanel(status({ impermanent: 'volume', source: ON_VOLUME, bundle: `${ON_VOLUME}.mjs` }))
-    expect(panel.headline).toContain('mounted volume')
-    expect(panel.detail).toContain(ON_VOLUME)
-    expect(panel.detail).toContain('eject')
+    expect(panel.headline).toContain('disk image')
+    expect(panel.detail).toBe(ON_VOLUME)
     // The one thing to do about it, where somebody looking for a button is.
-    expect(panel.detail).toContain('Applications')
+    expect(panel.headline).toContain('Applications')
     expect(panel.action).toBeNull()
     expect(panel.password).toBeNull()
   })
 
   it('says the same of the copy macOS translocated the app to', () => {
     const panel = cliPanel(status({ impermanent: 'translocated' }))
-    expect(panel.headline).toContain('temporary copy')
-    expect(panel.detail).toContain('Applications')
+    expect(panel.headline).toContain('translocated copy')
+    expect(panel.headline).toContain('Applications')
     expect(panel.action).toBeNull()
   })
 
@@ -321,23 +305,23 @@ describe('a link to a teamree that is not there any more', () => {
 
   it('does not say the command drives that copy, because it does not run at all', () => {
     const panel = cliPanel(missing)
-    expect(panel.detail).toContain(gone)
-    expect(panel.detail).not.toContain('drives that copy')
-    expect(panel.detail).toContain('nothing is there')
+    expect(panel.headline).toBe('Broken link')
+    expect(panel.detail).toBe(`/usr/local/bin/teamree → ${gone} (missing)`)
     // Still the same thing to press: pointing it here is exactly the repair.
     expect(panel.action).toBe('Point it at this app')
     expect(panel.promise).toContain(APP_CLI)
   })
 
-  it('keeps the other sentence for a link that does lead to a copy', () => {
+  it('keeps the other headline for a link that does lead to a copy', () => {
     const panel = cliPanel(status({ state: 'elsewhere', resolved: gone, dangling: false }))
-    expect(panel.detail).toContain('drives that copy')
+    expect(panel.headline).toBe('Linked to another copy')
+    expect(panel.detail).not.toContain('missing')
   })
 
   it('says the same on the card shown on first run', () => {
     const offer = cliOffer(missing)
-    expect(offer?.headline).not.toContain('a different copy')
-    expect(offer?.headline).toContain('nothing')
+    expect(offer?.headline).not.toContain('another copy')
+    expect(offer?.headline).toContain('broken link')
   })
 })
 
@@ -358,25 +342,25 @@ describe('what the line reporting success is standing on', () => {
   // ask, and it said the app could not.
   it('names /etc/paths as a fallback, and says the login shell was not asked', () => {
     const message = cliOutcome(linked({ onPath: 'login' }))
-    expect(message).toContain('/usr/local/bin is in /etc/paths')
-    expect(message).toContain('login shell could not be asked')
+    expect(message).toContain('/usr/local/bin in /etc/paths')
+    expect(message).toContain('login shell not asked')
     expect(message).not.toContain('teamree cannot read your shell profile')
   })
 
   // The strong answer, and the one a Mac normally gives now.
   it('names the login shell’s own PATH when that is what answered', () => {
-    expect(cliOutcome(linked({ onPath: 'shell' }))).toContain('/usr/local/bin is on the PATH your login shell reports')
+    expect(cliOutcome(linked({ onPath: 'shell' }))).toContain('/usr/local/bin on your login shell’s PATH')
   })
 
   it('names this app’s own PATH, and that it is not the terminal’s, when that is what answered', () => {
     const message = cliOutcome(linked({ onPath: 'environment' }))
-    expect(message).toContain('on this app’s PATH')
+    expect(message).toContain('on the app’s PATH')
     expect(message).toContain('not necessarily your terminal’s')
   })
 
   it('says nothing it can read claims the directory, rather than calling it done', () => {
     const message = cliOutcome(linked({ onPath: null }))
-    expect(message).toContain('Nothing teamree can read puts /usr/local/bin on a PATH')
+    expect(message).toContain('/usr/local/bin not on PATH')
   })
 
   it('stands the already-linked line on the same footing', () => {

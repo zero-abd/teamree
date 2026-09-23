@@ -642,7 +642,7 @@ function ProjectsSection({ projects }: { projects: readonly Project[] }): React.
       </h2>
       {projects.length === 0 ? (
         <div className="settings-group">
-          <p className="settings-note">No repositories yet.</p>
+          <p className="settings-note">No repositories yet</p>
         </div>
       ) : (
         projects.map((project) => <ProjectBlock key={project.id} project={project} />)

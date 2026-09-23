@@ -123,7 +123,7 @@ describe('the dialog itself', () => {
     await open()
     const dialog = screen.getByRole('dialog', { name: 'New task' })
     expect(dialog.getAttribute('aria-modal')).toBe('true')
-    expect(dialog.querySelector('.modal__description')?.textContent).toBe('pager')
+    expect((screen.getByRole('combobox', { name: 'Project' }) as HTMLSelectElement).value).toBe('p1')
   })
 
   it('puts the cursor in the field the user has to think about', async () => {
@@ -260,7 +260,7 @@ describe('what it submits', () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     expect(screen.getByRole('button', { name: 'Create worktree' })).toBeTruthy()
-    expect(screen.getByText('No coding agent on your login shell’s PATH.')).toBeTruthy()
+    expect(screen.getByText('No coding agent on your login shell’s PATH')).toBeTruthy()
     expect(screen.queryByRole('group', { name: 'Agents' })).toBeNull()
     submit().click()
     expect(startTask).toHaveBeenCalledWith({

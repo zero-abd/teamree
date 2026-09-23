@@ -440,10 +440,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       file: '.teamree/relay',
       url,
       source: url === null ? null : 'repository',
-      problem:
-        url === null
-          ? 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
-          : null,
+      problem: url === null ? 'no .teamree/relay' : null,
       onDisk: { url, problem: null },
       override: { name: 'TEAMREE_RELAY_URL', value: null },
       // No app bundle carries a relay project here, so the deploy button is disabled with a sentence.

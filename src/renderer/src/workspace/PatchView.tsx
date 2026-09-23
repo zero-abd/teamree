@@ -58,9 +58,9 @@ export function PatchView({
             )}
           </summary>
           {file.binary ? (
-            <p className="patch__binary">Binary file, not shown.</p>
+            <p className="patch__binary">Binary file</p>
           ) : file.hunks.length === 0 ? (
-            <p className="patch__binary">No content changed.</p>
+            <p className="patch__binary">No content changed</p>
           ) : (
             file.hunks.map((hunk, at) => (
               // By position: hunks of a truncated patch can share a header, and a duplicate key drops one.

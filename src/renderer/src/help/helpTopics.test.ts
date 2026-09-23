@@ -10,7 +10,6 @@
 
 import { describe, expect, it } from 'vitest'
 import type { CliStatus } from '@shared/entities'
-import { CLI_PURPOSE } from '../dialogs/cliInstallModel'
 import { WORKSPACE_SHORTCUTS, type WorkspaceShortcut } from '../keyboard/workspaceShortcuts'
 import { CLI_HELP_COMMAND, cliHelp, shortcutGroups, WORKTREE_PARAGRAPHS } from './helpTopics'
 
@@ -90,8 +89,7 @@ describe('the CLI section', () => {
   // to open with a sentence selling the CLI to somebody already reading about it.
   it('says where the command is, without restating what the CLI is for', () => {
     const help = cliHelp(status({ state: 'linked' }))
-    expect(help.headline).toContain('teamree is on your PATH')
-    expect(JSON.stringify(help)).not.toContain(CLI_PURPOSE)
+    expect(help.headline).toBe('On your PATH')
   })
 
   it('sends you to the command once the command exists', () => {
@@ -121,7 +119,7 @@ describe('the CLI section', () => {
   // "type teamree help" is both the right advice and possibly useless, so the
   // sentence that says so has to survive into this page.
   it('carries the warning that the directory is on no PATH it can read', () => {
-    expect(cliHelp(status({ state: 'linked', onPath: null })).caveat).toContain('on a PATH')
+    expect(cliHelp(status({ state: 'linked', onPath: null })).caveat).toBe('/usr/local/bin not on PATH')
     expect(cliHelp(status({ state: 'linked', onPath: 'login' })).caveat).toBeNull()
   })
 })

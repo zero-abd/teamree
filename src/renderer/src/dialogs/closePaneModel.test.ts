@@ -49,11 +49,10 @@ describe('panes that close without a word', () => {
 })
 
 describe('panes worth asking about', () => {
-  it('names the command still producing output, and what closing costs', () => {
+  it('names the pane still producing output', () => {
     const warning = closePaneWarning(terminal({ busy: true }))
     expect(warning?.title).toBe('Stop what is running here?')
     expect(warning?.body).toContain('“npm test”')
-    expect(warning?.body).toContain('kills the process')
     expect(warning?.confirm).toBe('Stop it and close')
   })
 
@@ -70,9 +69,7 @@ describe('panes worth asking about', () => {
   it('asks about a quiet agent, and does not claim to know it is waiting', () => {
     const warning = closePaneWarning(terminal({ title: 'claude', agent: 'claude', busy: false }))
     expect(warning?.title).toBe('Stop this agent?')
-    expect(warning?.body).toBe(
-      'Claude Code has gone quiet in “Claude Code” — waiting for an answer, or finished. Closing the pane kills it.'
-    )
+    expect(warning?.body).toBe('Claude Code is quiet in “Claude Code” — waiting or finished')
     expect(warning?.body).not.toContain('teamree watches output')
   })
 

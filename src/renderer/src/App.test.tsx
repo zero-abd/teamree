@@ -111,7 +111,7 @@ describe('the notice layer', () => {
       notices: [
         {
           id: 1,
-          text: 'Pushed work to origin · now tracking origin/work.',
+          text: 'Pushed work to origin · now tracking origin/work',
           tone: 'info',
           action: { label: 'Open review', url }
         }
@@ -127,7 +127,7 @@ describe('the notice layer', () => {
   })
 
   it('offers nothing to do when the notice carries no action', () => {
-    seed({ notices: [{ id: 1, text: 'Pushed work to origin.', tone: 'info' }] })
+    seed({ notices: [{ id: 1, text: 'Pushed work to origin', tone: 'info' }] })
     render(<App />)
     expect(screen.queryByRole('button', { name: 'Open review' })).toBeNull()
   })

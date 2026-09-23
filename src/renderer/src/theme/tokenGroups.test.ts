@@ -24,10 +24,10 @@ describe('the colour editor’s list', () => {
   // what it does is to change it and go looking.
   it('says what each colour is for, in terms of something on screen', () => {
     for (const group of TOKEN_GROUPS) {
-      expect(group.blurb.length, group.title).toBeGreaterThan(20)
       for (const { token, label, about } of group.tokens) {
         expect(label.length, token).toBeGreaterThan(2)
-        expect(about.endsWith('.'), `${token}: ${about}`).toBe(true)
+        expect(about.length, token).toBeGreaterThan(4)
+        expect(about.endsWith('.'), `${token}: ${about}`).toBe(false)
       }
     }
   })

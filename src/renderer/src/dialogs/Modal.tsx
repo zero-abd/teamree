@@ -30,12 +30,11 @@ export function useEscapeClaim(claim: EscapeClaim): void {
 
 type ModalProps = {
   title: string
-  description?: string
   onClose: () => void
   children: React.ReactNode
 }
 
-export function Modal({ title, description, onClose, children }: ModalProps): React.JSX.Element {
+export function Modal({ title, onClose, children }: ModalProps): React.JSX.Element {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const claims = useRef(new Set<EscapeClaim>())
   // A symbol, not a position, so a modal leaving from the middle of the stack removes itself.
@@ -108,11 +107,10 @@ export function Modal({ title, description, onClose, children }: ModalProps): Re
       >
         <header className="modal__head">
           <h2 className="modal__title">{title}</h2>
-          {description ? <p className="modal__description">{description}</p> : null}
         </header>
         {/* The frame pads the body on the same edge as the head. Content
             classes bring their own layout and never their own inset, so a
-            sentence under a title starts where the title does. */}
+            line under a title starts where the title does. */}
         <div className="modal__body">
           <EscapeClaims value={register}>{children}</EscapeClaims>
         </div>

@@ -33,7 +33,7 @@ export function AddProjectDialog(): React.JSX.Element {
       const selected = await window.teamree.selectProjectFolder()
       if (selected) setPath(selected)
     } catch {
-      setBrowseError('Could not open the folder picker. You can enter the path below.')
+      setBrowseError('Could not open the folder picker')
     } finally {
       pickerOpen.current = false
       setBrowsing(false)
@@ -61,7 +61,7 @@ export function AddProjectDialog(): React.JSX.Element {
   }
 
   return (
-    <Modal title="Add project" description="Point teamree at an existing git checkout." onClose={closeDialog}>
+    <Modal title="Add project" onClose={closeDialog}>
       <form className="form" onSubmit={submit}>
         <button type="button" className="button" onClick={() => void browse()} disabled={browsing}>
           {browsing ? 'Choosing folder…' : 'Choose folder…'}
@@ -101,7 +101,6 @@ export function AddProjectDialog(): React.JSX.Element {
             autoComplete="off"
             spellCheck={false}
           />
-          <span className="field__hint">Optional — defaults to the folder name.</span>
         </label>
 
         <footer className="modal__actions">

@@ -179,7 +179,7 @@ describe('buildPaletteItems', () => {
   // Both start an agent and only one of them does it here, so somebody unsure
   // which they want has to be able to tell the rows apart — and to find this
   // one by the word they would reach for.
-  it('says the agent opens a pane in the worktree already on screen', () => {
+  it('names the worktree on screen as where the agent starts', () => {
     const items = buildPaletteItems(
       context({
         worktrees: [worktree({ id: 'w1', name: 'login fix' })],
@@ -190,7 +190,7 @@ describe('buildPaletteItems', () => {
 
     const [found] = items.filter((item) => item.kind === 'agent')
     expect(found?.hint).toBe('login fix')
-    expect(found?.detail).toBe('Opens a pane here')
+    expect(found?.detail).toBe('')
     for (const query of ['claude', 'start claude', 'claude here', 'claude this worktree']) {
       expect(filterPalette(items, query)[0]).toMatchObject({ kind: 'agent', id: 'claude' })
     }
@@ -276,7 +276,7 @@ describe('filterPalette', () => {
       id: 'new-terminal',
       label: 'New terminal',
       hint: '',
-      detail: 'Action',
+      detail: '',
       search: 'New terminal shell'
     }
   ]

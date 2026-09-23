@@ -1,4 +1,4 @@
-// The settings page's two non-trivial sentences: whether this build can check for updates, and
+// The settings page's two non-trivial lines: whether this build can check for updates, and
 // where a project's relay comes from (an env var beating the file is the case nobody works out).
 
 import type { CliStatus, RelaySetting, UpdateState } from '@shared/entities'
@@ -54,43 +54,36 @@ function checkedLabel(checkedAt: number, now: number): string {
 }
 
 export type RelayPanel = {
-  /** What teamwork would dial, in one line. */
+  /** What teamwork would dial, or why there is nothing. */
   headline: string
-  /** Where that came from, or why there is nothing. Null while it is unknown. */
+  /** Where the URL came from. Null when there is none. */
   detail: string | null
   /** Said only when this process was started with the override set; Finder launches inherit no env. */
   override: string | null
 }
 
 export function relayPanel(relay: RelaySetting | undefined): RelayPanel {
-  if (relay === undefined) {
-    return { headline: 'Reading where this project’s relay is…', detail: null, override: null }
-  }
+  if (relay === undefined) return { headline: 'Reading…', detail: null, override: null }
 
-  const override = relay.override.value === null ? null : overrideSentence(relay, relay.override.value)
+  const override = relay.override.value === null ? null : overrideLine(relay, relay.override.value)
 
   if (relay.url === null) {
-    return {
-      headline: 'Teamwork has no relay to dial in this repository.',
-      // The fallback is for a shape with neither URL nor reason, which must not render empty.
-      detail: relay.problem ?? `Neither ${relay.file} nor ${relay.override.name} names one.`,
-      override
-    }
+    // The fallback is for a shape with neither URL nor reason, which must not render empty.
+    const problem = relay.problem ?? `no relay in ${relay.file} or ${relay.override.name}`
+    return { headline: problem.charAt(0).toUpperCase() + problem.slice(1), detail: null, override }
   }
 
   return {
-    headline: `Teamwork dials ${relay.url}.`,
-    detail:
-      relay.source === 'environment' ? `From ${relay.override.name} in this app’s environment.` : `From ${relay.file}.`,
+    headline: relay.url,
+    detail: `From ${relay.source === 'environment' ? relay.override.name : relay.file}`,
     override
   }
 }
 
-/** The environment beating the file, including that only a relaunch changes it. */
-function overrideSentence(relay: RelaySetting, value: string): string {
+/** The environment beating the file; only a relaunch after unsetting it changes that. */
+function overrideLine(relay: RelaySetting, value: string): string {
   const { name } = relay.override
-  const beaten = relay.onDisk.url === null ? `${relay.file} names no relay.` : `${relay.file} says ${relay.onDisk.url}.`
-  return `${name} is set to ${value} in this app’s environment. ${beaten} Unset it and relaunch teamree.`
+  return `${name}=${value} overrides ${relay.file} (${relay.onDisk.url ?? 'empty'}) until unset and relaunched`
 }
 
 /** The `teamree` command's section: one line of state and a button; the judgement is `cliInstallModel`'s. */
@@ -119,7 +112,7 @@ export function cliLine(status: CliStatus | null): CliLine {
   if (status.bundle === null) return { ...none, state: 'Not built', manual: panel.manual }
 
   const reach = status.onPath === null ? ` · ${status.directory} not on PATH` : ''
-  const title = panel.promise === null ? null : `${panel.promise} ${panel.password ?? ''}`.trim()
+  const title = panel.promise === null ? null : [panel.promise, panel.password].filter(Boolean).join(' · ')
   switch (status.state) {
     case 'linked':
       return { ...none, state: `${status.destination} → ${status.resolved ?? status.source}${reach}` }

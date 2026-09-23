@@ -141,7 +141,7 @@ describe('what the dialog promises', () => {
   // someone their machine has no agent on it.
   it('separates "not asked yet" from "none installed"', () => {
     expect(taskPlanNote([], false, [])).toBe('Looking for coding agents…')
-    expect(taskPlanNote([], true, [])).toBe('No coding agent on your login shell’s PATH.')
+    expect(taskPlanNote([], true, [])).toBe('No coding agent on your login shell’s PATH')
   })
 
   // The probe having answered says nothing about the answer being non-empty.

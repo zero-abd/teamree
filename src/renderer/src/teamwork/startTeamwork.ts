@@ -86,18 +86,18 @@ export const ADD_KEY_BUTTON = 'Add my key'
  * What adding a key grants: remote code execution by design (`docs/teamwork.md`).
  * Not a promise of safety — a prompt catches a colleague's mistake, not a bad roster entry.
  */
-export const KEY_GRANT_WARNING = 'Anyone on this roster can type into any pane here, as you.'
+export const KEY_GRANT_WARNING = 'Anyone on this roster can type into any pane here, as you'
 
 /** The deploy, in the fewest words that are still true. `relay/README.md` has the rest. */
 export const RELAY_DEPLOY = {
   button: 'Deploy a relay',
-  browser: 'Opens a browser to sign in to Cloudflare; deploys to your team’s account.',
-  /** Said while it runs, because somebody watching a pane deserves to know what finishing looks like. */
-  watching: 'Prints a wss:// URL when it finishes.',
+  browser: 'Cloudflare sign-in in your browser',
+  /** Said while it runs, so somebody watching the pane knows what finishing looks like. */
+  watching: 'Waiting for a wss:// URL',
   /** The label on the button that takes the URL the deploy printed. */
   use: 'Use this relay URL',
   /** Above the command itself, kept for anybody who would rather run it themselves. */
-  manual: 'Or run it yourself:'
+  manual: 'Run it yourself'
 } as const
 
 /**
@@ -106,20 +106,20 @@ export const RELAY_DEPLOY = {
  */
 export const RELAY_SERVE = {
   button: 'Run a relay yourself',
-  limit: 'Only reachable from machines that can already reach this Mac — one LAN, or a VPN you are all on.',
-  /** Said while it runs, because somebody watching a pane deserves to know what finishing looks like. */
-  watching: 'Prints the URL to give your team.',
+  limit: 'Same LAN or VPN only',
+  /** Said while it runs, so somebody watching the pane knows what finishing looks like. */
+  watching: 'Waiting for a URL',
   /** The label on the button that takes the URL the relay printed. */
   use: 'Use this relay URL',
   /** Beside the button, not instead of it: right for one LAN, a trap otherwise, and teamree cannot tell which. */
-  committing: 'A private address is unreachable from outside that network.',
+  committing: 'Private address: same network only',
   /**
    * The relay's first address is a guess — the OS lists wifi, VPN and container
    * bridges in no ranking — so the person who knows the network picks.
    */
-  choice: 'This Mac has more than one address. Take the one on the network you share:',
+  choice: 'Other addresses on this Mac',
   /** Above the command itself, kept for anybody who would rather run it themselves. */
-  manual: 'Or run it yourself:'
+  manual: 'Run it yourself'
 } as const
 
 /**
@@ -130,17 +130,16 @@ export const RELAY_CHECK = {
   button: 'Check this relay',
   /** A different label from `button`: both can be on screen at once and dial different addresses. */
   draftButton: 'Check the URL you typed',
-  what: 'Dials it from here and says what answered.',
-  proves: 'Dialled from this Mac only.',
+  proves: 'From this Mac only',
   /** Why the button beside the paste field is grey, which is always the same reason. */
-  nothing: 'No relay URL to check yet.'
+  nothing: 'No URL yet'
 } as const
 
 /** The disclosure's label, named so the panel and its test agree. */
 export const MORE_RELAYS_BUTTON = 'Other ways to get a relay'
 
 /** Said above the folded options. Only the container options still need a clone. */
-export const MORE_RELAYS_LEAD = 'The container options need a clone of the teamree repository.'
+export const MORE_RELAYS_LEAD = 'Container options need a teamree clone'
 
 /**
  * Whether the URL belongs in the repository. A stable address is a team fact;
@@ -176,35 +175,35 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
     id: 'tunnel',
     tier: 'fallback',
     name: 'A tunnel to a relay on your own machine',
-    what: 'Run the relay with the button above, then put a tunnel in front of it. No account.',
+    what: 'The relay above, behind a tunnel · no account',
     commands: 'cloudflared tunnel --url http://localhost:8787',
-    effort: 'A couple of minutes.',
-    money: 'Free, while the tunnel and this machine are up.',
+    effort: 'Minutes',
+    money: 'Free while this machine is up',
     keep: 'override',
-    address: 'An ephemeral https:// URL that dies with the tunnel. Set TEAMREE_RELAY_URL to its wss:// form.'
+    address: 'Ephemeral https:// URL · TEAMREE_RELAY_URL gets its wss:// form'
   },
   {
     id: 'mesh',
     tier: 'more',
     name: 'A mesh VPN, or a box on the LAN',
-    what: 'Run the relay on any machine the others can already reach. Nothing is exposed publicly.',
+    what: 'On a machine everyone can already reach · nothing public',
     commands:
       'cd relay\ndocker build -t teamree-relay .\ndocker run -d -p 8787:8787 --restart unless-stopped teamree-relay',
-    effort: 'Minutes, if the network already exists.',
-    money: 'Whatever the box costs.',
+    effort: 'Minutes, given the network',
+    money: 'The box',
     keep: 'commit',
-    address: 'ws://<that machine>:8787/v1/relay, or wss:// with TLS in front of it.'
+    address: 'ws://<that machine>:8787/v1/relay, or wss:// behind TLS'
   },
   {
     id: 'vps',
     tier: 'more',
     name: 'A VPS you rent',
-    what: 'The container on a small server, with Caddy or nginx in front for TLS.',
+    what: 'The container on a small server, Caddy or nginx for TLS',
     commands:
       'cd relay\ndocker build -t teamree-relay .\ndocker run -d -p 8787:8787 --restart unless-stopped teamree-relay\n' +
       '# then terminate TLS in front of it and forward the upgrade headers',
-    effort: 'An afternoon, then a server to patch.',
-    money: 'Whatever the server costs, monthly.',
+    effort: 'An afternoon, then patching',
+    money: 'The server, monthly',
     keep: 'commit',
     address: 'wss://<your hostname>/v1/relay'
   }
@@ -217,10 +216,7 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
  */
 export function brokenRelayOverride(relay: RelaySetting): string | null {
   if (relay.override.value === null || relay.url !== null || relay.onDisk.url === null) return null
-  return (
-    `${relay.override.name} is set to ${relay.override.value}, which is not a relay URL, so this project has no ` +
-    `relay even though ${relay.file} has one.`
-  )
+  return `${relay.override.name}=${relay.override.value} is not a relay URL and hides ${relay.file}`
 }
 
 /** A scheme a relay is dialled on. Nothing else is ever taken out of a pane. */
@@ -307,14 +303,11 @@ export type RelayPaneState = {
 
 /** Why a second relay command cannot start: one pane per project, and a grey button needs a reason. */
 export function relayPaneBusy(kind: RelayPaneKind): string {
-  const what =
-    kind === 'deploy' ? 'A deploy is' : kind === 'serve' ? 'A relay you are running yourself is' : 'A relay check is'
-  return `${what} already open in a pane below. Close it first.`
+  return `${kind === 'deploy' ? 'Deploy' : kind === 'serve' ? 'Relay' : 'Check'} pane open below`
 }
 
 /** Why a verb cannot run: the reported command does not end in ` deploy`, so nothing here knows the program. */
-export const RELAY_LAUNCHER_UNKNOWN =
-  'This build reports a relay command teamree does not recognise. Paste a relay URL below instead.'
+export const RELAY_LAUNCHER_UNKNOWN = 'Unrecognised relay command · paste a URL below'
 
 /** What the pane says it is, above the terminal itself. */
 export const RELAY_PANE_TITLES: Record<RelayPaneKind, string> = {
@@ -324,13 +317,13 @@ export const RELAY_PANE_TITLES: Record<RelayPaneKind, string> = {
 }
 
 /** Said when the command is over and there is no URL, instead of a blank space. */
-export const RELAY_PANE_NO_URL = 'Finished, and printed no relay URL.'
+export const RELAY_PANE_NO_URL = 'Finished without a relay URL'
 
 /**
  * A `serve` address dies with its process, so the offer is withdrawn when the
  * pane stops. A deploy is different: its Worker outlives the pane.
  */
-export const RELAY_SERVE_STOPPED = 'The relay in this pane has stopped, so the address it printed answers nothing.'
+export const RELAY_SERVE_STOPPED = 'Relay stopped · its address is dead'
 
 /** Whether the origin button is busy, and why it was last refused. */
 export type OriginState = { pending: boolean; error: string | null }
@@ -424,9 +417,7 @@ export function publishActivity(progress: TeamworkPublishProgress | undefined, n
     quietMs,
     quiet:
       running && progress.phase === 'pushing' && !progress.cancelling && quietMs >= PUBLISH_QUIET_MS
-        ? `git has printed nothing for ${formatElapsed(quietMs)}. A push that goes this quiet is usually waiting ` +
-          'for a credential teamree cannot be asked for. Stop it, and run the same push once in Terminal to see ' +
-          'what it wants.'
+        ? `No output for ${formatElapsed(quietMs)} · likely a credential prompt; push once in Terminal`
         : null,
     cancelling: progress.cancelling,
     running
@@ -454,14 +445,14 @@ export const RETRY_PUBLISH_BUTTON = 'Try the push again'
 export function retryHint(kind: PushFailureKind): string | null {
   switch (kind) {
     case 'rejected':
-      return 'Pull with rebase first: git pull --rebase.'
+      return 'Pull first: git pull --rebase'
     case 'auth':
     case 'host-key':
-      return 'Fix the credential first; nothing in this window changes it.'
+      return 'Fix the credential outside teamree, then retry'
     case 'cancelled':
-      return 'Nothing was sent. The commit is still here.'
+      return 'Nothing sent · commit kept'
     case 'timeout':
-      return 'It never finished rather than being refused.'
+      return 'Timed out, not refused'
     default:
       return null
   }
@@ -492,7 +483,7 @@ export function checkRelayDraft(raw: string): RelayDraftCheck {
   // that was in there — which is what carries the suggestion worth offering.
   const best = found[0] === undefined ? first : parseRelayUrl(found[0])
   if (best.ok) return { state: 'ok', url: best.url }
-  return { state: 'bad', reason: sentence(best.reason), suggestion: best.suggestion ?? null }
+  return { state: 'bad', reason: clause(best.reason), suggestion: best.suggestion ?? null }
 }
 
 /** Every URL in a piece of text, `ws(s)://` first, trailing punctuation dropped. */
@@ -522,7 +513,7 @@ export type OriginDraftCheck =
 export function checkOriginDraft(raw: string): OriginDraftCheck {
   if (raw.trim() === '') return { state: 'empty' }
   const checked = checkOrigin(raw)
-  if (!checked.ok) return { state: 'bad', reason: sentence(checked.reason) }
+  if (!checked.ok) return { state: 'bad', reason: clause(checked.reason) }
   return {
     state: 'ok',
     url: checked.remote,
@@ -532,9 +523,7 @@ export function checkOriginDraft(raw: string): OriginDraftCheck {
 }
 
 /** What each kind of origin has to agree about, behind the disclosure beside the field. */
-export const ORIGIN_DETAIL =
-  'Origins are compared after normalising: scheme, port and a trailing .git are ignored. A path origin is compared ' +
-  'literally, so both Macs must mount it at the same path.'
+export const ORIGIN_DETAIL = 'Scheme, port and trailing .git ignored · a path origin must be the same path on every Mac'
 
 /** The label on the button that copies the invitation. Named so a test can find it. */
 export const COPY_INVITE_BUTTON = 'Copy the invitation'
@@ -611,7 +600,7 @@ export function setupOutcome(
     {
       label: 'Your key',
       state: list.enrolled ? 'yes' : 'no',
-      detail: list.enrolled ? `${selfFileOf(list) ?? list.selfFile} is in this checkout.` : 'Not in this checkout yet.'
+      detail: list.enrolled ? `${selfFileOf(list) ?? list.selfFile}` : 'Not in this checkout'
     },
     {
       label: 'The relay',
@@ -620,35 +609,35 @@ export function setupOutcome(
         relay.url === null
           ? // The runtime's reason first: a broken override leaves the file fine, so
             // `onDisk.problem` alone put a false sentence on screen and in the sidebar.
-            sentence(relay.problem ?? relay.onDisk.problem ?? `${relay.file} does not name a relay`)
-          : `${relay.url}, from ${relay.source === 'environment' ? relay.override.name : relay.file}.`
+            clause(relay.problem ?? relay.onDisk.problem ?? `${relay.file} does not name a relay`)
+          : `${relay.url} · from ${relay.source === 'environment' ? relay.override.name : relay.file}`
     },
     {
       label: 'Pushed',
       state: pushed,
       detail:
         publish === undefined
-          ? 'teamree has not pushed from here. Check with git status.'
+          ? 'Not pushed from here · check git status'
           : publish.push.ok
-            ? `${publish.branch} is on ${publish.remote}.`
+            ? `${publish.branch} on ${publish.remote}`
             : // "Refused" is the remote's verdict; a stopped or unfinished push is not.
               `${
                 publish.push.kind === 'cancelled'
-                  ? 'You stopped the push.'
+                  ? 'Stopped'
                   : publish.push.kind === 'timeout'
-                    ? 'The push never finished.'
-                    : 'The push was refused.'
-              } ${publish.push.advice}`
+                    ? 'Timed out'
+                    : 'Refused'
+              }: ${clause(publish.push.advice)}`
     },
     {
       label: 'Connected',
       state: connected.length > 0 ? 'yes' : 'no',
       detail:
         connected.length > 0
-          ? `${namesOf(connected)} ${connected.length === 1 ? 'is' : 'are'} connected.`
+          ? namesOf(connected)
           : others.length === 0
-            ? 'Nobody but you on the roster.'
-            : `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} on the roster and not connected.`
+            ? 'Nobody else on the roster'
+            : `${namesOfMembers(others)} not connected`
     }
   ]
 
@@ -659,12 +648,12 @@ export function setupOutcome(
     done,
     facts,
     head: done
-      ? 'Teamwork is working in this repository.'
+      ? 'Teamwork is working'
       : publish !== undefined && !publish.push.ok && publish.commit !== null
-        ? 'Committed here; the push did not land.'
+        ? 'Committed, not pushed'
         : stalled === undefined
-          ? 'Done here. Waiting on a teammate.'
-          : `Not finished: ${stalled.label.toLowerCase()}.`,
+          ? 'Waiting on a teammate'
+          : `Not finished: ${stalled.label.toLowerCase()}`,
     next: done ? null : nextStepFor(stalled)
   }
 }
@@ -673,11 +662,11 @@ export function setupOutcome(
 function nextStepFor(stalled: SetupFact | undefined): string | null {
   switch (stalled?.label) {
     case 'Your key':
-      return `Step 2 writes it: ${ADD_KEY_BUTTON}.`
+      return `Step 2: ${ADD_KEY_BUTTON}`
     case 'The relay':
-      return 'Step 3 is where a relay is chosen or pasted in.'
+      return 'Step 3: choose a relay'
     case 'Pushed':
-      return `Step 4 sends it: ${PUBLISH_BUTTON}.`
+      return `Step 4: ${PUBLISH_BUTTON}`
     default:
       return null
   }
@@ -702,16 +691,16 @@ export function suggestedPath(
   if (relay.onDisk.url !== null && others.length > 0) {
     return {
       id: 'join',
-      because: `${relay.file} and ${namesOfMembers(others)}’s key are already in this checkout.`
+      because: `${relay.file} and ${namesOfMembers(others)}’s key already here`
     }
   }
   if (relay.onDisk.url !== null) {
-    return { id: 'join', because: `${relay.file} is already in this checkout.` }
+    return { id: 'join', because: `${relay.file} already here` }
   }
   if (others.length > 0) {
     return {
       id: 'join',
-      because: `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} already on the roster.`
+      because: `${namesOfMembers(others)} already on the roster`
     }
   }
   // Nothing to name: the absence of both is not worth a line under "Start a team here".
@@ -764,16 +753,11 @@ function identityStep({ list, failedReads }: StartTeamworkInput): StepCore {
         summary: readFailure('This machine’s identity', failedReads.list)
       }
     }
-    return { id: 'identity', title, mark: 'todo', summary: 'Reading this machine’s identity…' }
+    return { id: 'identity', title, mark: 'todo', summary: 'Reading…' }
   }
   // The keypair is made on first run, so this is only ever shown. A missing handle is step two's problem.
-  const named = list.self.handle === null ? ' No handle yet: git has no user.email in this checkout.' : ''
-  return {
-    id: 'identity',
-    title,
-    mark: 'done',
-    summary: `X25519 keypair, made on first run. The private half never leaves this machine.${named}`
-  }
+  const named = list.self.handle === null ? ' · no handle: git has no user.email here' : ''
+  return { id: 'identity', title, mark: 'done', summary: `X25519 keypair · private half stays here${named}` }
 }
 
 function keyStep({ list, failedReads }: StartTeamworkInput): StepCore {
@@ -787,7 +771,7 @@ function keyStep({ list, failedReads }: StartTeamworkInput): StepCore {
         summary: readFailure('The roster', failedReads.list)
       }
     }
-    return { id: 'key', title, mark: 'todo', summary: 'Waiting for the roster.' }
+    return { id: 'key', title, mark: 'todo', summary: 'Waiting for the roster' }
   }
   if (list.enrolled) {
     const file = selfFileOf(list) ?? list.selfFile
@@ -795,14 +779,14 @@ function keyStep({ list, failedReads }: StartTeamworkInput): StepCore {
       id: 'key',
       title,
       mark: 'done',
-      summary: `Your key is in this checkout${file === null ? '' : ` as ${file}`}. Step 4 pushes it.`
+      summary: file ?? 'In this checkout'
     }
   }
   return {
     id: 'key',
     title,
     mark: 'todo',
-    summary: 'Your key is not in this checkout.'
+    summary: 'Not in this checkout'
   }
 }
 
@@ -814,25 +798,19 @@ function relayStep({ relay, failedReads }: StartTeamworkInput): StepCore {
         id: 'relay',
         title,
         mark: 'blocked',
-        summary: readFailure('Where this project’s relay is recorded', failedReads.relay)
+        summary: readFailure('The relay setting', failedReads.relay)
       }
     }
-    return { id: 'relay', title, mark: 'todo', summary: 'Reading where this project’s relay is recorded…' }
+    return { id: 'relay', title, mark: 'todo', summary: 'Reading…' }
   }
   // A broken override takes the relay away while the file still names one. The
   // file is not what is wrong, so the mark is `blocked` with the runtime's own reason.
   const overridden = brokenRelayOverride(relay)
   if (overridden !== null) {
-    return { id: 'relay', title, mark: 'blocked', summary: sentence(relay.problem ?? overridden) }
+    return { id: 'relay', title, mark: 'blocked', summary: clause(relay.problem ?? overridden) }
   }
   if (relay.onDisk.url !== null) {
-    // The file in the working tree, so this says what step 2 says about the key: step 4 pushes it.
-    return {
-      id: 'relay',
-      title,
-      mark: 'done',
-      summary: `${relay.file} names ${relay.onDisk.url}. Step 4 pushes it.`
-    }
+    return { id: 'relay', title, mark: 'done', summary: `${relay.file}: ${relay.onDisk.url}` }
   }
   if (relay.source === 'environment' && relay.url !== null) {
     // Done for this run and never done: the tunnel option tells people to use
@@ -841,14 +819,14 @@ function relayStep({ relay, failedReads }: StartTeamworkInput): StepCore {
       id: 'relay',
       title,
       mark: 'this-run',
-      summary: `${relay.override.name} points this run at ${relay.url}; ${relay.file} is empty, so a teammate reads nothing.`
+      summary: `${relay.override.name}=${relay.url} for this run only · ${relay.file} is empty`
     }
   }
   return {
     id: 'relay',
     title,
     mark: 'todo',
-    summary: sentence(relay.onDisk.problem ?? `${relay.file} does not name a relay`)
+    summary: clause(relay.onDisk.problem ?? `${relay.file} does not name a relay`)
   }
 }
 
@@ -857,14 +835,9 @@ function pushStep(input: StartTeamworkInput): StepCore {
   // No path: the commands with the `cd` are rendered by the panel that knows where the checkout is.
   const plan = pushPlan(input.list, input.relay, undefined)
   if (plan === null) {
-    return { id: 'push', title, mark: 'todo', summary: 'Nothing to commit yet — the steps above write the files.' }
+    return { id: 'push', title, mark: 'todo', summary: 'Nothing to commit yet' }
   }
-  return {
-    id: 'push',
-    title,
-    mark: 'unchecked',
-    summary: `${listOf(plan.files)} ${plan.files.length === 1 ? 'is' : 'are'} in this checkout, unpushed.`
-  }
+  return { id: 'push', title, mark: 'unchecked', summary: `${listOf(plan.files)} in this checkout` }
 }
 
 function connectedStep(input: StartTeamworkInput): StepCore {
@@ -876,21 +849,16 @@ function connectedStep(input: StartTeamworkInput): StepCore {
         id: 'connected',
         title,
         mark: 'blocked',
-        summary: readFailure('Whether teamwork is running here', input.failedReads.status)
+        summary: readFailure('Teamwork status', input.failedReads.status)
       }
     }
-    return { id: 'connected', title, mark: 'todo', summary: 'Reading whether teamwork is running here…' }
+    return { id: 'connected', title, mark: 'todo', summary: 'Reading…' }
   }
 
   // The runtime answered that it has not read this project yet. Not the sentence
   // above: that is this panel waiting on a call, this is the facts not being in.
   if (status.state === 'unread') {
-    return {
-      id: 'connected',
-      title,
-      mark: 'todo',
-      summary: 'teamree has not read this project’s relay, roster or origin yet.'
-    }
+    return { id: 'connected', title, mark: 'todo', summary: 'Not read yet' }
   }
 
   const connected = status.links.filter((link) => link.phase === 'connected')
@@ -900,9 +868,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'done',
-      summary: `${namesOf(connected)} ${connected.length === 1 ? 'is' : 'are'} connected.${
-        away === 0 ? '' : ` ${away} other${away === 1 ? '' : 's'} on the roster ${away === 1 ? 'is' : 'are'} not.`
-      }`
+      summary: `${namesOf(connected)} connected${away === 0 ? '' : ` · ${away} not`}`
     }
   }
   if (!status.origin.ok) {
@@ -912,12 +878,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
   // leaves the links at `waiting` and every phrase below blames the wrong machine.
   // Not ahead of `connected`, because a link that is up outranks any roster.
   if (!status.enrolled) {
-    return {
-      id: 'connected',
-      title,
-      mark: 'blocked',
-      summary: 'Your own key is not in .teamree/members in this checkout.'
-    }
+    return { id: 'connected', title, mark: 'blocked', summary: 'Your key is not in .teamree/members' }
   }
   if (status.links.length === 0) {
     // The roster is read from disk on demand; the links are replaced at the end
@@ -928,9 +889,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
         id: 'connected',
         title,
         mark: 'todo',
-        summary:
-          `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} on the roster; no link open yet.` +
-          mountMismatchNote(status)
+        summary: `${namesOfMembers(others)} on the roster · no link yet${mountMismatchNote(status)}`
       }
     }
     const ready = input.list?.enrolled === true && input.relay?.url != null
@@ -938,7 +897,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'todo',
-      summary: ready ? 'Nobody but you on the roster.' : 'Nothing to connect to yet.'
+      summary: ready ? 'Nobody else on the roster' : 'Nothing to connect to yet'
     }
   }
 
@@ -948,7 +907,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'todo',
-      summary: `The handshake with ${namesOf(refused)} did not complete. Pull, and ask them to pull.`
+      summary: `Handshake with ${namesOf(refused)} failed · pull, and ask them to pull`
     }
   }
   const unreachable = status.links.filter((link) => link.phase === 'unreachable')
@@ -957,14 +916,14 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'todo',
-      summary: `This machine cannot reach ${relayLabel(status)}.`
+      summary: `Cannot reach ${relayLabel(status)}`
     }
   }
   return {
     id: 'connected',
     title,
     mark: 'todo',
-    summary: `${relayLabel(status)} is reachable; no teammate is on it yet.${mountMismatchNote(status)}`
+    summary: `${relayLabel(status)} reachable · no teammate on it yet${mountMismatchNote(status)}`
   }
 }
 
@@ -976,12 +935,12 @@ function mountMismatchNote(status: TeamworkRead): string {
   if (!status.origin.ok) return ''
   const origin = checkOrigin(status.origin.url)
   if (!origin.ok || origin.kind !== 'path') return ''
-  return ` A teammate whose Mac mounts this repository anywhere but ${origin.remote} will never appear here.`
+  return ` · teammates must mount it at ${origin.remote}`
 }
 
 /** Why a checkout with no usable `origin` cannot take part. Detail is in `ORIGIN_DETAIL`. */
 function originBlocker(reason: string): string {
-  return sentence(reason)
+  return clause(reason)
 }
 
 function relayLabel(status: TeamworkRead): string {
@@ -1001,7 +960,7 @@ function namesOfMembers(members: Member[]): string {
 
 /** A read that threw, with the runtime's message kept whole — not "Reading…" for ever. */
 function readFailure(what: string, error: string): string {
-  return `${what} could not be read: ${sentence(error)}`
+  return `${what} could not be read: ${clause(error)}`
 }
 
 function listOf(items: string[]): string {
@@ -1009,10 +968,8 @@ function listOf(items: string[]): string {
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
-/** The runtime's reasons are clause-shaped. Panels speak in sentences. */
-function sentence(text: string): string {
-  const trimmed = text.trim()
-  if (trimmed === '') return trimmed
-  const capitalised = trimmed[0]!.toUpperCase() + trimmed.slice(1)
-  return /[.!?]$/.test(capitalised) ? capitalised : `${capitalised}.`
+/** A runtime reason as a panel line: capitalised, no full stop. */
+function clause(text: string): string {
+  const trimmed = text.trim().replace(/\.$/, '')
+  return trimmed === '' ? trimmed : trimmed[0]!.toUpperCase() + trimmed.slice(1)
 }

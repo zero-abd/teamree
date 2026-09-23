@@ -38,7 +38,7 @@ describe('what the card says', () => {
 
   it('says teamree does not install it, in one line and without an argument for it', () => {
     const notice = updateNotice(state())
-    expect(notice?.detail).toContain('does not install it for you')
+    expect(notice?.detail).toContain('install by hand')
     expect(notice?.detail).not.toContain('unsigned')
   })
 

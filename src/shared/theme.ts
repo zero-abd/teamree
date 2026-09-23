@@ -86,8 +86,6 @@ export type ThemeSeed = {
 export type BuiltInTheme = {
   id: string
   name: string
-  /** One line, shown beside the name in the picker. */
-  blurb: string
   seed: ThemeSeed
 }
 
@@ -119,7 +117,6 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
   {
     id: 'black',
     name: 'Absolute Black',
-    blurb: 'A true #000 ground. Panes float on nothing; only the chrome is lit.',
     seed: {
       ground: '#000000',
       // Barely cool: on pure black a neutral grey ramp reads faintly green
@@ -135,7 +132,6 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
   {
     id: 'black-hc',
     name: 'Black, high contrast',
-    blurb: 'The same ground with nothing dim on it: every ink clears 7:1, every line is drawn to be seen.',
     seed: {
       ground: '#000000',
       surface: '#ffffff',
@@ -149,7 +145,6 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
   {
     id: 'midnight',
     name: 'Midnight',
-    blurb: 'The blue-black this app shipped with, kept so nobody loses the window they know.',
     seed: {
       ground: '#0a0c10',
       surface: '#99b7f5',
@@ -163,7 +158,6 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
   {
     id: 'graphite',
     name: 'Graphite',
-    blurb: 'Neutral grey with no cast at all, and more light in the surfaces for rooms that have some.',
     seed: {
       ground: '#131315',
       surface: '#ffffff',

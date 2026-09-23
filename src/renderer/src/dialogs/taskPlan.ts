@@ -104,7 +104,7 @@ export function taskPlanNote(
 ): string {
   if (!probed) return 'Looking for coding agents…'
   // Names which PATH: the login shell's, so `which claude` in a pane is the check to run.
-  if (agents.length === 0) return 'No coding agent on your login shell’s PATH.'
+  if (agents.length === 0) return 'No coding agent on your login shell’s PATH'
   if (selection.length === 0) return '1 worktree · no agent'
   const commands = selection.map((agent) => agent.command).join(', ')
   return `${selection.length} worktree${selection.length === 1 ? '' : 's'} · ${commands}`

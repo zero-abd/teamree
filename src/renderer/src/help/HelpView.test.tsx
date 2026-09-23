@@ -115,7 +115,7 @@ describe('the teamree command', () => {
   it('sends you to settings instead when it is not', () => {
     seed(status({ state: 'absent' }))
     render(<HelpView modifier={APPLE} />)
-    expect(screen.getByText(/The teamree CLI is not on your PATH yet/)).toBeDefined()
+    expect(screen.getByText('Not on your PATH')).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open settings' }))
     expect(toggleSettings).toHaveBeenCalled()

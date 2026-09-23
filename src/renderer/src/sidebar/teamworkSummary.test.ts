@@ -43,7 +43,7 @@ describe('what the project header says about teamwork', () => {
     const summary = teamworkSummary({ state: 'unread', projectId: 'p1', readAt: NOW }, NOW)
     expect(summary).toMatchObject({ tone: 'pending' })
     expect(summary?.label).not.toContain('off')
-    expect(summary?.detail).toContain('has not read')
+    expect(summary?.detail).toContain('not read yet')
   })
 
   it('reads a project with no relay as something to set up, not something broken', () => {

@@ -159,13 +159,13 @@ export function ChangesTab(): React.JSX.Element | null {
 
       {changes?.truncated ? (
         <p className="changes__note">
-          Showing {changes.limit} of {changes.total}.
+          {changes.limit} of {changes.total}
         </p>
       ) : null}
 
       {log?.unavailable !== undefined ? (
         <p className="commits__unknown" title={log.unavailable}>
-          Could not read what this branch has committed.
+          Could not read this branch’s commits
         </p>
       ) : null}
 
@@ -210,7 +210,7 @@ export function ChangesTab(): React.JSX.Element | null {
             {diffPending ? (
               <p className="changes__empty">Reading the patch…</p>
             ) : (diff === null || diff.patch === '') && stagedDiff === null ? (
-              <p className="changes__empty">No patch for this path.</p>
+              <p className="changes__empty">No patch</p>
             ) : (
               <>
                 {/* The staged half first, because it is what the next commit

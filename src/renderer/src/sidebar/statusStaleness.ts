@@ -29,6 +29,6 @@ export function statusStaleness(options: {
   const age = sinceLabel(Math.max(0, now - status.readAt))
   return {
     age,
-    detail: `Could not read this worktree. These are what it last said, ${age} ago.`
+    detail: `Could not read this worktree · last read ${age} ago`
   }
 }

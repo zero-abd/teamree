@@ -151,7 +151,7 @@ describe('a teammate who has gone away', () => {
   it('says their machine is not connected, never anything about the worktree', () => {
     mount(theirs({ live: false, heardAt: NOW - 240_000 }))
     const detail = screen.getByLabelText(/not connected/).getAttribute('aria-label') ?? ''
-    expect(detail).toBe('priya’s machine is not connected. This is what they were showing 4m ago.')
+    expect(detail).toBe('priya’s machine is not connected · showing what it had 4m ago')
   })
 
   // A badge that blinked on every relay restart would train a reader to ignore it.

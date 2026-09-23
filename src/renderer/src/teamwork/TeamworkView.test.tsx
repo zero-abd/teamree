@@ -322,7 +322,7 @@ describe('running a relay on this Mac, as the other button', () => {
 
   it('says who it will not work for, beside the button', () => {
     mount()
-    expect(screen.getByText(/Only reachable from machines that can already reach this Mac/)).toBeTruthy()
+    expect(screen.getByText('Same LAN or VPN only')).toBeTruthy()
   })
 
   // One slot: a second is refused rather than replacing output somebody is reading.
@@ -330,7 +330,7 @@ describe('running a relay on this Mac, as the other button', () => {
     seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, urls: [], running: true } } })
     mount()
     expect((screen.getByRole('button', { name: 'Run a relay yourself' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getAllByText(/A deploy is already open in a pane below/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Deploy pane open below').length).toBeGreaterThan(0)
   })
 
   const servePane = (running: boolean): Record<string, unknown> => ({
@@ -350,7 +350,7 @@ describe('running a relay on this Mac, as the other button', () => {
     const setRelay = vi.fn()
     seed({ setRelay, ...servePane(true) })
     mount()
-    expect(screen.getByText(/A private address is unreachable from outside that network/)).toBeTruthy()
+    expect(screen.getByText('Private address: same network only')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Use this relay URL' }))
     expect(setRelay).toHaveBeenCalledWith('p1', 'ws://192.168.1.23:8787/v1/relay')
   })
@@ -361,7 +361,7 @@ describe('running a relay on this Mac, as the other button', () => {
     seed(servePane(false))
     mount()
     expect(screen.queryByRole('button', { name: 'Use this relay URL' })).toBeNull()
-    expect(screen.getByText(/The relay in this pane has stopped/)).toBeTruthy()
+    expect(screen.getByText('Relay stopped · its address is dead')).toBeTruthy()
   })
 })
 
@@ -379,7 +379,7 @@ describe('checking a relay from the panel', () => {
   it('says what a pass proves and what it does not', () => {
     seed({ relays: { p1: relayOnDisk() } })
     mount()
-    expect(screen.getAllByText('Dialled from this Mac only.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('From this Mac only').length).toBeGreaterThan(0)
   })
 
   // The one beside the configured relay and the one beside the field dial
@@ -387,7 +387,7 @@ describe('checking a relay from the panel', () => {
   it('is disabled with the fix named when nothing has been typed to check', () => {
     mount()
     expect((screen.getByRole('button', { name: 'Check the URL you typed' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('No relay URL to check yet.')).toBeTruthy()
+    expect(screen.getByText('No URL yet')).toBeTruthy()
   })
 })
 
@@ -469,7 +469,7 @@ describe('committing and pushing, which is the one that leaves the machine', () 
   it('says when this push is what would set the upstream', () => {
     ready({ publishPlans: { p1: plan({ upstream: null }) } })
     mount()
-    expect(screen.getByText(/does not track yet — this push would set it/)).toBeTruthy()
+    expect(screen.getByText(/\(sets upstream\)/)).toBeTruthy()
   })
 
   it('pushes on the button, and only then', () => {

@@ -159,9 +159,7 @@ describe('showing a path in the file manager', () => {
     await store().revealInFinder('/repos/pager', 'the pager repository')
 
     expect(store().notices).toHaveLength(1)
-    expect(store().notices[0]?.text).toBe(
-      'teamree cannot open the pager repository in a file manager from this window.'
-    )
+    expect(store().notices[0]?.text).toBe('Cannot open the pager repository in a file manager from this window')
   })
 
   it('turns a bridge that rejects into a notice rather than an unhandled rejection', async () => {
