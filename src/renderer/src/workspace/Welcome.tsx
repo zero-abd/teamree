@@ -1,7 +1,7 @@
-// The front door, one card whatever is missing: the mark, New task and Add project, a terminal when
-// there is a checkout, and three chords. No agent buttons and no headline; the buttons carry the meaning.
+// The front door, with no worktree open: the mark, New task and Add project, and three chords. No agent
+// buttons and no headline; the buttons carry the meaning.
 
-import { hasCheckout, type Project, type Worktree } from '@shared/entities'
+import type { Project } from '@shared/entities'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { menuLabel } from '../menu/menuBar'
@@ -16,18 +16,13 @@ const SHORTCUT_COMMANDS: readonly WorkspaceCommand[] = ['new-worktree', 'open-pa
 
 export function Welcome({
   modifier,
-  project,
-  worktree
+  project
 }: {
   modifier: PlatformModifier
   /** Where a new task would go; undefined until a project has been added. */
   project: Project | undefined
-  /** The worktree on screen, when one is. A terminal is offered only in one with a checkout. */
-  worktree: Worktree | undefined
 }): React.JSX.Element {
   const openDialog = useWorkspaceStore((state) => state.openDialog)
-  const createTerminal = useWorkspaceStore((state) => state.createTerminal)
-  const terminalHere = worktree !== undefined && hasCheckout(worktree)
 
   return (
     <div className="welcome">
@@ -60,11 +55,6 @@ export function Welcome({
         >
           New task
         </button>
-        {terminalHere ? (
-          <button type="button" className="button button--lead" onClick={() => void createTerminal(worktree.id)}>
-            New terminal
-          </button>
-        ) : null}
       </div>
 
       <dl className="welcome__shortcuts">

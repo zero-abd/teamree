@@ -339,6 +339,55 @@
   fill: currentColor;
 }
 
+/* An open worktree with no panes: its name, its branch, and the `+` menu's rows as buttons. */
+.worktree-start {
+  display: flex;
+  flex: 1;
+  align-self: stretch;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: var(--s6);
+  text-align: center;
+}
+
+.worktree-start__name {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.worktree-start__branch {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.worktree-start__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s2);
+  max-width: 72ch;
+  margin-top: var(--s5);
+}
+
+.worktree-start__icon {
+  display: flex;
+  color: var(--fg-muted);
+}
+
+.worktree-start__icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* The workspace splits horizontally once the changes panel is open: panes keep
    every pixel they had, and the panel takes its width from the right. */
 .workspace__body {

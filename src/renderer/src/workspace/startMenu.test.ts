@@ -76,6 +76,11 @@ describe('the rows', () => {
     expect(items[2]?.separated).toBe(true)
   })
 
+  it('leaves the settings off when only rows that open a pane are wanted', () => {
+    const items = startMenuItems([claude], mac, actions(), true)
+    expect(items.map((item) => item.label)).toEqual(['New terminal', 'New markdown', 'Claude Code'])
+  })
+
   // The insertion point another pane kind is added at: a fixed row before the
   // agents, and the agents are the one group that is not a list of rows.
   it('keeps the agents as their own group between the fixed rows', () => {

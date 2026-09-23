@@ -17,6 +17,7 @@ import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalTabs } from './TerminalTabs'
 import { Welcome } from './Welcome'
+import { WorktreeStart } from './WorktreeStart'
 
 export function WorkspaceArea({
   modifier,
@@ -114,8 +115,6 @@ function WorkspaceView({
     () => shownRoot(layout?.root ?? null, expandedTerminalId),
     [layout?.root, expandedTerminalId]
   )
-  // The same rule ⌘N applies, so button and chord open the same composer.
-  const taskProject = worktree ? projects.find((project) => project.id === worktree.projectId) : projects[0]
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -153,7 +152,8 @@ function WorkspaceView({
     // Nothing open: one card, the button that cannot answer disabled.
     return (
       <main className="workspace workspace--empty">
-        <Welcome modifier={modifier} project={taskProject} worktree={undefined} />
+        {/* The project ⌘N picks with nothing open, so button and chord open the same composer. */}
+        <Welcome modifier={modifier} project={projects[0]} />
       </main>
     )
   }
@@ -180,7 +180,7 @@ function WorkspaceView({
               onCloseSearch={closePaneSearch}
             />
           ) : (
-            <Welcome modifier={modifier} project={taskProject} worktree={worktree} />
+            <WorktreeStart worktree={worktree} modifier={modifier} />
           )}
         </div>
 

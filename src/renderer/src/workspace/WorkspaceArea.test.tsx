@@ -6,7 +6,7 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Layout, Project, Worktree, WorktreeStatus } from '@shared/entities'
+import type { InstalledAgent, Layout, Project, Worktree, WorktreeStatus } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -40,6 +40,7 @@ vi.mock('../shell/openInBrowser', () => ({ openInBrowser: vi.fn() }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { WorkspaceArea } = await import('./WorkspaceArea')
+const { startMenuItems } = await import('./startMenu')
 
 const INITIAL = useWorkspaceStore.getState()
 const MAC = resolvePlatformModifier('darwin')
@@ -186,41 +187,68 @@ describe('when there is nothing open', () => {
   })
 })
 
+// The + menu's rows as buttons, under the worktree's name and branch; the front door is not shown.
 describe('a worktree with no panes in it', () => {
-  it('offers nothing to start while the checkout is still being prepared', () => {
-    seed({
-      projects: [project],
-      worktrees: [worktree({ state: 'creating' })],
-      activeWorktreeId: 'w1'
-    })
+  const claude: InstalledAgent = { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }
+  const codex: InstalledAgent = { kind: 'codex', command: 'codex', binary: '/opt/bin/codex' }
+  const openEmpty = (overrides: Partial<Worktree> = {}): void => {
+    seed({ projects: [project], worktrees: [worktree(overrides)], activeWorktreeId: 'w1', agents: [claude, codex] })
     mount()
-    expect(screen.getByRole('button', { name: 'Add project' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
+  }
+  // The label only: a glyph's <title> is text too.
+  const startButtons = (): string[] =>
+    [...document.querySelectorAll('.worktree-start__actions button')].map(
+      (button) => button.lastChild?.textContent ?? ''
+    )
+
+  it('names the worktree and its branch, and none of the front door', () => {
+    openEmpty()
+    expect(screen.getByRole('heading', { name: 'Rewrite the pager' })).toBeTruthy()
+    expect(screen.getByText('rewrite-the-pager')).toBeTruthy()
+    for (const name of ['Add project', 'New task', 'Star on GitHub']) {
+      expect(screen.queryByRole('button', { name })).toBeNull()
+    }
+    expect(document.querySelector('.brand__mark')).toBeNull()
+    expect(document.querySelector('kbd')).toBeNull()
   })
 
-  // No agent buttons; a terminal is not an agent, so it stays.
-  it('offers a plain terminal once the checkout is ready, and no agent by name', () => {
-    seed({
-      projects: [project],
-      worktrees: [worktree()],
-      activeWorktreeId: 'w1',
-      agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }]
+  it('offers every pane the + menu offers, in its order', () => {
+    openEmpty()
+    const menu = startMenuItems([claude, codex], MAC, {
+      newTerminal: () => {},
+      newMarkdown: () => {},
+      startAgent: () => {},
+      openAgentSettings: () => {}
     })
-    mount()
-    expect(screen.queryByRole('button', { name: 'Start claude' })).toBeNull()
+    expect(startButtons()).toEqual(menu.map((item) => item.label).filter((label) => label !== 'Agent settings…'))
+    expect(startButtons()).toEqual(['New terminal', 'New markdown', 'Claude Code', 'Codex'])
+  })
+
+  it('marks each agent with its harness glyph', () => {
+    openEmpty()
+    const button = screen.getByRole('button', { name: 'Codex' })
+    expect(button.querySelector('svg[data-agent="codex"]')).toBeTruthy()
+  })
+
+  it('starts the agent chosen, or a terminal, in this worktree', () => {
+    openEmpty()
+    fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
+    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
     fireEvent.click(screen.getByRole('button', { name: 'New terminal' }))
-    expect(createTerminal).toHaveBeenCalledWith('w1')
-    expect(startAgent).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'New task' }))
-    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
+    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
   })
 
-  // Ready on paper, gone from disk: a terminal here would fail with a path.
-  it('offers no terminal in a worktree whose checkout is missing', () => {
-    seed({ projects: [project], worktrees: [worktree({ missing: true })], activeWorktreeId: 'w1' })
-    mount()
-    expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'New task' })).toBeTruthy()
+  it('offers nothing to start while the checkout is still being prepared', () => {
+    openEmpty({ state: 'creating' })
+    expect(screen.getByRole('heading', { name: 'Rewrite the pager' })).toBeTruthy()
+    expect(startButtons()).toEqual([])
+    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
+  })
+
+  // Ready on paper, gone from disk: anything started here would fail with a path.
+  it('offers nothing to start in a worktree whose checkout is missing', () => {
+    openEmpty({ missing: true })
+    expect(startButtons()).toEqual([])
   })
 })
 
