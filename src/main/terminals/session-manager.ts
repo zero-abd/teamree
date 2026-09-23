@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { agentLaunchCommand } from '../../shared/agentLaunch'
+import type { RestoredAs } from '../../shared/paneRestore'
 import type { Layout, PaneNode, Terminal } from '../../shared/entities'
 import { evidenceLine } from '../../shared/outputEvidence'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
@@ -590,7 +591,10 @@ export class TerminalSessionManager {
             ...(launch.note === undefined ? {} : { startupNote: launch.note })
           },
           restoring,
-          launch.resumed ? 'agent' : 'shell'
+          // Three answers, not two: a pane whose agent was started over is
+          // running that agent, and the banner under its record says so.
+          // Calling it a shell was the badge contradicting the banner.
+          launch.resumed ? 'agent' : launch.repinned === undefined ? 'shell' : 'restarted'
         )
         restored += 1
         if (launch.resumed) resumed += 1
@@ -683,7 +687,7 @@ export class TerminalSessionManager {
       startupNote?: string
     },
     restoring?: TerminalRecord,
-    restored?: 'shell' | 'agent'
+    restored?: RestoredAs
   ): PtySession {
     const cwd = params.cwd ?? this.options.resolveWorktreeCwd?.(params.worktreeId)
     if (cwd === undefined || cwd.length === 0) {

@@ -26,7 +26,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
 import type { InstalledAgent, Project } from '@shared/entities'
-import { cliOutcome, cliPanel } from '../dialogs/cliInstallModel'
+import { cliOutcome } from '../dialogs/cliInstallModel'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import {
@@ -38,7 +38,7 @@ import {
 import { useNow } from '../state/useNow'
 import { modalOnScreen } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { relayPanel, updatePanel } from './settingsModel'
+import { cliLine, relayPanel, updatePanel } from './settingsModel'
 
 export function SettingsView({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
@@ -129,11 +129,10 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
 /**
  * The `teamree` command, and whether a terminal can find it.
  *
- * The whole of the judgement is `cliInstallModel`'s, exactly as it is for the
- * dialog: the same `cliPanel` and the same `cliOutcome`, shown as a section
- * rather than in a box. Rewriting any of those sentences here would be the
- * drift the model's own header warns about — two surfaces describing one link
- * in two ways, one of which is wrong about the password.
+ * One line and a button; `cliLine` says why, and the judgement underneath is
+ * still `cliInstallModel`'s — the same reading of the same link the first-run
+ * dialog makes, said in fewer words. What pressing the button does, and
+ * whether a password is coming, is on the button's hover.
  */
 function CliSection(): React.JSX.Element {
   const status = useWorkspaceStore((state) => state.cli)
@@ -142,30 +141,18 @@ function CliSection(): React.JSX.Element {
   const error = useWorkspaceStore((state) => state.cliError)
   const installCli = useWorkspaceStore((state) => state.installCli)
 
-  const panel = cliPanel(status)
+  const line = cliLine(status)
 
   return (
     <section className="settings-section" aria-labelledby="settings-cli">
       <h2 className="settings-section__title" id="settings-cli">
         teamree on your PATH
       </h2>
-      <p className="settings-fact">{panel.headline}</p>
-      {panel.detail ? <p className="settings-note">{panel.detail}</p> : null}
+      <p className="settings-fact settings-fact--mono">{line.state}</p>
 
-      {/* What the button will do, and what will ask for a password, penned off
-          above the button rather than left to be discovered by pressing it. */}
-      {panel.promise ? (
-        <div className="settings-promise">
-          <p>{panel.promise}</p>
-          {panel.password ? <p className="settings-promise__password">{panel.password}</p> : null}
-        </div>
-      ) : null}
-
-      {panel.pathWarning ? <p className="settings-warning">{panel.pathWarning}</p> : null}
-
-      {panel.manual ? (
+      {line.manual ? (
         <pre className="settings-command">
-          <code>{panel.manual}</code>
+          <code>{line.manual}</code>
         </pre>
       ) : null}
 
@@ -175,10 +162,16 @@ function CliSection(): React.JSX.Element {
       {error ? <p className="settings-error">{error}</p> : null}
       {install && error === null ? <p className="settings-done">{cliOutcome(install)}</p> : null}
 
-      {panel.action ? (
+      {line.action ? (
         <div className="settings-actions">
-          <button type="button" className="button button--primary" disabled={pending} onClick={() => void installCli()}>
-            {pending ? 'Linking…' : panel.action}
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={pending}
+            title={line.title ?? undefined}
+            onClick={() => void installCli()}
+          >
+            {pending ? 'Linking…' : line.action}
           </button>
         </div>
       ) : null}

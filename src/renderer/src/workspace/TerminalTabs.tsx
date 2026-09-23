@@ -102,9 +102,16 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
               >
                 {renaming === tab.terminalId ? (
                   <RenameField
-                    name={terminals[tab.terminalId]?.label ?? ''}
+                    // The name the tab shows, not the stored label: for a pane the
+                    // app named — the ones people rename — the label is empty and
+                    // the field opened blank.
+                    name={tab.label}
                     onCommit={(name) => {
                       setRenaming(null)
+                      // Enter on the untouched field is not a rename. Storing
+                      // `claude 1` as a label would freeze a number the strip made
+                      // up, and the name would stop telling twins apart.
+                      if (name.trim() === tab.label) return
                       void renamePane(tab.terminalId, name)
                     }}
                     onCancel={() => setRenaming(null)}

@@ -1,6 +1,7 @@
 // Core domain entities. Every process agrees on these shapes: the runtime owns
 // them, the renderer and the CLI only ever read or request changes to them.
 
+import type { RestoredAs } from './paneRestore'
 import type { TitleOpinion } from './titleOpinion'
 
 /** A tracked git repository. One project owns many worktrees. */
@@ -388,14 +389,13 @@ export type Terminal = {
   /** When output last arrived, for "no update for 4m". */
   lastOutputAt: number
   /**
-   * How this terminal came back from a previous run, when it did. `agent` means
-   * a conversation was resumed; `shell` means the pane and its directory came
-   * back but whatever was running did not. Absent for a terminal opened now.
+   * How this terminal came back from a previous run, when it did — see
+   * `RestoredAs`. Absent for a terminal opened now.
    *
    * It clears the moment the user types into the pane: by then they know what
    * they are looking at, and a badge that never leaves is noise.
    */
-  restored?: 'shell' | 'agent'
+  restored?: RestoredAs
 }
 
 /**

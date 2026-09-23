@@ -8,7 +8,7 @@
 // the app stops being able to answer the question it exists for.
 
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
-import { ACTIVITY_LABEL, sinceLabel, truncateName, typedBy, watchedBy, type AgentRow } from './agentRows'
+import { ACTIVITY_LABEL, agoLabel, sinceLabel, truncateName, typedBy, watchedBy, type AgentRow } from './agentRows'
 
 type PaneRowsProps = {
   rows: readonly AgentRow[]
@@ -93,9 +93,9 @@ export function paneTitle(
   typing: readonly { handle: string }[],
   unread: boolean
 ): string {
-  const head = `${row.label} · ${ACTIVITY_LABEL[row.activity]}${unread ? ' · unread' : ''} · last output ${sinceLabel(
+  const head = `${row.label} · ${ACTIVITY_LABEL[row.activity]}${unread ? ' · unread' : ''} · last output ${agoLabel(
     row.quietFor
-  )} ago`
+  )}`
   const lines = [row.evidence ? `${head}\nlast printed: ${row.evidence}` : head]
   if (attention.watchers.length > 0) lines.push(watchedBy(attention.watchers))
   if (typing.length > 0) lines.push(typedBy(typing))

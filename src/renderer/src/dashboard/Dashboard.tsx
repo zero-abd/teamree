@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { modalOnScreen } from '../dialogs/modalLayer'
-import { ACTIVITY_LABEL, ACTIVITY_NOUN, sinceLabel, truncateName } from '../sidebar/agentRows'
+import { ACTIVITY_LABEL, ACTIVITY_NOUN, agoLabel, sinceLabel, truncateName } from '../sidebar/agentRows'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -171,7 +171,7 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
                 }`}
                 title={`${row.label} in ${row.worktreeName} · ${ACTIVITY_LABEL[row.activity]}${
                   unread.has(row.terminalId) ? ' · unread' : ''
-                } · last output ${sinceLabel(row.quietFor)} ago`}
+                } · last output ${agoLabel(row.quietFor)}`}
                 onClick={() => void revealPane(row.worktreeId, row.terminalId)}
               >
                 <span className={`activity activity--${row.activity}`} aria-hidden="true" />

@@ -230,17 +230,35 @@ describe('the page itself', () => {
   })
 })
 
+// One line of state and a button. The section led with four lines of prose
+// about where `/usr/local/bin/teamree` pointed, over one button; the line says
+// where it points and the button says what it does.
 describe('teamree on your PATH', () => {
-  it('says the link is made, in the install panel’s own words', () => {
+  const cliSection = (): HTMLElement => screen.getByRole('region', { name: 'teamree on your PATH' })
+
+  it('says where the link leads, in one line, with nothing to press', () => {
     render(<SettingsView modifier={modifier} />)
-    expect(screen.getByText('teamree is on your PATH.')).toBeTruthy()
-    expect(screen.getByText(/\/usr\/local\/bin\/teamree leads to this app/)).toBeTruthy()
+    expect(
+      screen.getByText('/usr/local/bin/teamree → /Applications/teamree.app/Contents/Resources/cli/teamree')
+    ).toBeTruthy()
+    expect(within(cliSection()).queryByRole('button')).toBeNull()
+    expect(within(cliSection()).queryByText(/leads to|on your PATH\./)).toBeNull()
   })
 
-  it('offers the link where there is one to make, and presses it through', () => {
-    seed({ cli: { ...linkedCli(), state: 'missing', resolved: null, needsAdministrator: false } })
+  it('says it is not installed, and offers Install', () => {
+    seed({ cli: { ...linkedCli(), state: 'absent', resolved: null, needsAdministrator: false } })
     render(<SettingsView modifier={modifier} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Put teamree on my PATH' }))
+    expect(screen.getByText('Not installed')).toBeTruthy()
+    expect(within(cliSection()).getAllByRole('button')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+    expect(installCli).toHaveBeenCalled()
+  })
+
+  it('says where a wrong link leads, and offers Repair', () => {
+    seed({ cli: { ...linkedCli(), state: 'elsewhere', resolved: '/Volumes/old/teamree', dangling: true } })
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByText('/usr/local/bin/teamree → /Volumes/old/teamree (missing)')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Repair' }))
     expect(installCli).toHaveBeenCalled()
   })
 })

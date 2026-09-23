@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Terminal } from '@shared/entities'
 import {
+  ACTIVITY_LABEL,
   activityOf,
   agentRows,
+  agoLabel,
   paneLabel,
   paneName,
   paneNames,
@@ -335,5 +337,29 @@ describe('who is reading a pane', () => {
 
   it('says so plainly when nobody is', () => {
     expect(watchedBy([])).toBe('nobody is watching')
+  })
+})
+
+describe('agoLabel', () => {
+  // Every age `sinceLabel` returns composes with "ago" except the first one:
+  // "last output now ago" was the sidebar's hover text for a pane that had
+  // just printed.
+  it('says "now" on its own and everything else with "ago"', () => {
+    expect(agoLabel(3_000)).toBe('now')
+    expect(agoLabel(45_000)).toBe('45s ago')
+    expect(agoLabel(3 * 60_000)).toBe('3m ago')
+  })
+})
+
+describe('ACTIVITY_LABEL', () => {
+  // "waiting on you" and "waiting — no output" are opposites — a pane that
+  // rang the bell and a pane with nothing to say — and read side by side in
+  // the sidebar they started with the same word. The dashboard's nouns
+  // (`asking`, `waiting`) already tell them apart; the phrases now do too.
+  it('does not start the two opposite states with the same word', () => {
+    const [waiting] = ACTIVITY_LABEL.waiting.split(/\s/)
+    const [quiet] = ACTIVITY_LABEL.quiet.split(/\s/)
+    expect(waiting).not.toBe(quiet)
+    expect(ACTIVITY_LABEL.quiet).toBe('quiet — no output')
   })
 })

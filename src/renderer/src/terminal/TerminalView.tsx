@@ -38,7 +38,7 @@ import {
 } from '../keyboard/platformModifier'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { openInBrowser } from '../shell/openInBrowser'
-import { sinceLabel, typedBy, watchedBy } from '../sidebar/agentRows'
+import { agoLabel, typedBy, watchedBy } from '../sidebar/agentRows'
 import { hasBeenTyped, paneAttention, typingNow, type PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -441,7 +441,7 @@ function typedHere(typists: readonly PaneTypist[], now: number): string {
     (newest, typist) => (newest === undefined || typist.at > newest.at ? typist : newest),
     undefined
   )
-  return latest === undefined ? '' : `${latest.handle} typed here ${sinceLabel(now - latest.at)} ago`
+  return latest === undefined ? '' : `${latest.handle} typed here ${agoLabel(now - latest.at)}`
 }
 
 /**

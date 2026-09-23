@@ -11,7 +11,8 @@
 // variable is beating the file they just edited, which is the failure nobody
 // works out unaided because the file on screen is correct and ignored.
 
-import type { RelaySetting, UpdateState } from '@shared/entities'
+import type { CliStatus, RelaySetting, UpdateState } from '@shared/entities'
+import { cliPanel } from '../dialogs/cliInstallModel'
 import { sinceLabel } from '../sidebar/agentRows'
 
 export type UpdatePanel = {
@@ -149,4 +150,78 @@ function overrideSentence(relay: RelaySetting, value: string): string {
   const { name } = relay.override
   const beaten = relay.onDisk.url === null ? `${relay.file} names no relay.` : `${relay.file} says ${relay.onDisk.url}.`
   return `${name} is set to ${value} in this app’s environment. ${beaten} Unset it and relaunch teamree.`
+}
+
+/**
+ * The `teamree` command's section: one line of state, and a button.
+ *
+ * It used to lead with four lines of prose — where `/usr/local/bin/teamree`
+ * pointed, what that meant, what pressing the button would do and whether a
+ * password was coming — over one button. The line now says where the link
+ * leads and the button says what it does; the explanations live here and in
+ * `cliInstallModel`, whose judgement this is a reading of. The detection is
+ * that model's, untouched: this only changes what is said about it.
+ */
+export type CliLine = {
+  /**
+   * `/usr/local/bin/teamree → /Applications/…/cli/teamree`, or `Not installed`.
+   *
+   * A link that leads somewhere is shown as the arrow, whether or not that
+   * somewhere is right — the parenthesis after it says when it is not. A
+   * directory no PATH teamree can read reaches is said on the same line,
+   * because the command will not be found whether or not the link is made.
+   */
+  state: string
+  /**
+   * `Install` where there is no link, `Repair` where there is one leading
+   * somewhere else — a copy that is gone, or another copy of teamree, which is
+   * the failure nobody works out unaided. Null when there is nothing this app
+   * can do from here: the wrong platform, a build with no CLI, an app running
+   * from a volume that will be ejected, or something that is not a link in the
+   * way.
+   */
+  action: 'Install' | 'Repair' | null
+  /**
+   * The hover on that button: what pressing it does and whether macOS will ask
+   * for an administrator password, which it does when the directory is not
+   * writable as this user. Said before it is pressed, but not on the page.
+   */
+  title: string | null
+  /** What to type instead, when there is no button and typing would work. */
+  manual: string | null
+}
+
+export function cliLine(status: CliStatus | null): CliLine {
+  const none: CliLine = { state: 'Looking…', action: null, title: null, manual: null }
+  if (status === null) return none
+  const panel = cliPanel(status)
+  if (!status.installable) return { ...none, state: `Not installable on ${status.platform}`, manual: panel.manual }
+  if (status.source === null) return { ...none, state: 'No CLI in this build' }
+  // A link into a mounted image, or into the copy macOS translocates an app
+  // to, dangles by the evening; the only fix is where the app is, not the link.
+  if (status.impermanent !== null) {
+    return { ...none, state: `Running from ${status.source} — move teamree to Applications` }
+  }
+  // A checkout that has not built its CLI: the link would resolve and the
+  // command would still exit on its first line.
+  if (status.bundle === null) return { ...none, state: 'Not built', manual: panel.manual }
+
+  const reach = status.onPath === null ? ` · ${status.directory} not on PATH` : ''
+  const title = panel.promise === null ? null : `${panel.promise} ${panel.password ?? ''}`.trim()
+  switch (status.state) {
+    case 'linked':
+      return { ...none, state: `${status.destination} → ${status.resolved ?? status.source}${reach}` }
+    case 'elsewhere':
+      return {
+        state: `${status.destination} → ${status.resolved} (${status.dangling ? 'missing' : 'another copy'})${reach}`,
+        action: 'Repair',
+        title,
+        manual: null
+      }
+    case 'file':
+    case 'directory':
+      return { ...none, state: `${status.destination} is a ${status.state} — move it aside` }
+    default:
+      return { state: `Not installed${reach}`, action: 'Install', title, manual: null }
+  }
 }

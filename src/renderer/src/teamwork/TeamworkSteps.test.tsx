@@ -796,9 +796,13 @@ describe('the question asked before the steps', () => {
   // People pick the wrong one, and a choice that cannot be unmade is a trap.
   it('keeps the answer on screen with a way to take it back', () => {
     const shown = text(render({ path: 'join' }))
-    expect(shown).toContain('You are')
-    expect(shown).toContain('join a team i was invited to')
     expect(shown).toContain('Not that')
+    // The choice is quoted as the button said it. Lowercasing an imperative
+    // after "You are" made a predicate of it: "You are join a team i was
+    // invited to."
+    expect(shown).toContain('Join a team I was invited to')
+    expect(shown).not.toMatch(/You are/)
+    expect(shown).not.toMatch(/invited to\./)
   })
 })
 

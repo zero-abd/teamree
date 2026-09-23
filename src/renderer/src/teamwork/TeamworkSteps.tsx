@@ -317,13 +317,19 @@ function PathChoice({
   )
 }
 
-/** The answer, kept on screen and changeable — because people pick the wrong one. */
+/**
+ * The answer, kept on screen and changeable — because people pick the wrong one.
+ *
+ * The choice is quoted as the button said it and nothing is written around it.
+ * The titles are imperatives, and an imperative lowercased into a sentence
+ * ("You are start a team here.") reads as a predicate that was never one.
+ */
 function ChosenPath({ path, onChange }: { path: TeamworkPath; onChange: () => void }): React.JSX.Element {
   const chosen = TEAMWORK_PATHS.find((option) => option.id === path) as (typeof TEAMWORK_PATHS)[number]
   return (
     <div className="chosen-path">
       <p className="chosen-path__line">
-        <span className="chosen-path__label">You are</span> {chosen.title.toLowerCase()}.
+        <span className="chosen-path__label">{chosen.title}</span>
       </p>
       <button type="button" className="button button--small" onClick={onChange}>
         Not that

@@ -365,6 +365,29 @@ describe('naming a pane', () => {
     expect(screen.getByRole('textbox', { name: 'Pane name' })).toBeTruthy()
   })
 
+  // The panes a person renames are exactly the ones the app named, and the
+  // field opened empty for those: the strip drew `claude 1`, the field read the
+  // stored label, and there was none.
+  it('opens the field holding the name the tab shows, selected', () => {
+    threeAgents()
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
+    const field = screen.getByRole('textbox', { name: 'Pane name' }) as HTMLInputElement
+    expect(field.value).toBe('claude 1')
+    expect(field.selectionStart).toBe(0)
+    expect(field.selectionEnd).toBe('claude 1'.length)
+  })
+
+  // Enter on the untouched field is not a rename: storing `claude 1` as a
+  // label would freeze the number the strip made up.
+  it('does not store the app’s own name back as a label', () => {
+    threeAgents()
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
+    const field = screen.getByRole('textbox', { name: 'Pane name' })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(renamePane).not.toHaveBeenCalled()
+    expect(screen.queryByRole('textbox', { name: 'Pane name' })).toBeNull()
+  })
+
   it('renames from a double-click on the tab', () => {
     threeAgents()
     fireEvent.doubleClick(screen.getByRole('tab', { name: 'claude 1' }))

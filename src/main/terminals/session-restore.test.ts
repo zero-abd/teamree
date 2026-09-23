@@ -633,6 +633,29 @@ describePty('restoring terminals across a restart', () => {
     expect(second.write(agentPane.id, 'y')).toBe(false)
   }, 20_000)
 
+  // A pane whose conversation is not in the agent's store starts the agent
+  // over, and the banner in its scrollback says so: "fresh claude below". The
+  // badge on the same pane said "new shell", which is what a pane running an
+  // agent is not.
+  it('says a pane running its agent over again was restarted, not that it is a shell', async () => {
+    const { checkout, launch } = await fakeAgent('claude')
+    const repositories = createRepositories()
+
+    const first = manager(repositories, checkout)
+    const agentPane = first.create({ worktreeId: 'wt_1', command: launch })
+    const plainPane = first.create({ worktreeId: 'wt_1', command: 'echo hello' })
+    first.write(agentPane.id, 'hello\r')
+    await first.shutdown()
+
+    const second = manager(repositories, checkout, undefined, undefined, () => 'absent')
+    second.restoreSessions()
+
+    const byId = new Map(second.list('wt_1').map((terminal) => [terminal.id, terminal]))
+    expect(byId.get(agentPane.id)?.restored).toBe('restarted')
+    expect(byId.get(agentPane.id)?.agent).toBe('claude')
+    expect(byId.get(plainPane.id)?.restored).toBe('shell')
+  }, 20_000)
+
   // The bytes that arrive looking exactly like typing and are not. A terminal
   // answers the questions a program asks it — what kind of terminal it is,
   // where the cursor is — by sending bytes back up the pty, and an agent asks

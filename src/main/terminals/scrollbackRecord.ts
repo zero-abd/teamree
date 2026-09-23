@@ -29,6 +29,8 @@
 // that nothing on this disk can reprogram a terminal on the next launch, and
 // that `cat`ing one of these files is safe too.
 
+import { freshAgentLabel } from '../../shared/paneRestore'
+
 /** One pane's kept output, and when this machine wrote it down. */
 export type RecordedScrollback = {
   text: string
@@ -161,7 +163,7 @@ export function failedResumeMark(exitCode: number, hasRecord: boolean, restarted
  * and leaves the rest to the reader, who knows all four.
  */
 export function noConversationMark(agent: string): string {
-  return `${RESET}\r\n${DIM}[no conversation to resume — fresh ${agent} below]${RESET}\r\n`
+  return `${RESET}\r\n${DIM}[no conversation to resume — ${freshAgentLabel(agent)} below]${RESET}\r\n`
 }
 
 /**
