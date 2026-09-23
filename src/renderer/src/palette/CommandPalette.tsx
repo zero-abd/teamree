@@ -36,6 +36,8 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
   const projects = useWorkspaceStore((state) => state.projects)
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const agents = useWorkspaceStore((state) => state.agents)
+  // Orders the agent rows, nothing else.
+  const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
   const update = useWorkspaceStore((state) => state.update)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   // Names one of the actions: what is wrong with the CLI link decides what the
@@ -52,6 +54,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         projects,
         activeWorktreeId,
         agents,
+        defaultAgent,
         update,
         cli,
         hintFor: (action) => {
@@ -59,7 +62,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
           return command ? shortcutHint(command, modifier) : ''
         }
       }),
-    [worktrees, projects, activeWorktreeId, agents, update, cli, modifier]
+    [worktrees, projects, activeWorktreeId, agents, defaultAgent, update, cli, modifier]
   )
 
   // Nothing offered that cannot work, here as in the menu bar: a row for a

@@ -40,6 +40,11 @@ export type PaletteContext = {
   /** Coding agents found on this machine, as probed at startup. */
   agents: readonly InstalledAgent[]
   /**
+   * The agent kind this machine's owner said they always use, if any. It only
+   * decides which of the agent rows comes first.
+   */
+  defaultAgent: string
+  /**
    * What the runtime knows about newer releases, or null before it has been
    * asked. Only the preference is read from it: it decides which way round the
    * toggle's label reads.
@@ -123,7 +128,16 @@ function agentItems(context: PaletteContext): PaletteItem[] {
   const active = context.worktrees.find((worktree) => worktree.id === context.activeWorktreeId)
   if (active === undefined || active.state !== 'ready') return []
 
-  return context.agents.map((agent) => ({
+  // The preferred one first, and the rest in the probe's own order behind it.
+  // The palette is a keyboard surface: the row that is already under the cursor
+  // when it opens is the one that gets pressed, so "the agent I always use"
+  // being third is the same defect as the composer preselecting the wrong one.
+  // A preference naming an agent this machine does not have moves nothing,
+  // which is the same answer the composer gives.
+  const preferred = context.agents.filter((agent) => agent.kind === context.defaultAgent)
+  const rest = context.agents.filter((agent) => agent.kind !== context.defaultAgent)
+
+  return [...preferred, ...rest].map((agent) => ({
     kind: 'agent',
     id: agent.command,
     label: `Start ${agent.command} in this worktree`,

@@ -1,37 +1,14 @@
-// The preferences that belong to a person at a machine rather than to the work.
+// Per-machine preferences: what one person at one screen has chosen.
 //
-// Three of them live here: how big the text in a pane is, which ref a new task
-// in a given project starts from by default, whether an agent that stops
-// while you are elsewhere is allowed to say so, and which editor that
-// project's checkouts open in, and whether a patch is read down one column or
-// across two. All are stored the way the
-// sidebar's width already is — in this window's `localStorage`, behind a
-// clamp, with every read and write wrapped so that storage being unavailable
-// costs a default rather than a render.
-//
-// They are not in the workspace file, and that is a decision rather than an
-// oversight. The workspace file is the runtime's, reachable only through the
-// method contract in `src/shared/methods.ts`, and everything in it is a fact
-// about the work that a second window, a teammate's pull or the CLI has to be
-// able to read: a project, a worktree, a layout, a mute. Neither of these is
-// that. A font size is about the eyes in front of this screen, and a preferred
-// start point is a habit — "I always branch from develop" — that belongs to the
-// person holding the habit and not to the repository they hold it about. The
-// repository's own answer to "where do branches start" is its base ref, and
-// that stays exactly where it is; this only decides which ref the composer
-// offers first, and anything typed over it still wins. An editor is the same
-// kind of fact as the font size: which program is installed on this machine and
-// which one this person likes opening a checkout in. A teammate pulling the
-// repository has their own answer and it is not this one.
-//
-// Notifications are the clearest case of the three. Whether a machine is
-// allowed to interrupt you is a fact about the machine you are sitting at and
-// the room you are sitting in, not about the task; a laptop in a meeting and a
-// desktop at home should not have to agree about it, and a teammate pulling
-// your workspace must not inherit your sound.
-//
-// The consequence worth knowing is that no preference here follows you to
-// another machine, which is the same bargain the sidebar width already makes.
+// Several of them live here: how big the text in a pane is, which ref a new
+// task in a given project starts from by default, whether an agent that stops
+// while you are elsewhere is allowed to say so, which editor that project's
+// checkouts open in, whether a patch is read down one column or across two,
+// which agent the composer offers first, and what each agent is always
+// launched with. All are stored the way the sidebar's width already is — in
+// this window's `localStorage`, behind a clamp, with every read and write
+// wrapped so that storage being unavailable costs a default rather than a
+// render.
 
 /** Below this the emulator's own glyphs stop being glyphs; above it a pane holds nothing. */
 export const TERMINAL_FONT_MIN_PX = 9
@@ -85,6 +62,11 @@ export function writeStoredAgentNotices(
 }
 
 const EDITOR_COMMANDS_KEY = 'teamree.editor.commands'
+const DEFAULT_AGENT_KEY = 'teamree.agent.default'
+const AGENT_ARGS_KEY = 'teamree.agent.args'
+
+/** The default-agent preference when none has been set: no agent is preferred. */
+export const NO_DEFAULT_AGENT = ''
 const DIFF_LAYOUT_KEY = 'teamree.diff.layout'
 
 export function clampTerminalFontSize(size: number): number {
@@ -254,4 +236,93 @@ export function writeStoredDiffLayout(storage: Pick<Storage, 'setItem'> | undefi
   } catch {
     // As above: the choice holds for this window and is forgotten on the next.
   }
+}
+
+/**
+ * The agent kind the composer should offer first, or `NO_DEFAULT_AGENT`.
+ *
+ * Stored as the kind rather than the command, because the command is what the
+ * probe found on this machine's PATH today and the kind is what the person
+ * meant. Not checked against the catalogue of kinds here: the only readers
+ * match it against the agents actually installed, so a kind this build no
+ * longer knows about simply never matches and the first-found rule stands.
+ */
+export function readStoredDefaultAgent(storage: Pick<Storage, 'getItem'> | undefined): string {
+  try {
+    const raw = storage?.getItem(DEFAULT_AGENT_KEY)
+    return typeof raw === 'string' ? raw.trim() : NO_DEFAULT_AGENT
+  } catch {
+    return NO_DEFAULT_AGENT
+  }
+}
+
+export function writeStoredDefaultAgent(storage: Pick<Storage, 'setItem'> | undefined, kind: string): void {
+  try {
+    storage?.setItem(DEFAULT_AGENT_KEY, kind.trim())
+  } catch {
+    // As with the size above: the choice holds for this window and is forgotten
+    // on the next.
+  }
+}
+
+/**
+ * What each agent is always launched with, by agent kind.
+ *
+ * One string per agent rather than a list of arguments, because that is what
+ * the person types and because the string is spliced into a shell command
+ * line, where their own quoting is the thing that has to survive. Read as
+ * defensively as the start points above and for the same reason: this ends up
+ * on a command line, so anything that is not an object of strings is dropped
+ * whole rather than in part.
+ *
+ * Ships empty on purpose. Whether teamree pre-applies an agent's autonomy flag
+ * — `--dangerously-skip-permissions` and its cousins — is a product decision
+ * about what this app does to a machine by default, and it is not one to take
+ * by seeding a preference; anyone who wants one types it here.
+ */
+export function readStoredAgentArgs(storage: Pick<Storage, 'getItem'> | undefined): Record<string, string> {
+  try {
+    const raw = storage?.getItem(AGENT_ARGS_KEY)
+    if (raw === null || raw === undefined) return {}
+    const parsed: unknown = JSON.parse(raw)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const args: Record<string, string> = {}
+    for (const [kind, value] of Object.entries(parsed)) {
+      if (typeof value === 'string' && value.trim().length > 0) args[kind] = value.trim()
+    }
+    return args
+  } catch {
+    return {}
+  }
+}
+
+export function writeStoredAgentArgs(
+  storage: Pick<Storage, 'setItem'> | undefined,
+  args: Record<string, string>
+): void {
+  try {
+    storage?.setItem(AGENT_ARGS_KEY, JSON.stringify(args))
+  } catch {
+    // As above: the choice holds for this window and is forgotten on the next.
+  }
+}
+
+/**
+ * The map with one agent's arguments set, or removed when the field is blank.
+ *
+ * Removed rather than stored empty, for the same reason as `withStartPoint`:
+ * an empty string and an absent entry would be two spellings of "launch it
+ * plain", and only one of them is checked for anywhere else.
+ */
+export function withAgentArgs(
+  args: Record<string, string>,
+  kind: string,
+  value: string | null
+): Record<string, string> {
+  const trimmed = value?.trim() ?? ''
+  if (trimmed.length === 0) {
+    const { [kind]: _removed, ...rest } = args
+    return rest
+  }
+  return { ...args, [kind]: trimmed }
 }

@@ -44,6 +44,7 @@ const context = (
   projects,
   activeWorktreeId: null,
   agents: [],
+  defaultAgent: '',
   update: null,
   cli: null,
   hintFor: () => '',
@@ -109,6 +110,34 @@ describe('buildPaletteItems', () => {
     const agents = items.filter((item) => item.kind === 'agent')
     expect(agents.map((item) => item.id)).toEqual(['claude', 'codex'])
     expect(agents.map((item) => item.label)).toEqual(['Start claude in this worktree', 'Start codex in this worktree'])
+  })
+
+  // The palette opens with the first row under the cursor, so which agent is
+  // first is which agent gets started.
+  it('puts the agent this machine’s owner always uses first', () => {
+    const items = buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1', name: 'login fix' })],
+        activeWorktreeId: 'w1',
+        agents: [agent('claude'), agent('codex')],
+        defaultAgent: 'codex'
+      })
+    )
+
+    expect(items.filter((item) => item.kind === 'agent').map((item) => item.id)).toEqual(['codex', 'claude'])
+  })
+
+  it('leaves the order alone when the preferred agent is not installed here', () => {
+    const items = buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1', name: 'login fix' })],
+        activeWorktreeId: 'w1',
+        agents: [agent('claude'), agent('codex')],
+        defaultAgent: 'gemini'
+      })
+    )
+
+    expect(items.filter((item) => item.kind === 'agent').map((item) => item.id)).toEqual(['claude', 'codex'])
   })
 
   it('offers no agent row when the machine has none installed', () => {

@@ -17,6 +17,14 @@ import type { InstalledAgent } from '@shared/entities'
 /** How many runs of one agent a single task may ask for. */
 export const MAX_PER_AGENT = 9
 
+/** The kind that stands for "no agent": nothing installed, or nothing preferred. */
+export const NO_AGENT = ''
+
+/** The installed agent of this kind, or null when this machine has no such agent. */
+export function agentByKind(agents: readonly InstalledAgent[], kind: string): InstalledAgent | null {
+  return agents.find((agent) => agent.kind === kind) ?? null
+}
+
 /** How many of each agent to start, keyed by agent kind. */
 export type AgentCounts = Readonly<Record<string, number>>
 
@@ -27,10 +35,24 @@ export type TaskCreate = {
   agentCommand?: string
 }
 
-/** What the dialog opens with: one of the first agent found, none of the rest. */
-export function defaultAgentCounts(agents: readonly InstalledAgent[]): AgentCounts {
-  const first = agents[0]
-  return first ? { [first.kind]: 1 } : {}
+/**
+ * What the dialog opens with: one of the agent this machine's owner said they
+ * always use, when it is installed — otherwise one of the first agent found,
+ * which is the rule this had before there was anywhere to say otherwise — and
+ * none of the rest. A preference naming an agent that is not on this machine
+ * is not an error and is not reported as one: the same preference follows
+ * somebody between a laptop that has codex and a desktop that does not, and
+ * the honest answer on the desktop is the first agent it has.
+ */
+export function defaultAgentCounts(agents: readonly InstalledAgent[], preferred?: string): AgentCounts {
+  const kind = defaultAgentKind(agents, preferred)
+  return kind === NO_AGENT ? {} : { [kind]: 1 }
+}
+
+/** The agent kind the dialog opens with; see `defaultAgentCounts`. */
+export function defaultAgentKind(agents: readonly InstalledAgent[], preferred?: string): string {
+  if (preferred !== undefined && preferred !== NO_AGENT && agentByKind(agents, preferred)) return preferred
+  return agents[0]?.kind ?? NO_AGENT
 }
 
 export function agentCount(counts: AgentCounts, kind: string): number {

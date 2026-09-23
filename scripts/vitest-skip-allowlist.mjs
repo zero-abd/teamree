@@ -92,6 +92,12 @@ const ALLOWED = [
     why: 'TEAMREE_SKIP_PTY_TESTS=1: nothing here forks a real terminal.'
   },
   {
+    file: 'src/main/terminals/agent-launch-arguments.test.ts',
+    suite: 'the arguments a person always passes',
+    when: ptyOptOut,
+    why: 'TEAMREE_SKIP_PTY_TESTS=1: where the arguments land is proven against no real launch.'
+  },
+  {
     file: 'src/main/terminals/session-restore.test.ts',
     suite: 'restoring terminals across a restart',
     when: ptyOptOut,

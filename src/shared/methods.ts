@@ -103,6 +103,16 @@ export const MAX_TERMINAL_ID_CHARS = 256
  */
 export const MAX_PANE_LABEL_CHARS = 512
 
+/**
+ * How long the arguments a person always passes their agent may be.
+ *
+ * A generous bound on a short thing — a model name, a permission mode, a system
+ * prompt someone pasted — rather than a considered maximum. It is here because
+ * the value ends up on a command line the runtime builds, and every other
+ * string this contract puts somewhere consequential is bounded too.
+ */
+export const MAX_AGENT_ARGS_CHARS = 4096
+
 export const Params = {
   statusGet: z.object({}),
 
@@ -528,6 +538,16 @@ export const Params = {
     command: z.string().min(1).optional(),
     /** What to call the pane, for a caller that knows better than the program will. */
     label: z.string().min(1).max(MAX_PANE_LABEL_CHARS).optional(),
+    /**
+     * Appended to `command` before the runtime rewrites it: the flags this
+     * machine's owner always passes this agent, as one command-line fragment.
+     *
+     * A fragment rather than an argv because that is what they typed, and the
+     * pane runs a shell — see `src/shared/agentLaunch.ts`. Capped only in
+     * length; a fragment the rewriter cannot model costs the session-id
+     * rewrite and nothing else.
+     */
+    agentArgs: z.string().max(MAX_AGENT_ARGS_CHARS).optional(),
     cwd: z.string().min(1).optional(),
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional()

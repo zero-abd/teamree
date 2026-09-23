@@ -24,11 +24,17 @@
 // honest, since the panes it resizes are still there behind the page.
 
 import { useEffect, useRef, useState } from 'react'
-import type { Project } from '@shared/entities'
+import { agentLaunchCommand } from '@shared/agentLaunch'
+import type { InstalledAgent, Project } from '@shared/entities'
 import { cliOutcome, cliPanel } from '../dialogs/cliInstallModel'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
-import { TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX, type AgentNoticePreference } from '../state/preferences'
+import {
+  NO_DEFAULT_AGENT,
+  TERMINAL_FONT_MAX_PX,
+  TERMINAL_FONT_MIN_PX,
+  type AgentNoticePreference
+} from '../state/preferences'
 import { useNow } from '../state/useNow'
 import { modalOnScreen } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -111,6 +117,7 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
           <UpdatesSection />
           <NoticesSection />
           <PanesSection />
+          <AgentsSection />
           <AppearanceSection modifier={modifier} />
           <ProjectsSection projects={projects} />
         </div>
@@ -308,6 +315,121 @@ function PanesSection(): React.JSX.Element {
 
       <p className="settings-note">Remembered on this machine only.</p>
     </section>
+  )
+}
+
+/**
+ * Which agent you always use, and what you always pass it.
+ *
+ * Both are per-machine preferences rather than workspace settings — see
+ * `state/preferences.ts` — and the section only exists when the probe found
+ * something, because every control on it is about an agent this machine has.
+ *
+ * Nothing is seeded. Whether teamree pre-applies any agent's autonomy flag —
+ * `--dangerously-skip-permissions` and its equivalents — is a product decision
+ * about what this app does to a machine by default, and it is deliberately not
+ * being taken here by shipping a default that happens to be one. The fields
+ * start empty and stay empty until somebody types in them.
+ */
+function AgentsSection(): React.JSX.Element | null {
+  const agents = useWorkspaceStore((state) => state.agents)
+  const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
+  const setDefaultAgent = useWorkspaceStore((state) => state.setDefaultAgent)
+
+  if (agents.length === 0) return null
+
+  return (
+    <section className="settings-section" aria-labelledby="settings-agents">
+      <h2 className="settings-section__title" id="settings-agents">
+        Agents
+      </h2>
+
+      <div className="settings-field">
+        <label className="settings-field__label" htmlFor="settings-default-agent">
+          Default agent
+        </label>
+        <select
+          id="settings-default-agent"
+          className="settings-field__input settings-field__input--select"
+          value={defaultAgent}
+          onChange={(event) => setDefaultAgent(event.target.value)}
+        >
+          {/* The no-preference value is the rule that was here before there was
+              a preference, named after what it does rather than left blank. */}
+          <option value={NO_DEFAULT_AGENT}>First found</option>
+          {agents.map((agent) => (
+            <option key={agent.kind} value={agent.kind}>
+              {agent.command}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {agents.map((agent) => (
+        <AgentArguments key={agent.kind} agent={agent} />
+      ))}
+    </section>
+  )
+}
+
+/**
+ * One agent's launch arguments, with the command they produce under them.
+ *
+ * The command is shown because the field on its own cannot be checked: a
+ * fragment of a command line is exactly the thing whose effect depends on
+ * where it lands, and somebody who has typed a quote in the wrong place should
+ * see it in the line rather than in a pane. It is composed by the same
+ * function the runtime composes with — `@shared/agentLaunch` — so the page
+ * cannot drift into showing a line the launch would not produce.
+ *
+ * What it does not show is the session selector the runtime appends for the
+ * agents that take one. That is the app's own bookkeeping, it is not what this
+ * field controls, and putting a fresh uuid on the page would make a line that
+ * looks copyable and is not.
+ */
+function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element {
+  const stored = useWorkspaceStore((state) => state.agentArgs[agent.kind] ?? '')
+  const setAgentArgs = useWorkspaceStore((state) => state.setAgentArgs)
+  const [draft, setDraft] = useState(stored)
+
+  // As with the start point above: the stored value moving is what puts the
+  // trimmed spelling back in the box, and what keeps this field right when the
+  // preference is changed from another surface.
+  useEffect(() => {
+    setDraft(stored)
+  }, [stored])
+
+  const commit = (): void => {
+    const next = draft.trim()
+    if (next === stored) return
+    setAgentArgs(agent.kind, next.length === 0 ? null : next)
+  }
+
+  const id = `settings-agent-args-${agent.kind}`
+
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor={id}>
+        {agent.command}
+      </label>
+      <input
+        id={id}
+        className="settings-field__input"
+        type="text"
+        value={draft}
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            commit()
+          }
+        }}
+      />
+      <code className="settings-command">{agentLaunchCommand(agent.command, draft)}</code>
+    </div>
   )
 }
 
