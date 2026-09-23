@@ -35,6 +35,7 @@
 // Electron does not pump its event loop until this module finishes evaluating,
 // so everything here hangs off callbacks rather than top-level await.
 import { app, Menu } from 'electron'
+import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -653,6 +654,8 @@ async function checkWorktreeSurfaces(ask) {
     'pressing New terminal on the pane strip did not open a pane'
   )
 
+  await checkPatch(ask, worktreeId)
+
   // The reveal on the worktree header, which is all that is left of a path
   // sixty characters long. Checked for and deliberately not pressed: pressing
   // it would open a file manager on whoever is running the gate.
@@ -776,6 +779,131 @@ async function checkUnreadPanes(ask, call, worktreeId) {
     )
     failures.push(`the window said: ${said}`)
   }
+}
+
+/**
+ * That a patch on screen is something a person can read a line number off.
+ *
+ * The changes panel is the surface this app exists for the moment an agent says
+ * it is done, and until now the only thing observed about it was that the
+ * button opening it was there. What a unit test cannot say about it is whether
+ * a real patch — produced by real git, over a file a real command changed —
+ * comes out of the runtime, through the bridge, and onto the screen as hunks
+ * with numbers beside them. Every part of that is a seam between two halves
+ * that each have their own passing tests.
+ *
+ * The worktree is dirtied through the shipped CLI rather than by writing a file
+ * from here, and that is the point rather than a flourish: `teamree terminal
+ * run` is the command an agent is given, it goes in over the same socket a
+ * teammate's would, and the file it changes is changed by a process in the
+ * worktree. Writing the file from this process would prove the panel can render
+ * a diff of something this process did, which is not the situation.
+ */
+async function checkPatch(ask, worktreeId) {
+  const changed = await runCli([
+    'terminal',
+    'run',
+    '--worktree',
+    worktreeId,
+    // One line changed and one added, so the patch has context on both sides of
+    // them — which is the only arrangement where the two gutters disagree, and
+    // so the only one where their numbers mean anything. Written as four
+    // `echo`s rather than one `printf` because a `\n` would have to survive
+    // this file, a JSON frame, and a shell, and it only has to be four lines.
+    '--command',
+    "{ echo 'const one = 1'; echo 'const two = TWO'; echo 'const three = 3'; echo 'const four = 4'; } > note.ts"
+  ])
+  if (!changed.ok) {
+    failures.push(`could not change a file in the worktree through the CLI: ${changed.said.trim()}`)
+    return
+  }
+
+  // Opened by its own control, the way the window-level surfaces above are, and
+  // by the name rather than the class: the count is part of the name, so the
+  // match is on the start of it.
+  const pressed = await waitFor(
+    () =>
+      ask(
+        `(() => {
+           const found = document.querySelector('button[aria-label^="Changes"]')
+           if (!found || found.getAttribute('aria-pressed') === 'true') return found !== null
+           found.click()
+           return true
+         })()`
+      ),
+    'the worktree header offers no way to open the changes panel'
+  )
+  if (!pressed) return
+
+  // The panel lists what changed; pressing a row is what asks for its patch.
+  const selected = await waitFor(
+    () =>
+      ask(
+        `(() => {
+           const row = [...document.querySelectorAll('.changes__list .change')].find(
+             (node) => node.textContent?.includes('note.ts')
+           )
+           if (!row) return false
+           if (!row.classList.contains('change--selected')) row.click()
+           return true
+         })()`
+      ),
+    'the changed file never appeared in the changes panel'
+  )
+  if (!selected) return
+
+  // The two things the panel could not say before: which hunk this is, and
+  // which line. A patch with no `@@` separator and no gutter is the monospace
+  // block this replaced, and it would satisfy any check written against the
+  // text of the diff.
+  await waitFor(
+    () => ask(`document.querySelector('.patch__hunkHead')?.textContent?.startsWith('@@') === true`),
+    'the patch on screen has no hunk header to say where in the file it is'
+  )
+  await waitFor(
+    () => ask(`[...document.querySelectorAll('.patch__num')].some((cell) => /^\\d+$/.test(cell.textContent ?? ''))`),
+    'the patch on screen has no line number in its gutter'
+  )
+
+  // And that the whole of it — the gutters, the hunk header, the syntax colour,
+  // the two words above it — is legible. This surface paints more colours than
+  // any other in the window, and every one of them is a palette token used on a
+  // ground it was not designed for until this says otherwise.
+  await checkContrast(ask, 'the patch')
+}
+
+/**
+ * Runs the built CLI against this launch's runtime, and comes back with what it
+ * said.
+ *
+ * `ELECTRON_RUN_AS_NODE` because `process.execPath` here is Electron, and
+ * `TEAMREE_RUNTIME_FILE` because the CLI would otherwise look in the real user
+ * data directory — which is the developer's, and whose app is not this one.
+ *
+ * Spawned rather than `spawnSync`: the runtime the CLI is dialling is *this*
+ * process, so blocking this event loop until the CLI returns is a wait for an
+ * answer that cannot be written.
+ */
+function runCli(args) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [join(root, 'out/cli/index.js'), ...args], {
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        TEAMREE_RUNTIME_FILE: join(userDataDir, 'runtime.json')
+      },
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    let said = ''
+    child.stdout.on('data', (chunk) => {
+      said += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      said += chunk
+    })
+    child.on('error', (error) => resolve({ ok: false, said: error.message }))
+    child.on('close', (code) => resolve({ ok: code === 0, said }))
+  })
 }
 
 /**

@@ -12,7 +12,7 @@
 // everything else in this file: they want plain Node and a process that is
 // still around afterwards to clean up, and `smoke.mjs` is an Electron main
 // process that has exited by then.
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -39,13 +39,21 @@ const userDataDir = join(smokeRoot, 'teamree')
 //
 // `-c` rather than `git config`, so nothing is read from or written to whoever
 // is running this. A commit needs an identity and an empty repository has no
-// branch to create a worktree from, hence the empty commit.
+// branch to create a worktree from, hence the commit.
 const fixtureRepo = join(smokeRoot, 'repo')
 mkdirSync(fixtureRepo, { recursive: true })
 const fixtureGit = ['-c', 'user.email=smoke@teamree.invalid', '-c', 'user.name=smoke', '-c', 'commit.gpgsign=false']
+// A committed file, so that a worktree made from this has something to *change*
+// rather than only something to add. The difference matters to exactly one
+// check: a patch over an untracked file is additions from line one, and the
+// numbers in a diff's two gutters are only worth asserting where the two sides
+// disagree — which needs context lines, which needs a file that was there
+// before. Named `.ts` so the tokenizer has a table for it.
+writeFileSync(join(fixtureRepo, 'note.ts'), 'const one = 1\nconst two = 2\nconst three = 3\n')
 const fixtureSteps = [
   ['init', '-b', 'main'],
-  [...fixtureGit, 'commit', '--allow-empty', '-m', 'initial']
+  ['add', 'note.ts'],
+  [...fixtureGit, 'commit', '-m', 'initial']
 ]
 let fixture = fixtureRepo
 for (const args of fixtureSteps) {
