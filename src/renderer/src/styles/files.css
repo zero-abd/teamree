@@ -1,0 +1,260 @@
+/* File panes: the path bar, the viewers under it, and the file tab's marks. */
+
+.file__bar {
+  gap: var(--s2);
+}
+
+.file__glyph {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+  opacity: 0.75;
+}
+
+.file__path {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+
+.file__dir {
+  color: var(--fg-muted);
+}
+
+.file__unsaved,
+.tab__unsaved {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--fg-secondary);
+}
+
+.file__spacer {
+  flex: 1;
+}
+
+.file__tool {
+  height: 18px;
+  padding: 0 var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.file__tool:hover {
+  background: var(--bg-press);
+  color: var(--fg);
+}
+
+.file__tool--on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.file__more {
+  font-size: var(--text-base);
+  line-height: 1;
+}
+
+.file__notice {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: none;
+  padding: var(--s1) var(--s3);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
+  color: var(--warning);
+  font-size: var(--text-sm);
+}
+
+.file__notice button,
+.file__actions button {
+  padding: 2px var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-hover);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.file__notice button:hover,
+.file__actions button:hover {
+  background: var(--bg-press);
+}
+
+.file__body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.file__view {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.file__view[hidden] {
+  display: none;
+}
+
+.file__diff {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-panel);
+}
+
+.file__state {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s3);
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.file__state p {
+  margin: 0;
+}
+
+.file__actions {
+  display: flex;
+  gap: var(--s2);
+}
+
+.file__frame {
+  flex: 1;
+  border: 0;
+  background: var(--bg-panel);
+}
+
+.file__media {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: var(--s4);
+}
+
+.file__media video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.file__media audio {
+  width: min(480px, 100%);
+}
+
+.code {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.image {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.image__scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  background-color: var(--bg-panel);
+  background-image:
+    linear-gradient(45deg, var(--bg-raised) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--bg-raised) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--bg-raised) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--bg-raised) 75%);
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+  background-size: 16px 16px;
+}
+
+.image__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  padding: var(--s4);
+}
+
+.image--fit .image__stage {
+  width: 100%;
+  height: 100%;
+}
+
+.image--fit img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.image__zoom {
+  position: absolute;
+  right: var(--s3);
+  bottom: var(--s3);
+  display: flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.image__zoom button {
+  min-width: 24px;
+  height: 22px;
+  padding: 0 var(--s2);
+  border: 0;
+  background: transparent;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.image__zoom button:hover {
+  background: var(--bg-press);
+  color: var(--fg);
+}
+
+.image__level {
+  min-width: 44px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tab__main .file__glyph {
+  opacity: 0.6;
+}
+
+.tab--active .tab__main .file__glyph {
+  opacity: 0.9;
+}

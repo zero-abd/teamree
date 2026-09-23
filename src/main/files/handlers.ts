@@ -16,7 +16,8 @@ export function registerFileHandlers(registry: MethodRegistry): void {
     readWorktreeFile({
       worktreeId: params.worktreeId,
       worktreePath: worktreePath(params.worktreeId),
-      path: params.path
+      path: params.path,
+      ...(params.viewer === undefined ? {} : { viewer: params.viewer })
     })
   )
   registry.register('file.write', Params.fileWrite, async (params) => {
@@ -24,7 +25,9 @@ export function registerFileHandlers(registry: MethodRegistry): void {
       worktreeId: params.worktreeId,
       worktreePath: worktreePath(params.worktreeId),
       path: params.path,
-      content: params.content
+      content: params.content,
+      ...(params.encoding === undefined ? {} : { encoding: params.encoding }),
+      ...(params.expectedModifiedAt === undefined ? {} : { expectedModifiedAt: params.expectedModifiedAt })
     })
     // The watcher reports this too, but not on a machine whose watch is degraded.
     registry.context.workspaceEvents.emit({ type: 'worktrees' })

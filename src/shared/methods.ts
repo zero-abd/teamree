@@ -546,11 +546,19 @@ export const Params = {
   }),
 
   /** One text file of a worktree, for a file pane; `path` may not leave the worktree. Local only. */
-  fileRead: z.object({ worktreeId: z.string().min(1), path: z.string().min(1).max(4096) }),
+  fileRead: z.object({
+    worktreeId: z.string().min(1),
+    path: z.string().min(1).max(4096),
+    /** Answer media, binary and oversize files with a `view` rather than refusing them. */
+    viewer: z.boolean().optional()
+  }),
   fileWrite: z.object({
     worktreeId: z.string().min(1),
     path: z.string().min(1).max(4096),
-    content: z.string().max(MAX_FILE_PANE_BYTES)
+    content: z.string().max(MAX_FILE_PANE_BYTES),
+    encoding: z.enum(['utf-8', 'utf-8-bom']).optional(),
+    /** Refuses the write with `conflict` when the file's mtime is no longer this one. */
+    expectedModifiedAt: z.number().nonnegative().optional()
   }),
 
   layoutGet: z.object({ worktreeId: z.string().min(1) }),

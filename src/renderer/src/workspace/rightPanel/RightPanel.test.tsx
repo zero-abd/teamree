@@ -304,16 +304,33 @@ describe('the files tab', () => {
     expect(within(tree).getByText('app.ts')).toBeTruthy()
   })
 
-  it('opens a file in the editor at its path under the checkout', async () => {
+  it('opens a file as a pane beside the terminals, and a second as another', async () => {
     seed({ rightPanelOpen: true, rightPanelTab: 'files', editorCommands: { p1: 'mate' } })
     mount()
     const tree = await screen.findByRole('tree', { name: 'Files' })
     await within(tree).findByText('README.md')
 
+    fireEvent.click(within(tree).getByRole('button', { name: /^README\.md/ }))
+    await waitFor(() => expect(call).toHaveBeenCalledWith('layout.set', expect.objectContaining({ worktreeId: 'w1' })))
+    let layout = useWorkspaceStore.getState().layouts.w1!
+    expect(fileLeavesIn(layout.root).map((leaf) => leaf.path)).toEqual(['README.md'])
+    expect(layout.focusedTerminalId).toBe(fileLeavesIn(layout.root)[0]?.terminalId)
+
     fireEvent.click(within(tree).getByRole('button', { name: /^src/ }))
     fireEvent.click(await within(tree).findByRole('button', { name: /^app\.ts/ }))
+    layout = useWorkspaceStore.getState().layouts.w1!
+    expect(fileLeavesIn(layout.root).map((leaf) => leaf.path)).toEqual(['README.md', 'src/app.ts'])
+    expect(call).not.toHaveBeenCalledWith('editor.open', expect.anything())
+  })
+
+  it('still opens a file in the editor from its row menu', async () => {
+    seed({ rightPanelOpen: true, rightPanelTab: 'files', editorCommands: { p1: 'mate' } })
+    mount()
+    const tree = await screen.findByRole('tree', { name: 'Files' })
+    fireEvent.contextMenu(await within(tree).findByRole('button', { name: /^README\.md/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^Open in/ }))
     await waitFor(() =>
-      expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite/src/app.ts', command: 'mate' })
+      expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite/README.md', command: 'mate' })
     )
   })
 
@@ -346,9 +363,7 @@ describe('the files tab', () => {
     ).toEqual(['src/app.ts?'])
 
     fireEvent.click(within(found).getByRole('button'))
-    await waitFor(() =>
-      expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite/src/app.ts' })
-    )
+    expect(fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root).map((leaf) => leaf.path)).toEqual(['src/app.ts'])
 
     // Clearing the field brings the tree back.
     fireEvent.change(screen.getByRole('searchbox', { name: 'Find files' }), { target: { value: '' } })

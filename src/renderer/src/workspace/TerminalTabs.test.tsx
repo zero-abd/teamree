@@ -641,13 +641,12 @@ describe('a markdown tab', () => {
     expect(screen.queryByRole('button', { name: 'Rename pane NOTES.md' })).toBeNull()
   })
 
-  it('shows a dot while the page is ahead of the file, and a hollow one once it is saved', () => {
+  it('shows a dot while the page is ahead of the file, and none once it is saved', () => {
     withPage({ unsavedFiles: { 'file:1': true } })
     expect(screen.getByTestId('unsaved')).toBeTruthy()
     expect(screen.getByRole('tab', { name: /NOTES\.md/ }).getAttribute('title')).toBe('NOTES.md · unsaved')
     act(() => useWorkspaceStore.setState({ unsavedFiles: {} }))
     expect(screen.queryByTestId('unsaved')).toBeNull()
-    expect(screen.getByTestId('saved')).toBeTruthy()
   })
 
   it('asks for the next file’s name in the strip, and hands it to the store', () => {

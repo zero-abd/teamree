@@ -52,6 +52,7 @@ describe('the renderer transport names one set of channels', () => {
       // explicitly rather than by walking `src/main`: adding a channel should make
       // somebody come here and say where it is answered; a glob would adopt the next one.
       ...(await channelsNamedIn('src/main/reveal/revealPath.ts')),
+      ...(await channelsNamedIn('src/main/reveal/openPath.ts')),
       // The menu bar's two, the same arrangement.
       ...(await channelsNamedIn('src/main/menuBar.ts')),
       // The agent notifications' two, the same again.

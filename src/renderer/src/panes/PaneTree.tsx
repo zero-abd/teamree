@@ -45,6 +45,7 @@ export function PaneTree({
         focused={callbacks.focusedTerminalId === node.terminalId}
         onFocus={() => callbacks.onFocus(node.terminalId)}
         onClose={() => callbacks.onClose(node.terminalId)}
+        searchToken={callbacks.searchTerminalId === node.terminalId ? callbacks.searchToken : 0}
       />
     )
   }

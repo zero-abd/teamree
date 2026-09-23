@@ -4,6 +4,7 @@
 // (`+` opens a menu of what can start here), and a tab is where a pane gets renamed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { FileGlyph } from '../files/FileView'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { startMenuItems } from './startMenu'
 import { PaneGlyph } from '../agents/glyphs'
@@ -124,11 +125,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                       PTY, and a second dot would be a second vocabulary for four
                       states the app can only honestly describe one way. */}
                     {isFile ? (
-                      <span
-                        className={`md-dot${unsaved ? ' md-dot--unsaved' : ''}`}
-                        data-testid={unsaved ? 'unsaved' : 'saved'}
-                        aria-hidden="true"
-                      />
+                      <FileGlyph />
                     ) : (
                       <span
                         className={tab.activity === null ? 'activity' : `activity activity--${tab.activity}`}
@@ -139,9 +136,10 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                     {isUnread ? <span className="pip" aria-hidden="true" /> : null}
                     {isFile ? null : <PaneGlyph agent={tab.agent} />}
                     {tab.text === '' ? null : <span className="tab__name">{truncateName(tab.text)}</span>}
+                    {unsaved ? <span className="tab__unsaved" data-testid="unsaved" aria-hidden="true" /> : null}
                   </button>
                 )}
-                {/* A button besides double-click: F2 is a brightness key on a Mac keyboard. */}
+                {/* A button besides double-click: F2 is a brightness key on a Mac keyboard. A file pane is named by its file. */}
                 {isFile ? null : (
                   <button
                     type="button"

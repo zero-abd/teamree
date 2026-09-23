@@ -35,6 +35,12 @@ vi.mock('../markdown/MarkdownPane', () => ({
   )
 }))
 
+vi.mock('../files/FileView', () => ({
+  FileView: ({ paneId, path }: { paneId: string; path: string }) => (
+    <div data-testid={`viewer-${paneId}`} data-path={path} />
+  )
+}))
+
 const { PaneTree } = await import('./PaneTree')
 const { shownRoot } = await import('./paneLayout')
 
@@ -399,5 +405,20 @@ describe('a file leaf', () => {
     const page = screen.getByTestId('page-file:1')
     expect(page.dataset.path).toBe('docs/NOTES.md')
     expect(page.dataset.focused).toBe('true')
+  })
+
+  it('draws any other file with the file viewer', () => {
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [
+        { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'docs/NOTES.md' },
+        { kind: 'leaf', terminalId: 'file:2', pane: 'file', path: 'src/app.ts' }
+      ]
+    }
+    mount(root, [], 'file:2')
+    expect(screen.getByTestId('page-file:1').dataset.path).toBe('docs/NOTES.md')
+    expect(screen.getByTestId('viewer-file:2').dataset.path).toBe('src/app.ts')
   })
 })

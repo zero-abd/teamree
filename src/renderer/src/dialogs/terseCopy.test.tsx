@@ -28,6 +28,7 @@ const { RemoteKeystrokesDialog } = await import('./RemoteKeystrokesDialog')
 const { InstallCliDialog } = await import('./InstallCliDialog')
 const { FirstRunCliOffer } = await import('./FirstRunCliOffer')
 const { ConfirmRemoveDialog } = await import('./ConfirmRemoveDialog')
+const { ConfirmCloseFileDialog } = await import('./ConfirmCloseFileDialog')
 const { closePaneWarning } = await import('./closePaneModel')
 const { cliOutcome } = await import('./cliInstallModel')
 const { CommandPalette } = await import('../palette/CommandPalette')
@@ -270,6 +271,22 @@ describe('dialogs', () => {
     const terminal = { id: 't1', title: 'zsh', running: true, busy: true } as never
     const agent = { id: 't2', title: 'claude', running: true, busy: false, agent: 'claude' } as never
     expect(clauses(closePaneWarning(terminal)?.body, closePaneWarning(agent)?.body)).toEqual([])
+  })
+
+  it('discarding unsaved edits to a file: no sentence', () => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: {
+        w1: {
+          worktreeId: 'w1',
+          root: { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'src/app.ts' },
+          focusedTerminalId: 'file:1'
+        }
+      }
+    })
+    render(<ConfirmCloseFileDialog terminalId="file:1" />)
+    expect(document.body.textContent).toContain('Discard unsaved changes?')
+    expect(sentenceStops(document.body)).toEqual([])
   })
 })
 

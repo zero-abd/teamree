@@ -9,6 +9,7 @@ const RPC_STREAM_CHANNEL = 'teamree:rpc:stream'
 const RPC_RELEASE_CHANNEL = 'teamree:rpc:release'
 // src/main/reveal/revealPath.ts
 const REVEAL_PATH_CHANNEL = 'teamree:reveal-path'
+const OPEN_PATH_CHANNEL = 'teamree:open-path'
 // src/main/menuBar.ts; the command channel carries one string inward.
 const MENU_PUBLISH_CHANNEL = 'teamree:menu:publish'
 const MENU_COMMAND_CHANNEL = 'teamree:menu:command'
@@ -144,6 +145,10 @@ const api = {
    */
   revealPath(path: string): Promise<RevealResult> {
     return ipcRenderer.invoke(REVEAL_PATH_CHANNEL, path)
+  },
+  /** Opens a file in the app the OS picks for it; refuses executables. */
+  openPath(path: string): Promise<RevealResult> {
+    return ipcRenderer.invoke(OPEN_PATH_CHANNEL, path)
   },
   platform: process.platform,
   versions: {

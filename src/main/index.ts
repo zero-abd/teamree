@@ -1,7 +1,19 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, powerSaveBlocker, screen, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  Notification,
+  powerSaveBlocker,
+  protocol,
+  screen,
+  shell
+} from 'electron'
 import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
 import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type ApplicationMenuOptions } from './appMenu'
+import { FILE_SCHEME, FILE_SCHEME_PRIVILEGES, fileGrants, serveGrantedFile } from './files/fileProtocol'
 import { installKeepAwake } from './keepAwake'
 import { frontsExistingWindow, isBackgroundLaunch, launchData, userDataOverride } from './launchProfile'
 import { installMenuBar } from './menuBar'
@@ -9,6 +21,7 @@ import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
 import { createQuitSequence } from './quitSequence'
+import { registerOpenPathHandler } from './reveal/openPath'
 import { registerRevealHandler } from './reveal/revealPath'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
 import { mayOpenExternally, navigationVerdict, windowOpenAnswer } from './windowNavigation'
@@ -99,6 +112,10 @@ function setDockBadge(count: number): void {
 const profile = userDataOverride(process.env, process.cwd())
 if (profile) app.setPath('userData', profile)
 
+// Before `ready`, or Chromium will not stream or range-request the scheme. The smoke run
+// imports this module after `ready`, where the call throws; there media just loads unprivileged.
+if (!app.isReady()) protocol.registerSchemesAsPrivileged([{ scheme: FILE_SCHEME, privileges: FILE_SCHEME_PRIVILEGES }])
+
 if (!app.requestSingleInstanceLock(launchData(process.env))) {
   app.quit()
 } else {
@@ -139,6 +156,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
       )
     }
     installMenu()
+    protocol.handle(FILE_SCHEME, (request) => serveGrantedFile(fileGrants, request))
 
     // Packaged, macOS draws the bundle's icon in About; unpackaged it would be Electron's.
     const icon = app.isPackaged ? undefined : join(import.meta.dirname, '../../build/icon.png')
@@ -194,6 +212,10 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
     // across the relay must never open a window here. See src/main/reveal.
     registerRevealHandler(ipcMain, {
       showItemInFolder: (target) => shell.showItemInFolder(target),
+      fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
+    })
+    registerOpenPathHandler(ipcMain, {
+      openPath: (target) => shell.openPath(target),
       fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
     })
     // Before any window, so the first render can already call it.
