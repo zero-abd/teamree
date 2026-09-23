@@ -620,7 +620,7 @@ function RelayServe({
         {RELAY_SERVE.button}
       </button>
       {blocked === null ? null : <p className="relay-deploy__blocked">{blocked}</p>}
-      <p className="relay-deploy__note">{RELAY_SERVE.watching}</p>
+      {pane?.kind === 'serve' ? <p className="relay-deploy__note">{RELAY_SERVE.watching}</p> : null}
       {command === null ? null : (
         <details className="relay-deploy__manual">
           <summary>{RELAY_SERVE.manual}</summary>

@@ -353,6 +353,11 @@ describe('running a relay yourself', () => {
     expect(serve).toBeLessThan(more)
   })
 
+  it('says it is waiting for a URL only while a relay is running', () => {
+    expect(text(render())).not.toContain(RELAY_SERVE.watching)
+    expect(text(render({ pane: pane({ kind: 'serve' }) }))).toContain(RELAY_SERVE.watching)
+  })
+
   it('says who it will not work for, above the button and not after it', () => {
     const markup = render()
     const limit = markup.indexOf('Same LAN or VPN only')
