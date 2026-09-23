@@ -3,6 +3,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorktreeLog, WorktreePush, WorktreeStatus } from '@shared/entities'
+import { fileLeavesIn } from '@shared/filePane'
 
 const call = vi.fn()
 const openInBrowser = vi.fn()
@@ -172,6 +173,46 @@ describe('ticking every file', () => {
     expect(all).toHaveProperty('checked', true)
     expect(screen.getByText('2/2')).toBeTruthy()
     expect(screen.queryByText(/selected/)).toBeNull()
+  })
+})
+
+describe('picking a changed file', () => {
+  it('opens its diff in the centre and keeps the panel a list, with the row selected', () => {
+    seed()
+    useWorkspaceStore.setState({
+      layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } },
+      changes: {
+        w1: {
+          worktreeId: 'w1',
+          changes: [
+            { path: 'src/rank.ts', kind: 'modified', staged: false, unstaged: true },
+            { path: 'README.md', kind: 'modified', staged: false, unstaged: true }
+          ],
+          total: 2,
+          limit: 500,
+          truncated: false,
+          readAt: 0
+        }
+      }
+    })
+    render(<ChangesTab />)
+
+    fireEvent.click(screen.getByTitle('src/rank.ts'))
+    const leaves = fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root)
+    expect(leaves.map((leaf) => leaf.path)).toEqual(['src/rank.ts'])
+    expect(useWorkspaceStore.getState().diffPanes[leaves[0]!.terminalId]).toBe(true)
+    expect(document.querySelector('.patch')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Side by side' })).toBeNull()
+
+    const row = screen.getByTitle('src/rank.ts')
+    expect(row.getAttribute('aria-current')).toBe('true')
+    expect(row.closest('li')?.className).toContain('changes__item--selected')
+    expect(screen.getByTitle('README.md').closest('li')?.className).not.toContain('changes__item--selected')
+
+    // A second click keeps the selection and the one pane.
+    fireEvent.click(row)
+    expect(row.getAttribute('aria-current')).toBe('true')
+    expect(fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root)).toHaveLength(1)
   })
 })
 

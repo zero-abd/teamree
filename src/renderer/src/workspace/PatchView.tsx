@@ -15,6 +15,14 @@ const STATUS_NOTE: Record<PatchFile['status'], string> = {
   modified: ''
 }
 
+/** Below this many pixels two columns of code are too narrow to read. */
+export const SPLIT_MIN_WIDTH = 720
+
+/** The layout a patch gets at `width`: side by side falls back to inline where it does not fit. */
+export function fitLayout(chosen: DiffLayout, width: number | null): DiffLayout {
+  return chosen === 'split' && width !== null && width < SPLIT_MIN_WIDTH ? 'inline' : chosen
+}
+
 /** The verb on a hunk header's control; which one follows from the half of the patch the hunk is in. */
 export type HunkAction = 'Stage' | 'Unstage'
 
@@ -111,7 +119,7 @@ function HunkView({
 }): React.JSX.Element {
   return (
     <details className="patch__hunk" open>
-      {/* Sticky, and the reason the whole panel scrolls in one container: the
+      {/* Sticky, and the reason the whole diff scrolls in one container: the
           `@@` line is the only thing on screen that says which part of the file
           is underneath the cursor, and it is the first thing to scroll away. */}
       <summary className="patch__hunkHead">

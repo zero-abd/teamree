@@ -25,7 +25,6 @@ import type {
   UpdateState,
   Worktree,
   WorktreeChanges,
-  WorktreeDiff,
   WorktreeLog,
   WorktreeMergePreview,
   WorktreeStatus
@@ -254,6 +253,8 @@ type WorkspaceState = {
   unsavedFiles: Record<string, true>
   /** The code panes among them (markdown saves as it goes), kept drafts from the last launch included. */
   editedFiles: Record<string, EditedFile>
+  /** File panes showing their diff rather than their text, by pane id. */
+  diffPanes: Record<string, true>
   /** A markdown editor holds the keyboard, so ⌘B and ⌘E are bold and code, not the window's. */
   editingMarkdown: boolean
   /** The worktree whose strip asks for a file name, because NOTES.md is already open. */
@@ -340,10 +341,6 @@ type WorkspaceState = {
   agents: InstalledAgent[]
   /** True once the probe has answered; until then an empty `agents` means "not asked yet". */
   agentsProbed: boolean
-  diff: WorktreeDiff | null
-  /** The same path's staged patch, read beside the working-tree one so a hunk knows which half it came from. */
-  stagedDiff: WorktreeDiff | null
-  diffPending: boolean
   /** True while a hunk is being staged or unstaged, so the controls settle. */
   hunkPending: boolean
 
@@ -432,8 +429,10 @@ type WorkspaceState = {
   /** Runs an exited pane's program again, in the same pane. */
   relaunchTerminal: (terminalId: string) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
-  /** Opens a file pane on `path` beside the focused pane, or focuses the one already on it. */
-  openFilePane: (worktreeId: string, path: string) => void
+  /** Opens a file pane on `path` beside the focused pane, or focuses the one already on it; `diff` shows its diff. */
+  openFilePane: (worktreeId: string, path: string, mode?: 'diff') => void
+  /** Shows a file pane's diff, or its text again. */
+  setPaneDiff: (paneId: string, on: boolean) => void
   /** `New markdown`: NOTES.md, or a name asked for in the strip when that is already open. */
   newMarkdown: (worktreeId: string) => void
   /** Answers the strip's question with a name, or null to withdraw it. */
@@ -471,7 +470,7 @@ type WorkspaceState = {
   /** Opens the right panel on one tab. */
   showRightPanelTab: (tab: RightPanelTab) => void
   setRightPanelWidth: (width: number) => void
-  /** Shows the patch for one path, or clears the selection when given null. */
+  /** Selects one changed path and opens its diff in the centre, or clears the selection when given null. */
   selectChange: (path: string | null) => void
   /** Adds or removes one path from what the next commit will capture. */
   toggleStaged: (path: string) => void
@@ -479,7 +478,7 @@ type WorkspaceState = {
   setAllStaged: (staged: boolean) => void
   commitStaged: (message: string) => Promise<void>
   /** Puts one hunk into the index, or takes it out. The hunk is exactly what was on screen; the runtime refuses it if the file moved on. */
-  applyHunk: (path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
+  applyHunk: (worktreeId: string, path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
   /** Throws away a path's unstaged change, or one unstaged hunk. The index is never touched. */
   discardChange: (worktreeId: string, path: string, hunk?: PatchHunk) => Promise<void>
   /** Sends the active worktree's branch to its remote. Never forces. */
@@ -854,20 +853,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     void refreshLog(worktreeId).catch(() => undefined)
   }
 
-  /** The patch for the selected path, re-read whenever the tree moves. */
-  const refreshDiff = async (worktreeId: string, path: string): Promise<void> => {
-    set({ diffPending: true })
-    // Both halves at once: which half a hunk came from decides Stage or Unstage.
-    const [diff, staged] = await Promise.all([
-      runtimeClient.call('worktree.diff', { worktreeId, path }).catch(() => null),
-      runtimeClient.call('worktree.diff', { worktreeId, path, staged: true }).catch(() => null)
-    ])
-    // A late answer for a path nobody is looking at any more must not replace the current one.
-    const current = get()
-    if (current.selectedChangePath !== path || current.activeWorktreeId !== worktreeId) return
-    set({ diff, stagedDiff: staged && staged.patch !== '' ? staged : null, diffPending: false })
-  }
-
   /** How many `git merge-tree` processes may be in flight at once; ten worktrees fanning out ten per file change is not worth it. */
   const MERGE_PREVIEW_CONCURRENCY = 4
 
@@ -955,10 +940,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     await refreshMergePreviews(readable)
 
     // The panel rides the same signal as the chips, so an edit in a shell moves both at once.
-    const { activeWorktreeId, selectedChangePath } = get()
+    const { activeWorktreeId } = get()
     if (!changesOnScreen(get()) || !activeWorktreeId || !readable.includes(activeWorktreeId)) return
     await Promise.all([refreshChanges(activeWorktreeId), refreshLog(activeWorktreeId)])
-    if (selectedChangePath !== null) await refreshDiff(activeWorktreeId, selectedChangePath)
   }
 
   /** Re-reads the rosters this window holds: the `members` event names no project, and only opened rosters are in the map. */
@@ -1121,6 +1105,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     editedFiles: Object.fromEntries(
       lastDrafts.map(([paneId, draft]) => [paneId, { worktreeId: draft.worktreeId, path: draft.path }])
     ),
+    diffPanes: {},
     editingMarkdown: false,
     namingMarkdown: null,
     editingPaneName: null,
@@ -1167,9 +1152,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     update: null,
     agents: [],
     agentsProbed: false,
-    diff: null,
-    stagedDiff: null,
-    diffPending: false,
     hunkPending: false,
 
     // Folded projects are remembered with the sidebar's width. Tabs are restored in `bootstrap`,
@@ -1455,9 +1437,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         ...(switching
           ? {
               selectedChangePath: null,
-              diff: null,
-              stagedDiff: null,
-              diffPending: false,
               stagedPaths: [],
               expandedTerminalId: null
             }
@@ -1583,6 +1562,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           focusedTerminalId: layout.focusedTerminalId === terminalId ? nextFocus : layout.focusedTerminalId
         })
         forgetEdits([terminalId])
+        get().setPaneDiff(terminalId, false)
         if (get().expandedTerminalId === terminalId) set({ expandedTerminalId: null })
         return
       }
@@ -1653,10 +1633,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({ editingPaneName: terminalId })
     },
 
-    openFilePane(worktreeId, path) {
+    openFilePane(worktreeId, path, mode) {
       const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
       const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path)
       if (open) {
+        if (mode === 'diff') get().setPaneDiff(open.terminalId, true)
         get().focusPane(open.terminalId)
         return
       }
@@ -1676,7 +1657,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       )
       if (root === null) return
       set({ namingMarkdown: null })
+      if (mode === 'diff') get().setPaneDiff(added.terminalId, true)
       persistLayout({ worktreeId, root, focusedTerminalId: added.terminalId })
+    },
+
+    setPaneDiff(paneId, on) {
+      set((state) => {
+        if ((state.diffPanes[paneId] === true) === on) return {}
+        const diffPanes = { ...state.diffPanes }
+        if (on) diffPanes[paneId] = true
+        else delete diffPanes[paneId]
+        return { diffPanes }
+      })
     },
 
     newMarkdown(worktreeId) {
@@ -1935,7 +1927,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         )
         // Nothing is left ticked; the list refetches on the invalidation the runtime publishes, and
         // doing it here too would be a second way for this window to disagree with the others.
-        set({ stagedPaths: [], selectedChangePath: null, diff: null, stagedDiff: null })
+        set({ stagedPaths: [], selectedChangePath: null })
       } catch (error) {
         failed('Could not commit')(error)
       } finally {
@@ -1943,9 +1935,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async applyHunk(path, hunk, staged) {
-      const worktreeId = get().activeWorktreeId
-      if (!worktreeId || get().hunkPending) return
+    async applyHunk(worktreeId, path, hunk, staged) {
+      if (get().hunkPending) return
 
       set({ hunkPending: true })
       try {
@@ -2368,12 +2359,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     selectChange(path) {
       const worktreeId = get().activeWorktreeId
-      set({ selectedChangePath: path, diff: null, stagedDiff: null, diffPending: path !== null })
-      if (path === null || !worktreeId) return
-      void refreshDiff(worktreeId, path).catch((error: unknown) => {
-        set({ diffPending: false })
-        failed('Could not read the patch')(error)
-      })
+      set({ selectedChangePath: path })
+      if (path !== null && worktreeId) get().openFilePane(worktreeId, path, 'diff')
     },
 
     async decideConsent(requestId, decision, through) {
