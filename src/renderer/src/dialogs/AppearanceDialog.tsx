@@ -201,7 +201,7 @@ export function AppearanceDialog(): React.JSX.Element {
           ) : null}
         </div>
 
-        <footer className="form__actions">
+        <footer className="modal__actions">
           <p className="form__note">{edited ? `${preset.name}, with your changes.` : `${preset.name}, as it ships.`}</p>
           <button
             type="button"

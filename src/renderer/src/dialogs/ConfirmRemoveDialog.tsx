@@ -6,7 +6,7 @@
 // git itself would have deleted without a word. So the question is not "are you
 // sure" but "this will be thrown away, and here is what".
 
-import { Modal } from './Modal'
+import { Confirm } from './Confirm'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
 export function ConfirmRemoveDialog({ worktreeId, reason }: { worktreeId: string; reason: string }): React.JSX.Element {
@@ -22,29 +22,25 @@ export function ConfirmRemoveDialog({ worktreeId, reason }: { worktreeId: string
   const ignored = status?.ignored ?? 0
 
   return (
-    <Modal title={`Discard ${worktree?.name ?? 'this worktree'}?`} onClose={closeDialog}>
-      <div className="confirm">
-        <p className="confirm__body">{reason}</p>
-        {pending > 0 ? (
-          <p className="confirm__detail">
-            {pending} uncommitted change{pending === 1 ? '' : 's'} will be deleted. There is no undo.
-          </p>
-        ) : null}
-        {ignored > 0 ? (
-          <p className="confirm__detail">
-            {ignored} ignored file{ignored === 1 ? '' : 's'} or folder{ignored === 1 ? '' : 's'} will go too.
-          </p>
-        ) : null}
-        {worktree ? <p className="confirm__path">{worktree.path}</p> : null}
-        <div className="confirm__actions">
-          <button type="button" className="button" onClick={closeDialog}>
-            Keep it
-          </button>
-          <button type="button" className="button button--danger" onClick={() => void forceRemoveWorktree(worktreeId)}>
-            {retrying ? 'Discard it and start again' : 'Discard the work'}
-          </button>
-        </div>
-      </div>
-    </Modal>
+    <Confirm
+      title={`Discard ${worktree?.name ?? 'this worktree'}?`}
+      body={reason}
+      cancel="Keep it"
+      confirm={retrying ? 'Discard it and start again' : 'Discard the work'}
+      onCancel={closeDialog}
+      onConfirm={() => void forceRemoveWorktree(worktreeId)}
+    >
+      {pending > 0 ? (
+        <p className="confirm__detail">
+          {pending} uncommitted change{pending === 1 ? '' : 's'} will be deleted. There is no undo.
+        </p>
+      ) : null}
+      {ignored > 0 ? (
+        <p className="confirm__detail">
+          {ignored} ignored file{ignored === 1 ? '' : 's'} or folder{ignored === 1 ? '' : 's'} will go too.
+        </p>
+      ) : null}
+      {worktree ? <p className="confirm__path">{worktree.path}</p> : null}
+    </Confirm>
   )
 }

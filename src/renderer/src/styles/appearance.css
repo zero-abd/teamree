@@ -2,10 +2,9 @@
    a disclosure.
 
    Wider and taller than the other dialogs because it is the only one that is
-   read rather than filled in, and because the window behind it is the preview —
-   so it is deliberately not centred over the middle of the screen either; the
-   modal layer already places dialogs high, which leaves the sidebar and a pane
-   edge visible while colours change. */
+   read rather than filled in. The window behind it is the preview, and it is
+   capped well under the window's height so that the sidebar and a pane edge
+   stay visible around it while colours change. */
 
 .modal:has(.appearance) {
   width: min(620px, 92vw);
@@ -17,7 +16,6 @@
   gap: var(--s5);
   max-height: min(66vh, 620px);
   overflow-y: auto;
-  padding: 0 var(--s5) var(--s5);
 }
 
 .appearance__section {

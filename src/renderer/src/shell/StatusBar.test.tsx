@@ -156,6 +156,37 @@ describe('the rail as a whole', () => {
   })
 })
 
+// The runtime segment is a dot and nothing else. `● Runtime ready 0.2.0` was
+// three facts where one glance needs one: the colour is the state, and the
+// words and the version are on the hover for whoever wants them. The version
+// keeps its places in Settings and the About box.
+describe('the runtime dot', () => {
+  it('shows no words and no version, and puts both on its hover', () => {
+    seed({ runtimeVersion: '0.2.0', connection: { phase: 'ready' } })
+    mount()
+    expect(screen.queryByText(/Runtime ready/)).toBeNull()
+    expect(screen.queryByText(/0\.2\.0/)).toBeNull()
+    const dot = document.querySelector('.statusbar__connection')
+    expect(dot?.textContent).toBe('')
+    expect(dot?.getAttribute('title')).toBe('Runtime 0.2.0')
+    expect(dot?.classList.contains('statusbar__connection--ready')).toBe(true)
+  })
+
+  it('says it is starting, and then why it is down, on the hover alone', () => {
+    seed({ connection: { phase: 'connecting' } })
+    const { unmount } = render(<StatusBar />)
+    expect(document.querySelector('.statusbar__connection')?.getAttribute('title')).toBe('Runtime starting')
+    unmount()
+
+    seed({ connection: { phase: 'offline', detail: 'the runtime socket refused the connection' } })
+    mount()
+    const dot = document.querySelector('.statusbar__connection')
+    expect(dot?.getAttribute('title')).toBe('the runtime socket refused the connection')
+    expect(dot?.classList.contains('statusbar__connection--offline')).toBe(true)
+    expect(dot?.textContent).toBe('')
+  })
+})
+
 describe('keep awake', () => {
   it('shows the mode, follows the agents by default, and offers the three modes upward', () => {
     mount()

@@ -90,6 +90,86 @@ describe('stylesheets', () => {
     expect(findRule('panes.css', '.pane__dot')).toBeUndefined()
   })
 
+  // The strip is one row with one vertical centre. It used to sit the tabs on
+  // its bottom edge and the split and + buttons in its middle, so the labels
+  // centred eleven pixels lower than the icons beside them, and the active
+  // tab's border stopped short of the strip's baseline. Every child now
+  // centres on the same height, and the active mark is drawn on the strip's
+  // own bottom edge rather than as a border on a shorter box.
+  describe('the tab strip is one row', () => {
+    it('centres the tabs, the pane buttons and the sidebar control on one height', () => {
+      expect(declarationOf(ruleFor('workspace.css', '.tabs'), 'align-items')).toBe('center')
+      expect(declarationOf(ruleFor('workspace.css', '.tabs__list'), 'align-self')).toBe('stretch')
+      expect(declarationOf(ruleFor('workspace.css', '.tab'), 'align-items')).toBe('center')
+      expect(declarationOf(ruleFor('workspace.css', '.tabs__actions'), 'align-self')).toBeUndefined()
+    })
+
+    it('marks the active tab on the strip’s bottom edge', () => {
+      const active = ruleFor('workspace.css', '.tab--active')
+      expect(declarationOf(active, 'box-shadow')).toMatch(/^inset 0 -2px 0 /)
+      expect(declarationOf(ruleFor('workspace.css', '.tab'), 'border-bottom')).toBeUndefined()
+    })
+
+    it('draws the pane buttons’ icons in a 16px box', () => {
+      const icon = ruleFor('workspace.css', '.tabs__action svg')
+      expect(declarationOf(icon, 'width')).toBe('16px')
+      expect(declarationOf(icon, 'height')).toBe('16px')
+    })
+
+    // Both strips are the window's top row, and on macOS the window buttons
+    // are centred in whichever is at the left edge. Two heights would be a step
+    // in the frame.
+    it('is as tall as the sidebar’s header, so the two read as one bar', () => {
+      expect(declarationOf(ruleFor('workspace.css', '.tabs'), 'height')).toBe(
+        declarationOf(ruleFor('shell.css', '.sidebar__brand'), 'height')
+      )
+    })
+  })
+
+  // One frame for every dialog. The title is inset by the frame's own padding
+  // and the body used to bring its own — or not: the two confirms brought none,
+  // so their sentence started further left than the question above it. The
+  // frame pads the body now, on the same edge as the head, and no content
+  // class pads itself.
+  describe('one dialog frame', () => {
+    it('puts the body on the title’s edge', () => {
+      const head = declarationOf(ruleFor('dialog.css', '.modal__head'), 'padding')
+      const body = declarationOf(ruleFor('dialog.css', '.modal__body'), 'padding')
+      expect(head?.split(' ')[1]).toBe('var(--s5)')
+      expect(body).toBe('0 var(--s5) var(--s5)')
+    })
+
+    it('lets no dialog content pad or size itself', () => {
+      for (const [sheet, selector] of [
+        ['dialog.css', '.confirm'],
+        ['dialog.css', '.consent'],
+        ['dialog.css', '.form'],
+        ['dialog.css', '.palette'],
+        ['cli.css', '.cli-install'],
+        ['appearance.css', '.appearance']
+      ] as const) {
+        const rule = ruleFor(sheet, selector)
+        expect(declarationOf(rule, 'padding'), selector).toBeUndefined()
+        expect(declarationOf(rule, 'width'), selector).toBeUndefined()
+      }
+    })
+
+    it('centres the layer over the window', () => {
+      const layer = ruleFor('dialog.css', '.modal-layer')
+      expect(declarationOf(layer, 'place-items')).toBe('center')
+      expect(declarationOf(layer, 'padding-top')).toBeUndefined()
+    })
+
+    it('ends every dialog in one right-aligned row with an 8px gap', () => {
+      const actions = ruleFor('dialog.css', '.modal__actions')
+      expect(declarationOf(actions, 'justify-content')).toBe('flex-end')
+      expect(declarationOf(actions, 'gap')).toBe('8px')
+      expect(findRule('dialog.css', '.confirm__actions')).toBeUndefined()
+      expect(findRule('dialog.css', '.form__actions')).toBeUndefined()
+      expect(findRule('dialog.css', '.consent__actions')).toBeUndefined()
+    })
+  })
+
   /**
    * Custom properties the shell writes onto the element itself, which no
    * stylesheet declares and none should: two of them come from

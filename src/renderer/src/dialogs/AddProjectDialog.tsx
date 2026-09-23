@@ -76,7 +76,7 @@ export function AddProjectDialog(): React.JSX.Element {
           <span className="field__hint">Optional — defaults to the folder name.</span>
         </label>
 
-        <footer className="form__actions">
+        <footer className="modal__actions">
           <button type="button" className="button button--ghost" onClick={closeDialog}>
             Cancel
           </button>

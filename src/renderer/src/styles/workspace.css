@@ -39,39 +39,37 @@
 
    It is also the window's drag region on this side, the same height as the
    sidebar's header and — once the sidebar is away — the row the macOS window
-   buttons sit on; shell.css moves their inset onto it then. The tabs sit on the
-   strip's bottom edge so the active one runs into the pane below it. */
+   buttons sit on; shell.css moves their inset onto it then.
+
+   One row, one vertical centre. The tabs, the three pane buttons and the
+   sidebar control all centre on the strip's height: the tabs used to sit on
+   the bottom edge while the buttons sat in the middle, so a label's centre was
+   eleven pixels under the icon beside it. A tab is the strip's full height and
+   the active one is marked by a line on the strip's own bottom edge, so the
+   mark meets the baseline rather than stopping short of it on a shorter box. */
 .tabs {
   -webkit-app-region: drag;
   flex: none;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--s2);
   height: var(--titlebar-h, 38px);
   padding: 0 var(--s3);
   background: var(--bg-rail);
 }
 
-/* First in the strip once the sidebar is away, and centred on the row the
-   window buttons are centred on. */
-.tabs > .shell__toggle {
-  align-self: center;
-}
-
 /* The list scrolls; the three buttons beside it do not. They are the only way
    to split or open a pane with a pointer, so a twentieth tab must not push
-   them off the end of the strip. */
+   them off the end of the strip. Stretched to the strip's height so a tab's
+   mark can reach the bottom edge; each tab centres its own contents. */
 .tabs__list {
   display: flex;
   align-items: stretch;
+  align-self: stretch;
   gap: 1px;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
-  /* Sat on the strip's bottom edge, which `align-items: flex-end` above does
-     for the list as a whole; this keeps the list from growing into the row
-     when a tab is being renamed. */
-  align-self: flex-end;
 }
 
 .tabs__list::-webkit-scrollbar {
@@ -81,16 +79,19 @@
 .tabs__actions {
   display: flex;
   flex: none;
-  align-self: center;
   gap: 1px;
 }
 
+/* A 16px icon box in a 24px button: the glyphs are drawn a unit and a half in
+   from the edge of their 12-unit viewBox, so the mark itself is 12px and sits
+   centred in the box, as the sidebar's toggle and the pane bar's close draw
+   theirs. */
 .tabs__action {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: var(--r1);
@@ -100,11 +101,11 @@
 }
 
 .tabs__action svg {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentcolor;
-  stroke-width: 1.2;
+  stroke-width: 1.1;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -125,9 +126,7 @@
   align-items: center;
   min-width: 0;
   padding-right: var(--s1);
-  border: 1px solid transparent;
-  border-bottom: 0;
-  border-radius: var(--r2) var(--r2) 0 0;
+  box-shadow: inset 0 -2px 0 transparent;
   color: var(--fg-muted);
 }
 
@@ -135,12 +134,11 @@
   background: var(--bg-hover);
 }
 
-/* The surface and the hairline of the board below, and no bottom edge of its
-   own, so the active tab and the pane it points at read as one piece of paper
-   rather than two stacked strips. */
+/* The mark is a line on the strip's bottom edge, drawn inside the tab's box so
+   it lands exactly on the baseline the strip shares with the sidebar's header.
+   A border on the tab's own box used to stop a pixel short of it. */
 .tab--active {
-  background: var(--bg-panel);
-  border-color: var(--line);
+  box-shadow: inset 0 -2px 0 var(--accent);
   color: var(--fg);
 }
 
@@ -154,7 +152,8 @@
      command line, sometimes — and one loud pane must not push every other tab
      off the end of the strip. */
   max-width: 160px;
-  padding: 5px var(--s2) 5px var(--s3);
+  height: 100%;
+  padding: 0 var(--s2) 0 var(--s3);
   border: 0;
   background: transparent;
   color: inherit;
@@ -177,11 +176,12 @@
 }
 
 /* The name being typed, sized to the slot it replaces so the strip does not
-   jump as a tab turns into a field and back. */
+   jump as a tab turns into a field and back, and centred on the row like the
+   label it stands in for. */
 .tab__rename-field {
   width: 160px;
   min-width: 0;
-  margin: 3px var(--s2) 3px var(--s3);
+  margin: 0 var(--s2) 0 var(--s3);
   padding: 1px var(--s2);
   border: 1px solid var(--accent);
   border-radius: var(--r1);
