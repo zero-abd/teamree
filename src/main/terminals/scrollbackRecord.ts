@@ -94,6 +94,20 @@ export const NEW_SHELL_BELOW = 'a new shell starts below'
 export const FAILED_RESUME_BELOW = 'the attempt to resume this conversation begins below'
 
 /**
+ * What follows it when a pane that had exited was asked to run its program
+ * again: the same program, in the same directory, from the top.
+ *
+ * Named rather than left as "a new shell", because the pane most often run
+ * again is an agent's, and a mark saying "shell" over an agent booting up is
+ * the same small lie the two constants above exist to avoid. It says "again"
+ * rather than "resumed" for the larger reason: this is a fresh conversation,
+ * and the record above it belongs to the one that ended.
+ */
+export function startsAgainBelow(program: string): string {
+  return `${program} starts again below`
+}
+
+/**
  * Said into a pane whose resume did not take, in place of the conversation.
  *
  * Every clause is something this app actually knows. It knows the pane was

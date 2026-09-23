@@ -27,6 +27,10 @@ export function notFound(message: string, data?: unknown): TerminalServiceError 
   return new TerminalServiceError(ErrorCode.NotFound, message, data)
 }
 
+export function conflict(message: string, data?: unknown): TerminalServiceError {
+  return new TerminalServiceError(ErrorCode.Conflict, message, data)
+}
+
 export function invalidParams(message: string, data?: unknown): TerminalServiceError {
   return new TerminalServiceError(ErrorCode.InvalidParams, message, data)
 }

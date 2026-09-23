@@ -80,7 +80,8 @@ describe('terminal error codes on the wire', () => {
       ['terminal.write', { terminalId: MISSING, data: 'x' }],
       ['terminal.resize', { terminalId: MISSING, cols: 80, rows: 24 }],
       ['terminal.split', { terminalId: MISSING, direction: 'row' }],
-      ['terminal.subscribe', { terminalId: MISSING }]
+      ['terminal.subscribe', { terminalId: MISSING }],
+      ['terminal.relaunch', { terminalId: MISSING }]
     ]
 
     for (const [method, params] of calls) {

@@ -10,13 +10,27 @@ import { statSync } from 'node:fs'
 import type { Layout, PaneNode, Terminal } from '../../shared/entities'
 import { evidenceLine } from '../../shared/outputEvidence'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
-import { detectAgent, newSessionId, pinSessionCommand, pinsOwnSessionId, type AgentKind } from './agent-command'
+import {
+  detectAgent,
+  newSessionId,
+  pinSessionCommand,
+  pinsOwnSessionId,
+  restartSessionCommand,
+  type AgentKind
+} from './agent-command'
 import { appendPane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { CHECKPOINT_SOURCE_BYTES, ScrollbackCheckpoints } from './scrollbackCheckpoints'
-import type { RecordedScrollback } from './scrollbackRecord'
-import { PtySession } from './pty-session'
-import { invalidParams, notFound } from './service-error'
+import {
+  closingMark,
+  NEW_SHELL_BELOW,
+  sanitizeRecordedOutput,
+  startsAgainBelow,
+  tailFromLineBoundary,
+  type RecordedScrollback
+} from './scrollbackRecord'
+import { EXITED_RETENTION_BYTES, PtySession } from './pty-session'
+import { conflict, invalidParams, notFound } from './service-error'
 import { resolveLoginShell } from './shell-environment'
 
 /** Size a pane starts at before the renderer measures itself and resizes. */
@@ -224,6 +238,98 @@ export class TerminalSessionManager {
   }
 
   /**
+   * Runs an exited pane's program again, in the pane it left behind.
+   *
+   * Agents exit for reasons that have nothing to do with the work being
+   * finished: a crash, a rate limit, a quit, a resume that found nothing. What
+   * the person wants next is always the same thing — that agent, in that
+   * directory, again — and doing it by hand costs a new pane, the command
+   * remembered, and their place in the scrollback they were still reading.
+   *
+   * Deliberately not a resume. Whether this pane's conversation is worth coming
+   * back to is a question `restoreLaunch` already asks, at startup, with
+   * everything written down about the pane; asking it a second time here would
+   * be a second answer to it given with less, and the pane this is most for is
+   * the one whose resume just failed. So the agent starts over under a freshly
+   * pinned id, which is exactly what a pane nobody ever typed into comes back
+   * as.
+   *
+   * The pane itself does not move. Same terminal id, so the leaf in the split
+   * tree still points at it and no layout is rewritten; same streams, pointed
+   * at the new process; and what the dead pane printed is carried over as this
+   * session's record, so it stands above a line saying the program starts
+   * again, the way a restored pane's output does.
+   *
+   * Refused while the pane is running, because then there is nothing to run
+   * again — and `running` stays true across the window where a reaped pane's
+   * last output is still arriving, so that window is refused too rather than
+   * having a second process print into the middle of it.
+   */
+  async relaunch(params: ParamsOf<'terminal.relaunch'>): Promise<Terminal> {
+    const previous = this.require(params.terminalId)
+    if (previous.isRunning) {
+      throw conflict(`terminal ${params.terminalId} has not exited; there is nothing to run again`)
+    }
+
+    const size = previous.snapshot()
+    const stored = this.records.listTerminals().find((record) => record.id === params.terminalId)
+    const launch = relaunchCommand(stored)
+    const below = launch.agent === undefined ? NEW_SHELL_BELOW : startsAgainBelow(launch.agent)
+
+    // Read before anything is torn down: this is the only copy of what the pane
+    // printed, and it is reduced on the way in for the reason `scrollbackRecord`
+    // gives — nothing replayed into a live emulator may do anything but print.
+    const text = tailFromLineBoundary(sanitizeRecordedOutput(previous.recordedOutput()), EXITED_RETENTION_BYTES)
+    const kept: RecordedScrollback | undefined = text.length === 0 ? undefined : { text, recordedAt: Date.now() }
+
+    const restoring: TerminalRecord = {
+      id: previous.id,
+      worktreeId: previous.worktreeId,
+      cwd: previous.cwd,
+      shell: previous.shell,
+      ...(launch.command === undefined ? {} : { command: launch.command }),
+      ...(launch.agent === undefined ? {} : { agent: launch.agent }),
+      ...(launch.agentSessionId === undefined ? {} : { agentSessionId: launch.agentSessionId }),
+      // Nobody has typed into the conversation this is opening, so there is
+      // nothing under the new id to come back to until somebody does.
+      typed: false,
+      cols: size.cols,
+      rows: size.rows,
+      createdAt: stored?.createdAt ?? Date.now()
+    }
+
+    // Started before the old session is let go of. A start that fails — a
+    // directory that has moved, a shell that is gone — must leave the pane
+    // exactly as it was, holding its scrollback, rather than take away the dead
+    // pane the person was reading as well as the live one they asked for.
+    const session = this.startSession(
+      {
+        worktreeId: previous.worktreeId,
+        cwd: previous.cwd,
+        shell: previous.shell,
+        cols: size.cols,
+        rows: size.rows,
+        recordStartsBelow: below,
+        ...(launch.command === undefined ? {} : { command: launch.command }),
+        ...(kept === undefined ? {} : { restoredRecord: kept })
+      },
+      restoring
+    )
+
+    await previous.close()
+    this.rebindStreams(session)
+    // Said as well as written. `read()` builds this same line in from the
+    // record's side, so a view mounting from here on finds it there — but a
+    // view that was already open read its snapshot once and will not read
+    // again, and the whole job of the line is to sit between the two runs on
+    // the screen somebody is looking at.
+    for (const stream of this.streamsFor(session.id)) {
+      stream.channel.emit({ type: 'data', data: closingMark(below) })
+    }
+    return session.snapshot()
+  }
+
+  /**
    * Returns true when this write cleared the pane's restored badge, which is
    * the one thing a keystroke changes that anyone else needs to hear about.
    * Reported rather than published here, so the manager stays unaware of the
@@ -284,13 +390,15 @@ export class TerminalSessionManager {
    */
   attachStream(terminalId: string, channel: StreamChannel): () => void {
     const session = this.require(terminalId)
-    const unlisten = session.on((event) => channel.emit(event))
     const streams = this.streamsFor(terminalId)
-    const stream: AttachedStream = { channel, detach: unlisten }
+    const stream: AttachedStream = { channel, detach: session.on((event) => channel.emit(event)) }
     streams.add(stream)
 
+    // Through the stream rather than through the listener this attached: a pane
+    // run again swaps the session underneath and rewrites `detach`, and a
+    // teardown holding the old one would unhook nothing.
     return () => {
-      unlisten()
+      stream.detach()
       streams.delete(stream)
     }
   }
@@ -511,6 +619,7 @@ export class TerminalSessionManager {
       restoredRecord?: RecordedScrollback
       /** What this pane runs instead if the resume it is being given is refused. */
       fallback?: { command: string; agentSessionId?: string }
+      recordStartsBelow?: string
     },
     restoring?: TerminalRecord,
     restored?: 'shell' | 'agent'
@@ -540,6 +649,7 @@ export class TerminalSessionManager {
       rows: params.rows ?? DEFAULT_ROWS,
       ...(restored === undefined ? {} : { restored }),
       ...(params.restoredRecord === undefined ? {} : { restoredRecord: params.restoredRecord }),
+      ...(params.recordStartsBelow === undefined ? {} : { recordStartsBelow: params.recordStartsBelow }),
       ...(agent === undefined ? {} : { agent }),
       ...(fallback === undefined
         ? {}
@@ -772,6 +882,22 @@ export class TerminalSessionManager {
     })
   }
 
+  /**
+   * Points every stream open on a pane at the session now running in it.
+   *
+   * A subscription is to the pane and not to the process behind it: the window
+   * opens one when it mounts and holds it for as long as the pane is on screen,
+   * and a teammate watching holds another. Left attached to the session that
+   * ended, every one of them would be a live subscription to something that
+   * will never say anything again.
+   */
+  private rebindStreams(session: PtySession): void {
+    for (const stream of this.streamsFor(session.id)) {
+      stream.detach()
+      stream.detach = session.on((event) => stream.channel.emit(event))
+    }
+  }
+
   private streamsFor(terminalId: string): Set<AttachedStream> {
     const existing = this.streams.get(terminalId)
     if (existing) return existing
@@ -832,6 +958,36 @@ function pinAgentSession(command: string | undefined): {
   // its own. That choice is the caller's, so nothing is recorded to override it.
   if (pinned === command) return { command, agent }
   return { command: pinned, agent, agentSessionId }
+}
+
+/**
+ * What a pane runs when it is run again.
+ *
+ * The same refusal `restoreLaunch` makes, reached from the same direction: a
+ * command that is not an agent's is not re-issued, because a pane left holding
+ * `npm run deploy` was not asking for it twice, and a shell in the right
+ * directory is both useful and honest. An agent's command is re-issued with
+ * every session selector cut out and a fresh id pinned in — `restartSessionCommand`,
+ * which is already what a never-typed pane comes back as.
+ *
+ * A command that cannot be modelled well enough to take the old session out of
+ * it answers as a shell too: re-issuing it would leave a dead id on the line
+ * and write a different one into the record, and the two would disagree from
+ * there on with nothing ever noticing.
+ */
+function relaunchCommand(record: TerminalRecord | undefined): {
+  command?: string
+  agent?: AgentKind
+  agentSessionId?: string
+} {
+  if (record?.command === undefined || record.agent === undefined) return {}
+  const restart = restartSessionCommand(record.command, record.agent)
+  if (restart === null) return {}
+  return {
+    command: restart.command,
+    agent: record.agent,
+    ...(restart.agentSessionId === undefined ? {} : { agentSessionId: restart.agentSessionId })
+  }
 }
 
 /** Records nothing worth keeping: an in-memory manager has no next launch. */

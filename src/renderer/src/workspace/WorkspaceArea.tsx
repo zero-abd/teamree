@@ -101,6 +101,7 @@ function WorkspaceMain({
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
+  const relaunchTerminal = useWorkspaceStore((state) => state.relaunchTerminal)
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
   const applySplitSizes = useWorkspaceStore((state) => state.applySplitSizes)
   const changesOpen = useWorkspaceStore((state) => state.changesOpen)
@@ -178,6 +179,7 @@ function WorkspaceMain({
     [activeWorktreeId, applySplitSizes]
   )
   const onClose = useCallback((terminalId: string) => void closeTerminal(terminalId), [closeTerminal])
+  const onRelaunch = useCallback((terminalId: string) => void relaunchTerminal(terminalId), [relaunchTerminal])
 
   // Before the empty state, not after it: which pane needs you is a question
   // about every worktree, and it is worth asking with none of them open.
@@ -485,6 +487,7 @@ function WorkspaceMain({
               focusedTerminalId={focusedWatchId === null ? (layout?.focusedTerminalId ?? null) : null}
               onFocus={focusPane}
               onClose={onClose}
+              onRelaunch={onRelaunch}
               onResize={onResize}
               isAppChord={isAppChord}
               closeHint={shortcutHint('close-pane', modifier)}

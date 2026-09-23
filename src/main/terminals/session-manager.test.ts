@@ -8,7 +8,8 @@ import type { TerminalEvent } from '../../shared/methods'
 import { createTerminalService, registerTerminalHandlers } from './method-handlers'
 import type { MethodRegistry, StreamChannel, TerminalService } from './method-handlers'
 import { isProcessAlive } from './process-tree'
-import { canSpawnPty, printThenExit, waitUntil, writeProcessTreeProbe } from './pty-test-support'
+import { canSpawnPty, printThenExit, waitUntil, writeFakeAgent, writeProcessTreeProbe } from './pty-test-support'
+import type { TerminalRecord } from './session-restore'
 import { isTerminalServiceError } from './service-error'
 
 // Driven through the handler surface the runtime will call, over real PTYs, so
@@ -325,6 +326,171 @@ describePty('terminal handlers', () => {
   )
 })
 
+/**
+ * The pane a person comes back to and finds dead — an agent that crashed, hit a
+ * rate limit, was quit, or came back to resume a conversation that was not
+ * there. What they do next never varies: that program, in that directory,
+ * again. These are about doing it without the pane moving.
+ */
+describePty('running an exited pane again', () => {
+  /** A service whose records are readable, which is where a session id lives. */
+  function serviceWithRecords(): { service: TerminalService; records: Map<string, TerminalRecord> } {
+    const records = new Map<string, TerminalRecord>()
+    const service = createTerminalService({
+      publish: (subscription, event) => published.push({ subscription, event }),
+      resolveWorktreeCwd: (worktreeId) => (worktreeId === WORKTREE ? process.cwd() : undefined),
+      sessions: {
+        listTerminals: () => [...records.values()],
+        putTerminal: (record) => {
+          records.set(record.id, record)
+          return record
+        },
+        removeTerminal: (terminalId) => records.delete(terminalId)
+      }
+    })
+    services.push(service)
+    return { service, records }
+  }
+
+  async function scratchDir(): Promise<string> {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'teamree-relaunch-'))
+    scratchDirs.push(directory)
+    return directory
+  }
+
+  const hasExited = async (service: TerminalService, terminalId: string): Promise<boolean> => {
+    const list = await service.handlers['terminal.list']({})
+    return list.some((terminal) => terminal.id === terminalId && !terminal.running)
+  }
+
+  it(
+    'refuses a pane that has not exited, and says why',
+    async () => {
+      const service = newService()
+      const terminal = await newTerminal(service)
+
+      const failure = await service.handlers['terminal.relaunch']({ terminalId: terminal.id }).catch(
+        (error: unknown) => error
+      )
+      expect(isTerminalServiceError(failure) ? failure.code : undefined).toBe(ErrorCode.Conflict)
+      expect(isTerminalServiceError(failure) ? failure.message : '').toContain('has not exited')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'starts the same agent over, in the same pane, under a session id of its own',
+    async () => {
+      const { service, records } = serviceWithRecords()
+      const command = await writeFakeAgent(await scratchDir())
+      const terminal = await service.handlers['terminal.create']({ worktreeId: WORKTREE, command })
+      expect(terminal.agent).toBe('claude')
+
+      await waitUntil(() => hasExited(service, terminal.id), 'the agent pane to exit')
+      const first = records.get(terminal.id)?.agentSessionId
+      expect(first).toBeDefined()
+      const before = await service.handlers['terminal.read']({ terminalId: terminal.id })
+      expect(before.data).toContain(first)
+
+      const again = await service.handlers['terminal.relaunch']({ terminalId: terminal.id })
+
+      // The same pane: a different id here would be a different leaf, and the
+      // layout would have to move to hold it.
+      expect(again.id).toBe(terminal.id)
+      expect(again.cwd).toBe(terminal.cwd)
+      expect(again.agent).toBe('claude')
+      expect(again.running).toBe(true)
+      // Not the conversation that ended. Starting over is the whole claim.
+      const second = records.get(terminal.id)?.agentSessionId
+      expect(second).toBeDefined()
+      expect(second).not.toBe(first)
+      expect(records.get(terminal.id)?.typed).toBe(false)
+
+      await waitUntil(async () => {
+        const { data } = await service.handlers['terminal.read']({ terminalId: terminal.id })
+        return data.includes(second as string)
+      }, 'the second run to say which session it was given')
+
+      // And what the dead pane printed is still there, above the line that says
+      // where this run starts, rather than replaced by it.
+      const after = (await service.handlers['terminal.read']({ terminalId: terminal.id })).data
+      const banner = after.indexOf('claude starts again below')
+      expect(banner).toBeGreaterThan(-1)
+      expect(after.indexOf(first as string)).toBeLessThan(banner)
+      expect(after.indexOf(second as string)).toBeGreaterThan(banner)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'brings a pane that was not running an agent back as a shell, not as its command again',
+    async () => {
+      const { service, records } = serviceWithRecords()
+      const terminal = await newTerminal(service, printThenExit('one-shot', 4))
+      await waitUntil(() => hasExited(service, terminal.id), 'the command pane to exit')
+
+      const again = await service.handlers['terminal.relaunch']({ terminalId: terminal.id })
+      expect(again.id).toBe(terminal.id)
+      expect(again.agent).toBeUndefined()
+      // Re-running whatever a pane was left holding is the thing `restoreLaunch`
+      // refuses to do at startup, for the same reason: nobody asked for it twice.
+      expect(records.get(terminal.id)?.command).toBeUndefined()
+
+      const after = (await service.handlers['terminal.read']({ terminalId: terminal.id })).data
+      expect(after).toContain('a new shell starts below')
+      expect(after.indexOf('one-shot')).toBeLessThan(after.indexOf('a new shell starts below'))
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'leaves the split tree exactly where it was',
+    async () => {
+      const { service } = serviceWithRecords()
+      const command = await writeFakeAgent(await scratchDir())
+      const first = await service.handlers['terminal.create']({ worktreeId: WORKTREE })
+      const { terminal: second } = await service.handlers['terminal.split']({
+        terminalId: first.id,
+        direction: 'row',
+        command
+      })
+
+      await waitUntil(() => hasExited(service, second.id), 'the split pane to exit')
+      const before = await service.handlers['layout.get']({ worktreeId: WORKTREE })
+
+      await service.handlers['terminal.relaunch']({ terminalId: second.id })
+
+      expect(await service.handlers['layout.get']({ worktreeId: WORKTREE })).toEqual(before)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'keeps a subscription open across the relaunch, and says in it where the new run starts',
+    async () => {
+      const { service } = serviceWithRecords()
+      const command = await writeFakeAgent(await scratchDir())
+      const terminal = await service.handlers['terminal.create']({ worktreeId: WORKTREE, command })
+      await service.handlers['terminal.subscribe']({ terminalId: terminal.id })
+      await waitUntil(() => hasExited(service, terminal.id), 'the agent pane to exit')
+
+      published.length = 0
+      await service.handlers['terminal.relaunch']({ terminalId: terminal.id })
+
+      // A subscription is to the pane, not to the process: a window that was
+      // open when the pane died must not be left watching something that can
+      // never speak again.
+      await waitUntil(
+        () =>
+          published.some(({ event }) => event.type === 'data' && event.data.includes('claude starts again below')) &&
+          published.some(({ event }) => event.type === 'data' && event.data.includes('agent args:')),
+        'the banner and the second run to reach the subscriber'
+      )
+    },
+    TEST_TIMEOUT_MS
+  )
+})
+
 describe('layout handlers', () => {
   it('stores a tree wholesale and normalises its sizes', async () => {
     const service = createTerminalService()
@@ -460,6 +626,7 @@ describe('registerTerminalHandlers', () => {
       'terminal.create',
       'terminal.list',
       'terminal.read',
+      'terminal.relaunch',
       'terminal.resize',
       'terminal.split',
       'terminal.subscribe',

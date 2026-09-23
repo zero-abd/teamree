@@ -123,6 +123,12 @@ export type PtySessionInit = {
    * produced.
    */
   restoredRecord?: RecordedScrollback
+  /**
+   * What the mark under that record says is starting below it. Absent means the
+   * ordinary "a new shell", which is what a restored pane opens; a pane run
+   * again names the program it is running again instead.
+   */
+  recordStartsBelow?: string
   /** Which coding agent this pane runs, when it runs one. */
   agent?: AgentKind
   /**
@@ -340,7 +346,7 @@ export class PtySession {
     if (this.record === undefined || this.recordHeld) return live
     // What follows the record is a new shell in the ordinary case, and the
     // attempt at resuming that did not take in the other one.
-    const framed = replayableRecord(this.record, this.resumeFailed ? FAILED_RESUME_BELOW : undefined)
+    const framed = replayableRecord(this.record, this.resumeFailed ? FAILED_RESUME_BELOW : this.init.recordStartsBelow)
     if (tailBytes === undefined) return `${framed}${live}`
 
     // A tail short enough to be answered out of this session alone is answered

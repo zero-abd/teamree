@@ -11,6 +11,8 @@ export type PaneCallbacks = {
   focusedTerminalId: string | null
   onFocus: (terminalId: string) => void
   onClose: (terminalId: string) => void
+  /** Runs an exited pane's program again, in the same pane. */
+  onRelaunch: (terminalId: string) => void
   onResize: (path: number[], sizes: number[]) => void
   isAppChord: (event: KeyboardEvent) => boolean
   closeHint: string
@@ -37,6 +39,7 @@ function PaneLeaf({
   focusedTerminalId,
   onFocus,
   onClose,
+  onRelaunch,
   isAppChord,
   closeHint,
   searchTerminalId,
@@ -59,6 +62,14 @@ function PaneLeaf({
         <span className="pane__title">{terminal?.title ?? 'terminal'}</span>
         {exited ? (
           <span className="pane__exit">exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}</span>
+        ) : null}
+        {/* Beside the badge that says the pane is dead, because the next thing
+            anybody does about a dead pane is this. An agent is named, since
+            running one again is a different act from opening a shell. */}
+        {exited ? (
+          <button type="button" className="pane__again" onClick={() => onRelaunch(terminalId)}>
+            {terminal?.agent === undefined ? 'New shell' : `Run ${terminal.agent} again`}
+          </button>
         ) : null}
         {terminal?.restored === undefined ? null : (
           <span

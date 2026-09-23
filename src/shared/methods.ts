@@ -521,6 +521,11 @@ export const Params = {
     tailBytes: z.number().int().positive().optional()
   }),
   terminalSubscribe: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
+  /**
+   * Starts an exited pane's program over, in the pane it left behind. Refused
+   * while the pane is still running: there is nothing to run again yet.
+   */
+  terminalRelaunch: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
   terminalSplit: z.object({
     /** Pane to divide. The new terminal takes half of it. */
     terminalId: z.string().min(1),
@@ -660,6 +665,12 @@ export type MethodContract = {
   'terminal.read': { params: z.infer<typeof Params.terminalRead>; result: { data: string } }
   'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
   'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
+  /**
+   * The same pane, running its program again: same id, same leaf, same
+   * directory, and the agent started over rather than resumed. Answers with the
+   * pane, which is the same record wearing a new process.
+   */
+  'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }
 
   /** How this installation is painted. Per machine, not per project. */
   'appearance.get': { params: z.infer<typeof Params.appearanceGet>; result: Appearance }
