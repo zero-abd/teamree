@@ -412,6 +412,24 @@ export class GitService {
         `worktree "${worktree.name}" is ${worktree.state}; status is only available once it is ready`
       )
     }
+    // Checked here as well as at list time, because status is asked for on its
+    // own. Left to git, a vanished cwd fails the spawn with ENOENT, which the
+    // runner can only report as "git executable not found" — a wrong answer
+    // about the machine, given for a question about one directory.
+    if (!(await isDirectory(worktree.path))) {
+      return {
+        worktreeId: worktree.id,
+        branch: worktree.branch,
+        missing: true,
+        ahead: 0,
+        behind: 0,
+        staged: 0,
+        unstaged: 0,
+        untracked: 0,
+        conflicted: 0,
+        readAt: this.#now()
+      }
+    }
     const project = this.#store.getProject(worktree.projectId)
     return readWorktreeStatus(this.#runner, {
       worktreeId: worktree.id,
@@ -698,12 +716,16 @@ export class GitService {
     return worktree
   }
 
-  #patch(worktreeId: string, patch: Partial<Worktree> & { clearError?: boolean }): Worktree | null {
+  #patch(
+    worktreeId: string,
+    patch: Partial<Worktree> & { clearError?: boolean; clearMissing?: boolean }
+  ): Worktree | null {
     const current = this.#store.getWorktree(worktreeId)
     if (!current) return null
-    const { clearError, ...fields } = patch
+    const { clearError, clearMissing, ...fields } = patch
     const next: Worktree = { ...current, ...fields }
     if (clearError) delete next.error
+    if (clearMissing) delete next.missing
     this.#store.putWorktree(next)
     this.events.emit({ type: 'worktree.updated', worktree: next })
     return next
@@ -1078,8 +1100,18 @@ export class GitService {
       const live = new Set(inventory.map((entry) => pathKey(entry.path)))
       for (const worktree of this.#store.listWorktrees(project.id)) {
         if (worktree.state !== 'ready') continue
-        if (live.has(pathKey(worktree.path))) continue
-        this.#forget(worktree)
+        if (!live.has(pathKey(worktree.path))) {
+          this.#forget(worktree)
+          continue
+        }
+        // Still in git's inventory, but is the directory there? An `rm -rf` of
+        // a checkout leaves the metadata behind, and a row that said `ready`
+        // over it was a row whose every action failed one step later. One
+        // `stat` per listed row, and a patch only when the answer changes, so
+        // a list that finds nothing new says nothing on the change stream.
+        const missing = !(await isDirectory(worktree.path))
+        if (missing && worktree.missing !== true) this.#patch(worktree.id, { missing: true })
+        else if (!missing && worktree.missing === true) this.#patch(worktree.id, { clearMissing: true })
       }
     }
   }

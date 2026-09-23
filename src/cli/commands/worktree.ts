@@ -41,6 +41,18 @@ async function readPrompt(context: CommandContext, agents: number): Promise<stri
   return text
 }
 
+/**
+ * The state column of a listing.
+ *
+ * `missing` is not a state on the record — the record says `ready`, and it is
+ * the disk that disagrees — but a listing read by eye has one column for "what
+ * is this row doing", and a checkout that is not there belongs in it. Under
+ * --json both facts are there as they are.
+ */
+export function shownState(worktree: Pick<Worktree, 'state' | 'missing'>): string {
+  return worktree.missing ? 'missing' : worktree.state
+}
+
 export const worktreeCommands: readonly CommandSpec[] = [
   {
     path: ['worktree', 'list'],
@@ -62,7 +74,13 @@ export const worktreeCommands: readonly CommandSpec[] = [
         data: worktrees,
         text: formatTable(
           ['ID', 'NAME', 'BRANCH', 'STATE', 'PATH'],
-          worktrees.map((worktree) => [worktree.id, worktree.name, worktree.branch, worktree.state, worktree.path]),
+          worktrees.map((worktree) => [
+            worktree.id,
+            worktree.name,
+            worktree.branch,
+            shownState(worktree),
+            worktree.path
+          ]),
           'No worktrees. Create one with: teamree worktree create --project <id> --name <name>'
         )
       }
@@ -253,19 +271,23 @@ export const worktreeCommands: readonly CommandSpec[] = [
     run: async (context) => {
       const worktree = await resolveWorktree(context.client, context.args[0] as string)
       const status = await context.client.call('worktree.status', { worktreeId: worktree.id })
-      return {
-        data: status,
-        text: formatFields([
-          ['worktree', `${worktree.name} (${status.worktreeId})`],
-          ['branch', status.branch],
-          ['ahead/behind', `${status.ahead}/${status.behind}`],
-          ['staged', String(status.staged)],
-          ['unstaged', String(status.unstaged)],
-          ['untracked', String(status.untracked)],
-          ['conflicted', String(status.conflicted)],
-          ['read at', new Date(status.readAt).toISOString()]
-        ])
-      }
+      const head: [string, string][] = [
+        ['worktree', `${worktree.name} (${status.worktreeId})`],
+        ['branch', status.branch]
+      ]
+      const readAt: [string, string] = ['read at', new Date(status.readAt).toISOString()]
+      // No counts for a checkout that is not there: every one of them would be
+      // a zero that means "nothing was asked", printed where "clean" is read.
+      const counts: [string, string][] = status.missing
+        ? [['checkout', 'missing']]
+        : [
+            ['ahead/behind', `${status.ahead}/${status.behind}`],
+            ['staged', String(status.staged)],
+            ['unstaged', String(status.unstaged)],
+            ['untracked', String(status.untracked)],
+            ['conflicted', String(status.conflicted)]
+          ]
+      return { data: status, text: formatFields([...head, ...counts, readAt]) }
     }
   },
   {

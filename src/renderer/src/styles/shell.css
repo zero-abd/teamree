@@ -158,6 +158,29 @@
   background: var(--accent);
 }
 
+/* The same lockup at the welcome's size: the tile a little over three rows
+   tall, the mark still two thirds of it, the name at the largest text size
+   the window uses rather than a display size of its own. */
+.brand__tile--welcome {
+  width: 72px;
+  height: 72px;
+}
+
+.brand__tile--welcome .brand__mark {
+  width: 48px;
+  height: 48px;
+}
+
+.wordmark--welcome {
+  gap: 3px;
+  font-size: var(--text-xl);
+}
+
+.wordmark--welcome .wordmark__dot {
+  width: 5px;
+  height: 5px;
+}
+
 .sidebar {
   grid-area: sidebar;
 }

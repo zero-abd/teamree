@@ -119,7 +119,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
 }
 
 const mount = (): void => {
-  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" settingsHint="⌘," helpHint="⌘/" sidebarHint="⌘B" />)
+  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" />)
 }
 
 beforeEach(() => {
@@ -149,10 +149,10 @@ describe('the sidebar’s own header', () => {
     expect(document.querySelector('.titlebar')).toBeNull()
   })
 
-  it('puts the sidebar away from its own header, and names the chord that does the same', () => {
+  it('puts the sidebar away from its own header', () => {
     mount()
     const hide = screen.getByRole('button', { name: 'Hide sidebar' })
-    expect(hide.getAttribute('title')).toBe('Hide sidebar · ⌘B')
+    expect(hide.getAttribute('title')).toBe('Hide sidebar')
     fireEvent.click(hide)
     expect(toggleSidebar).toHaveBeenCalledOnce()
   })
@@ -460,15 +460,16 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(screen.getByRole('button', { name: /Settings/ }).getAttribute('aria-current')).toBe('page')
   })
 
-  // ⌘, belongs to the settings page and is shown on its row. The theme editor
-  // one row up used to have it, and a Mac developer pressing the chord for an
-  // app's settings landed on 42 colour swatches.
-  it('shows the settings chord on settings, and none on the theme editor', () => {
+  // The rows used to carry ⌘, and ⌘/ at their far ends. The owner's rule is
+  // that the window has too many places explaining shortcuts; the search field
+  // keeps its one, because that is where every app puts it.
+  it('draws no chord on any rail row but the search', () => {
     seed({ toggleHelp })
     mount()
-    expect(within(screen.getByRole('button', { name: /Help/ })).getByText('⌘/')).toBeTruthy()
-    expect(within(screen.getByRole('button', { name: /Settings/ })).getByText('⌘,')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Help/ }).querySelector('kbd')).toBeNull()
+    expect(screen.getByRole('button', { name: /Settings/ }).querySelector('kbd')).toBeNull()
     expect(screen.getByRole('button', { name: /Appearance/ }).querySelector('kbd')).toBeNull()
+    expect(document.querySelectorAll('.rail kbd')).toHaveLength(1)
     act(() => screen.getByRole('button', { name: /Help/ }).click())
     expect(toggleHelp).toHaveBeenCalled()
   })
@@ -491,9 +492,7 @@ describe('the order the chords walk', () => {
       worktree({ id: 'w4', projectId: 'p2', name: 'four' })
     ]
     seed({ projects, worktrees })
-    const { container } = render(
-      <Sidebar newWorktreeHint="⌘N" searchHint="⌘K" settingsHint="⌘," helpHint="⌘/" sidebarHint="⌘B" />
-    )
+    const { container } = render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" />)
 
     const drawn = [...container.querySelectorAll('.worktree__name')].map((node) => node.textContent)
     expect(drawn).toEqual(['one', 'three', 'two', 'four'])

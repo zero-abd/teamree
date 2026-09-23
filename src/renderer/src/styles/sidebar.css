@@ -86,13 +86,6 @@
   cursor: default;
 }
 
-/* A chord on a rail entry sits at the far end of the row, the way it does on
-   the search button above: the label is what is read, the key is what is
-   reached for later. */
-.rail__link kbd {
-  margin-left: auto;
-}
-
 /* Where you are. Said in `aria-current` first; this is the same fact for eyes
    that are not reading the accessibility tree. */
 .rail__link--current {
@@ -381,6 +374,12 @@
   color: var(--fg-secondary);
 }
 
+/* Whole row rather than only the name: a checkout that is not on disk is not a
+   place, and the branch under it is as unreachable as the name. */
+.worktree--missing .worktree__row {
+  opacity: 0.55;
+}
+
 /* Takes the slack on its line, which pushes the chips and the merge badge to
    the right edge and lets the branch itself be the part that gives way. */
 .worktree__branch {
@@ -407,6 +406,11 @@
 .worktree__tag--failed {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
+}
+
+.worktree__tag--missing {
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  color: var(--warning);
 }
 
 .worktree__action {

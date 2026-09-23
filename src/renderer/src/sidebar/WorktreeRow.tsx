@@ -1,6 +1,6 @@
-// One worktree in the sidebar. The row carries three different shapes — ready,
-// still being created, and failed — because a worktree is a background job and
-// hiding that would make the sidebar lie.
+// One worktree in the sidebar. The row carries four different shapes — ready,
+// still being created, failed, and ready on paper but gone from disk — because
+// a worktree is a background job and hiding that would make the sidebar lie.
 //
 // Everything a row can do besides being opened is in one menu, reached by
 // right-clicking the row, by the `⋯` beside it, or by the context-menu key on
@@ -12,7 +12,13 @@
 // last, under a rule, and still asks the same question it always did.
 
 import { useRef, useState } from 'react'
-import type { Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
+import {
+  hasCheckout,
+  type Terminal,
+  type Worktree,
+  type WorktreeMergePreview,
+  type WorktreeStatus
+} from '@shared/entities'
 import type { PaneAttention } from '../state/paneAttention'
 import { ACTIVITY_LABEL, agentRows, worktreeActivity } from './agentRows'
 import { PaneRows } from './PaneRows'
@@ -87,7 +93,12 @@ export function WorktreeRow({
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
-  const badge = worktree.state === 'ready' ? mergeBadge(mergePreview) : null
+  // The record says ready and the disk says otherwise. Treated as not ready
+  // for everything below that reads or starts something in the checkout, and
+  // as its own shape for what the row says.
+  const missing = worktree.missing === true
+  const ready = hasCheckout(worktree)
+  const badge = ready ? mergeBadge(mergePreview) : null
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   const openControl = useRef<HTMLButtonElement | null>(null)
   const opener = useRef<HTMLElement | null>(null)
@@ -111,16 +122,21 @@ export function WorktreeRow({
     return rect === undefined ? { x: 0, y: 0 } : { x: rect.left + 12, y: rect.bottom }
   }
 
-  const items: RowMenuItem[] = [
-    { label: 'Reveal in Finder', onChoose: onReveal },
-    { label: 'Copy path', onChoose: onCopyPath },
-    { label: 'Copy branch', onChoose: onCopyBranch },
-    { label: `Open in ${editorLabel}`, onChoose: onOpenInEditor },
-    // Last, and behind a rule, and it still opens the question it always did —
-    // the one that names the ignored files the removal would destroy.
-    { label: 'Remove', onChoose: onRemove, separated: true, danger: true }
-  ]
-  const rows = worktree.state === 'ready' ? agentRows(terminals, worktree.id, now, evidence) : []
+  // Last, and behind a rule, and it still opens the question it always did —
+  // the one that names the ignored files the removal would destroy.
+  const remove: RowMenuItem = { label: 'Remove', onChoose: onRemove, separated: true, danger: true }
+  // A directory that is not there has nothing to reveal, open or copy a path
+  // to. Removal is the one thing left, and it is the thing wanted.
+  const items: RowMenuItem[] = missing
+    ? [remove]
+    : [
+        { label: 'Reveal in Finder', onChoose: onReveal },
+        { label: 'Copy path', onChoose: onCopyPath },
+        { label: 'Copy branch', onChoose: onCopyBranch },
+        { label: `Open in ${editorLabel}`, onChoose: onOpenInEditor },
+        remove
+      ]
+  const rows = ready ? agentRows(terminals, worktree.id, now, evidence) : []
   const overall = worktreeActivity(rows)
   // Rolled up the way the dot is: the collapsed row says that something under
   // it wants reading, and the pane rows say which.
@@ -128,7 +144,7 @@ export function WorktreeRow({
 
   return (
     <li
-      className={`worktree${active ? ' worktree--active' : ''} worktree--${worktree.state}`}
+      className={`worktree${active ? ' worktree--active' : ''} worktree--${missing ? 'missing' : worktree.state}`}
       onContextMenu={(event) => {
         event.preventDefault()
         // A right-click puts the menu where the pointer is. The context-menu key
@@ -159,7 +175,7 @@ export function WorktreeRow({
           className="worktree__open"
           ref={openControl}
           onClick={onOpen}
-          disabled={creating || failed}
+          disabled={creating || failed || missing}
           aria-current={active ? 'true' : undefined}
         >
           {/* The task name gets a line of its own but for the activity dot.
@@ -187,7 +203,7 @@ export function WorktreeRow({
           </span>
           <span className="worktree__meta">
             <span className="worktree__branch">{worktree.branch}</span>
-            {worktree.state === 'ready' ? <GitStatusChips status={status} /> : null}
+            {ready ? <GitStatusChips status={status} /> : null}
             {badge ? (
               <span className={`worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
                 {badge.label}
@@ -195,6 +211,11 @@ export function WorktreeRow({
             ) : null}
             {creating ? <span className="worktree__tag">creating</span> : null}
             {failed ? <span className="worktree__tag worktree__tag--failed">failed</span> : null}
+            {missing ? (
+              <span className="worktree__tag worktree__tag--missing" title={`${worktree.path} is not on disk`}>
+                missing
+              </span>
+            ) : null}
           </span>
         </button>
         {/* The only button on the row besides the row itself, and it opens the

@@ -4,7 +4,14 @@
 // it is the ranking: with twenty worktrees open, a palette that matches the
 // right thing third is a palette nobody uses twice.
 
-import type { CliStatus, InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
+import {
+  hasCheckout,
+  type CliStatus,
+  type InstalledAgent,
+  type Project,
+  type UpdateState,
+  type Worktree
+} from '@shared/entities'
 import { cliActionLabel } from '../dialogs/cliInstallModel'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
@@ -86,7 +93,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
         id: worktree.id,
         label: worktree.name,
         hint: worktree.branch,
-        detail: worktree.state === 'ready' ? project : `${project} · ${worktree.state}`,
+        detail: hasCheckout(worktree) ? project : `${project} · ${worktree.missing ? 'missing' : worktree.state}`,
         // Everything you might reach for it by, in one string: a branch name is
         // often the only part a person remembers.
         search: `${worktree.name} ${worktree.branch} ${project}`
@@ -132,7 +139,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
  */
 function agentItems(context: PaletteContext): PaletteItem[] {
   const active = context.worktrees.find((worktree) => worktree.id === context.activeWorktreeId)
-  if (active === undefined || active.state !== 'ready') return []
+  if (active === undefined || !hasCheckout(active)) return []
 
   // The preferred one first, and the rest in the probe's own order behind it.
   // The palette is a keyboard surface: the row that is already under the cursor

@@ -129,6 +129,36 @@ beforeEach(() => {
   for (const handler of Object.values(handlers)) handler.mockReset()
 })
 
+// The fourth shape, found in a profile rather than designed: the checkout was
+// deleted from disk with git none the wiser, and the row went on saying
+// `ready` until starting an agent in it failed with a path.
+describe('a worktree whose directory is gone', () => {
+  it('says so, dimmed, and cannot be opened', () => {
+    mount({ worktree: worktree({ missing: true }) })
+    expect(screen.getByText('missing')).toBeTruthy()
+    expect(row().classList.contains('worktree--missing')).toBe(true)
+    expect(openButton().disabled).toBe(true)
+  })
+
+  it('says nothing about git, and shows no panes, for a checkout that is not there', () => {
+    mount({
+      worktree: worktree({ missing: true }),
+      status: status({ untracked: 3, missing: true }),
+      terminals: [terminal()]
+    })
+    expect(screen.queryByLabelText(/git status/)).toBeNull()
+    expect(document.querySelector('.pane-row')).toBeNull()
+  })
+
+  it('offers only removal', () => {
+    mount({ worktree: worktree({ missing: true }) })
+    fireEvent.click(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
+    expect(labels()).toEqual(['Remove'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    expect(handlers.onRemove).toHaveBeenCalledOnce()
+  })
+})
+
 describe('a worktree still being made', () => {
   it('says so, and cannot be opened while it is not there', () => {
     mount({ worktree: worktree({ state: 'creating' }) })

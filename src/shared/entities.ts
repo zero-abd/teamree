@@ -89,12 +89,38 @@ export type Worktree = {
    * made without one.
    */
   task?: string
+  /**
+   * The checkout directory is not on disk, though git still lists it.
+   *
+   * The shape an `rm -rf` of a checkout leaves: the record is `ready`, the
+   * inventory still names the path, and nothing in it can be started. Read
+   * from disk on every listing rather than trusted from the record — the
+   * directory can come back, and a flag remembered would outlive that. Absent
+   * when the directory is where the record says.
+   */
+  missing?: true
+}
+
+/**
+ * Whether there is a checkout to work in: ready, and the directory is there.
+ *
+ * The one test for "can a shell start here", so the sidebar, the palette, the
+ * menu bar and the window's own startup agree on it rather than each reading
+ * `state` and forgetting the disk.
+ */
+export function hasCheckout(worktree: Pick<Worktree, 'state' | 'missing'>): boolean {
+  return worktree.state === 'ready' && worktree.missing !== true
 }
 
 /** Live git state for a worktree, refreshed independently of the row itself. */
 export type WorktreeStatus = {
   worktreeId: string
   branch: string
+  /**
+   * Set when there was no checkout to read: every count below is zero because
+   * nothing was asked, not because the tree is clean.
+   */
+  missing?: true
   ahead: number
   behind: number
   staged: number

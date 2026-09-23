@@ -3,6 +3,7 @@
 // are open, which pane has focus, how wide the sidebar is).
 
 import { create } from 'zustand'
+import { hasCheckout } from '@shared/entities'
 import type {
   CliInstall,
   CliStatus,
@@ -1006,7 +1007,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const missing = get().openWorktreeIds.filter((id) => !(id in get().layouts))
     if (missing.length > 0) refresher.request(refreshTargets({ layouts: missing }))
 
-    return worktrees.filter((worktree) => worktree.state === 'ready').map((worktree) => worktree.id)
+    return worktrees.filter(hasCheckout).map((worktree) => worktree.id)
   }
 
   const refreshTerminals = async (): Promise<void> => {
@@ -1371,7 +1372,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     // Ready ones only, exactly as `refreshWorktrees` picks them: there is no
     // git in a checkout that is still being built, or never was.
     const worth = get()
-      .worktrees.filter((worktree) => worktree.state === 'ready' && shown.has(worktree.id))
+      .worktrees.filter((worktree) => hasCheckout(worktree) && shown.has(worktree.id))
       .map((worktree) => worktree.id)
     if (worth.length > 0) refresher.request(refreshTargets({ statuses: worth }))
   }
@@ -1597,8 +1598,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           // that was in front left in front. Main restores the panes and
           // resumes the agents in them; opening one arbitrary tab instead threw
           // that away every launch. A worktree removed since — from here, from
-          // another window, from the CLI — simply has no tab to reopen.
-          const live = new Set(get().worktrees.map((worktree) => worktree.id))
+          // another window, from the CLI — simply has no tab to reopen. One
+          // whose directory has gone is not reopened either: a tab over it
+          // would offer a terminal that no shell can start in.
+          const live = new Set(
+            get()
+              .worktrees.filter(hasCheckout)
+              .map((worktree) => worktree.id)
+          )
           const reopening = lastSession.openWorktreeIds.filter((worktreeId) => live.has(worktreeId))
           for (const worktreeId of reopening) await get().openWorktree(worktreeId)
           const wasActive = lastSession.activeWorktreeId
@@ -1607,7 +1614,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           // Nothing remembered, or nothing remembered is left: the first ready
           // worktree is still better than an empty window.
           if (reopening.length === 0) {
-            const first = get().worktrees.find((worktree) => worktree.state === 'ready')
+            const first = get().worktrees.find(hasCheckout)
             if (first) await get().openWorktree(first.id)
           }
         }
