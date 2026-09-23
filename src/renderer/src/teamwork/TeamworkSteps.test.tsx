@@ -646,7 +646,7 @@ describe('a checkout with no origin', () => {
     expect(shown).toContain('Origin')
     expect(shown).toContain('Add origin')
     // Both kinds of answer are one disclosure away, rather than in the banner.
-    expect(shown).toContain('What has to match')
+    expect(shown).toContain('Requirements')
   })
 
   it('marks the connected step blocked, in a word', () => {

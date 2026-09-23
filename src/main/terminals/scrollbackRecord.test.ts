@@ -119,13 +119,13 @@ describe('the marks around a record', () => {
     const framed = replayableRecord({ text: 'built in 4.2s\r\n', recordedAt: Date.parse('2026-03-04T09:05:00Z') })
 
     expect(framed).toContain('record')
-    expect(framed).toContain('nothing in it is running')
-    expect(framed).toContain('a new shell starts below')
+    expect(framed).toContain('nothing running')
+    expect(framed).toContain('new shell below')
     expect(framed).toContain('built in 4.2s')
     // The output is between the two marks, which is what makes the second one
     // the boundary: whatever the new shell prints lands under it.
-    expect(framed.indexOf('nothing in it is running')).toBeLessThan(framed.indexOf('built in 4.2s'))
-    expect(framed.indexOf('built in 4.2s')).toBeLessThan(framed.indexOf('a new shell starts below'))
+    expect(framed.indexOf('nothing running')).toBeLessThan(framed.indexOf('built in 4.2s'))
+    expect(framed.indexOf('built in 4.2s')).toBeLessThan(framed.indexOf('new shell below'))
   })
 
   it('dates the record, and resets the colour on both sides of itself', () => {
@@ -136,7 +136,7 @@ describe('the marks around a record', () => {
     // wherever the last checkpoint reached, and the mark has to say so rather
     // than promise the reader the whole of what the pane printed.
     expect(openingMark(at)).toContain('up to')
-    expect(openingMark(at)).toContain('last written down')
+    expect(openingMark(at)).toContain('nothing running')
     expect(clockLabel(at)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
     // A record that ended mid-colour must not paint the mark, or the shell.
     expect(openingMark(at).startsWith(`${ESC}[0m`)).toBe(true)

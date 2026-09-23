@@ -31,10 +31,18 @@
     "src/cli/**/*.ts",
     "tests/**/*.ts"
   ],
-  // The one test that drives the window's store rather than a node module. It
-  // needs the DOM lib and the `@shared/*` aliases, so it is checked by the web
-  // project instead; see the include list there.
+  // The two tests that reach across the process boundary rather than staying in
+  // one. Both need the DOM lib and the `@shared/*` aliases, so both are checked
+  // by the web project instead; see the include list there.
+  //
+  // `appMenu.test.ts` is here because the menu bar is assembled across that
+  // boundary and a fixture written out on this side is a copy that drifts: it
+  // claimed the palette item was called "Go to anything" for as long as the
+  // window had been publishing "Go to worktree or command", and every assertion
+  // in the file passed. It now takes the real `menuBarSpec`, which is the
+  // window's.
   "exclude": [
-    "tests/paneCloseWriteBack.test.ts"
+    "tests/paneCloseWriteBack.test.ts",
+    "src/main/appMenu.test.ts"
   ]
 }

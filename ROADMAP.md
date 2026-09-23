@@ -505,10 +505,9 @@ the pane existed.
       leaves behind. The old arrangement bet the transcript on the resume working,
       and paid for it the first time one did not
 - [x] The line that closes a replayed record reads
-      `[end of record — the attempt to resume this conversation begins below]`
-      where an attempt to resume is what follows, rather than the usual
-      `[end of record — a new shell starts below]`, because a new shell is not
-      what starts there
+      `[end of record — resume attempt below]` where an attempt to resume is what
+      follows, rather than the usual `[end of record — new shell below]`, because
+      a new shell is not what starts there
 - [x] Pruned with the pane it belongs to, the way a mute is, and swept at
       startup of anything a crash orphaned
 

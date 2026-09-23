@@ -280,7 +280,9 @@ function StartPointStatus({
     )
   }
 
-  if (summaryRef.length === 0) return <>Pick a branch, tag or commit to start the work from.</>
+  // What the field takes, not an instruction to use it: the field is already
+  // labelled and this line is its own description.
+  if (summaryRef.length === 0) return <>Branch, tag or commit</>
 
   return (
     <>

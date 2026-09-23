@@ -203,7 +203,6 @@ function UpdatesSection(): React.JSX.Element {
         Updates
       </h2>
       <p className="settings-fact">{panel.headline}</p>
-      <p className="settings-note">{panel.detail}</p>
 
       {panel.offersCheck ? (
         <>
@@ -213,12 +212,12 @@ function UpdatesSection(): React.JSX.Element {
               checked={update?.automatic ?? false}
               onChange={(event) => void setAutomaticUpdates(event.target.checked)}
             />
-            {/* What the preference actually arms, rather than "check
-                automatically": the runtime makes its first check half a minute
-                after startup and one every six hours after that, and a label
-                that said "on launch" would be describing a check that has not
-                happened yet at the moment somebody reads it. */}
-            <span>Check shortly after launch, and every few hours while teamree is open</span>
+            {/* What this arms, for whoever reads the file rather than the page:
+                the runtime makes its first check half a minute after startup
+                and one every six hours after that, for as long as the window is
+                open. That was the label once, and a label is not the place for
+                a schedule — the checkbox is called what it does. */}
+            <span>Check automatically</span>
           </label>
 
           <div className="settings-actions">
@@ -228,7 +227,7 @@ function UpdatesSection(): React.JSX.Element {
               disabled={update?.checking ?? false}
               onClick={() => void checkForUpdates()}
             >
-              {update?.checking ? 'Checking…' : 'Check now'}
+              {update?.checking ? 'Checking…' : 'Check for updates'}
             </button>
             {panel.lastChecked ? <span className="settings-aside">{panel.lastChecked}</span> : null}
           </div>
@@ -312,8 +311,10 @@ function PanesSection(): React.JSX.Element {
           {terminalFontSize}px
         </output>
       </div>
-
-      <p className="settings-note">Remembered on this machine only.</p>
+      {/* No line under the slider saying the size is remembered on this machine
+          only. It is — see `state/preferences.ts` — and it is true of every
+          other per-machine preference on this page as well, none of which says
+          so either. */}
     </section>
   )
 }
@@ -571,9 +572,10 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
           Use {project.baseRef}
         </button>
       </div>
-      <p className="settings-note">
-        What the New task dialog offers first; the repository&rsquo;s base ref is unchanged.
-      </p>
+      {/* No caption. What this sets is what the New task dialog offers first,
+          and the buttons above say so by naming the ref they would use; the
+          repository's own base ref is untouched, which is `startPointModel.ts`'s
+          business rather than a reassurance to print here. */}
     </div>
   )
 }
@@ -737,14 +739,18 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
           Use what is on PATH
         </button>
       </div>
+      {/* The field takes the name of one program, which teamree looks for on
+          PATH and starts with the checkout as its only argument. It is not a
+          command line: flags typed here are part of a name rather than flags.
+          That is the field's contract and it belongs here rather than on the
+          page — what is left on the page is the one thing the reader cannot
+          work out from the control, which is what this machine actually has. */}
       <p className="settings-note">
-        The name of one program, which teamree looks for on PATH and starts with the checkout as its only argument — not
-        a command line, so flags here are part of a name rather than flags.{' '}
         {editors === null
-          ? 'teamree has not looked yet.'
+          ? 'Looking…'
           : found.length === 0
-            ? 'teamree found none of code, cursor, zed, idea or subl on PATH.'
-            : `Left empty, teamree uses the first it found: ${found}.`}
+            ? 'None of code, cursor, zed, idea or subl on PATH'
+            : `On PATH: ${found}`}
       </p>
     </div>
   )

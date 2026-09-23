@@ -108,6 +108,16 @@ function finish() {
   if (failures.length) {
     for (const failure of failures) console.error(`smoke: ${failure}`)
     process.exitCode = 1
+    // And again at the last moment, because `process.exitCode` alone does not
+    // survive this exit. Electron's `app.quit()` ends the process through
+    // `Browser::Quit` with an exit code of its own, which is zero unless
+    // somebody names another — so every failure this file has ever found was
+    // printed in full and then reported as a pass. `will-quit` is the safe
+    // moment to name one: the quit sequence has already stopped the runtime by
+    // then, so every pty is dead and there is no exit callback left to wake in
+    // a closing environment, which is the whole reason `app.exit()` is not
+    // called here directly. See the note below.
+    app.once('will-quit', () => process.exit(1))
   } else {
     console.log('smoke: renderer mounted, preload bridge reachable, runtime answering')
     process.exitCode = 0
@@ -378,7 +388,7 @@ async function checkMenuBar(ask) {
     ['New task', 'CommandOrControl+N'],
     ['Close pane', 'CommandOrControl+W'],
     ['Settings\u2026', 'CommandOrControl+,'],
-    ['Every pane, by what needs you', 'CommandOrControl+E'],
+    ['All panes', 'CommandOrControl+E'],
     // The four moves. Worth reading off a running app rather than trusting the
     // unit tests, because these are the ones whose chords are not characters:
     // the arrows and Return are spelled for Electron's parser rather than for
@@ -388,12 +398,12 @@ async function checkMenuBar(ask) {
     ['Previous worktree', 'CommandOrControl+Alt+Up'],
     ['Next worktree', 'CommandOrControl+Alt+Down'],
     ['Focus previous pane', 'CommandOrControl+['],
-    ['Maximise pane', 'CommandOrControl+Shift+Enter'],
+    ['Maximize pane', 'CommandOrControl+Shift+Enter'],
     // In the Help menu, which carries the `help` role. Reading it off a running
     // app proves the submenu survived the role — that Electron built both onto
     // one item — and no more than that: whether macOS adopted it as the app's
     // Help menu is not something `Menu.getApplicationMenu()` can say.
-    ['Shortcuts and what a worktree is', 'CommandOrControl+/']
+    ['Shortcuts', 'CommandOrControl+/']
   ]) {
     const item = named(label)
     if (!item) {
@@ -408,12 +418,23 @@ async function checkMenuBar(ask) {
     }
   }
 
+  // The mnemonic marker, which this platform does not have. `&File` is how
+  // Windows and Linux are told that Alt-F opens the menu, and there the `&` is
+  // consumed rather than drawn; macOS consumes nothing, so an unconditional
+  // marker is an ampersand in the menu bar. Only a running app can say what the
+  // bar actually reads, and the submenu walk above never looks at the top row.
+  for (const item of process.platform === 'darwin' ? (Menu.getApplicationMenu()?.items ?? []) : []) {
+    if ((item.label ?? '').includes('&')) {
+      failures.push(`the menu bar draws ${item.label} with a mnemonic marker macOS does not use`)
+    }
+  }
+
   // Nothing offered that cannot work: on a first launch there is no pane, so
   // the pane commands are grey and the window-level ones are not.
   if (named('Close pane')?.enabled !== false) {
     failures.push('Close pane is live in a window with no pane in it')
   }
-  if (named('Every pane, by what needs you')?.enabled !== true) {
+  if (named('All panes')?.enabled !== true) {
     failures.push('the menu bar greys a command that needs nothing to be open')
   }
 
@@ -424,13 +445,13 @@ async function checkMenuBar(ask) {
   const showsDashboard = () =>
     ask('[...document.querySelectorAll("h1")].some((node) => node.textContent?.trim() === "All panes")')
 
-  named('Every pane, by what needs you')?.click()
+  named('All panes')?.click()
   const reached = await waitFor(showsDashboard, 'choosing a menu item did not reach the window')
 
   // And away again, which is both what that command does and what leaves the
   // window as the checks after this one expect to find it.
   if (reached) {
-    named('Every pane, by what needs you')?.click()
+    named('All panes')?.click()
     await waitFor(async () => !(await showsDashboard()), 'choosing the same menu item again did not put the view away')
   }
 }

@@ -37,11 +37,10 @@ const relay = (overrides: Partial<RelaySetting> = {}): RelaySetting => ({
 })
 
 describe('what the page says about updates', () => {
-  it('offers a check, and says what pressing it does and does not do', () => {
+  it('names the version and offers a check, and says nothing else', () => {
     const panel = updatePanel(update(), NOW)
-    expect(panel.headline).toBe('This is teamree 1.4.0.')
+    expect(panel.headline).toBe('teamree 1.4.0')
     expect(panel.offersCheck).toBe(true)
-    expect(panel.detail).toContain('installs nothing by itself')
   })
 
   // The button is absent rather than disabled: there is nothing published to
@@ -50,24 +49,25 @@ describe('what the page says about updates', () => {
   it('offers no check at all when there is nothing to compare against', () => {
     const panel = updatePanel(update({ current: '0.0.0-dev', checkable: false }), NOW)
     expect(panel.offersCheck).toBe(false)
-    expect(panel.detail).toContain('Not a released version')
+    // In the label, because there is no button beside it to carry the meaning.
+    expect(panel.headline).toBe('teamree 0.0.0-dev (not a release)')
   })
 
   it('says nothing about a version it has not been told yet', () => {
     const panel = updatePanel(null, NOW)
     expect(panel.offersCheck).toBe(false)
     expect(panel.lastChecked).toBeNull()
-    expect(panel.headline).toContain('has not said which version')
+    expect(panel.headline).toBe('teamree (version unknown)')
   })
 
   it('counts from the last check', () => {
-    expect(updatePanel(update({ checkedAt: NOW - 90 * 60_000 }), NOW).lastChecked).toBe('Last checked 1h ago.')
+    expect(updatePanel(update({ checkedAt: NOW - 90 * 60_000 }), NOW).lastChecked).toBe('Checked 1h ago')
   })
 
-  // `sinceLabel` answers "now" under ten seconds, and "last checked now ago" is
-  // not a sentence.
+  // `sinceLabel` answers "now" under ten seconds, and "checked now ago" is not
+  // anything.
   it('does not say "now ago" about a check that has just run', () => {
-    expect(updatePanel(update({ checkedAt: NOW - 2_000 }), NOW).lastChecked).toBe('Checked just now.')
+    expect(updatePanel(update({ checkedAt: NOW - 2_000 }), NOW).lastChecked).toBe('Checked just now')
   })
 
   it('has no last check to report before one has ever run', () => {

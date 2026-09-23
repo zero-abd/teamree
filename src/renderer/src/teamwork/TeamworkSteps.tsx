@@ -307,7 +307,9 @@ function PathChoice({
             >
               {option.title}
             </button>
-            {option.id === suggestion?.id ? <p className="path-option__because">{suggestion.because}</p> : null}
+            {option.id === suggestion?.id && suggestion.because !== null ? (
+              <p className="path-option__because">{suggestion.because}</p>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -509,9 +511,13 @@ function hintFor(list: MemberList, typed: string, file: string | null): string {
 function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: (url: string) => void }) {
   const [draft, setDraft] = useState('')
   const [why, setWhy] = useState(false)
-  // The hint is a description rather than part of the name: a label that
-  // swallowed it would have a screen reader announce a paragraph every time the
-  // field took focus, and the field is called "Origin".
+  // What the refusal is attached to, rather than a caption under the field. The
+  // field said "Runs git remote add origin in this checkout." under its own
+  // label, which is what pressing Add origin does and what this component's
+  // docblock above already says; an example URL in the box is the whole of what
+  // a developer needs from a field called Origin. The id stays, aimed at the
+  // refusal, so a screen reader reads why a URL was rejected rather than
+  // reading a description of the button on every focus.
   const hint = useId()
   const check = checkOriginDraft(draft)
   // What the field itself refused beats what git last said: the reader is
@@ -531,17 +537,18 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
           className="field__input field__input--mono"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="https://github.com/you/repo.git"
+          placeholder="git@github.com:org/repo.git"
           aria-invalid={refusal !== null}
-          aria-describedby={hint}
+          aria-describedby={refusal === null ? undefined : hint}
           autoComplete="off"
           spellCheck={false}
         />
       </label>
-      <span className="field__hint" id={hint}>
-        Runs <code>git remote add origin</code> in this checkout.
-      </span>
-      {refusal === null ? null : <p className="field__error">{refusal}</p>}
+      {refusal === null ? null : (
+        <p className="field__error" id={hint}>
+          {refusal}
+        </p>
+      )}
       {/* The condition, in front of the person who is about to accept it, on
           the one screen where the exact string is still visible. It is a note
           rather than a refusal: this origin works, and works on terms. */}
@@ -559,7 +566,11 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
           <span className="disclosure__caret" aria-hidden="true">
             {why ? '▾' : '▸'}
           </span>
-          What has to match
+          {/* A noun, because that is what a control that opens a list of
+              conditions is called. What is behind it is not something the
+              buttons imply — normalisation, and the one condition a path origin
+              carries — so the disclosure stays and only its name changes. */}
+          Requirements
         </button>
         {why ? <p className="disclosure__body">{ORIGIN_DETAIL}</p> : null}
       </div>

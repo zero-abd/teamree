@@ -101,9 +101,8 @@ completely for a whole class of user.
 
 **2. Open two or three panes, print something in each, ⌘Q, relaunch. Then do it
 again, pressing ⌘Q twice quickly.** Expect every pane back under a dim
-`[record — what this pane printed, up to <date> <time> when it was last written
-down; nothing in it is running]` line, with its old output above an
-`[end of record — a new shell starts below]` line. A pane that comes back empty
+`[record — up to <date> <time>, nothing running]` line, with its old output
+above an `[end of record — new shell below]` line. A pane that comes back empty
 means the flush is not landing: look in
 `~/Library/Application Support/teamree/scrollback/` for one `<terminal-id>.json`
 per pane. No `.json` files at all means the write never ran; files ending `.tmp`
@@ -185,11 +184,10 @@ its conversations on disk, and relaunch. Expect the pane to come back, run its
 resume, and be refused in a line by the agent itself, which then exits — and
 expect the app to say so rather than leave you looking at it: the badge stops
 reading resumed, the pane's old output is there above under an
-`[end of record — the attempt to resume this conversation begins below]` line
-rather than the usual one, and a dim bracketed line at the bottom says that
-nothing was resumed, that the agent's own reason is directly above, that the old
-output is all still here, and that a conversation goes missing for ordinary
-reasons. The pane is dead, and that is the recorded behaviour rather than the
+`[end of record — resume attempt below]` line rather than the usual one, and a
+dim bracketed line at the bottom reads
+`[resume refused — agent exited <code>, record above; open a new pane for a
+fresh one]`, immediately under the agent's own reason. The pane is dead, and that is the recorded behaviour rather than the
 failure — [`../ROADMAP.md`](../ROADMAP.md) records it under "Known gaps", along
 with why a pane that quietly started a fresh conversation instead would be the
 worse answer.

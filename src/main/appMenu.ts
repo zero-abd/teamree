@@ -127,6 +127,19 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
   const platform = options.platform ?? process.platform
   const mac = platform === 'darwin'
 
+  /**
+   * A top-level menu's name, with the mnemonic marker only where one means
+   * something.
+   *
+   * `&` in a top-level item name is a Windows and Linux convention: Electron
+   * turns `&File` into an Alt-F that opens the menu and underlines the letter,
+   * and the `&` itself is not drawn. macOS has no such thing — Cocoa menus are
+   * not opened by mnemonic — and nothing strips the character there, so an
+   * unconditional `&File` is a menu literally titled "&File" in the bar. Every
+   * one of these five carried it on every platform until now.
+   */
+  const top = (name: string): string => (mac ? name : `&${name}`)
+
   /** The published items of one menu, as menu items. Empty when there are none. */
   const inSection = (section: string): MenuItemConstructorOptions[] => {
     const commands = options.commands
@@ -187,19 +200,19 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
     // No Close Window here either; see the top of this file. The menu exists at
     // all only once there is something of the app's own to put in it.
     const file = inSection('file')
-    if (file.length > 0) template.push({ label: '&File', submenu: file })
+    if (file.length > 0) template.push({ label: top('File'), submenu: file })
   } else {
     // The app menu is where Quit lives on macOS; everywhere else it is here,
     // and so is everything that would have gone in it. No Close Window on this
     // platform either: Ctrl+W is the pane's.
     template.push({
-      label: '&File',
+      label: top('File'),
       submenu: [...before([...inSection('file'), ...inSection('application')]), { role: 'quit' }]
     })
   }
 
   template.push({
-    label: '&Edit',
+    label: top('Edit'),
     submenu: [
       { role: 'undo' },
       { role: 'redo' },
@@ -217,7 +230,7 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
   })
 
   template.push({
-    label: '&View',
+    label: top('View'),
     submenu: [
       ...(options.developing === true
         ? ([{ role: 'reload' }, { role: 'forceReload' }, { type: 'separator' }] as const)
@@ -235,7 +248,7 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
   })
 
   template.push({
-    label: '&Window',
+    label: top('Window'),
     // Splitting and walking panes is arranging the window, which is what this
     // menu is for; then Minimize and Zoom, and on macOS the one item that is
     // about every window rather than this one. Close Window is the omission
@@ -252,7 +265,7 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
   // what makes it that menu rather than a menu that happens to be called Help:
   // on macOS it is the one the system's own Help search is attached to.
   const help = inSection('help')
-  if (help.length > 0) template.push({ label: '&Help', role: 'help', submenu: help })
+  if (help.length > 0) template.push({ label: top('Help'), role: 'help', submenu: help })
 
   return template
 }
