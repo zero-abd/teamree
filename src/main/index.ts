@@ -10,7 +10,8 @@ import {
   powerSaveBlocker,
   protocol,
   screen,
-  shell
+  shell,
+  systemPreferences
 } from 'electron'
 import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
 import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type ApplicationMenuOptions } from './appMenu'
@@ -27,6 +28,7 @@ import { installUnsavedFiles, type UnsavedFiles } from './unsavedFiles'
 import { registerOpenPathHandler } from './reveal/openPath'
 import { registerRevealHandler } from './reveal/revealPath'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
+import { optOutOfStateRestoration } from './stateRestoration'
 import { mayOpenExternally, navigationVerdict, windowOpenAnswer } from './windowNavigation'
 import { loadWindowState, placeWindow, saveWindowState, trackWindowState, WINDOW_STATE_FILE } from './windowState'
 
@@ -138,6 +140,9 @@ function setDockBadge(count: number): void {
 // throwaway profile runs beside the installed app instead of knocking on it.
 const profile = userDataOverride(process.env, process.cwd())
 if (profile) app.setPath('userData', profile)
+
+// At module load: AppKit consults it when the launch event arrives, before `ready`.
+optOutOfStateRestoration(process.platform, systemPreferences)
 
 // Before `ready`, or Chromium will not stream or range-request the scheme. The smoke run
 // imports this module after `ready`, where the call throws; there media just loads unprivileged.
