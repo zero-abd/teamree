@@ -42,6 +42,7 @@
 // It closes without a word.
 
 import type { Terminal } from '@shared/entities'
+import { paneName } from '../sidebar/agentRows'
 
 export type ClosePaneWarning = {
   /** The question, as the dialog's title. */
@@ -63,7 +64,10 @@ export function closePaneWarning(terminal: Terminal | undefined): ClosePaneWarni
   if (terminal === undefined) return null
   if (!terminal.running || terminal.draining === true) return null
 
-  const where = terminal.title.trim() === '' ? 'this pane' : `“${terminal.title.trim()}”`
+  // The name the tab and the sidebar row call it, not the program's title:
+  // "in “claude”" asked about a pane the person knew as `Race two agents claude`.
+  // Never empty — a pane with no title is called after its shell.
+  const where = `“${paneName(terminal)}”`
 
   if (terminal.agent !== undefined) {
     return {

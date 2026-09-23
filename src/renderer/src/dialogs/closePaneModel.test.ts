@@ -81,10 +81,27 @@ describe('panes worth asking about', () => {
   })
 
   // A pane can be opened with no title at all, and "Closing “” kills it" is the
-  // sentence that makes a reader stop trusting the rest of the dialog.
+  // sentence that makes a reader stop trusting the rest of the dialog. The name
+  // falls back the way the tab's does — to the shell — so it is never empty.
   it('falls back to naming the pane when it has no title', () => {
     const warning = closePaneWarning(terminal({ title: '   ', busy: true }))
-    expect(warning?.body).toContain('this pane')
+    expect(warning?.body).toContain('in “zsh”')
     expect(warning?.body).not.toContain('““')
+  })
+})
+
+describe('what the question calls the pane', () => {
+  // The pane is called by its label everywhere the person has been looking —
+  // the tab, the sidebar row — and a question that quotes the binary's name
+  // back instead ("in “claude”") is asking about a pane they cannot find.
+  it('quotes the name the pane was given, not the program it runs', () => {
+    const warning = closePaneWarning(terminal({ agent: 'claude', title: 'claude', label: 'Race two agents claude' }))
+    expect(warning?.body).toContain('in “Race two agents claude”')
+    expect(warning?.body).not.toContain('in “claude”')
+  })
+
+  it('falls back to the title for a pane nobody named', () => {
+    const warning = closePaneWarning(terminal({ busy: true, title: 'npm test' }))
+    expect(warning?.body).toContain('in “npm test”')
   })
 })

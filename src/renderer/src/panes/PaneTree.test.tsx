@@ -104,7 +104,7 @@ describe('one pane', () => {
   it('still renders, named plainly, for a terminal the store has not got', () => {
     mount(leaf('t1'), [])
     expect(screen.getByRole('region', { name: 'terminal' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Close pane' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close pane terminal' })).toBeTruthy()
   })
 
   it('says nothing about exiting while the shell is alive', () => {
@@ -132,6 +132,15 @@ describe('one pane', () => {
   it('shows the pane’s size, which is what a split changed', () => {
     mount(leaf('t1'), [terminal('t1', { cols: 132, rows: 43 })])
     expect(screen.getByText('132×43')).toBeTruthy()
+  })
+
+  // The scrollback under the badge says "[no conversation to resume — fresh
+  // claude below]", and a badge two lines above it reading "new shell" was the
+  // window disagreeing with itself about what is running in the pane.
+  it('says an agent started over is a fresh agent, in the words the banner uses', () => {
+    mount(leaf('t1'), [terminal('t1', { agent: 'claude', restored: 'restarted' })])
+    expect(screen.getByText('fresh claude').getAttribute('title')).toContain('fresh claude')
+    expect(screen.queryByText('new shell')).toBeNull()
   })
 
   it('distinguishes a resumed conversation from a pane that only came back', () => {
@@ -166,7 +175,8 @@ describe('one pane', () => {
       terminal('t2', { agent: 'claude' })
     ])
     expect(screen.getAllByRole('button', { name: 'Run claude again' })).toHaveLength(1)
-    const alive = screen.getByRole('region', { name: 't2' })
+    // Two claude panes nobody named: called `claude 1` and `claude 2`, as the strip does.
+    const alive = screen.getByRole('region', { name: 'claude 2' })
     expect(within(alive).queryByRole('button', { name: /again|New shell/ })).toBeNull()
   })
 
@@ -183,6 +193,33 @@ describe('one pane', () => {
     mount(row(leaf('t1'), leaf('t2')), [terminal('t1'), terminal('t2')], 't2')
     expect(screen.getByTestId('surface-t1').dataset.focused).toBe('false')
     expect(screen.getByTestId('surface-t2').dataset.focused).toBe('true')
+  })
+})
+
+describe('what a pane is called', () => {
+  // One pane, one name. The tab strip says the label somebody gave the pane;
+  // the pane bar and its close button said the program's title; and a rename
+  // reached the tab and nothing else.
+  it('reads the same name as the tab strip: the label, else the title', () => {
+    mount(row(leaf('t1'), leaf('t2')), [
+      terminal('t1', { agent: 'codex', title: 'codex', label: 'Race two agents codex' }),
+      terminal('t2', { title: 'zsh' })
+    ])
+    expect(screen.getByRole('button', { name: 'Close pane Race two agents codex' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Race two agents codex' })).toBeTruthy()
+    expect(screen.getByText('Race two agents codex').className).toBe('pane__title')
+    expect(screen.getByRole('button', { name: 'Close pane zsh' })).toBeTruthy()
+  })
+
+  // Two panes of the same agent are told apart along the top as `claude 1`
+  // and `claude 2`; the bar under each tab says the same thing.
+  it('numbers unnamed twins the way the strip does', () => {
+    mount(row(leaf('t1'), leaf('t2')), [
+      terminal('t1', { agent: 'claude', title: 'node' }),
+      terminal('t2', { agent: 'claude', title: 'node' })
+    ])
+    expect(screen.getByRole('button', { name: 'Close pane claude 1' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close pane claude 2' })).toBeTruthy()
   })
 })
 

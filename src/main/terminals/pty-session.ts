@@ -4,6 +4,7 @@
 // The session owns the only reference to the node-pty handle; nothing outside
 // this file writes to a PTY or listens to one directly.
 
+import type { RestoredAs } from '../../shared/paneRestore'
 import { spawn } from 'node-pty'
 import type { IDisposable, IPty } from 'node-pty'
 import type { Terminal } from '../../shared/entities'
@@ -115,7 +116,7 @@ export type PtySessionInit = {
   platform?: NodeJS.Platform
   scrollbackCapBytes?: number
   /** Set when this session is a previous run's pane being brought back. */
-  restored?: 'shell' | 'agent'
+  restored?: RestoredAs
   /**
    * What the pane printed the last time it was open, for a pane being brought
    * back. Read by everything that reads this pane's output and appended to by
@@ -206,7 +207,7 @@ export class PtySession {
   private rows: number
   private running = true
   private exitCode: number | undefined
-  private restored: 'shell' | 'agent' | undefined
+  private restored: RestoredAs | undefined
   private busy = false
   /**
    * When the bell last rang, within the burst of output this pane is still in.
