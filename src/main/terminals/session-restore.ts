@@ -106,13 +106,18 @@ export function restoreLaunch(
   return { command: resume, resumed: true, ...(fallback === null ? {} : { fallback }) }
 }
 
-/** Records worth restoring, in a stable order. A worktree that is gone takes its terminals with it. */
+/**
+ * Records worth restoring, oldest first; a worktree that is gone takes its terminals with it.
+ * A same-millisecond tie keeps the order of `shown` (pane ids as laid out), then stored order.
+ */
 export function restorableRecords(
   records: readonly TerminalRecord[],
-  isLiveWorktree: (worktreeId: string) => boolean
+  isLiveWorktree: (worktreeId: string) => boolean,
+  shown: readonly string[] = []
 ): TerminalRecord[] {
+  const place = new Map(shown.map((id, index) => [id, index]))
+  const rank = (record: TerminalRecord): number => place.get(record.id) ?? shown.length
   return records
     .filter((record) => isLiveWorktree(record.worktreeId))
-    .slice()
-    .sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))
+    .sort((left, right) => left.createdAt - right.createdAt || rank(left) - rank(right))
 }
