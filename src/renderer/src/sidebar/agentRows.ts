@@ -62,7 +62,10 @@ export type AgentRow = {
 export const ACTIVITY_LABEL: Record<AgentActivity, string> = {
   waiting: 'waiting on you',
   working: 'working',
-  quiet: 'waiting — no output',
+  // Not "waiting — no output": beside `waiting on you` the two opposite
+  // states began with the same word. `quiet` is the state's own name and the
+  // word the close-pane question already uses for it.
+  quiet: 'quiet — no output',
   done: 'finished',
   failed: 'exited with an error'
 }
@@ -321,4 +324,14 @@ export function sinceLabel(milliseconds: number): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}h`
   return `${Math.floor(hours / 24)}d`
+}
+
+/**
+ * The same age, as a phrase: "45s ago", "3m ago" — and "now", which is the
+ * one answer `sinceLabel` gives that does not take "ago" after it. Every place
+ * that says when something last happened says it through this.
+ */
+export function agoLabel(milliseconds: number): string {
+  const since = sinceLabel(milliseconds)
+  return since === 'now' ? since : `${since} ago`
 }

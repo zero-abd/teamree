@@ -1257,6 +1257,16 @@ describe('the message to send a teammate', () => {
   it('says nothing about mounting anything when the origin is a URL', () => {
     expect(invite() ?? '').not.toMatch(/mount/)
   })
+
+  // The URL is whatever `origin` is set to, and nothing here has checked that
+  // it clones: an origin pointed at a path that does not exist went into the
+  // invitation as a plain instruction. So the invitation says whose word the
+  // URL is on, instead of asserting it.
+  it('attributes the clone URL to the checkout rather than vouching for it', () => {
+    const text = invite() ?? ''
+    expect(text).toMatch(/origin as git has it/)
+    expect(text).toMatch(/not checked/)
+  })
 })
 
 describe('where this ended up', () => {

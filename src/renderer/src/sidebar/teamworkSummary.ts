@@ -24,7 +24,7 @@
 
 import type { PeerLink, TeamworkRead, TeamworkStatus } from '@shared/entities'
 import { ADD_KEY_BUTTON } from '../teamwork/startTeamwork'
-import { sinceLabel } from './agentRows'
+import { agoLabel } from './agentRows'
 
 /**
  * The label on the button in the project header that opens the setup panel.
@@ -150,7 +150,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
       .filter((quiet): quiet is number => quiet !== undefined)
     const parts = [`${connected} connected`]
     if (away > 0) parts.push(`${away} away`)
-    if (silences.length > 0) parts.push(`last heard ${sinceLabel(Math.max(...silences))} ago`)
+    if (silences.length > 0) parts.push(`last heard ${agoLabel(Math.max(...silences))}`)
     return {
       // Still `live`, because the link is: nothing has failed and nothing has
       // been established about the teammate's machine. What was wrong was the
@@ -213,7 +213,7 @@ function quietFor(link: PeerLink, now: number): number | undefined {
 function linkLine(link: PeerLink, now: number): string {
   const quiet = quietFor(link, now)
   const head = `${link.handle}: ${link.detail ?? link.phase}`
-  return quiet === undefined ? head : `${head}, last heard ${sinceLabel(quiet)} ago`
+  return quiet === undefined ? head : `${head}, last heard ${agoLabel(quiet)}`
 }
 
 /** Says where the relay came from, because a surprising URL needs a source. */

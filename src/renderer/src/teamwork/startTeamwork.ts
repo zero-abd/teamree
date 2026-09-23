@@ -952,6 +952,10 @@ export function inviteText(input: {
     // Quoted only when it has to be, which for a URL is never and for a volume
     // called "Team Share" is the difference between a command and two commands.
     `1. Clone it if you have not: git clone ${shellPath(input.originUrl)}`,
+    // Whose word the URL is on. It is read off `origin` and nothing here has
+    // tried to clone it — a remote pointed somewhere that does not exist went
+    // into this message as a plain instruction, with no warning anywhere.
+    '   (That is this checkout’s origin as git has it; teamree has not checked that it clones.)',
     '2. Open teamree on your Mac and add that checkout as a project.',
     '3. Press Teamwork in the project header, choose “Join a team I was invited to”, and press Add my key.',
     '4. Press Commit and push. That is what puts you on the team.',
