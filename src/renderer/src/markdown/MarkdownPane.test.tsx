@@ -4,7 +4,7 @@
 
 import type { Editor } from '@tiptap/core'
 import { act, render, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FileContent } from '@shared/entities'
 import { AUTOSAVE_DELAY_MS } from './autosave'
 
@@ -123,5 +123,81 @@ describe('the markdown pane', () => {
         }
       ]
     ])
+  })
+})
+
+describe('images on the page', () => {
+  const GUIDE = [
+    '# Guide',
+    '',
+    '![beside](logo.png) ![root](/top.png) ![spaced](my%20shot.png?raw=1)',
+    '',
+    '![up](../../outside.png) ![dot](data:image/gif;base64,R0lGODlhAQABAAAAACw=)',
+    ''
+  ].join('\n')
+  const IMAGES = ['docs/logo.png', 'top.png', 'docs/my shot.png']
+
+  // Every URL an image in the window was pointed at; a detached document loads nothing.
+  const pointedAt: string[] = []
+  const src = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src')!
+  const setAttribute = Element.prototype.setAttribute
+  Object.defineProperty(HTMLImageElement.prototype, 'src', {
+    ...src,
+    set(this: HTMLImageElement, value: string) {
+      if (this.ownerDocument === document) pointedAt.push(String(value))
+      src.set!.call(this, value)
+    }
+  })
+  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
+    if (this instanceof HTMLImageElement && name === 'src' && this.ownerDocument === document) pointedAt.push(value)
+    setAttribute.call(this, name, value)
+  }
+
+  afterAll(() => {
+    Object.defineProperty(HTMLImageElement.prototype, 'src', src)
+    Element.prototype.setAttribute = setAttribute
+  })
+
+  beforeEach(() => {
+    pointedAt.length = 0
+    call.mockImplementation(async (method: string, params: { path: string; viewer?: boolean }) => {
+      if (method === 'file.write') return { worktreeId: 'w1', path: params.path, size: 0, modifiedAt: 200 }
+      if (method !== 'file.read') return undefined
+      if (params.path === 'docs/guide.md') return { ...read(GUIDE), path: 'docs/guide.md' }
+      if (params.viewer === true && IMAGES.includes(params.path))
+        return {
+          ...read(''),
+          path: params.path,
+          view: { kind: 'image', mime: 'image/png', url: `teamree-file://grant/${encodeURIComponent(params.path)}` }
+        }
+      return { ...read(''), path: params.path, exists: false }
+    })
+  })
+
+  it('loads a relative image from the worktree, and nothing from anywhere else', async () => {
+    render(
+      <MarkdownPane paneId="md:2" worktreeId="w1" path="docs/guide.md" focused onFocus={() => {}} onClose={() => {}} />
+    )
+    const editor = await page()
+    // Markdown itself refuses a `file:` image; one set by hand is refused here.
+    act(() => {
+      editor.commands.insertContentAt(editor.state.doc.content.size, {
+        type: 'paragraph',
+        content: [{ type: 'image', attrs: { src: 'file:///etc/hosts', alt: 'disk' } }]
+      })
+    })
+    await waitFor(() => expect(document.querySelectorAll('img.md-image[src^="teamree-file:"]')).toHaveLength(3))
+    await settle()
+
+    const asked = call.mock.calls.filter(([, params]) => (params as { viewer?: boolean }).viewer === true)
+    expect(asked.map(([, params]) => (params as { path: string }).path).sort()).toEqual([...IMAGES].sort())
+    expect(pointedAt.filter((url) => !url.startsWith('data:'))).toEqual(
+      expect.arrayContaining(IMAGES.map((path) => `teamree-file://grant/${encodeURIComponent(path)}`))
+    )
+    expect(pointedAt.every((url) => url.startsWith('teamree-file://') || url.startsWith('data:'))).toBe(true)
+    const byAlt = (alt: string) => document.querySelector(`img.md-image[alt="${alt}"]`)
+    expect(byAlt('up')?.hasAttribute('src')).toBe(false)
+    expect(byAlt('disk')?.hasAttribute('src')).toBe(false)
+    expect(byAlt('dot')?.getAttribute('src')).toMatch(/^data:image\/gif/)
   })
 })

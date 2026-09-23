@@ -6,12 +6,19 @@ import { BulletList, OrderedList, TaskItem, TaskList } from '@tiptap/extension-l
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
 import StarterKit from '@tiptap/starter-kit'
 import { lowlight } from './codeLanguages'
-import { ArtifactCard, CodeBlockWithLanguage, HtmlBlock, HtmlInline, ImageByPath } from './markdownNodes'
+import {
+  ArtifactCard,
+  CodeBlockWithLanguage,
+  HtmlBlock,
+  HtmlInline,
+  ImageByPath,
+  type ImageResolver
+} from './markdownNodes'
 
 export type MarkdownExtensionOptions = {
   onOpenUrl?: (url: string) => void
-  /** Where an image path is loaded from; the path itself, headless. */
-  resolveImage?: (src: string) => string
+  /** Where an image path is loaded from; nowhere when absent. */
+  resolveImage?: ImageResolver
 }
 
 export function markdownExtensions(options: MarkdownExtensionOptions = {}): AnyExtension[] {
@@ -35,7 +42,7 @@ export function markdownExtensions(options: MarkdownExtensionOptions = {}): AnyE
     // any list mix task items with plain ones.
     BulletList.extend({ content: '(listItem | taskItem)+' }),
     OrderedList.extend({ content: '(listItem | taskItem)+' }),
-    ImageByPath.configure({ inline: true, allowBase64: false, resolve: options.resolveImage ?? ((src) => src) }),
+    ImageByPath.configure({ inline: true, allowBase64: false, resolve: options.resolveImage ?? (() => null) }),
     HtmlBlock,
     HtmlInline,
     ArtifactCard.configure({ onOpen: options.onOpenUrl ?? (() => {}) })

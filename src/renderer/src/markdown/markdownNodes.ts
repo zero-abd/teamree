@@ -150,23 +150,28 @@ export const CodeBlockWithLanguage = CodeBlockLowlight.extend({
   }
 })
 
-export type ImageByPathOptions = ImageOptions & {
-  /** Turns the path the file names into something the window can load. */
-  resolve: (src: string) => string
-}
+/** Turns the path the file names into a URL the window may load, or null for none. */
+export type ImageResolver = (src: string) => string | null | Promise<string | null>
 
-/** The image node, drawn from a path relative to the worktree. */
+export type ImageByPathOptions = ImageOptions & { resolve: ImageResolver }
+
+/** The image node, drawn from a path relative to the page; no source until `resolve` gives one. */
 export const ImageByPath = Image.extend<ImageByPathOptions>({
   addOptions() {
-    return { ...this.parent?.(), resolve: (src: string) => src } as ImageByPathOptions
+    return { ...this.parent?.(), resolve: () => null } as ImageByPathOptions
   },
   addNodeView() {
     return ({ node }) => {
       const dom = document.createElement('img')
       dom.className = 'md-image'
-      dom.src = this.options.resolve(String(node.attrs.src ?? ''))
       dom.alt = String(node.attrs.alt ?? '')
       if (node.attrs.title) dom.title = String(node.attrs.title)
+      void Promise.resolve()
+        .then(() => this.options.resolve(String(node.attrs.src ?? '')))
+        .then((url) => {
+          if (url !== null) dom.src = url
+        })
+        .catch(() => {})
       return { dom }
     }
   }

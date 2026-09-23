@@ -13,6 +13,24 @@ import { NEW_CHAT_URL } from './artifactUrl'
 import { createAutosave } from './autosave'
 import { MarkdownEditor, type MarkdownEditorHandle } from './MarkdownEditor'
 
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i
+
+/** The worktree path an image link names, read from the page's folder; null when it leaves the worktree. */
+function imagePath(page: string, src: string): string | null {
+  const link = src.replace(/[?#].*$/, '')
+  let decoded = link
+  try {
+    decoded = decodeURI(link)
+  } catch {}
+  const parts = decoded.startsWith('/') ? [] : page.split('/').slice(0, -1)
+  for (const part of decoded.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part !== '..') parts.push(part)
+    else if (parts.pop() === undefined) return null
+  }
+  return parts.length === 0 ? null : parts.join('/')
+}
+
 type Loaded = { content: string; modifiedAt: number; encoding?: 'utf-8' | 'utf-8-bom' }
 
 function loadedFrom(file: FileContent): Loaded {
@@ -32,7 +50,6 @@ export function MarkdownPane({
   onClose,
   onHeaderMenu
 }: FilePaneProps): React.JSX.Element {
-  const worktreePath = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.path)
   const dirty = useWorkspaceStore((state) => state.unsavedFiles[paneId] === true)
   const setFileUnsaved = useWorkspaceStore((state) => state.setFileUnsaved)
   const setEditingMarkdown = useWorkspaceStore((state) => state.setEditingMarkdown)
@@ -45,6 +62,8 @@ export function MarkdownPane({
   const editor = useRef<MarkdownEditorHandle | null>(null)
   // What this pane last knows to be on disk.
   const known = useRef<Loaded>({ content: '', modifiedAt: 0 })
+  // Each image's URL by worktree path; the editor draws every image twice as it starts.
+  const images = useRef(new Map<string, Promise<string | null>>())
   const name = filePaneName(path)
 
   const autosave = useMemo(
@@ -104,6 +123,7 @@ export function MarkdownPane({
 
   // A change reported by the worktree is taken when the page has nothing of its own to lose.
   useEffect(() => {
+    images.current.clear()
     if (loaded === null) return
     let alive = true
     void runtimeClient
@@ -152,12 +172,22 @@ export function MarkdownPane({
     openInBrowser(NEW_CHAT_URL)
   }
 
+  // Only through a grant the runtime confined to the worktree; a URL passes as written but for `file:`.
   const resolveImage = useCallback(
-    (src: string): string => {
-      if (/^[a-z]+:/i.test(src) || worktreePath === undefined) return src
-      return `file://${worktreePath}/${src.replace(/^\/+/, '')}`
+    (src: string): Promise<string | null> => {
+      if (URL_SCHEME.test(src)) return Promise.resolve(/^file:/i.test(src) ? null : src)
+      const target = imagePath(path, src)
+      if (target === null) return Promise.resolve(null)
+      let url = images.current.get(target)
+      if (url === undefined) {
+        url = runtimeClient
+          .call('file.read', { worktreeId, path: target, viewer: true })
+          .then((file) => (file.view?.kind === 'image' ? file.view.url : null))
+        images.current.set(target, url)
+      }
+      return url
     },
-    [worktreePath]
+    [path, worktreeId]
   )
 
   return (

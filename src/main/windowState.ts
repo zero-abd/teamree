@@ -7,6 +7,7 @@ export type Rect = { x: number; y: number; width: number; height: number }
 export type WindowState = { bounds: Rect; maximized: boolean; fullScreen: boolean }
 
 export const DEFAULT_WINDOW_SIZE = { width: 1400, height: 900 } as const
+const MIN_WINDOW_SIZE = { width: 800, height: 560 } as const
 export const WINDOW_STATE_FILE = 'window-state.json'
 export const SAVE_DEBOUNCE_MS = 500
 
@@ -39,6 +40,14 @@ export function placeWindow(saved: WindowState | null, workAreas: readonly Rect[
     return shared.width >= MIN_VISIBLE_PX && shared.height >= MIN_VISIBLE_PX
   })
   return visible ? saved : { ...saved, bounds: centredDefault(primary) }
+}
+
+/** The window's minimum size, shrunk to a work area smaller than it so the first window still fits. */
+export function minimumSize(primary: Rect): { minWidth: number; minHeight: number } {
+  return {
+    minWidth: Math.min(MIN_WINDOW_SIZE.width, primary.width),
+    minHeight: Math.min(MIN_WINDOW_SIZE.height, primary.height)
+  }
 }
 
 function isFiniteNumber(value: unknown): value is number {
