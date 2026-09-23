@@ -55,6 +55,21 @@ describe('committing in a worktree', () => {
     expect(await repo.git(['status', '--porcelain'])).toContain('loose.ts')
   })
 
+  it('commits a partly staged file as the index holds it, leaving the rest unstaged', async () => {
+    const repo = await repository()
+    await repo.write('two.txt', 'a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n')
+    await repo.commit('add two')
+    await repo.write('two.txt', 'A\nb\nc\nd\ne\nf\ng\nh\ni\nJ\n')
+    const top = (await repo.git(['diff', '-U0', '--', 'two.txt'])).split('\n@@ -10')[0]!
+    await repo.runner.run({ args: ['apply', '--cached', '--unidiff-zero', '-'], cwd: repo.repoPath, stdin: `${top}\n` })
+
+    const result = await commit(repo)
+
+    expect(result.paths).toEqual(['two.txt'])
+    expect(await repo.git(['show', 'HEAD:two.txt'])).toBe('A\nb\nc\nd\ne\nf\ng\nh\ni\nj')
+    expect(await repo.git(['diff', '--no-color', '-U0'])).toContain('+J')
+  })
+
   // The report has to describe the commit, not the request: a path staged
   // earlier rides along, and pretending otherwise is a lie about the history.
   it('reports everything the commit captured, not only what was asked for', async () => {

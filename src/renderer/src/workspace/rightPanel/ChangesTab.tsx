@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
-import { useWorkspaceStore, type PushState } from '../../state/workspaceStore'
+import { commitScope, useWorkspaceStore, type PushState } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import type { WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 
@@ -37,8 +37,13 @@ export function ChangesTab(): React.JSX.Element | null {
 
   const rows = changes?.changes ?? []
   const ticked = new Set(stagedPaths)
-  const tickedCount = rows.filter((change) => ticked.has(change.path)).length
-  const allTicked = rows.length > 0 && tickedCount === rows.length
+  const tick = (change: WorktreeChange): Tick => tickOf(change, ticked.has(change.path))
+  const checked = (change: WorktreeChange): boolean => tick(change) === 'on' || tick(change) === 'index'
+  const checkedCount = rows.filter(checked).length
+  const allChecked = rows.length > 0 && checkedCount === rows.length
+  const tickable = rows.filter((change) => tick(change) !== 'index')
+  const allTicked = tickable.every((change) => ticked.has(change.path))
+  const scope = commitScope(stagedPaths, rows)
   const canCommit = rows.length > 0 && message.trim().length > 0 && !committing
 
   const offer = pushOffer(status, push, rows.length > 0)
@@ -99,9 +104,16 @@ export function ChangesTab(): React.JSX.Element | null {
               <input
                 type="checkbox"
                 className="change__tick"
-                checked={ticked.has(change.path)}
+                checked={checked(change)}
+                ref={(box) => {
+                  if (box) box.indeterminate = tick(change) === 'mixed'
+                }}
+                // Not `disabled`: that greys a tick out, and this one is as checked as any.
+                aria-disabled={tick(change) === 'index' || undefined}
                 aria-label={`Include ${change.path} in the next commit`}
-                onChange={() => toggleStaged(change.path)}
+                onChange={() => {
+                  if (tick(change) !== 'index') toggleStaged(change.path)
+                }}
               />
               <button
                 type="button"
@@ -158,16 +170,17 @@ export function ChangesTab(): React.JSX.Element | null {
             <label>
               <input
                 type="checkbox"
-                checked={allTicked}
+                checked={allChecked}
                 ref={(box) => {
-                  if (box) box.indeterminate = tickedCount > 0 && !allTicked
+                  if (box) box.indeterminate = !allChecked && rows.some((change) => tick(change) !== 'off')
                 }}
+                disabled={tickable.length === 0}
                 onChange={() => setAllStaged(!allTicked)}
               />
               All
             </label>
             <span className="changes__allCount">
-              {tickedCount}/{rows.length}
+              {checkedCount}/{rows.length}
             </span>
           </div>
           <input
@@ -185,7 +198,7 @@ export function ChangesTab(): React.JSX.Element | null {
             }}
           />
           <button type="button" className="button button--primary button--small" disabled={!canCommit} onClick={commit}>
-            {committing ? 'Committing…' : tickedCount > 0 ? 'Commit' : 'Commit All'}
+            {committing ? 'Committing…' : COMMIT_LABEL[scope]}
           </button>
         </div>
       ) : null}
@@ -221,6 +234,17 @@ export function ChangesTab(): React.JSX.Element | null {
       ) : null}
     </section>
   )
+}
+
+const COMMIT_LABEL = { ticked: 'Commit', staged: 'Commit Staged', all: 'Commit All' } as const
+
+/** `index`: git already holds the whole change, so the tick is not the app's to take back. */
+type Tick = 'on' | 'off' | 'mixed' | 'index'
+
+function tickOf(change: WorktreeChange, ticked: boolean): Tick {
+  if (change.staged && !change.unstaged) return 'index'
+  if (ticked) return 'on'
+  return change.staged ? 'mixed' : 'off'
 }
 
 const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish branch', 'Publishing…'] } as const

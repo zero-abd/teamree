@@ -276,6 +276,67 @@ describe('committing', () => {
   })
 })
 
+describe('what git has staged', () => {
+  const partly: WorktreeChange = { path: 'src/rank.ts', kind: 'modified', staged: true, unstaged: true }
+  const whole: WorktreeChange = { path: 'src/done.ts', kind: 'modified', staged: true, unstaged: false }
+  const loose: WorktreeChange = { path: 'README.md', kind: 'modified', staged: false, unstaged: true }
+  const box = (path: string): HTMLInputElement =>
+    screen.getByRole('checkbox', { name: `Include ${path} in the next commit` }) as HTMLInputElement
+
+  it('commits the index alone, naming no paths, when something is staged and nothing ticked', () => {
+    withChanges([partly, loose])
+    render(<ChangesTab />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
+
+    expect(screen.queryByRole('button', { name: 'Commit All' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Commit Staged' }))
+    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank' })
+  })
+
+  it('shows a partly staged row mixed, and a ticked one whole', () => {
+    withChanges([partly, loose])
+    render(<ChangesTab />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
+    expect(box('src/rank.ts').indeterminate).toBe(true)
+    expect(box('src/rank.ts').checked).toBe(false)
+
+    fireEvent.click(box('src/rank.ts'))
+    expect(box('src/rank.ts').indeterminate).toBe(false)
+    expect(box('src/rank.ts').checked).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Commit' }))
+    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', paths: ['src/rank.ts'] })
+  })
+
+  it('shows a wholly staged row ticked, and counts it', () => {
+    withChanges([whole, loose])
+    render(<ChangesTab />)
+    expect(box('src/done.ts').checked).toBe(true)
+    expect(box('src/done.ts').getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(box('src/done.ts'))
+    expect(box('src/done.ts').checked).toBe(true)
+    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
+    expect(screen.getByText('1/2')).toBeTruthy()
+    const all = screen.getByRole('checkbox', { name: 'All' }) as HTMLInputElement
+    expect(all.indeterminate).toBe(true)
+
+    fireEvent.click(all)
+    expect(all.checked).toBe(true)
+    expect(screen.getByText('2/2')).toBeTruthy()
+    fireEvent.click(all)
+    expect(box('src/done.ts').checked).toBe(true)
+    expect(box('README.md').checked).toBe(false)
+  })
+
+  it('leaves All nothing to do when git already holds every change', () => {
+    withChanges([whole])
+    render(<ChangesTab />)
+    const all = screen.getByRole('checkbox', { name: 'All' }) as HTMLInputElement
+    expect(all.checked).toBe(true)
+    expect(all.disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Commit Staged' })).toBeTruthy()
+  })
+})
+
 describe('the changes header', () => {
   it('names the branch and how far it is from its upstream, with the push button after', () => {
     seed({ ahead: 1, behind: 2 })
