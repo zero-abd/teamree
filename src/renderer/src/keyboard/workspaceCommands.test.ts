@@ -169,6 +169,14 @@ describe('what a window can be asked to do', () => {
     expect(isCommandAvailable('new-terminal', WORKING)).toBe(true)
   })
 
+  // Open, but the directory is gone: the shell the item would start has
+  // nowhere to start, and an item that is lit over a failure is the thing the
+  // enablement rule exists to prevent.
+  it('withholds a new terminal from a worktree whose checkout is not on disk', () => {
+    const gone = { ...WORKING, worktrees: [{ id: 'w1', projectId: 'p1', missing: true as const }] }
+    expect(isCommandAvailable('new-terminal', gone)).toBe(false)
+  })
+
   it('offers the focus walk only where there is somewhere else to walk to', () => {
     expect(isCommandAvailable('focus-next-pane', EMPTY)).toBe(false)
     // One pane: the walk would land where the focus already is.

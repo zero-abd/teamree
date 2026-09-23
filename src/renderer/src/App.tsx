@@ -106,9 +106,6 @@ export function App(): React.JSX.Element {
           <Sidebar
             newWorktreeHint={shortcutHint('new-worktree', modifier)}
             searchHint={shortcutHint('open-palette', modifier)}
-            settingsHint={shortcutHint('open-settings', modifier)}
-            helpHint={shortcutHint('open-help', modifier)}
-            sidebarHint={shortcutHint('toggle-sidebar', modifier)}
           />
           <SidebarResizer />
         </>

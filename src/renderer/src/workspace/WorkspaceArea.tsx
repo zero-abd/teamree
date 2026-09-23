@@ -21,24 +21,21 @@
 // that sits between two of your own.
 
 import { useCallback, useMemo } from 'react'
-import { teamworkFacts } from '@shared/entities'
 import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
-import { menuLabel } from '../menu/menuBar'
+import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { shownRoot } from '../panes/paneLayout'
 import { PaneTree } from '../panes/PaneTree'
 import { SplitFrame } from '../panes/SplitFrame'
 import { SettingsView } from '../settings/SettingsView'
-import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 import { TeamworkView } from '../teamwork/TeamworkView'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { RightPanel } from './rightPanel/RightPanel'
 import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { terminalTarget } from './terminalTarget'
 import { TerminalTabs } from './TerminalTabs'
+import { Welcome } from './Welcome'
 
 export function WorkspaceArea({
   modifier,
@@ -142,31 +139,16 @@ function WorkspaceView({
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
   const relaunchTerminal = useWorkspaceStore((state) => state.relaunchTerminal)
-  const createTerminal = useWorkspaceStore((state) => state.createTerminal)
   const applySplitSizes = useWorkspaceStore((state) => state.applySplitSizes)
-  const agents = useWorkspaceStore((state) => state.agents)
-  const startAgent = useWorkspaceStore((state) => state.startAgent)
   const paneSearch = useWorkspaceStore((state) => state.paneSearch)
   const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
   const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
   const projects = useWorkspaceStore((state) => state.projects)
   const connection = useWorkspaceStore((state) => state.connection)
-  const openDialog = useWorkspaceStore((state) => state.openDialog)
-  const worktrees = useWorkspaceStore((state) => state.worktrees)
-  const openWorktreeIds = useWorkspaceStore((state) => state.openWorktreeIds)
-  const openWorktree = useWorkspaceStore((state) => state.openWorktree)
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
   const helpOpen = useWorkspaceStore((state) => state.helpOpen)
-  const toggleHelp = useWorkspaceStore((state) => state.toggleHelp)
-  const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
-  const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
-  const teamwork = useWorkspaceStore((state) => state.teamwork)
 
-  // Where "open a terminal" would go, and whose teamwork "start teamwork"
-  // would set up. Both are read before the early returns below, because hooks
-  // are, and both are null only in states this component then does not offer.
-  const target = useMemo(() => terminalTarget(worktrees, openWorktreeIds), [worktrees, openWorktreeIds])
   // The tree as it is drawn: one leaf while a pane is maximised, otherwise the
   // whole of it. Read here with the other hooks rather than beside the JSX,
   // which is where the early returns below put it out of reach.
@@ -174,35 +156,10 @@ function WorkspaceView({
     () => shownRoot(layout?.root ?? null, expandedTerminalId),
     [layout?.root, expandedTerminalId]
   )
-  const teamworkProject = worktree
-    ? projects.find((project) => project.id === worktree.projectId)
-    : (projects.find((project) => project.id === target?.projectId) ?? projects[0])
-
-  /**
-   * Whether teamwork is already running in the project this card is about.
-   *
-   * The card below used to say "put your key in <project> and pick a relay"
-   * whatever the answer, which is the one sentence that cannot be true here:
-   * `disabledReason === null` means the relay is configured and the origin
-   * matches, and `enrolled` means this machine's own key is in the checkout —
-   * the two things the sentence asks for. Seen on a packaged build whose own
-   * project header said "1 connected" in the same window: the app told a
-   * connected member to go and do what they had already done, on the empty
-   * state they are most likely to be looking at while they wait for a
-   * teammate. An absent status is not an answer, so it keeps the old copy — and
-   * neither is one teamwork has not read yet, which `teamworkFacts` folds into
-   * the same absence for the same reason.
-   */
-  const teamworkFound = teamworkProject === undefined ? undefined : teamworkFacts(teamwork[teamworkProject.id])
-  const teamworkRunning = teamworkFound?.disabledReason === null && teamworkFound.enrolled
-
-  // Open the tab first and put the pane in it second: the pane is the thing
-  // asked for, and it has to appear somewhere the person is looking.
-  const startTerminal = useCallback(async () => {
-    if (target === null) return
-    await openWorktree(target.id)
-    await createTerminal(target.id)
-  }, [target, openWorktree, createTerminal])
+  // Where the welcome's New task would go: the open worktree's project, else
+  // the first — the same rule the ⌘N command applies, so the button and the
+  // chord under it cannot disagree about which composer opens.
+  const taskProject = worktree ? projects.find((project) => project.id === worktree.projectId) : projects[0]
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -249,116 +206,12 @@ function WorkspaceView({
       )
     }
 
-    // The genuine first run. Every shortcut in the legend below acts on a pane,
-    // and the one that makes a worktree needs a project to make it in — with
-    // none added it does nothing at all when pressed. Naming a chord here would
-    // be telling somebody to press a key that cannot answer, so this state
-    // offers the only action that can.
-    if (projects.length === 0) {
-      return (
-        <main className="workspace workspace--empty">
-          <div className="placeholder">
-            <h1 className="placeholder__title">Add a repository to start</h1>
-            <div className="placeholder__actions">
-              <button
-                type="button"
-                className="button button--primary"
-                onClick={() => openDialog({ kind: 'add-project' })}
-              >
-                Add a repository
-              </button>
-            </div>
-          </div>
-        </main>
-      )
-    }
-
-    // Nothing open, and — until this — nothing offered: a heading, a sentence
-    // naming a chord, and a legend of six more. That is a reference card handed
-    // to somebody who has not yet done the thing it is a reference for. The two
-    // things a person actually opens this app to do are here as buttons; the
-    // chords stay, underneath, for the second week rather than the first hour.
+    // Nothing open — the first run, or a window with worktrees and none of
+    // them picked. One card for both: what changes is which of its buttons can
+    // answer, and the card says that by disabling the one that cannot.
     return (
       <main className="workspace workspace--empty">
-        <div className="placeholder">
-          <h1 className="placeholder__title">Nothing open</h1>
-          {/* `target` is null when there is no worktree to pick, and pointing
-              somebody at an empty list is the one thing this line must not do. */}
-          <div className="starters">
-            <div className="starter">
-              <button
-                type="button"
-                className="button button--primary button--lead"
-                aria-describedby="starter-terminal"
-                onClick={() => {
-                  if (target === null) {
-                    if (teamworkProject) openDialog({ kind: 'new-task', projectId: teamworkProject.id })
-                    return
-                  }
-                  void startTerminal()
-                }}
-              >
-                {target === null ? 'Open a terminal in a new worktree' : 'Open a terminal'}
-              </button>
-              <p className="starter__note" id="starter-terminal">
-                {target === null
-                  ? 'No worktree yet — this asks for the task and makes one.'
-                  : `${target.name}, on ${target.branch}.`}
-              </p>
-            </div>
-
-            <div className="starter">
-              <button
-                type="button"
-                className="button button--lead"
-                aria-describedby="starter-teamwork"
-                disabled={teamworkProject === undefined}
-                onClick={() => {
-                  if (teamworkProject) openTeamwork(teamworkProject.id)
-                }}
-              >
-                {teamworkRunning ? TEAMWORK_BUTTON_LABEL : 'Start teamwork'}
-              </button>
-              <p className="starter__note" id="starter-teamwork">
-                {teamworkProject === undefined
-                  ? 'No repository here yet.'
-                  : teamworkRunning
-                    ? `Already on in ${teamworkProject.name}.`
-                    : `Not set up in ${teamworkProject.name}.`}
-              </p>
-            </div>
-          </div>
-
-          {/* One row per chord, named the way the menu bar names the same
-              command. The words used to be this file's own — `maximise pane`
-              against the menu's `Maximize pane`, `every pane` against `All
-              panes` — which is a person reading two names for one thing two
-              clicks apart and reasonably concluding they are two things. */}
-          <dl className="legend">
-            {LEGEND_COMMANDS.map((command) => (
-              <div key={command} data-command={command}>
-                <dt>{shortcutHint(command, modifier)}</dt>
-                <dd>{menuLabel(command)}</dd>
-              </div>
-            ))}
-          </dl>
-
-          {/* The legend above is a dozen chords offered to somebody who may not
-              yet know what a worktree is, which is the question underneath all
-              of them. These two lines are the way out of that: one goes to the
-              page that answers it — and lists every chord, generated from the
-              same table the legend reads — and the other to the page that
-              settles what this machine is configured to do. Text rather than
-              buttons, because they are not what this state is for. */}
-          <div className="placeholder__actions">
-            <button type="button" className="button button--ghost button--small" onClick={toggleHelp}>
-              How this works
-            </button>
-            <button type="button" className="button button--ghost button--small" onClick={toggleSettings}>
-              Settings
-            </button>
-          </div>
-        </div>
+        <Welcome modifier={modifier} project={taskProject} worktree={undefined} />
       </main>
     )
   }
@@ -385,37 +238,7 @@ function WorkspaceView({
               onCloseSearch={closePaneSearch}
             />
           ) : (
-            <div className="placeholder placeholder--inset">
-              <h2 className="placeholder__title">
-                {worktree.state === 'creating' ? 'Preparing the worktree' : 'No terminals here yet'}
-              </h2>
-              <p className="placeholder__body">
-                {worktree.state === 'creating'
-                  ? 'Panes appear as soon as the checkout is ready.'
-                  : `Start one with ${shortcutHint('new-terminal', modifier)}.`}
-              </p>
-              {worktree.state === 'ready' ? (
-                <div className="placeholder__actions">
-                  {agents.map((agent) => (
-                    <button
-                      type="button"
-                      key={agent.kind}
-                      className="button button--primary"
-                      onClick={() => void startAgent(agent.command)}
-                    >
-                      Start {agent.command}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className={agents.length === 0 ? 'button button--primary' : 'button'}
-                    onClick={() => void createTerminal(activeWorktreeId)}
-                  >
-                    New terminal
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            <Welcome modifier={modifier} project={taskProject} worktree={worktree} />
           )}
         </div>
 
@@ -424,29 +247,3 @@ function WorkspaceView({
     </main>
   )
 }
-
-/**
- * The chords the empty state offers, in the order somebody would need them.
- *
- * A subset of the table rather than all of it: this is a first-run card, not
- * the help page, and a person who has never opened a worktree does not need
- * Commit or the theme editor. What it is not is a second set of words for the
- * commands it does list — `menuLabel` says what each is called, once.
- */
-const LEGEND_COMMANDS: readonly WorkspaceCommand[] = [
-  'new-worktree',
-  'previous-worktree',
-  'next-worktree',
-  'new-terminal',
-  'split-right',
-  'split-down',
-  'close-pane',
-  'focus-previous-pane',
-  'focus-next-pane',
-  'expand-pane',
-  'open-palette',
-  'find-in-pane',
-  'open-dashboard',
-  'toggle-sidebar',
-  'open-help'
-]

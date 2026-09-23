@@ -340,6 +340,68 @@ describe('reconciliation', () => {
   })
 })
 
+// A record whose directory is gone but whose git metadata is not — the shape
+// left by an `rm -rf` of a checkout. The inventory still lists it, so the
+// reconciliation above keeps the row, and the row used to say `ready` right up
+// until a shell was asked to start in a directory that was not there.
+describe('a worktree whose directory has gone', () => {
+  async function missingWorktree(): Promise<{ repo: TempRepo; service: GitService; worktree: Worktree }> {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await readyWorktree(service, project.id, 'gone')
+    await rm(worktree.path, { recursive: true, force: true })
+    return { repo, service, worktree }
+  }
+
+  it('is listed as missing rather than ready', async () => {
+    const { service, worktree } = await missingWorktree()
+    const [listed] = await service.listWorktrees({ projectId: worktree.projectId })
+    expect(listed?.state).toBe('ready')
+    expect(listed?.missing).toBe(true)
+  })
+
+  it('says so on the change stream, once', async () => {
+    const { service, worktree } = await missingWorktree()
+    const updated: Worktree[] = []
+    service.events.on((event) => {
+      if (event.type === 'worktree.updated') updated.push(event.worktree)
+    })
+    await service.listWorktrees({})
+    await service.listWorktrees({})
+    expect(updated.map((row) => [row.id, row.missing])).toEqual([[worktree.id, true]])
+  })
+
+  it('stops being missing when the directory is back', async () => {
+    const { service, worktree } = await missingWorktree()
+    await service.listWorktrees({})
+    await mkdir(worktree.path, { recursive: true })
+    const [listed] = await service.listWorktrees({ projectId: worktree.projectId })
+    expect(listed?.missing).toBeUndefined()
+  })
+
+  it('answers status without throwing, and says the checkout is missing', async () => {
+    const { service, worktree } = await missingWorktree()
+    const status = await service.worktreeStatus({ worktreeId: worktree.id })
+    expect(status.missing).toBe(true)
+    expect(status.branch).toBe(worktree.branch)
+    expect(status.staged + status.unstaged + status.untracked + status.conflicted).toBe(0)
+  })
+
+  it('can be removed, which prunes what git still knew about it', async () => {
+    const { repo, service, worktree } = await missingWorktree()
+    await service.listWorktrees({})
+
+    expect(await service.removeWorktree({ worktreeId: worktree.id, deleteBranch: true })).toEqual({ removed: true })
+
+    expect((await rejection(service.getWorktree({ worktreeId: worktree.id }))).code).toBe(ErrorCode.NotFound)
+    const inventory = await repo.git(['worktree', 'list', '--porcelain'])
+    expect(inventory).not.toContain(worktree.path)
+    const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
+    expect(branches.split('\n')).not.toContain('gone')
+  })
+})
+
 describe('persistence', () => {
   it('marks creates that a restart interrupted as failed', async () => {
     const repo = await newRepo()

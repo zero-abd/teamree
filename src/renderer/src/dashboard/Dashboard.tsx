@@ -150,15 +150,7 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
       {shown.length === 0 ? (
         <div className="placeholder">
           <h2 className="placeholder__title">{unreadOnly && rows.length > 0 ? 'Nothing unread' : 'Nothing running'}</h2>
-          <p className="placeholder__body">
-            {unreadOnly && rows.length > 0 ? (
-              'Every pane has been read.'
-            ) : (
-              <>
-                Open a terminal with <kbd>{shortcutHint('new-terminal', modifier)}</kbd>.
-              </>
-            )}
-          </p>
+          {unreadOnly && rows.length > 0 ? <p className="placeholder__body">Every pane has been read.</p> : null}
         </div>
       ) : (
         <ul className="board__list" ref={list}>

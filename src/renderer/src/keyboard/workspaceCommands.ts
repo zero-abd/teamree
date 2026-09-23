@@ -44,7 +44,7 @@ export type CommandState = {
   consent: Readonly<Record<string, { requests: ConsentRequest[] }>>
   dialog: DialogState
   projects: readonly { id: string }[]
-  worktrees: readonly { id: string; projectId: string }[]
+  worktrees: readonly { id: string; projectId: string; missing?: true }[]
   activeWorktreeId: string | null
   layouts: Readonly<Record<string, Layout>>
   watches: readonly unknown[]
@@ -154,7 +154,13 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
       // watch, so it counts as something the command can do.
       return state.focusedWatchId !== null || activeLayout(state)?.focusedTerminalId != null
     case 'new-terminal':
-      return state.activeWorktreeId !== null
+      // Open, and not known to have lost its directory. A worktree whose
+      // checkout has gone from disk is still a tab somebody may be looking at,
+      // and the item over it would fail with a path.
+      return (
+        state.activeWorktreeId !== null &&
+        !state.worktrees.some((worktree) => worktree.id === state.activeWorktreeId && worktree.missing === true)
+      )
     case 'toggle-right-panel':
       // The panel shows one worktree's files, changes and panes; with none
       // open it has nothing to show and the item says so.

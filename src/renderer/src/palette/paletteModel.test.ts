@@ -113,6 +113,21 @@ describe('buildPaletteItems', () => {
     expect(agents.map((item) => item.label)).toEqual(['Start claude in this worktree', 'Start codex in this worktree'])
   })
 
+  // A row that promises a pane in a directory that is not there is the same
+  // broken promise as one for an agent nobody has installed.
+  it('offers no agent in a worktree whose checkout is gone from disk', () => {
+    const items = buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1', missing: true }), worktree({ id: 'w2', missing: true })],
+        activeWorktreeId: 'w1',
+        agents: [agent('claude')]
+      })
+    )
+    expect(items.filter((item) => item.kind === 'agent')).toEqual([])
+    // And the other one's row says why it is not the ordinary kind of row.
+    expect(items.find((item) => item.kind === 'worktree' && item.id === 'w2')?.detail).toContain('missing')
+  })
+
   // The palette opens with the first row under the cursor, so which agent is
   // first is which agent gets started.
   it('puts the agent this machine’s owner always uses first', () => {

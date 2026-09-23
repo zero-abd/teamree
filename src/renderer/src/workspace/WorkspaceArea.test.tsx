@@ -22,9 +22,9 @@
 // everything else in this area, because unmounting it would close and reopen a
 // stream nobody stopped watching.
 
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Layout, Project, TeamworkRead, TeamworkStatus, Worktree, WorktreeStatus } from '@shared/entities'
+import type { Layout, Project, Worktree, WorktreeStatus } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -57,6 +57,9 @@ vi.mock('../help/HelpView', () => ({ HelpView: () => <div data-testid="help" /> 
 // The strip above the panes is `TerminalTabs` now — one tab per pane in the
 // worktree on screen, where it used to be one per open worktree.
 vi.mock('./TerminalTabs', () => ({ TerminalTabs: () => null }))
+// jsdom has no browser to open; what matters is that the welcome asks the one
+// path that does.
+vi.mock('../shell/openInBrowser', () => ({ openInBrowser: vi.fn() }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { WorkspaceArea } = await import('./WorkspaceArea')
@@ -97,21 +100,6 @@ const status = (overrides: Partial<WorktreeStatus> = {}): WorktreeStatus => ({
   ...overrides
 })
 
-/** Teamwork running in `p1`: a relay is set, the origin matches, the key is in. */
-const teamworkUp = (overrides: Partial<TeamworkRead> = {}): Record<string, TeamworkStatus> => ({
-  p1: {
-    state: 'read',
-    projectId: 'p1',
-    relay: { url: 'wss://relay.example/v1/relay', source: 'repository' },
-    disabledReason: null,
-    origin: { ok: true, url: 'https://example.com/ada/pager.git' },
-    enrolled: true,
-    links: [{ publicKey: 'k', handle: 'bo', phase: 'connected', since: 0, attempts: 1 }],
-    readAt: 0,
-    ...overrides
-  }
-})
-
 const openDialog = vi.fn()
 const pushActiveWorktree = vi.fn()
 const createTerminal = vi.fn()
@@ -119,8 +107,6 @@ const startAgent = vi.fn()
 const openWorktree = vi.fn()
 const openTeamwork = vi.fn()
 const revealInFinder = vi.fn()
-const toggleHelp = vi.fn()
-const toggleSettings = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
@@ -133,8 +119,6 @@ function seed(overrides: Record<string, unknown> = {}): void {
       openWorktree,
       openTeamwork,
       revealInFinder,
-      toggleHelp,
-      toggleSettings,
       ...overrides
     },
     true
@@ -153,8 +137,6 @@ beforeEach(() => {
   openWorktree.mockReset()
   openTeamwork.mockReset()
   revealInFinder.mockReset()
-  toggleHelp.mockReset()
-  toggleSettings.mockReset()
   seed()
 })
 
@@ -177,161 +159,78 @@ describe('when there is nothing open', () => {
     expect(screen.getByRole('heading', { name: 'The runtime is not running' })).toBeTruthy()
   })
 
-  // A dead runtime outranks a first run: with nothing answering, "add a
-  // repository" is a button that cannot work.
-  it('prefers the dead runtime to the first-run offer when both are true', () => {
+  // A dead runtime outranks a first run: with nothing answering, "add project"
+  // is a button that cannot work.
+  it('prefers the dead runtime to the welcome when both are true', () => {
     seed({ projects: [], connection: { phase: 'offline' } })
     mount()
-    expect(screen.queryByRole('heading', { name: 'Add a repository to start' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
   })
 
-  // The genuine first run. The chord that makes a worktree needs a project to
-  // make it in, so naming one here would be telling somebody to press a key
-  // that does nothing.
-  it('offers the only action that can work when no repository has been added', () => {
+  // The genuine first run: the mark, the name, and the one action that can
+  // work. A task needs a project to make its worktree in, so that button waits.
+  it('welcomes a first run with the mark and the one action that can work', () => {
     seed({ projects: [] })
     mount()
-    expect(screen.getByRole('heading', { name: 'Add a repository to start' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Add a repository' }))
+    expect(document.querySelector('.welcome .brand__mark')).toBeTruthy()
+    expect(screen.getByText('teamree')).toBeTruthy()
+    expect(screen.queryByRole('heading')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Add project' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'add-project' })
+    expect((screen.getByRole('button', { name: 'New task' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
   })
 
-  // Caught by reading this state in the running app: with a project added and
-  // no worktree in it, the sidebar beside this said "No worktrees yet" while a
-  // line here told somebody to pick one from it. The button is the whole of the
-  // answer now — it says which of the two things pressing it will do.
-  it('does not send somebody to the sidebar when there is no worktree in it', () => {
-    seed({ projects: [project] })
+  // The same welcome once there is a project, with the task button live: the
+  // composer is where an agent is chosen, so nothing here names one.
+  it('offers a new task in the project once there is one, and no agent by name', () => {
+    seed({ projects: [project], agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }] })
     mount()
-    expect(screen.getByRole('button', { name: 'Open a terminal in a new worktree' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Open a terminal' })).toBeNull()
-    expect(screen.getByText('No worktree yet — this asks for the task and makes one.')).toBeTruthy()
-  })
-
-  it('offers the plain terminal once there is a worktree to pick', () => {
-    seed({ projects: [project], worktrees: [worktree()] })
-    mount()
-    expect(screen.getByRole('button', { name: 'Open a terminal' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New task' }))
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
+    expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
   })
 
   it('names the chords once there is a project for them to act on', () => {
     seed({ projects: [project] })
     mount()
-    expect(screen.getByRole('heading', { name: 'Nothing open' })).toBeTruthy()
-    const keys = [...document.querySelectorAll('kbd, .legend dt')].map((node) => node.textContent)
-    // The chord that makes a worktree, and the one that reaches anything else.
-    expect(keys).toContain('⌘N')
-    expect(keys).toContain('⌘K')
-    expect(keys).toContain('⌘⇧D')
-  })
-
-  // What was here before: a heading, a sentence naming a chord, and a legend of
-  // six more. A reference card handed to somebody who has not yet done the
-  // thing it is a reference for. These are the two things the app is for.
-  it('offers a terminal and teamwork as buttons, not as chords to memorise', async () => {
-    seed({ projects: [project], worktrees: [worktree()] })
-    mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Open a terminal' }))
-    await waitFor(() => expect(createTerminal).toHaveBeenCalledWith('w1'))
-    // The tab first, then the pane in it: a pane nobody can see is not the
-    // thing that was asked for.
-    expect(openWorktree).toHaveBeenCalledWith('w1')
-    fireEvent.click(screen.getByRole('button', { name: 'Start teamwork' }))
-    expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p1')
-  })
-
-  // Seen on a packaged build talking to a deployed relay: the project header in
-  // the same window said "1 connected", and this card told the connected member
-  // to put their key in and pick a relay. Both were already done — which is
-  // what `disabledReason === null` and `enrolled` mean.
-  it('does not tell somebody to set teamwork up in a project where it is already running', () => {
-    seed({ projects: [project], worktrees: [worktree()], teamwork: teamworkUp() })
-    mount()
-    const button = screen.getByRole('button', { name: 'Teamwork' })
-    const described = document.getElementById(button.getAttribute('aria-describedby') ?? '')
-    expect(described?.textContent).toBe('Already on in pager.')
-    fireEvent.click(button)
-    expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p1')
-  })
-
-  // The two halves of the old sentence are two separate facts, and either one
-  // being untrue still leaves something to do. A checkout whose relay is set
-  // but whose key was never pushed is the case the runbook warns about, and it
-  // must keep the offer rather than claim teamwork is on.
-  it('keeps the offer when this machine’s own key is not in the checkout', () => {
-    seed({ projects: [project], worktrees: [worktree()], teamwork: teamworkUp({ enrolled: false }) })
-    mount()
-    const button = screen.getByRole('button', { name: 'Start teamwork' })
-    const described = document.getElementById(button.getAttribute('aria-describedby') ?? '')
-    expect(described?.textContent).toBe('Not set up in pager.')
-  })
-
-  // An answer nobody has yet is not an answer. Until teamwork has been read for
-  // this project, the card says the thing that is true of a project nobody has
-  // set up, because that is overwhelmingly the case it is there for.
-  it('keeps the offer while teamwork has not been read for the project', () => {
-    seed({ projects: [project], worktrees: [worktree()] })
-    mount()
-    expect(screen.getByRole('button', { name: 'Start teamwork' })).toBeTruthy()
-  })
-
-  it('says which worktree the terminal would open in, rather than making somebody guess', () => {
-    seed({ projects: [project], worktrees: [worktree()] })
-    mount()
-    const button = screen.getByRole('button', { name: 'Open a terminal' })
-    const described = document.getElementById(button.getAttribute('aria-describedby') ?? '')
-    expect(described?.textContent).toBe('Rewrite the pager, on rewrite-the-pager.')
-  })
-
-  // There is no terminal outside a worktree — that is the shape of the app —
-  // so with none to run one in, the button says what it will really do rather
-  // than opening a task composer somebody did not ask for.
-  it('says it will make a worktree first when there is none to run a terminal in', () => {
-    seed({ projects: [project] })
-    mount()
-    expect(screen.queryByRole('button', { name: 'Open a terminal' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Open a terminal in a new worktree' }))
-    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
-    expect(createTerminal).not.toHaveBeenCalled()
-  })
-
-  // A worktree still being checked out has no directory to start a shell in.
-  it('does not offer a worktree that is not ready as somewhere to open one', () => {
-    seed({ projects: [project], worktrees: [worktree({ state: 'creating' })] })
-    mount()
-    expect(screen.getByRole('button', { name: 'Open a terminal in a new worktree' })).toBeTruthy()
+    const keys = [...document.querySelectorAll('.welcome kbd')].map((node) => node.textContent)
+    expect(keys).toEqual(['⌘N', '⌘K', '⌘B'])
   })
 
   it('shows the teamwork setup instead of any of that when it has the area', () => {
     seed({ projects: [project], teamworkProjectId: 'p1' })
     mount()
     expect(screen.getByRole('main', { name: 'Set up teamwork in pager' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Nothing open' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
   })
 
   it('shows the dashboard instead of any of that when it is open', () => {
     seed({ projects: [], dashboardOpen: true })
     mount()
     expect(screen.getByTestId('dashboard')).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Add a repository to start' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
   })
 })
 
 describe('a worktree with no panes in it', () => {
-  it('says the checkout is still being prepared, and offers nothing to press', () => {
+  it('offers nothing to start while the checkout is still being prepared', () => {
     seed({
       projects: [project],
       worktrees: [worktree({ state: 'creating' })],
       activeWorktreeId: 'w1'
     })
     mount()
-    const placeholder = document.querySelector('.placeholder--inset') as HTMLElement
-    expect(within(placeholder).getByRole('heading', { name: 'Preparing the worktree' })).toBeTruthy()
-    expect(within(placeholder).queryByRole('button')).toBeNull()
-    expect(within(placeholder).getByText('Panes appear as soon as the checkout is ready.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Add project' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
   })
 
-  it('offers each agent it found, and a plain terminal, once the checkout is ready', () => {
+  // The owner's note on the old state: "it should be like create project or
+  // open project, no need to have buttons for claude, codex". A terminal is a
+  // different thing from an agent, so it stays; the agents are the composer's
+  // and the panes tab's to offer.
+  it('offers a plain terminal once the checkout is ready, and no agent by name', () => {
     seed({
       projects: [project],
       worktrees: [worktree()],
@@ -339,10 +238,21 @@ describe('a worktree with no panes in it', () => {
       agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }]
     })
     mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Start claude' }))
-    expect(startAgent).toHaveBeenCalledExactlyOnceWith('claude')
-    fireEvent.click(screen.getAllByRole('button', { name: 'New terminal' })[0] as HTMLElement)
+    expect(screen.queryByRole('button', { name: 'Start claude' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New terminal' }))
     expect(createTerminal).toHaveBeenCalledWith('w1')
+    expect(startAgent).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'New task' }))
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
+  })
+
+  // Ready on paper, gone from disk: a terminal offered here would fail with a
+  // path, which is the notice this whole shape was found by.
+  it('offers no terminal in a worktree whose checkout is missing', () => {
+    seed({ projects: [project], worktrees: [worktree({ missing: true })], activeWorktreeId: 'w1' })
+    mount()
+    expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'New task' })).toBeTruthy()
   })
 })
 
@@ -386,22 +296,13 @@ describe('settings and help', () => {
     seed({ projects: [project], settingsOpen: true })
     mount()
     expect(screen.getByTestId('settings')).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: 'Nothing open' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
   })
 
   it('gives the area to help on the same terms', () => {
     seed({ projects: [project], helpOpen: true })
     mount()
     expect(screen.getByTestId('help')).toBeTruthy()
-  })
-
-  it('offers both from the empty state, not only as chords', () => {
-    seed({ projects: [project] })
-    mount()
-    fireEvent.click(screen.getByRole('button', { name: 'How this works' }))
-    expect(toggleHelp).toHaveBeenCalledOnce()
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    expect(toggleSettings).toHaveBeenCalledOnce()
   })
 })
 
@@ -500,29 +401,44 @@ describe('a teammate’s pane beside your own', () => {
   it('stays where it is with no worktree open at all', () => {
     seed({ projects: [project], watches: [watch('priya', 'priya:t7')] })
     mount()
-    expect(screen.getByRole('heading', { name: 'Nothing open' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Add project' })).toBeTruthy()
     expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
   })
 })
 
-// The strip under the empty state spelled `maximise pane` while the menu two
-// clicks away said `Maximize pane`, and called six other commands by names that
-// appear nowhere else in the app. One wording per command: the strip reads the
-// menu's label rather than a second set of words.
-describe('the shortcut strip and the menu bar use one set of words', () => {
-  it('names every command exactly as the menu bar names it', async () => {
+// The list under the welcome names each command the way the menu bar names it,
+// and it is generated from the same table, so a rebind or a rename in one
+// place cannot leave a stale word here. One wording per command — and no more
+// than three rows, because this is the one surface in the window that teaches
+// chords besides the menu bar, the palette and the help page.
+describe('the welcome’s shortcut list and the menu bar use one set of words', () => {
+  it('names every command exactly as the menu bar names it, with its chord', async () => {
     const { menuBarSpec } = await import('../menu/menuBar')
-    const { commandNamed } = await import('../keyboard/workspaceShortcuts')
+    const { commandNamed, shortcutHint } = await import('../keyboard/workspaceShortcuts')
     seed({ projects: [project], worktrees: [] })
     mount()
 
     const menu = new Map(menuBarSpec(useWorkspaceStore.getState()).map((item) => [item.command, item.label]))
-    const entries = [...document.querySelectorAll('.legend > div')]
-    expect(entries.length).toBeGreaterThan(5)
-    for (const entry of entries) {
-      const command = commandNamed(entry.getAttribute('data-command') ?? '')
-      expect(command, entry.textContent ?? '').not.toBeNull()
-      expect(entry.querySelector('dd')?.textContent, command ?? '').toBe(menu.get(command as never))
+    const rows = [...document.querySelectorAll('.welcome__shortcuts > div')]
+    expect(rows).toHaveLength(3)
+    for (const row of rows) {
+      const command = commandNamed(row.getAttribute('data-command') ?? '')
+      expect(command, row.textContent ?? '').not.toBeNull()
+      expect(row.querySelector('dt')?.textContent).toBe(menu.get(command as never))
+      expect(row.querySelector('kbd')?.textContent).toBe(shortcutHint(command as never, MAC))
     }
+  })
+})
+
+// Under the shortcuts and quiet, because it is not what the window is for.
+// Through the one path anything here takes to the browser, so the main
+// process's answer about where a link may go is the answer here too.
+describe('the star', () => {
+  it('opens the repository through the window’s one browser path', async () => {
+    const { openInBrowser } = await import('../shell/openInBrowser')
+    seed({ projects: [] })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Star on GitHub' }))
+    expect(openInBrowser).toHaveBeenCalledExactlyOnceWith('https://github.com/zero-abd/teamree')
   })
 })

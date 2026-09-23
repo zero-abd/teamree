@@ -35,6 +35,9 @@ export function SidebarGlyph(): React.JSX.Element {
  * The teamree mark: two slabs facing a shared centre, each with a slanted
  * window, the right one a little taller than the left.
  *
+ * Exported for the welcome, which draws it large on its own tile with the
+ * wordmark under it rather than beside it.
+ *
  * This is the reduced form of the artwork (`brand/mark-small.svg`), not the
  * full one — the tile is 22px, and below about 32px the full mark's thinner
  * frame bars drop under a device pixel and fuse with the window, so the
@@ -46,7 +49,7 @@ export function SidebarGlyph(): React.JSX.Element {
  * directory. Decorative throughout: the wordmark beside it already announces
  * the name, so a screen reader that read this too would say "teamree" twice.
  */
-function BrandMark(): React.JSX.Element {
+export function BrandMark(): React.JSX.Element {
   return (
     <svg className="brand__mark" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true" focusable="false">
       <path

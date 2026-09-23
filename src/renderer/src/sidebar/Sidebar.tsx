@@ -35,16 +35,16 @@ import { WorktreeRow } from './WorktreeRow'
 
 export function Sidebar({
   newWorktreeHint,
-  searchHint,
-  settingsHint,
-  helpHint,
-  sidebarHint
+  searchHint
 }: {
   newWorktreeHint: string
+  /**
+   * The one chord drawn in the rail, inside the search field, because that is
+   * where every app puts it. The rows under it carry none: the owner's rule is
+   * that the window has too many places explaining shortcuts, and the menu
+   * bar, the palette and the help page already name these.
+   */
   searchHint: string
-  settingsHint: string
-  helpHint: string
-  sidebarHint: string
 }): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
@@ -141,14 +141,14 @@ export function Sidebar({
           the one control that puts the sidebar away. On macOS the window
           buttons sit on this row too, and it is what the window is dragged by
           — the stylesheet makes it a drag region and exempts the button. The
-          same command is the chord beside it and a row in the palette and
-          the menu bar; the way back is the strip's left end. */}
+          same command is a row in the palette and the menu bar; the way back
+          is the strip's left end. */}
       <header className="sidebar__brand">
         <Brand />
         <button
           type="button"
           className="shell__toggle"
-          title={`Hide sidebar · ${sidebarHint}`}
+          title="Hide sidebar"
           aria-label="Hide sidebar"
           onClick={toggleSidebar}
         >
@@ -222,9 +222,8 @@ export function Sidebar({
                 main area. It is in the rail anyway because it belongs to the
                 same set — things about the window rather than about a worktree
                 — and because a preference nobody can find is a preference
-                nobody has. No chord beside it: ⌘, is the settings page's, one
-                row down, and this is reached from here, from the View menu and
-                from the palette. */}
+                nobody has. Reached from here, from the View menu and from the
+                palette. */}
             <button
               type="button"
               className="rail__link"
@@ -242,10 +241,7 @@ export function Sidebar({
           </li>
           <li>
             {/* Last two in the rail, and last on purpose: they are the entries
-                somebody goes looking for rather than the ones they work in.
-                Settings carries ⌘,, which is where a Mac user looks for an
-                app's settings and which used to open the theme editor one row
-                up. */}
+                somebody goes looking for rather than the ones they work in. */}
             <button
               type="button"
               className={`rail__link${settingsOpen ? ' rail__link--current' : ''}`}
@@ -258,7 +254,6 @@ export function Sidebar({
                 <path d="M7 1.5v1.7M7 10.8v1.7M12.1 7h-1.7M3.6 7H1.9M10.6 3.4 9.4 4.6M4.6 9.4l-1.2 1.2M10.6 10.6 9.4 9.4M4.6 4.6 3.4 3.4" />
               </svg>
               <span>Settings</span>
-              <kbd>{settingsHint}</kbd>
             </button>
           </li>
           <li>
@@ -275,7 +270,6 @@ export function Sidebar({
                 <circle cx="7" cy="10.2" r="0.7" />
               </svg>
               <span>Help</span>
-              <kbd>{helpHint}</kbd>
             </button>
           </li>
         </ul>
