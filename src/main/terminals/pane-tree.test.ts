@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PaneNode } from '../../shared/entities'
+import { fileLeaf } from '../../shared/filePane'
 import {
   appendPane,
   containsTerminal,
@@ -325,5 +326,60 @@ describe('file leaves', () => {
     })
     expect(removePane(split, 'b')).toEqual(file)
     expect(terminalIdsIn(split)).toEqual(['file:1', 'b'])
+  })
+})
+
+describe('the file column', () => {
+  const tab = (id: string): PaneNode => fileLeaf(id, `${id}.ts`)
+  const column = (ids: string[], extra: { shown?: string; preview?: string } = {}): PaneNode => ({
+    kind: 'split',
+    direction: 'column',
+    sizes: ids.map(() => 1 / ids.length),
+    children: ids.map(tab),
+    tabs: true,
+    ...extra
+  })
+
+  it('comes back from the parser whole, one tab and under a column alike', () => {
+    const lone = column(['file:a'], { shown: 'file:a', preview: 'file:a' })
+    expect(parsePaneNode(JSON.parse(JSON.stringify(lone)))).toEqual({ ...lone, sizes: [1] })
+    const stacked: PaneNode = {
+      kind: 'split',
+      direction: 'column',
+      sizes: [0.5, 0.5],
+      children: [leafPane('t'), column(['file:a', 'file:b'], { shown: 'file:b' })]
+    }
+    expect(parsePaneNode(JSON.parse(JSON.stringify(stacked)))).toEqual(stacked)
+  })
+
+  it('refuses tabs that are not files', () => {
+    const bad = { ...column(['file:a']), children: [leafPane('t')] }
+    expect(parsePaneNode(bad)).toEqual(leafPane('t'))
+  })
+
+  it('keeps its last tab, and forgets the shown and preview tabs it lost', () => {
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leafPane('t'), column(['file:a', 'file:b'], { shown: 'file:b', preview: 'file:b' })]
+    }
+    expect(removePane(root, 'file:b')).toEqual({
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leafPane('t'), { ...column(['file:a']), sizes: [1] }]
+    })
+  })
+
+  it('takes a terminal split from a tab beside itself, not among its tabs', () => {
+    const root = splitPane(column(['file:a', 'file:b']), 'file:b', 'column', 't')
+    expect(root).toEqual({
+      kind: 'split',
+      direction: 'column',
+      sizes: [0.5, 0.5],
+      children: [column(['file:a', 'file:b']), leafPane('t')]
+    })
+    expect(appendPane(column(['file:a']), 't', 'column')).toMatchObject({ children: [{ tabs: true }, leafPane('t')] })
   })
 })

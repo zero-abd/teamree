@@ -134,3 +134,43 @@ describe('minExtent', () => {
     expect(minExtent(tree, 'column', min, 5)).toBe(205)
   })
 })
+
+describe('a file column', () => {
+  const file = (id: string): PaneNode => ({ kind: 'leaf', terminalId: id, pane: 'file', path: `${id}.ts` })
+  const column = (...ids: string[]): PaneNode => ({
+    kind: 'split',
+    direction: 'column',
+    sizes: ids.map(() => 1 / ids.length),
+    children: ids.map(file),
+    tabs: true,
+    shown: ids[0]!
+  })
+  const box = { width: 1005, height: 400 }
+  const tree: PaneNode = {
+    kind: 'split',
+    direction: 'row',
+    sizes: [0.5, 0.5],
+    children: [leaf('t'), column('f1', 'f2')]
+  }
+
+  it('gives every tab the whole column', () => {
+    expect(paneRects(tree, box).slice(1)).toEqual([
+      { id: 'f1', x: 505, y: 0, width: 500, height: 400 },
+      { id: 'f2', x: 505, y: 0, width: 500, height: 400 }
+    ])
+  })
+
+  it('needs the room of one pane, however many tabs it holds', () => {
+    expect(minExtent(column('f1', 'f2', 'f3'), 'column', { width: 300, height: 100 }, 5)).toBe(100)
+  })
+
+  it('takes a new pane beside itself, never among its tabs', () => {
+    const placed = placePane(column('f1', 'f2'), leaf('n'), { width: 1000, height: 400 })
+    expect(placed).toEqual({
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [column('f1', 'f2'), leaf('n')]
+    })
+  })
+})

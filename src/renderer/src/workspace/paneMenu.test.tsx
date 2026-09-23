@@ -340,7 +340,12 @@ describe('a row of the Files tab', () => {
       clientY: 200
     })
     const menu = screen.getByRole('menu')
-    expect(labels(menu)).toEqual(['Copy path', 'Reveal in Finder', 'Open in'])
+    expect(labels(menu)).toEqual([
+      ...(name.includes('.') ? ['Open to the side'] : []),
+      'Copy path',
+      'Reveal in Finder',
+      'Open in'
+    ])
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open in' }))
     return within(screen.getByRole('menu', { name: 'Open in' }))
       .getAllByRole('menuitem')

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { PaneNode } from '@shared/entities'
+import { fileColumn, fileLeaf, type FileColumn } from '@shared/filePane'
 import {
+  addTab,
   appendPane,
   applyGutterDrag,
   splitPaneWith,
@@ -10,7 +12,9 @@ import {
   MIN_PANE_FRACTION,
   neighbourTerminalId,
   normalizeSizes,
+  pinTab,
   setSizesAt,
+  showTab,
   shownRoot,
   splitChildBases,
   splitPane
@@ -274,5 +278,66 @@ describe('file leaves in the tree', () => {
     expect(row.sizes.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1, 10)
     const column = appendPane(row, leaf('c'), 'column')
     expect(column.kind === 'split' && column.direction).toBe('column')
+  })
+})
+
+describe('the file column', () => {
+  const file = (id: string): ReturnType<typeof fileLeaf> => fileLeaf(id, `${id}.ts`)
+  const withColumn = (column: FileColumn): PaneNode => ({
+    kind: 'split',
+    direction: 'row',
+    sizes: [0.6, 0.4],
+    children: [leaf('t'), column]
+  })
+  const columnOf = (root: PaneNode): FileColumn => (root.kind === 'split' ? root.children[1] : root) as FileColumn
+
+  it('takes a file as a tab after the one on show, and shows it, leaving the terminal its share', () => {
+    let root = withColumn(fileColumn(file('a')))
+    root = addTab(root, file('b'))
+    root = showTab(root, 'a')
+    root = addTab(root, file('c'))
+    expect(root.kind === 'split' && root.sizes).toEqual([0.6, 0.4])
+    expect(collectTerminalIds(root)).toEqual(['t', 'a', 'c', 'b'])
+    expect(columnOf(root).shown).toBe('c')
+  })
+
+  it('puts a preview in the preview tab’s place, and pins nothing it was not asked to', () => {
+    let root = withColumn(fileColumn(file('a')))
+    root = addTab(root, file('p1'), { preview: true })
+    expect(columnOf(root).preview).toBe('p1')
+    root = addTab(root, file('p2'), { preview: true, replace: 'p1' })
+    expect(collectTerminalIds(root)).toEqual(['t', 'a', 'p2'])
+    expect(columnOf(root)).toMatchObject({ shown: 'p2', preview: 'p2' })
+    root = addTab(root, file('b'))
+    expect(columnOf(root).preview).toBe('p2')
+  })
+
+  it('pins the preview tab, and changes nothing for any other', () => {
+    const root = withColumn(fileColumn(file('a'), true))
+    expect(pinTab(root, 'b')).toBe(root)
+    expect(columnOf(pinTab(root, 'a')).preview).toBeUndefined()
+  })
+
+  it('keeps its last tab, and shows the next one when the shown tab closes', () => {
+    let root: PaneNode | null = addTab(addTab(withColumn(fileColumn(file('a'))), file('b')), file('c'))
+    root = showTab(root, 'b')
+    root = closePane(root, 'b')
+    expect(columnOf(root!).shown).toBe('c')
+    root = closePane(root, 'c')
+    expect(columnOf(root!)).toMatchObject({ tabs: true, children: [file('a')], shown: 'a' })
+    expect(closePane(root, 'a')).toEqual(leaf('t'))
+  })
+
+  it('is split beside, never into, and nothing is appended among its tabs', () => {
+    const column = fileColumn(file('a'))
+    const root = withColumn(column)
+    const split = splitPaneWith(root, 'a', 'column', file('s'))
+    expect(split.kind === 'split' && split.children[1]).toEqual({
+      kind: 'split',
+      direction: 'column',
+      sizes: [0.5, 0.5],
+      children: [column, file('s')]
+    })
+    expect(appendPane(column, leaf('n'), 'column')).toMatchObject({ children: [column, leaf('n')] })
   })
 })

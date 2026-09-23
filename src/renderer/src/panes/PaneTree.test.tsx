@@ -424,3 +424,37 @@ describe('a file leaf', () => {
     expect(screen.getByTestId('viewer-file:2').dataset.path).toBe('src/app.ts')
   })
 })
+
+describe('the file column', () => {
+  const file = (id: string, path: string): PaneNode => ({ kind: 'leaf', terminalId: id, pane: 'file', path })
+  const column: PaneNode = {
+    kind: 'split',
+    direction: 'column',
+    sizes: [0.5, 0.5],
+    children: [file('file:1', 'docs/NOTES.md'), file('file:2', 'src/app.ts')],
+    tabs: true,
+    shown: 'file:2',
+    preview: 'file:2'
+  }
+
+  it('draws its files as tabs, only the shown one open, the preview set apart', () => {
+    mount(row(leaf('t1'), column), [terminal('t1')], 't1')
+    const tabs = within(screen.getByRole('tablist', { name: 'Open files' })).getAllByRole('tab')
+    expect(tabs.map((tab) => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([
+      ['NOTES.md', 'false'],
+      ['app.ts', 'true']
+    ])
+    expect(tabs[1]!.className).toContain('column__name--preview')
+    expect(screen.getByTestId('page-file:1').closest('[hidden]')).not.toBeNull()
+    expect(screen.getByTestId('viewer-file:2').closest('[hidden]')).toBeNull()
+    expect(document.querySelectorAll('.gutter')).toHaveLength(1)
+  })
+
+  it('focuses a tab on a click and closes it from its ×', () => {
+    mount(row(leaf('t1'), column), [terminal('t1')], 't1')
+    fireEvent.click(screen.getByRole('tab', { name: 'NOTES.md' }))
+    expect(onFocus).toHaveBeenCalledWith('file:1')
+    fireEvent.click(screen.getByRole('button', { name: 'Close NOTES.md' }))
+    expect(onClose).toHaveBeenCalledWith('file:1')
+  })
+})

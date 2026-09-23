@@ -3,6 +3,7 @@
 // DOM: the components below only translate the results into CSS.
 
 import type { PaneNode } from '@shared/entities'
+import { isFileColumn, shownTabId, withTabs, type FileColumn, type FileLeaf } from '@shared/filePane'
 import { PANE_GUTTER_PX } from '@shared/paneRoom'
 
 /** Smallest slice of a split a pane may shrink to, as a fraction of the axis. */
@@ -124,13 +125,14 @@ export function splitPaneWith(
   added: PaneNode
 ): PaneNode {
   if (!root) return added
-  if (root.kind === 'leaf') {
-    return root.terminalId === terminalId
-      ? { kind: 'split', direction, sizes: [0.5, 0.5], children: [root, added] }
-      : root
+  // The file column splits as one pane: a tab's split goes beside the column.
+  const isTarget = (node: PaneNode): boolean =>
+    node.kind === 'leaf' ? node.terminalId === terminalId : isFileColumn(node) && hasTerminal(node, terminalId)
+  if (root.kind === 'leaf' || isFileColumn(root)) {
+    return isTarget(root) ? { kind: 'split', direction, sizes: [0.5, 0.5], children: [root, added] } : root
   }
 
-  const index = root.children.findIndex((child) => child.kind === 'leaf' && child.terminalId === terminalId)
+  const index = root.children.findIndex(isTarget)
   if (index !== -1 && root.direction === direction) {
     const sizes = normalizeSizes(root.sizes, root.children.length)
     const share = sizes[index] ?? 1 / sizes.length
@@ -152,7 +154,7 @@ export function splitPaneWith(
 /** Adds a pane at the top level, the way the runtime's `terminal.create` does. */
 export function appendPane(root: PaneNode | null, added: PaneNode, direction: 'row' | 'column' = 'row'): PaneNode {
   if (!root) return added
-  if (root.kind === 'split' && root.direction === direction) {
+  if (root.kind === 'split' && root.direction === direction && !isFileColumn(root)) {
     const share = 1 / (root.children.length + 1)
     const sizes = normalizeSizes(root.sizes, root.children.length).map((size) => size * (1 - share))
     return { kind: 'split', direction, sizes: [...sizes, share], children: [...root.children, added] }
@@ -180,8 +182,63 @@ export function closePane(root: PaneNode | null, terminalId: string): PaneNode |
   })
 
   if (kept.length === 0) return null
+  if (isFileColumn(root)) return withTabs(root, kept, shownAfterClose(root, kept))
   if (kept.length === 1) return kept[0] ?? null
   return { kind: 'split', direction: root.direction, sizes: normalizeSizes(keptSizes, kept.length), children: kept }
+}
+
+/** The shown tab once some closed: itself, else the tab now at its place, else the one before. */
+function shownAfterClose(column: FileColumn, kept: readonly PaneNode[]): string | undefined {
+  const ids = column.children.map((child) => (child.kind === 'leaf' ? child.terminalId : ''))
+  const left = new Set(kept.map((child) => (child.kind === 'leaf' ? child.terminalId : '')))
+  const at = column.shown === undefined ? -1 : ids.indexOf(column.shown)
+  if (at === -1) return column.shown
+  return ids.slice(at).find((id) => left.has(id)) ?? ids.slice(0, at).findLast((id) => left.has(id))
+}
+
+/**
+ * `added` as a tab of the file column, shown: after the shown tab, or in `replace`'s place.
+ * `preview` makes it the tab the next preview open replaces. A tree without a column comes back as is.
+ */
+export function addTab(
+  root: PaneNode,
+  added: FileLeaf,
+  { preview = false, replace }: { preview?: boolean; replace?: string | undefined } = {}
+): PaneNode {
+  return mapColumn(root, (column) => {
+    const tabs = [...column.children]
+    const indexOf = (id: string | undefined): number => tabs.findIndex((tab) => hasTerminal(tab, id ?? ''))
+    const replaced = indexOf(replace)
+    if (replaced !== -1) tabs.splice(replaced, 1, added)
+    else tabs.splice(indexOf(shownTabId(column)) + 1 || tabs.length, 0, added)
+    const next = withTabs(column, tabs, added.terminalId)
+    return preview ? { ...next, preview: added.terminalId } : next
+  })
+}
+
+/** The tree with the column holding `id` showing it; the same tree when it already did. */
+export function showTab(root: PaneNode, id: string): PaneNode {
+  return mapColumn(root, (column) =>
+    column.shown === id || !hasTerminal(column, id) ? column : { ...column, shown: id }
+  )
+}
+
+/** The tree with `id` no longer the preview tab; the same tree when it was not. */
+export function pinTab(root: PaneNode, id: string): PaneNode {
+  return mapColumn(root, (column) => {
+    if (column.preview !== id) return column
+    const pinned = { ...column }
+    delete pinned.preview
+    return pinned
+  })
+}
+
+/** `root` with each file column replaced by `change`'s answer; untouched subtrees keep their identity. */
+function mapColumn(root: PaneNode, change: (column: FileColumn) => FileColumn): PaneNode {
+  if (root.kind === 'leaf') return root
+  if (isFileColumn(root)) return change(root)
+  const children = root.children.map((child) => mapColumn(child, change))
+  return children.every((child, index) => child === root.children[index]) ? root : { ...root, children }
 }
 
 /** Replaces the sizes of the split at `path`, addressed by child indices. */

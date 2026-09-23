@@ -1,9 +1,9 @@
 // The split algebra, as pure functions over PaneNode. Invariants: a split has
 // at least two children, none a split in the same direction; `sizes` has one
-// entry per child and they sum to 1.
+// entry per child and they sum to 1. The file column is exempt from the first two.
 
 import type { PaneNode } from '../../shared/entities'
-import { fileLeaf } from '../../shared/filePane'
+import { fileLeaf, isFileColumn, isFileLeaf, withTabs } from '../../shared/filePane'
 
 export type SplitDirection = 'row' | 'column'
 
@@ -36,7 +36,7 @@ export function splitPane(
   if (root === null) return leafPane(newTerminalId)
   if (!containsTerminal(root, targetTerminalId)) return appendPane(root, newTerminalId, direction)
 
-  if (root.kind === 'leaf') {
+  if (root.kind === 'leaf' || isFileColumn(root)) {
     return normalisePane({
       kind: 'split',
       direction,
@@ -52,7 +52,7 @@ export function splitPane(
 export function appendPane(root: PaneNode | null, terminalId: string, direction: SplitDirection = 'row'): PaneNode {
   if (root === null) return leafPane(terminalId)
 
-  if (root.kind === 'split' && root.direction === direction) {
+  if (root.kind === 'split' && root.direction === direction && !isFileColumn(root)) {
     const share = 1 / (root.children.length + 1)
     const scale = 1 - share
     return normalisePane({
@@ -86,6 +86,8 @@ export function removePane(root: PaneNode | null, terminalId: string): PaneNode 
   })
 
   if (kept.length === 0) return null
+  // The file column keeps a last tab rather than dissolving into it.
+  if (isFileColumn(root)) return withTabs(root, kept)
   if (kept.length === 1) return kept[0] ?? null
   return normalisePane({ kind: 'split', direction: root.direction, sizes: keptSizes, children: kept })
 }
@@ -109,6 +111,7 @@ export function normaliseSizes(sizes: readonly number[], count: number): number[
 /** Canonicalises a subtree: flattens same-direction nesting, collapses single-child splits, normalises sizes. */
 export function normalisePane(node: PaneNode): PaneNode {
   if (node.kind === 'leaf') return node
+  if (isFileColumn(node)) return withTabs(node, node.children)
 
   const children: PaneNode[] = []
   const sizes: number[] = []
@@ -117,7 +120,7 @@ export function normalisePane(node: PaneNode): PaneNode {
   node.children.forEach((child, index) => {
     const normalised = normalisePane(child)
     const slot = parentSizes[index] ?? 0
-    if (normalised.kind === 'split' && normalised.direction === node.direction) {
+    if (normalised.kind === 'split' && normalised.direction === node.direction && !isFileColumn(normalised)) {
       // A row inside a row draws identically to one wider row.
       normalised.children.forEach((grandchild, inner) => {
         children.push(grandchild)
@@ -171,7 +174,19 @@ function parseNode(value: unknown, depth: number): PaneNode | null {
   }
 
   const sizes = Array.isArray(node.sizes) ? node.sizes.filter((size): size is number => typeof size === 'number') : []
-  return { kind: 'split', direction: node.direction, sizes: normaliseSizes(sizes, children.length), children }
+  const split: PaneNode = {
+    kind: 'split',
+    direction: node.direction,
+    sizes: normaliseSizes(sizes, children.length),
+    children
+  }
+  if (node.tabs !== true || !children.every(isFileLeaf)) return split
+  const preview = typeof node.preview === 'string' ? { preview: node.preview } : {}
+  return withTabs(
+    { ...split, tabs: true, ...preview },
+    children,
+    typeof node.shown === 'string' ? node.shown : undefined
+  )
 }
 
 /** Inserts the new leaf beside its target, within an existing split. */
@@ -188,7 +203,7 @@ function splitWithin(
   node.children.forEach((child, index) => {
     const slot = currentSizes[index] ?? 0
 
-    if (child.kind === 'leaf' && child.terminalId === targetTerminalId) {
+    if ((child.kind === 'leaf' || isFileColumn(child)) && containsTerminal(child, targetTerminalId)) {
       if (node.direction === direction) {
         children.push(child, leafPane(newTerminalId))
         sizes.push(slot / 2, slot / 2)

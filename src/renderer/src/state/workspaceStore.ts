@@ -33,21 +33,27 @@ import type {
 import { DEFAULT_APPEARANCE, type Appearance, type Tone } from '@shared/theme'
 import {
   DEFAULT_MARKDOWN_PATH,
+  fileColumn,
+  fileColumnIn,
   fileLeaf,
   fileLeavesIn,
   isFilePaneId,
   isMarkdownPath,
-  newFilePaneId
+  newFilePaneId,
+  shownTabId
 } from '@shared/filePane'
 import { closePaneWarning } from '../dialogs/closePaneModel'
 import { noticeLifetime } from '../notices/noticeLifetime'
 import type { TaskCreate } from '../dialogs/taskPlan'
 import {
+  addTab,
   appendPane,
   closePane,
   collectTerminalIds,
   neighbourTerminalId,
+  pinTab,
   setSizesAt,
+  showTab,
   splitPane,
   splitPaneWith
 } from '../panes/paneLayout'
@@ -434,10 +440,12 @@ type WorkspaceState = {
   relaunchTerminal: (terminalId: string) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
   /**
-   * Opens a file pane on `path` beside the focused pane, or focuses the one already on it; `diff` shows its
-   * diff, `split` puts it to the right of the focused pane.
+   * Opens `path` as a tab of the file column, or focuses the tab already on it; `diff` shows its diff,
+   * `split` puts it to the right of the focused pane instead, `preview` replaces the preview tab.
    */
-  openFilePane: (worktreeId: string, path: string, mode?: 'diff' | 'split') => void
+  openFilePane: (worktreeId: string, path: string, mode?: 'diff' | 'split' | 'preview') => void
+  /** Keeps a preview tab open when the next preview comes. */
+  pinFilePane: (paneId: string) => void
   /** Shows a file pane's diff, or its text again. */
   setPaneDiff: (paneId: string, on: boolean) => void
   /** `New markdown`: NOTES.md, or a name asked for in the strip when that is already open. */
@@ -1491,8 +1499,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Both ends of the move, before the early return: the pane being left is read up to now, and the
       // one taken is being looked at — even when it already had the focus.
       get().markPanesSeen([paneId, ...(layout?.focusedTerminalId ? [layout.focusedTerminalId] : [])])
-      if (!layout || layout.focusedTerminalId === paneId) return
-      persistLayout({ ...layout, focusedTerminalId: paneId })
+      if (!layout) return
+      const root = layout.root && showTab(layout.root, paneId)
+      if (layout.focusedTerminalId === paneId && root === layout.root) return
+      persistLayout({ ...layout, root, focusedTerminalId: paneId })
     },
 
     markPanesSeen(terminalIds) {
@@ -1563,10 +1573,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // No session to end: closing is taking the leaf out of the tree.
         const layout = get().layouts[activeWorktreeId]
         if (!layout) return
-        const nextFocus = neighbourTerminalId(layout.root, terminalId)
+        const root = closePane(layout.root, terminalId)
+        // Within the column, focus goes to the tab it shows next.
+        const column = fileLeavesIn(fileColumnIn(layout.root)).some((leaf) => leaf.terminalId === terminalId)
+          ? fileColumnIn(root)
+          : null
+        const nextFocus = (column && shownTabId(column)) ?? neighbourTerminalId(layout.root, terminalId)
         persistLayout({
           worktreeId: activeWorktreeId,
-          root: closePane(layout.root, terminalId),
+          root,
           focusedTerminalId: layout.focusedTerminalId === terminalId ? nextFocus : layout.focusedTerminalId
         })
         forgetEdits([terminalId])
@@ -1650,28 +1665,45 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path)
       if (open) {
         if (mode === 'diff') get().setPaneDiff(open.terminalId, true)
+        if (mode !== 'preview') get().pinFilePane(open.terminalId)
         get().focusPane(open.terminalId)
         return
       }
       const added = fileLeaf(newFilePaneId(), path)
-      const focused = layout.focusedTerminalId
-      const inTree = focused !== null && collectTerminalIds(layout.root).includes(focused) ? focused : null
-      const files = fileLeavesIn(layout.root)
-      // Files stack in one column beside the terminals, so each new one does not halve a shell.
-      const besideFile = files.find((leaf) => leaf.terminalId === focused) ?? files.at(-1)
-      const root = withRoom(
-        layout.root,
-        inTree !== null && (mode === 'split' || besideFile === undefined)
-          ? splitPaneWith(layout.root, inTree, 'row', added)
-          : besideFile !== undefined
-            ? splitPaneWith(layout.root, besideFile.terminalId, 'column', added)
-            : appendPane(layout.root, added),
-        (grid) => placePaneWithin(layout.root, added, grid.area, grid.minPane)
-      )
+      const column = fileColumnIn(layout.root)
+      let root: PaneNode | null
+      if (mode !== 'split' && column !== null && layout.root !== null) {
+        // A tab takes no room from anyone, so it needs no room check.
+        const preview = column.preview
+        const replace =
+          mode === 'preview' && preview !== undefined && !get().unsavedFiles[preview] ? preview : undefined
+        root = addTab(layout.root, added, { preview: mode === 'preview', replace })
+        if (replace !== undefined) {
+          forgetEdits([replace])
+          get().setPaneDiff(replace, false)
+        }
+      } else {
+        const focused = layout.focusedTerminalId
+        const inTree = focused !== null && collectTerminalIds(layout.root).includes(focused) ? focused : null
+        // The column is made once, beside the focused pane; a split is a file of its own there.
+        const placed = mode === 'split' ? added : fileColumn(added, mode === 'preview')
+        root = withRoom(
+          layout.root,
+          inTree !== null ? splitPaneWith(layout.root, inTree, 'row', placed) : appendPane(layout.root, placed),
+          (grid) => placePaneWithin(layout.root, placed, grid.area, grid.minPane)
+        )
+      }
       if (root === null) return
       set({ namingMarkdown: null })
       if (mode === 'diff') get().setPaneDiff(added.terminalId, true)
       persistLayout({ worktreeId, root, focusedTerminalId: added.terminalId })
+    },
+
+    pinFilePane(paneId) {
+      for (const layout of Object.values(get().layouts)) {
+        if (layout.root === null || fileColumnIn(layout.root)?.preview !== paneId) continue
+        persistLayout({ ...layout, root: pinTab(layout.root, paneId) })
+      }
     },
 
     setPaneDiff(paneId, on) {
@@ -1704,6 +1736,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     setFileUnsaved(paneId, dirty) {
+      // An edited preview is kept.
+      if (dirty) get().pinFilePane(paneId)
       set((state) => {
         if (Boolean(state.unsavedFiles[paneId]) === dirty) return {}
         const unsavedFiles = { ...state.unsavedFiles }
@@ -1714,6 +1748,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     setFileEdited(paneId, file) {
+      if (file !== null) get().pinFilePane(paneId)
       set((state) => {
         if (file === null ? state.editedFiles[paneId] === undefined : state.editedFiles[paneId] !== undefined) return {}
         const unsavedFiles = { ...state.unsavedFiles }

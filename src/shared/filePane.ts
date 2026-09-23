@@ -94,3 +94,54 @@ export function fileLeavesIn(root: PaneNode | null): FileLeaf[] {
   if (root.kind === 'leaf') return isFileLeaf(root) ? [root] : []
   return root.children.flatMap(fileLeavesIn)
 }
+
+export type FileColumn = Extract<PaneNode, { kind: 'split' }> & { tabs: true }
+
+export function isFileColumn(node: PaneNode | null | undefined): node is FileColumn {
+  return node?.kind === 'split' && node.tabs === true
+}
+
+/** A column of one tab; `preview` marks it the tab the next preview open replaces. */
+export function fileColumn(first: FileLeaf, preview = false): FileColumn {
+  return {
+    kind: 'split',
+    direction: 'column',
+    sizes: [1],
+    children: [first],
+    tabs: true,
+    shown: first.terminalId,
+    ...(preview ? { preview: first.terminalId } : {})
+  }
+}
+
+/** The id of the tab a column draws: `shown` while it names a tab, else the first. */
+export function shownTabId(column: FileColumn): string | undefined {
+  const ids = column.children.map((child) => (child.kind === 'leaf' ? child.terminalId : ''))
+  return column.shown !== undefined && ids.includes(column.shown) ? column.shown : ids[0]
+}
+
+/** The file column in the tree, if there is one. */
+export function fileColumnIn(root: PaneNode | null): FileColumn | null {
+  if (root === null || root.kind === 'leaf') return null
+  if (isFileColumn(root)) return root
+  for (const child of root.children) {
+    const found = fileColumnIn(child)
+    if (found !== null) return found
+  }
+  return null
+}
+
+/** `column` holding `tabs`, keeping `shown` (or the one given) and `preview` only while they name a tab. */
+export function withTabs(column: FileColumn, tabs: PaneNode[], shown = column.shown): FileColumn {
+  const ids = tabs.map((tab) => (tab.kind === 'leaf' ? tab.terminalId : ''))
+  const keep = (id: string | undefined): id is string => id !== undefined && ids.includes(id)
+  return {
+    kind: 'split',
+    direction: 'column',
+    sizes: tabs.map(() => 1 / tabs.length),
+    children: tabs,
+    tabs: true,
+    ...(keep(shown) ? { shown } : {}),
+    ...(keep(column.preview) ? { preview: column.preview } : {})
+  }
+}

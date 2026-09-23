@@ -120,7 +120,7 @@ describe('file panes in the store', () => {
     const a = fileLeavesIn(layout.root).find((leaf) => leaf.path === 'docs/a.md')
     const b = fileLeavesIn(layout.root).find((leaf) => leaf.path === 'docs/b.md')
     expect(layout.focusedTerminalId).toBe(b?.terminalId)
-    // Beside the file that had the focus, in a row, rather than stacked under it.
+    // Beside the column of the file that had the focus, in a row, rather than a tab of it.
     const parentOf = (node: typeof layout.root, id: string): typeof layout.root => {
       if (node === null || node.kind === 'leaf') return null
       if (node.children.some((child) => child.kind === 'leaf' && child.terminalId === id)) return node
@@ -134,7 +134,7 @@ describe('file panes in the store', () => {
     expect(parent?.kind === 'split' && parent.direction).toBe('row')
     expect(
       parent?.kind === 'split' &&
-        parent.children.some((child) => child.kind === 'leaf' && child.terminalId === a?.terminalId)
+        parent.children.some((child) => collectTerminalIds(child).includes(a?.terminalId ?? ''))
     ).toBe(true)
   })
 
