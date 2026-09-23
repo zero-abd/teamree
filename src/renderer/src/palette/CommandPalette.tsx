@@ -158,7 +158,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         />
 
         {matches.length === 0 ? (
-          <p className="palette__empty">Nothing matches “{query.trim()}”.</p>
+          <p className="palette__empty">Nothing matches “{query.trim()}”</p>
         ) : (
           <ul className="palette__list" role="listbox" aria-label="Results">
             {matches.map((item, index) => (
@@ -174,7 +174,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
                 >
                   <span className="palette__label">{item.label}</span>
                   <span className="palette__hint">{item.hint}</span>
-                  <span className="palette__detail">{item.detail}</span>
+                  {item.detail ? <span className="palette__detail">{item.detail}</span> : null}
                 </button>
               </li>
             ))}

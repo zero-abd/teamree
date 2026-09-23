@@ -20,7 +20,6 @@ export function FirstRunCliOffer(): React.JSX.Element | null {
   return (
     <aside className="cli-offer" aria-label="Put the teamree CLI on your PATH">
       <p className="cli-offer__headline">{offer.headline}</p>
-      <p className="cli-offer__detail">{offer.detail}</p>
       <p className="cli-offer__promise">{offer.promise}</p>
       <p className="cli-offer__password">{offer.password}</p>
       <div className="cli-offer__actions">
@@ -39,7 +38,6 @@ export function FirstRunCliOffer(): React.JSX.Element | null {
           {`${offer.accept}…`}
         </button>
       </div>
-      <p className="cli-offer__once">{offer.once}</p>
     </aside>
   )
 }

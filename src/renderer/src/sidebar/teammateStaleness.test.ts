@@ -26,7 +26,7 @@ describe('a row that is remembered rather than watched', () => {
 
   it('says whose machine is away, and nothing whatever about the worktree', () => {
     const stale = away(600_000)
-    expect(stale?.detail).toBe('bob’s machine is not connected. This is what they were showing 10m ago.')
+    expect(stale?.detail).toBe('bob’s machine is not connected · showing what it had 10m ago')
     // A worktree that is gone is a row not on screen at all; the two must not read alike.
     expect(stale?.detail).not.toMatch(/delet|remov|gone/i)
   })

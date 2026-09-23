@@ -36,12 +36,6 @@
   text-transform: uppercase;
 }
 
-.appearance__note {
-  max-width: 52ch;
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-}
-
 /* Presets ----------------------------------------------------------------- */
 
 .appearance__themes {
@@ -52,9 +46,7 @@
 
 .appearance__theme {
   display: grid;
-  grid-template-areas:
-    'preview name'
-    'preview blurb';
+  grid-template-areas: 'preview name';
   grid-template-columns: 46px minmax(0, 1fr);
   gap: 0 var(--s3);
   align-items: center;
@@ -132,13 +124,6 @@
   grid-area: name;
   font-size: var(--text-base);
   font-weight: 600;
-}
-
-.appearance__theme-blurb {
-  grid-area: blurb;
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  line-height: 1.4;
 }
 
 /* Accent and ground -------------------------------------------------------- */

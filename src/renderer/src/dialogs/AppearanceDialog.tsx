@@ -39,11 +39,7 @@ export function AppearanceDialog(): React.JSX.Element {
   }
 
   return (
-    <Modal
-      title="Appearance"
-      description="Changes land as you make them, and are remembered for the next launch."
-      onClose={closeDialog}
-    >
+    <Modal title="Appearance" onClose={closeDialog}>
       <div className="appearance">
         <fieldset className="appearance__section">
           <legend className="appearance__legend">Theme</legend>
@@ -75,7 +71,6 @@ export function AppearanceDialog(): React.JSX.Element {
                     <span className="appearance__preview-dot" style={{ background: swatches.accent }} />
                   </span>
                   <span className="appearance__theme-name">{theme.name}</span>
-                  <span className="appearance__theme-blurb">{theme.blurb}</span>
                 </button>
               )
             })}
@@ -152,7 +147,6 @@ export function AppearanceDialog(): React.JSX.Element {
               {TOKEN_GROUPS.map((group) => (
                 <section className="appearance__group" key={group.title}>
                   <h3 className="appearance__group-title">{group.title}</h3>
-                  <p className="appearance__note">{group.blurb}</p>
                   <ul className="appearance__rows">
                     {group.tokens.map(({ token, label, about }) => (
                       <li className="appearance__row" key={token}>
@@ -186,7 +180,7 @@ export function AppearanceDialog(): React.JSX.Element {
         </div>
 
         <footer className="modal__actions">
-          <p className="form__note">{edited ? `${preset.name}, with your changes.` : `${preset.name}, as it ships.`}</p>
+          <p className="form__note">{edited ? `${preset.name} · edited` : preset.name}</p>
           <button
             type="button"
             className="button"

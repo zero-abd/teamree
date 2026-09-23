@@ -893,8 +893,7 @@ on each machine as that machine fetches, and not before.
 
 ### There is no relay, or nobody committed one
 
-The header says **Teamwork off** and the tooltip says *no `.teamree/relay` in
-this project, so teamree does not know which relay your team meets on*. That is
+The header says **Teamwork off** and the tooltip says *no `.teamree/relay`*. That is
 the ordinary state of a project nobody has done step 3 to, and it is what you
 get instead of the app quietly connecting to somebody else's server.
 
@@ -932,9 +931,8 @@ find yourself opening a port on a laptop, something has gone wrong further back.
 
 ### The project has no `origin` remote
 
-The header says **Teamwork off**, and the tooltip says *this project has no
-origin remote, so teamree cannot tell it is the same repository your teammates
-have*. This is the honest answer rather than a fault: what makes two checkouts
+The header says **Teamwork off**, and the tooltip says *no origin remote*. This
+is the honest answer rather than a fault: what makes two checkouts
 the same project is a hash of the normalised origin remote, so a checkout with
 no origin cannot be matched to anything.
 

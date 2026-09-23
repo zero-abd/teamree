@@ -115,7 +115,7 @@ describe('reading it out of a checkout', () => {
     const runner = { ...fixedRemoteRunner('x'), tryRun: async () => ({ exitCode: 1, stdout: '', stderr: '' }) }
     const result = await readProjectKey(runner, '/anywhere')
     expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toContain('no origin remote')
+    expect(result.ok === false && result.reason).toBe('no origin remote')
   })
 })
 

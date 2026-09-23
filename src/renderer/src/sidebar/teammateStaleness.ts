@@ -42,6 +42,6 @@ export function teammateStaleness(options: {
     badge: `away · picture ${age} old`,
     // Only that the machine is not reachable, never anything about the worktree: a worktree that
     // has gone is a row that is not here at all.
-    detail: `${handle}’s machine is not connected. This is what they were showing ${age} ago.`
+    detail: `${handle}’s machine is not connected · showing what it had ${age} ago`
   }
 }

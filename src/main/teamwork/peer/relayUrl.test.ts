@@ -52,7 +52,7 @@ describe('reading the relay a project meets on', () => {
     const config = await readRelayConfig(root, {})
     expect(config.configured).toBe(false)
     // The words matter here: this is a thing to set up, not a thing that broke.
-    expect(config.configured === false && config.reason).toContain('.teamree/relay')
+    expect(config.configured === false && config.reason).toBe('no .teamree/relay')
   })
 
   it('names the file when it is there and has nothing usable in it', async () => {

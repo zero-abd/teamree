@@ -169,7 +169,7 @@ describe('one pane', () => {
   it('distinguishes a resumed conversation from a pane that only came back', () => {
     mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { restored: 'agent' }), terminal('t2', { restored: 'shell' })])
     expect(screen.getByText('resumed').getAttribute('title')).toContain('session resumed')
-    expect(screen.getByText('new shell').getAttribute('title')).toContain('whatever it was running is gone')
+    expect(screen.getByText('new shell').getAttribute('title')).toContain('previous process gone')
   })
 
   it('says nothing about restoring for a pane opened now', () => {

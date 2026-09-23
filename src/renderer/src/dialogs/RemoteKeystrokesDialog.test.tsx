@@ -48,7 +48,7 @@ describe('the question the owner is asked', () => {
     expect(screen.getByText('npm test⏎')).toBeTruthy()
     // And says what it will cost, in the only terms that matter: this runs on
     // your machine, as you.
-    expect(screen.getByText(/would run on your machine, as you/)).toBeTruthy()
+    expect(screen.getByText('Runs on your machine, as you')).toBeTruthy()
   })
 
   it('shows the bytes as text, never as something the pane would obey', () => {
@@ -94,6 +94,6 @@ describe('the question the owner is asked', () => {
 
   it('says when it is holding more than it is showing', () => {
     render(<RemoteKeystrokesDialog request={request({ clipped: true })} />)
-    expect(screen.getByText(/More is held than fits here/)).toBeTruthy()
+    expect(screen.getByText(/Preview truncated/)).toBeTruthy()
   })
 })

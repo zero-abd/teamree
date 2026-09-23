@@ -78,7 +78,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   }
 
   return (
-    <Modal title="New task" description={project.name} onClose={closeDialog}>
+    <Modal title="New task" onClose={closeDialog}>
       <form
         className="form"
         onSubmit={(event) => {
@@ -103,18 +103,15 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
             autoComplete="off"
             spellCheck={true}
           />
-          <span className="field__hint">
-            {tooLong ? (
-              <>
-                {task.trim().length} / {MAX_AGENT_ARGS_CHARS} chars ·{' '}
-              </>
-            ) : branchName ? (
-              <>
-                branch <code>{branchName}</code> ·{' '}
-              </>
-            ) : null}
-            Shift+Enter for a new line
-          </span>
+          {tooLong ? (
+            <span className="field__hint">
+              {task.trim().length} / {MAX_AGENT_ARGS_CHARS} chars
+            </span>
+          ) : branchName ? (
+            <span className="field__hint">
+              branch <code>{branchName}</code>
+            </span>
+          ) : null}
         </label>
 
         {agents.length > 0 ? (

@@ -205,7 +205,7 @@ describe('a ref the listing never mentioned', () => {
   it('says git will resolve it, rather than inventing a sha for it', () => {
     render(<Harness initial={{ text: '4f9a1c2', option: null }} />)
     const description = document.getElementById(box().getAttribute('aria-describedby') ?? '')
-    expect(description?.textContent).toContain('git resolves this when the worktree is created')
+    expect(description?.textContent).toContain('(resolved on create)')
   })
 
   // Typing a listed ref in full is the same choice as picking it, so it has to
@@ -230,13 +230,13 @@ describe('a ref the listing never mentioned', () => {
     expect(rows[0]?.textContent).toContain('use as typed')
   })
 
-  // NB: the popup's "Nothing here matches." only ever appears for a repository
+  // NB: the popup's "No matches" only ever appears for a repository
   // whose listing is empty — with any text in the box the typed row is itself a
   // row, so the count is never zero. See the note in the agent's report.
   it('says there is nothing to pick when the listing itself is empty', () => {
     render(<Harness state={ready({ ...LIST, options: [], total: 0 })} />)
     fireEvent.keyDown(box(), { key: 'ArrowDown' })
-    expect(screen.getByText('Nothing here matches.')).toBeTruthy()
+    expect(screen.getByText('No matches')).toBeTruthy()
   })
 
   it('names how many refs the cap dropped, so the tail is reachable', () => {
@@ -299,7 +299,6 @@ describe('when the refs cannot be listed', () => {
       />
     )
     expect(screen.getByText(/fatal: not a git repository/)).toBeTruthy()
-    expect(screen.getByText(/Type a ref or sha instead/)).toBeTruthy()
     expect(box().hasAttribute('disabled')).toBe(false)
     screen.getByRole('button', { name: 'Retry' }).click()
     expect(onReload).toHaveBeenCalledOnce()

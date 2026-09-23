@@ -152,7 +152,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
       {flow.blocker === null ? null : (
         <div className="steps__blocker">
           <p className="steps__blocker-lead">
-            <strong>This checkout cannot take part yet.</strong> {flow.blocker}
+            <strong>{flow.blocker}</strong>
           </p>
           {teamworkFacts(props.status)?.origin.ok === false ? (
             <OriginFix origin={props.origin} onSetOrigin={props.onSetOrigin} />
@@ -378,10 +378,10 @@ function JoinBody({
 
 /** What the field says it will do, for each of the three things it can be told. */
 function hintFor(list: MemberList, typed: string, file: string | null): string {
-  if (file !== null) return `Writes ${file}.`
+  if (file !== null) return `Writes ${file}`
   return typed.trim() === ''
-    ? 'No git user.email here — choose a handle. Lowercase, [a-z0-9._-].'
-    : 'Nothing in that name survives as a filename. Lowercase, [a-z0-9._-].'
+    ? 'No git user.email · lowercase, [a-z0-9._-]'
+    : 'Not a valid handle · lowercase, [a-z0-9._-]'
 }
 
 /**
@@ -493,7 +493,7 @@ function RelayBody({
     <div className="step__body">
       {/* A joiner who finds no relay is ahead of whoever invited them; standing a second one up is the wrong answer. */}
       {path === 'join' && relay.onDisk.url === null ? (
-        <p className="relay-waiting">Nobody has pushed {relay.file} yet. Pull in a moment.</p>
+        <p className="relay-waiting">{relay.file} not pushed yet · pull again soon</p>
       ) : null}
       {/* An unreadable override, said first: every other sentence here is about a relay the app will not dial. */}
       {brokenRelayOverride(relay) === null ? null : (
@@ -535,8 +535,7 @@ function RelayBody({
             spellCheck={false}
           />
           <span className="field__hint">
-            {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>. A whole message pasted here
-            works — the URL is taken out of it.
+            {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>
           </span>
         </label>
         {check.state === 'bad' ? <RelayRefusal check={check} onUse={setDraft} /> : null}
@@ -621,7 +620,7 @@ function RelayServe({
         {RELAY_SERVE.button}
       </button>
       {blocked === null ? null : <p className="relay-deploy__blocked">{blocked}</p>}
-      <p className="relay-deploy__note">{RELAY_SERVE.watching}</p>
+      {pane?.kind === 'serve' ? <p className="relay-deploy__note">{RELAY_SERVE.watching}</p> : null}
       {command === null ? null : (
         <details className="relay-deploy__manual">
           <summary>{RELAY_SERVE.manual}</summary>
@@ -703,7 +702,7 @@ function RelayPaneBlock({
       {url === null ? null : (
         <>
           <p className="relay-deploy__found">
-            {pane.kind === 'deploy' ? 'The deploy printed' : 'The relay is at'} <code>{url}</code>.{' '}
+            {pane.kind === 'deploy' ? 'Deployed at' : 'Relay at'} <code>{url}</code>{' '}
             <button
               type="button"
               className="button button--primary button--small"
@@ -831,7 +830,7 @@ function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element
         </div>
       </dl>
       <p className={`relay-option__keep relay-option__keep--${option.keep}`}>
-        {option.keep === 'commit' ? 'Commit it: paste it above.' : 'Too short-lived to commit: use TEAMREE_RELAY_URL.'}
+        {option.keep === 'commit' ? 'Commit it: paste it above' : 'Too short-lived to commit · use TEAMREE_RELAY_URL'}
       </p>
     </li>
   )
@@ -861,8 +860,8 @@ function Override({ relay }: { relay: RelaySetting }): React.JSX.Element | null 
         </button>
         {open ? (
           <p className="disclosure__body">
-            No <code>{relay.override.name}</code> in this app’s environment. An app opened from Finder does not inherit
-            your shell’s.
+            <code>{relay.override.name}</code> not in this app’s environment · Finder launches do not inherit your
+            shell’s
           </p>
         ) : null}
       </div>
@@ -870,8 +869,8 @@ function Override({ relay }: { relay: RelaySetting }): React.JSX.Element | null 
   }
   return (
     <p className="members__relay-note">
-      <code>{relay.override.name}</code> is set to <code>{relay.override.value}</code>, and beats{' '}
-      {relay.onDisk.url === null ? <code>{relay.file}</code> : <code>{relay.onDisk.url}</code>} for this run.
+      <code>{relay.override.name}</code>=<code>{relay.override.value}</code> overrides{' '}
+      {relay.onDisk.url === null ? <code>{relay.file}</code> : <code>{relay.onDisk.url}</code>} for this run
     </p>
   )
 }
@@ -938,7 +937,7 @@ function PushBody({
       )}
       {local === null ? null : (
         <details className="push__manual">
-          <summary>Or run it yourself:</summary>
+          <summary>Run it yourself</summary>
           <pre className="members__push-commands">{local.commands}</pre>
         </details>
       )}
@@ -959,7 +958,7 @@ function PublishProgress({ activity }: { activity: ReturnType<typeof publishActi
         <span className="push__progress-elapsed">{formatElapsed(activity.elapsedMs)}</span>
       </p>
       {activity.lastLine === null ? (
-        <p className="push__progress-line push__progress-line--quiet">git has not printed anything yet.</p>
+        <p className="push__progress-line push__progress-line--quiet">No output yet</p>
       ) : (
         <pre className="push__progress-line">{activity.lastLine}</pre>
       )}
@@ -996,21 +995,19 @@ function PublishPlan({ plan, files }: { plan: TeamworkPublishPlan; files: string
       </div>
       <div>
         <dt>Branch</dt>
-        <dd>{plan.branch ?? 'none — this checkout is not on a branch'}</dd>
+        <dd>{plan.branch ?? 'none (detached HEAD)'}</dd>
       </div>
       <div>
         <dt>Pushes to</dt>
         <dd>
           {plan.remote}
-          {plan.upstream === null
-            ? `, which ${plan.branch ?? 'this branch'} does not track yet — this push would set it`
-            : ` (${plan.upstream})`}
+          {plan.upstream === null ? ' (sets upstream)' : ` (${plan.upstream})`}
         </dd>
       </div>
       {plan.committed ? (
         <div>
           <dt>Already committed</dt>
-          <dd>Nothing new to commit.</dd>
+          <dd>Nothing new to commit</dd>
         </div>
       ) : null}
     </dl>
@@ -1023,17 +1020,17 @@ function PublishResult({ result, took }: { result: TeamworkPublish; took: number
     <div className="push__result">
       <p>
         {result.commit === null
-          ? 'Nothing new to commit.'
-          : `Committed ${result.commit.shortSha} — “${result.commit.message}”.`}
+          ? 'Nothing new to commit'
+          : `Committed ${result.commit.shortSha} “${result.commit.message}”`}
         {/* How long it took answers "was that normal?". */}
-        {took === null ? '' : ` Took ${formatElapsed(took)}.`}
+        {took === null ? '' : ` · ${formatElapsed(took)}`}
       </p>
       {result.push.ok ? (
         <p>
           {result.push.alreadyUpToDate
-            ? `${result.remote} already had ${result.branch}.`
-            : `Pushed ${result.branch} to ${result.remote}.`}
-          {result.push.setUpstream ? ` It now tracks ${result.push.upstream}.` : ''}
+            ? `${result.remote} already had ${result.branch}`
+            : `Pushed ${result.branch} to ${result.remote}`}
+          {result.push.setUpstream ? ` · tracks ${result.push.upstream}` : ''}
         </p>
       ) : (
         <>
@@ -1182,7 +1179,7 @@ const PHASE_WORDS: Record<PeerLink['phase'], string> = {
 
 function MemberRoster({ list }: { list: MemberList }): React.JSX.Element {
   if (list.members.length === 0) {
-    return <p className="members__empty">No keys in this checkout yet.</p>
+    return <p className="members__empty">No keys yet</p>
   }
   return (
     <ul className="members__list">
@@ -1231,7 +1228,5 @@ function Problems({ list }: { list: MemberList }): React.JSX.Element | null {
 /** Said only when the list will not stay true on its own: nothing is watching the file. */
 function Freshness({ list }: { list: MemberList }): React.JSX.Element | null {
   if (list.watched) return null
-  return (
-    <p className="members__stale">Not watching this project’s files, so this list is only as fresh as this read.</p>
-  )
+  return <p className="members__stale">Not watching · may be stale</p>
 }

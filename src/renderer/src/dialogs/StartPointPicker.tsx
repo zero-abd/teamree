@@ -191,12 +191,12 @@ export function StartPointPicker({
                 </div>
               ))}
 
-              {model.rows.length === 0 ? <p className="combo__empty">Nothing here matches.</p> : null}
+              {model.rows.length === 0 ? <p className="combo__empty">No matches</p> : null}
             </div>
 
             {model.truncated ? (
               <p className="combo__footer">
-                First {list.limit} of {list.total} refs. Type one in full to reach the other {model.droppedCount}.
+                First {list.limit} of {list.total} refs · type one in full for the other {model.droppedCount}
               </p>
             ) : null}
           </div>
@@ -258,8 +258,7 @@ function StartPointStatus({
   if (state.phase === 'error') {
     return (
       <>
-        <span className="combo__warn">Could not list refs — {startPointErrorText(state.message)}</span> Type a ref or
-        sha instead.{' '}
+        <span className="combo__warn">Could not list refs — {startPointErrorText(state.message)}</span>{' '}
         <button type="button" className="button button--ghost button--tiny" onClick={onReload}>
           Retry
         </button>
@@ -281,7 +280,7 @@ function StartPointStatus({
           at <code>{summaryOption.shortSha}</code>
         </>
       ) : (
-        <> — git resolves this when the worktree is created.</>
+        <> (resolved on create)</>
       )}
     </>
   )

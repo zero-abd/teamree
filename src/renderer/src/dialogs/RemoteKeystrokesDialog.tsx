@@ -29,11 +29,11 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
   return (
     <Modal
       title={`${request.handle} wants to type in ${request.terminalId}`}
-      description={'This would run on your machine, as you.'}
       // Deliberately nothing: a stray Escape does not answer somebody else's keystrokes.
       onClose={() => {}}
     >
       <div className="consent">
+        <p className="consent__warning">Runs on your machine, as you</p>
         <p className="consent__meta">
           {shown === 1 ? '1 keystroke' : `${shown} keystrokes`}
           {' · '}
@@ -47,12 +47,10 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
             like one command because it was wrapped into one would be the
             dialog choosing what the question says. */}
         <pre className="consent__preview">{request.preview}</pre>
-        {request.clipped ? (
-          <p className="consent__clipped">More is held than fits here. Allowing it allows all of it.</p>
-        ) : null}
+        {request.clipped ? <p className="consent__clipped">Preview truncated · allowing allows all of it</p> : null}
 
         <p className="consent__who">
-          {request.handle} is on this project’s roster as {request.publicKey.slice(0, 12)}…
+          {request.handle} · roster key {request.publicKey.slice(0, 12)}…
         </p>
 
         {/* Refuse first and plain, not red: it is the answer that changes
@@ -79,7 +77,7 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
           </button>
         </div>
 
-        <p className="consent__note">Every keystroke that lands is recorded on this machine.</p>
+        <p className="consent__note">Allowed keystrokes are logged on this machine</p>
       </div>
     </Modal>
   )

@@ -143,7 +143,7 @@ function WorkspaceView({
         <main className="workspace workspace--empty">
           <div className="placeholder">
             <h1 className="placeholder__title">The runtime is not running</h1>
-            <p className="placeholder__body">Quit and reopen teamree.</p>
+            <p className="placeholder__body">Quit and reopen teamree</p>
             {connection.detail ? <p className="placeholder__body">{connection.detail}</p> : null}
           </div>
         </main>

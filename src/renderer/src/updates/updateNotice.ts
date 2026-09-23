@@ -14,7 +14,7 @@ export type UpdateNotice = {
   action: string
   /** The quieter one, which stops teamree looking. */
   silence: string
-  /** Where the install steps are, said as a sentence rather than a link. */
+  /** Where the install steps are, beside the link that opens them. */
   install: string
 }
 
@@ -27,13 +27,13 @@ export function updateNotice(state: UpdateState | null): UpdateNotice | null {
   const release = state.available
 
   return {
-    headline: `teamree ${release.version} is available.`,
+    headline: `teamree ${release.version} is available`,
     // An unsigned build cannot replace itself, so the download is a `.dmg` installed like this one.
-    detail: `You are running ${state.current}. The download is a disk image; teamree does not install it for you.`,
+    detail: `Running ${state.current} · disk image, install by hand`,
     notes: release.notes,
     action: release.downloadUrl === null ? 'Open the release page' : `Download ${release.version}`,
     silence: 'Stop checking',
-    install: 'Install steps are in docs/install.md.'
+    install: 'Install steps: docs/install.md'
   }
 }
 

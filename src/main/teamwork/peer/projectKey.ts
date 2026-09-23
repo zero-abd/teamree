@@ -36,13 +36,7 @@ export async function readProjectKey(runner: GitRunner, projectPath: string): Pr
       cwd: projectPath,
       readOnly: true
     })
-    if (exitCode !== 0) {
-      return {
-        ok: false,
-        reason:
-          'this project has no origin remote, so teamree cannot tell it is the same repository your teammates have'
-      }
-    }
+    if (exitCode !== 0) return { ok: false, reason: 'no origin remote' }
     remote = stdout.trim()
   } catch (error) {
     return { ok: false, reason: `git could not be asked for the origin remote: ${messageOf(error)}` }

@@ -49,7 +49,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     return {
       tone: 'pending',
       label: 'reading…',
-      detail: 'teamree has not read this project’s relay, roster or origin yet.'
+      detail: 'Relay, roster and origin not read yet'
     }
   }
 
@@ -62,14 +62,14 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     return {
       tone: 'off',
       label: 'no key',
-      detail: `Your key is not in .teamree/members here. ${TEAMWORK_BUTTON_LABEL} → “${ADD_KEY_BUTTON}”.`
+      detail: `Your key is not in .teamree/members · ${TEAMWORK_BUTTON_LABEL} → ${ADD_KEY_BUTTON}`
     }
   }
   if (status.links.length === 0) {
     return {
       tone: 'off',
       label: 'no teammates',
-      detail: 'This project’s roster has nobody in it but you.'
+      detail: 'Nobody else on the roster'
     }
   }
 
@@ -86,7 +86,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
       tone: 'problem',
       label: refused.length === 1 ? 'handshake failed' : `${refused.length} handshakes failed`,
       detail: [
-        'Either roster could be the stale one, so pull, and ask them to pull.',
+        'Pull, and ask them to pull',
         ...refused.map((link) => `${link.handle}: ${link.detail ?? 'no reason given'}`)
       ].join('\n')
     }
@@ -102,7 +102,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     return {
       tone: 'problem',
       label: 'relay unreachable',
-      detail: `${relayLabel(status)} could not be reached.`
+      detail: `Cannot reach ${relayLabel(status)}`
     }
   }
   if (connected > 0) {
@@ -130,7 +130,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
       label: 'nobody connected',
       // Per link underneath, because they do not all say the same thing.
       detail: [
-        `${relayLabel(status)} is reachable. No teammate’s machine is connected to it right now.`,
+        `${relayLabel(status)} reachable · no teammate on it`,
         ...status.links.filter((link) => link.detail !== undefined).map((link) => `${link.handle}: ${link.detail}`)
       ].join('\n')
     }

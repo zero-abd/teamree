@@ -1797,7 +1797,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           notify(`Could not check for updates: ${update.problem}`, 'info')
           return
         }
-        notify(`teamree ${update.current} is the latest release.`, 'info')
+        notify(`teamree ${update.current} is the latest release`, 'info')
       } catch (error) {
         set({ update: before })
         failed('Could not check for updates')(error)
@@ -1888,7 +1888,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         const setting = await runtimeClient.call('teamwork.setRelay', { projectId, url })
         set((state) => ({ relays: { ...state.relays, [projectId]: setting } }))
         // The same half-done state a join leaves: the file means nothing to anybody else until pushed.
-        notify(`Wrote ${setting.file}. Commit and push it so your team meets there.`, 'info')
+        notify(`Wrote ${setting.file} · commit and push it`, 'info')
       } catch (error) {
         // Kept in the dialog: a refusal names the URL to type instead, useful only beside the field.
         set({ relayError: error instanceof Error ? error.message : String(error) })
@@ -1903,7 +1903,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         const list = await runtimeClient.call('members.join', handle ? { projectId, handle } : { projectId })
         set((state) => ({ members: { ...state.members, [projectId]: list } }))
         // As a notice too: the file is the smaller half, and nobody else sees it until it is pushed.
-        if (list.selfFile) notify(`Wrote ${list.selfFile}. Commit and push it to join.`, 'info')
+        if (list.selfFile) notify(`Wrote ${list.selfFile} · commit and push it`, 'info')
       } catch (error) {
         // Kept in the panel, as a refused relay URL is: every refusal here ends in "choose another
         // handle", an instruction about the box the cursor is in.
@@ -1921,12 +1921,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // this read turns the blocker green without a restart.
         await get().loadTeamwork(projectId)
         await get().loadPublishPlan(projectId)
-        notify(
-          result.replaced
-            ? `origin now points at ${result.url}.`
-            : `Added origin ${result.url}. Your teammates’ checkouts have to name the same repository.`,
-          'info'
-        )
+        notify(result.replaced ? `origin now points at ${result.url}` : `Added origin ${result.url}`, 'info')
       } catch (error) {
         // Beside the field, like every other refusal here.
         set({ originError: error instanceof Error ? error.message : String(error) })
@@ -2037,8 +2032,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         notify(
           result.push.ok
             ? result.push.alreadyUpToDate
-              ? `${result.remote} already had ${result.branch}.`
-              : `Pushed ${result.branch} to ${result.remote}. Your team can reach this machine now.`
+              ? `${result.remote} already had ${result.branch}`
+              : `Pushed ${result.branch} to ${result.remote}`
             : // "Refused" is the remote's verdict, wrong for a push somebody stopped or one that never finished.
               `${result.commit === null ? 'Nothing to commit, and the' : 'Committed, but the'} push ${
                 result.push.kind === 'cancelled'
@@ -2085,7 +2080,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         }
         // The push result carries the review page, derived from the remote's URL and absent for a host teamree cannot name.
         notify(
-          `${parts.join(' · ')}.`,
+          parts.join(' · '),
           'info',
           result.reviewUrl === undefined ? undefined : { label: 'Open review', url: result.reviewUrl }
         )
@@ -2242,7 +2237,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // node, where `window` is a ReferenceError rather than an undefined.
       const reveal = typeof window === 'undefined' ? undefined : window.teamree?.revealPath
       if (reveal === undefined) {
-        notify(`teamree cannot open ${what} in a file manager from this window.`, 'info')
+        notify(`Cannot open ${what} in a file manager from this window`, 'info')
         return
       }
       try {
@@ -2345,12 +2340,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // packaged build is not reliably one, so a failure is reported: what this copies is not on screen.
       const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard
       if (clipboard === undefined) {
-        notify(`teamree cannot reach the clipboard from this window, so ${what} was not copied.`, 'info')
+        notify(`Clipboard unavailable · ${what} not copied`, 'info')
         return
       }
       try {
         await clipboard.writeText(text)
-        notify(`Copied ${what}.`, 'info')
+        notify(`Copied ${what}`, 'info')
       } catch (error) {
         failed(`Could not copy ${what}`)(error)
       }

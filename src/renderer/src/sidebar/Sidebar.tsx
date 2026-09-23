@@ -394,10 +394,10 @@ export function Sidebar({
                     {rows.length === 0 && theirs.length === 0 ? (
                       <li className="project__none">
                         {filter.trim().length > 0 ? (
-                          'No worktrees match that.'
+                          'No matches'
                         ) : (
                           <>
-                            {'No worktrees yet. '}
+                            {'No worktrees yet '}
                             <button
                               type="button"
                               className="project__none-action"

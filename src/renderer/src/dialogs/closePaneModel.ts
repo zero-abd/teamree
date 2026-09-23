@@ -28,8 +28,8 @@ export function closePaneWarning(terminal: Terminal | undefined): ClosePaneWarni
       title: 'Stop this agent?',
       // Working loses the work in flight; quiet may be holding a question, which this cannot tell from done.
       body: terminal.busy
-        ? `${harnessName(terminal.agent)} is working in ${where}. Closing the pane kills it.`
-        : `${harnessName(terminal.agent)} has gone quiet in ${where} — waiting for an answer, or finished. Closing the pane kills it.`,
+        ? `${harnessName(terminal.agent)} is working in ${where}`
+        : `${harnessName(terminal.agent)} is quiet in ${where} — waiting or finished`,
       confirm: 'Stop it and close'
     }
   }
@@ -37,7 +37,7 @@ export function closePaneWarning(terminal: Terminal | undefined): ClosePaneWarni
   if (terminal.busy) {
     return {
       title: 'Stop what is running here?',
-      body: `Output is still arriving in ${where}. Closing the pane kills the process.`,
+      body: `Output still arriving in ${where}`,
       confirm: 'Stop it and close'
     }
   }

@@ -6,7 +6,7 @@ import type { CliInstall, CliStatus } from '@shared/entities'
 export type CliPanel = {
   /** What is true now, in one line. */
   headline: string
-  /** The rest of it: what that means, or where the other copy is. */
+  /** Where the link leads, when that is not already the headline. */
   detail: string | null
   /** Exactly what pressing the button will do. Null when there is no button. */
   promise: string | null
@@ -20,12 +20,9 @@ export type CliPanel = {
   pathWarning: string | null
 }
 
-/** What the CLI is for, in one sentence; shared by the first-run card and the dialog so they agree. */
-export const CLI_PURPOSE = 'teamree ships a CLI that does everything this window can.'
-
 /** Shown while the first read is in flight, so the panel is never blank. */
 export const CLI_PANEL_READING: CliPanel = {
-  headline: 'Looking for the teamree CLI…',
+  headline: 'Looking for the CLI…',
   detail: null,
   promise: null,
   password: null,
@@ -40,8 +37,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
   if (!status.installable) {
     return {
       ...CLI_PANEL_READING,
-      headline: 'teamree can only put its CLI on PATH for you on macOS.',
-      detail: `This is ${status.platform}. The command below does what the button would.`,
+      headline: `Not installable on ${status.platform}`,
       manual: `sudo ln -sf ${status.source ?? '<the app>/resources/cli/teamree'} ${status.destination}`,
       pathWarning: pathWarning(status)
     }
@@ -50,8 +46,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
   if (status.source === null) {
     return {
       ...CLI_PANEL_READING,
-      headline: 'This build of teamree has no CLI inside it.',
-      detail: 'A packaged app carries its CLI in Contents/Resources/cli.'
+      headline: 'No CLI in this build'
     }
   }
 
@@ -59,15 +54,10 @@ export function cliPanel(status: CliStatus | null): CliPanel {
   if (status.impermanent !== null) {
     return {
       ...CLI_PANEL_READING,
-      headline:
-        status.impermanent === 'volume'
-          ? 'teamree is running from a mounted volume.'
-          : 'macOS is running teamree from a temporary copy of itself.',
-      detail:
-        (status.impermanent === 'volume'
-          ? `It is at ${status.source}, so a link there dies when you eject. `
-          : `The copy is at ${status.source}, and is gone by the next launch. `) +
-        'Move teamree to Applications and open it from there.'
+      headline: `Running from ${
+        status.impermanent === 'volume' ? 'a disk image' : 'a translocated copy'
+      } — move teamree to Applications`,
+      detail: status.source
     }
   }
 
@@ -75,8 +65,8 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     // Only a source checkout gets here. No button: a launcher with nothing behind it exits at once.
     return {
       ...CLI_PANEL_READING,
-      headline: 'The teamree CLI has not been built yet.',
-      detail: `${status.source} is the launcher; the bundle it runs is not there.`,
+      headline: 'CLI not built',
+      detail: status.source,
       manual: 'npm run build:cli'
     }
   }
@@ -84,8 +74,8 @@ export function cliPanel(status: CliStatus | null): CliPanel {
   if (status.state === 'linked') {
     return {
       ...CLI_PANEL_READING,
-      headline: 'teamree is on your PATH.',
-      detail: `${status.destination} leads to this app’s CLI.`,
+      headline: 'On your PATH',
+      detail: `${status.destination} → ${status.resolved ?? status.source}`,
       pathWarning: pathWarning(status)
     }
   }
@@ -94,26 +84,19 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     const what = status.state === 'file' ? 'a regular file' : 'a directory'
     return {
       ...CLI_PANEL_READING,
-      headline: `There is ${what} at ${status.destination}.`,
-      detail: 'Move it aside and open this again.',
+      headline: `${status.destination} is ${what} — move it aside`,
       pathWarning: pathWarning(status)
     }
   }
 
-  const password = status.needsAdministrator
-    ? `macOS will ask for your administrator password; ${status.directory} needs one.`
-    : `No password: ${status.directory} is writable as you.`
+  const password = status.needsAdministrator ? `Administrator password for ${status.directory}` : 'No password'
 
   if (status.state === 'elsewhere') {
     return {
-      headline: status.dangling
-        ? `${status.destination} leads to a teamree that is not there.`
-        : `${status.destination} points at a different copy of teamree.`,
-      // Two failures, opposite sentences: a link that drives the wrong app, and one into nothing.
-      detail: status.dangling
-        ? `It leads to ${status.resolved}, and nothing is there.`
-        : `It leads to ${status.resolved}, so typing teamree drives that copy.`,
-      promise: `Points ${status.destination} at this app’s CLI instead: ${status.source}.`,
+      // Two failures: a link that drives the wrong app, and one into nothing.
+      headline: status.dangling ? 'Broken link' : 'Linked to another copy',
+      detail: `${status.destination} → ${status.resolved}${status.dangling ? ' (missing)' : ''}`,
+      promise: `${status.destination} → ${status.source}`,
       password,
       action: 'Point it at this app',
       manual: null,
@@ -122,12 +105,9 @@ export function cliPanel(status: CliStatus | null): CliPanel {
   }
 
   return {
-    headline: 'The teamree CLI is not on your PATH yet.',
-    // A checkout can move out from under the link; say so rather than "ships inside this app".
-    detail: status.packaged
-      ? `It ships inside this app, at ${status.source}.`
-      : `It is at ${status.source}, in the checkout you are running from, so the link breaks if you move it.`,
-    promise: `Links ${status.destination} to it.`,
+    headline: 'Not on your PATH',
+    detail: null,
+    promise: `${status.destination} → ${status.source}`,
     password,
     action: 'Put teamree on my PATH',
     manual: null,
@@ -148,7 +128,7 @@ export function cliActionLabel(status: CliStatus | null): string {
 /** The button's hover: what is wrong, then what pressing it (and its password prompt) does. */
 export function cliTitle(status: CliStatus | null): string {
   const panel = cliPanel(status)
-  return panel.promise === null ? panel.headline : `${panel.headline} ${panel.promise}`
+  return panel.promise === null ? panel.headline : `${panel.headline} · ${panel.promise}`
 }
 
 /** Whether the sidebar offers this: only when there is something to do and doing it leaves a working command. */
@@ -162,17 +142,14 @@ export function offerCliInstall(status: CliStatus | null): boolean {
   )
 }
 
-/** The one unprompted offer after install, or null; its sentences come from the panel so they agree. */
+/** The one unprompted offer after install, or null; its lines come from the panel so they agree. */
 export type CliOffer = {
   headline: string
-  detail: string
   promise: string
   password: string
   /** Opens the panel, where the link is actually made. */
   accept: string
   decline: string
-  /** That this is asked once, and where it lives afterwards. */
-  once: string
 }
 
 /** Whether to ask at all: not when answered, nothing to do, a source checkout, or something is in the way. */
@@ -186,52 +163,39 @@ export function cliOffer(status: CliStatus | null): CliOffer | null {
     headline:
       status.state === 'elsewhere'
         ? status.dangling
-          ? 'The teamree command on your PATH leads to nothing.'
-          : 'The teamree command on your PATH is a different copy.'
+          ? 'teamree on your PATH is a broken link'
+          : 'teamree on your PATH is another copy'
         : 'Put the teamree command on your PATH?',
-    detail: CLI_PURPOSE,
     promise: panel.promise,
     password: panel.password,
     accept: panel.action,
-    decline: 'No thanks',
-    once: 'Asked once. The sidebar and the command palette both have it.'
+    decline: 'No thanks'
   }
 }
 
-/** What just happened, said precisely enough that nobody has to guess. */
+/** What just happened, and which PATH source vouches for it, so it is not heard as "it works". */
 export function cliOutcome(install: CliInstall): string {
   const { status } = install
-  const password = install.administrator ? ' An administrator password was given.' : ''
-  const basis = ` ${pathBasis(status)}`
-  if (install.outcome === 'already-linked') {
-    return `${status.destination} already pointed at this app, so nothing was changed.${basis}`
-  }
-  if (install.outcome === 'replaced') {
-    return (
-      `${status.destination} now points at ${status.source}, and no longer at ${install.replaced}.` +
-      `${password}${basis}`
-    )
-  }
-  return `${status.destination} now points at ${status.source}.${password}${basis}`
+  const link = `${status.destination} → ${status.source}`
+  const done =
+    install.outcome === 'already-linked'
+      ? `Already linked: ${link}`
+      : install.outcome === 'replaced'
+        ? `Linked ${link}, replacing ${install.replaced}`
+        : `Linked ${link}`
+  return `${done} · ${pathBasis(status)}`
 }
 
-/** Which PATH source confirmed the link, named so it is not heard as "it works". */
+/** Which PATH source confirmed the link. */
 function pathBasis(status: CliStatus): string {
-  if (status.onPath === 'environment') {
-    return `${status.directory} is on this app’s PATH, which is not necessarily your terminal’s.`
-  }
+  if (status.onPath === 'environment') return `${status.directory} on the app’s PATH, not necessarily your terminal’s`
   // teamree reads the login shell's PATH back, the same probe every pane is built with.
-  if (status.onPath === 'shell') {
-    return `${status.directory} is on the PATH your login shell reports.`
-  }
-  if (status.onPath === 'login') {
-    return `${status.directory} is in /etc/paths; your login shell could not be asked.`
-  }
-  return `Nothing teamree can read puts ${status.directory} on a PATH.`
+  if (status.onPath === 'shell') return `${status.directory} on your login shell’s PATH`
+  if (status.onPath === 'login') return `${status.directory} in /etc/paths (login shell not asked)`
+  return `${status.directory} not on PATH`
 }
 
 /** Said only when neither this process's PATH nor `/etc/paths` includes the directory. */
 function pathWarning(status: CliStatus): string | null {
-  if (status.onPath !== null) return null
-  return `Nothing teamree can read puts ${status.directory} on a PATH, so your shell may not find the command.`
+  return status.onPath === null ? `${status.directory} not on PATH` : null
 }

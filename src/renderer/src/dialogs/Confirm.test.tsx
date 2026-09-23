@@ -45,7 +45,7 @@ function Question({
   return (
     <Confirm
       title="Stop this agent?"
-      body="claude is working in “claude”. Closing the pane kills it."
+      body="claude is working in “claude”"
       cancel="Leave it open"
       confirm="Stop it and close"
       tone={tone}
@@ -59,9 +59,7 @@ describe('what it draws', () => {
   it('is a dialog named by its question, one body line, and the two answers in order', () => {
     render(<Question tone="danger" onCancel={vi.fn()} onConfirm={vi.fn()} />)
     const dialog = screen.getByRole('dialog', { name: 'Stop this agent?' })
-    expect(dialog.querySelector('.modal__body .confirm__body')?.textContent).toBe(
-      'claude is working in “claude”. Closing the pane kills it.'
-    )
+    expect(dialog.querySelector('.modal__body .confirm__body')?.textContent).toBe('claude is working in “claude”')
     const buttons = [...dialog.querySelectorAll<HTMLButtonElement>('.modal__actions .button')]
     expect(buttons.map((button) => button.textContent)).toEqual(['Leave it open', 'Stop it and close'])
     // The destructive answer is the red one, and it is the one on the right.

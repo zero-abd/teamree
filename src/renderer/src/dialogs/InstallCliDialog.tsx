@@ -8,7 +8,7 @@
 
 import { useEffect } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { cliOutcome, cliPanel, CLI_PURPOSE } from './cliInstallModel'
+import { cliOutcome, cliPanel } from './cliInstallModel'
 import { Modal } from './Modal'
 
 export function InstallCliDialog(): React.JSX.Element {
@@ -29,7 +29,7 @@ export function InstallCliDialog(): React.JSX.Element {
   const panel = cliPanel(status)
 
   return (
-    <Modal title="Put teamree on your PATH" description={CLI_PURPOSE} onClose={closeDialog}>
+    <Modal title="Put teamree on your PATH" onClose={closeDialog}>
       <div className="cli-install">
         <p className="cli-install__headline">{panel.headline}</p>
         {panel.detail ? <p className="cli-install__detail">{panel.detail}</p> : null}

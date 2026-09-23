@@ -152,7 +152,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
 
       {found !== null ? (
         <ul className="tree__list tree__list--found" aria-label={`Files matching ${found.query}`}>
-          {found.paths.length === 0 ? <li className="panel__empty">No file matches.</li> : null}
+          {found.paths.length === 0 ? <li className="panel__empty">No matches</li> : null}
           {found.paths.map((path) => {
             const kind = statusKindFor(path, changes)
             return (
@@ -178,13 +178,13 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
               </li>
             )
           })}
-          {found.truncated ? <li className="panel__note">Showing the first {found.paths.length}.</li> : null}
+          {found.truncated ? <li className="panel__note">First {found.paths.length}</li> : null}
         </ul>
       ) : root?.entries === null || root === undefined ? (
         <p className="panel__empty">{root?.error ?? 'Reading…'}</p>
       ) : (
         <ul className="tree__list" role="tree" aria-label="Files">
-          {rows.length === 0 ? <li className="panel__empty">Nothing here.</li> : null}
+          {rows.length === 0 ? <li className="panel__empty">Empty</li> : null}
           {rows.map((row) => {
             const kind = row.kind === 'dir' ? null : statusKindFor(row.path, changes)
             const under = row.kind === 'dir' ? changesUnder(row.path, changes) : 0
@@ -239,12 +239,12 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                   </button>
                 </div>
                 {row.kind === 'dir' && row.expanded && row.truncated ? (
-                  <p className="panel__note">Showing the first {tree.dirs[row.path]?.entries?.length ?? 0}.</p>
+                  <p className="panel__note">First {tree.dirs[row.path]?.entries?.length ?? 0}</p>
                 ) : null}
               </li>
             )
           })}
-          {root.truncated ? <li className="panel__note">Showing the first {root.entries.length}.</li> : null}
+          {root.truncated ? <li className="panel__note">First {root.entries.length}</li> : null}
         </ul>
       )}
 

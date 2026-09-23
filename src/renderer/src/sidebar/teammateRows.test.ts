@@ -157,7 +157,7 @@ describe('a teammate never heard from', () => {
       ])
     )
     expect(unheard).toEqual(['marcus'])
-    expect(unheardTitle(unheard)).toContain('not even an old one')
+    expect(unheardTitle(unheard)).toContain('no worktrees to show')
   })
 
   it('is not the same as a teammate whose rows are simply old', () => {

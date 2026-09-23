@@ -91,17 +91,16 @@ describe('what it says will be lost', () => {
     expect(screen.getByText('/repos/pager-wt/rewrite-the-pager')).toBeTruthy()
   })
 
-  it('says how much uncommitted work there is, and that there is no undo', () => {
+  it('says how much uncommitted work there is', () => {
     seed({ statuses: { w1: status({ staged: 1, unstaged: 2, untracked: 3, conflicted: 1 }) } })
     mount()
-    expect(screen.getByText(/^7 uncommitted changes will be deleted/)).toBeTruthy()
-    expect(screen.getByText(/There is no undo/)).toBeTruthy()
+    expect(screen.getByText('7 uncommitted changes')).toBeTruthy()
   })
 
   it('counts one change as one change', () => {
     seed({ statuses: { w1: status({ unstaged: 1 }) } })
     mount()
-    expect(screen.getByText(/^1 uncommitted change will be deleted/)).toBeTruthy()
+    expect(screen.getByText('1 uncommitted change')).toBeTruthy()
   })
 
   // Git leaves ignored files out of every warning it gives, and this app cannot
@@ -109,13 +108,13 @@ describe('what it says will be lost', () => {
   it('warns separately about ignored files, which git itself would not mention', () => {
     seed({ statuses: { w1: status({ ignored: 4 }) } })
     mount()
-    expect(screen.getByText(/^4 ignored files or folders will go too/)).toBeTruthy()
+    expect(screen.getByText('4 ignored files or folders')).toBeTruthy()
   })
 
   it('says nothing about counts it has no status for', () => {
     mount()
-    expect(screen.queryByText(/will be deleted with the checkout/)).toBeNull()
-    expect(screen.queryByText(/will go too/)).toBeNull()
+    expect(screen.queryByText(/^\d+ uncommitted change/)).toBeNull()
+    expect(screen.queryByText(/^\d+ ignored file/)).toBeNull()
   })
 })
 
