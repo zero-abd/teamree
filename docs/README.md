@@ -21,7 +21,9 @@ the [README](../README.md) if you have not seen it before.
   the internet and stored scrollback all end up in the app's window, and the
   window holds a bridge to the whole runtime. What the settings on it actually
   are, why the sandbox is off and what that costs, what a crafted stream can and
-  cannot make the window do, and the one thing this found and fixed.
+  cannot make the window do, the three things on that bridge that are not the
+  runtime — revealing a path, the menu bar and the agent notifications — and the
+  one thing this found and fixed.
 
 ## Working with a team
 

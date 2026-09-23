@@ -59,11 +59,16 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
 ## Quick start
 
 1. **Add a repository** — a git checkout you already have.
-2. **Start a worktree** from any base ref. It is a real checkout of its own, so
+2. **Start a worktree** from any base ref, with an agent in it — or several, one
+   per agent, racing the same description. It is a real checkout of its own, so
    parallel attempts at the same task never see each other's files.
-3. **Open terminals in it**, split them, and start an agent in one.
+3. **Open terminals in it** and split them, from the strip above the panes, from
+   the menu bar, or with **⌘D** / **⌘⇧D** / **⌘T**. Every command in the app is
+   in the menu bar, with **Settings…** in the application menu and a Help menu.
 4. **Watch the sidebar** — every pane says whether it is working, waiting, finished
-   or failed, and how long since it last said anything.
+   or failed, which of them have spoken since you last looked, and how long since
+   it last said anything. macOS tells you when an agent stops while you are
+   looking at something else.
 5. **Review and commit** from the app, and push when it is ready.
 
 ## What it does
@@ -73,7 +78,14 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
   models against each other, or two runs of one — and starts a worktree each from
   the same ref, named for the agent that runs in it. `--agent`, repeated, does
   the same from a shell.
-- **Split terminals** per worktree, arbitrarily nested, with a real PTY behind each.
+- **A worktree you can run in.** Per project, gitignored directories every new
+  checkout symlinks (`node_modules`) and gitignored files it copies (`.env`), so
+  the first command in it is not an install.
+- **Split terminals** per worktree, arbitrarily nested, with a real PTY behind
+  each. Split and open from the strip above them; the worktree's own header is
+  one line — its name, what is changed, what is unpushed.
+- **Panes named after the job**, not the binary: a pane takes the description
+  the task was started with, and the pencil on its tab renames it.
 - **Panes that come back.** A pane running a coding agent returns with its
   conversation resumed — if the agent wrote one. Whether it did is read from that
   agent's own store rather than guessed at from whether anybody typed: a brand-new
@@ -84,6 +96,14 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
   dying quietly. teamree only reads those stores; it never writes to them, and it
   answers no other tool's prompts for you. An ordinary pane returns as a shell in
   the same directory, and its command is deliberately never re-run.
+- **Run it again.** An exited pane offers `Run claude again` beside its badge —
+  same pane, same directory, fresh session — and so does
+  `teamree terminal relaunch`.
+- **Told when an agent stops.** A system notification and a dock badge when an
+  agent goes quiet or exits while you are elsewhere. Per machine: nothing,
+  notify, or notify with sound.
+- **What has spoken since you looked.** An unread mark on the sidebar row, the
+  pane strip and the board, and an **Unread only** filter on the board.
 - **Which agent needs you.** One view ranks every pane in every worktree by what
   would make you look — failures, then work in progress, then waiting, then
   finished. It is a narrow reading on purpose: teamree watches a PTY, not an
@@ -91,8 +111,20 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
   something.
 - **A live picture of the work**, driven by watching the checkout rather than
   polling, with the changed paths and the patch for any of them.
+- **A diff you can review**, not just look at: files and hunks fold, both line
+  numbers are drawn, the `@@` header holds still, the code is coloured, and it
+  reads inline or side by side.
 - **Enough git to finish** — stage, commit, check the branch would merge into its
   base, push. There is no force push and no flag to ask for one.
+- **The agent you always use** — a default agent, and a command-line fragment per
+  agent (`--model opus`) that the composer and the palette both pass.
+- **Everything without the mouse.** **⌘⌥↑** / **⌘⌥↓** walk the worktrees, **⌘[**
+  / **⌘]** walk the panes, **⌘⇧↩** maximises one and restores it, **⌘K** is the
+  palette and **⌘/** lists the rest.
+- **A menu on the worktree row.** Right-click it, or press `⋯`: reveal in Finder,
+  copy path, copy branch, open in your editor, remove.
+- **Panes you can act on.** A URL an agent prints is a link, and **⌘C** / **⌘V**
+  copy the selection and paste into the pane.
 - **Your own colours.** Four presets ship and all forty-two colours are editable
   (**⌘,**); a palette you build by hand goes through the same legibility pass a
   shipped one does.
