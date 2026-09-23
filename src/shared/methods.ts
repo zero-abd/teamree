@@ -115,6 +115,15 @@ export const MAX_AGENT_ARGS_CHARS = 4096
 
 export const Params = {
   statusGet: z.object({}),
+  /**
+   * Asks the app to quit itself, the way the quit key does.
+   *
+   * Additive, and answered before anything is torn down: the caller gets the
+   * pid it is about to lose and then watches the endpoint disappear. A runtime
+   * with no app around it — the acceptance host, a vitest worker — has nothing
+   * to quit and refuses rather than pretending.
+   */
+  appQuit: z.object({}),
 
   projectList: z.object({}),
   projectAdd: z.object({ path: z.string().min(1), name: z.string().min(1).optional() }),
@@ -647,6 +656,12 @@ export const Params = {
 /** Maps every method name to its params schema and its result type. */
 export type MethodContract = {
   'status.get': { params: z.infer<typeof Params.statusGet>; result: RuntimeStatus }
+  /**
+   * The reply is sent before the teardown starts, so `quitting` is a promise
+   * rather than a receipt; what proves the app went is the endpoint going with
+   * it, which is what the CLI waits for.
+   */
+  'app.quit': { params: z.infer<typeof Params.appQuit>; result: { quitting: true; pid: number } }
 
   'project.list': { params: z.infer<typeof Params.projectList>; result: Project[] }
   'project.add': { params: z.infer<typeof Params.projectAdd>; result: Project }

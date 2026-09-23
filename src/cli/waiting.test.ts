@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { TerminalEvent } from '../shared/methods.js'
 import type { RuntimeClient } from './transport.js'
-import { waitForState, waitForTerminal, WaitTimeout, type Delay, type WaitTiming } from './waiting.js'
+import {
+  waitForEndpointGone,
+  waitForState,
+  waitForTerminal,
+  WaitTimeout,
+  type Delay,
+  type WaitTiming
+} from './waiting.js'
 
 type Timeline = {
   timing: WaitTiming
@@ -214,5 +221,41 @@ describe('waiting for a state', () => {
     })
     const wait = stateWait(async () => 'creating', 1_000, time)
     await expect(wait).rejects.toMatchObject({ interrupted: true, code: 'wait_timeout' })
+  })
+})
+
+describe('waiting for the endpoint to go', () => {
+  it('returns as soon as the socket is gone, charging only the time it watched', async () => {
+    const clock = timeline()
+    let looks = 0
+    const outcome = await waitForEndpointGone({
+      endpoint: '/tmp/teamree.sock',
+      timeoutMs: 1000,
+      exists: () => (looks += 1) < 4,
+      ...clock.timing
+    })
+
+    expect(outcome.gone).toBe(true)
+    expect(outcome.waitedMs).toBe(75)
+  })
+
+  it('gives up rather than waiting forever on a socket that stays', async () => {
+    const clock = timeline()
+    const outcome = await waitForEndpointGone({
+      endpoint: '/tmp/teamree.sock',
+      timeoutMs: 100,
+      exists: () => true,
+      ...clock.timing
+    })
+
+    expect(outcome).toEqual({ gone: false, waitedMs: 100 })
+  })
+
+  // A named pipe lives in the kernel and cannot be stat'd, so there is nothing
+  // to watch. Saying so beats waiting out a timeout for an answer that can
+  // never arrive.
+  it('does not pretend to watch a named pipe', async () => {
+    const outcome = await waitForEndpointGone({ endpoint: '\\\\.\\pipe\\teamree', timeoutMs: 1000 })
+    expect(outcome).toEqual({ gone: true, waitedMs: null })
   })
 })

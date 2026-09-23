@@ -3,6 +3,7 @@ import type { CommandSpec } from '../command-spec.js'
 import { readBoolean, readNumber, readString, requireString, type ParsedFlags } from '../argv.js'
 import { UsageError } from '../exit.js'
 import { formatFields, formatTable } from '../output.js'
+import { plainText } from '../plainText.js'
 import { resolveWorktree, selectWorktree } from '../selectors.js'
 import { DEFAULT_QUIET_MS, DEFAULT_WAIT_TIMEOUT_MS, waitForTerminal } from '../waiting.js'
 
@@ -130,12 +131,20 @@ export const terminalCommands: readonly CommandSpec[] = [
   {
     path: ['terminal', 'read'],
     summary: "Print a terminal's scrollback snapshot.",
-    details: 'Text mode writes the raw buffer to stdout; --json wraps it instead.',
+    details:
+      'Text mode writes the raw buffer to stdout, escape sequences and all, unless --plain is given.\n\n' +
+      '--json always carries the raw buffer in `data`, so a caller writing the bytes back gets the bytes; ' +
+      'with --plain the stripped text rides alongside it in `plain`.',
     args: [TERMINAL_ARG],
     flags: [
-      { name: 'tail-bytes', kind: 'number', placeholder: '<n>', description: 'Return only the trailing N bytes.' }
+      { name: 'tail-bytes', kind: 'number', placeholder: '<n>', description: 'Return only the trailing N bytes.' },
+      {
+        name: 'plain',
+        kind: 'boolean',
+        description: 'Strip escape sequences and replay the line edits: what the screen showed.'
+      }
     ],
-    examples: ['teamree terminal read t_12 --tail-bytes 4000'],
+    examples: ['teamree terminal read t_12 --tail-bytes 4000', 'teamree terminal read t_12 --plain'],
     run: async (context) => {
       const terminalId = context.args[0] as string
       const tailBytes = readNumber(context.flags, 'tail-bytes')
@@ -143,7 +152,19 @@ export const terminalCommands: readonly CommandSpec[] = [
         terminalId,
         ...(tailBytes === undefined ? {} : { tailBytes })
       })
-      return { data: { terminalId, data: result.data, bytes: Buffer.byteLength(result.data) }, text: result.data }
+      // The raw buffer stays in `data` whatever was asked for: a caller that
+      // writes bytes back into a pane needs the bytes, and losing them to a
+      // display choice would be the opposite of this flag's point.
+      const stripped = readBoolean(context.flags, 'plain') ? plainText(result.data) : undefined
+      return {
+        data: {
+          terminalId,
+          data: result.data,
+          bytes: Buffer.byteLength(result.data),
+          ...(stripped === undefined ? {} : { plain: stripped })
+        },
+        text: stripped ?? result.data
+      }
     }
   },
   {

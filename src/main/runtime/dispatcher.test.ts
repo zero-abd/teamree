@@ -45,6 +45,17 @@ describe('dispatcher', () => {
     })
   })
 
+  // The wiring, not the handler: a runtime assembled with no way to quit must
+  // answer `app.quit` with a refusal that says so, and never with
+  // unknown_method — which would read as a CLI too new for this app.
+  it('offers app.quit, and refuses it when there is no app behind the runtime', async () => {
+    const response = (await dispatch({ id: 'a3', method: 'app.quit', params: {} }, call)) as ErrorResponse
+
+    expect(response.ok).toBe(false)
+    expect(response.error.code).toBe(ErrorCode.NotFound)
+    expect(response.error.message).toMatch(/no app to quit/)
+  })
+
   it('treats absent params as an empty object', async () => {
     const response = await dispatch({ id: 'a2', method: 'status.get' }, call)
     expect(response.ok).toBe(true)
@@ -114,6 +125,9 @@ describe('dispatcher', () => {
     // which method arrived or went missing.
     expect([...registry.methods()].sort()).toEqual([
       'agent.list',
+      // Ending the app. Local by nature and pointedly not on the peer list: a
+      // teammate watching a pane does not get to close the machine it runs on.
+      'app.quit',
       // How this machine paints itself. Local by nature: a theme is a fact
       // about one person's screen, and there is nothing for a teammate to read
       // in it or ask of it.

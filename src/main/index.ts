@@ -245,7 +245,11 @@ if (!app.requestSingleInstanceLock()) {
         // The one way this process opens a browser, handed over explicitly so
         // that the update check's download link is the only thing that can.
         openExternal: (url) => shell.openExternal(url),
-        onAgentNotice: (notice) => notices?.deliver(notice)
+        onAgentNotice: (notice) => notices?.deliver(notice),
+        // `teamree quit`, which has to be this and not a signal: everything
+        // that makes a quit clean hangs off `before-quit`, and only `app.quit`
+        // runs it. See quitSequence.ts.
+        requestQuit: () => app.quit()
       })
     } catch (error) {
       console.error('[runtime] failed to start', error)
