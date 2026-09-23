@@ -159,6 +159,7 @@ describe('worktree.status', () => {
     await repo.git(['push', 'origin', 'main'])
 
     const before = await service.worktreeStatus({ worktreeId: worktree.id })
+    expect(before.upstream).toBeNull()
     expect(before.ahead).toBe(1)
     expect(before.behind).toBe(2)
 
@@ -168,6 +169,7 @@ describe('worktree.status', () => {
     // The branch tracks itself on the remote now, and the base is still two ahead.
     expect(await repo.git(['rev-parse', '--abbrev-ref', '@{upstream}'], worktree.path)).toBe('origin/push-me')
     const after = await service.worktreeStatus({ worktreeId: worktree.id })
+    expect(after.upstream).toBe('origin/push-me')
     expect(after.ahead).toBe(0)
     expect(after.behind).toBe(2)
   })

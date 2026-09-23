@@ -132,6 +132,12 @@ export type Notice = {
   action?: { label: string; url: string }
 }
 
+/** The last push of one worktree, as the Changes tab shows it. */
+export type PushState =
+  | { phase: 'pushing' }
+  | { phase: 'pushed'; reviewUrl?: string }
+  | { phase: 'failed'; error: string }
+
 /** The find bar belongs to the focused pane. `token` changes on every press, which is how a repeat press re-takes an open field. */
 export type PaneSearch = { terminalId: string; token: number }
 
@@ -223,6 +229,7 @@ type WorkspaceState = {
   stagedPaths: string[]
   committing: boolean
   pushing: boolean
+  pushes: Record<string, PushState>
   /** Each project's roster, by project id, read on demand: most windows never open one. */
   members: Record<string, MemberList>
   /** True while a roster is being read or written, so the dialog can say so. */
@@ -583,7 +590,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         statuses: keptFor(state.statuses, live),
         unreadableSince: keptFor(state.unreadableSince, live),
         mergePreviews: keptFor(state.mergePreviews, live),
-        logs: keptFor(state.logs, live)
+        logs: keptFor(state.logs, live),
+        pushes: keptFor(state.pushes, live)
       }
     })
 
@@ -980,6 +988,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     stagedPaths: [],
     committing: false,
     pushing: false,
+    pushes: {},
     cli: null,
     cliPending: false,
     cliInstall: null,
@@ -1891,7 +1900,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const worktreeId = get().activeWorktreeId
       if (!worktreeId || get().pushing) return
 
+      const setPush = (push: PushState): void => set((state) => ({ pushes: { ...state.pushes, [worktreeId]: push } }))
       set({ pushing: true })
+      setPush({ phase: 'pushing' })
       try {
         const result = await runtimeClient.call('worktree.push', { worktreeId })
         // Three things worth saying, none of them "done": what was sent, whether this set the upstream, what stayed behind.
@@ -1910,7 +1921,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           'info',
           result.reviewUrl === undefined ? undefined : { label: 'Open review', url: result.reviewUrl }
         )
+        setPush({ phase: 'pushed', ...(result.reviewUrl === undefined ? {} : { reviewUrl: result.reviewUrl }) })
+        // The remote has every commit now; the next status read confirms it, and the tab should not offer Push until then.
+        set((state) => {
+          const status = state.statuses[worktreeId]
+          if (!status) return {}
+          return { statuses: { ...state.statuses, [worktreeId]: { ...status, ahead: 0, upstream: result.upstream } } }
+        })
       } catch (error) {
+        setPush({ phase: 'failed', error: error instanceof Error ? error.message : String(error) })
         failed('Could not push')(error)
       } finally {
         set({ pushing: false })
