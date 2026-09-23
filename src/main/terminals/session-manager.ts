@@ -176,10 +176,14 @@ type AttachedStream = { channel: StreamChannel; detach: () => void }
 
 export type TerminalExitListener = (terminalId: string, exitCode: number) => void
 
+/** See `TerminalSessionManager.onPaneAnswered`. */
+export type PaneAnsweredListener = (terminalId: string) => void
+
 export class TerminalSessionManager {
   private readonly sessions = new Map<string, PtySession>()
   private readonly streams = new Map<string, Set<AttachedStream>>()
   private readonly exitListeners = new Set<TerminalExitListener>()
+  private readonly answeredListeners = new Set<PaneAnsweredListener>()
   /**
    * Panes brought back from the last launch that have not gone quiet yet.
    *
@@ -359,18 +363,29 @@ export class TerminalSessionManager {
   }
 
   /**
-   * Returns true when this write cleared the pane's restored badge, which is
-   * the one thing a keystroke changes that anyone else needs to hear about.
-   * Reported rather than published here, so the manager stays unaware of the
-   * workspace stream.
+   * Sends bytes to a pane's program, and reports the keystroke to anyone who
+   * has to redraw because of it.
+   *
+   * A keystroke changes two things every client holds, and both of them are
+   * badges somebody is looking at: it retires the pane's restored badge, and it
+   * answers the bell the pane was ringing, which is what the sidebar draws
+   * "waiting on you" from. Neither is visible from outside this call — the pane
+   * list says what the pane is now, not what it was a byte ago — so this is the
+   * only place that can see the edge, and it says so.
+   *
+   * Reported rather than published, so the manager stays unaware of the
+   * workspace stream; `publishTerminalEvents` is what turns it into an event.
+   * Reported rather than returned, because the answer has to reach the runtime
+   * however the write arrived — the CLI's `terminal send` and a teammate's
+   * keystroke both come through handlers that have nothing to do with drawing.
    *
    * `byHand` is false only for the emulator answering the program's own
    * questions — bytes for the pty and nothing for the record. See
    * `PtySession.write`.
    */
-  write(terminalId: string, data: string, byHand = true): boolean {
+  write(terminalId: string, data: string, byHand = true): void {
     const session = this.require(terminalId)
-    const wasRestored = session.snapshot().restored !== undefined
+    const before = session.snapshot()
     const wasUntouched = !session.wasTypedInto
     session.write(data, byHand)
     // The first keystroke a pane ever gets is the moment its agent can have a
@@ -378,7 +393,10 @@ export class TerminalSessionManager {
     // once per pane rather than once per keystroke: this runs on the typing
     // path, and the store persists on every put.
     if (byHand && wasUntouched) this.rememberTyped(terminalId)
-    return byHand && wasRestored
+    const after = session.snapshot()
+    if (before.restored !== after.restored || before.lastBellAt !== after.lastBellAt) {
+      for (const listener of this.answeredListeners) listener(terminalId)
+    }
   }
 
   /**
@@ -471,6 +489,18 @@ export class TerminalSessionManager {
     this.exitListeners.add(listener)
     return () => {
       this.exitListeners.delete(listener)
+    }
+  }
+
+  /**
+   * Called when somebody typing into a pane changed something every client
+   * holds: the restored badge is gone, or the bell has been answered. Never for
+   * the emulator's own replies, which change neither. See `write`.
+   */
+  onPaneAnswered(listener: PaneAnsweredListener): () => void {
+    this.answeredListeners.add(listener)
+    return () => {
+      this.answeredListeners.delete(listener)
     }
   }
 

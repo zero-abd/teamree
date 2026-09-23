@@ -165,6 +165,18 @@ export function publishTerminalEvents(
     bus.emit({ type: 'terminals' })
   })
 
+  // The keystrokes worth announcing: the ones that retire a badge somebody is
+  // looking at — the restored pane's, and the bell that put "waiting on you"
+  // beside the pane's name. Publishing per keystroke would be absurd, so the
+  // manager reports only the writes that changed something a client holds; an
+  // emulator answering the program's own questions changes neither and says
+  // nothing. This is a listener rather than a wrapper around `terminal.write`
+  // because the edge is invisible from out here: the pane list answers what the
+  // pane is now, and the bell it was ringing a byte ago has already gone.
+  terminals.manager.onPaneAnswered(() => {
+    bus.emit({ type: 'terminals' })
+  })
+
   const announceOpened = (terminal: Terminal): void => {
     bus.emit({ type: 'terminals' })
     // Opening a pane rewrites the worktree's tree, so the layout changed too.
@@ -209,24 +221,6 @@ export function publishTerminalEvents(
     const terminal = await handlers['terminal.rename'](params, call)
     bus.emit({ type: 'terminals' })
     return terminal
-  })
-
-  // The only keystroke worth announcing: the first one into a restored pane,
-  // which retires its badge. Every other write changes nothing a client holds,
-  // and publishing per keystroke would be absurd — hence the manager reporting
-  // whether this particular write mattered rather than a blanket producer.
-  //
-  // Asked on both sides of the write rather than only before it, because not
-  // every write retires the badge any more: an emulator answering the program's
-  // own questions leaves a restored pane restored, and a pane that is still
-  // restored has nothing to announce.
-  registry.register('terminal.write', schemas['terminal.write'], async (params, call) => {
-    const restored = (): boolean =>
-      terminals.manager.list().some((terminal) => terminal.id === params.terminalId && terminal.restored !== undefined)
-    const wasRestored = restored()
-    const result = await handlers['terminal.write'](params, call)
-    if (wasRestored && !restored()) bus.emit({ type: 'terminals' })
-    return result
   })
 
   // terminal.resize is deliberately not a producer: the caller already gets the

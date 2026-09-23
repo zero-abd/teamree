@@ -124,7 +124,10 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
     'terminal.create': async (params) => manager.create(params),
     'terminal.write': async (params) => {
       // Absent means a person: every caller but the pane view is one, and the
-      // pane view is the only one that can see the difference.
+      // pane view is the only one that can see the difference. What the write
+      // retired — a restored badge, a bell — is reported by the manager rather
+      // than answered here, so it reaches the window that is drawing the badge
+      // and not only the one that pressed the key.
       manager.write(params.terminalId, params.data, params.byHand !== false)
       return { written: true }
     },
