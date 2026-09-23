@@ -191,6 +191,12 @@ select.field__input {
   gap: var(--s4);
 }
 
+.field__refusal {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
 .form__note {
   margin-right: auto;
   color: var(--fg-muted);

@@ -49,16 +49,27 @@ export class GitCommandError extends GitServiceError {
   }
 }
 
+/** git's own `fatal:` or `error:` line when there is one; progress like "Preparing worktree" comes first. */
 function firstMeaningfulLine(stderr: string): string {
-  for (const line of stderr.split('\n')) {
-    const trimmed = line.trim()
-    if (trimmed) return trimmed
-  }
-  return ''
+  const lines = stderr
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  return lines.find((line) => /^(?:fatal|error):/.test(line)) ?? lines[0] ?? ''
 }
 
 /** Human-readable reason for any thrown value, for `Worktree.error`. */
 export function describeError(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
   return String(error)
+}
+
+/** Whether trying the same create again could succeed: a timeout, a cancel, a held lock, a name taken meanwhile. */
+export function isTransient(error: unknown): boolean {
+  if (error instanceof GitCommandError) {
+    return error.timedOut || error.cancelled || /\.lock'?: File exists|could not lock/i.test(error.stderr)
+  }
+  if (error instanceof GitServiceError) return error.code === ErrorCode.Conflict
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  return code === 'EBUSY' || code === 'EAGAIN' || code === 'EMFILE' || code === 'ENFILE'
 }

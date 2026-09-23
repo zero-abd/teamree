@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Worktree } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
@@ -15,6 +15,7 @@ const repos: TempRepo[] = []
 const services: GitService[] = []
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(services.splice(0).map((service) => service.dispose()))
   await Promise.all(repos.splice(0).map((repo) => repo.cleanup()))
 })
@@ -82,7 +83,63 @@ describe('projects', () => {
 
     expect(error.code).toBe(ErrorCode.InvalidParams)
     expect(error.message).toContain('not a git repository')
+    expect(error.data).toEqual({ refusal: 'not-a-repository' })
     expect(service.listProjects()).toEqual([])
+  })
+
+  it('initializes a plain folder with a first commit when asked, then adds it', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const plainDirectory = path.join(repo.base, 'plain')
+    await mkdir(plainDirectory)
+    for (const role of ['AUTHOR', 'COMMITTER']) {
+      vi.stubEnv(`GIT_${role}_NAME`, 'Teamree Test')
+      vi.stubEnv(`GIT_${role}_EMAIL`, 'test@teamree.invalid')
+    }
+
+    const project = await service.addProject({ path: plainDirectory, init: true })
+
+    expect(project.path).toBe(canonicalPath(plainDirectory))
+    expect(await repo.git(['rev-list', '--count', 'HEAD'], plainDirectory)).toBe('1')
+    expect(await readyWorktree(service, project.id, 'first task')).toMatchObject({ state: 'ready' })
+  })
+
+  // Every create would branch from nothing and fail; the folder is turned away instead.
+  it('refuses a repository with no commits', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const empty = path.join(repo.base, 'empty')
+    await mkdir(empty)
+    await repo.git(['init'], empty)
+
+    const error = await rejection(service.addProject({ path: empty }))
+
+    expect(error.code).toBe(ErrorCode.InvalidParams)
+    expect(error.data).toEqual({ refusal: 'no-commits' })
+    expect(service.listProjects()).toEqual([])
+  })
+
+  it('does not initialize over a repository that has no commits', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const empty = path.join(repo.base, 'empty')
+    await mkdir(empty)
+    await repo.git(['init'], empty)
+
+    const error = await rejection(service.addProject({ path: empty, init: true }))
+
+    expect(error.data).toEqual({ refusal: 'no-commits' })
+  })
+
+  it('refuses a path that is not a folder without offering to initialize it', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+
+    const error = await rejection(service.addProject({ path: path.join(repo.base, 'nowhere'), init: true }))
+
+    expect(error.code).toBe(ErrorCode.InvalidParams)
+    expect(error.data).toBeUndefined()
+    expect(existsSync(path.join(repo.base, 'nowhere'))).toBe(false)
   })
 
   it('rejects a relative path and a repository that is already tracked', async () => {
@@ -182,6 +239,7 @@ describe('worktree.create', () => {
     const settled = await service.whenSettled(pending.id)
     expect(settled.state).toBe('failed')
     expect(settled.error).toContain('origin/does-not-exist')
+    expect(settled.retryable).toBeUndefined()
 
     // The row survives so the UI can offer a retry, but nothing was left behind.
     expect(await service.listWorktrees({})).toHaveLength(1)
@@ -202,6 +260,7 @@ describe('worktree.create', () => {
 
     expect(settled?.state).toBe('failed')
     expect(settled?.error).toBe('creation cancelled')
+    expect(settled?.retryable).toBe(true)
     expect(existsSync(pending.path)).toBe(false)
     const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
     expect(branches.split('\n')).not.toContain('never-mind')

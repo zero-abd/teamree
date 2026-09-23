@@ -129,6 +129,9 @@ export const Hunk = z.object({
 /** One hunk as it crosses the wire: the shape `Hunk` validates. */
 export type HunkInput = z.infer<typeof Hunk>
 
+/** Why `project.add` turned a folder away, carried as `error.data.refusal`. */
+export type ProjectAddRefusal = 'not-a-repository' | 'no-commits'
+
 export const Params = {
   statusGet: z.object({}),
   /**
@@ -138,7 +141,8 @@ export const Params = {
   appQuit: z.object({}),
 
   projectList: z.object({}),
-  projectAdd: z.object({ path: z.string().min(1), name: z.string().min(1).optional() }),
+  /** `init`: a folder that is not a repository gets `git init` and an empty first commit before it is added. */
+  projectAdd: z.object({ path: z.string().min(1), name: z.string().min(1).optional(), init: z.boolean().optional() }),
   projectRemove: z.object({ projectId: z.string().min(1) }),
   /**
    * What a new worktree of this project carries from the primary checkout:

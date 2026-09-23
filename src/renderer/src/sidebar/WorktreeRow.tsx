@@ -225,12 +225,31 @@ export function WorktreeRow({
 
       {failed ? (
         <div className="worktree__failure">
-          <p className="worktree__error">{worktree.error ?? 'Creation failed'}</p>
-          <button type="button" className="button button--ghost button--tiny" onClick={onRetry}>
-            Retry
+          <p className="worktree__error" title={worktree.error}>
+            {failureLine(worktree.error)}
+          </p>
+          {worktree.retryable ? (
+            <button type="button" className="button button--ghost button--tiny" onClick={onRetry}>
+              Retry
+            </button>
+          ) : null}
+          <button type="button" className="button button--ghost button--tiny" onClick={onRemove}>
+            Remove
           </button>
         </div>
       ) : null}
     </li>
   )
+}
+
+const FAILURE_LINE_MAX = 60
+
+/** git's own words from a failure, on one line of at most sixty characters. */
+function failureLine(error: string | undefined): string {
+  if (!error) return 'Creation failed'
+  // A failed git command reads `git <args> exited with code N: <stderr>`; the stderr is the reason.
+  const reason = error.replace(/^git .*? (?:exited with code \S+|timed out|cancelled): /s, '')
+  const line = (reason.split('\n').find((part) => part.trim()) ?? reason).trim().replace(/^(?:fatal|error): /i, '')
+  const sentence = line.charAt(0).toUpperCase() + line.slice(1)
+  return sentence.length <= FAILURE_LINE_MAX ? sentence : `${sentence.slice(0, FAILURE_LINE_MAX - 1).trimEnd()}…`
 }

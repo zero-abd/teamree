@@ -9,6 +9,7 @@
 // window, which is a fair proxy for undriveable from a test.
 
 import { fireEvent, render, screen } from '@testing-library/react'
+import type { ProjectAddRefusal } from '@shared/methods'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -24,6 +25,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { AddProjectDialog } = await import('./AddProjectDialog')
+const { useWorkspaceStore } = await import('../state/workspaceStore')
 
 const selectProjectFolder = vi.fn<() => Promise<string | null>>()
 
@@ -50,5 +52,48 @@ describe('the folder picker', () => {
     expect(selectProjectFolder).toHaveBeenCalledOnce()
     const path = screen.getByRole('textbox', { name: 'Repository path' }) as HTMLInputElement
     await vi.waitFor(() => expect(path.value).toBe('/Users/ada/code/atlas'))
+  })
+})
+
+describe('a folder that cannot be a project', () => {
+  const addProject = vi.fn<(path: string, name?: string, init?: boolean) => Promise<ProjectAddRefusal | null>>()
+
+  beforeEach(() => {
+    addProject.mockReset()
+    useWorkspaceStore.setState({ addProject })
+  })
+
+  const submit = (path: string): void => {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Repository path' }), { target: { value: path } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add project' }))
+  }
+
+  it('offers to initialize a folder that is not a git repository, then adds it', async () => {
+    addProject.mockResolvedValueOnce('not-a-repository').mockResolvedValueOnce(null)
+    render(<AddProjectDialog />)
+    submit('/Users/ada/notes')
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Not a git repository')
+    fireEvent.click(screen.getByRole('button', { name: 'Initialize git' }))
+    expect(addProject).toHaveBeenLastCalledWith('/Users/ada/notes', undefined, true)
+  })
+
+  it('says a repository with no commits is not added, and offers no way round it', async () => {
+    addProject.mockResolvedValueOnce('no-commits')
+    render(<AddProjectDialog />)
+    submit('/Users/ada/fresh')
+
+    expect((await screen.findByRole('alert')).textContent).toContain('No commits yet')
+    expect(screen.queryByRole('button', { name: 'Initialize git' })).toBeNull()
+  })
+
+  it('forgets the refusal once the path changes', async () => {
+    addProject.mockResolvedValueOnce('not-a-repository')
+    render(<AddProjectDialog />)
+    submit('/Users/ada/notes')
+    await screen.findByRole('alert')
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Repository path' }), { target: { value: '/Users/ada/code' } })
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
