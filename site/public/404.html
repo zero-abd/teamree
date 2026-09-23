@@ -1,49 +1,32 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
-<meta name="robots" content="noindex">
-<title>Not found — teamree</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<style>
-  :root{
-    --bg:#0B0C0E; --fg:#F3F2EE; --fg-secondary:#C8C7C2; --fg-muted:#A09F9B;
-    --line:#25262B; --accent:#8b8cf7; --accent-bright:#A9AAFF;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    margin:0; background:var(--bg); color:var(--fg);
-    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
-    display:flex; align-items:center; justify-content:center; padding:24px;
-  }
-  main{max-width:34rem}
-  .code{
-    font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    letter-spacing:.08em; text-transform:uppercase; color:var(--fg-muted);
-  }
-  h1{margin:.6rem 0 0; font-size:clamp(1.6rem,5vw,2.2rem); line-height:1.2; letter-spacing:-.02em}
-  p{margin:.9rem 0 0; color:var(--fg-secondary)}
-  a{color:var(--accent-bright); text-underline-offset:3px}
-  a:hover{color:var(--accent)}
-  .back{
-    display:inline-block; margin-top:1.6rem; padding:.7rem 1.15rem;
-    border:1px solid var(--line); border-radius:9px;
-    color:var(--fg); text-decoration:none;
-  }
-  .back:hover{border-color:var(--accent); color:var(--accent-bright)}
-</style>
-</head>
-<body>
-<main>
-  <div class="code">Error 404</div>
-  <h1>That page isn&rsquo;t here.</h1>
-  <p>The link may be out of date, or the page may have moved. If you were after
-     the download, <a href="/download/mac">grab the latest macOS build</a> &mdash;
-     that link always follows the newest release.</p>
-  <a class="back" href="/">Back to the home page</a>
-</main>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><meta name="robots" content="noindex"><title>Not found — teamree</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>
+/* Tokens */
+:root{--ground:#0B0C0E;--tile:#101114;--tile-2:#171718;--ink:#F3F2EE;--ink-2:#C8C7C2;--muted:#A09F9B;--line:rgb(243 242 238 / 9%);--accent:#8b8cf7;--link:#A9AAFF;--font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;}
+
+/* Base */
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{margin:0;padding:24px;display:grid;place-items:center;background:radial-gradient(ellipse 70% 50% at 50% 0,#15161A,#0B0C0E 70%);background-attachment:fixed;color:var(--ink);font-family:var(--font);}
+body:before{content:"";position:fixed;inset:0;z-index:-1;background-image:linear-gradient(rgb(243 242 238 / 3%) 1px,transparent 1px),linear-gradient(90deg,rgb(243 242 238 / 3%) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(#000 0,transparent 900px);}
+main{width:min(100%,520px);padding:40px;border:1px solid var(--line);border-radius:14px;background:rgb(16 17 20 / 80%);backdrop-filter:blur(16px);}
+.defs{position:absolute;width:0;height:0;}
+
+/* Lockup */
+.lockup{display:inline-flex;align-items:center;gap:8px;color:var(--ink);text-decoration:none;}
+.tile{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;background:var(--tile-2);}
+.tile svg{width:62%;height:62%;}
+.name{display:flex;align-items:flex-end;gap:4px;}
+.word{width:78px;height:20px;overflow:visible;}
+.dot{width:4px;height:4px;margin-bottom:3px;border-radius:50%;background:var(--accent);}
+
+/* Copy */
+h1{margin:40px 0 0;font-size:40px;line-height:1.2;letter-spacing:-.02em;}
+p{margin:12px 0 0;color:var(--ink-2);font-size:17px;line-height:1.6;}
+.back{display:inline-flex;align-items:center;min-height:44px;margin-top:24px;color:var(--link);text-underline-offset:3px;}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px;}
+
+/* Responsive layout */
+@media(max-width:520px){
+  main{padding:28px 24px;}
+}
+</style></head><body><svg class="defs" aria-hidden="true"><defs><symbol id="mark-sm" viewBox="0 0 256 256" fill="currentColor"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM34 68L94 53V203L34 188ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM162 52L222 70V186L162 204Z"/></symbol><symbol id="wordmark" viewBox="0 10 440 82" overflow="visible" fill="currentColor"><path fill-rule="evenodd" d="M8 12H20V27H38V39H20V69Q20 78 30 78H39V90H28Q8 90 8 70V39H2V27H8ZM54 56Q54 25 78 25Q101 25 101 51V60H67Q69 78 84 78Q94 78 101 71V85Q93 90 81 90Q54 90 54 61ZM67 49H88Q88 37 78 37Q68 37 67 49ZM114 48Q114 25 138 25Q160 25 160 47V88H148V81Q140 90 129 90Q111 90 111 73Q111 55 134 55H148V48Q148 37 138 37Q128 37 128 48ZM148 66H135Q123 66 123 73Q123 79 132 79Q148 79 148 66ZM178 27H190V35Q197 25 209 25Q222 25 228 37Q235 25 248 25Q268 25 268 48V88H256V50Q256 38 247 38Q234 38 234 54V88H222V50Q222 38 213 38Q190 38 190 59V88H178ZM286 27H298V37Q305 25 319 25H324V38H318Q298 38 298 60V88H286ZM336 56Q336 25 360 25Q383 25 383 51V60H349Q351 78 366 78Q376 78 383 71V85Q375 90 363 90Q336 90 336 61ZM349 49H370Q370 37 360 37Q350 37 349 49ZM390 56Q390 25 414 25Q437 25 437 51V60H403Q405 78 420 78Q430 78 437 71V85Q429 90 417 90Q390 90 390 61ZM403 49H424Q424 37 414 37Q404 37 403 49Z"/></symbol></defs></svg><main><a class="lockup" href="/" aria-label="teamree home"><span class="tile"><svg aria-hidden="true"><use href="#mark-sm"/></svg></span><span class="name"><svg class="word" viewBox="0 10 440 82" overflow="visible" aria-hidden="true"><use href="#wordmark"/></svg><i class="dot"></i></span></a><h1>Not found.</h1><p>The link is old or the page moved.</p><a class="back" href="/">Back to teamree</a></main></body></html>

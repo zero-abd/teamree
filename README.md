@@ -12,8 +12,8 @@
 </p>
 
 <p align="center">
-  <strong>Run several coding agents at once, each in its own git worktree.</strong><br/>
-  One window shows what every one of them is doing, and which one is waiting on you.
+  <strong>Run your agents like a team.</strong><br/>
+  Each agent in its own git worktree. One window says which one needs you.
 </p>
 
 <p align="center">
