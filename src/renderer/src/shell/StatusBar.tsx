@@ -14,11 +14,18 @@ import { useKeepAwake } from './keepAwake'
 import { KeepAwakeControl } from './KeepAwakeControl'
 import { ResourcesControl } from './ResourcesControl'
 
+/**
+ * What the runtime dot says on hover, by phase. On the rail itself it is the
+ * dot alone: green when the runtime answers, amber while it is starting or
+ * coming back, red when it is down. `● Runtime ready 0.2.0` was three facts
+ * where one glance needs one, and the version has its places in Settings and
+ * the About box.
+ */
 const CONNECTION_LABEL: Record<string, string> = {
-  connecting: 'Connecting',
-  ready: 'Runtime ready',
-  retrying: 'Reconnecting',
-  offline: 'Runtime offline'
+  connecting: 'Runtime starting',
+  ready: 'Runtime',
+  retrying: 'Runtime reconnecting',
+  offline: 'Runtime down'
 }
 
 export function StatusBar(): React.JSX.Element {
@@ -44,15 +51,23 @@ export function StatusBar(): React.JSX.Element {
   const paneCount = collectTerminalIds(layout?.root ?? null).length
   const summary = summarizeWorktreeStatus(status)
 
+  // The error while there is one, the version once the runtime answers, and
+  // the phase in between.
+  const runtimeTitle =
+    connection.detail ??
+    (connection.phase === 'ready' && runtimeVersion
+      ? `Runtime ${runtimeVersion}`
+      : (CONNECTION_LABEL[connection.phase] ?? connection.phase))
+
   return (
     <footer className="statusbar">
       <span
         className={`statusbar__item statusbar__connection statusbar__connection--${connection.phase}`}
-        title={connection.detail ?? CONNECTION_LABEL[connection.phase]}
+        role="img"
+        aria-label={runtimeTitle}
+        title={runtimeTitle}
       >
         <span className="statusbar__dot" aria-hidden="true" />
-        {CONNECTION_LABEL[connection.phase] ?? connection.phase}
-        {runtimeVersion ? <span className="statusbar__muted">{runtimeVersion}</span> : null}
       </span>
 
       <KeepAwakeControl />
