@@ -981,16 +981,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const live = new Set(worktrees.map((worktree) => worktree.id))
 
     // A worktree removed from anywhere — this window, another window, the CLI —
-    // takes its tab, its panes and its status chips with it.
+    // takes its tab, its panes and its status chips with it. What it does not
+    // take is anybody to another tab: the one in front going away leaves
+    // nothing in front, because a tab this window did not choose is a pane
+    // the next keystroke lands in without anybody having chosen that either.
+    // Removing it from here goes through `closeWorktreeTab`, which does pick a
+    // neighbour, and is a click.
     set((state) => {
       const openWorktreeIds = state.openWorktreeIds.filter((id) => live.has(id))
       return {
         worktrees,
         openWorktreeIds,
-        activeWorktreeId:
-          state.activeWorktreeId && live.has(state.activeWorktreeId)
-            ? state.activeWorktreeId
-            : (openWorktreeIds[openWorktreeIds.length - 1] ?? null),
+        activeWorktreeId: state.activeWorktreeId && live.has(state.activeWorktreeId) ? state.activeWorktreeId : null,
         layouts: keptFor(state.layouts, live),
         statuses: keptFor(state.statuses, live),
         unreadableSince: keptFor(state.unreadableSince, live),
@@ -1029,7 +1031,34 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const token = layoutEdits.mark(worktreeId)
     const layout = await runtimeClient.call('layout.get', { worktreeId })
     if (layoutEdits.isStale(worktreeId, token)) return
-    set((state) => ({ layouts: { ...state.layouts, [worktreeId]: layout } }))
+    set((state) => ({ layouts: { ...state.layouts, [worktreeId]: keepingFocus(state, layout) } }))
+  }
+
+  /**
+   * The runtime's layout, with this window's focus kept where it was.
+   *
+   * The runtime focuses every pane it opens, and it opens panes for whoever
+   * asks — an agent on the CLI, a hook, a setup command, another window. A
+   * layout arriving with its focus on one of those is a report of what
+   * happened, not a request to type there: the pane in front stays the pane in
+   * front as long as it is still in the tree. A pane this window asked for
+   * (`createTerminal`, which is a click) is the one exception, and it is named
+   * in `panesAskedFor` before the layout that focuses it is read.
+   *
+   * Only the tab in front: focus on any other tab is a stored preference, read
+   * when the tab is opened, and the runtime's is as good as anybody's.
+   */
+  const panesAskedFor = new Set<string>()
+  const keepingFocus = (
+    state: { activeWorktreeId: string | null; layouts: Record<string, Layout> },
+    layout: Layout
+  ): Layout => {
+    if (layout.focusedTerminalId !== null && panesAskedFor.delete(layout.focusedTerminalId)) return layout
+    if (layout.worktreeId !== state.activeWorktreeId) return layout
+    const focused = state.layouts[layout.worktreeId]?.focusedTerminalId ?? null
+    if (focused === null || focused === layout.focusedTerminalId) return layout
+    if (!collectTerminalIds(layout.root).includes(focused)) return layout
+    return { ...layout, focusedTerminalId: focused }
   }
 
   const refreshStatuses = async (worktreeIds: string[]): Promise<void> => {
@@ -1604,9 +1633,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
      * made in order, because the order is what the names were handed out in and
      * the runtime allocates branches as they arrive; what happens after each
      * create is not, because waiting for the first checkout before asking for
-     * the second would make a race run in single file. The one thing left
-     * serial is the open at the end, and only the first is opened: the others
-     * are on the sidebar, which is where the user compares them anyway.
+     * the second would make a race run in single file. Only the first is
+     * opened, and as soon as its row exists: the others are on the sidebar,
+     * which is where the user compares them anyway.
      */
     startTask({ projectId, startedFrom, creates }) {
       set({ dialog: null })
@@ -1626,6 +1655,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],
             collapsedProjects: { ...state.collapsedProjects, [projectId]: false }
           }))
+          // The first one goes in front now, while it is still being made, and
+          // this is the last time anything here changes tabs: the click that
+          // started the task is the click that opens it. Opening it when the
+          // checkout was ready — tens of seconds on — meant changing tabs under
+          // whoever had gone on typing somewhere else, and keystrokes meant for
+          // one agent ran in another.
+          if (started.length === 0) await get().openWorktree(created.id)
           started.push({
             worktreeId: created.id,
             label: name,
@@ -1637,7 +1673,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // with it.
         readOnScreen()
 
-        const ready = await Promise.all(
+        await Promise.all(
           started.map(async ({ worktreeId, agentCommand, label, task }) => {
             // The agent needs a checkout to run in, so the pane waits for one. A
             // failure here is already on the row, with its reason and its retry.
@@ -1665,9 +1701,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             return worktree
           })
         )
-
-        const first = ready[0]
-        if (first) await get().openWorktree(first.id)
       })().catch(failed('Could not start the task'))
     },
 
@@ -1970,7 +2003,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const terminal = await runtimeClient.call('terminal.create', { worktreeId })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
-        // Creation already appends and focuses one pane in the runtime.
+        // Creation appends and focuses one pane in the runtime, and this is the
+        // one focus a layout may bring with it: it was asked for here.
+        panesAskedFor.add(terminal.id)
         refresher.request(refreshTargets({ layouts: [worktreeId] }))
         await refresher.flush()
       } catch (error) {

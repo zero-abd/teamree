@@ -185,6 +185,20 @@ describe('the application menu', () => {
     expect(roles(submenuOf(template, 'Window'))).toEqual(['minimize', 'zoom', 'front'])
   })
 
+  // ⌘Q has to reach `before-quit`, because everything that makes a quit clean
+  // hangs off it (quitSequence.ts). Electron's own `quit` role is `app.quit()`
+  // and nothing else, so the item carries no handler of its own that could get
+  // in front of that — which also means `MenuItem.click()` from an inspector,
+  // which runs handlers and not roles, is not the key.
+  it('leaves Quit to Electron, so ⌘Q is app.quit() and nothing of its own', () => {
+    for (const platform of ['darwin', 'win32', 'linux'] as const) {
+      const template = applicationMenuTemplate({ platform })
+      const menu = platform === 'darwin' ? template[0]?.submenu : submenuOf(template, menuName(platform, 'File'))
+      const quit = (Array.isArray(menu) ? menu : []).find((item) => item.role === 'quit')
+      expect(quit, platform).toEqual({ role: 'quit' })
+    }
+  })
+
   it('puts Quit in the File menu where there is no app menu to hold it', () => {
     const template = applicationMenuTemplate({ platform: 'win32' })
     expect(template[0]?.label).toBe(menuName('win32', 'File'))

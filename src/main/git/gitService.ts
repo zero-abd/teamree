@@ -13,7 +13,7 @@
 //    drops rows git no longer knows about.
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, rm, stat } from 'node:fs/promises'
+import { mkdir, rm, rmdir, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
@@ -878,6 +878,7 @@ export class GitService {
       // Only ever delete inside our own root; a user-chosen checkout path is theirs.
       if (isInside(this.#worktreesRoot, worktree.path)) {
         await rm(worktree.path, { recursive: true, force: true }).catch(() => undefined)
+        await this.#dropEmptyProjectDir(worktree.path)
       }
     }
     if (!ourBranch) return
@@ -886,6 +887,23 @@ export class GitService {
     // read that fails leaves the question open rather than answering it "mine".
     const tip = await this.#branchTip(project, ourBranch.branch).catch(() => null)
     if (tip === ourBranch.sha) await quiet(['branch', '-D', ourBranch.branch])
+  }
+
+  /**
+   * Takes away `<worktreesRoot>/<project>` once the last checkout in it has
+   * gone, and never otherwise.
+   *
+   * The directory is made for the first checkout of a project and nothing
+   * else ever wants it; left behind it is one empty folder per project ever
+   * tracked, in the one directory this app owns. Only the directory straight
+   * under the root, and only by a plain `rmdir` — anything at all in it, ours
+   * or not, makes that fail and the folder stays. A checkout somewhere the
+   * user chose is nowhere near this.
+   */
+  async #dropEmptyProjectDir(checkoutPath: string): Promise<void> {
+    const projectDir = path.dirname(checkoutPath)
+    if (!samePath(path.dirname(projectDir), this.#worktreesRoot)) return
+    await rmdir(projectDir).catch(() => undefined)
   }
 
   /**
@@ -949,7 +967,10 @@ export class GitService {
     if (force) args.push('--force')
     args.push(worktree.path)
     const result = await this.#runner.tryRun({ args, cwd: project.path, timeoutMs: 120_000 })
-    if (result.exitCode === 0) return this.#surviving(worktree)
+    if (result.exitCode === 0) {
+      await this.#dropEmptyProjectDir(worktree.path)
+      return this.#surviving(worktree)
+    }
 
     // Fallback for the one case `git worktree remove` refuses outright on our
     // 2.25 floor: the checkout directory is gone but its metadata is not.

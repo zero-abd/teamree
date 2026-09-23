@@ -54,12 +54,19 @@ it('creates the worktree, then runs the chosen agent in it', { timeout: 20_000 }
       'the worktree to be created'
     ).then(() => useWorkspaceStore.getState().worktrees.find((worktree) => worktree.name === 'Rewrite the pager')!)
 
-    await until(
-      () =>
-        useWorkspaceStore.getState().activeWorktreeId === created.id &&
-        created.id in useWorkspaceStore.getState().layouts,
-      'the new worktree to open with its panes'
-    )
+    // Every pane the runtime has opened in it is in the layout, and the agent's
+    // is one of them: the tab opened before any of them existed.
+    await until(() => {
+      const state = useWorkspaceStore.getState()
+      const panes = collectTerminalIds(state.layouts[created.id]?.root ?? null)
+      const known = Object.values(state.terminals).filter((one) => one.worktreeId === created.id)
+      return (
+        state.activeWorktreeId === created.id &&
+        state.worktrees.find((one) => one.id === created.id)?.state === 'ready' &&
+        known.some((one) => one.title === agent.command) &&
+        known.every((one) => panes.includes(one.id))
+      )
+    }, 'the new worktree to open with its panes')
 
     const state = useWorkspaceStore.getState()
     expect(state.worktrees.find((worktree) => worktree.id === created.id)?.state).toBe('ready')
@@ -181,3 +188,60 @@ it('creates one worktree per selected agent, each running its own', { timeout: 3
     stop()
   }
 })
+
+// The incident this pins: the checkout takes tens of seconds, and opening the
+// tab when it was ready meant the window changed tabs under whoever had gone
+// on typing somewhere else in the meantime. Starting the task is the click
+// that opens the tab; nothing that happens afterwards is.
+it(
+  'opens the tab as the composer closes, and never moves you again once the checkout is ready',
+  { timeout: 20_000 },
+  async () => {
+    const store = useWorkspaceStore.getState()
+    await store.bootstrap()
+    const stop = store.startWatching()
+    try {
+      const projectId = useWorkspaceStore.getState().projects[0]!.id
+      const elsewhere = useWorkspaceStore.getState().worktrees.find((worktree) => worktree.state === 'ready')!
+      const agent = (await runtimeClient.call('agent.list', {}))[0]!
+      const call = vi.spyOn(runtimeClient, 'call')
+
+      store.startTask({
+        projectId,
+        creates: [{ name: 'Stream the pager', agentCommand: agent.command, task: 'Stream the pager' }]
+      })
+
+      const created = await until(
+        () => useWorkspaceStore.getState().worktrees.some((worktree) => worktree.name === 'Stream the pager'),
+        'the worktree to be created'
+      ).then(() => useWorkspaceStore.getState().worktrees.find((worktree) => worktree.name === 'Stream the pager')!)
+
+      // In front at once, while the checkout is still being made.
+      expect(useWorkspaceStore.getState().activeWorktreeId).toBe(created.id)
+      expect(useWorkspaceStore.getState().worktrees.find((one) => one.id === created.id)?.state).toBe('creating')
+
+      // Going somewhere else to type while it is made.
+      await store.openWorktree(elsewhere.id)
+      expect(useWorkspaceStore.getState().activeWorktreeId).toBe(elsewhere.id)
+
+      await until(
+        () =>
+          call.mock.calls.some(
+            ([method, params]) =>
+              method === 'terminal.create' && (params as { worktreeId: string }).worktreeId === created.id
+          ),
+        'the agent to be started'
+      )
+      await until(
+        () => collectTerminalIds(useWorkspaceStore.getState().layouts[created.id]?.root ?? null).length > 0,
+        'the agent’s pane to land in the layout'
+      )
+
+      expect(useWorkspaceStore.getState().activeWorktreeId).toBe(elsewhere.id)
+
+      call.mockRestore()
+    } finally {
+      stop()
+    }
+  }
+)

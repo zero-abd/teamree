@@ -269,6 +269,41 @@ describe('worktree.remove', () => {
     expect(branches.split('\n')).not.toContain('real-work')
   })
 
+  // `~/.teamree/worktrees/<project>` is made for the first checkout and used
+  // to outlive the last: an empty folder per project ever tracked, in the one
+  // directory this app owns.
+  it('takes the project’s directory with the last checkout, and only then', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const first = await readyWorktree(service, project.id, 'first')
+    const second = await readyWorktree(service, project.id, 'second')
+    const projectDir = path.dirname(first.path)
+    expect(path.dirname(projectDir)).toBe(repo.worktreesRoot)
+    expect(path.dirname(second.path)).toBe(projectDir)
+
+    await service.removeWorktree({ worktreeId: first.id, deleteBranch: true })
+    expect(existsSync(projectDir)).toBe(true)
+
+    await service.removeWorktree({ worktreeId: second.id, deleteBranch: true })
+    expect(existsSync(projectDir)).toBe(false)
+    expect(existsSync(repo.worktreesRoot)).toBe(true)
+  })
+
+  it('leaves the project’s directory alone while anything else is in it', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const only = await readyWorktree(service, project.id, 'only')
+    const projectDir = path.dirname(only.path)
+    await mkdir(path.join(projectDir, 'notes'), { recursive: true })
+
+    await service.removeWorktree({ worktreeId: only.id, deleteBranch: true })
+
+    expect(existsSync(only.path)).toBe(false)
+    expect(existsSync(path.join(projectDir, 'notes'))).toBe(true)
+  })
+
   it('keeps the branch when only the checkout is removed', async () => {
     const repo = await newRepo()
     const service = newService(repo)

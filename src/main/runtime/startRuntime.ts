@@ -139,6 +139,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
 
   let socketServer: RuntimeSocketServer | undefined
   const discoveryPath = discoveryFilePath(userDataDir)
+  let wroteDiscovery = false
   // Replaced once the renderer bridge below is installed. A no-op until then,
   // which is part of what makes the teardown safe on a runtime only part-way up.
   let uninstallBridge = (): void => {}
@@ -149,26 +150,41 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   // up: the bridge is a no-op until one is installed, the areas exist from the
   // moment `registerHandlers` returned, and the socket is released only if
   // there is one.
+  //
+  // Each step is its own step: one that throws is reported and the next one
+  // still runs. The quit goes ahead whether or not this finishes — an app that
+  // cannot be quit is the worse failure, see quitSequence.ts — so a step that
+  // took the rest of the teardown with it used to leave the process gone and
+  // its discovery file behind, and the next `teamree` command trying a socket
+  // nobody answered. The file and the socket are what the world outside this
+  // process can see of it, so they go last and they go regardless.
   const stop = async (): Promise<void> => {
-    uninstallBridge()
+    const step = async (release: () => void | Promise<void>): Promise<void> => {
+      try {
+        await release()
+      } catch (error) {
+        report(error)
+      }
+    }
+    await step(uninstallBridge)
     // Before anything that takes time: a pending check firing during shutdown
     // would be a request nobody is left to read the answer to.
-    areas.updates.stop()
+    await step(() => areas.updates.stop())
     // First: a relay connection outliving the process it reports on would
     // have a teammate watching panes that are already being killed below.
-    areas.peers.stop()
+    await step(() => areas.peers.stop())
     // Before the PTYs, because a shell dying rewrites files and there is no
     // point reporting changes nobody is left to read.
-    areas.worktreeFiles.close()
-    areas.teamworkFiles.close()
+    await step(() => areas.worktreeFiles.close())
+    await step(() => areas.teamworkFiles.close())
     // Kills every PTY before the sockets go, so nothing is orphaned.
-    await areas.terminals.shutdown().catch(report)
-    subscriptions.closeAll()
-    if (socketServer) {
-      await socketServer.close().catch(report)
-      await removeDiscoveryFile(discoveryPath)
-    }
-    await store.flush().catch(report)
+    await step(() => areas.terminals.shutdown())
+    await step(() => subscriptions.closeAll())
+    if (socketServer) await step(socketServer.close)
+    // Whether or not the socket was ever bound: a file naming this process is
+    // wrong the moment it leaves, and only this process writes it.
+    if (wroteDiscovery) await step(() => removeDiscoveryFile(discoveryPath))
+    await step(() => store.flush())
   }
 
   try {
@@ -190,6 +206,9 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
       try {
         socketServer = await startSocketServer({ endpoint, dispatch, subscriptions, onError: report })
         context.endpoint = socketServer.endpoint
+        // Claimed before the write, because a write that failed half way is
+        // still a file to take away.
+        wroteDiscovery = true
         await writeDiscoveryFile(discoveryPath, {
           endpoint: socketServer.endpoint,
           pid: context.pid,
