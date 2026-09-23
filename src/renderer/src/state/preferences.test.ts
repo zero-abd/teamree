@@ -1,12 +1,6 @@
-// The two preferences that are kept in the browser's storage rather than in the
-// workspace file.
-//
-// Everything here is about the same promise: a preference that cannot be read
-// back costs a default and nothing else. Storage is the one place in this
-// renderer that can throw for reasons that have nothing to do with the app —
-// a private window, a quota, a browser configured to refuse it — and a
-// preference is never worth a blank window, so each of those is asserted rather
-// than assumed.
+// Preferences kept in the browser's storage. Storage can throw for reasons
+// outside the app (private window, quota), and a preference that cannot be read
+// back costs a default and nothing else.
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -64,17 +58,15 @@ describe('the size of the text in a pane', () => {
     expect(clampTerminalFontSize(14)).toBe(14)
   })
 
-  // A fractional size is a fractional cell, and a grid of fractional cells is
-  // where a column count and the PTY's idea of one stop agreeing.
+  // A grid of fractional cells is where a column count and the PTY's idea of one stop agreeing.
   it('rounds to a whole pixel', () => {
     expect(clampTerminalFontSize(13.6)).toBe(14)
   })
 
   it('falls back to the default rather than passing a number that is not one', () => {
     expect(clampTerminalFontSize(Number.NaN)).toBe(TERMINAL_FONT_DEFAULT_PX)
-    // Infinity is not a size somebody meant, so it is the default rather than
-    // the top of the range: clamping it to the maximum would silently turn a
-    // broken value into a deliberate-looking one.
+    // Infinity is not a size somebody meant: clamping it to the maximum would
+    // turn a broken value into a deliberate-looking one.
     expect(clampTerminalFontSize(Number.POSITIVE_INFINITY)).toBe(TERMINAL_FONT_DEFAULT_PX)
   })
 
@@ -88,9 +80,7 @@ describe('the size of the text in a pane', () => {
     expect(readStoredTerminalFontSize(memoryStorage())).toBe(TERMINAL_FONT_DEFAULT_PX)
   })
 
-  // The value on disk is a string somebody's browser kept, so it is treated as
-  // hostile: a stored size out of range is clamped on the way back in rather
-  // than trusted because it was once written by this app.
+  // The value on disk is a string somebody's browser kept, so it is treated as hostile.
   it('clamps what it reads, not only what it writes', () => {
     expect(readStoredTerminalFontSize(memoryStorage({ 'teamree.terminal.fontSize': '900' }))).toBe(TERMINAL_FONT_MAX_PX)
     expect(readStoredTerminalFontSize(memoryStorage({ 'teamree.terminal.fontSize': 'enormous' }))).toBe(
@@ -116,9 +106,8 @@ describe('the ref a project starts new worktrees from', () => {
     expect(readStoredStartPoints(memoryStorage())).toEqual({})
   })
 
-  // Setting a ref and clearing it are the same call, because the two are the
-  // same question answered differently and splitting them would leave two ways
-  // to mean "no preference".
+  // Setting a ref and clearing it are the same call; splitting them would
+  // leave two ways to mean "no preference".
   it('sets one project without disturbing another', () => {
     const refs = withStartPoint({ alpha: 'develop' }, 'beta', 'main')
     expect(refs).toEqual({ alpha: 'develop', beta: 'main' })
@@ -136,10 +125,7 @@ describe('the ref a project starts new worktrees from', () => {
     })
   })
 
-  // The value is a string from storage, so every shape that is not the one this
-  // expects has to end somewhere. It ends here rather than in the start-point
-  // box, where a number or an object would have been rendered into the field
-  // that names a git ref.
+  // A wrong shape has to end here rather than rendered into the field that names a git ref.
   it('drops anything that is not a ref, and anything that is not a map of them', () => {
     expect(readStoredStartPoints(memoryStorage({ 'teamree.worktree.startPoints': 'not json at all' }))).toEqual({})
     expect(readStoredStartPoints(memoryStorage({ 'teamree.worktree.startPoints': '["develop"]' }))).toEqual({})
@@ -156,10 +142,8 @@ describe('the ref a project starts new worktrees from', () => {
   })
 })
 
-// The same reader again, over a string that names a program rather than a ref.
-// Worth its own tests for one reason: this value reaches the main process,
-// which looks for it on PATH — so the shapes that are not a program name have
-// to stop here rather than in the sentence that says it was not found.
+// This value reaches the main process, which looks for it on PATH, so shapes
+// that are not a program name have to stop here.
 describe('the editor a project opens its checkouts in', () => {
   const KEY = 'teamree.editor.commands'
 
@@ -200,16 +184,13 @@ describe('how a patch is laid out', () => {
     expect(readStoredDiffLayout(storage)).toBe('inline')
   })
 
-  // One column, because this is a side panel: two columns in three hundred
-  // pixels is two columns of nothing.
+  // Two columns in three hundred pixels is two columns of nothing.
   it('is inline until somebody says otherwise', () => {
     expect(readStoredDiffLayout(memoryStorage())).toBe('inline')
     expect(DIFF_LAYOUT_DEFAULT).toBe('inline')
   })
 
-  // What is in storage is a string somebody's browser kept. A third value would
-  // reach the panel as a layout with no rules written for it, and the patch
-  // would render with neither set of columns.
+  // A third value would reach the panel as a layout with no rules written for it.
   it('takes the default rather than a value that is not one of the two', () => {
     expect(readStoredDiffLayout(memoryStorage({ 'teamree.diff.layout': 'unified' }))).toBe('inline')
     expect(readStoredDiffLayout(memoryStorage({ 'teamree.diff.layout': '' }))).toBe('inline')
@@ -229,8 +210,7 @@ describe('the agent you always use', () => {
     expect(readStoredDefaultAgent(storage)).toBe('codex')
   })
 
-  // Nothing stored is not the same as "no agent": it means nobody has said,
-  // and the first-found rule is what answers instead.
+  // Nothing stored means nobody has said, and the first-found rule answers instead.
   it('is empty until somebody chooses one', () => {
     expect(readStoredDefaultAgent(memoryStorage())).toBe(NO_DEFAULT_AGENT)
   })
@@ -273,8 +253,7 @@ describe('the flag you always pass', () => {
     expect(withAgentArgs({ claude: '--model opus' }, 'claude', '   ')).toEqual({})
   })
 
-  // This ends up on a command line, so a stored value that is not a string has
-  // to stop here rather than in the middle of one.
+  // This ends up on a command line, so a non-string has to stop here.
   it('drops anything that is not a fragment, and anything that is not a map of them', () => {
     expect(readStoredAgentArgs(memoryStorage({ 'teamree.agent.args': 'not json at all' }))).toEqual({})
     expect(readStoredAgentArgs(memoryStorage({ 'teamree.agent.args': '["--model opus"]' }))).toEqual({})
@@ -299,8 +278,7 @@ describe('whether this Mac may sleep', () => {
     expect(readStoredKeepAwake(storage)).toBe('off')
   })
 
-  // Awake while an agent is on something, and free to sleep otherwise: the one
-  // default that costs nobody a night of fan noise and nobody a stopped run.
+  // Awake while an agent is on something: costs nobody fan noise and nobody a stopped run.
   it('follows the agents until somebody says otherwise', () => {
     expect(readStoredKeepAwake(memoryStorage())).toBe('agent')
     expect(KEEP_AWAKE_DEFAULT).toBe('agent')

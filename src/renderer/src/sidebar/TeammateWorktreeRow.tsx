@@ -1,39 +1,13 @@
-// One of a teammate's worktrees, under the same project as your own.
-//
-// Two things a reader must never be wrong about, and both are structural rather
-// than decorative:
-//
-// **Whose it is.** The handle is on the row itself, not only in a tooltip, and
-// the row carries a class the stylesheet indents and tints. A reader glancing
-// down the list has to be able to see where their checkouts stop without
-// reading a word.
-//
-// **That it is not theirs to act on.** There is no remove button and no retry:
-// the worktree row is a `<div>` rather than a button with a disabled attribute,
-// because a disabled control is a thing that would work if something were
-// different and this is a thing that will not.
-//
-// The panes underneath it are the one exception, and only in one direction. A
-// pane can be opened for *reading*, so it is a real button and says "watch" —
-// and what it opens is a pane in the workspace that says whose machine it is on
-// every line of its chrome, rather than a pane of your own that happens to be
-// somebody else's. Pressing a row that is already open closes it again, which
-// is what keeps stopping reachable for somebody whose eye is on this list.
-//
-// **Whether this is a live view or a remembered one.** A row whose teammate is
-// away stays exactly where it was — a worktree disappearing reads as a worktree
-// deleted — and says how old it is, in the same words and the same rounding
-// every other age in this sidebar uses.
+// One of a teammate's worktrees, under the same project as your own. The
+// handle is on the row and the row is a `<div>`, not a disabled button: it will
+// not act. Panes can be watched; an away teammate's row stays put and says how old it is.
 
 import { ACTIVITY_LABEL, sinceLabel, truncateName } from './agentRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 
 type TeammateWorktreeRowProps = {
   row: TeammateWorktreeRowModel
-  /**
-   * The panes of this project the window has open, which can be more than one:
-   * they take slots in the workspace now rather than a single floating card.
-   */
+  /** The panes of this project the window has open; they take slots in the workspace. */
   watchingPaneIds: readonly string[]
   onWatch: (pane: TeammatePaneRow) => void
 }

@@ -46,8 +46,7 @@ describe('a teammate’s rows', () => {
       NOW
     )
     expect(row?.panes.map((entry) => entry.activity)).toEqual(['working', 'quiet', 'done', 'failed'])
-    // The worktree as a whole is read by the same ordering the local rows use:
-    // a failure outranks work in progress, because it is finished and wrong.
+    // The same ordering the local rows use: a failure outranks work in progress.
     expect(row?.activity).toBe('failed')
     expect(ACTIVITY_LABEL[row!.activity!]).toBe('exited with an error')
   })
@@ -71,8 +70,7 @@ describe('a teammate’s rows', () => {
   })
 
   it('adds the time since the snapshot arrived to the silence its owner measured', () => {
-    // Two clocks never agree, so what crosses is a duration. The reader adds
-    // what has elapsed here, which is the only part of it this machine knows.
+    // Two clocks never agree, so what crosses is a duration; the reader adds what elapsed here.
     const [row] = teammateRows([theirWorktree({ heardAt: NOW - 20_000, panes: [pane({ quietForMs: 60_000 })] })], NOW)
     expect(row?.panes[0]?.quietFor).toBe(80_000)
     expect(row?.heardAgoMs).toBe(20_000)
@@ -85,8 +83,7 @@ describe('a teammate’s rows', () => {
   })
 
   it('quotes nothing from a pane nobody has opened, because nothing of it has crossed', () => {
-    // Output flows only for a pane somebody is watching. An empty evidence line
-    // would read as an answer; null is the row saying it has nothing to quote.
+    // Output flows only for a watched pane; null is the row saying it has nothing to quote.
     const [row] = teammateRows([theirWorktree({ panes: [pane()] })], NOW)
     expect(row?.panes[0]?.evidence).toBeNull()
   })
@@ -106,8 +103,8 @@ describe('a teammate’s rows', () => {
   })
 
   it('leaves the dimensions unknown rather than guessing when a teammate sends none', () => {
-    // A peer that has not been rebuilt sends no size, and a row that answered
-    // 80x24 anyway would have a watcher draw a frame the output does not fit.
+    // A peer not rebuilt sends no size; answering 80x24 would have a watcher
+    // draw a frame the output does not fit.
     const [row] = teammateRows([theirWorktree({ panes: [pane()] })], NOW)
     expect(row?.panes[0]?.cols).toBeUndefined()
     expect(row?.panes[0]?.rows).toBeUndefined()
@@ -130,8 +127,7 @@ describe('a teammate whose machine is away', () => {
   })
 
   it('carries the unrounded fact as well as the wording, so acting on a pane can gate on it', () => {
-    // The badge forgives a blink; `live` does not. Anything that could reach a
-    // teammate's pane has to read the one that forgives nothing.
+    // The badge forgives a blink; `live` does not, and anything that could reach a pane reads `live`.
     const [blinking] = teammateRows([theirWorktree({ live: false, heardAt: NOW - 1_000 })], NOW)
     expect(blinking?.staleness).toBeNull()
     expect(blinking?.live).toBe(false)

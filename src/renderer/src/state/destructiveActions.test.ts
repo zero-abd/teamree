@@ -1,9 +1,5 @@
-// The two places in this window that acted before the runtime had agreed.
-//
-// One forced a removal git was entitled to refuse; the other took a pane off
-// the screen and only then asked for the process behind it to be closed. Both
-// are the same mistake in different clothes: the UI deciding an outcome the
-// runtime owns.
+// The two places in this window that acted before the runtime had agreed: a forced removal
+// git could refuse, and a pane taken off screen before the process behind it was closed.
 
 import { expect, it, vi } from 'vitest'
 import { collectTerminalIds } from '../panes/paneLayout'
@@ -19,8 +15,7 @@ import { useWorkspaceStore } from './workspaceStore'
 it('retries a failed worktree without forcing away whatever is behind it', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
-  // A failed row can have a complete checkout behind it — a create the last
-  // restart interrupted is marked failed with its files still on disk.
+  // A failed row can have a complete checkout behind it: a create interrupted by a restart.
   const failed = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'failed')!
 
   const call = vi.spyOn(runtimeClient, 'call')
@@ -49,9 +44,7 @@ it('keeps a pane on screen when the runtime could not close the terminal behind 
 
   await store.closeTerminal(terminalId)
 
-  // The PTY and its process tree are still running, so the pane is the only
-  // way back to them: dropping it would strand the work with no way to reach
-  // it short of quitting the app.
+  // The PTY is still running, so the pane is the only way back to it.
   const after = useWorkspaceStore.getState()
   expect(collectTerminalIds(after.layouts[worktreeId]!.root)).toContain(terminalId)
   expect(after.terminals[terminalId]).toBeDefined()
@@ -73,19 +66,9 @@ it('closes the pane once the runtime has really closed the terminal', async () =
   expect(useWorkspaceStore.getState().terminals[terminalId]).toBeUndefined()
 })
 
-// The guard is on the store action and not on the buttons, which is the whole
-// point of it: there are three ways to close a pane — the pane bar's ×, the
-// close-pane chord, and the × on each tab above the panes — and a check written
-// into each of them is a check the fourth one is written without. These two
-// tests are about `closeTerminal` itself, because that is the seam every one of
-// those paths goes through.
-//
-// Each opens a pane of its own rather than borrowing one from the layout. The
-// tests above close panes out of the same seeded workspace, so by the time
-// these run an id taken from the tree can be one whose record has already gone
-// — and a terminal the window has no record of is, correctly, one this guard
-// says nothing about. That made an earlier version of these tests pass for a
-// reason that had nothing to do with what they were asking.
+// `closeTerminal` is the seam every close path goes through, so the guard is tested there.
+// Each test opens a pane of its own: an id taken from the seeded tree may already have been
+// closed by the tests above, and a terminal with no record is one the guard says nothing about.
 async function workingPane(agent: 'claude' | undefined): Promise<{ worktreeId: string; terminalId: string }> {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
@@ -102,9 +85,7 @@ async function workingPane(agent: 'claude' | undefined): Promise<{ worktreeId: s
       ...state.terminals,
       [terminalId]: { ...state.terminals[terminalId]!, agent, busy: true, running: true }
     },
-    // These tests share one store, and one of them deliberately leaves a
-    // question on the screen. Starting from no dialog is what lets the next one
-    // assert that nothing asked.
+    // One shared store, and one test deliberately leaves a question on screen.
     dialog: null
   }))
   return { worktreeId, terminalId }
@@ -133,9 +114,7 @@ it('closes a working pane once somebody has actually said so', async () => {
   expect(useWorkspaceStore.getState().terminals[terminalId]).toBeUndefined()
 })
 
-// The other half of the decision, and the one that keeps the guard worth
-// obeying: a shell at a prompt is the ordinary pane and it still closes on one
-// click. A question asked on every close is one people learn to press through.
+// A shell at a prompt still closes on one click: a question on every close is one people learn to press through.
 it('closes a quiet shell without asking anybody anything', async () => {
   const { worktreeId, terminalId } = await workingPane(undefined)
   useWorkspaceStore.setState((state) => ({

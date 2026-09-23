@@ -1,18 +1,6 @@
-// A teammate's worktrees, turned into the rows the sidebar already knows how to
-// read.
-//
-// Deliberately built on `agentRows.ts` rather than beside it. The four activity
-// states, the phrases for them and the rule for naming a pane are the same four
-// states, phrases and rule whether the PTY is on this machine or somebody
-// else's — and two modules describing them is how an app ends up calling one of
-// them two different things, on two rows, in one list.
-//
-// The one thing that is genuinely different is time. A teammate's silence
-// crossed the wire as a duration measured by its owner, because two machines do
-// not agree about what time it is. The receiver adds what has elapsed since it
-// arrived, which is the only part of the number it is entitled to, and the
-// result is honest at the cost of being a little behind — which is the right
-// way round for a number whose job is to say something has been sitting there.
+// A teammate's worktrees as the rows the sidebar already reads, built on `agentRows.ts` so
+// one activity is never named two ways. Only time differs: silence crosses the wire as the
+// owner's duration and the receiver adds what has elapsed since, trusting nobody's clock.
 
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
 import { activityOf, paneName, worktreeActivity, type AgentActivity, type AgentRow } from './agentRows'
@@ -39,31 +27,19 @@ export type TeammateWorktreeRowModel = {
   /** How old the whole picture is, in this machine's milliseconds. */
   heardAgoMs: number
   /**
-   * Whether the link behind this row is connected right now.
-   *
-   * The unrounded truth, and the only thing that may ever gate acting on a
-   * pane. `staleness` below is what a reader is shown and it forgives a blink;
-   * this forgives nothing.
+   * Whether the link behind this row is connected right now: the unrounded truth, and the only
+   * thing that may gate acting on a pane. `staleness` forgives a blink; this forgives nothing.
    */
   live: boolean
   /** How old this is and how to say so, or null while it is live. */
   staleness: TeammateStaleness | null
 }
 
-/**
- * `now` is this machine's clock and `heardAt` is a stamp it made itself, so
- * nothing here trusts a timestamp from the other end.
- */
+/** `now` is this machine's clock and `heardAt` a stamp it made itself; nothing here trusts a timestamp from the other end. */
 export function teammateRows(
   worktrees: readonly TeammateWorktree[],
   now: number,
-  /**
-   * The last line each watched pane has said, keyed by the namespaced pane id.
-   *
-   * Only panes somebody has open have one, and that is the point: a teammate's
-   * pane does not stream until it is opened, so a row that quoted one nobody is
-   * watching would be quoting something this machine has never been sent.
-   */
+  /** The last line each watched pane said, by namespaced pane id. Only open panes have one: a teammate's pane does not stream until opened. */
   evidence: Readonly<Record<string, string | null>> = {}
 ): TeammateWorktreeRowModel[] {
   return worktrees.map((worktree) => {
@@ -90,12 +66,9 @@ function paneRow(pane: PeerPane, handle: string, heardAgoMs: number, evidence: s
     agent: pane.agent,
     label: paneName(pane),
     activity: activityOf(pane),
-    // The owner's measurement plus the time it has been sitting here. Adding
-    // the two is the only arithmetic that does not involve believing somebody
-    // else's clock.
+    // The owner's measurement plus the time it has sat here: the only arithmetic that believes no other clock.
     quietFor: pane.quietForMs + heardAgoMs,
-    // Null until somebody opens the pane, because until then no byte of it has
-    // crossed the wire and a quotation would be an invention.
+    // Null until somebody opens the pane; no byte of it has crossed the wire before then.
     evidence,
     handle,
     cols: pane.cols,
@@ -103,31 +76,16 @@ function paneRow(pane: PeerPane, handle: string, heardAgoMs: number, evidence: s
   }
 }
 
-/**
- * The hover text for a teammate's worktree row.
- *
- * It says whose it is first, because that is the fact that changes what every
- * other fact on the row means.
- */
+/** The hover text for a teammate's worktree row; whose it is comes first. */
 export function teammateTitle(row: TeammateWorktreeRowModel): string {
   const panes = `${row.panes.length} pane${row.panes.length === 1 ? '' : 's'}`
   const head = `${row.name} · ${row.handle}’s worktree on their machine · ${row.branch} · ${panes}`
   return row.staleness ? `${head}\n${row.staleness.detail}` : head
 }
 
-/**
- * Teammates on the roster there is no picture of at all.
- *
- * Deliberately not a row each. A colleague whose app has never been up while
- * yours was has no worktrees to show and, as far as this machine knows, may
- * have none — inventing a row for them would be inventing work, which is the
- * mirror of the mistake this milestone exists to prevent. One line saying they
- * are on the roster and unheard is the whole of what is true.
- */
+/** Teammates on the roster there is no picture of. Not a row each: inventing a row for them would be inventing work. */
 export function unheardTeammates(presence: TeammatePresence | undefined): string[] {
-  // Nothing while the project is unread, on the same argument as the rest of
-  // the line: naming somebody as unheard from is a claim about a roster, and a
-  // roster nobody has opened yet supports no claim at all.
+  // Nothing while the project is unread: a roster nobody has opened supports no claim.
   return (teammatesHeard(presence)?.teammates ?? [])
     .filter((teammate) => teammate.heardAt === null)
     .map((teammate) => teammate.handle)

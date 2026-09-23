@@ -18,8 +18,7 @@ describe('a row that is remembered rather than watched', () => {
   })
 
   it('rounds the age down, so a row never flatters how long a teammate has been away', () => {
-    // The same rule every other age in this sidebar is written by, on purpose:
-    // two vocabularies for "I am not sure" is one too many.
+    // The same rule every other age in this sidebar is written by.
     expect(away(299_000)?.age).toBe('4m')
     expect(away(299_000)?.age).toBe(sinceLabel(299_000))
     expect(away(86_399_000)?.age).toBe('23h')
@@ -28,23 +27,18 @@ describe('a row that is remembered rather than watched', () => {
   it('says whose machine is away, and nothing whatever about the worktree', () => {
     const stale = away(600_000)
     expect(stale?.detail).toBe('bob’s machine is not connected. This is what they were showing 10m ago.')
-    // The word this must never come near. A worktree that is gone is a row that
-    // is not on screen at all, and the two cannot be allowed to read alike.
+    // A worktree that is gone is a row not on screen at all; the two must not read alike.
     expect(stale?.detail).not.toMatch(/delet|remov|gone/i)
   })
 
   it('says which fact its number is the age of, because it is the picture and not the absence', () => {
     // `heardAt` moves when a teammate's snapshot changes, not on contact, so a
-    // colleague whose worktrees have been static for an hour arrives here at
-    // an hour the instant their link drops. That is the honest age of what is
-    // on screen — it must stay honest, and every pane's quiet time on the row
-    // is measured from it — but `away · 1h` read as an hour of absence, which
-    // is not what happened.
+    // colleague static for an hour arrives here at an hour the instant their
+    // link drops; `away · 1h` read as an hour of absence.
     const stale = away(3_600_000)
     expect(stale?.age).toBe('1h')
     expect(stale?.badge).toBe('away · picture 1h old')
-    // The word is still there: the machine is away, and a badge that dropped
-    // it would leave that fact to a dashed border and nothing else.
+    // The machine is away; a badge that dropped the word would leave that to a dashed border.
     expect(stale?.badge).toContain('away')
   })
 

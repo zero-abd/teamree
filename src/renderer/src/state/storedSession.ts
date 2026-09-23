@@ -1,17 +1,6 @@
-// What the window had open, remembered across launches.
-//
-// The runtime goes to real trouble to bring a session back: sessions restored,
-// agents resumed, layouts reconciled. None of that is visible if the window
-// then opens one arbitrary tab — the oldest ready worktree — and expands every
-// project, which is what it did with nothing but the sidebar's width written
-// down. This is the rest of the window's own state, read exactly the way that
-// width is: anything that is not what was written is ignored, and storage that
-// refuses to answer at all is the same as having nothing written.
-//
-// Deliberately not here: the changes panel and what is ticked in it. Those are
-// about a working tree that an agent can have moved on entirely while the app
-// was shut, and a tick restored against a file somebody has not looked at since
-// is a claim to have reviewed it.
+// What the window had open, remembered across launches. Anything not what was
+// written is ignored, and storage that refuses is the same as nothing written.
+// Not here: the changes panel's ticks, which would claim a review of a tree an agent may have moved on.
 
 /** The window state that survives a quit. */
 export type StoredSession = {
@@ -44,15 +33,13 @@ export function readStoredSession(storage: Pick<Storage, 'getItem'> | undefined)
     const active = typeof fields.activeWorktreeId === 'string' ? fields.activeWorktreeId : null
     return {
       openWorktreeIds,
-      // An active worktree with no tab is not a window anybody had; dropping it
-      // leaves the tabs and lets the caller put the last one in front.
+      // An active worktree with no tab is not a window anybody had.
       activeWorktreeId: active !== null && openWorktreeIds.includes(active) ? active : null,
       collapsedProjects: readCollapsed(fields.collapsedProjects),
       sidebarVisible: fields.sidebarVisible !== false
     }
   } catch {
-    // A private window, cleared site data, or a record this version cannot
-    // read. Starting fresh is always a window somebody could have had.
+    // A private window, cleared site data, or a record this version cannot read.
     return emptySession()
   }
 }
@@ -69,8 +56,7 @@ export function writeStoredSession(storage: Pick<Storage, 'setItem'> | undefined
       })
     )
   } catch {
-    // Storage can be full or blocked. Forgetting which tabs were open is not
-    // worth failing the click that opened one.
+    // Storage can be full or blocked; not worth failing the click that opened a tab.
   }
 }
 

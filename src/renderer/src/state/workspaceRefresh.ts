@@ -1,18 +1,6 @@
-// Turning workspace events into refetches, without refetching more than the
-// event asked for and without letting two refetches race.
-//
-// The stream is coarse by design: an event names a collection, the client
-// re-reads it. That is only safe if the re-reads are ordered. Two overlapping
-// `worktree.list` calls can resolve in either order, so the older answer can
-// land last and put the UI back to a state the runtime has already left —
-// permanently, because nothing else is coming to correct it. So every refetch
-// goes through one queue here: at most one batch is ever in flight, and events
-// that arrive during a batch accumulate into the next one. Ordering then holds
-// by construction rather than by hope.
-//
-// The second half of the file is the other direction of the same race: a fetch
-// that started before the user edited something locally must not land on top of
-// that edit.
+// Workspace events become refetches through one queue: two overlapping `worktree.list` calls
+// can resolve in either order, and the older answer landing last would stick. At most one batch
+// is in flight and events during it accumulate into the next; `LocalEditFence` is the reverse race.
 
 import type { WorkspaceEvent } from '@shared/methods'
 
@@ -21,21 +9,11 @@ export type RefreshTargets = {
   projects: boolean
   worktrees: boolean
   terminals: boolean
-  /**
-   * Rosters. The event carries no project id, so this is the one target that
-   * cannot be narrowed from the stream: the reader re-reads the rosters it is
-   * already holding, which are the ones somebody is looking at.
-   */
+  /** Rosters. The event carries no project id, so the reader re-reads the rosters it already holds. */
   members: boolean
-  /**
-   * Link states and what teammates are showing. Like `members`, the event
-   * carries no project id, so this re-reads the projects on screen.
-   */
+  /** Link states and what teammates are showing; no project id either, so the projects on screen. */
   teammates: boolean
-  /**
-   * What the update check has to say. No id either, and nothing to narrow: it
-   * is one small read out of the runtime's memory.
-   */
+  /** What the update check has to say: one small read, nothing to narrow. */
   updates: boolean
   /** Layouts of exactly these worktrees. Never widened to "every layout". */
   layouts: readonly string[]
@@ -77,11 +55,7 @@ export function isEmptyRefresh(targets: RefreshTargets): boolean {
   )
 }
 
-/**
- * The event-to-refetch mapping, and the whole reason the ids travel on the
- * event: a layout change in one worktree names that worktree, so nothing else
- * is re-read because of it.
- */
+/** The event-to-refetch mapping: a layout change names its worktree, so nothing else is re-read for it. */
 export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
   switch (event.type) {
     case 'projects':
@@ -92,10 +66,8 @@ export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
       return refreshTargets({ terminals: true })
     case 'members':
       return refreshTargets({ members: true })
-    // A roster change moves the link set as well, but it does not need to be
-    // said here: the runtime reconciles its links off the same event and emits
-    // `teammates` when it has, so coupling the two in the client would refetch
-    // once for the roster and once more for the announcement of the same thing.
+    // A roster change moves the link set too, but the runtime emits `teammates` once it has
+    // reconciled; coupling the two here would refetch twice for one thing.
     case 'teammates':
       return refreshTargets({ teammates: true })
     case 'updates':
@@ -103,8 +75,7 @@ export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
     case 'layout':
       return refreshTargets({ layouts: [event.worktreeId] })
     case 'terminalExited':
-      // The runtime emits `terminals` alongside this, so re-reading the list
-      // here would fetch it twice for one exit.
+      // The runtime emits `terminals` alongside this; re-reading here would fetch twice for one exit.
       return refreshTargets({ exits: [{ terminalId: event.terminalId, exitCode: event.exitCode }] })
   }
 }
@@ -160,9 +131,8 @@ export type WorkspaceRefresherOptions = {
 }
 
 /**
- * Short enough that a change made in a shell shows up as fast as the eye reads
- * it, long enough that one action's fan-out is one refetch. The runtime already
- * coalesces on its side; this catches what crosses window boundaries.
+ * Short enough that a shell change shows as fast as the eye reads it, long enough that one action's
+ * fan-out is one refetch. The runtime coalesces on its side; this catches what crosses window boundaries.
  */
 export const REFRESH_WINDOW_MS = 30
 
@@ -177,8 +147,7 @@ export function createWorkspaceRefresher(options: WorkspaceRefresherOptions): Wo
   const startIfIdle = (): void => {
     cancelScheduled?.()
     cancelScheduled = undefined
-    // A batch already running will pick this up when it finishes, and starting
-    // a second one is exactly the overlap this queue exists to prevent.
+    // A running batch picks this up when it finishes; a second one is the overlap this queue prevents.
     if (inFlight || isEmptyRefresh(pending)) return
 
     const batch = pending
@@ -195,8 +164,7 @@ export function createWorkspaceRefresher(options: WorkspaceRefresherOptions): Wo
   const add = (targets: RefreshTargets): void => {
     pending = mergeTargets(pending, targets)
     if (isEmptyRefresh(pending) || cancelScheduled) return
-    // The window opens at the first event of a burst, not the last, so a steady
-    // stream of changes still lands every window rather than never.
+    // The window opens at the first event of a burst, so a steady stream still lands every window.
     cancelScheduled = schedule(startIfIdle, windowMs)
   }
 
@@ -223,10 +191,8 @@ function scheduleWithTimeout(run: () => void, delayMs: number): () => void {
 }
 
 /**
- * Guards a local edit against a read that was already in flight when the user
- * made it. Dragging a pane gutter writes the new tree straight into the store;
- * a `layout.get` issued a moment earlier would otherwise answer with the tree
- * from before the drag and snap the gutter back.
+ * Guards a local edit against a read already in flight: a `layout.get` issued just before a gutter
+ * drag would answer with the tree from before the drag and snap the gutter back.
  */
 export type LocalEditFence = {
   /** Records that the value under `key` was just changed locally. */

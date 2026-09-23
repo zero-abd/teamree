@@ -1,14 +1,6 @@
-// Per-machine preferences: what one person at one screen has chosen.
-//
-// Several of them live here: how big the text in a pane is, which ref a new
-// task in a given project starts from by default, whether an agent that stops
-// while you are elsewhere is allowed to say so, which editor that project's
-// checkouts open in, whether a patch is read down one column or across two,
-// which agent the composer offers first, what each agent is always launched
-// with, and whether this Mac may sleep. All are stored the way the sidebar's width already is — in
-// this window's `localStorage`, behind a clamp, with every read and write
-// wrapped so that storage being unavailable costs a default rather than a
-// render.
+// Per-machine preferences: what one person at one screen has chosen. All live in
+// this window's `localStorage` behind a clamp, with every read and write wrapped
+// so storage being unavailable costs a default rather than a render.
 
 /** Below this the emulator's own glyphs stop being glyphs; above it a pane holds nothing. */
 export const TERMINAL_FONT_MIN_PX = 9
@@ -21,23 +13,14 @@ const START_POINTS_KEY = 'teamree.worktree.startPoints'
 const AGENT_NOTICES_KEY = 'teamree.agent.notices'
 
 /**
- * What an agent pane going quiet is allowed to do: nothing, raise a
- * notification, or raise one with the OS's sound.
- *
- * Three values rather than two booleans, because a sound with no notification
- * is not a state anybody wants and offering it would be a setting that can be
- * put somewhere meaningless.
+ * What an agent pane going quiet may do. Three values rather than two booleans: a sound with no
+ * notification is not a state anybody wants.
  */
 export type AgentNoticePreference = 'off' | 'notify' | 'sound'
 
 export const AGENT_NOTICE_PREFERENCES: readonly AgentNoticePreference[] = ['off', 'notify', 'sound']
 
-/**
- * On, silently. The app's whole premise is that you start three agents and go
- * and do something else, and a default of `off` would be shipping that premise
- * turned off — while a default that makes noise is a decision about the room
- * somebody is in that this app is in no position to make.
- */
+/** On, silently: `off` ships the premise turned off, and a default that makes noise is a decision about somebody's room. */
 export const AGENT_NOTICE_DEFAULT: AgentNoticePreference = 'notify'
 
 export function readStoredAgentNotices(storage: Pick<Storage, 'getItem'> | undefined): AgentNoticePreference {
@@ -56,31 +39,21 @@ export function writeStoredAgentNotices(
   try {
     storage?.setItem(AGENT_NOTICES_KEY, preference)
   } catch {
-    // As with the size above: the choice holds for this window and is forgotten
-    // on the next.
+    // Storage full or blocked: the choice holds for this window and is forgotten on the next.
   }
 }
 
 const KEEP_AWAKE_KEY = 'teamree.keepAwake'
 
 /**
- * Whether this Mac may sleep: never while the app runs, not while an agent
- * pane is working or waiting on you, or whenever the OS would.
- *
- * Read by the main process, which is the only one that can hold a power
- * assertion — `useKeepAwake` publishes it over the preload bridge whenever it
- * changes, beside whether any agent is busy.
+ * Whether this Mac may sleep: never while the app runs, not while an agent pane is busy or waiting,
+ * or whenever the OS would. Only the main process can hold a power assertion; `useKeepAwake` publishes it.
  */
 export type KeepAwakeMode = 'on' | 'agent' | 'off'
 
 export const KEEP_AWAKE_MODES: readonly KeepAwakeMode[] = ['on', 'agent', 'off']
 
-/**
- * Follow the agents. The app's premise is that you start three agents and go
- * and do something else, and a laptop that sleeps ten minutes into that stops
- * all three mid-turn; a default of `on` would hold the machine up all night
- * for a window with nothing running in it.
- */
+/** Follow the agents: a laptop that sleeps mid-turn stops all three, and `on` would hold the machine up all night for an empty window. */
 export const KEEP_AWAKE_DEFAULT: KeepAwakeMode = 'agent'
 
 export function readStoredKeepAwake(storage: Pick<Storage, 'getItem'> | undefined): KeepAwakeMode {
@@ -128,19 +101,13 @@ export function writeStoredTerminalFontSize(storage: Pick<Storage, 'setItem'> | 
   try {
     storage?.setItem(FONT_SIZE_KEY, String(clampTerminalFontSize(size)))
   } catch {
-    // A blocked storage quota is not worth failing a preference over; the size
-    // still applies to this window, it simply does not survive the next launch.
+    // As above: the choice holds for this window and is forgotten on the next.
   }
 }
 
 /**
- * Each project's preferred start point, by project id.
- *
- * Read defensively rather than trusted, because the only thing standing between
- * this and the composer's start-point box is a string somebody's browser kept:
- * anything that is not an object of non-empty strings is dropped entirely
- * rather than partly, so a corrupted entry cannot put a `[object Object]` into
- * the field that names a git ref.
+ * Each project's preferred start point, by project id. Anything that is not an object of non-empty
+ * strings is dropped whole, so a corrupt entry cannot put `[object Object]` into a git ref field.
  */
 export function readStoredStartPoints(storage: Pick<Storage, 'getItem'> | undefined): Record<string, string> {
   try {
@@ -169,13 +136,7 @@ export function writeStoredStartPoints(
   }
 }
 
-/**
- * The map with one project's preference set, or removed when the ref is blank.
- *
- * Clearing writes no empty string, because an empty string and an absent entry
- * would be two spellings of "use the base ref" and only one of them is checked
- * for anywhere else.
- */
+/** The map with one project's preference set, or removed when blank: absence is the only spelling of "use the base ref" checked for elsewhere. */
 export function withStartPoint(
   refs: Record<string, string>,
   projectId: string,
@@ -190,13 +151,8 @@ export function withStartPoint(
 }
 
 /**
- * Each project's editor command, by project id.
- *
- * Read exactly as defensively as the start points above, and for a sharper
- * reason: this string names a program the main process will look for on PATH.
- * It is never a command line — the main process resolves it as one program name
- * and spawns it with the checkout as an argument — but a stored value that is
- * not a string has no business getting as far as that decision.
+ * Each project's editor command, by project id. Read as defensively as the start points: this names
+ * a program the main process looks for on PATH (one program name, never a command line).
  */
 export function readStoredEditorCommands(storage: Pick<Storage, 'getItem'> | undefined): Record<string, string> {
   try {
@@ -225,13 +181,7 @@ export function writeStoredEditorCommands(
   }
 }
 
-/**
- * The map with one project's editor set, or removed when the command is blank.
- *
- * Clearing removes the entry rather than storing an empty string, because an
- * absent entry is the only spelling of "use whatever is on PATH" that the main
- * process checks for.
- */
+/** The map with one project's editor set, or removed when blank: absence is the only spelling of "use PATH" the main process checks. */
 export function withEditorCommand(
   commands: Record<string, string>,
   projectId: string,
@@ -245,23 +195,14 @@ export function withEditorCommand(
   return { ...commands, [projectId]: trimmed }
 }
 
-/**
- * How a patch is laid out: one column with the removals above the additions,
- * or two columns with the old file beside the new one.
- *
- * Inline is the default because this panel is a side panel — it is beside the
- * terminals, not instead of them — and two columns in three hundred pixels is
- * two columns of nothing. Side by side is what somebody widens the panel for.
- */
+/** How a patch is laid out. Inline by default: this is a side panel, and two columns in three hundred pixels is two columns of nothing. */
 export type DiffLayout = 'inline' | 'split'
 
 export const DIFF_LAYOUT_DEFAULT: DiffLayout = 'inline'
 
 export function readStoredDiffLayout(storage: Pick<Storage, 'getItem'> | undefined): DiffLayout {
   try {
-    // Checked against the two it can be rather than cast: what is in storage is
-    // a string somebody's browser kept, and a third value would reach the panel
-    // as a layout with no rules written for it.
+    // Checked rather than cast: a third value would reach the panel as a layout with no rules written for it.
     const raw = storage?.getItem(DIFF_LAYOUT_KEY)
     return raw === 'split' || raw === 'inline' ? raw : DIFF_LAYOUT_DEFAULT
   } catch {
@@ -278,13 +219,8 @@ export function writeStoredDiffLayout(storage: Pick<Storage, 'setItem'> | undefi
 }
 
 /**
- * The agent kind the composer should offer first, or `NO_DEFAULT_AGENT`.
- *
- * Stored as the kind rather than the command, because the command is what the
- * probe found on this machine's PATH today and the kind is what the person
- * meant. Not checked against the catalogue of kinds here: the only readers
- * match it against the agents actually installed, so a kind this build no
- * longer knows about simply never matches and the first-found rule stands.
+ * The agent kind the composer offers first, or `NO_DEFAULT_AGENT`. The kind rather than the command,
+ * and unchecked here: readers match it against installed agents, so an unknown kind simply never matches.
  */
 export function readStoredDefaultAgent(storage: Pick<Storage, 'getItem'> | undefined): string {
   try {
@@ -299,25 +235,14 @@ export function writeStoredDefaultAgent(storage: Pick<Storage, 'setItem'> | unde
   try {
     storage?.setItem(DEFAULT_AGENT_KEY, kind.trim())
   } catch {
-    // As with the size above: the choice holds for this window and is forgotten
-    // on the next.
+    // As above: the choice holds for this window and is forgotten on the next.
   }
 }
 
 /**
- * What each agent is always launched with, by agent kind.
- *
- * One string per agent rather than a list of arguments, because that is what
- * the person types and because the string is spliced into a shell command
- * line, where their own quoting is the thing that has to survive. Read as
- * defensively as the start points above and for the same reason: this ends up
- * on a command line, so anything that is not an object of strings is dropped
- * whole rather than in part.
- *
- * Ships empty on purpose. Whether teamree pre-applies an agent's autonomy flag
- * — `--dangerously-skip-permissions` and its cousins — is a product decision
- * about what this app does to a machine by default, and it is not one to take
- * by seeding a preference; anyone who wants one types it here.
+ * What each agent is always launched with, by kind: one string, spliced into a shell command line so
+ * the person's own quoting survives. Ships empty on purpose: seeding `--dangerously-skip-permissions`
+ * or its cousins is a product decision about what this app does to a machine, not a preference default.
  */
 export function readStoredAgentArgs(storage: Pick<Storage, 'getItem'> | undefined): Record<string, string> {
   try {
@@ -346,13 +271,7 @@ export function writeStoredAgentArgs(
   }
 }
 
-/**
- * The map with one agent's arguments set, or removed when the field is blank.
- *
- * Removed rather than stored empty, for the same reason as `withStartPoint`:
- * an empty string and an absent entry would be two spellings of "launch it
- * plain", and only one of them is checked for anywhere else.
- */
+/** The map with one agent's arguments set, or removed when blank, for the same reason as `withStartPoint`. */
 export function withAgentArgs(
   args: Record<string, string>,
   kind: string,

@@ -1,10 +1,6 @@
-// What the window does with a check, which is mostly nothing.
-//
-// The asymmetry is the whole design and it is easy to lose: a check the app
-// made by itself may only ever produce the card, and a check somebody asked for
-// has to answer even when the answer is "you are current". Without the second
-// half, choosing "Check for updates" on a current build does nothing at all and
-// reads as a broken menu item.
+// What the window does with a check, which is mostly nothing. A check the app
+// made by itself may only produce the card; one somebody asked for must answer
+// even with "you are current".
 
 import { expect, it, vi } from 'vitest'
 import type { UpdateState } from '@shared/entities'
@@ -85,9 +81,8 @@ it('reports a check that could not be made, because this one was asked for', asy
   expect(notices()[0]).toContain('403')
 })
 
-// The other half of the asymmetry: this is the read the window makes at startup
-// and whenever the runtime says the check has something new to say. A machine
-// with no network must cost the user nothing for it, including a notice.
+// The read the window makes at startup and whenever the check has news. A
+// machine with no network must cost the user nothing, including a notice.
 it('is silent when the read itself fails, which is how a check nobody asked for fails', async () => {
   reset()
   call.mockRejectedValue(new Error('runtime is not answering'))

@@ -45,23 +45,19 @@ describe('activityOf', () => {
     expect(activityOf(terminal({ id: 't', busy: true }))).toBe('working')
   })
 
-  // The honest reading, and the fallback the other cases are measured against.
-  // A pane that has stopped saying things and said nothing about why is a pane
-  // this app knows nothing more about, and calling that "waiting on you" would
-  // be a guess.
+  // A pane that stopped saying things and said nothing about why is one this
+  // app knows nothing more about; "waiting on you" would be a guess.
   it('is quiet — not "waiting for input" — when output stops with no bell and no title', () => {
     expect(activityOf(terminal({ id: 't', busy: false }))).toBe('quiet')
   })
 
-  // The whole point. A bell is the one byte a program sends for no reason
-  // except to be noticed; a bell and then silence is a pane that asked for
-  // something and is sitting on the answer.
+  // A bell is the one byte a program sends for no reason except to be noticed.
   it('is waiting when a bell rang and the pane then went quiet', () => {
     expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 1_000 }))).toBe('waiting')
   })
 
-  // The session clears the bell when a new burst of output starts, so a bell
-  // that is still set alongside `busy` rang inside the burst still running.
+  // The session clears the bell when a new burst starts, so a bell set
+  // alongside `busy` rang inside the burst still running.
   it('is working while output is still arriving, bell or no bell', () => {
     expect(activityOf(terminal({ id: 't', busy: true, lastBellAt: 1_000 }))).toBe('working')
   })
@@ -71,14 +67,12 @@ describe('activityOf', () => {
     expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'waiting' }))).toBe('waiting')
   })
 
-  // A long tool call prints nothing for minutes. Its title, written before the
-  // silence, is the pane's own account of what it is doing in it.
+  // A long tool call prints nothing for minutes; the title is the pane's own account.
   it('is working when output stopped but the title still says it is working', () => {
     expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'working' }))).toBe('working')
   })
 
-  // A title is a status the program repaints; a bell is something it did on
-  // purpose, at a person. The one aimed at a person wins.
+  // A title is a status the program repaints; a bell is something it did on purpose, at a person.
   it('lets an unanswered bell outrank a title left saying "working"', () => {
     expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'working', lastBellAt: 1_000 }))).toBe('waiting')
   })
@@ -99,10 +93,8 @@ describe('activityOf', () => {
 })
 
 describe('activityOf, when the agent has said something', () => {
-  // The agent's own word outranks every reading of its bytes. Claude Code
-  // writes no bell and no telling title while it sits on a permission prompt,
-  // which is how a pane blocked on a question showed as merely quiet; a hook
-  // reporting the prompt is the agent saying so.
+  // Claude Code writes no bell and no telling title while it sits on a
+  // permission prompt; a hook reporting the prompt is the agent saying so.
   it('is waiting when the agent reported a notification, whatever the bytes say', () => {
     const said = { event: 'Notification' as const, at: 1_000, detail: 'permission_prompt' }
     expect(activityOf(terminal({ id: 't', busy: true, titleSays: 'working', agentEvent: said }))).toBe('waiting')
@@ -114,16 +106,15 @@ describe('activityOf, when the agent has said something', () => {
     expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('waiting')
   })
 
-  // A model call prints nothing for a while, and a long tool call prints
-  // nothing for minutes. The turn is running because the agent said it started.
+  // A model call prints nothing; the turn is running because the agent said it started.
   it('is working after a prompt was submitted, even with no output arriving', () => {
     const said = { event: 'UserPromptSubmit' as const, at: 1_000 }
     expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('working')
     expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 900, agentEvent: said }))).toBe('working')
   })
 
-  // The turn is over. A title still saying otherwise is a title nobody has
-  // repainted, and a bell in the burst that ended was part of that turn.
+  // A title still saying otherwise is one nobody has repainted; a bell in the
+  // burst that ended was part of that turn.
   it('is quiet once the agent reported the turn ended, even mid-output', () => {
     for (const event of ['Stop', 'SessionStart', 'SessionEnd'] as const) {
       const said = { event, at: 1_000 }
@@ -132,9 +123,7 @@ describe('activityOf, when the agent has said something', () => {
     }
   })
 
-  // Some notifications are about the agent, not aimed at the person: a login
-  // that succeeded, a quota timer. They say nothing about whether you are
-  // needed, so the bytes are read instead.
+  // A login that succeeded or a quota timer says nothing about whether you are needed.
   it('falls back to the bytes for a notification that is not a request', () => {
     const said = { event: 'Notification' as const, at: 1_000, detail: 'auth_success' }
     expect(activityOf(terminal({ id: 't', busy: true, agentEvent: said }))).toBe('working')
@@ -174,8 +163,7 @@ describe('agentRows', () => {
     expect(rows.map((entry) => entry.label)).toEqual(['claude', 'npm test'])
   })
 
-  // A build somebody left running is as likely to want attention as an agent,
-  // and hiding it would make the row disagree with what is actually open.
+  // Hiding a plain shell would make the row disagree with what is actually open.
   it('keeps plain shells, not only agents', () => {
     expect(agentRows([terminal({ id: 'a' })], 'wt1', 0)).toHaveLength(1)
   })
@@ -200,8 +188,7 @@ describe('agentRows', () => {
 })
 
 describe('paneName', () => {
-  // The gap this whole file is about: the agent's binary is the one fact three
-  // panes started on three different jobs have in common.
+  // The agent's binary is the one fact three panes on three jobs have in common.
   it('prefers the name somebody gave the pane to the agent running in it', () => {
     expect(paneName(terminal({ id: 't', agent: 'claude', label: 'auth refactor' }))).toBe('auth refactor')
   })
@@ -237,8 +224,7 @@ describe('paneNames', () => {
     expect(names).toEqual(['claude', 'npm test'])
   })
 
-  // Numbering somebody's own words back at them would be the app overruling
-  // the one thing on the row it did not make up.
+  // Numbering somebody's own words back at them would be overruling the one thing the app did not make up.
   it('never numbers a name somebody typed, and counts only the unnamed', () => {
     const names = paneNames([
       terminal({ id: 'a', agent: 'claude', label: 'auth refactor' }),
@@ -273,8 +259,7 @@ describe('agentRows naming', () => {
     expect(rows.map((entry) => entry.label)).toEqual(['claude 1', 'claude 2'])
   })
 
-  // Only within the worktree being drawn: a pane in another one is not on this
-  // row and cannot be what a reader is confusing it with.
+  // A pane in another worktree is not on this row and cannot be confused with it.
   it('counts only the panes of the worktree it is listing', () => {
     const rows = agentRows(
       [
@@ -304,8 +289,7 @@ describe('paneLabel', () => {
     expect(paneLabel(terminal({ id: 't', title: 'npm run build' }))).toBe('npm run build')
   })
 
-  // The one title that says nothing: it repeats the worktree the row is already
-  // under, and it changes every time the shell changes directory.
+  // The default title repeats the worktree row and changes every time the shell cds.
   it('replaces the default shell title, which is user, host and path', () => {
     expect(paneLabel(terminal({ id: 't', title: 'root@8f2c1d: /work/rank-results' }))).toBe('bash')
     expect(paneLabel(terminal({ id: 't', title: 'ada@laptop:~', shell: '/usr/bin/zsh' }))).toBe('zsh')
@@ -396,9 +380,7 @@ describe('who is reading a pane', () => {
 })
 
 describe('agoLabel', () => {
-  // Every age `sinceLabel` returns composes with "ago" except the first one:
-  // "last output now ago" was the sidebar's hover text for a pane that had
-  // just printed.
+  // "last output now ago" was the hover text for a pane that had just printed.
   it('says "now" on its own and everything else with "ago"', () => {
     expect(agoLabel(3_000)).toBe('now')
     expect(agoLabel(45_000)).toBe('45s ago')
@@ -407,10 +389,7 @@ describe('agoLabel', () => {
 })
 
 describe('ACTIVITY_LABEL', () => {
-  // "waiting on you" and "waiting — no output" are opposites — a pane that
-  // rang the bell and a pane with nothing to say — and read side by side in
-  // the sidebar they started with the same word. The dashboard's nouns
-  // (`asking`, `waiting`) already tell them apart; the phrases now do too.
+  // "waiting on you" and "waiting — no output" are opposites that started with the same word.
   it('does not start the two opposite states with the same word', () => {
     const [waiting] = ACTIVITY_LABEL.waiting.split(/\s/)
     const [quiet] = ACTIVITY_LABEL.quiet.split(/\s/)

@@ -1,15 +1,6 @@
-// One worktree in the sidebar. The row carries four different shapes — ready,
-// still being created, failed, and ready on paper but gone from disk — because
-// a worktree is a background job and hiding that would make the sidebar lie.
-//
-// Everything a row can do besides being opened is in one menu, reached by
-// right-clicking the row, by the `⋯` beside it, or by the context-menu key on
-// the focused row. That is a change of shape as much as an addition: the row's
-// only control used to be a `×` that destroyed the checkout, so the most
-// destructive thing in the app was the easiest thing on the row to hit, and the
-// ordinary things — where is this on disk, what is the branch called, open it
-// in my editor — could not be reached from here at all. Remove is still here,
-// last, under a rule, and still asks the same question it always did.
+// One worktree in the sidebar, in four shapes: ready, still being created,
+// failed, and ready on paper but gone from disk. Everything a row can do besides
+// being opened is in one menu: right-click, the `⋯`, or the context-menu key.
 
 import { useRef, useState } from 'react'
 import {
@@ -35,20 +26,11 @@ type WorktreeRowProps = {
   /** Last line read from each pane, keyed by terminal id. */
   evidence: Readonly<Record<string, string | null>>
   /**
-   * Who is reading and typing into each of these panes, keyed by terminal id.
-   *
-   * Not decoration. The argument in `docs/teamwork.md` for why a project where
-   * anyone can type is survivable is that nothing can be done invisibly, and
-   * this row is where a pane nobody is looking at says it anyway.
+   * Who is reading and typing into each pane, keyed by terminal id. Not
+   * decoration: `docs/teamwork.md` rests on nothing being done invisibly.
    */
   watchers: Readonly<Record<string, PaneAttention>>
-  /**
-   * Panes that have printed since this person last had them in front of them.
-   *
-   * Passed in rather than read here, because the sidebar asks the store once
-   * for every row: one reading of "what is unread" for the whole window, which
-   * is the same bargain `evidence` above makes.
-   */
+  /** Panes that have printed since last looked at; read once by the sidebar for every row. */
   unread: ReadonlySet<string>
   now: number
   onFocusTerminal: (terminalId: string) => void
@@ -61,12 +43,8 @@ type WorktreeRowProps = {
   onCopyBranch: () => void
   onOpenInEditor: () => void
   /**
-   * What the Open in item is called — the editor this project would use.
-   *
-   * A word rather than a name when teamree has not found one, because the item
-   * is offered either way: choosing it is how somebody finds out that nothing
-   * is set up, and the refusal that comes back says what to do about it. A
-   * hidden item would have been a silence.
+   * What the Open in item is called. A bare word when no editor was found: the
+   * item is offered either way, and the refusal says what to do.
    */
   editorLabel: string
 }
@@ -93,9 +71,8 @@ export function WorktreeRow({
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
-  // The record says ready and the disk says otherwise. Treated as not ready
-  // for everything below that reads or starts something in the checkout, and
-  // as its own shape for what the row says.
+  // The record says ready and the disk says otherwise: not ready for anything
+  // that touches the checkout, and its own shape for what the row says.
   const missing = worktree.missing === true
   const ready = hasCheckout(worktree)
   const badge = ready ? mergeBadge(mergePreview) : null
@@ -110,9 +87,7 @@ export function WorktreeRow({
 
   const closeMenu = (): void => {
     setMenuAt(null)
-    // Back where it came from, which is the whole reason the opener is kept: a
-    // menu that leaves the focus on `document.body` costs a keyboard user their
-    // place in the sidebar every time they open one.
+    // A menu that leaves the focus on `document.body` costs a keyboard user their place.
     ;(opener.current ?? openControl.current)?.focus()
   }
 
@@ -122,11 +97,9 @@ export function WorktreeRow({
     return rect === undefined ? { x: 0, y: 0 } : { x: rect.left + 12, y: rect.bottom }
   }
 
-  // Last, and behind a rule, and it still opens the question it always did —
-  // the one that names the ignored files the removal would destroy.
+  // Last, behind a rule, and it still asks the question naming the ignored files it would destroy.
   const remove: RowMenuItem = { label: 'Remove', onChoose: onRemove, separated: true, danger: true }
-  // A directory that is not there has nothing to reveal, open or copy a path
-  // to. Removal is the one thing left, and it is the thing wanted.
+  // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
   const items: RowMenuItem[] = missing
     ? [remove]
     : [
@@ -138,8 +111,7 @@ export function WorktreeRow({
       ]
   const rows = ready ? agentRows(terminals, worktree.id, now, evidence) : []
   const overall = worktreeActivity(rows)
-  // Rolled up the way the dot is: the collapsed row says that something under
-  // it wants reading, and the pane rows say which.
+  // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
 
   return (
@@ -147,11 +119,9 @@ export function WorktreeRow({
       className={`worktree${active ? ' worktree--active' : ''} worktree--${missing ? 'missing' : worktree.state}`}
       onContextMenu={(event) => {
         event.preventDefault()
-        // A right-click puts the menu where the pointer is. The context-menu key
-        // and Shift+F10 raise this same event with nothing pointing anywhere —
-        // Chromium reports a detail of 0 — and a menu placed at those
-        // coordinates would open in the corner of the window rather than on the
-        // row somebody is standing on.
+        // The context-menu key and Shift+F10 raise this same event with
+        // Chromium reporting a detail of 0 and no coordinates; a menu placed
+        // there would open in the corner of the window.
         const pointed = event.detail > 0 && (event.clientX > 0 || event.clientY > 0)
         openMenu(
           pointed ? { x: event.clientX, y: event.clientY } : rowAnchor(),
@@ -159,11 +129,8 @@ export function WorktreeRow({
         )
       }}
       onKeyDown={(event) => {
-        // Said here as well as left to the browser's own default, because that
-        // default is what turns these keys into the `contextmenu` above and
-        // `preventDefault` is what stops it arriving twice. A second arrival
-        // would only reopen the menu that is already open, which is why this is
-        // written the harmless way round rather than guarded.
+        // The browser's default turns these keys into the `contextmenu` above;
+        // `preventDefault` stops it arriving twice.
         if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return
         event.preventDefault()
         openMenu(rowAnchor(), document.activeElement instanceof HTMLElement ? document.activeElement : null)

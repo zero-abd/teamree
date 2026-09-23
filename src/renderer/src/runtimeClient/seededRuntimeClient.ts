@@ -1,7 +1,5 @@
-// A stand-in runtime that answers the whole method catalogue from memory, so
-// the interface is demonstrable — splits, background worktree creation,
-// failures, live terminal output — before the real transport exists. It is
-// deliberately the only place in the renderer that fabricates data.
+// A stand-in runtime that answers the whole method catalogue from memory.
+// Deliberately the only place in the renderer that fabricates data.
 
 import type {
   CliStatus,
@@ -47,10 +45,7 @@ type FakeTerminal = {
   listeners: Set<(event: TerminalEvent) => void>
 }
 
-/**
- * Paths the seeded changes are drawn from, cycled so the same worktree always
- * shows the same files. Invented, but invented once.
- */
+/** Paths the seeded changes are drawn from, cycled so the same worktree always shows the same files. */
 const SEEDED_PATHS = [
   'src/search/rankResults.ts',
   'src/search/index.ts',
@@ -69,13 +64,7 @@ const SEEDED_PEER_KEY = 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='
 const SEEDED_AWAY_KEY = 'Qw8ErTyUiOpAsDfGhJkLzXcVbNm1234567890QwErTy='
 const SEEDED_PUBLIC_KEY = 'EA3VNMgROVtL/oUJhTmpENptwwkAWhc1HD2SIqJTHE4='
 
-/**
- * The teammate panes this demo can open, and the scrollback each joins at.
- *
- * A watcher joining a running pane is shown what it has already said and then
- * whatever it says next. With no relay and no teammate there is no "next", so
- * these are the first half only — which is the honest half to invent.
- */
+/** The teammate panes this demo can open, and the scrollback each joins at. With no relay there is no "next". */
 const SEEDED_WATCHABLE: Record<string, { handle: string; cols: number; rows: number; scrollback: string }> = {
   [`peer:${SEEDED_PEER_KEY.slice(0, 12)}:t_remote_1`]: {
     handle: 'priya',
@@ -99,10 +88,7 @@ function seededMember(handle: string, publicKey: string, addedAt: string): Membe
   return { handle, publicKey, addedAt, file: `.teamree/members/${handle}.pub`, isSelf: false }
 }
 
-/**
- * Changed paths made up to match a worktree's counters, so the list and the
- * chips above it never contradict each other in the demo.
- */
+/** Changed paths made up to match a worktree's counters, so list and chips never contradict. */
 function seededChanges(status: WorktreeStatus): WorktreeChange[] {
   const changes: WorktreeChange[] = []
   let next = 0
@@ -128,12 +114,7 @@ function seededChanges(status: WorktreeStatus): WorktreeChange[] {
   return changes
 }
 
-/**
- * One directory of the invented tree, read off the same paths the changes are
- * drawn from so a file the changes list names is a file the tree has.
- * `node_modules` is there and ignored, because a tree with nothing dimmed does
- * not show what dimming is for.
- */
+/** One directory of the invented tree, off the same paths as the changes. `node_modules` is there and ignored to show dimming. */
 function seededDirectory(directory: string): WorktreeFileEntry[] {
   const prefix = directory === '' ? '' : `${directory}/`
   const names = new Map<string, WorktreeFileEntry>()
@@ -185,31 +166,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
   const seededMutes = new Set<string>()
   /** One remote write, so the record's shape is visible without a teammate. */
   const seededWrites: RemoteWrite[] = []
-  /**
-   * Standing permissions given in the demo. Local like a mute, so this one is
-   * not a pretence either: granting one here really does remove the row.
-   */
+  /** Standing permissions given in the demo. Local like a mute, so granting one really removes the row. */
   const seededGrants = new Map<string, ConsentGrant>()
   /**
-   * One teammate's keystrokes, held at a pane of this machine.
-   *
-   * Seeded because the prompt is the part of teamwork a demo cannot otherwise
-   * show — it needs a teammate on the far end of a relay to happen at all — and
-   * because what it puts on screen is bytes somebody else chose. The preview
-   * carries a carriage return and an escape sequence rendered as the runtime
-   * renders them, so the demo shows the safe form rather than a tidy sentence
-   * that would never occur.
+   * One teammate's keystrokes, held at a pane of this machine. The preview carries
+   * a carriage return and an escape sequence rendered as the runtime renders them.
    */
   const seededRequests: ConsentRequest[] = []
 
   let connection: ConnectionState = { phase: 'connecting', detail: 'Starting runtime' }
   const connectionListeners = new Set<(state: ConnectionState) => void>()
 
-  // The demo announces its own changes exactly as the real runtime does, so the
-  // browser path exercises the same subscribe-and-refetch code rather than a
-  // second, quieter one that could rot unnoticed. Delivery is deferred by a
-  // turn because a handler is still mid-call when it announces: the caller must
-  // have its result before a refetch goes looking for what it changed.
+  // Announces changes as the real runtime does, so the same subscribe-and-refetch
+  // code runs. Deferred a turn: the caller must have its result before a refetch.
   const workspaceWatchers = new Set<(event: WorkspaceEvent) => void>()
   const announce = (...events: WorkspaceEvent[]): void => {
     setTimeout(() => {
@@ -224,8 +193,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     for (const listener of connectionListeners) listener(state)
   }
 
-  // The real client flips to ready once the handshake lands; mirror that shape
-  // so the status bar has the same states to animate through.
+  // Mirrors the real client's handshake so the status bar has the same states.
   setTimeout(() => setConnection({ phase: 'ready' }), 420)
 
   const emit = (terminal: FakeTerminal, event: TerminalEvent): void => {
@@ -300,16 +268,14 @@ export function createSeededRuntimeClient(): RuntimeClient {
   const atlas = seedProject('atlas', '/Users/dev/code/atlas', 'origin/main')
   const ledger = seedProject('ledger-api', '/Users/dev/code/ledger-api', 'origin/trunk')
 
-  // One project the demo's own key is already in, one it is not, because the
-  // difference between those two is the whole of what this dialog shows.
+  // One project the demo's own key is already in, one it is not.
   rosters.set(atlas.id, [
     seededMember('ada', 'PkQtFYttlX7oLD8c/tYpNlHWLIflye3t6tMGm0I4iRk=', '2026-04-02'),
     seededMember('grace', 'tOZqe8RgnJt2KzVOWEfPkfYHQpB1i0Jt7Ojb9vDfjW4=', '2026-05-19'),
     { ...seededMember('you', SEEDED_PUBLIC_KEY, '2026-08-27'), isSelf: true }
   ])
   rosters.set(ledger.id, [seededMember('grace', 'tOZqe8RgnJt2KzVOWEfPkfYHQpB1i0Jt7Ojb9vDfjW4=', '2026-06-11')])
-  // The same split for the other team-wide fact: one project has a relay
-  // committed and one has none, which is what the panel is there to fix.
+  // One project has a relay committed and one has none.
   relays.set(atlas.id, 'wss://relay.example/v1/relay')
 
   const search = seedWorktree(atlas, 'incremental search index', 'task/incremental-search', 'ready')
@@ -353,9 +319,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
   ])
 
   // Priya has typed a command at the agent pane and has not been allowed yet.
-  // The preview is the runtime's own safe rendering: the return that would
-  // submit it is shown as a mark, so the demo shows the question as it really
-  // arrives rather than as tidy prose.
+  // The preview is the runtime's own safe rendering, return shown as a mark.
   seededRequests.push({
     id: 'ask_1',
     projectId: search.projectId,
@@ -415,8 +379,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     logCursor++
   }, 3200)
 
-  // Background worktree creation, including the failure path, so the sidebar's
-  // creating and failed states are reachable without a backend.
+  // Background worktree creation, including the failure path.
   const finishCreation = (worktreeId: string, shouldFail: boolean): void => {
     setTimeout(() => {
       const worktree = worktrees.get(worktreeId)
@@ -482,10 +445,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
           : null,
       onDisk: { url, problem: null },
       override: { name: 'TEAMREE_RELAY_URL', value: null },
-      // The seeded runtime has no app bundle to carry a relay project, and
-      // saying so is the honest answer: the deploy button is disabled here,
-      // with a sentence, rather than offering to run a command that is not
-      // there.
+      // No app bundle carries a relay project here, so the deploy button is disabled with a sentence.
       deploy: { command: null, reason: 'the seeded runtime carries no relay project to deploy' },
       readAt: Date.now()
     }
@@ -493,11 +453,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
 
   // --- method dispatch ------------------------------------------------------
 
-  /**
-   * Seeded: a packaged app, not linked, nobody asked yet, and a destination
-   * only root can write — which is the one state where the demo has both the
-   * first-run offer and the password sentence to show.
-   */
+  /** Seeded: packaged, not linked, nobody asked yet, destination only root can write. */
   let cliLinked = false
   let cliAskedAt: number | null = null
   let automaticUpdates = true
@@ -507,8 +463,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
     packaged: true,
     bundle: '/Applications/teamree.app/Contents/Resources/cli/teamree.mjs',
-    // In /Applications rather than in the disk image it arrived in, which is
-    // the one state where the panel has a button to demonstrate at all.
+    // In /Applications, the one state where the panel has a button to demonstrate.
     impermanent: null,
     destination: '/usr/local/bin/teamree',
     directory: '/usr/local/bin',
@@ -524,9 +479,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
   let appearance: Appearance = DEFAULT_APPEARANCE
   const updateState = (): UpdateState => ({
     current: '0.0.1-demo',
-    // Nothing to compare a demo build against, which is also what a checkout
-    // says about itself — and it keeps this stand-in from advertising a release
-    // that has nothing to do with what is running.
+    // Nothing to compare a demo build against, which is also what a checkout says about itself.
     checkable: false,
     automatic: automaticUpdates,
     available: null,
@@ -543,8 +496,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       platform: 'darwin',
       startedAt: Date.now() - 90000
     }),
-    // There is no app behind a seeded runtime, so there is nothing to quit and
-    // nothing worth pretending about it.
+    // No app behind a seeded runtime, so nothing to quit.
     'app.quit': () => {
       throw new Error('the seeded runtime has no app to quit')
     },
@@ -620,8 +572,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.remove': ({ worktreeId, force }) => {
       const status = statuses.get(worktreeId)
       const pending = status ? status.staged + status.unstaged + status.untracked + status.conflicted : 0
-      // The same refusal the real runtime makes, so the confirmation this
-      // provokes is demonstrable rather than only reachable against git.
+      // The same refusal the real runtime makes, so the confirmation is demonstrable.
       if (!force && pending > 0) {
         throw Object.assign(
           new Error(`worktree has ${pending} uncommitted changes; remove with force to discard them`),
@@ -691,8 +642,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       const status = statuses.get(worktreeId)
       const changes = status ? seededChanges(status) : []
       const captured = paths && paths.length > 0 ? paths : changes.filter((c) => c.staged).map((c) => c.path)
-      // The seeded workspace moves with it: what was committed is no longer a
-      // pending change, so the chips settle the way they would for real.
+      // What was committed is no longer a pending change, so the chips settle.
       if (status) {
         seedStatus(worktree, {
           ahead: status.ahead + 1,
@@ -718,8 +668,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)
       const target = remote ?? 'origin'
-      // Nothing ahead means nothing to send, which is the outcome worth seeing
-      // in a demo as much as the other one.
+      // Nothing ahead means nothing to send.
       const alreadyUpToDate = (status?.ahead ?? 0) === 0
       if (status && !alreadyUpToDate) {
         seedStatus(worktree, { ...status, ahead: 0 })
@@ -768,8 +717,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const project = projects.get(worktree.projectId)
       const status = statuses.get(worktreeId)
-      // Seeded to match the chips: a worktree carrying conflicts is exactly the
-      // one that would not go in cleanly.
+      // Matches the chips: a worktree carrying conflicts would not go in cleanly.
       const conflicted = (status?.conflicted ?? 0) > 0
       return {
         worktreeId,
@@ -824,9 +772,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       }
     },
 
-    // Refused, like the other writes to a repository that is not there. The
-    // seeded patches are strings this file invented; "staged" would be a claim
-    // about an index nothing here has.
+    // Refused, like the other writes to a repository that is not there.
     'worktree.stageHunk': () => {
       throw new Error('the seeded runtime has no index to stage into')
     },
@@ -835,9 +781,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
 
     'teamwork.relay': ({ projectId }) => relaySetting(projectId),
-    // Refused rather than faked. The seeded runtime has no repository behind
-    // it, so a demo that claimed to have set a remote or made a commit would be
-    // the one thing a demo must never be: a lie about somebody's git history.
+    // Refused rather than faked: a demo must not lie about somebody's git history.
     'teamwork.setOrigin': () => {
       throw new Error('the seeded runtime has no repository to add a remote to')
     },
@@ -855,9 +799,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'teamwork.publish': () => {
       throw new Error('the seeded runtime has no repository to commit to')
     },
-    // Null rather than a fabricated run: the demo has no push to be partway
-    // through, and a progress record here would put a moving percentage on a
-    // thing that is not happening.
+    // Null rather than a fabricated run: the demo has no push to be partway through.
     'teamwork.publishProgress': () => null,
     'teamwork.cancelPublish': () => ({ cancelled: false }),
     'teamwork.setRelay': ({ projectId, url }) => {
@@ -883,14 +825,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
       return memberList(projectId)
     },
 
-    // Teamwork, as the demo can honestly show it: a relay named, one teammate
-    // connected and one whose machine is not. Inventing a refused link would be
-    // inventing a security event, so the seeded data has none.
+    // A relay named, one teammate connected and one whose machine is not.
+    // Inventing a refused link would be inventing a security event, so there is none.
     'teamwork.status': ({ projectId }) => ({
-      // Read, and not the honest "not read yet" a real runtime passes through
-      // on its way here: the seeded workspace is a picture of a machine that
-      // has been running for a while, and a demo that started every project as
-      // unread would be showing a state that lasts milliseconds.
+      // Read: the seeded workspace is a machine that has been running a while,
+      // and "not read yet" is a state that lasts milliseconds.
       state: 'read' as const,
       projectId,
       relay: { url: 'wss://relay.example/v1/relay', source: 'repository' as const },
@@ -909,8 +848,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
           publicKey: SEEDED_AWAY_KEY,
           handle: 'marcus',
           phase: 'waiting' as const,
-          // A shut lid, which is the case the link's own silence deadline
-          // names: the socket was never closed, this side gave up waiting.
+          // A shut lid: the socket was never closed, this side gave up waiting.
           detail: 'your teammate’s machine stopped answering',
           since: Date.now() - 300_000,
           attempts: 3
@@ -918,13 +856,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
       ],
       readAt: Date.now()
     }),
-    // Two teammates, because the two cases read differently: priya is
-    // connected, and marcus's laptop is shut — his worktree stays exactly where
-    // it was, out of the local cache, dated and not live.
+    // priya is connected; marcus's laptop is shut, so his worktree comes out of
+    // the local cache, dated and not live.
     'teamwork.presence': ({ projectId }) => ({
-      // Read, always: the demo runtime has no reconcile to be waiting on, and
-      // a seeded `unread` would put the sidebar's waiting state on screen
-      // permanently for a project that is never going to settle.
+      // Read, always: a seeded `unread` would show the waiting state permanently.
       state: 'read' as const,
       projectId,
       teammates: [
@@ -1000,23 +935,18 @@ export function createSeededRuntimeClient(): RuntimeClient {
       readAt: Date.now()
     }),
 
-    // A teammate's pane, as the demo can honestly show one: the scrollback it
-    // joins at and nothing after it. There is no relay here and no teammate, so
-    // inventing live output would be inventing a person.
+    // The scrollback a teammate's pane joins at and nothing after it: inventing
+    // live output would be inventing a person.
     'teamwork.watch': ({ paneId }) => {
       const pane = SEEDED_WATCHABLE[paneId]
       if (!pane) throw new Error(`${paneId} is not a teammate’s pane`)
       return { subscription: nextId('sub'), cols: pane.cols, rows: pane.rows, handle: pane.handle }
     },
-    // Typing into a teammate's pane, refused here rather than pretended at.
-    // There is no relay and no teammate, so a keystroke has nowhere to land,
-    // and answering "written" would be the one lie this feature must not tell.
+    // Refused: no relay and no teammate, so a keystroke has nowhere to land.
     'teamwork.type': () => {
       throw new Error('there is no teammate to type to in the demo runtime')
     },
-    // One teammate reading one of this machine's panes, and one who has typed
-    // into it, so both halves of the owner's bargain are visible in the demo
-    // rather than only in the design.
+    // One teammate reading one of this machine's panes, and one who has typed into it.
     'teamwork.watchers': ({ projectId }) => ({
       projectId,
       panes: [...terminals.keys()].slice(0, 1).map((terminalId) => ({
@@ -1037,8 +967,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       })),
       readAt: Date.now()
     }),
-    // The one thing in this area a demo can do for real: a mute is local, needs
-    // nobody's agreement, and takes effect on a machine that has no peers at all.
+    // Real: a mute is local and needs nobody's agreement.
     'teamwork.mute': ({ terminalId, muted }) => {
       const worktreeId = terminals.get(terminalId)?.record.worktreeId
       const projectId = worktreeId === undefined ? undefined : worktrees.get(worktreeId)?.projectId
@@ -1048,9 +977,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'teammates' })
       return handlers['teamwork.watchers']({ projectId })
     },
-    // What is waiting on the owner, and what they have already settled. The
-    // request is seeded against the first pane so the question is on screen
-    // without a relay; answering it is real, and the row goes.
+    // The request is seeded against the first pane; answering it is real, and the row goes.
     'teamwork.requests': ({ projectId }) => ({
       projectId,
       requests: seededRequests.filter((request) => request.projectId === projectId),
@@ -1082,8 +1009,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'teammates' })
       return handlers['teamwork.requests']({ projectId })
     },
-    // Seeded with one entry so the shape of the record is visible: who, when,
-    // which pane, how much — and, deliberately, not a byte of what was typed.
+    // One entry so the record's shape is visible — and, deliberately, not a byte of what was typed.
     'teamwork.writeLog': ({ limit }) => {
       const writes = [...seededWrites]
       return {
@@ -1093,9 +1019,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       }
     },
 
-    // PEER-ONLY, and refused here rather than seeded. These are what a teammate
-    // calls over the peer transport; a window asking for one is a bug, and
-    // answering it with invented data would hide that.
+    // PEER-ONLY: a window asking for one is a bug, and invented data would hide that.
     'peer.presence': () => {
       throw new Error('peer.presence is a teammate’s call, not a window’s')
     },
@@ -1108,10 +1032,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex' }
     ],
 
-    // The demo's CLI is not linked yet and its destination needs a password,
-    // because that is the state the panel has something to say in — and the
-    // button moves it, so pressing it demonstrates the outcome rather than a
-    // spinner that ends where it started.
+    // Not linked yet and the destination needs a password; the button moves it.
     'cli.status': () => cliStatus(),
     'cli.install': () => {
       const before = cliStatus()
@@ -1124,10 +1045,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       return cliStatus()
     },
 
-    // The seeded runtime is a demonstration, and a demonstration that reached
-    // GitHub would not be one. It answers as a current build that has looked
-    // recently: the card is worth showing in a screenshot, but not at the cost
-    // of this file being the one place in the renderer that opens a socket.
+    // Answers as a current build that has looked recently: this file must not
+    // be the one place in the renderer that opens a socket.
     'update.state': () => updateState(),
     'update.check': () => updateState(),
     'update.setAutomatic': ({ automatic }) => {
@@ -1135,13 +1054,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
       return updateState()
     },
     'update.download': () => ({ opened: 'https://github.com/zero-abd/teamree/releases/latest' }),
-    // The seeded runtime has no machine under it: nothing here is on anybody's
-    // PATH and nothing may be started. The row menu keeps its Open in item and
-    // says this when it is chosen, which is what the real refusal looks like.
+    // No machine under it: nothing is on anybody's PATH. The row menu keeps its
+    // Open in item and says this when chosen, which is what the real refusal looks like.
     'editor.list': () => ({ editors: [] }),
     'editor.open': () => ({ opened: false, reason: 'The demonstration workspace cannot start an editor.' }),
-    // Invented, like the panes: enough of a tree that the panel has rows, and
-    // a kill that does what the real one does to a row that has no process.
+    // Enough of a tree that the panel has rows; kill does what the real one does.
     'system.resources': () => {
       const open = [...terminals.values()].filter((entry) => entry.record.running)
       const panes = open.map((entry, index) => {
@@ -1195,8 +1112,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       [...terminals.values()]
         .map((terminal) => terminal.record)
         .filter((record) => !worktreeId || record.worktreeId === worktreeId),
-    // A pane started with a command shows that command, not the shell it would
-    // have been: the demo's job is to look like what the runtime actually does.
+    // A pane started with a command shows that command, as the runtime does.
     'terminal.create': ({ worktreeId, cols, rows, command, label }) => {
       const record = command
         ? spawn(worktreeId, command, [accent(`▌ ${command}`), dim('reading the worktree …')])
@@ -1286,8 +1202,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       required(terminals.get(terminalId), 'terminal')
       return { subscription: nextId('sub') }
     },
-    // The seeded pane comes back alive with what it printed still above it, so
-    // the control in the pane bar does in the demo window what it does for real.
+    // Comes back alive with what it printed still above it, as for real.
     'terminal.relaunch': ({ terminalId }) => {
       const terminal = required(terminals.get(terminalId), 'terminal')
       terminal.record = { ...terminal.record, running: true, busy: false, lastOutputAt: Date.now() }
@@ -1313,9 +1228,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       return { terminal: record, layout }
     },
 
-    // Held for the life of the page rather than written anywhere: the seeded
-    // runtime has no disk, and a demo that claimed to have remembered a theme
-    // would be claiming to have written a file it never wrote.
+    // Held for the life of the page: the seeded runtime has no disk.
     'appearance.get': () => appearance,
     'appearance.set': (next) => {
       appearance = sanitizeAppearance(next)
@@ -1334,8 +1247,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       return layout
     },
 
-    // The renderer watches through `watchWorkspace` below rather than this
-    // method, which exists only to keep the catalogue complete.
+    // The renderer watches through `watchWorkspace` below; this keeps the catalogue complete.
     'workspace.subscribe': () => ({ subscription: nextId('sub') }),
 
     unsubscribe: () => ({ unsubscribed: true })
@@ -1370,8 +1282,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     async watchPane(projectId, paneId, onEvent) {
       await sleep(LATENCY_MS)
       const opened = handlers['teamwork.watch']({ projectId, paneId })
-      // The scrollback, and then silence: a demo with no peer has nothing live
-      // to say, and saying something anyway would be inventing a teammate.
+      // The scrollback, then silence: no peer, nothing live to say.
       onEvent({ type: 'data', data: SEEDED_WATCHABLE[paneId]?.scrollback ?? '' })
       return {
         subscription: { close: () => {} },
@@ -1430,11 +1341,8 @@ function echo(
 }
 
 // --- start points ------------------------------------------------------------
-//
-// A repository's refs are the one thing the demo cannot derive from its own
-// worktrees, so they are seeded outright, remotes and tags included: a stand-in
-// that only ever showed local branches would leave the picker's other sections
-// and its truncation notice unexercised in the browser.
+// Refs are seeded outright, remotes and tags included, so the picker's other
+// sections and its truncation notice are exercised.
 
 type SeedRef = { ref: string; kind: StartPoint['kind']; minutesAgo: number; current?: boolean }
 
@@ -1456,8 +1364,7 @@ const SEEDED_REFS: Record<string, SeedRef[]> = {
     { ref: 'origin/trunk', kind: 'remoteBranch', minutesAgo: 41 },
     { ref: 'v2.9.0', kind: 'tag', minutesAgo: 60 * 24 * 12 },
     { ref: 'v2.8.4', kind: 'tag', minutesAgo: 60 * 24 * 33 },
-    // A wall of stale integration branches, which is what a long-lived
-    // repository looks like and what makes the cap worth showing.
+    // A wall of stale integration branches, which makes the cap worth showing.
     ...Array.from({ length: 46 }, (_, index) => ({
       ref: `origin/integration/batch-${String(index + 1).padStart(3, '0')}`,
       kind: 'remoteBranch' as const,

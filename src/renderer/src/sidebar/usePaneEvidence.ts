@@ -1,8 +1,5 @@
-// Keeps one line of recent output for each pane the sidebar is showing.
-//
-// The policy — who is read, how often, and when a pane is finished with — lives
-// in ./evidenceReads so it can be tested without a clock or a runtime. This is
-// only the wiring: a timer, a call, and the line picker.
+// One line of recent output for each pane the sidebar shows. The policy lives in ./evidenceReads;
+// this is only the wiring: a timer, a call, and the line picker.
 
 import { useEffect, useRef, useState } from 'react'
 import type { Terminal } from '@shared/entities'
@@ -10,8 +7,7 @@ import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { EVIDENCE_TAIL_BYTES, forgetClosed, terminalsToRead, type EvidenceRead } from './evidenceReads'
 import { evidenceLine } from '@shared/outputEvidence'
 
-/** How often the policy is consulted. Shorter than the per-pane interval so a
- *  pane that has just appeared is read promptly rather than on the next beat. */
+/** How often the policy is consulted; shorter than the per-pane interval so a new pane is read promptly. */
 const TICK_MS = 500
 
 export function usePaneEvidence(
@@ -21,8 +17,7 @@ export function usePaneEvidence(
   const [evidence, setEvidence] = useState<Record<string, string | null>>({})
   const reads = useRef<Record<string, EvidenceRead>>({})
 
-  // The timer is started once and reads whatever is on screen when it fires, so
-  // scrolling, filtering or a pane appearing never restarts the schedule.
+  // Started once and reads whatever is on screen when it fires, so a pane appearing never restarts the schedule.
   const onScreen = useRef(visible)
   onScreen.current = visible
 
@@ -41,8 +36,7 @@ export function usePaneEvidence(
         const line = evidenceLine(data)
         setEvidence((current) => (current[terminal.id] === line ? current : { ...current, [terminal.id]: line }))
       } catch {
-        // A pane can close between the tick and the read. Nothing is shown for
-        // it, which is the same as having nothing to show.
+        // A pane can close between the tick and the read; nothing shown is the same as nothing to show.
       }
     }
 

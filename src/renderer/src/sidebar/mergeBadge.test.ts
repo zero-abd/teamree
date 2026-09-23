@@ -16,8 +16,7 @@ function preview(overrides: Partial<WorktreeMergePreview> = {}): WorktreeMergePr
 
 describe('mergeBadge', () => {
   it('says nothing at all before anything has been read', () => {
-    // A row that guesses is worse than a row that waits; the answer lands a
-    // moment later on its own.
+    // A row that guesses is worse than a row that waits.
     expect(mergeBadge(undefined)).toBeNull()
   })
 
@@ -29,17 +28,13 @@ describe('mergeBadge', () => {
     expect(badge?.detail).toContain('3 commits')
   })
 
-  // Two branches git cannot tell apart — one whose work is all in the base, and
-  // one that never did any — must not be labelled as though it could, or
-  // somebody deletes a worktree they had not finished with. So nothing is said:
-  // every fresh worktree is in this state, and a chip on every row is a chip
-  // on no row.
+  // Git cannot tell "all merged" from "never did anything", so nothing is said: every fresh
+  // worktree is in this state, and a chip on every row is a chip on no row.
   it('says nothing at all when there is nothing to merge', () => {
     expect(mergeBadge(preview({ state: 'nothingToMerge', ahead: 0 }))).toBeNull()
   })
 
-  // It shares a sidebar row with the worktree's name, which is the thing
-  // somebody is actually reading.
+  // It shares a row with the worktree's name.
   it('keeps every label short enough to sit beside a name', () => {
     const states = ['clean', 'unrelated', 'unavailable'] as const
     for (const state of states) {
@@ -64,8 +59,7 @@ describe('mergeBadge', () => {
     expect(detail).toContain('and 2 more')
   })
 
-  // The distinction the whole badge exists for: these two must never read as
-  // "nothing wrong", because that is the opposite of what they mean.
+  // These two must never read as "nothing wrong".
   it('keeps "could not tell" visibly apart from "nothing conflicts"', () => {
     for (const state of ['unrelated', 'unavailable'] as const) {
       const badge = mergeBadge(preview({ state, reason: 'a specific reason' }))

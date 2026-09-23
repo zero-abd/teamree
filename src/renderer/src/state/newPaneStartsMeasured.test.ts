@@ -1,11 +1,6 @@
-// The window says how big the pane is, because only the window knows.
-//
-// `terminal.create` used to carry no size, so every pane's pty was born 80x24
-// and learned the truth a frame later, after the agent inside it had already
-// drawn a frame to the wrong width. The measurement happens here, before the
-// call, and this file holds the store to sending it — and to leaving it out
-// when there is nothing on screen to measure, which is a real answer and not a
-// reason to invent one.
+// The window says how big the pane is, because only the window knows: a pty
+// born 80x24 draws its first frame to the wrong width. Left out when there is
+// nothing on screen to measure.
 
 import { expect, it, vi } from 'vitest'
 
@@ -52,8 +47,7 @@ it('opens a pane at the size this window measured', async () => {
   measurement.size = { cols: 173, rows: 47 }
   measurement.asked.length = 0
 
-  // Read before the call, because creating a pane rewrites the tree and the
-  // question is what the grid held when the measurement was taken.
+  // Read before the call, because creating a pane rewrites the tree.
   const joining = useWorkspaceStore.getState().layouts[worktreeId]!.root
   const fontSize = useWorkspaceStore.getState().terminalFontSize
 
@@ -61,8 +55,7 @@ it('opens a pane at the size this window measured', async () => {
   await useWorkspaceStore.getState().createTerminal(worktreeId)
 
   expect(createCalls(call as unknown as Calls)).toEqual([{ worktreeId, cols: 173, rows: 47 }])
-  // Measured against the layout the pane is joining, because what share of the
-  // grid it gets is decided by what is already in it.
+  // Measured against the layout the pane is joining, which decides its share of the grid.
   expect(measurement.asked).toEqual([{ fontSize, root: joining }])
   call.mockRestore()
 })
@@ -74,8 +67,7 @@ it('sends no size at all when there is nothing on screen to measure', async () =
   const call = vi.spyOn(runtimeClient, 'call')
   await useWorkspaceStore.getState().createTerminal(worktreeId)
 
-  // Not a guess, and not a zero: the runtime's own default stands, exactly as
-  // it does for a pane the CLI opened, and the view resizes it on mount.
+  // Not a guess and not a zero: the runtime's default stands and the view resizes it on mount.
   expect(createCalls(call as unknown as Calls)).toEqual([{ worktreeId }])
   call.mockRestore()
 })

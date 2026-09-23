@@ -53,8 +53,7 @@ it('reads the changed paths only once the panel is open, and the patch only once
   const changesCalls = (): number => call.mock.calls.filter(([method]) => method === 'worktree.changes').length
   const diffCalls = (): number => call.mock.calls.filter(([method]) => method === 'worktree.diff').length
 
-  // Closed, it costs nothing: a `git status` per refresh for a panel nobody is
-  // looking at is exactly the kind of thing that makes an app feel heavy.
+  // Closed, it costs nothing: no `git status` per refresh for a panel nobody is looking at.
   expect(changesOnScreen(useWorkspaceStore.getState())).toBe(false)
   expect(changesCalls()).toBe(0)
 
@@ -68,9 +67,8 @@ it('reads the changed paths only once the panel is open, and the patch only once
   const path = listed!.changes[0]!.path
   useWorkspaceStore.getState().selectChange(path)
   await vi.waitFor(() => expect(useWorkspaceStore.getState().diffPending).toBe(false))
-  // Two, and exactly two: the working-tree patch and the index's. Which half a
-  // hunk came out of is what decides whether it can be staged or unstaged, and
-  // one read cannot answer that.
+  // Exactly two: the working-tree patch and the index's. Which half a hunk
+  // came out of decides whether it can be staged or unstaged.
   expect(diffCalls()).toBe(2)
   expect(useWorkspaceStore.getState().diff?.patch).toContain('diff --git')
 
@@ -121,8 +119,7 @@ it('reads mergeability for ready worktrees, a few at a time', async () => {
     }
   })
 
-  // A worktree list refresh is what drives the read, the same as it drives the
-  // status chips the badge sits beside.
+  // A worktree list refresh drives the read, as it drives the status chips beside the badge.
   const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
   await store.openWorktree(worktreeId)
   await vi.waitFor(() => expect(useWorkspaceStore.getState().mergePreviews[worktreeId]).toBeDefined())
@@ -185,8 +182,7 @@ it('drops a tick for a path that stopped being a change', async () => {
   useWorkspaceStore.getState().toggleStaged('src/reverted-since.ts')
   expect(useWorkspaceStore.getState().stagedPaths).toHaveLength(2)
 
-  // A refresh is what prunes it: a tick that would fail the commit is worse
-  // than no tick at all.
+  // A refresh prunes it: a tick that would fail the commit is worse than none.
   await store.openWorktree(worktreeId)
   useWorkspaceStore.getState().toggleChanges()
   useWorkspaceStore.getState().toggleChanges()
@@ -216,16 +212,13 @@ it('pushes the active worktree and says what actually happened', async () => {
   call.mockRestore()
 })
 
-// News goes stale. "Added repo" was still on screen twenty minutes and two
-// dozen interactions later, under every notice raised since; nothing but the
-// dismiss button ever retired one. An informational notice with nothing to do
-// about it leaves on its own. Errors stay, and so does anything with a button.
+// An informational notice with nothing to do about it leaves on its own.
+// Errors stay, and so does anything with a button.
 describe('how long a notice stays', () => {
   it('retires plain news after a while, and keeps errors and offers', async () => {
     vi.useFakeTimers()
     // The seeded runtime answers after a short sleep, which fake timers would
-    // hold forever: each call is awaited with the clock moving under it, by
-    // far less than a notice's lifetime.
+    // hold forever: each call is awaited with the clock moving under it.
     const settle = async <T>(work: Promise<T>): Promise<T> => {
       await vi.advanceTimersByTimeAsync(500)
       return work
@@ -274,8 +267,7 @@ describe('how long a notice stays', () => {
   })
 })
 
-// The push result is the only place that knows a review became possible, so
-// the notice it raises is the only place that can offer to open one.
+// Only the push result knows a review became possible, so only its notice can offer to open one.
 it('offers the review page the push came back with', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
@@ -295,8 +287,7 @@ it('offers the review page the push came back with', async () => {
   call.mockRestore()
 })
 
-// A remote that is not a forge teamree can name is an ordinary push, and the
-// notice says exactly as much as it did before.
+// A remote that is not a forge teamree can name is an ordinary push.
 it('offers nothing to open when the push named no review page', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
@@ -330,8 +321,7 @@ it('opens the worktree a pane lives in, focuses that pane, and leaves the dashbo
   await store.bootstrap()
 
   const panes = await runtimeClient.call('terminal.list', {})
-  // A worktree with more than one pane, so focusing the right one is a claim
-  // that can actually fail.
+  // More than one pane, so focusing the right one is a claim that can fail.
   const worktreeId = panes
     .map((pane) => pane.worktreeId)
     .find((id, _, all) => all.filter((entry) => entry === id).length > 1)!
@@ -343,8 +333,7 @@ it('opens the worktree a pane lives in, focuses that pane, and leaves the dashbo
   store.toggleDashboard()
   expect(useWorkspaceStore.getState().dashboardOpen).toBe(true)
 
-  // Deliberately not the pane that already has the focus there, so the
-  // assertion below is about this call rather than about the stored layout.
+  // Not the pane that already has the focus, so the assertion is about this call.
   const seeded = await runtimeClient.call('layout.get', { worktreeId })
   const target = panes.find((pane) => pane.worktreeId === worktreeId && pane.id !== seeded.focusedTerminalId)!
 
@@ -352,8 +341,7 @@ it('opens the worktree a pane lives in, focuses that pane, and leaves the dashbo
 
   expect(useWorkspaceStore.getState().activeWorktreeId).toBe(worktreeId)
   expect(useWorkspaceStore.getState().layouts[worktreeId]?.focusedTerminalId).toBe(target.id)
-  // Picking a row is the answer the view was opened to get, so it gets out of
-  // the way rather than leaving the pane it just focused hidden behind it.
+  // Picking a row is the answer the view was opened to get, so it gets out of the way.
   expect(useWorkspaceStore.getState().dashboardOpen).toBe(false)
 })
 
@@ -371,9 +359,8 @@ it('never forces a worktree removal without asking first', async () => {
 
   const attempts = call.mock.calls.filter(([method]) => method === 'worktree.remove')
   expect(attempts).toHaveLength(1)
-  // The whole point: the first attempt is unforced, so git gets to refuse.
+  // The first attempt is unforced, so git gets to refuse.
   expect(attempts[0]?.[1]).toEqual({ worktreeId: dirty.id })
-  // Nothing was removed, and the user is being asked.
   expect(useWorkspaceStore.getState().worktrees.some((entry) => entry.id === dirty.id)).toBe(true)
   expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: dirty.id })
   call.mockRestore()
@@ -414,15 +401,12 @@ it('removes a clean worktree without stopping to ask', async () => {
 
   await useWorkspaceStore.getState().removeWorktree(clean.id)
 
-  // Nothing is lost by removing a clean checkout, so nagging about it would
-  // only teach people to click through the dialog that matters.
+  // Nagging about a clean checkout would teach people to click through the dialog that matters.
   expect(useWorkspaceStore.getState().dialog).toBeNull()
   expect(useWorkspaceStore.getState().worktrees.some((entry) => entry.id === clean.id)).toBe(false)
 })
 
-// The CLI panel re-reads on open, so the read is where a stale refusal has to
-// go: a password not given to an attempt that was abandoned is not a fact about
-// the next time the panel is opened.
+// The CLI panel re-reads on open, so the read is where a stale refusal has to go.
 it('does not repeat a CLI refusal to somebody who reopens the panel', async () => {
   useWorkspaceStore.setState({ cliError: 'The administrator password was not given, so nothing was changed.' })
 
@@ -432,8 +416,7 @@ it('does not repeat a CLI refusal to somebody who reopens the panel', async () =
   expect(useWorkspaceStore.getState().cli).not.toBeNull()
 })
 
-// The other half of the same line: a refusal that did happen is re-read past,
-// because installCli re-reads the destination before it shows what refused it.
+// installCli re-reads the destination before it shows what refused it.
 it('keeps the refusal of an install that was refused, across the re-read it does', async () => {
   const refused = 'The administrator password was not given, so nothing was changed.'
   const call = vi.spyOn(runtimeClient, 'call').mockRejectedValueOnce(new Error(refused))
@@ -445,9 +428,8 @@ it('keeps the refusal of an install that was refused, across the re-read it does
   expect(useWorkspaceStore.getState().cliPending).toBe(false)
 })
 
-// The other outcome that belongs to the attempt that earned it. A link made in
-// March and broken in April leaves a panel that opens saying the CLI is not on
-// your PATH and, three lines down, that it now points at this app.
+// A link made in March and broken in April must not open saying the CLI is
+// not on your PATH and, three lines down, that it now points at this app.
 it('does not repeat a CLI success line to somebody who reopens the panel', async () => {
   await useWorkspaceStore.getState().installCli()
   expect(useWorkspaceStore.getState().cliInstall).not.toBeNull()
@@ -458,24 +440,12 @@ it('does not repeat a CLI success line to somebody who reopens the panel', async
   expect(useWorkspaceStore.getState().cli).not.toBeNull()
 })
 
-// The three relay-pane actions, against the store rather than against a mock of
-// it.
-//
-// They had no tests at all: the view's tests mock them away, and the panel's
-// render them out of props, so every rule they enforce — one pane at a time,
-// which verb may yield a URL, what a closed pane leaves behind — was enforced
-// by nothing that would notice if it stopped. The one that matters most is the
-// scheme list: a check pane's scrollback says `teamree-relay: dialling ws://…`
-// in so many words, and the panel would offer that URL as a relay to write into
-// everybody's repository.
+// The three relay-pane actions, against the store rather than a mock of it.
+// The view's tests mock them away, so the rules they enforce are pinned here.
 /**
- * Every teamwork pane the seeded runtime is still holding, gone.
- *
- * The runtime in these tests is one object shared by the whole file, and a
- * relay pane is now rebuilt from its list — so a pane a previous test started
- * and did not close is a pane the next test finds on screen. That is the
- * reconciliation doing exactly what it is for, and it is also why each of these
- * has to start from an empty runtime rather than only from an empty store.
+ * Every teamwork pane the seeded runtime is still holding, gone. The runtime is
+ * shared by the whole file and a relay pane is rebuilt from its list, so each
+ * test has to start from an empty runtime, not only an empty store.
  */
 const closeTeamworkTerminals = async (): Promise<void> => {
   const open = await runtimeClient.call('terminal.list', {})
@@ -535,8 +505,8 @@ describe('the relay pane, in the store that owns it', () => {
     call.mockRestore()
   })
 
-  // One slot. A second command would replace the output somebody is reading,
-  // and for a relay it would also fight the first one for the port.
+  // One slot: a second command would replace the output somebody is reading
+  // and, for a relay, fight the first for the port.
   it('refuses a second command while one is open', async () => {
     const projectId = await ready()
     await useWorkspaceStore.getState().startRelayPane(projectId, 'serve', undefined)
@@ -548,10 +518,8 @@ describe('the relay pane, in the store that owns it', () => {
     expect(paneOf(projectId).kind).toBe('serve')
   })
 
-  // The check button is disabled when there is nothing to dial, and that used
-  // to be the only thing standing between a caller and `teamree-relay check`
-  // with no argument — which is not the check anybody asked for, in a pane
-  // titled as though it were.
+  // Without this, a caller could run `teamree-relay check` with no argument
+  // in a pane titled as though it were the check somebody asked for.
   it('refuses a check with no URL to dial, the way the disabled button does', async () => {
     const projectId = await ready()
     const call = vi.spyOn(runtimeClient, 'call')
@@ -609,8 +577,7 @@ describe('the relay pane, in the store that owns it', () => {
 
     // The one the relay itself offered, which is the last thing it printed.
     expect(paneOf(projectId).url).toBe('ws://192.168.64.1:8787/v1/relay')
-    // And all of them, so the person who knows their own network can take a
-    // different one: the relay's own source says its pick is a guess.
+    // And all of them: the relay's own source says its pick is a guess.
     expect(paneOf(projectId).urls).toEqual([
       'ws://127.0.0.1:8787/v1/relay',
       'ws://192.168.64.1:8787/v1/relay',
@@ -618,10 +585,8 @@ describe('the relay pane, in the store that owns it', () => {
     ])
   })
 
-  // The one that nothing caught. A check prints the URL it was handed, and its
-  // very first line is `teamree-relay: dialling ws://…` — so a scheme list that
-  // let a check yield a URL would put the address the check had just proved
-  // dead under a button offering to write it into everybody's repository.
+  // A check's first line is `teamree-relay: dialling ws://…`, so a scheme list
+  // that let a check yield a URL would offer an address it had just proved dead.
   it('never takes a URL out of a check pane, however plainly the check prints one', async () => {
     const projectId = await ready()
     await useWorkspaceStore.getState().startRelayPane(projectId, 'check', 'ws://192.168.1.23:8787/v1/relay')
@@ -642,9 +607,8 @@ describe('the relay pane, in the store that owns it', () => {
     expect(paneOf(projectId).urls).toEqual([])
   })
 
-  // Only the tail of the scrollback is read, and a relay that is working logs.
-  // Give it long enough and the announcement scrolls out of that window — and
-  // the button somebody was about to press used to vanish out from under them.
+  // Only the tail of the scrollback is read, and a relay that is working logs
+  // the announcement out of that window.
   it('does not forget an address because the relay kept talking', async () => {
     const projectId = await ready()
     await useWorkspaceStore.getState().startRelayPane(projectId, 'serve', undefined)
@@ -676,11 +640,8 @@ describe('the relay pane, in the store that owns it', () => {
 })
 
 // A renderer reload empties this window's memory and leaves every process the
-// runtime started exactly where it was. For a deploy that did not matter — it
-// had finished. For a relay it matters a great deal: the slot is gone, the
-// buttons come back enabled, the pane is in no pane tree so there is no way
-// left to stop it, and the next serve dies on EADDRINUSE against a process
-// nothing on screen admits to.
+// runtime started where it was. For a relay the slot is gone, the pane is in no
+// tree so nothing can stop it, and the next serve dies on EADDRINUSE.
 describe('the relay pane, against the runtime’s own list of terminals', () => {
   const terminal = (id: string, worktreeId: string, running = true): Terminal => ({
     id,
@@ -718,8 +679,7 @@ describe('the relay pane, against the runtime’s own list of terminals', () => 
     expect(rebuilt.p1).toEqual({ kind: 'serve', terminalId: 'term_9', url: null, urls: [], running: true })
   })
 
-  // The other way round: a slot whose only control reads "Close this pane" for
-  // a pane that is not there.
+  // A slot whose only control reads "Close this pane" for a pane that is not there.
   it('drops a slot whose terminal has left the runtime’s list', () => {
     const open: Record<string, RelayPaneState> = {
       p1: { kind: 'serve', terminalId: 'term_9', url: 'ws://192.168.1.23:8787/v1/relay', urls: [], running: true }
@@ -727,8 +687,7 @@ describe('the relay pane, against the runtime’s own list of terminals', () => 
     expect(reconcileRelayPanes(open, listed(terminal('term_1', 'wt_1')))).toEqual({})
   })
 
-  // Everything the slot has learned is in the slot and nowhere else — the URL
-  // above all, which is scraped out of a pane and is not in any list.
+  // The URL is scraped out of a pane and is in no list, so the slot must keep it.
   it('keeps what an open pane has learned, and takes running off the record', () => {
     const open: Record<string, RelayPaneState> = {
       p1: {
@@ -750,8 +709,7 @@ describe('the relay pane, against the runtime’s own list of terminals', () => 
     expect(reconcileRelayPanes({}, listed(terminal('term_1', 'wt_1'), terminal('term_2', 'wt_2')))).toEqual({})
   })
 
-  // And the whole of it through the store, because the reconciliation is only
-  // worth anything if it is actually wired to the read that replaces the list.
+  // Through the store, to prove the reconciliation is wired to the read that replaces the list.
   it('adopts a relay left running by a window that reloaded, and prunes it when it goes', async () => {
     const store = useWorkspaceStore.getState()
     await store.bootstrap()
@@ -772,8 +730,7 @@ describe('the relay pane, against the runtime’s own list of terminals', () => 
       await useWorkspaceStore.getState().startRelayPane(projectId, 'serve', undefined)
       const terminalId = useWorkspaceStore.getState().relayPanes[projectId]!.terminalId
 
-      // The reload: this window's memory of the pane is gone and the process is
-      // not. The next read of the list is what has to notice.
+      // The reload: this window's memory of the pane is gone and the process is not.
       useWorkspaceStore.setState({ relayPanes: {} })
       const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
       await useWorkspaceStore.getState().createTerminal(worktreeId)
@@ -786,8 +743,7 @@ describe('the relay pane, against the runtime’s own list of terminals', () => 
         })
       )
 
-      // And gone from the runtime is gone from the panel: a slot offering to
-      // close a pane that is not there is a button that can only fail.
+      // Gone from the runtime is gone from the panel.
       await runtimeClient.call('terminal.close', { terminalId })
       await vi.waitFor(() => expect(useWorkspaceStore.getState().relayPanes[projectId]).toBeUndefined())
     } finally {

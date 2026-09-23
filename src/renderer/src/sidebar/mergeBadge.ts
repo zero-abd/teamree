@@ -1,9 +1,5 @@
-// How a merge preview reads in one word.
-//
-// The sidebar's job here is comparison: with five attempts at one task, the
-// useful glance is which of them can go in. That has to survive being three
-// characters wide, and it has to keep "could not tell" visibly apart from
-// "nothing wrong" — those look the same at a glance and mean opposite things.
+// How a merge preview reads in one word. It has to survive being three
+// characters wide and keep "could not tell" visibly apart from "nothing wrong".
 
 import type { WorktreeMergePreview } from '@shared/entities'
 
@@ -17,18 +13,14 @@ export type MergeBadge = {
 }
 
 export function mergeBadge(preview: WorktreeMergePreview | undefined): MergeBadge | null {
-  // Nothing has been read yet. A row that says nothing is better than one that
-  // guesses, and the answer arrives a moment later on its own.
+  // Nothing read yet; the answer arrives a moment later on its own.
   if (!preview) return null
 
   switch (preview.state) {
     case 'nothingToMerge':
-      // Nothing, and on purpose. Every fresh worktree is in this state, so a
-      // chip here was a chip on every row, saying the one thing a row with no
-      // ahead count already says. And never "merged": a branch whose commits
-      // are all in the base and one that never made any are the same fact to
-      // git, and the row must not talk somebody into deleting a worktree they
-      // had not finished with.
+      // Nothing, on purpose: every fresh worktree is in this state. Never
+      // "merged": a branch whose commits are all in the base and one that never
+      // made any are the same fact to git, and the row must not talk somebody into deleting.
       return null
     case 'clean':
       return {

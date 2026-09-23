@@ -1,11 +1,6 @@
-// What "unread" is allowed to mean, and every way it could be a lie.
-//
-// The mark is the only thing in this window that claims to know something about
-// the reader rather than about the work, so each of these is about the claim
-// being false rather than about the arithmetic: a pane somebody is watching
-// must never carry it, a pane opened on screen must lose it, and a record
-// storage could not keep must leave the window saying nothing rather than
-// saying everything is new.
+// What "unread" is allowed to mean, and every way it could be a lie: a pane
+// somebody is watching must never carry it, and a record storage could not keep
+// must leave the window saying nothing rather than everything is new.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { Layout, Terminal } from '@shared/entities'
@@ -102,9 +97,7 @@ describe('what makes a pane unread', () => {
 
   it('never marks the pane somebody is looking at, however much it prints', () => {
     // The debounce writes the focused pane down every half minute, so between
-    // two of those writes a working agent has always printed since. This is the
-    // rule that stops a pip appearing on the pane being watched, and it is a
-    // rule rather than a race deliberately.
+    // two writes a working agent has always printed since. A rule, not a race, deliberately.
     const watched = terminal('t1', NOW)
     expect(isPaneUnread(watched, NOW - 30_000, true)).toBe(false)
     expect(isPaneUnread(watched, NOW - 30_000, false)).toBe(true)
@@ -196,8 +189,7 @@ describe('the window', () => {
     const seen = useWorkspaceStore.getState().paneSeenAt
     expect(seen.t2).toBeGreaterThan(NOW - 60_000)
     expect(unreadPaneIds(panes, seen, 't2').size).toBe(0)
-    // And the pane it was taken off is written down too: what was on screen up
-    // to this moment has been seen up to this moment.
+    // What was on screen up to this moment has been seen up to this moment.
     expect(seen.t1).toBeGreaterThan(NOW - 60_000)
   })
 })

@@ -1,22 +1,8 @@
 /** @vitest-environment jsdom */
 
-// The sidebar, assembled: projects, your worktrees, and your teammates'
-// worktrees under the same project.
-//
-// The rows have their own files. What is only true here is the wiring between
-// them — that pressing a teammate's pane opens *that* pane, that pressing it
-// again closes it rather than opening a second one, and that the row goes on
-// saying which of them this window has open.
-//
-// The pane itself is not here any more. It used to be: a card this component
-// rendered, floating over the whole window, which is what made it the one
-// surface in the app that could not be moved, resized or closed the way
-// everything else can. It is a pane in the workspace now, held in the store, so
-// what the sidebar is responsible for is the decision rather than the window.
-//
-// It is also where the several ways of having nothing to show are kept apart:
-// no projects, no worktrees, and a teammate on the roster nothing has ever been
-// heard from are three different sentences.
+// The sidebar, assembled: projects, your worktrees, and your teammates' worktrees under
+// the same project. What is only true here is the wiring between the rows, and the
+// three different sentences for having nothing to show.
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -136,10 +122,7 @@ beforeEach(() => {
   seed()
 })
 
-// The app's name used to sit in a strip of its own across the whole window,
-// above the sidebar and the panes alike. The strip is gone: the sidebar's own
-// header is where the name lives now, beside the one control that puts the
-// sidebar away, and the window buttons sit on the same row.
+// The name lives in the sidebar's own header, beside the one control that puts the sidebar away.
 describe('the sidebar’s own header', () => {
   it('carries the app name, in the sidebar rather than in a strip of its own', () => {
     mount()
@@ -149,8 +132,7 @@ describe('the sidebar’s own header', () => {
     expect(document.querySelector('.titlebar')).toBeNull()
   })
 
-  // The chord is taught in the menu bar, in Help, in the palette and on the
-  // front door; a hover is not a fifth place.
+  // The chord is taught in four places already; a hover is not a fifth.
   it('puts the sidebar away from its own header, without naming a chord', () => {
     mount()
     const hide = screen.getByRole('button', { name: 'Hide sidebar' })
@@ -159,8 +141,7 @@ describe('the sidebar’s own header', () => {
     expect(toggleSidebar).toHaveBeenCalledOnce()
   })
 
-  // The header is what the window is dragged by on macOS, so the button in it
-  // has to opt back out of the drag region — a class the stylesheet keys on.
+  // The header is the macOS drag region, so the button must opt out of it — a class the stylesheet keys on.
   it('keeps the control inside the header, where the drag region can exempt it', () => {
     mount()
     const header = document.querySelector('.sidebar__brand') as HTMLElement
@@ -182,9 +163,7 @@ describe('having nothing to show', () => {
     expect(openDialog).toHaveBeenCalledWith({ kind: 'new-task', projectId: 'p1' })
   })
 
-  // On the roster and never heard from is not the same as away, and not the
-  // same as having no worktrees — inventing a row for them would be inventing
-  // work.
+  // Never heard from is not away and not "no worktrees"; inventing a row would be inventing work.
   it('names teammates nothing has ever been heard from, without inventing rows for them', () => {
     seed({
       teammates: {
@@ -220,9 +199,7 @@ describe('a project header', () => {
     expect(toggleProject).toHaveBeenCalledExactlyOnceWith('p1')
   })
 
-  // Six causes, five of which are not each other. Collapsing them into
-  // "offline" sends somebody to check their wifi because a colleague shut a
-  // laptop.
+  // Collapsing six causes into "offline" sends somebody to check their wifi because a colleague shut a laptop.
   it('says which of the ways teamwork is not working applies here', () => {
     const status: TeamworkStatus = {
       state: 'read',
@@ -236,9 +213,7 @@ describe('a project header', () => {
     }
     seed({ teamwork: { p1: status } })
     mount()
-    // One control, whose text is the state and whose hover is the reason. It
-    // used to be a chip reading "Teamwork off" beside a button reading
-    // "Teamwork", which is the same word twice and no way to tell which to press.
+    // One control, whose text is the state and whose hover is the reason.
     const control = screen.getByRole('button', { name: 'Teamwork · off in pager' })
     expect(control.textContent).toBe('Teamwork · off')
     expect(control.getAttribute('title')).toBe('no .teamree/relay in this project')
@@ -253,9 +228,7 @@ describe('a project header', () => {
     expect(screen.getByRole('button', { name: 'Teamwork in pager' }).textContent).toBe('Teamwork')
   })
 
-  // Named with the project, because the rail above the tree has an entry of
-  // the same name: two buttons reading "Teamwork" are one button to anybody
-  // listening rather than looking.
+  // Named with the project: the rail has an entry of the same name, and two "Teamwork" buttons are one to a listener.
   it('opens the setup view for the project it belongs to', () => {
     mount()
     screen.getByRole('button', { name: 'Teamwork in pager' }).click()
@@ -279,11 +252,8 @@ describe('a project header', () => {
   })
 })
 
-// Selected by hover text rather than by accessible name: a teammate's pane
-// button is labelled by its own content ("claude"), so two teammates running
-// the same agent are two identically named buttons. See the note in the report.
-// The text says what the next press would do, so a row that is already open
-// offers to stop — which is the half of the toggle this has to match too.
+// Selected by hover text: a pane button is labelled by its content ("claude"), so two teammates on
+// the same agent are two identically named buttons. The text says what the next press would do.
 const paneOf = (handle: string): HTMLElement => screen.getByTitle(new RegExp(`^(Watch|Stop watching) ${handle}`))
 
 describe('watching a teammate’s pane', () => {
@@ -308,9 +278,7 @@ describe('watching a teammate’s pane', () => {
     expect(open()).toEqual([{ projectId: 'p1', paneId: 'priya:t7' }])
   })
 
-  // The floating card could only ever be one, because it was one card. A pane
-  // in the workspace is a pane, and a second one is a second pane — which is
-  // the whole reason somebody wanted two teammates side by side.
+  // A pane in the workspace is a pane, and a second one is a second pane.
   it('opens a second pane beside the first rather than replacing it', () => {
     act(() => paneOf('priya').click())
     act(() => paneOf('ana').click())
@@ -320,8 +288,7 @@ describe('watching a teammate’s pane', () => {
     ])
   })
 
-  // Which is what keeps stopping reachable for somebody whose eye is on this
-  // list rather than on the pane.
+  // Keeps stopping reachable for somebody whose eye is on this list rather than the pane.
   it('stops watching when the same row is pressed again', () => {
     const row = (): HTMLElement => paneOf('priya')
     act(() => row().click())
@@ -340,11 +307,8 @@ describe('watching a teammate’s pane', () => {
   })
 })
 
-// The CLI is a Settings concern, and it used to be a red pill pinned to the
-// bottom of the sidebar for as long as the link was wrong — which on a machine
-// running from a checkout is always. Now it is a dot on the Settings entry: the
-// row that leads to the fix carries the mark, and nothing else in the sidebar
-// argues for itself.
+// The CLI is a Settings concern: the row that leads to the fix carries the mark, and nothing
+// else in the sidebar argues for itself.
 describe('the CLI mark on Settings', () => {
   const badge = (): HTMLElement | null => document.querySelector('.rail__badge')
 
@@ -365,11 +329,7 @@ describe('the CLI mark on Settings', () => {
         directory: '/usr/local/bin',
         source: '/Applications/teamree.app/cli',
         bundle: '/Applications/teamree.app/cli.js',
-        // Spelled out rather than left off. These are the fields that say the
-        // app is running from somewhere it will still be tomorrow, and an
-        // absent one is not the same as a null one: the panel branches on
-        // `!== null`, so a seed that omits them describes a state this app
-        // never reports and tests a sentence nobody is ever shown.
+        // Spelled out: the panel branches on `!== null`, so a seed omitting these describes a state the app never reports.
         impermanent: null,
         onPath: 'environment'
       },
@@ -403,18 +363,14 @@ describe('the CLI mark on Settings', () => {
   })
 })
 
-// Everything this window can show used to be reachable only from a chord or a
-// button buried in a project header. These are app-level places, so they sit
-// above the tree, and they have to say which one you are in without relying on
-// a colour.
+// App-level places sit above the tree and say which one you are in without relying on a colour.
 describe('the rail above the tree', () => {
   it('is a landmark of its own, separate from the tree', () => {
     mount()
     expect(screen.getByRole('navigation', { name: 'Go to' })).toBeTruthy()
   })
 
-  // A field that filters this list would be a second, weaker search beside the
-  // real one. This opens the real one.
+  // A field that filters this list would be a second, weaker search beside the real one.
   it('sends search to the palette rather than pretending to be one', () => {
     mount()
     const search = screen.getByRole('button', { name: 'Search worktrees and commands' })
@@ -450,8 +406,7 @@ describe('the rail above the tree', () => {
     expect(toggleDashboard).toHaveBeenCalledOnce()
   })
 
-  // Teamwork is set up per repository. With none added the entry says why
-  // rather than doing nothing when pressed.
+  // Teamwork is set up per repository; with none added the entry says why.
   it('says why teamwork cannot be reached before a repository has been added', () => {
     seed({ projects: [] })
     mount()
@@ -476,10 +431,7 @@ describe('the list itself', () => {
   })
 })
 
-// Settings and Help take the main area, and both were reachable only from the
-// empty state until this. A surface with no entry in the rail and no row in the
-// palette is a surface somebody has to already know about, which is the one
-// thing a help page cannot afford to be.
+// A surface with no entry in the rail and no row in the palette is one somebody has to already know about.
 describe('the rail reaches the window-level surfaces', () => {
   it('opens settings from the rail', () => {
     seed({ settingsOpen: false, toggleSettings })
@@ -496,9 +448,7 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(screen.getByRole('button', { name: /Settings/ }).getAttribute('aria-current')).toBe('page')
   })
 
-  // The rows used to carry ⌘, and ⌘/ at their far ends. The owner's rule is
-  // that the window has too many places explaining shortcuts; the search field
-  // keeps its one, because that is where every app puts it.
+  // The window has too many places explaining shortcuts; the search field keeps its one.
   it('draws no chord on any rail row but the search', () => {
     seed({ toggleHelp })
     mount()
@@ -511,16 +461,12 @@ describe('the rail reaches the window-level surfaces', () => {
   })
 })
 
-// The claim the worktree chords rest on, made where it can actually be checked:
-// against the DOM the sidebar produces. `worktreeOrder.test.ts` proves the
-// function groups by project; only a rendered sidebar can say that the function
-// is what the sidebar renders. If these two ever part company, ⌘⌥↓ starts
-// jumping around a list that is sitting still.
+// `worktreeOrder.test.ts` proves the function groups by project; only a rendered sidebar can say
+// the function is what the sidebar renders.
 describe('the order the chords walk', () => {
   it('is the order the rows are drawn in', () => {
     const projects = [project, { id: 'p2', name: 'relay', path: '/repos/relay', baseRef: 'origin/main' }]
-    // Interleaved, which is how a runtime answer arrives: two projects' rows in
-    // whatever order the worktrees were made.
+    // Interleaved, which is how a runtime answer arrives.
     const worktrees = [
       worktree({ id: 'w1', projectId: 'p1', name: 'one' }),
       worktree({ id: 'w2', projectId: 'p2', name: 'two' }),
@@ -536,10 +482,8 @@ describe('the order the chords walk', () => {
   })
 })
 
-// What the row menu is wired to. The menu itself is `WorktreeRow.test.tsx`'s;
-// what is only true here is that choosing an item acts on the right worktree
-// with the right project's editor — which is the half a component test of the
-// row structurally cannot see.
+// The menu itself is `WorktreeRow.test.tsx`'s; what is only true here is that an item acts on
+// the right worktree with the right project's editor.
 describe('the row menu acts on the worktree it was opened on', () => {
   const openMenu = (): void => {
     mount()
@@ -580,10 +524,8 @@ describe('the row menu acts on the worktree it was opened on', () => {
     fireEvent.click(target, { button: 0, detail: 1 })
   }
 
-  // Reported as doing nothing twice, through a driver that sends press and
-  // release with no click count — which never makes a click event. A mouse
-  // does, and the menu's own outside-press dismissal is not in its way: the
-  // press lands inside the menu.
+  // Reported as doing nothing, through a driver that sends press and release with no click count,
+  // which never makes a click event; a mouse does, and the press lands inside the menu.
   it('asks the runtime to remove the worktree when Remove is clicked with a mouse', async () => {
     call.mockResolvedValue({ removed: true })
     seed({ worktrees: [worktree()] })
@@ -614,8 +556,7 @@ describe('the row menu acts on the worktree it was opened on', () => {
     expect(useWorkspaceStore.getState().worktrees).toHaveLength(1)
   })
 
-  // The editor is the project's, and the path is the worktree's. Nothing else
-  // in the window pairs those two, which is why this is asserted here.
+  // Nothing else in the window pairs the project's editor with the worktree's path.
   it('opens the checkout in the editor this project names', async () => {
     call.mockResolvedValue({ opened: true, editor: 'mate' })
     seed({ worktrees: [worktree()], editorCommands: { p1: 'mate' } })
@@ -628,9 +569,7 @@ describe('the row menu acts on the worktree it was opened on', () => {
     expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite', command: 'mate' })
   })
 
-  // A refusal is the ordinary answer on a machine with no editor set up, and it
-  // has to reach the screen: a menu item that did nothing and said nothing is
-  // the broken button this menu exists to stop being.
+  // A refusal is the ordinary answer on a machine with no editor set up, and it has to reach the screen.
   it('says why nothing opened', async () => {
     call.mockResolvedValue({ opened: false, reason: 'teamree found no editor on PATH.' })
     seed({ worktrees: [worktree()] })

@@ -1,10 +1,7 @@
 /** @vitest-environment jsdom */
 
-// Where the next keystroke goes is this window's to decide, and only the person
-// at it may change the answer. The workspace stream reports what the runtime
-// did — for this window, for another, for an agent on the CLI — and none of
-// that is a request to be somewhere else. These are the two stream events that
-// used to move the focus anyway: a worktree removed from elsewhere while it was
+// Where the next keystroke goes is this window's to decide, and only the person at it may change
+// the answer. Two stream events must not move the focus: a worktree removed from elsewhere while
 // in front, and a layout arriving with its focus on a pane somebody else made.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -141,8 +138,7 @@ describe('a worktree removed from elsewhere while it is in front', () => {
 
 describe('a layout arriving from the stream with its focus moved', () => {
   it('keeps the pane you were typing into when a pane you did not ask for appears', async () => {
-    // An agent on the CLI, a hook, another window: a third pane, and the
-    // runtime's layout says it has the focus.
+    // A third pane from the CLI, a hook or another window, and the runtime's layout says it has the focus.
     useWorkspaceStore.setState((state) => ({ terminals: { ...state.terminals, t3: terminal('t3', 'w1') } }))
     runtimeSays({
       'terminal.list': () => Object.values(store().terminals),
@@ -188,9 +184,7 @@ describe('a layout arriving from the stream with its focus moved', () => {
   })
 
   it('focuses the pane you started from the agent picker, and not the one the runtime opens after it', async () => {
-    // The picker is a click, the same as the new-terminal button, and its pane
-    // goes in front. The pane that arrives next on the stream — an agent on
-    // the CLI, a hook — is nobody's click here, and it does not.
+    // The picker is a click and its pane goes in front; the pane arriving next on the stream is nobody's click here.
     runtimeSays({
       'terminal.create': (params) => {
         expect(params).toMatchObject({ worktreeId: 'w1', command: 'claude' })
