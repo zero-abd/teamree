@@ -63,17 +63,20 @@ import {
   clampTerminalFontSize,
   readStoredAgentNotices,
   readStoredEditorCommands,
+  readStoredDiffLayout,
   readStoredStartPoints,
   readStoredTerminalFontSize,
   withEditorCommand,
   withStartPoint,
   writeStoredAgentNotices,
   writeStoredEditorCommands,
+  writeStoredDiffLayout,
   writeStoredStartPoints,
   writeStoredTerminalFontSize,
   type AgentNoticePreference
 } from './preferences'
 import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen } from './paneSeen'
+import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
 
@@ -555,6 +558,8 @@ type WorkspaceState = {
    * is what the Open in item's refusal will say when it is chosen.
    */
   editors: { command: string; label: string }[] | null
+  /** Whether the patch in the changes panel is laid out inline or side by side. */
+  diffLayout: DiffLayout
 
   /**
    * How this window is painted, as the runtime last told it.
@@ -782,6 +787,8 @@ type WorkspaceState = {
   setTerminalFontSize: (size: number) => void
   /** Sets what an agent going quiet may do, and remembers it. */
   setAgentNotices: (preference: AgentNoticePreference) => void
+  /** Sets whether a patch is read down one column or across two, and remembers it. */
+  setDiffLayout: (layout: DiffLayout) => void
   /** Sets one project's preferred start point, or clears it when given null. */
   setStartPointDefault: (projectId: string, ref: string | null) => void
   /**
@@ -1369,6 +1376,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     editorCommands: readStoredEditorCommands(storage),
     editors: null,
     paneSeenAt: readPaneSeen(storage),
+    diffLayout: readStoredDiffLayout(storage),
 
     // The default until the runtime answers, which is the same palette
     // `tokens.css` already painted the first frame in — so the window does not
@@ -2522,6 +2530,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     setAgentNotices(preference) {
       set({ agentNotices: preference })
       writeStoredAgentNotices(storage, preference)
+    },
+
+    setDiffLayout(layout) {
+      set({ diffLayout: layout })
+      writeStoredDiffLayout(storage, layout)
     },
 
     setStartPointDefault(projectId, ref) {

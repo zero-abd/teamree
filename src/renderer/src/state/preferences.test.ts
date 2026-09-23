@@ -11,6 +11,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   clampTerminalFontSize,
+  DIFF_LAYOUT_DEFAULT,
+  readStoredDiffLayout,
   readStoredEditorCommands,
   readStoredStartPoints,
   readStoredTerminalFontSize,
@@ -19,6 +21,7 @@ import {
   TERMINAL_FONT_MIN_PX,
   withEditorCommand,
   withStartPoint,
+  writeStoredDiffLayout,
   writeStoredEditorCommands,
   writeStoredStartPoints,
   writeStoredTerminalFontSize
@@ -176,5 +179,36 @@ describe('the editor a project opens its checkouts in', () => {
     expect(readStoredEditorCommands(refusingStorage)).toEqual({})
     expect(() => writeStoredEditorCommands(refusingStorage, { alpha: 'code' })).not.toThrow()
     expect(readStoredEditorCommands(undefined)).toEqual({})
+  })
+})
+
+describe('how a patch is laid out', () => {
+  it('comes back as it was chosen', () => {
+    const storage = memoryStorage()
+    writeStoredDiffLayout(storage, 'split')
+    expect(readStoredDiffLayout(storage)).toBe('split')
+    writeStoredDiffLayout(storage, 'inline')
+    expect(readStoredDiffLayout(storage)).toBe('inline')
+  })
+
+  // One column, because this is a side panel: two columns in three hundred
+  // pixels is two columns of nothing.
+  it('is inline until somebody says otherwise', () => {
+    expect(readStoredDiffLayout(memoryStorage())).toBe('inline')
+    expect(DIFF_LAYOUT_DEFAULT).toBe('inline')
+  })
+
+  // What is in storage is a string somebody's browser kept. A third value would
+  // reach the panel as a layout with no rules written for it, and the patch
+  // would render with neither set of columns.
+  it('takes the default rather than a value that is not one of the two', () => {
+    expect(readStoredDiffLayout(memoryStorage({ 'teamree.diff.layout': 'unified' }))).toBe('inline')
+    expect(readStoredDiffLayout(memoryStorage({ 'teamree.diff.layout': '' }))).toBe('inline')
+  })
+
+  it('survives a storage that refuses, in both directions', () => {
+    expect(readStoredDiffLayout(refusingStorage)).toBe('inline')
+    expect(() => writeStoredDiffLayout(refusingStorage, 'split')).not.toThrow()
+    expect(readStoredDiffLayout(undefined)).toBe('inline')
   })
 })

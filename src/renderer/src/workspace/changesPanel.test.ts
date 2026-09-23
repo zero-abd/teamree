@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorktreeLog } from '@shared/entities'
-import { directoryOf, draftFor, emptyChangesLabel, fileNameOf, lineKind, withDraft } from './ChangesPanel'
+import { directoryOf, draftFor, emptyChangesLabel, fileNameOf, withDraft } from './ChangesPanel'
 import { changedCount } from './WorkspaceArea'
 
 describe('emptyChangesLabel', () => {
@@ -37,31 +37,10 @@ describe('emptyChangesLabel', () => {
   })
 })
 
-describe('lineKind', () => {
-  it('colours additions and removals by their first character', () => {
-    expect(lineKind('+  const next = 1')).toBe('added')
-    expect(lineKind('-  const next = 0')).toBe('removed')
-    expect(lineKind('   unchanged')).toBe('context')
-  })
-
-  // The trap in every hand-rolled diff renderer: `---` and `+++` start with the
-  // same characters as a removal and an addition, and are neither.
-  it('reads the file headers as headers, not as one added and one removed line', () => {
-    expect(lineKind('--- a/src/app.ts')).toBe('header')
-    expect(lineKind('+++ b/src/app.ts')).toBe('header')
-    expect(lineKind('diff --git a/src/app.ts b/src/app.ts')).toBe('header')
-    expect(lineKind('index 3f8a1c2..9b21e40 100644')).toBe('header')
-    expect(lineKind('new file mode 100644')).toBe('header')
-  })
-
-  it('picks out the hunk header', () => {
-    expect(lineKind('@@ -14,7 +14,9 @@')).toBe('hunk')
-  })
-
-  it('treats an empty line as context rather than anything louder', () => {
-    expect(lineKind('')).toBe('context')
-  })
-})
+// What `lineKind` used to decide here — which part of a diff a line belongs
+// to — is now one of the things `parsePatch` decides, in `src/shared/patch.ts`,
+// where the same pass also works out the line's number on each side. Its tests
+// went with it, including the `---`/`+++` trap they were written for.
 
 describe('splitting a path for display', () => {
   it('keeps the directory and the name apart, so the name can stay put', () => {

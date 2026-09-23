@@ -570,15 +570,54 @@
   background: var(--bg-window);
 }
 
+/* The two words above the patch. A segmented pair rather than a switch,
+   because a switch has one label and this has two things to say. */
+.changes__layout {
+  display: flex;
+  gap: var(--s1);
+  padding: var(--s2) var(--s4);
+  border-top: 1px solid var(--line);
+  background: var(--bg-raised);
+}
+
+.changes__layoutPick {
+  padding: var(--s1) var(--s2);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.changes__layoutPick:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.changes__layoutPick--on {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
 /* A patch scrolls sideways rather than wrapping, and deliberately: its meaning
    is in the columns. A wrapped line turns one change into several rows and
-   pushes the +/- gutter out of line, which is the one edge a diff is read down.
+   pushes the gutters out of line, which is the one edge a diff is read down.
    Sized to its widest line so that a line's highlight runs the whole width of
    the patch — without this the green and red stop at the panel edge and scrolling
    right leaves changed text with no colour on it at all. */
 .patch {
+  /* The syntax palette, which is the terminal's own bright half. Named here
+     rather than in `tokens.css` because these are roles this one surface
+     assigns, not colours the theme adds: every value is a token the palette
+     already resolves, so a theme switch carries the patch with it. */
+  --syntax-keyword: var(--term-bright-magenta);
+  --syntax-string: var(--term-bright-green);
+  --syntax-number: var(--term-bright-yellow);
+  --syntax-comment: var(--fg-muted);
+
   margin: 0;
-  padding: var(--s2) 0;
   display: flex;
   flex-direction: column;
   width: max-content;
@@ -588,32 +627,163 @@
   line-height: 1.55;
 }
 
-.patch__line {
-  padding: 0 var(--s4);
+.patch__file {
+  border-bottom: 1px solid var(--line);
+}
+
+/* The disclosure triangle is the platform's and points the wrong way at this
+   size; the row is the control, and its own state is the fold. */
+.patch__fileHead,
+.patch__hunkHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: var(--s2) var(--s4);
+  cursor: pointer;
+  list-style: none;
   white-space: pre;
 }
 
-.patch__line--added {
-  background: color-mix(in srgb, var(--success) 14%, transparent);
-  color: var(--success);
+.patch__fileHead::-webkit-details-marker,
+.patch__hunkHead::-webkit-details-marker {
+  display: none;
 }
 
-.patch__line--removed {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-  color: var(--danger);
+.patch__fileHead {
+  background: var(--bg-raised);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
 }
 
-.patch__line--hunk {
-  color: var(--accent);
+.patch__fileHead:hover,
+.patch__hunkHead:hover {
+  background: var(--bg-hover);
 }
 
-.patch__line--header,
-.patch__line--note {
+.patch__fileDir {
   color: var(--fg-muted);
 }
 
-.patch__line--context {
+.patch__fileNote {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* The one line on screen that says where in the file you are, kept there while
+   the hunk scrolls under it. Opaque, because a translucent header over
+   monospace text is two lines of text in the same place. */
+.patch__hunkHead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--line);
+  color: var(--accent);
+}
+
+.patch__binary,
+.patch__cut {
+  margin: 0;
+  padding: var(--s2) var(--s4);
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.patch__row {
+  display: flex;
+  align-items: baseline;
+  white-space: pre;
+}
+
+.patch__row--added,
+.patch__side--added {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.patch__row--removed,
+.patch__side--removed {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+/* Wide enough for four digits, which is where a file stops being one somebody
+   reads a diff of in a side panel. Right-aligned so the digits line up. */
+.patch__num {
+  width: 3.4em;
+  flex: none;
+  padding: 0 var(--s2);
+  color: var(--fg-muted);
+  text-align: right;
+  user-select: none;
+}
+
+.patch__sign {
+  width: 1ch;
+  flex: none;
+  margin-right: var(--s2);
+  user-select: none;
+}
+
+.patch__sign--added {
+  color: var(--success);
+}
+
+.patch__sign--removed {
+  color: var(--danger);
+}
+
+.patch__text {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.patch__tok--plain {
   color: var(--fg-secondary);
+}
+
+.patch__tok--keyword {
+  color: var(--syntax-keyword);
+}
+
+.patch__tok--string {
+  color: var(--syntax-string);
+}
+
+.patch__tok--number {
+  color: var(--syntax-number);
+}
+
+.patch__tok--comment {
+  color: var(--syntax-comment);
+}
+
+/* The file ends here, with no newline after it. */
+.patch__nonl {
+  margin-left: var(--s2);
+  color: var(--fg-muted);
+}
+
+/* Side by side. Two halves of the row, each with its own gutter; a half with
+   no line in it is the gap where the other side added or removed one. */
+.patch--split .patch__row--split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.patch__side {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.patch__side--gap {
+  background: var(--bg-hover);
+}
+
+.patch--split .patch__side + .patch__side {
+  border-left: 1px solid var(--line);
 }
 
 /* The checkbox sits outside the row button, so clicking a file to read its

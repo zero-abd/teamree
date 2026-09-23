@@ -3,7 +3,8 @@
 // Three of them live here: how big the text in a pane is, which ref a new task
 // in a given project starts from by default, whether an agent that stops
 // while you are elsewhere is allowed to say so, and which editor that
-// project's checkouts open in. All are stored the way the
+// project's checkouts open in, and whether a patch is read down one column or
+// across two. All are stored the way the
 // sidebar's width already is — in this window's `localStorage`, behind a
 // clamp, with every read and write wrapped so that storage being unavailable
 // costs a default rather than a render.
@@ -84,6 +85,7 @@ export function writeStoredAgentNotices(
 }
 
 const EDITOR_COMMANDS_KEY = 'teamree.editor.commands'
+const DIFF_LAYOUT_KEY = 'teamree.diff.layout'
 
 export function clampTerminalFontSize(size: number): number {
   if (!Number.isFinite(size)) return TERMINAL_FONT_DEFAULT_PX
@@ -220,4 +222,36 @@ export function withEditorCommand(
     return rest
   }
   return { ...commands, [projectId]: trimmed }
+}
+
+/**
+ * How a patch is laid out: one column with the removals above the additions,
+ * or two columns with the old file beside the new one.
+ *
+ * Inline is the default because this panel is a side panel — it is beside the
+ * terminals, not instead of them — and two columns in three hundred pixels is
+ * two columns of nothing. Side by side is what somebody widens the panel for.
+ */
+export type DiffLayout = 'inline' | 'split'
+
+export const DIFF_LAYOUT_DEFAULT: DiffLayout = 'inline'
+
+export function readStoredDiffLayout(storage: Pick<Storage, 'getItem'> | undefined): DiffLayout {
+  try {
+    // Checked against the two it can be rather than cast: what is in storage is
+    // a string somebody's browser kept, and a third value would reach the panel
+    // as a layout with no rules written for it.
+    const raw = storage?.getItem(DIFF_LAYOUT_KEY)
+    return raw === 'split' || raw === 'inline' ? raw : DIFF_LAYOUT_DEFAULT
+  } catch {
+    return DIFF_LAYOUT_DEFAULT
+  }
+}
+
+export function writeStoredDiffLayout(storage: Pick<Storage, 'setItem'> | undefined, layout: DiffLayout): void {
+  try {
+    storage?.setItem(DIFF_LAYOUT_KEY, layout)
+  } catch {
+    // As above: the choice holds for this window and is forgotten on the next.
+  }
 }

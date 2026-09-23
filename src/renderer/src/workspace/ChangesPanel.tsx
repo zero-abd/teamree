@@ -10,6 +10,8 @@
 
 import { useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { PatchView } from './PatchView'
+import type { DiffLayout } from '../state/preferences'
 import type { WorktreeChange, WorktreeLog } from '@shared/entities'
 
 /** One letter per kind, the way git itself abbreviates them. */
@@ -23,6 +25,12 @@ const KIND_LETTER: Record<WorktreeChange['kind'], string> = {
   untracked: '?',
   conflicted: '!'
 }
+
+/** The two layouts, and the two words that offer them. */
+const LAYOUTS: readonly [DiffLayout, string][] = [
+  ['inline', 'Inline'],
+  ['split', 'Side by side']
+]
 
 const KIND_LABEL: Record<WorktreeChange['kind'], string> = {
   modified: 'Modified',
@@ -42,6 +50,8 @@ export function ChangesPanel(): React.JSX.Element | null {
   const selectedPath = useWorkspaceStore((state) => state.selectedChangePath)
   const diff = useWorkspaceStore((state) => state.diff)
   const diffPending = useWorkspaceStore((state) => state.diffPending)
+  const diffLayout = useWorkspaceStore((state) => state.diffLayout)
+  const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
   const selectChange = useWorkspaceStore((state) => state.selectChange)
   const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
   const stagedPaths = useWorkspaceStore((state) => state.stagedPaths)
@@ -193,24 +203,34 @@ export function ChangesPanel(): React.JSX.Element | null {
       ) : null}
 
       {selectedPath === null ? null : (
-        <div className="changes__diff">
-          {diffPending ? (
-            <p className="changes__empty">Reading the patch…</p>
-          ) : diff && diff.patch !== '' ? (
-            <pre className="patch">
-              {diff.patch.split('\n').map((line, index) => (
-                // The index is the only identity a diff line has: two lines of a
-                // patch can be byte-identical and still be different lines.
-                <span className={`patch__line patch__line--${lineKind(line)}`} key={index}>
-                  {line === '' ? ' ' : line}
-                </span>
-              ))}
-              {diff.truncated ? <span className="patch__line patch__line--note">… cut short</span> : null}
-            </pre>
-          ) : (
-            <p className="changes__empty">No patch for this path.</p>
-          )}
-        </div>
+        <>
+          {/* Two words and no label. The panel is narrow enough that a column
+              of explanation would cost more than the choice is worth, and the
+              two labels say what each one does. Outside the scrolling area
+              below it, so it is still there at line four hundred. */}
+          <div className="changes__layout" role="group" aria-label="How to lay the patch out">
+            {LAYOUTS.map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                className={`changes__layoutPick${diffLayout === value ? ' changes__layoutPick--on' : ''}`}
+                aria-pressed={diffLayout === value}
+                onClick={() => setDiffLayout(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="changes__diff">
+            {diffPending ? (
+              <p className="changes__empty">Reading the patch…</p>
+            ) : diff && diff.patch !== '' ? (
+              <PatchView patch={diff.patch} truncated={diff.truncated} layout={diffLayout} />
+            ) : (
+              <p className="changes__empty">No patch for this path.</p>
+            )}
+          </div>
+        </>
       )}
     </aside>
   )
@@ -249,20 +269,6 @@ export function emptyChangesLabel(log: WorktreeLog | undefined): string {
   if (log?.unavailable !== undefined) return 'Nothing uncommitted here.'
   if ((log?.commits.length ?? 0) > 0) return 'Everything here is committed.'
   return 'Nothing changed here yet.'
-}
-
-/**
- * Which part of a unified diff a line belongs to. Deliberately positional, the
- * way the format is: the first character decides, and `---`/`+++` are headers
- * rather than a removal and an addition.
- */
-export function lineKind(line: string): 'added' | 'removed' | 'header' | 'hunk' | 'context' {
-  if (line.startsWith('+++') || line.startsWith('---')) return 'header'
-  if (line.startsWith('@@')) return 'hunk'
-  if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('new file')) return 'header'
-  if (line.startsWith('+')) return 'added'
-  if (line.startsWith('-')) return 'removed'
-  return 'context'
 }
 
 /** The path up to the file name, kept dim so the name itself reads first. */
