@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, powerSaveBlocker, screen, shell } from 'electron'
 import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
-import { applicationMenuTemplate, type ApplicationMenuOptions } from './appMenu'
+import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type ApplicationMenuOptions } from './appMenu'
 import { installKeepAwake } from './keepAwake'
 import { frontsExistingWindow, isBackgroundLaunch, launchData, userDataOverride } from './launchProfile'
 import { installMenuBar } from './menuBar'
@@ -11,7 +11,7 @@ import { APP_VERSION } from './appVersion'
 import { createQuitSequence } from './quitSequence'
 import { registerRevealHandler } from './reveal/revealPath'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
-import { navigationVerdict, windowOpenAnswer } from './windowNavigation'
+import { mayOpenExternally, navigationVerdict, windowOpenAnswer } from './windowNavigation'
 import { loadWindowState, placeWindow, saveWindowState, trackWindowState, WINDOW_STATE_FILE } from './windowState'
 
 function createWindow(): BrowserWindow {
@@ -121,6 +121,14 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         Menu.buildFromTemplate(
           applicationMenuTemplate({
             developing: process.env.ELECTRON_RENDERER_URL !== undefined,
+            devTools: offersDevTools(process.env),
+            links: {
+              version: APP_VERSION,
+              systemVersion: process.getSystemVersion(),
+              open: (url) => {
+                if (mayOpenExternally(url)) void shell.openExternal(url)
+              }
+            },
             // Reads `runtime` at click time: the menu is installed before it starts.
             checkForUpdates: () => {
               void runtime?.checkForUpdates().catch((error: unknown) => console.warn('[updates]', error))
@@ -131,6 +139,11 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
       )
     }
     installMenu()
+
+    // Packaged, macOS draws the bundle's icon in About; unpackaged it would be Electron's.
+    const icon = app.isPackaged ? undefined : join(import.meta.dirname, '../../build/icon.png')
+    if (icon !== undefined) app.dock?.setIcon(icon)
+    app.setAboutPanelOptions(aboutPanelOptions(APP_VERSION, icon))
 
     // Before the runtime: `startRuntime` restores the last session's panes,
     // and one of them can settle in that same breath.
