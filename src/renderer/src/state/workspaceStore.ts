@@ -3024,17 +3024,4 @@ function keptFor<T>(byWorktree: Record<string, T>, live: Set<string>): Record<st
   return entries.length === Object.keys(byWorktree).length ? byWorktree : Object.fromEntries(entries)
 }
 
-/** Terminal ids on screen right now, for the status bar's pane count. */
-export function activeTerminalIds(state: {
-  activeWorktreeId: string | null
-  layouts: Record<string, Layout>
-}): string[] {
-  const layout = state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : null
-  return collectTerminalIds(layout?.root ?? null)
-}
-
-export function worktreesOfProject(worktrees: Worktree[], projectId: string): Worktree[] {
-  return worktrees.filter((worktree) => worktree.projectId === projectId)
-}
-
 export type { Worktree, WorktreeStatus, Project, Terminal, Layout }

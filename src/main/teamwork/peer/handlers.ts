@@ -32,7 +32,6 @@
 // across every handler.
 
 import { Params } from '../../../shared/methods'
-import type { ParamsOf, ResultOf } from '../../../shared/methods'
 import type { MethodRegistry } from '../../runtime/methodRegistry'
 import type { PeerService } from './peerService'
 
@@ -50,15 +49,6 @@ export const PEER_SERVICE_METHODS = [
   'peer.presence',
   'peer.subscribe'
 ] as const
-
-export type PeerServiceMethodName = (typeof PEER_SERVICE_METHODS)[number]
-
-export type PeerServiceHandlers = {
-  'teamwork.status': (params: ParamsOf<'teamwork.status'>) => ResultOf<'teamwork.status'>
-  'teamwork.presence': (params: ParamsOf<'teamwork.presence'>) => ResultOf<'teamwork.presence'>
-  'teamwork.watchers': (params: ParamsOf<'teamwork.watchers'>) => ResultOf<'teamwork.watchers'>
-  'teamwork.requests': (params: ParamsOf<'teamwork.requests'>) => ResultOf<'teamwork.requests'>
-}
 
 export function registerPeerHandlers(registry: MethodRegistry, service: PeerService): PeerService {
   // Asked before answering, because the project key is a hash of the `origin`

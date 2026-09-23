@@ -22,18 +22,6 @@ import { join } from 'node:path'
 export const MEMBERS_DIR = join('.teamree', 'members')
 
 /**
- * The format milestone A actually shipped: a short comment header, then
- * `handle:`, `key: x25519 <base64 of the raw 32 bytes>`, and `added:`.
- *
- * This was a guess when the harness was written — the design fixed the path and
- * the algorithm but never the encoding — and the guess (SPKI PEM) was wrong.
- * `src/main/teamwork/memberFile.ts` is the authority, and a test asserts that
- * what this writes parses there, so the two cannot drift apart again without
- * something going red.
- */
-export const PUBLIC_KEY_ENCODING = 'x25519-base64'
-
-/**
  * A handle has to be a filename, and it ends up in a repository every member
  * clones, so it is kept to the characters that mean the same thing on every
  * filesystem. Case-folding matters more than it looks: macOS would treat

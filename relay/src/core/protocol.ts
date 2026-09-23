@@ -73,8 +73,6 @@ export const CloseCode = {
   GoingAway: 1001
 } as const
 
-export type CloseCodeValue = (typeof CloseCode)[keyof typeof CloseCode]
-
 export type HelloResult = { ok: true; hello: Hello } | { ok: false; reason: string }
 
 /**

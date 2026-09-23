@@ -5,7 +5,6 @@
 // every list/get pass reconciles against this inventory.
 
 import type { GitRunner } from './gitProcess'
-import { pathKey } from './pathIdentity'
 
 export type InventoryEntry = {
   path: string
@@ -91,8 +90,4 @@ export async function readWorktreeInventory(runner: GitRunner, root: string): Pr
     timeoutMs: 30_000
   })
   return parseWorktreeList(stdout)
-}
-
-export function inventoryPathKeys(entries: readonly InventoryEntry[]): Set<string> {
-  return new Set(entries.map((entry) => pathKey(entry.path)))
 }

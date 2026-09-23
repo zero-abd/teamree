@@ -38,9 +38,6 @@ export type KeepAwakeState = {
   agentBusy: boolean
 }
 
-/** Until the window says otherwise, which it does on its first render. */
-export const DEFAULT_KEEP_AWAKE_STATE: KeepAwakeState = { mode: 'agent', agentBusy: false }
-
 function isMode(value: unknown): value is KeepAwakeMode {
   return typeof value === 'string' && (KEEP_AWAKE_MODES as readonly string[]).includes(value)
 }
