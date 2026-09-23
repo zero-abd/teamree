@@ -40,6 +40,9 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'open-appearance': 'app',
   'open-settings': 'app',
   'open-help': 'app',
+  'bigger-text': 'app',
+  'smaller-text': 'app',
+  'actual-size': 'app',
   'commit-changes': 'around',
   'push-worktree': 'around'
 }

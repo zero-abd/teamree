@@ -36,7 +36,7 @@ import { WORKSPACE_SHORTCUTS, type WorkspaceCommand, type WorkspaceShortcut } fr
  * the main process folds it into File on the platforms that have no such menu,
  * because that is where those platforms keep the same items.
  */
-export type MenuBarSection = 'application' | 'file' | 'edit' | 'view' | 'window' | 'help'
+export type MenuBarSection = 'application' | 'file' | 'edit' | 'view' | 'text' | 'window' | 'help'
 
 type Placement = {
   section: MenuBarSection
@@ -100,6 +100,11 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   // view of the window rather than a setting of the machine, and this is the
   // menu somebody looks in for how the window looks.
   'open-appearance': { section: 'view', label: 'Appearance…' },
+
+  // View's own group, where the zoom roles were.
+  'actual-size': { section: 'text' },
+  'bigger-text': { section: 'text' },
+  'smaller-text': { section: 'text' },
 
   // Splitting and walking panes is arranging the window, which is the Window
   // menu's whole subject — it already holds Minimize, Zoom and Bring All to

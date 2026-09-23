@@ -129,10 +129,8 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
         ? ([{ role: 'reload' }, { role: 'forceReload' }, { type: 'separator' }] as const)
         : []),
       ...before(inSection('view')),
-      { role: 'resetZoom' },
-      { role: 'zoomIn' },
-      { role: 'zoomOut' },
-      { type: 'separator' },
+      // Terminal text size, in place of the zoom roles that scaled the whole window.
+      ...before(inSection('text')),
       { role: 'togglefullscreen' },
       { type: 'separator' },
       { role: 'toggleDevTools' }

@@ -8,6 +8,7 @@ import { isFilePaneId } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { collectTerminalIds } from '../panes/paneLayout'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
+import { TERMINAL_FONT_DEFAULT_PX, TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
 import type { DialogState } from '../state/workspaceStore'
 import type { WorkspaceCommand } from './workspaceShortcuts'
 
@@ -27,6 +28,8 @@ export type CommandState = {
   pushing: boolean
   /** A markdown editor holds the keyboard; ⌘B and ⌘E are bold and code there. */
   editingMarkdown?: boolean
+  /** Absent reads as the default size. */
+  terminalFontSize?: number
 }
 
 /** The store's own methods, named so this module does not import the store. */
@@ -50,6 +53,7 @@ export type CommandActions = {
   toggleSettings: () => void
   showRightPanelTab: (tab: RightPanelTab) => void
   pushActiveWorktree: () => Promise<void>
+  setTerminalFontSize: (size: number) => void
 }
 
 export type Workspace = CommandState & CommandActions
@@ -80,6 +84,10 @@ function projectForNewTask(state: CommandState): string | undefined {
 function ownFocusedPane(state: CommandState): string | null {
   if (state.focusedWatchId !== null) return null
   return activeLayout(state)?.focusedTerminalId ?? null
+}
+
+function fontSize(state: CommandState): number {
+  return state.terminalFontSize ?? TERMINAL_FONT_DEFAULT_PX
 }
 
 /** Whether choosing this command now would do anything; each answer is the condition the action itself checks. */
@@ -136,6 +144,12 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
     case 'open-dashboard':
       // Greyed while the editor types: on macOS only a disabled item lets ⌘B and ⌘E reach the page.
       return state.editingMarkdown !== true
+    case 'bigger-text':
+      return fontSize(state) < TERMINAL_FONT_MAX_PX
+    case 'smaller-text':
+      return fontSize(state) > TERMINAL_FONT_MIN_PX
+    case 'actual-size':
+      return fontSize(state) !== TERMINAL_FONT_DEFAULT_PX
     case 'open-palette':
     case 'open-appearance':
     case 'open-settings':
@@ -224,6 +238,15 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       break
     case 'open-help':
       store.toggleHelp()
+      break
+    case 'bigger-text':
+      store.setTerminalFontSize(fontSize(store) + 1)
+      break
+    case 'smaller-text':
+      store.setTerminalFontSize(fontSize(store) - 1)
+      break
+    case 'actual-size':
+      store.setTerminalFontSize(TERMINAL_FONT_DEFAULT_PX)
       break
   }
 }
