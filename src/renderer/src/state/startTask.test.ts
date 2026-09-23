@@ -206,7 +206,10 @@ it(
       const agent = (await runtimeClient.call('agent.list', {}))[0]!
       const call = vi.spyOn(runtimeClient, 'call')
 
-      store.startTask({ projectId, creates: [{ name: 'Stream the pager', agentCommand: agent.command }] })
+      store.startTask({
+        projectId,
+        creates: [{ name: 'Stream the pager', agentCommand: agent.command, task: 'Stream the pager' }]
+      })
 
       const created = await until(
         () => useWorkspaceStore.getState().worktrees.some((worktree) => worktree.name === 'Stream the pager'),
