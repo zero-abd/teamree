@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 import type { Layout, PaneNode, Project, Worktree } from '../../shared/entities'
+import { MAX_PANE_LABEL_CHARS } from '../../shared/methods'
 import { sanitizeAppearance, type Appearance } from '../../shared/theme'
 import { AGENT_KINDS } from '../terminals/agent-command'
 import type { TerminalRecord } from '../terminals/session-restore'
@@ -65,6 +66,13 @@ const TerminalRecordSchema = z.object({
   command: z.string().min(1).optional(),
   agent: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
   agentSessionId: z.string().min(1).optional(),
+  // What the pane is called. The only field here that somebody typed rather
+  // than something the process reported, and therefore the one whose loss would
+  // be noticed: `terminal rename --help` promises it survives a restart, and a
+  // schema that drops it on the way back in is where that promise was broken.
+  // Optional because most panes have never been named, and capped at the same
+  // length the wire caps a rename at.
+  label: z.string().min(1).max(MAX_PANE_LABEL_CHARS).optional(),
   // Whether anybody ever typed into the pane, which is what the next launch
   // reads to decide whether the pinned id above names a conversation at all.
   //

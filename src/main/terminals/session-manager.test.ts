@@ -454,6 +454,27 @@ describePty('running an exited pane again', () => {
   )
 
   it(
+    'keeps the name the pane was given, because running the program again is not taking it back',
+    async () => {
+      const { service, records } = serviceWithRecords()
+      const terminal = await service.handlers['terminal.create']({
+        worktreeId: WORKTREE,
+        command: printThenExit('one-shot', 0),
+        label: 'auth refactor'
+      })
+      await waitUntil(() => hasExited(service, terminal.id), 'the command pane to exit')
+
+      const again = await service.handlers['terminal.relaunch']({ terminalId: terminal.id })
+      // On the pane, so the strip and the listing say it now, and on the
+      // record, so the next launch does too. Losing it here is the same loss as
+      // losing it across a restart, arrived at from the other direction.
+      expect(again.label).toBe('auth refactor')
+      expect(records.get(terminal.id)?.label).toBe('auth refactor')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'brings a pane that was not running an agent back as a shell, not as its command again',
     async () => {
       const { service, records } = serviceWithRecords()

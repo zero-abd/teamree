@@ -1,7 +1,9 @@
+import type { Terminal, Worktree } from '../../shared/entities.js'
 import type { CommandSpec } from '../command-spec.js'
-import { readBoolean, readNumber, readString, requireString } from '../argv.js'
+import { readBoolean, readNumber, readString, requireString, type ParsedFlags } from '../argv.js'
+import { UsageError } from '../exit.js'
 import { formatFields, formatTable } from '../output.js'
-import { resolveWorktree } from '../selectors.js'
+import { resolveWorktree, selectWorktree } from '../selectors.js'
 import { DEFAULT_QUIET_MS, DEFAULT_WAIT_TIMEOUT_MS, waitForTerminal } from '../waiting.js'
 
 /** Terminals are addressed by id only: ids come straight from `terminal list`. */
@@ -10,6 +12,37 @@ const TERMINAL_ARG = {
   description: 'Terminal id from `teamree terminal list`.',
   required: true
 } as const
+
+/**
+ * The listing, with the worktree column reading as a name.
+ *
+ * A worktree id is a uuid, and a column of them is a column nobody can act on:
+ * every other command takes a name, a branch or a path, so a listing that
+ * answers in ids makes the reader go and look each one up. The id is still the
+ * honest answer where no name is known — a pane whose worktree has gone from
+ * the listing between the two calls — and it is better than an empty cell.
+ *
+ * Pure, and exported, so what the column says is checked without a runtime.
+ */
+export function terminalTable(terminals: readonly Terminal[], worktrees: readonly Worktree[]): string {
+  const names = new Map(worktrees.map((worktree) => [worktree.id, worktree.name]))
+  return formatTable(
+    // NAME before TITLE: the name is the one somebody chose, and a strip
+    // of panes all titled `claude` is exactly the listing this column
+    // exists to tell apart.
+    ['ID', 'WORKTREE', 'NAME', 'TITLE', 'SIZE', 'RUNNING', 'CWD'],
+    terminals.map((terminal) => [
+      terminal.id,
+      names.get(terminal.worktreeId) ?? terminal.worktreeId,
+      terminal.label ?? '-',
+      terminal.title,
+      `${terminal.cols}x${terminal.rows}`,
+      terminal.running ? 'yes' : `no (exit ${terminal.exitCode ?? '?'})`,
+      terminal.cwd
+    ]),
+    'No terminals. Create one with: teamree terminal create <worktree>'
+  )
+}
 
 export const terminalCommands: readonly CommandSpec[] = [
   {
@@ -25,39 +58,24 @@ export const terminalCommands: readonly CommandSpec[] = [
     ],
     run: async (context) => {
       const selector = readString(context.flags, 'worktree')
-      const worktreeId = selector === undefined ? undefined : (await resolveWorktree(context.client, selector)).id
+      // Read whether or not one was named: the rows are what turns the
+      // worktree column from a uuid into something to type back.
+      const worktrees = await context.client.call('worktree.list', {})
+      const worktreeId = selector === undefined ? undefined : selectWorktree(worktrees, selector).id
       const terminals = await context.client.call('terminal.list', worktreeId === undefined ? {} : { worktreeId })
-      return {
-        data: terminals,
-        text: formatTable(
-          // NAME before TITLE: the name is the one somebody chose, and a strip
-          // of panes all titled `claude` is exactly the listing this column
-          // exists to tell apart.
-          ['ID', 'WORKTREE', 'NAME', 'TITLE', 'SIZE', 'RUNNING', 'CWD'],
-          terminals.map((terminal) => [
-            terminal.id,
-            terminal.worktreeId,
-            terminal.label ?? '-',
-            terminal.title,
-            `${terminal.cols}x${terminal.rows}`,
-            terminal.running ? 'yes' : `no (exit ${terminal.exitCode ?? '?'})`,
-            terminal.cwd
-          ]),
-          'No terminals. Create one with: teamree terminal create --worktree <id>'
-        )
-      }
+      return { data: terminals, text: terminalTable(terminals, worktrees) }
     }
   },
   {
     path: ['terminal', 'create'],
     summary: 'Open a terminal in a worktree.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: false }],
     flags: [
       {
         name: 'worktree',
         kind: 'string',
         placeholder: '<worktree>',
-        description: 'Worktree id, name, path, or branch.',
-        required: true
+        description: 'Same thing as the positional.'
       },
       {
         name: 'command',
@@ -80,9 +98,9 @@ export const terminalCommands: readonly CommandSpec[] = [
       { name: 'cols', kind: 'number', placeholder: '<n>', description: 'Initial column count.' },
       { name: 'rows', kind: 'number', placeholder: '<n>', description: 'Initial row count.' }
     ],
-    examples: ['teamree terminal create --worktree fix-login --command "npm test"'],
+    examples: ['teamree terminal create fix-login --command "npm test"'],
     run: async (context) => {
-      const worktree = await resolveWorktree(context.client, requireString(context.flags, 'worktree'))
+      const worktree = await resolveWorktree(context.client, worktreeSelector(context.args[0], context.flags))
       const command = readString(context.flags, 'command')
       const shell = readString(context.flags, 'shell')
       const cwd = readString(context.flags, 'cwd')
@@ -367,3 +385,19 @@ export const terminalCommands: readonly CommandSpec[] = [
     }
   }
 ]
+
+/**
+ * The worktree a command was pointed at, however it was pointed.
+ *
+ * Every other command that names a worktree takes it as a positional, so a flag
+ * here was a rule with one exception in it — and the exception was found by
+ * typing the obvious thing and being told off. The flag still works, because
+ * scripts were written against it.
+ */
+function worktreeSelector(positional: string | undefined, flags: ParsedFlags): string {
+  const selector = positional ?? readString(flags, 'worktree')
+  if (selector === undefined || selector.length === 0) {
+    throw new UsageError('terminal create needs <worktree>.', 'Usage: teamree terminal create <worktree>')
+  }
+  return selector
+}

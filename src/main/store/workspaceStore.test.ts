@@ -434,6 +434,65 @@ describe('workspace store', () => {
   })
 
   /**
+   * A pane's name is the one thing on its record that a person typed, and
+   * `terminal rename --help` promises in so many words that it survives a
+   * restart. It did not: the name was written to the file and then dropped on
+   * the way back in, because the schema that reads the file had never heard of
+   * it. Nothing failed and nothing was logged — the pane simply came back
+   * called whatever it was running, which for three agents racing one task is
+   * the same word three times.
+   *
+   * So the round trip is the test, both halves of it, out of the same bytes on
+   * disk: written by one store, read by the next.
+   */
+  describe('what a pane is called, across a restart', () => {
+    const named = (id: string, label?: string): TerminalRecord => ({
+      id,
+      worktreeId: 'w1',
+      cwd: '/repos/teamree',
+      shell: '/bin/bash',
+      command: 'claude',
+      agent: 'claude',
+      ...(label === undefined ? {} : { label }),
+      cols: 80,
+      rows: 24,
+      createdAt: 1700000000000
+    })
+
+    it('brings a named pane back under its name', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(named('t1', 'auth refactor'))
+      await store.flush()
+
+      const written = JSON.parse(await readFile(filePath, 'utf8')) as { terminals: TerminalRecord[] }
+      expect(written.terminals[0]?.label).toBe('auth refactor')
+
+      const reopened = await WorkspaceStore.open(filePath)
+      expect(reopened.listTerminals()).toEqual([named('t1', 'auth refactor')])
+    })
+
+    it('leaves a pane nobody named without one, rather than inventing an empty one', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(named('t1'))
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(filePath)
+      const [record] = reopened.listTerminals()
+      expect(Object.keys(record ?? {})).not.toContain('label')
+    })
+
+    it('keeps a rename, which is the name that was typed last', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(named('t1', 'auth refactor'))
+      store.putTerminal(named('t1', 'auth refactor · take two'))
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(filePath)
+      expect(reopened.listTerminals().map((record) => record.label)).toEqual(['auth refactor · take two'])
+    })
+  })
+
+  /**
    * `typed` decides, on the launch after this one, whether a pane's pinned
    * session id names a conversation worth resuming at all; the argument for it
    * is written out on `TerminalRecord` in `session-restore.ts`. Every test of
