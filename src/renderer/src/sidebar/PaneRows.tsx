@@ -5,11 +5,11 @@
 import { PaneGlyph } from '../agents/glyphs'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
 import {
-  ACTIVITY_LABEL,
   agoLabel,
   dotClass,
   dotTone,
   sinceLabel,
+  TONE_LABEL,
   truncateName,
   typedBy,
   watchedBy,
@@ -18,6 +18,8 @@ import {
 
 type PaneRowsProps = {
   rows: readonly AgentRow[]
+  /** The worktree's name; the pane named after it, the task's own, is drawn by glyph alone. */
+  worktreeName?: string
   /** Who is reading and typing into each of these panes, keyed by terminal id. */
   watchers: Readonly<Record<string, PaneAttention>>
   /** Panes that have printed since this person last had them in front of them. */
@@ -30,6 +32,7 @@ type PaneRowsProps = {
 
 export function PaneRows({
   rows,
+  worktreeName,
   watchers,
   unread,
   now,
@@ -44,6 +47,7 @@ export function PaneRows({
         // Typing outranks watching in the one slot the row has.
         const hands = typing.length > 0 ? typedBy(typing) : watchedBy(attention.watchers)
         const isUnread = unread.has(row.terminalId)
+        const named = row.label !== worktreeName
         return (
           <li key={row.terminalId}>
             <button
@@ -56,7 +60,8 @@ export function PaneRows({
                 <span className={dotClass(dotTone(row.activity, row.agent), isUnread)} aria-hidden="true" />
                 {/* Shortened for the row only: the hover text carries the whole of it. */}
                 <PaneGlyph agent={row.agent} />
-                <span className="pane-row__label">{truncateName(row.text)}</span>
+                {named ? <span className="pane-row__label">{truncateName(row.text)}</span> : null}
+                {!named && row.evidence ? <span className="pane-row__quote">{row.evidence}</span> : null}
                 {/* Named, never counted: "2 watching" says nothing about who. */}
                 {typing.length > 0 || attention.watchers.length > 0 ? (
                   <span
@@ -75,7 +80,7 @@ export function PaneRows({
                 <span className="pane-row__since">{sinceLabel(row.quietFor)}</span>
               </span>
               {/* Nothing when there is nothing worth quoting: an empty line would read as an answer. */}
-              {row.evidence ? <span className="pane-row__evidence">{row.evidence}</span> : null}
+              {named && row.evidence ? <span className="pane-row__evidence">{row.evidence}</span> : null}
             </button>
           </li>
         )
@@ -91,9 +96,9 @@ export function paneTitle(
   typing: readonly { handle: string }[],
   unread: boolean
 ): string {
-  const head = `${row.label} · ${ACTIVITY_LABEL[row.activity]}${unread ? ' · unread' : ''} · last output ${agoLabel(
-    row.quietFor
-  )}`
+  const head = `${row.label} · ${TONE_LABEL[dotTone(row.activity, row.agent)]}${
+    unread ? ' · unread' : ''
+  } · last output ${agoLabel(row.quietFor)}`
   const lines = [row.evidence ? `${head}\nlast printed: ${row.evidence}` : head]
   if (attention.watchers.length > 0) lines.push(watchedBy(attention.watchers))
   if (typing.length > 0) lines.push(typedBy(typing))

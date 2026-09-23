@@ -3,7 +3,7 @@
 // owner's duration and the receiver adds what has elapsed since, trusting nobody's clock.
 
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
-import { activityOf, paneName, paneText, worktreeActivity, type AgentActivity, type AgentRow } from './agentRows'
+import { activityOf, paneName, paneText, worktreeTone, type AgentRow, type DotTone } from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 
 export type TeammatePaneRow = AgentRow & {
@@ -22,8 +22,8 @@ export type TeammateWorktreeRowModel = {
   branch: string
   state: TeammateWorktree['state']
   panes: TeammatePaneRow[]
-  /** What the worktree as a whole is doing, for the collapsed row. */
-  activity: AgentActivity | null
+  /** The collapsed row's dot. */
+  tone: DotTone | null
   /** How old the whole picture is, in this machine's milliseconds. */
   heardAgoMs: number
   /**
@@ -52,7 +52,7 @@ export function teammateRows(
       branch: worktree.branch,
       state: worktree.state,
       panes,
-      activity: worktreeActivity(panes),
+      tone: worktreeTone(panes),
       heardAgoMs,
       live: worktree.live,
       staleness: teammateStaleness({ live: worktree.live, heardAt: worktree.heardAt, handle: worktree.handle, now })

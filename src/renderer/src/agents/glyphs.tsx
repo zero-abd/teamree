@@ -3,13 +3,14 @@
 import type { AgentKind } from '@shared/entities'
 import { HARNESSES, harnessName, type Harness } from './harnesses'
 
-/** The harness's mark, named for screen readers; a neutral mark for a kind with no entry. */
-export function AgentGlyph({ kind }: { kind: AgentKind }): React.JSX.Element {
+/** The harness's mark, named for screen readers unless text beside it already names it; neutral for an unknown kind. */
+export function AgentGlyph({ kind, decorative = false }: { kind: AgentKind; decorative?: boolean }): React.JSX.Element {
   const harness = HARNESSES[kind] as Harness | undefined
   const name = harnessName(kind)
+  const named = decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': name }
   return (
-    <svg className="agent-glyph" viewBox="0 0 24 24" role="img" aria-label={name} data-agent={kind}>
-      <title>{name}</title>
+    <svg className="agent-glyph" viewBox="0 0 24 24" {...named} data-agent={kind}>
+      {decorative ? null : <title>{name}</title>}
       <path d={harness?.path ?? NEUTRAL_PATH} fillRule={harness?.evenOdd === true ? 'evenodd' : undefined} />
     </svg>
   )

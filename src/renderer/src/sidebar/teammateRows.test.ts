@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TeammatePresence, TeammatePresenceRead, TeammateWorktree } from '@shared/entities'
-import { ACTIVITY_LABEL } from './agentRows'
+import { TONE_LABEL } from './agentRows'
 import { teammateRows, teammateTitle, unheardTeammates, unheardTitle } from './teammateRows'
 
 const NOW = 1_700_000_000_000
@@ -47,8 +47,8 @@ describe('a teammate’s rows', () => {
     )
     expect(row?.panes.map((entry) => entry.activity)).toEqual(['working', 'quiet', 'done', 'failed'])
     // The same ordering the local rows use: a failure outranks work in progress.
-    expect(row?.activity).toBe('failed')
-    expect(ACTIVITY_LABEL[row!.activity!]).toBe('exited with an error')
+    expect(row?.tone).toBe('failed')
+    expect(TONE_LABEL[row!.tone!]).toBe('failed')
   })
 
   it('names a pane from its title and shell, not from a label the owner chose', () => {

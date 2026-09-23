@@ -2,7 +2,7 @@
 // `agentRows` unchanged so the board and the sidebar speak one vocabulary.
 
 import type { Project, Terminal, Worktree } from '@shared/entities'
-import { agentRows, type AgentActivity, type AgentRow } from '../sidebar/agentRows'
+import { agentRows, dotTone, TONES_BY_ATTENTION, type AgentRow, type DotTone } from '../sidebar/agentRows'
 
 export type DashboardRow = AgentRow & {
   worktreeId: string
@@ -11,9 +11,6 @@ export type DashboardRow = AgentRow & {
   /** Empty when the project is gone from under the worktree; never guessed at. */
   projectName: string
 }
-
-/** The order attention is owed in: failed, asking, working, quiet, done; `worktreeActivity`'s precedence. */
-export const ACTIVITIES_BY_ATTENTION: readonly AgentActivity[] = ['failed', 'waiting', 'working', 'quiet', 'done']
 
 export type DashboardInput = {
   terminals: readonly Terminal[]
@@ -37,9 +34,10 @@ export function dashboardRows(input: DashboardInput): DashboardRow[] {
   )
 
   // Longest-silent first within a state; ties fall back to names so the clock tick does not reshuffle.
+  const rank = (row: AgentRow): number => TONES_BY_ATTENTION.indexOf(dotTone(row.activity, row.agent))
   return rows.sort(
     (left, right) =>
-      ACTIVITIES_BY_ATTENTION.indexOf(left.activity) - ACTIVITIES_BY_ATTENTION.indexOf(right.activity) ||
+      rank(left) - rank(right) ||
       right.quietFor - left.quietFor ||
       left.worktreeName.localeCompare(right.worktreeName) ||
       left.label.localeCompare(right.label) ||
@@ -47,11 +45,9 @@ export function dashboardRows(input: DashboardInput): DashboardRow[] {
   )
 }
 
-export type ActivityCounts = Record<AgentActivity, number>
-
-/** How many panes are in each state, zeros included so the header keeps its shape. */
-export function activityCounts(rows: readonly DashboardRow[]): ActivityCounts {
-  const counts: ActivityCounts = { failed: 0, waiting: 0, working: 0, quiet: 0, done: 0 }
-  for (const row of rows) counts[row.activity] += 1
+/** How many panes wear each dot, zeros included so the header keeps its shape. */
+export function toneCounts(rows: readonly AgentRow[]): Record<DotTone, number> {
+  const counts = Object.fromEntries(TONES_BY_ATTENTION.map((tone) => [tone, 0])) as Record<DotTone, number>
+  for (const row of rows) counts[dotTone(row.activity, row.agent)] += 1
   return counts
 }

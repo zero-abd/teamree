@@ -17,6 +17,11 @@ export function teamworkControlLabel(summary: TeamworkSummary | null): string {
   return summary === null ? TEAMWORK_BUTTON_LABEL : `${TEAMWORK_BUTTON_LABEL} · ${summary.label}`
 }
 
+/** Whether a project header carries the control: once teamwork is read and on there. The rail reaches it either way. */
+export function teamworkOn(status: TeamworkStatus | undefined): boolean {
+  return status?.state === 'read' && status.disabledReason === null
+}
+
 export type TeamworkTone =
   /** Everything that can be up is up. */
   | 'live'

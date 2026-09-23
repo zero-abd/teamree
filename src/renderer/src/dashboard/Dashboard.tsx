@@ -5,18 +5,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { modalOnScreen } from '../dialogs/modalLayer'
 import {
-  ACTIVITY_LABEL,
-  ACTIVITY_NOUN,
   agoLabel,
   dotClass,
   dotTone,
   sinceLabel,
+  TONE_LABEL,
+  TONES_BY_ATTENTION,
   truncateName
 } from '../sidebar/agentRows'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { ACTIVITIES_BY_ATTENTION, activityCounts, dashboardRows } from './dashboardRows'
+import { dashboardRows, toneCounts } from './dashboardRows'
 
 export function Dashboard(): React.JSX.Element {
   const terminals = useWorkspaceStore((state) => state.terminals)
@@ -31,7 +31,7 @@ export function Dashboard(): React.JSX.Element {
     () => dashboardRows({ terminals: paneList, worktrees, projects, now }),
     [paneList, worktrees, projects, now]
   )
-  const counts = useMemo(() => activityCounts(rows), [rows])
+  const counts = useMemo(() => toneCounts(rows), [rows])
 
   // "Said something since I last looked"; not remembered across launches, or the board would hide rows.
   const [unreadOnly, setUnreadOnly] = useState(false)
@@ -82,16 +82,11 @@ export function Dashboard(): React.JSX.Element {
         </div>
 
         <ul className="board__counts" aria-label="Panes by state">
-          {ACTIVITIES_BY_ATTENTION.map((activity) => (
-            <li
-              key={activity}
-              className={`board-count${counts[activity] === 0 ? ' board-count--zero' : ''}`}
-              title={ACTIVITY_LABEL[activity]}
-            >
-              {/* The idle column is mostly shells, so its dot is theirs. */}
-              <span className={dotClass(activity === 'quiet' ? 'idle' : activity)} aria-hidden="true" />
-              <span className="board-count__number">{counts[activity]}</span>
-              <span className="board-count__label">{ACTIVITY_NOUN[activity]}</span>
+          {TONES_BY_ATTENTION.map((tone) => (
+            <li key={tone} className={`board-count${counts[tone] === 0 ? ' board-count--zero' : ''}`}>
+              <span className={dotClass(tone)} aria-hidden="true" />
+              <span className="board-count__number">{counts[tone]}</span>
+              <span className="board-count__label">{TONE_LABEL[tone]}</span>
             </li>
           ))}
         </ul>
@@ -125,37 +120,37 @@ export function Dashboard(): React.JSX.Element {
         </div>
       ) : (
         <ul className="board__list" ref={list}>
-          {shown.map((row) => (
-            <li key={row.terminalId}>
-              <button
-                type="button"
-                className={`board-row board-row--${row.activity}${
-                  unread.has(row.terminalId) ? ' board-row--unread' : ''
-                }`}
-                title={`${row.label} in ${row.worktreeName} · ${ACTIVITY_LABEL[row.activity]}${
-                  unread.has(row.terminalId) ? ' · unread' : ''
-                } · last output ${agoLabel(row.quietFor)}`}
-                onClick={() => void revealPane(row.worktreeId, row.terminalId)}
-              >
-                <span
-                  className={dotClass(dotTone(row.activity, row.agent), unread.has(row.terminalId))}
-                  aria-hidden="true"
-                />
-                <span className="board-row__what">
-                  <span className="board-row__label">{truncateName(row.label)}</span>
-                  {/* An agent pane is named by its agent, so only a shell needs saying. */}
-                  {row.agent ? null : <span className="chip board-row__kind">shell</span>}
-                </span>
-                <span className="board-row__state">{ACTIVITY_NOUN[row.activity]}</span>
-                <span className="board-row__where">
-                  <span className="board-row__worktree">{row.worktreeName}</span>
-                  <span className="board-row__branch">{row.branch}</span>
-                </span>
-                <span className="board-row__project">{row.projectName}</span>
-                <span className="board-row__since">{sinceLabel(row.quietFor)}</span>
-              </button>
-            </li>
-          ))}
+          {shown.map((row) => {
+            const tone = dotTone(row.activity, row.agent)
+            return (
+              <li key={row.terminalId}>
+                <button
+                  type="button"
+                  className={`board-row board-row--${row.activity}${
+                    unread.has(row.terminalId) ? ' board-row--unread' : ''
+                  }`}
+                  title={`${row.label} in ${row.worktreeName} · ${TONE_LABEL[tone]}${
+                    unread.has(row.terminalId) ? ' · unread' : ''
+                  } · last output ${agoLabel(row.quietFor)}`}
+                  onClick={() => void revealPane(row.worktreeId, row.terminalId)}
+                >
+                  <span className={dotClass(tone, unread.has(row.terminalId))} aria-hidden="true" />
+                  <span className="board-row__what">
+                    <span className="board-row__label">{truncateName(row.label)}</span>
+                    {/* An agent pane is named by its agent, so only a shell needs saying. */}
+                    {row.agent ? null : <span className="chip board-row__kind">shell</span>}
+                  </span>
+                  <span className="board-row__state">{TONE_LABEL[tone]}</span>
+                  <span className="board-row__where">
+                    <span className="board-row__worktree">{row.worktreeName}</span>
+                    <span className="board-row__branch">{row.branch}</span>
+                  </span>
+                  <span className="board-row__project">{row.projectName}</span>
+                  <span className="board-row__since">{sinceLabel(row.quietFor)}</span>
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
     </main>

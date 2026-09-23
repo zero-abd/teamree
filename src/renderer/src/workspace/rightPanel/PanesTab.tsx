@@ -59,6 +59,7 @@ export function PanesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
         <PaneRows
           className="panes--panel"
           rows={rows}
+          worktreeName={worktree.name}
           watchers={reading}
           unread={unread}
           now={now}

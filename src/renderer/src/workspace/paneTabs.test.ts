@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PaneNode, Terminal } from '@shared/entities'
 import { leaf } from '../panes/paneLayout'
-import { ACTIVITY_LABEL } from '../sidebar/agentRows'
+import { TONE_LABEL } from '../sidebar/agentRows'
 import { paneTabs, paneTabTitle } from './paneTabs'
 
 function terminal(overrides: Partial<Terminal> & { id: string }): Terminal {
@@ -142,9 +142,9 @@ describe('paneTabTitle', () => {
     ).toBe('terminal')
   })
 
-  // Read from ACTIVITY_LABEL rather than written out again, because the hover
+  // Read from TONE_LABEL rather than written out again, because the hover
   // and the sidebar are describing the same dot and must use the same words.
-  it('adds the sentence the sidebar uses for the state', () => {
+  it('adds the word the sidebar uses for the dot, a quiet agent apart from a quiet shell', () => {
     const waiting = paneTabTitle({ terminalId: 'a', agent: 'claude', label: 'claude', text: '', activity: 'quiet' })
     const failed = paneTabTitle({
       terminalId: 'b',
@@ -154,8 +154,12 @@ describe('paneTabTitle', () => {
       activity: 'failed'
     })
 
-    expect(waiting).toBe(`claude · ${ACTIVITY_LABEL.quiet}`)
-    expect(failed).toBe(`npm test · ${ACTIVITY_LABEL.failed}`)
+    const shell = paneTabTitle({ terminalId: 'c', agent: undefined, label: 'zsh', text: 'zsh', activity: 'quiet' })
+
+    expect(waiting).toBe(`claude · ${TONE_LABEL.quiet}`)
+    expect(failed).toBe(`npm test · ${TONE_LABEL.failed}`)
+    expect(shell).toBe('zsh · idle')
+    expect(waiting).toBe('claude · stopped')
   })
 })
 

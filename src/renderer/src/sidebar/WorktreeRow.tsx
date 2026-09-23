@@ -3,6 +3,7 @@
 // being opened is in one menu: right-click, the `⋯`, or the context-menu key.
 
 import { useEffect, useRef, useState } from 'react'
+import { slugifyBranchName } from '@shared/branchName'
 import {
   hasCheckout,
   type Terminal,
@@ -10,8 +11,9 @@ import {
   type WorktreeMergePreview,
   type WorktreeStatus
 } from '@shared/entities'
+import { AgentGlyph } from '../agents/glyphs'
 import type { PaneAttention } from '../state/paneAttention'
-import { ACTIVITY_LABEL, agentRows, dotClass, worktreeActivity, worktreeTone } from './agentRows'
+import { agentRows, dotClass, TONE_LABEL, worktreeTone, type WorktreeTitle } from './agentRows'
 import { PaneRows } from './PaneRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
@@ -20,6 +22,8 @@ import { WorktreeNameField } from './WorktreeNameField'
 
 type WorktreeRowProps = {
   worktree: Worktree
+  /** How the name is drawn; the whole name when absent. See `worktreeTitles`. */
+  title?: WorktreeTitle
   status: WorktreeStatus | undefined
   mergePreview: WorktreeMergePreview | undefined
   /** Every terminal in the workspace; the row picks out its own. */
@@ -49,6 +53,7 @@ type WorktreeRowProps = {
 
 export function WorktreeRow({
   worktree,
+  title = { text: worktree.name },
   status,
   mergePreview,
   terminals,
@@ -117,8 +122,9 @@ export function WorktreeRow({
         remove
       ]
   const rows = ready ? agentRows(terminals, worktree.id, now, evidence) : []
-  const overall = worktreeActivity(rows)
   const tone = worktreeTone(rows)
+  // `scratch / scratch`: a branch that is the name slugified says nothing the name does not.
+  const branchSaysMore = worktree.branch !== slugifyBranchName(worktree.name)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
 
@@ -132,28 +138,52 @@ export function WorktreeRow({
         {renaming ? (
           <WorktreeNameField name={worktree.name} onRename={onRename} onDone={() => setRenaming(false)} />
         ) : (
-          <span
-            className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
-            title={worktree.task ?? worktree.name}
-            onDoubleClick={() => setRenaming(true)}
-          >
-            {worktree.name}
-          </span>
+          <>
+            {/* The one part that differs between runs of a task, so it is the part never cut. */}
+            {title.agent ? (
+              <span className="worktree__agent">
+                <AgentGlyph kind={title.agent.kind} decorative />
+                {title.agent.text}
+              </span>
+            ) : null}
+            <span
+              className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
+              title={worktree.task ?? worktree.name}
+              onDoubleClick={() => setRenaming(true)}
+            >
+              {title.text}
+            </span>
+          </>
         )}
-        {overall ? (
+        {tone ? (
           <span
             className={dotClass(tone, unreadHere)}
-            title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${ACTIVITY_LABEL[overall]}${
+            title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
               unreadHere ? ' · unread' : ''
             }`}
-            aria-label={ACTIVITY_LABEL[overall]}
+            aria-label={TONE_LABEL[tone]}
           />
         ) : null}
       </span>
       <span className="worktree__meta">
-        <span className="worktree__branch">{worktree.branch}</span>
+        {/* Kept when empty: it is the slack that holds the chips to the right edge. */}
+        <span className="worktree__branch">{branchSaysMore ? worktree.branch : null}</span>
         {ready ? <GitStatusChips status={status} /> : null}
-        {badge ? (
+        {badge?.tone === 'clean' ? (
+          <span
+            className="worktree__merge worktree__merge--clean"
+            role="img"
+            aria-label={badge.detail}
+            title={badge.detail}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <circle cx="3.5" cy="2.5" r="1.3" />
+              <circle cx="3.5" cy="9.5" r="1.3" />
+              <circle cx="8.5" cy="5" r="1.3" />
+              <path d="M3.5 3.8v4.4M8.5 6.3c0 1.6-2 2.2-5 2.2" />
+            </svg>
+          </span>
+        ) : badge ? (
           <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
             {badge.label}
           </span>
@@ -247,7 +277,14 @@ export function WorktreeRow({
       )}
 
       {rows.length > 0 ? (
-        <PaneRows rows={rows} watchers={watchers} unread={unread} now={now} onFocusTerminal={onFocusTerminal} />
+        <PaneRows
+          rows={rows}
+          worktreeName={worktree.name}
+          watchers={watchers}
+          unread={unread}
+          now={now}
+          onFocusTerminal={onFocusTerminal}
+        />
       ) : null}
 
       {creating ? (

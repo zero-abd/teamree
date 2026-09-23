@@ -87,3 +87,45 @@ describe('PaneRows', () => {
     expect(row?.querySelector('.activity')?.classList.contains('activity--unread')).toBe(true)
   })
 })
+
+describe('a pane named after its worktree', () => {
+  const mountIn = (
+    worktreeName: string,
+    evidence: Record<string, string | null>,
+    ...panes: Terminal[]
+  ): HTMLElement[] => {
+    render(
+      <PaneRows
+        rows={agentRows(panes, 'w1', 0, evidence)}
+        worktreeName={worktreeName}
+        watchers={{}}
+        unread={new Set()}
+        now={0}
+        onFocusTerminal={() => {}}
+      />
+    )
+    return screen.getAllByRole('button')
+  }
+
+  it('shows its glyph and last line on one line, and the name only on hover', () => {
+    const [row] = mountIn(
+      'Add a subtract function to codex',
+      { t1: 'Edited calc.js (+1 -0)' },
+      terminal({ id: 't1', agent: 'codex', label: 'Add a subtract function to codex' })
+    )
+    expect(row?.querySelector('.pane-row__label')).toBeNull()
+    expect(row?.querySelector('.pane-row__evidence')).toBeNull()
+    expect(row?.querySelector('.pane-row__head')?.textContent).toContain('Edited calc.js (+1 -0)')
+    expect(row?.title).toContain('Add a subtract function to codex')
+  })
+
+  it('keeps the name of any other pane', () => {
+    const [, other] = mountIn(
+      'pager',
+      {},
+      terminal({ id: 't1', agent: 'codex', label: 'pager' }),
+      terminal({ id: 't2', title: 'npm test' })
+    )
+    expect(other?.querySelector('.pane-row__label')?.textContent).toBe('npm test')
+  })
+})

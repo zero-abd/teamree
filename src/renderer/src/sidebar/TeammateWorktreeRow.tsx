@@ -2,7 +2,7 @@
 // handle is on the row and the row is a `<div>`, not a disabled button: it will
 // not act. Panes can be watched; an away teammate's row stays put and says how old it is.
 
-import { ACTIVITY_LABEL, dotClass, dotTone, sinceLabel, truncateName, worktreeTone } from './agentRows'
+import { dotClass, dotTone, sinceLabel, TONE_LABEL, truncateName } from './agentRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 import { PaneGlyph } from '../agents/glyphs'
 
@@ -14,19 +14,14 @@ type TeammateWorktreeRowProps = {
 }
 
 export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateWorktreeRowProps): React.JSX.Element {
+  const { tone } = row
   return (
     <li className={`worktree worktree--teammate worktree--${row.state}${row.staleness ? ' worktree--stale' : ''}`}>
       <div className="worktree__row worktree__row--teammate" title={teammateTitle(row)}>
         <div className="worktree__open worktree__open--teammate">
           <span className="worktree__title">
             <span className="worktree__name">{row.name}</span>
-            {row.activity ? (
-              <span
-                className={dotClass(worktreeTone(row.panes))}
-                title={ACTIVITY_LABEL[row.activity]}
-                aria-label={ACTIVITY_LABEL[row.activity]}
-              />
-            ) : null}
+            {tone ? <span className={dotClass(tone)} title={TONE_LABEL[tone]} aria-label={TONE_LABEL[tone]} /> : null}
           </span>
           <span className="worktree__meta">
             {/* First on the line, because it is the fact that changes what
@@ -61,7 +56,7 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
                   title={
                     watching
                       ? `Stop watching ${row.handle}’s ${pane.label}`
-                      : `Watch ${row.handle}’s ${pane.label} · ${ACTIVITY_LABEL[pane.activity]} · reading only`
+                      : `Watch ${row.handle}’s ${pane.label} · ${TONE_LABEL[dotTone(pane.activity, pane.agent)]} · reading only`
                   }
                   aria-pressed={watching}
                   onClick={() => onWatch(pane)}
