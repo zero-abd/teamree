@@ -370,7 +370,11 @@ export class TerminalSessionManager {
             cols: record.cols,
             rows: record.rows,
             ...(launch.command === undefined ? {} : { command: launch.command }),
-            ...(kept === undefined ? {} : { restoredRecord: kept })
+            ...(kept === undefined ? {} : { restoredRecord: kept }),
+            // Only where a conversation is being asked for. Everything else
+            // here either is the fresh start already or is a plain shell, and
+            // neither has anything to fall back from.
+            ...(launch.resumed && launch.fallback !== undefined ? { fallback: launch.fallback } : {})
           },
           restoring,
           launch.resumed ? 'agent' : 'shell'
@@ -457,7 +461,11 @@ export class TerminalSessionManager {
   }
 
   private startSession(
-    params: ParamsOf<'terminal.create'> & { restoredRecord?: RecordedScrollback },
+    params: ParamsOf<'terminal.create'> & {
+      restoredRecord?: RecordedScrollback
+      /** What this pane runs instead if the resume it is being given is refused. */
+      fallback?: { command: string; agentSessionId?: string }
+    },
     restoring?: TerminalRecord,
     restored?: 'shell' | 'agent'
   ): PtySession {
@@ -474,6 +482,7 @@ export class TerminalSessionManager {
     // rewritten again.
     const launch = restoring ? { command: params.command } : pinAgentSession(params.command)
     const agent = restoring?.agent ?? launch.agent
+    const fallback = params.fallback
 
     const session = PtySession.start({
       id: restoring?.id ?? `term_${this.nextId()}`,
@@ -486,6 +495,18 @@ export class TerminalSessionManager {
       ...(restored === undefined ? {} : { restored }),
       ...(params.restoredRecord === undefined ? {} : { restoredRecord: params.restoredRecord }),
       ...(agent === undefined ? {} : { agent }),
+      ...(fallback === undefined
+        ? {}
+        : {
+            restartCommand: fallback.command,
+            // The pane has stopped being the one the record describes: it is
+            // running a new agent under a new id, and nobody has said anything
+            // to that one yet. Written here rather than on the next launch,
+            // because the next launch is exactly what this is trying to spare
+            // the pane — a record still naming the conversation that has just
+            // been refused would ask for it again, and be refused again.
+            onRestart: (started: PtySession) => this.rememberRestart(started.id, fallback)
+          }),
       ...(this.options.onActivityChange === undefined
         ? {}
         : { onActivityChange: (session: PtySession) => this.options.onActivityChange?.(session.id) }),
@@ -578,6 +599,29 @@ export class TerminalSessionManager {
    * back working on the next launch and a pane that reproduces the same failure
    * every time the app starts, forever.
    */
+  /**
+   * Writes down that this pane is running a different agent than the one it was
+   * brought back for.
+   *
+   * The resume was refused, so the conversation the record names is not there;
+   * the pane has started a fresh agent under an id of its own, and the record
+   * has to name that one instead. Both halves matter. Leaving the old id would
+   * ask for the same missing conversation on every launch from here on, and
+   * leaving `typed` alone would let the next launch resume an id nobody has
+   * said anything to yet — which is the same refusal again, one launch later.
+   */
+  private rememberRestart(terminalId: string, restart: { command: string; agentSessionId?: string }): void {
+    const stored = this.records.listTerminals().find((record) => record.id === terminalId)
+    if (stored === undefined) return
+    const next: TerminalRecord = { ...stored, command: restart.command, typed: false }
+    // Deleted rather than overwritten when the agent mints its own ids: what is
+    // recorded has to be an id this app actually pinned, and an absent one is
+    // how the restore already says "ask this agent for the last session here".
+    if (restart.agentSessionId === undefined) delete next.agentSessionId
+    else next.agentSessionId = restart.agentSessionId
+    this.records.putTerminal(next)
+  }
+
   private markNotResumable(terminalId: string): void {
     const stored = this.records.listTerminals().find((record) => record.id === terminalId)
     if (stored === undefined || stored.typed === false) return

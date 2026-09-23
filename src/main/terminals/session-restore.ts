@@ -73,6 +73,24 @@ export type RestoreLaunch = {
    * become, so the next launch resumes this run rather than the one before it.
    */
   repinned?: { command: string; agentSessionId?: string }
+  /**
+   * What to run in this pane if the resume above is refused.
+   *
+   * A resume can find nothing for reasons that are nobody's fault — the
+   * conversation was deleted, it expired, the worktree was last opened on
+   * another machine — and the pane has to come back usable either way. So the
+   * command that starts the agent over is worked out here, from the same
+   * record, and handed down alongside the resume: a pane that is refused says
+   * so and starts a fresh agent in the same breath, rather than sitting dead
+   * until the launch after next.
+   *
+   * Absent when there is nothing honest to fall back to: a command that cannot
+   * be modelled, or a session the user named themselves. Starting over past a
+   * hand-chosen session id means minting one of ours and writing it over
+   * theirs, which throws away the only trace anywhere of the conversation they
+   * asked for — and they are the one person in a position to know where it is.
+   */
+  fallback?: { command: string; agentSessionId?: string }
 }
 
 /**
@@ -140,7 +158,8 @@ export function restoreLaunch(record: TerminalRecord): RestoreLaunch {
   // The agent offers no way back at all: a shell in the right place is still
   // better than re-running whatever the command was.
   if (resume === null) return { resumed: false }
-  return { command: resume, resumed: true }
+  const fallback = restartSessionCommand(record.command, record.agent)
+  return { command: resume, resumed: true, ...(fallback === null ? {} : { fallback }) }
 }
 
 /**

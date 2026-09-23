@@ -125,6 +125,23 @@ export type PtySessionInit = {
   restoredRecord?: RecordedScrollback
   /** Which coding agent this pane runs, when it runs one. */
   agent?: AgentKind
+  /**
+   * What to run in this pane if the resume it came back for is refused.
+   *
+   * A pane brought back to pick a conversation up and told there is no such
+   * conversation has done all it can with the command it was given. Without
+   * this it stops there, holding an explanation and nothing else, and the
+   * person who opened it has to open it again. With it the pane says what
+   * happened and then starts the agent afresh in the same place — which is what
+   * they were going to do anyway, and what a pane nobody ever typed into
+   * already does on its own.
+   *
+   * Used at most once per pane: the second start is a fresh agent, not a
+   * resume, so nothing it does afterwards can be read as a refusal.
+   */
+  restartCommand?: string
+  /** Called after that restart, so the pane's record can say what is running. */
+  onRestart?: (session: PtySession) => void
   /** Called when the pane starts or stops producing output. */
   onActivityChange?: (session: PtySession) => void
   now?: () => number
@@ -141,9 +158,17 @@ export class PtySession {
   readonly shell: string
   readonly command: string | undefined
   readonly agent: AgentKind | undefined
-  readonly pid: number
 
-  private readonly pty: IPty
+  /**
+   * Not held as a field: a pane that has restarted its agent has a different
+   * child, and a pid captured at construction would name a process that has
+   * been reaped — which `close()` would then go looking for a tree under.
+   */
+  get pid(): number {
+    return this.pty.pid
+  }
+
+  private pty: IPty
   private readonly platform: NodeJS.Platform
   private readonly scrollback: ScrollbackBuffer
   /** The previous run's output, when this pane is one that was brought back. */
@@ -177,6 +202,8 @@ export class PtySession {
   private recordHeld: boolean
   /** True once this pane has said, in the pane, that its resume did not take. */
   private resumeFailed = false
+  /** True once a fresh agent has taken the refused resume's place in this pane. */
+  private agentRestarted = false
   /** True once anybody has typed into this pane; see `TerminalRecord.typed`. */
   private typedInto = false
   /** True from the moment close() is called: this pane is being ended on purpose. */
@@ -197,7 +224,6 @@ export class PtySession {
     this.rows = init.rows
     this.platform = platform
     this.pty = handle
-    this.pid = handle.pid
     this.scrollback = new ScrollbackBuffer(init.scrollbackCapBytes)
     this.record = init.restoredRecord
     this.recordHeld = init.restored === 'agent' && init.restoredRecord !== undefined
@@ -206,44 +232,21 @@ export class PtySession {
     this.lastOutputAt = (init.now ?? Date.now)()
     this.startedAt = this.lastOutputAt
 
+    this.listen(handle)
+  }
+
+  /** Routes one child's output, and its death, into this pane. */
+  private listen(handle: IPty): void {
     this.subscriptions.push(
       handle.onData((chunk) => this.receive(chunk)),
       handle.onExit(({ exitCode, signal }) => this.finish(exitCode, signal)),
-      recoverTailOnTeardown(handle, platform, (chunk) => this.receive(chunk))
+      recoverTailOnTeardown(handle, this.platform, (chunk) => this.receive(chunk))
     )
   }
 
   static start(init: PtySessionInit): PtySession {
     const platform = init.platform ?? process.platform
-    const { file, args } = buildShellCommand(init.shell, init.command, platform)
-    // The login shell's PATH rather than this process's: a pane opened from a
-    // desktop launch would otherwise start from the PATH launchd handed the
-    // app, which is not the one the user installed anything on.
-    const env = buildTerminalEnv(init.env, platform, loginShellPath({ platform }))
-
-    // The two platforms answer "that shell is not there" in different places.
-    // Windows refuses in spawn() below. POSIX does not refuse at all: the fork
-    // succeeds, the helper's own execvp failure goes to the pty, and the caller
-    // is handed a running session that dies a moment later — a pane that
-    // appears and vanishes, with nothing anywhere saying why. So the platform
-    // that will not raise is asked the question first, and both ends here.
-    if (shellCannotRun(file, env, init.cwd, platform)) {
-      throw terminalFailed(`failed to start ${file}: ${SHELL_UNRUNNABLE}`, { cwd: init.cwd })
-    }
-
-    let handle: IPty
-    try {
-      handle = spawn(file, args, {
-        name: TERMINAL_TYPE,
-        cwd: init.cwd,
-        cols: init.cols,
-        rows: init.rows,
-        env
-      })
-    } catch (error) {
-      throw terminalFailed(`failed to start ${file}: ${startFailureReason(error)}`, { cwd: init.cwd })
-    }
-
+    const handle = startChild(init, init.command, platform)
     return new PtySession(init, handle, platform)
   }
 
@@ -487,19 +490,27 @@ export class PtySession {
     draining.cancelQuiet()
     draining.cancelCeiling()
     this.draining = undefined
-    this.running = false
     // An exited pane is not busy, whatever it was doing a moment ago.
     this.cancelQuietWatch?.()
     this.cancelQuietWatch = undefined
     const wasBusy = this.busy
     this.busy = false
-    this.exitCode = draining.exitCode
+
+    // Asked before `running` is settled and before anybody is told anything,
+    // because for a refused resume this pane has not ended: the note is printed
+    // and a fresh agent takes the dead one's place, and no subscriber ever sees
+    // an exit. Every report below then describes whichever of the two happened.
+    const restarting = this.restartAfterRefusedResume(draining.exitCode)
+    if (!restarting) this.running = false
+
     // The quiet countdown that would have reported this edge was just
     // cancelled, so the edge has to be reported here instead: a pane that dies
     // mid-burst goes busy -> not busy like any other, and a subscriber watching
     // activity must not be left holding the last thing it was told.
     if (wasBusy) this.init.onActivityChange?.(this)
-    this.sayIfResumeFailed(this.exitCode)
+    if (restarting) return
+
+    this.exitCode = draining.exitCode
     this.emit({ type: 'exit', exitCode: this.exitCode })
     for (const waiter of this.exitWaiters) waiter()
     this.exitWaiters.clear()
@@ -528,19 +539,26 @@ export class PtySession {
    * "exited 1", with a refusal from a CLI as its entire contents, is the app
    * asserting something it can see is not true — and of everything here that is
    * the part a person could not work out for themselves.
+   *
+   * Then, where there is a command to do it with, the agent is started again in
+   * this same pane. A conversation being gone is not a reason for the pane to
+   * be gone too: what the person wanted was an agent in this checkout, and the
+   * fresh one they would have opened by hand is the one this starts for them.
+   * Returns true when that happened, which is the caller's signal that this
+   * pane has not ended after all.
    */
-  private sayIfResumeFailed(exitCode: number): void {
-    if (this.restored !== 'agent' || this.closing) return
+  private restartAfterRefusedResume(exitCode: number): boolean {
+    if (this.restored !== 'agent' || this.closing) return false
     // A clean exit is not a refusal. Every one of these CLIs leaves non-zero
     // when it will not resume, and an agent asked to do one thing and print the
     // answer — which is a mode, not a different program, so nothing upstream can
     // tell it apart from the interactive one — does its work and leaves with
     // zero. Saying "nothing was resumed" over that would be false in every
     // clause, which is precisely what this is here to stop.
-    if (exitCode === 0) return
+    if (exitCode === 0) return false
     // Past the window, an agent that ends is an agent that ended: it may well
     // have resumed fine an hour ago, and this app would be inventing a cause.
-    if (this.clock() - this.startedAt > RESUME_WINDOW_MS) return
+    if (this.clock() - this.startedAt > RESUME_WINDOW_MS) return false
 
     this.restored = undefined
     this.resumeFailed = true
@@ -565,22 +583,73 @@ export class PtySession {
     // all of it, and in both the record stands above the note that describes it.
     if (this.record !== undefined) this.emit({ type: 'data', data: replayableRecord(this.record, FAILED_RESUME_BELOW) })
 
-    const note = failedResumeMark(exitCode, this.record !== undefined)
+    // Attempted before the note is written, because the note says which of the
+    // two things happened and must not promise a fresh agent that failed to
+    // start. A start that throws — the shell gone, the checkout unmounted — is
+    // the pane ending the way it would have ended anyway.
+    const restarted = this.restartAgent()
+
+    const note = failedResumeMark(exitCode, this.record !== undefined, restarted)
     // Appended as well as emitted, so it is in what `terminal.read` answers
     // with. That is the copy that matters here — a subscriber arriving after
     // the exit gets the pane by reading it, not by having been told.
     this.scrollback.append(note)
     this.emit({ type: 'data', data: note })
+
+    if (restarted) this.init.onRestart?.(this)
+    return restarted
+  }
+
+  /**
+   * Puts a fresh agent on the other end of this pane, keeping everything the
+   * pane is: its id, its listeners, its title, and every byte it has printed.
+   *
+   * The old child's subscriptions go first. They are bound to a pty that has
+   * already been reaped, and a `recoverTailOnTeardown` left in place would go
+   * on reading a file descriptor this process is about to hand to somebody
+   * else.
+   */
+  private restartAgent(): boolean {
+    const command = this.init.restartCommand
+    if (command === undefined) return false
+    let handle: IPty
+    try {
+      handle = startChild(this.init, command, this.platform)
+    } catch {
+      // Nothing to add: the pane is about to report the exit it was going to
+      // report, and the agent's own refusal is already on the screen above.
+      return false
+    }
+    for (const subscription of this.subscriptions) subscription.dispose()
+    this.subscriptions.length = 0
+    this.pty = handle
+    try {
+      // The pane has been drawn since it was created and is very likely not the
+      // size `init` describes any more.
+      handle.resize(this.cols, this.rows)
+    } catch {
+      // A child that died between the spawn and this call; its own exit is
+      // already on its way through `listen` below.
+    }
+    this.agentRestarted = true
+    this.listen(handle)
+    return true
   }
 
   /**
    * True once this pane has said that the conversation it came back for did not
-   * come back. Read by the manager, which writes that down: a pane whose resume
-   * failed has nothing to resume next time either, and saying so in the record
-   * is what stops it failing the same way on every launch from here on.
+   * come back, and nothing has been started in its place. Read by the manager,
+   * which writes that down: a pane whose resume failed has nothing to resume
+   * next time either, and saying so in the record is what stops it failing the
+   * same way on every launch from here on.
+   *
+   * False again once a fresh agent has taken over, because by then the record
+   * has already been corrected — `onRestart` fires at that moment and says what
+   * is running — and a second answer arriving at the pane's eventual exit would
+   * write "nobody ever typed here" over a pane somebody has since worked in.
    */
   get resumeDidNotTake(): boolean {
-    return this.resumeFailed
+    return this.resumeFailed && !this.agentRestarted
   }
 
   private emit(event: TerminalEvent): void {
@@ -592,6 +661,45 @@ export class PtySession {
         // A broken subscriber must not stall the PTY's data pump.
       }
     }
+  }
+}
+
+/**
+ * Puts one child on the other end of a new pty.
+ *
+ * Takes the command separately from the rest of the pane's description because
+ * a pane can outlive the command it was opened with: one whose resume is
+ * refused starts its agent again, in the same pane, under a different command
+ * line. Everything else about the pane — where it runs, how big it is, which
+ * shell wraps it — is the same both times and comes from `init`.
+ */
+function startChild(init: PtySessionInit, command: string | undefined, platform: NodeJS.Platform): IPty {
+  const { file, args } = buildShellCommand(init.shell, command, platform)
+  // The login shell's PATH rather than this process's: a pane opened from a
+  // desktop launch would otherwise start from the PATH launchd handed the
+  // app, which is not the one the user installed anything on.
+  const env = buildTerminalEnv(init.env, platform, loginShellPath({ platform }))
+
+  // The two platforms answer "that shell is not there" in different places.
+  // Windows refuses in spawn() below. POSIX does not refuse at all: the fork
+  // succeeds, the helper's own execvp failure goes to the pty, and the caller
+  // is handed a running session that dies a moment later — a pane that
+  // appears and vanishes, with nothing anywhere saying why. So the platform
+  // that will not raise is asked the question first, and both ends here.
+  if (shellCannotRun(file, env, init.cwd, platform)) {
+    throw terminalFailed(`failed to start ${file}: ${SHELL_UNRUNNABLE}`, { cwd: init.cwd })
+  }
+
+  try {
+    return spawn(file, args, {
+      name: TERMINAL_TYPE,
+      cwd: init.cwd,
+      cols: init.cols,
+      rows: init.rows,
+      env
+    })
+  } catch (error) {
+    throw terminalFailed(`failed to start ${file}: ${startFailureReason(error)}`, { cwd: init.cwd })
   }
 }
 
