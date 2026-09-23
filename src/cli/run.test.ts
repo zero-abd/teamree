@@ -536,11 +536,94 @@ describe('worktree create --agent, repeated', () => {
     )
   })
 
+  // Two of the three panes above run the same binary, so `claude` names none of
+  // them. The task does — the same name, suffix and all, that told the three
+  // checkouts apart — and without it the listing is three identical rows.
+  it('names each pane after the task it is racing, not after the binary', async () => {
+    const made: Array<Record<string, unknown>> = []
+    const cli = await harness((method, params) => {
+      if (method === 'project.list') return PROJECTS
+      if (method === 'worktree.create') {
+        const name = (params as { name: string }).name
+        const worktree = { ...WORKTREES[0], id: `wt_made_${made.length + 1}`, name, state: 'ready' }
+        made.push(worktree)
+        return worktree
+      }
+      if (method === 'worktree.list') return made
+      if (method === 'terminal.create') return TERMINAL
+      throw new StubError('unknown_method', `no handler for ${method}`)
+    })
+
+    const result = await cli.run([
+      'worktree',
+      'create',
+      '--project',
+      'api',
+      '--name',
+      'fix login',
+      '--agent',
+      'claude',
+      '--agent',
+      'claude',
+      '--agent',
+      'codex'
+    ])
+    expect(result.code).toBe(ExitCode.Success)
+
+    const labels = cli.stub.received
+      .filter((call) => call.method === 'terminal.create')
+      .map((call) => call.params as { worktreeId: string; label?: string })
+    expect(new Map(labels.map((pane) => [pane.worktreeId, pane.label]))).toEqual(
+      new Map([
+        ['wt_made_1', 'fix login claude'],
+        ['wt_made_2', 'fix login claude 2'],
+        ['wt_made_3', 'fix login codex']
+      ])
+    )
+  })
+
   it('leaves a create with no --agent exactly as it was: one record, no pane', async () => {
     const cli = await harness()
     const result = await cli.run(['worktree', 'create', '--project', 'api', '--name', 'x', '--json'])
     const record = soleJsonDocument(result.out)['data'] as { id: string }
     expect(record.id).toBe('wt_1')
+    expect(cli.stub.received.some((call) => call.method === 'terminal.create')).toBe(false)
+  })
+})
+
+// Two things an agent does constantly: read the listing to find a pane, and open
+// a pane in a worktree it already knows the name of.
+describe('pointing the CLI at a worktree', () => {
+  it('prints the worktree by name in the listing, not by id', async () => {
+    const cli = await harness()
+    const result = await cli.run(['terminal', 'list'])
+    expect(result.code).toBe(ExitCode.Success)
+    expect(result.out).toContain('fix-login')
+    expect(result.out).not.toContain('wt_1')
+    // The payload is unchanged: a caller parsing JSON addresses panes by id,
+    // and the name is the human column.
+    const json = soleJsonDocument((await cli.run(['terminal', 'list', '--json'])).out)
+    expect(JSON.stringify(json['data'])).toContain('wt_1')
+  })
+
+  it('takes the worktree as a positional on terminal create, the way every other command does', async () => {
+    const cli = await harness()
+    const result = await cli.run(['terminal', 'create', 'fix-login', '--json'])
+    expect(result.code).toBe(ExitCode.Success)
+    const created = cli.stub.received.find((call) => call.method === 'terminal.create')
+    expect((created?.params as { worktreeId: string } | undefined)?.worktreeId).toBe('wt_1')
+  })
+
+  it('still takes --worktree, because scripts were written against it', async () => {
+    const cli = await harness()
+    expect((await cli.run(['terminal', 'create', '--worktree', 'fix-login'])).code).toBe(ExitCode.Success)
+  })
+
+  it('asks for a worktree when given none, rather than opening one somewhere', async () => {
+    const cli = await harness()
+    const result = await cli.run(['terminal', 'create'])
+    expect(result.code).toBe(ExitCode.Usage)
+    expect(result.err).toMatch(/needs <worktree>/)
     expect(cli.stub.received.some((call) => call.method === 'terminal.create')).toBe(false)
   })
 })

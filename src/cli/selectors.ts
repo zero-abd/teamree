@@ -98,8 +98,22 @@ export async function resolveProject(client: RuntimeClient, token: string): Prom
   return selectOne('project', token, projects)
 }
 
+/**
+ * Picks one worktree out of a listing already in hand.
+ *
+ * Split out from `resolveWorktree` for the caller that needs the whole listing
+ * anyway — `terminal list` prints a worktree's name, which means reading the
+ * names — so naming one does not cost a second round trip to read the same
+ * rows.
+ */
+export function selectWorktree(worktrees: readonly Worktree[], token: string): Worktree {
+  return selectOne(
+    'worktree',
+    token,
+    worktrees.map((worktree) => ({ ...worktree, aliases: [worktree.branch] }))
+  )
+}
+
 export async function resolveWorktree(client: RuntimeClient, token: string): Promise<Worktree> {
-  const worktrees = await client.call('worktree.list', {})
-  const selectable = worktrees.map((worktree) => ({ ...worktree, aliases: [worktree.branch] }))
-  return selectOne('worktree', token, selectable)
+  return selectWorktree(await client.call('worktree.list', {}), token)
 }

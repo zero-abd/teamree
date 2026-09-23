@@ -301,6 +301,11 @@ export class TerminalSessionManager {
       ...(launch.command === undefined ? {} : { command: launch.command }),
       ...(launch.agent === undefined ? {} : { agent: launch.agent }),
       ...(launch.agentSessionId === undefined ? {} : { agentSessionId: launch.agentSessionId }),
+      // The pane keeps its name across the restart. Everything else here is a
+      // fact about a process that has just been replaced; the name is a fact
+      // about the person who gave it, and running the program again is not them
+      // taking it back.
+      ...(size.label === undefined ? {} : { label: size.label }),
       // Nobody has typed into the conversation this is opening, so there is
       // nothing under the new id to come back to until somebody does.
       typed: false,
