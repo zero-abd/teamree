@@ -129,6 +129,18 @@ export type PtySessionInit = {
    * again names the program it is running again instead.
    */
   recordStartsBelow?: string
+  /**
+   * A line to put in the pane before anything this session prints.
+   *
+   * For the one thing a pane cannot show by itself: that it is not the launch
+   * its record asked for. A pane whose conversation was found to be missing
+   * comes back as a fresh agent, and a fresh agent looks like a fresh agent —
+   * so the reason is written in, above it, where whoever opens the pane will
+   * read it. Written into the pane's own output rather than emitted alongside
+   * it, because the copy that matters is the one `terminal.read` answers with:
+   * nobody is subscribed at the moment a pane starts.
+   */
+  startupNote?: string
   /** Which coding agent this pane runs, when it runs one. */
   agent?: AgentKind
   /**
@@ -242,6 +254,10 @@ export class PtySession {
     this.restored = init.restored
     this.lastOutputAt = (init.now ?? Date.now)()
     this.startedAt = this.lastOutputAt
+
+    // Before the child is listened to, so it is above the first byte the child
+    // prints however quickly that arrives.
+    if (init.startupNote !== undefined) this.scrollback.append(init.startupNote)
 
     this.listen(handle)
   }

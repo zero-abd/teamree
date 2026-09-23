@@ -12,6 +12,8 @@
 
 import type { AgentKind } from './agent-command'
 import { carriesSelector, restartSessionCommand, resumeSessionCommand } from './agent-command'
+import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
+import { noConversationMark } from './scrollbackRecord'
 
 /** One terminal, as much of it as outlives the process that ran it. */
 export type TerminalRecord = {
@@ -43,17 +45,25 @@ export type TerminalRecord = {
   /**
    * Whether anybody ever typed into this pane.
    *
-   * Written down because it is the one thing this app knows for certain about
-   * whether there is a conversation to come back to, and it holds for every
-   * agent rather than for one of them. An id can be pinned before an agent
-   * starts, but the conversation under it is not written until the agent has
-   * something to write — and an agent with nobody talking to it has nothing.
-   * So a pane that was opened and then left alone has no conversation on any
-   * agent's disk, whatever id was reserved for it, and asking to resume one is
-   * asking for something that was never had.
+   * A guess at whether there is a conversation to come back to, and now the
+   * second-best one. An id can be pinned before an agent starts, but the
+   * conversation under it is not written until the agent has something to
+   * write — so a pane that was opened and then left alone has no conversation
+   * on any agent's disk, whatever id was reserved for it.
+   *
+   * What makes it a guess is the other direction. A keystroke is not a
+   * conversation, and a worktree is a directory the agent has never seen: the
+   * first launch of Claude Code in one asks whether the project is trusted, with
+   * "No, exit" selected, and an arrow key or an Enter at that gate is somebody
+   * typing into the pane without a word being said to any agent. Both answers
+   * leave this field `true` and the store empty, and the pane came back on the
+   * next launch asking for a conversation nobody had. So `restoreLaunch` asks
+   * the agent's own store first and only falls back to this where it cannot —
+   * see `agent-conversations.ts` for which agents those are.
    *
    * Deliberately not "the agent produced output": every agent prints a banner.
-   * Input is the part that only happens when somebody meant it.
+   * Input is the part that only happens when somebody meant it — which is the
+   * strongest thing that can be said for it, and not strong enough on its own.
    *
    * Three values and not two, which is the part worth being careful about.
    * `false` is this version saying nobody has typed. Absent is *unknown* — a
@@ -101,6 +111,17 @@ export type RestoreLaunch = {
    * asked for — and they are the one person in a position to know where it is.
    */
   fallback?: { command: string; agentSessionId?: string }
+  /**
+   * A line for the pane to print before whatever starts in it, when this launch
+   * is not the one the record asked for.
+   *
+   * Only where the difference is invisible otherwise. A pane that comes back as
+   * a fresh agent looks exactly like a pane that came back as a fresh agent for
+   * any other reason, and the one thing its owner wants to know — where the
+   * conversation went — is the one thing nothing on the screen says. So the
+   * decision that was made about this pane is written into it.
+   */
+  note?: string
 }
 
 /**
@@ -117,22 +138,37 @@ export type RestoreLaunch = {
  * Coming back to a shell in the right directory is both useful and honest; the
  * alternative is a startup that does something nobody asked for.
  *
- * The one agent pane that is *not* resumed is the one this app has written down
- * that nobody ever typed into. Reserving an id at launch is not the same as
- * there being a conversation under it: the agent writes that down when it has
- * something to write, and a pane that was opened and left alone gave it
- * nothing. Asking to resume such an id gets a refusal from the CLI and a dead
- * pane, every time, for the whole life of the record — so that pane is started
- * over instead, under an id of its own. Re-issuing an agent's own launch is not
- * the thing the refusal above is about: starting an agent is what the pane was
- * for, and it does nothing until it is spoken to.
+ * The one agent pane that is *not* resumed is the one with no conversation to
+ * resume. Reserving an id at launch is not the same as there being a
+ * conversation under it: the agent writes that down when it has something to
+ * write, and a pane that was opened and left alone gave it nothing. Asking to
+ * resume such an id gets a refusal from the CLI and a dead pane, every time,
+ * for the whole life of the record — so that pane is started over instead,
+ * under an id of its own. Re-issuing an agent's own launch is not the thing the
+ * refusal above is about: starting an agent is what the pane was for, and it
+ * does nothing until it is spoken to.
  *
- * "Written down that nobody typed" and not "no record of anybody typing", which
- * are the same sentence only if you have forgotten that this field is newer
- * than the files it is read out of. See `TerminalRecord.typed`: absent means
- * unknown, and unknown tries.
+ * Which panes those are is asked of the agent's own store rather than inferred
+ * from what this app saw somebody do. The inference was that a keystroke means
+ * a conversation, and a worktree makes that wrong routinely: a brand-new
+ * directory means Claude Code's "Is this a project you trust?" on the first
+ * launch, so the first key pressed in the pane is pressed at a gate rather than
+ * at an agent, and the pane recorded a conversation that no agent ever wrote.
+ * `conversation` answers from the file the agent would have to read, and only
+ * where it cannot answer — an agent whose store this app does not know, or a
+ * store not on this disk — does `typed` decide, which is the reading this had
+ * before and is still better than nothing.
+ *
+ * That fallback is careful in the same direction it always was. See
+ * `TerminalRecord.typed`: absent means unknown, and unknown tries.
+ *
+ * `conversation` is a parameter so a test can hand it a store it built, and so
+ * nothing in this file has to reach the disk to be exercised.
  */
-export function restoreLaunch(record: TerminalRecord): RestoreLaunch {
+export function restoreLaunch(
+  record: TerminalRecord,
+  conversation: (question: ConversationQuestion) => ConversationEvidence = conversationOnDisk
+): RestoreLaunch {
   if (record.command === undefined || record.agent === undefined) return { resumed: false }
 
   // Before any of that: a session on the command line that is not ours is not
@@ -149,7 +185,18 @@ export function restoreLaunch(record: TerminalRecord): RestoreLaunch {
     return { command: record.command, resumed: true }
   }
 
-  if (record.typed === false) {
+  const evidence = conversation({
+    agent: record.agent,
+    cwd: record.cwd,
+    ...(record.agentSessionId === undefined ? {} : { agentSessionId: record.agentSessionId })
+  })
+
+  // Evidence first, and in both directions: a pane the app watched somebody
+  // type into but whose conversation is not in the store starts over, and a
+  // pane nobody was seen to type into whose conversation *is* in the store
+  // resumes. The store is the thing the resume will read; this is only trying
+  // to predict it.
+  if (evidence === 'absent' || (evidence === 'unknown' && record.typed === false)) {
     const restart = restartSessionCommand(record.command, record.agent)
     // The command could not be modelled well enough to take the old session out
     // of it — a pipeline, a quote that does not close, an agent run through
@@ -161,7 +208,17 @@ export function restoreLaunch(record: TerminalRecord): RestoreLaunch {
     // `resumed: false` because nothing was: the pane comes back with a fresh
     // agent in it, and the record of what it printed last time replayed above,
     // exactly as an ordinary pane does.
-    return { command: restart.command, resumed: false, repinned: restart }
+    //
+    // With a line saying so only in the first case. "This app looked in the
+    // agent's store and there is no conversation there" is news, and it is news
+    // the pane's owner cannot get any other way — while "nobody ever typed into
+    // this pane" describes a pane they left empty, which the pane itself shows.
+    return {
+      command: restart.command,
+      resumed: false,
+      repinned: restart,
+      ...(evidence === 'absent' ? { note: noConversationMark(record.agent) } : {})
+    }
   }
 
   const resume = resumeSessionCommand(record.command, record.agent, record.agentSessionId ?? null)

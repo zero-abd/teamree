@@ -75,11 +75,15 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
   the same from a shell.
 - **Split terminals** per worktree, arbitrarily nested, with a real PTY behind each.
 - **Panes that come back.** A pane running a coding agent returns with its
-  conversation resumed; one nobody ever typed into has no conversation to resume,
-  so its agent is started afresh above what the pane printed last time, and a
-  resume that finds nothing left says so in the pane, in one line, and starts a
-  fresh agent there rather than dying quietly. An ordinary pane returns as a
-  shell in the same directory, and its command is deliberately never re-run.
+  conversation resumed — if the agent wrote one. Whether it did is read from that
+  agent's own store rather than guessed at from whether anybody typed: a brand-new
+  worktree means a trust prompt on the first launch, and answering one is a
+  keystroke, not a conversation. A pane with nothing to resume gets a fresh agent
+  above what it printed last time, with one line saying why, and a resume that is
+  refused anyway says so in the pane and starts a fresh agent there rather than
+  dying quietly. teamree only reads those stores; it never writes to them, and it
+  answers no other tool's prompts for you. An ordinary pane returns as a shell in
+  the same directory, and its command is deliberately never re-run.
 - **Which agent needs you.** One view ranks every pane in every worktree by what
   would make you look — failures, then work in progress, then waiting, then
   finished. It is a narrow reading on purpose: teamree watches a PTY, not an

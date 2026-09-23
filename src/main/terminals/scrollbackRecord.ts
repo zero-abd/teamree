@@ -145,6 +145,35 @@ export function failedResumeMark(exitCode: number, hasRecord: boolean, restarted
 }
 
 /**
+ * Said into a pane that was going to resume a conversation and did not, because
+ * the agent's own store has nothing written under the id this pane was given.
+ *
+ * Printed above the fresh agent rather than under a refusal, which is the whole
+ * difference between this mark and the one above: nothing has failed here and
+ * nothing was asked of the CLI at all. The pane looked where that agent keeps
+ * its conversations, found none, and started over — and a pane that comes back
+ * without the conversation somebody left in it owes them a sentence either way.
+ * "We looked" is a different sentence from "it refused", so it is a different
+ * mark.
+ *
+ * The reason is offered without being insisted on. A conversation can be absent
+ * because it was deleted, expired, or recorded on another machine, and it can be
+ * absent because the agent never wrote one — the pane was opened, a key was
+ * pressed at a prompt that was not a conversation, and nothing was ever said.
+ * Nothing here can tell those apart from outside, so this names what it can
+ * demonstrate and leaves the rest as the ordinary reasons they are.
+ */
+export function noConversationMark(agent: string): string {
+  return (
+    `${RESET}\r\n${DIM}[nothing to resume — this pane came back to pick a conversation up and ${agent} has ` +
+    `nothing written down for it: the session id this pane was given names no conversation in that agent's ` +
+    `own store on this machine. A conversation can be missing for ordinary reasons — deleted, expired, ` +
+    `recorded on another machine — and one nobody ever spoke to was never written at all. Nothing was asked ` +
+    `of the agent and nothing refused; a fresh agent is starting below, in this same directory.]${RESET}\r\n`
+  )
+}
+
+/**
  * Said before the record, so it is described before it is read.
  *
  * The time is the one thing here a reader can act on, so it is the moment this

@@ -88,7 +88,12 @@ async function startAfterRestart(record: TerminalRecord, checkout: string, stopF
     subscriptions: hub,
     resolveWorktreeCwd: (worktreeId) => (worktreeId === WORKTREE ? checkout : undefined),
     layouts: store,
-    sessions: store
+    sessions: store,
+    // The conversation is there, said here rather than left to the real probe —
+    // which would read the home directory of whoever is running this and answer
+    // for a checkout `mkdtemp` made a moment ago, so the pane would come back as
+    // a fresh agent and this file would be watching the wrong pane.
+    conversationEvidence: () => 'present'
   })
   services.push(terminals)
   terminals.restoreSessions()
@@ -122,10 +127,10 @@ function recordFor(binary: string, checkout: string): TerminalRecord {
     command: binary,
     agent: 'claude',
     agentSessionId: 'session_from_last_launch',
-    // Typed into last time, so there is a conversation to come back to and this
-    // pane resumes rather than starting its agent over. A pane nobody ever
-    // spoke to takes the other branch and comes back running a fresh agent,
-    // which is not the pane this file is here to watch.
+    // Typed into last time. What actually decides the resume is the evidence
+    // above — whether the agent's store has this conversation — and this says
+    // the other half agrees: a pane nobody spoke to takes the other branch and
+    // comes back running a fresh agent, which is not the pane this file watches.
     typed: true,
     cols: 80,
     rows: 24,
