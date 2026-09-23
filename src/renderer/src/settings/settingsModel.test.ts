@@ -7,8 +7,8 @@
 // never read again until it was wrong in front of somebody.
 
 import { describe, expect, it } from 'vitest'
-import type { RelaySetting, UpdateState } from '@shared/entities'
-import { relayPanel, updatePanel } from './settingsModel'
+import type { CliStatus, RelaySetting, UpdateState } from '@shared/entities'
+import { cliLine, relayPanel, updatePanel } from './settingsModel'
 
 const NOW = 1_700_000_000_000
 
@@ -129,5 +129,79 @@ describe('what the page says about a relay', () => {
     const panel = relayPanel(undefined)
     expect(panel.headline).toContain('Reading')
     expect(panel.detail).toBeNull()
+  })
+})
+
+describe('cliLine', () => {
+  const status = (overrides: Partial<CliStatus> = {}): CliStatus => ({
+    installable: true,
+    platform: 'darwin',
+    source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+    packaged: true,
+    bundle: '/Applications/teamree.app/Contents/Resources/cli/index.js',
+    impermanent: null,
+    destination: '/usr/local/bin/teamree',
+    directory: '/usr/local/bin',
+    state: 'linked',
+    resolved: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+    dangling: false,
+    needsAdministrator: true,
+    onPath: 'login',
+    askedAt: null,
+    readAt: 0,
+    ...overrides
+  })
+
+  it('is the link and where it leads, with nothing to do', () => {
+    expect(cliLine(status())).toMatchObject({
+      state: '/usr/local/bin/teamree → /Applications/teamree.app/Contents/Resources/cli/teamree',
+      action: null
+    })
+  })
+
+  it('is "Not installed" and Install', () => {
+    expect(cliLine(status({ state: 'absent', resolved: null }))).toMatchObject({
+      state: 'Not installed',
+      action: 'Install'
+    })
+  })
+
+  // Two failures under one state: a link to nothing, and a link to another copy.
+  it('is the wrong destination and Repair', () => {
+    expect(cliLine(status({ state: 'elsewhere', resolved: '/Volumes/old/teamree', dangling: true }))).toMatchObject({
+      state: '/usr/local/bin/teamree → /Volumes/old/teamree (missing)',
+      action: 'Repair'
+    })
+    expect(cliLine(status({ state: 'elsewhere', resolved: '/opt/teamree/cli/teamree' }))).toMatchObject({
+      state: '/usr/local/bin/teamree → /opt/teamree/cli/teamree (another copy)',
+      action: 'Repair'
+    })
+  })
+
+  it('says when the link is right but no PATH teamree can read reaches it', () => {
+    expect(cliLine(status({ onPath: null })).state).toBe(
+      '/usr/local/bin/teamree → /Applications/teamree.app/Contents/Resources/cli/teamree · /usr/local/bin not on PATH'
+    )
+  })
+
+  // The button carries a password prompt, and the hover is where that is said.
+  it('says on the button what it does and whether a password is coming', () => {
+    const line = cliLine(status({ state: 'absent', resolved: null }))
+    expect(line.title).toMatch(/Links \/usr\/local\/bin\/teamree/)
+    expect(line.title).toMatch(/administrator password/)
+  })
+
+  it('has no button where this app cannot link, and says what to type', () => {
+    expect(cliLine(status({ bundle: null, packaged: false }))).toMatchObject({
+      state: 'Not built',
+      action: null,
+      manual: 'npm run build:cli'
+    })
+    expect(cliLine(status({ installable: false, platform: 'linux' }))).toMatchObject({
+      state: 'Not installable on linux',
+      action: null,
+      manual: expect.stringContaining('ln -sf')
+    })
+    expect(cliLine(null)).toMatchObject({ state: 'Looking…', action: null })
   })
 })

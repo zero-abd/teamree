@@ -102,6 +102,14 @@
   font-weight: 560;
 }
 
+/* A path with an arrow in it reads as a path, not a sentence. */
+.settings-fact--mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  word-break: break-all;
+}
+
 .settings-note {
   color: var(--fg-secondary);
   font-size: var(--text-sm);
