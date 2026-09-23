@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
-import { applicationMenuTemplate } from './appMenu'
+import { applicationMenuTemplate, type ApplicationMenuOptions } from './appMenu'
+import { installMenuBar } from './menuBar'
 import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
@@ -115,21 +116,39 @@ if (!app.requestSingleInstanceLock()) {
     // one, whose File menu is a single "Close Window" on Cmd+W. A menu key
     // equivalent never reaches the web contents, so that one item is what the
     // renderer's "Close pane" binding has been losing to. See appMenu.ts.
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate(
-        applicationMenuTemplate({
-          developing: process.env.ELECTRON_RENDERER_URL !== undefined,
-          // Reads `runtime` when it is clicked rather than capturing it now:
-          // the menu is installed before the runtime starts, on purpose, and a
-          // click in the second before it is up does nothing rather than
-          // throwing. The answer reaches the window over the workspace stream,
-          // which is why nothing here touches a BrowserWindow.
-          checkForUpdates: () => {
-            void runtime?.checkForUpdates().catch((error: unknown) => console.warn('[updates]', error))
-          }
-        })
+    //
+    // Installed empty of teamree's own commands and then again for real once
+    // the window has said what they are and which of them are live. That gap is
+    // a fraction of a second of a menu bar with the platform's roles and
+    // nothing else, which is what this app had until now; the alternative is a
+    // bar built from a guess about a window that has not rendered.
+    const installMenu = (commands?: ApplicationMenuOptions['commands']): void => {
+      Menu.setApplicationMenu(
+        Menu.buildFromTemplate(
+          applicationMenuTemplate({
+            developing: process.env.ELECTRON_RENDERER_URL !== undefined,
+            // Reads `runtime` when it is clicked rather than capturing it now:
+            // the menu is installed before the runtime starts, on purpose, and a
+            // click in the second before it is up does nothing rather than
+            // throwing. The answer reaches the window over the workspace stream,
+            // which is why nothing here touches a BrowserWindow.
+            checkForUpdates: () => {
+              void runtime?.checkForUpdates().catch((error: unknown) => console.warn('[updates]', error))
+            },
+            commands
+          })
+        )
       )
-    )
+    }
+    installMenu()
+
+    // And the window's own menus, rebuilt whenever its answer changes. What
+    // arrives is checked before it is drawn and the choice goes back to the
+    // frame that published it; see src/main/menuBar.ts for both.
+    installMenuBar(ipcMain, {
+      install: (items, choose) => installMenu({ items, choose }),
+      fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
+    })
 
     ipcMain.handle('teamree:select-project-folder', async (event) => {
       const owner = BrowserWindow.fromWebContents(event.sender)

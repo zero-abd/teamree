@@ -9,6 +9,7 @@ import { AppearanceDialog } from './dialogs/AppearanceDialog'
 import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
+import { useMenuBar } from './menu/useMenuBar'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmClosePaneDialog } from './dialogs/ConfirmClosePaneDialog'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
@@ -33,6 +34,10 @@ export function App(): React.JSX.Element {
   )
   const modifier = useMemo(() => resolvePlatformModifier(platform), [platform])
   const isAppChord = useWorkspaceShortcuts(modifier)
+  // And the same commands in the menu bar, which is the other half of the same
+  // thing: the chord and the menu item run one dispatcher over one table, so
+  // neither can offer what the other refuses. See src/renderer/src/menu.
+  useMenuBar()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)

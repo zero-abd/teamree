@@ -7,7 +7,7 @@ import {
   matchesChord,
   resolvePlatformModifier
 } from './platformModifier'
-import { commandForEvent, shortcutHint, WORKSPACE_SHORTCUTS } from './workspaceShortcuts'
+import { commandForEvent, commandNamed, shortcutHint, WORKSPACE_SHORTCUTS } from './workspaceShortcuts'
 
 const mac = resolvePlatformModifier('darwin')
 const pc = resolvePlatformModifier('win32')
@@ -113,5 +113,19 @@ describe('workspace shortcuts', () => {
   it('labels commands with the platform spelling', () => {
     expect(shortcutHint('close-pane', mac)).toBe('⌘W')
     expect(shortcutHint('close-pane', pc)).toBe('Ctrl+W')
+  })
+
+  // The menu bar sends a command's name back from the main process, so a
+  // string now has to be turned into a command somewhere. The table is what
+  // decides, and it decides by refusing anything it does not have rather than
+  // by trusting where the string came from.
+  it('recognises the commands it has, and only those', () => {
+    expect(commandNamed('close-pane')).toBe('close-pane')
+    expect(commandNamed('open-help')).toBe('open-help')
+    expect(commandNamed('close-window')).toBeNull()
+    expect(commandNamed('')).toBeNull()
+    // Not a command: a field of the table's own entries, which is the shape of
+    // mistake a looser check would let through.
+    expect(commandNamed('title')).toBeNull()
   })
 })

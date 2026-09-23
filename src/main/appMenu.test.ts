@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { MenuItemConstructorOptions } from 'electron'
-import { applicationMenuTemplate } from './appMenu'
+import { applicationMenuTemplate, type ApplicationMenuOptions } from './appMenu'
+import type { MenuBarItem } from './menuBar'
 
 /**
  * Every item in the template, at any depth. Roles are asserted rather than
@@ -25,20 +26,92 @@ function submenuOf(template: MenuItemConstructorOptions[], label: string): MenuI
   return Array.isArray(found) ? found : []
 }
 
+/** The labels of one menu, separators shown as a rule, so order can be read. */
+function labelsOf(template: MenuItemConstructorOptions[], menu: string): string[] {
+  return submenuOf(template, menu).map((item) => item.label ?? item.role ?? (item.type === 'separator' ? '—' : '?'))
+}
+
+/**
+ * A window's published menus, of the shape `menuBar.ts` parses.
+ *
+ * Written out here rather than imported from the renderer, and that is the
+ * point of the arrangement: this process is handed a description and has no
+ * opinion about what is in it. Which menus the real commands are read under is
+ * the window's decision and is asserted where it is made,
+ * `src/renderer/src/menu/menuBar.test.ts`. What is asserted here is only the
+ * weaving — that a published item lands in the menu it asked for, above or
+ * below the platform's own items, with its chord shown and its click wired.
+ */
+const SPEC: readonly MenuBarItem[] = [
+  {
+    command: 'open-appearance',
+    label: 'Settings…',
+    accelerator: 'CommandOrControl+,',
+    section: 'application',
+    enabled: true
+  },
+  { command: 'new-worktree', label: 'New task', accelerator: 'CommandOrControl+N', section: 'file', enabled: true },
+  {
+    command: 'new-terminal',
+    label: 'New terminal',
+    accelerator: 'CommandOrControl+T',
+    section: 'file',
+    enabled: false
+  },
+  { command: 'close-pane', label: 'Close pane', accelerator: 'CommandOrControl+W', section: 'file', enabled: false },
+  {
+    command: 'find-in-pane',
+    label: 'Find in pane',
+    accelerator: 'CommandOrControl+F',
+    section: 'edit',
+    enabled: false
+  },
+  {
+    command: 'open-palette',
+    label: 'Go to anything',
+    accelerator: 'CommandOrControl+K',
+    section: 'view',
+    enabled: true
+  },
+  {
+    command: 'split-right',
+    label: 'Split pane right',
+    accelerator: 'CommandOrControl+D',
+    section: 'window',
+    enabled: false
+  },
+  {
+    command: 'open-help',
+    label: 'Shortcuts and what a worktree is',
+    accelerator: 'CommandOrControl+/',
+    section: 'help',
+    enabled: true
+  }
+]
+
+function published(choose: (command: string) => void = () => {}): ApplicationMenuOptions['commands'] {
+  return { items: SPEC, choose }
+}
+
 describe('the application menu', () => {
   // The defect this file exists for: Electron's default menu binds Cmd+W to
   // "Close Window", which is consumed before the key reaches the renderer, so
   // the pane the user meant to close survives and the window does not.
-  it('has no Close Window anywhere, and claims no accelerator of its own', () => {
+  it('has no Close Window anywhere, and invents no accelerator of its own', () => {
     for (const platform of ['darwin', 'win32', 'linux'] as const) {
-      const template = applicationMenuTemplate({ platform })
+      // With the window's commands in it, which is when there is most to get
+      // wrong: `close` must still be absent even though Cmd+W is now spoken
+      // for, and it is spoken for by an item that closes a pane.
+      const template = applicationMenuTemplate({ platform, commands: published() })
       expect(roles(template), platform).not.toContain('close')
-      // Nothing here spells an accelerator out: every binding is the role's,
-      // so the menu cannot quietly take a key the renderer already uses.
-      expect(
-        items(template).every((item) => item.accelerator === undefined),
-        platform
-      ).toBe(true)
+
+      // Every accelerator in the menu belongs to a command the window
+      // published. Nothing here writes one down: a chord invented in this
+      // process is a chord taken off the renderer with nothing to say so.
+      const accelerators = items(template)
+        .filter((item) => item.accelerator !== undefined)
+        .map((item) => item.accelerator)
+      expect(accelerators.sort(), platform).toEqual(SPEC.map((item) => item.accelerator).sort())
     }
   })
 
@@ -113,5 +186,121 @@ describe('the application menu', () => {
     expect(roles(applicationMenuTemplate({ platform: 'darwin', developing: true }))).toContain('reload')
     // Devtools are how a bug gets reported, so they are there either way.
     expect(roles(applicationMenuTemplate({ platform: 'darwin' }))).toContain('toggleDevTools')
+  })
+})
+
+// Apple's own first sentence about menu bars is that it is where all the
+// commands people need to do things in your app live. Until these items existed
+// this menu was Electron's roles and nothing else — not one thing teamree does
+// was in it, and a new user, VoiceOver, and the Help menu's own search all had
+// nothing to find.
+describe('the window’s own commands in the menu bar', () => {
+  it('reads each published item under the menu it asked for', () => {
+    const template = applicationMenuTemplate({ platform: 'darwin', commands: published() })
+
+    // The app menu, where this platform keeps an app's settings and where a Mac
+    // user looks for nothing else.
+    const appMenu = Array.isArray(template[0]?.submenu) ? template[0].submenu : []
+    expect(appMenu.map((item) => item.label ?? item.role)).toContain('Settings…')
+
+    // In the order the window published them, which is the order a File menu is
+    // read in rather than the order the shortcut table happens to be written.
+    expect(labelsOf(template, '&File')).toEqual(['New task', 'New terminal', 'Close pane'])
+    expect(labelsOf(template, '&Edit').slice(-2)).toEqual(['—', 'Find in pane'])
+    expect(labelsOf(template, '&View').slice(0, 2)).toEqual(['Go to anything', '—'])
+    expect(labelsOf(template, '&Window')).toEqual(['Split pane right', '—', 'minimize', 'zoom', '—', 'front'])
+    expect(labelsOf(template, '&Help')).toEqual(['Shortcuts and what a worktree is'])
+  })
+
+  // The `help` role is what makes a menu called Help *be* the Help menu on
+  // macOS — the one the system's own search field is attached to. A menu that
+  // merely carried the word would look right and search nothing.
+  it('gives the Help menu the role that makes it the platform’s Help menu', () => {
+    const template = applicationMenuTemplate({ platform: 'darwin', commands: published() })
+    expect(template.find((item) => item.label === '&Help')?.role).toBe('help')
+  })
+
+  // This is the one that keeps one keypress from doing one thing. An
+  // accelerator written here that the renderer does not bind is a key that
+  // stops working; a chord the renderer binds that is shown wrong here is worse
+  // still. Every one of these is the window's own spelling, passed through.
+  it('shows exactly the chord the window published, and never one of its own', () => {
+    const template = applicationMenuTemplate({ platform: 'darwin', commands: published() })
+    for (const item of SPEC) {
+      const found = items(template).find((entry) => entry.label === item.label)
+      expect(found?.accelerator, item.command).toBe(item.accelerator)
+    }
+  })
+
+  // Display-only where the platform honours it, so Windows and Linux keep the
+  // renderer as the single dispatcher. macOS ignores the option and takes the
+  // key for the menu — which is also single dispatch, because the renderer's
+  // listener never sees a key the menu consumed.
+  it('asks not to register any of these accelerators with the system', () => {
+    for (const platform of ['darwin', 'win32', 'linux'] as const) {
+      const template = applicationMenuTemplate({ platform, commands: published() })
+      const commandItems = items(template).filter((item) => item.accelerator !== undefined)
+      expect(commandItems.length, platform).toBe(SPEC.length)
+      expect(
+        commandItems.every((item) => item.registerAccelerator === false),
+        platform
+      ).toBe(true)
+    }
+  })
+
+  // The standing rule of this app: nothing is offered that cannot work. The
+  // window says which of its commands could do anything right now, and a menu
+  // bar is where breaking that shows most, because every item is on screen at
+  // once.
+  it('greys the items the window said could not do anything', () => {
+    const template = applicationMenuTemplate({ platform: 'darwin', commands: published() })
+    for (const item of SPEC) {
+      const found = items(template).find((entry) => entry.label === item.label)
+      expect(found?.enabled, item.command).toBe(item.enabled)
+    }
+  })
+
+  it('names the command back when an item is chosen', () => {
+    const choose = vi.fn()
+    const template = applicationMenuTemplate({ platform: 'darwin', commands: published(choose) })
+    const item = items(template).find((entry) => entry.label === 'New task')
+
+    item?.click?.(undefined as never, undefined, undefined as never)
+    expect(choose).toHaveBeenCalledExactlyOnceWith('new-worktree')
+  })
+
+  // Before the first window has rendered there is nothing to say, and a row of
+  // items with nothing behind them would be worse than the platform's roles
+  // alone — which is what this menu was until these items existed.
+  it('offers no command menu at all until the window has published one', () => {
+    const template = applicationMenuTemplate({ platform: 'darwin' })
+    expect(template.map((item) => item.label)).not.toContain('&File')
+    expect(template.map((item) => item.label)).not.toContain('&Help')
+    expect(items(template).every((item) => item.accelerator === undefined)).toBe(true)
+  })
+
+  // A window from a build that knows a menu this one does not. Nowhere is the
+  // right place for it: an item read under a heading this process invented
+  // would be an item nobody could have meant to put there.
+  it('drops an item published for a menu it does not have', () => {
+    const stray: MenuBarItem = {
+      command: 'open-sideboard',
+      label: 'The sideboard',
+      accelerator: 'CommandOrControl+9',
+      section: 'sideboard',
+      enabled: true
+    }
+    const template = applicationMenuTemplate({
+      platform: 'darwin',
+      commands: { items: [...SPEC, stray], choose: () => {} }
+    })
+    expect(items(template).map((item) => item.label)).not.toContain('The sideboard')
+  })
+
+  // There is no app menu off this platform, so what would have been in it goes
+  // where that platform keeps the same things: the File menu, above Quit.
+  it('folds the application items into File where there is no app menu', () => {
+    const template = applicationMenuTemplate({ platform: 'win32', commands: published() })
+    expect(labelsOf(template, '&File')).toEqual(['New task', 'New terminal', 'Close pane', 'Settings…', '—', 'quit'])
   })
 })

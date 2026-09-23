@@ -1,11 +1,37 @@
 // Window-level key handling. The listener runs in the capture phase so a chord
 // is claimed before xterm's textarea sees it, and `isAppChord` is handed to the
 // terminals so they decline the same set.
+//
+// What a chord *does* is not here any more — it is in `workspaceCommands.ts`,
+// which the menu bar reads too. This file is only about the key: which event is
+// a chord, whether the window claims it, and handing the command on.
+//
+// **On macOS most of these keys never arrive here at all**, and that is the
+// design rather than an accident. Every one of these commands is also a menu
+// item carrying the same chord as its key equivalent, and AppKit performs a key
+// equivalent before the event reaches the window's web contents — so ⌘D goes to
+// the menu, the menu tells the renderer, and this listener never sees it.
+// Exactly one layer acts on one keypress, which is the whole point: a menu
+// accelerator and a key handler both firing would split two panes on one press.
+//
+// This listener is still what runs when the menu does not take the key:
+//
+//   - On Windows and Linux, where the teamree items ask not to register their
+//     accelerators at all (`registerAccelerator: false`) and only display them.
+//   - On macOS whenever the item is **disabled**, because a disabled item does
+//     not perform its key equivalent and the event carries on down the
+//     responder chain to the page. It lands here, and `isCommandAvailable` —
+//     the same predicate that greyed the item out — declines it. So the key
+//     does nothing, which is what the grey said it would do.
+//
+// That is why the availability check below is not an optimisation and must not
+// move after `preventDefault`: on macOS it is the second half of the menu's own
+// enablement, standing where the fallen-through key arrives.
 
 import { useCallback, useEffect } from 'react'
-import { firstQuestion } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { ModifierState, PlatformModifier } from './platformModifier'
+import { isCommandAvailable, runWorkspaceCommand } from './workspaceCommands'
 import { commandForEvent } from './workspaceShortcuts'
 
 export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: KeyboardEvent) => boolean {
@@ -20,79 +46,20 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
       if (!command) return
 
       const store = useWorkspaceStore.getState()
-      // A question about a teammate's keystrokes owns the keyboard outright,
-      // and without the palette's exception. It is a modal the same as any
-      // other, but it is not in `dialog` — nobody in this window opened it —
-      // and it is the one modal here that refuses to be dismissed. So a chord
-      // that still fired under it would act on a window the owner cannot see
-      // and cannot get back to without answering: Cmd-, put the colour editor
-      // underneath the scrim and took the focus with it, and Cmd-W stopped a
-      // watch while the prompt about it was still on screen.
-      if (firstQuestion(store.consent) !== null) return
-
-      // A modal owns the keyboard while it is up — except the palette's own
-      // chord, which closes it again the way every palette does.
-      if (store.dialog) {
-        if (command !== 'open-palette' || store.dialog.kind !== 'palette') return
-        event.preventDefault()
-        store.closeDialog()
-        return
-      }
+      // Refused, so not acted on. The chord is still an app chord — `isAppChord`
+      // above says so without asking whether it is available, so the terminals
+      // keep declining it and nothing reaches a pty — but nothing runs, which
+      // matters most for the modals `isCommandAvailable` refuses under: a chord
+      // that fired behind the question about a teammate's keystrokes acted on a
+      // window the owner cannot see and, because that prompt will not dismiss,
+      // cannot get back to.
+      if (!isCommandAvailable(command, store)) return
 
       event.preventDefault()
       event.stopPropagation()
       if (event.repeat) return
 
-      switch (command) {
-        case 'split-right':
-          void store.splitFocusedPane('row')
-          break
-        case 'split-down':
-          void store.splitFocusedPane('column')
-          break
-        case 'close-pane': {
-          // A teammate's pane closes with the same chord as your own, and for
-          // this one closing is the whole of stopping the watch: the pane is
-          // the subscription, and nothing flows once it is gone.
-          if (store.focusedWatchId !== null) {
-            store.closeWatchedPane(store.focusedWatchId)
-            break
-          }
-          const layout = store.activeWorktreeId ? store.layouts[store.activeWorktreeId] : undefined
-          if (layout?.focusedTerminalId) void store.closeTerminal(layout.focusedTerminalId)
-          break
-        }
-        case 'new-terminal':
-          if (store.activeWorktreeId) void store.createTerminal(store.activeWorktreeId)
-          break
-        case 'new-worktree': {
-          const active = store.worktrees.find((worktree) => worktree.id === store.activeWorktreeId)
-          const projectId = active?.projectId ?? store.projects[0]?.id
-          if (projectId) store.openDialog({ kind: 'new-task', projectId })
-          break
-        }
-        case 'toggle-sidebar':
-          store.toggleSidebar()
-          break
-        case 'focus-next-pane':
-          store.focusNextPane()
-          break
-        case 'open-palette':
-          store.openDialog({ kind: 'palette' })
-          break
-        case 'find-in-pane':
-          store.openPaneSearch()
-          break
-        case 'open-dashboard':
-          store.toggleDashboard()
-          break
-        case 'open-appearance':
-          store.openDialog({ kind: 'appearance' })
-          break
-        case 'open-help':
-          store.toggleHelp()
-          break
-      }
+      runWorkspaceCommand(command, store)
     }
 
     window.addEventListener('keydown', onKeyDown, true)

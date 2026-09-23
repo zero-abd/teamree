@@ -10,6 +10,13 @@ const RPC_STREAM_CHANNEL = 'teamree:rpc:stream'
 const RPC_RELEASE_CHANNEL = 'teamree:rpc:release'
 // And this one with src/main/reveal/revealPath.ts, for the same reason.
 const REVEAL_PATH_CHANNEL = 'teamree:reveal-path'
+// And these two with src/main/menuBar.ts. The first carries the window's
+// description of its own menus outward; the second is the only thing in this
+// file that carries anything inward other than the RPC stream, and what it
+// carries is one string — the `command` of a menu item this window itself
+// published a moment earlier.
+const MENU_PUBLISH_CHANNEL = 'teamree:menu:publish'
+const MENU_COMMAND_CHANNEL = 'teamree:menu:command'
 
 /**
  * What the main process answers a reveal with, declared structurally here.
@@ -20,6 +27,21 @@ const REVEAL_PATH_CHANNEL = 'teamree:reveal-path'
  * the one that has to stay in step with it.
  */
 type RevealResult = { revealed: true } | { revealed: false; reason: string }
+
+/**
+ * One item of the window's own menus, declared structurally for the same reason
+ * `RevealResult` is: the definition that matters belongs to the renderer
+ * (`src/renderer/src/menu/menuBar.ts`) and the main process has a third copy it
+ * parses incoming items against, because neither of those trees may be imported
+ * from here. Plain strings and a boolean, so it crosses the bridge by value.
+ */
+type MenuBarItem = {
+  command: string
+  label: string
+  accelerator: string
+  section: string
+  enabled: boolean
+}
 
 // The renderer never sees ipcRenderer: it gets three plain functions over the
 // context bridge. Everything crossing the bridge is structured-cloneable, so the
@@ -55,6 +77,40 @@ const runtime = {
   }
 } as const
 
+const menuCommandListeners = new Set<(command: string) => void>()
+
+ipcRenderer.on(MENU_COMMAND_CHANNEL, (_event, command: string) => {
+  // Copied first, for the same reason the stream listeners are: a listener may
+  // unsubscribe while the command is being delivered.
+  for (const listener of [...menuCommandListeners]) listener(command)
+})
+
+/**
+ * The application menu, which only the main process can install.
+ *
+ * Two functions and nothing else. `publish` hands over a finished description
+ * of teamree's own menus — labels, accelerators and which of them are live —
+ * built in the window because that is where the command table and the state
+ * that enables each command both are. `onCommand` is how the choice comes back.
+ *
+ * This grants the page nothing it did not already have: it can name the items
+ * of a menu bar it is looking at, and it is told when one is chosen. Everything
+ * a choice then does is done by the window's own code, through the same store
+ * the chord goes through.
+ */
+const menu = {
+  publish(items: readonly MenuBarItem[]): void {
+    ipcRenderer.send(MENU_PUBLISH_CHANNEL, items)
+  },
+
+  onCommand(listener: (command: string) => void): () => void {
+    menuCommandListeners.add(listener)
+    return () => {
+      menuCommandListeners.delete(listener)
+    }
+  }
+} as const
+
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
@@ -78,7 +134,8 @@ const api = {
     chrome: process.versions.chrome,
     node: process.versions.node
   },
-  runtime
+  runtime,
+  menu
 } as const
 
 export type TeamreeRuntimeBridge = typeof runtime

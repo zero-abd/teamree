@@ -96,7 +96,8 @@ about the CLI socket.
 
 `src/preload/index.ts` exposes exactly one object. `selectProjectFolder` opens a
 directory picker. `revealPath` asks the OS file manager to show one path and is
-described below. `platform` and `versions` are strings. `runtime` is three
+described below. `platform` and `versions` are strings. `menu` is two functions
+and is described below. `runtime` is three
 functions: `call(method, params)`, `onStream(listener)` and `release()`. There
 is no method allow-list on `call` — the window is one of the three transports
 the runtime answers, and unlike the peer link (six methods, `PEER_METHODS`) it
@@ -126,6 +127,38 @@ Against the paragraph above, that adds nothing: a page that could call this
 could already spawn a pty through `runtime.call`. It is listed because the
 enumeration in this section is meant to be complete.
 
+`menu` is the second thing on the bridge that is not the runtime, and it is the
+application menu bar. `publish(items)` hands the main process a description of
+teamree's own menus — each item's label, the chord to print beside it, which of
+the six menus it is read under, and whether it can do anything right now — and
+`onCommand(listener)` is how the choice of one comes back. It is on this bridge
+rather than in the runtime catalogue for the same reason `revealPath` is: a menu
+bar is the window's, the `teamree` command has none, and a teammate across a
+relay must never be able to put an item in one on this machine.
+
+It is also the **only inbound channel on this bridge other than the RPC
+stream**, which is the part worth being exact about. What comes in is one
+string. The window looks it up in its own table of commands (`commandNamed`) and
+runs it through the same dispatcher a keystroke goes through, against the same
+availability check — so a command that arrives here can do nothing that pressing
+the chord could not, and nothing at all when the window says that command is not
+available. Outbound, the main process does not trust what it is handed either:
+`readMenuBarItems` rebuilds every item out of the five fields it verified and
+drops the whole message otherwise, because the alternative is a message deciding
+what goes into `Menu.buildFromTemplate` — and it refuses a publish that did not
+come from the window's main frame, the same guard the folder picker and the
+reveal make. Two of those fields are checked for more than their type: an
+accelerator must be spelled the way the shortcut table spells one (the platform
+modifier, optionally Alt and Shift, one key), because these items sit above
+Quit in the same menu and a page that could publish `CommandOrControl+Q` would
+take that key; and a list longer than sixty-four items is not a menu. The items
+also go with the window: when the web contents that published them is
+destroyed the bar returns to the platform's roles alone, so a Mac with the app
+running and no window open is not showing a row of lit items that do nothing.
+
+Against the paragraph above this adds nothing either, and for the same reason.
+It is listed because the enumeration is meant to be complete.
+
 ## The gap that was here: nothing stopped the window navigating
 
 `setWindowOpenHandler` was already in place and denies every `window.open`.
@@ -141,6 +174,8 @@ then asked the page that arrived:
 ```
 DID-NAVIGATE   file:///tmp/drop-NO75mv/dropped.html
 BRIDGE-AFTER   {"teamree":"object","keys":["selectProjectFolder","platform","versions","runtime"], …}
+               (the run that produced this predates `revealPath` and `menu`;
+                the surface as it stands is enumerated above)
 RPC-AFTER      ok=true
 ```
 
@@ -364,6 +399,13 @@ the code this document describes.
 | a person's bytes are sent and a stream's are not                 | same, and `WatchedPaneView.test.tsx`                     |
 | release notes are text, and markup in them stays characters      | `src/renderer/src/updates/UpdateAvailableCard.test.tsx`  |
 | release notes lose both the seven- and eight-bit controls        | `src/main/updates/latestRelease.test.ts`                 |
+| a menu publish from anything but the window's main frame is refused | `src/main/menuBar.test.ts`                            |
+| a published accelerator is one the table could have spelled             | `src/main/menuBar.test.ts`                            |
+| the menu's items go away with the window that published them            | `src/main/menuBar.test.ts`                            |
+| an item that is not the shape it should be takes the whole message down | same                                             |
+| a command arriving from the menu is one this window has                 | `src/renderer/src/keyboard/platformModifier.test.ts`  |
+| a menu command does nothing the window says it cannot do                | `src/renderer/src/keyboard/workspaceCommands.test.ts` |
+| the menu bar really carries this app's commands, in a running app       | `scripts/smoke.mjs` · `checkMenuBar`                  |
 
 One thing is read off the build rather than watched, and is marked as such above:
 that xterm's OSC 8 provider only offers `http:` and `https:` links and activates

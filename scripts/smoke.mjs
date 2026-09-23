@@ -34,7 +34,7 @@
 //
 // Electron does not pump its event loop until this module finishes evaluating,
 // so everything here hangs off callbacks rather than top-level await.
-import { app } from 'electron'
+import { app, Menu } from 'electron'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -157,6 +157,7 @@ async function run() {
 
   await checkContrast(ask, 'first launch')
   await checkWindowSurfaces(ask)
+  await checkMenuBar(ask)
   await checkWorktreeSurfaces(ask)
   await checkRendererBoundary(window, ask)
   await checkPeerCrypto()
@@ -313,6 +314,96 @@ async function checkContrast(ask, surface) {
 }
 
 /**
+ * That the menu bar has this app's commands in it, and that choosing one works.
+ *
+ * The menu bar is the one surface in this app that no unit test can see the
+ * whole of, because it is assembled across the process boundary: the window
+ * works out what its menus should contain — labels, chords, and which items
+ * could do anything right now — and the main process draws what it is told.
+ * Each half has tests of its own and both were green through a version of this
+ * where the window published to a channel nothing served, so the menu bar was
+ * the platform's roles and nothing else and the app looked exactly as it had
+ * before. Only a running app can say otherwise.
+ *
+ * Two things are asserted, and the second is the one worth the trouble. That
+ * the commands are in the menu at all, read off `Menu.getApplicationMenu()` —
+ * the object the platform is showing, not a template. And that choosing one
+ * reaches the window: the item's own click is invoked and the surface it opens
+ * is waited for, which is the full round trip of menu to main to renderer to
+ * screen.
+ *
+ * Run against the first-launch state, so the pane commands are correctly greyed
+ * and there is not much left that can be chosen. The dashboard item is the one
+ * picked because it is a window-level view that needs nothing open — the same
+ * reason `checkWindowSurfaces` uses Settings and Help — and because it toggles,
+ * so this can put the window back the way it found it for the checks below.
+ */
+async function checkMenuBar(ask) {
+  const named = (label) => {
+    const walk = (menu) => (menu?.items ?? []).flatMap((item) => [item, ...(item.submenu ? walk(item.submenu) : [])])
+    return walk(Menu.getApplicationMenu()).find((item) => item.label === label)
+  }
+
+  // Waited for rather than read once: the window publishes its menus on mount,
+  // and the main process installs them when the message arrives.
+  const arrived = await waitFor(
+    async () => named('New task') !== undefined,
+    'the window\u2019s commands never reached the menu bar'
+  )
+  if (!arrived) return
+
+  for (const [label, accelerator] of [
+    ['New task', 'CommandOrControl+N'],
+    ['Close pane', 'CommandOrControl+W'],
+    ['Settings\u2026', 'CommandOrControl+,'],
+    ['Every pane, by what needs you', 'CommandOrControl+E'],
+    // In the Help menu, which carries the `help` role. Reading it off a running
+    // app proves the submenu survived the role — that Electron built both onto
+    // one item — and no more than that: whether macOS adopted it as the app's
+    // Help menu is not something `Menu.getApplicationMenu()` can say.
+    ['Shortcuts and what a worktree is', 'CommandOrControl+/']
+  ]) {
+    const item = named(label)
+    if (!item) {
+      failures.push(`the menu bar has no ${label} item`)
+      continue
+    }
+    // The chord beside the item is the chord that fires. A menu that printed a
+    // different one would be a wrong answer given to somebody who came to the
+    // menu because they did not know.
+    if (item.accelerator !== accelerator) {
+      failures.push(`the menu bar shows ${item.accelerator} for ${label}, not ${accelerator}`)
+    }
+  }
+
+  // Nothing offered that cannot work: on a first launch there is no pane, so
+  // the pane commands are grey and the window-level ones are not.
+  if (named('Close pane')?.enabled !== false) {
+    failures.push('Close pane is live in a window with no pane in it')
+  }
+  if (named('Every pane, by what needs you')?.enabled !== true) {
+    failures.push('the menu bar greys a command that needs nothing to be open')
+  }
+
+  // And the round trip. `click()` on the item is what the platform does when
+  // somebody chooses it, so this goes the whole way: main names the command to
+  // the window, the window runs it through the same dispatcher a chord uses,
+  // and the view changes.
+  const showsDashboard = () =>
+    ask('[...document.querySelectorAll("h1")].some((node) => node.textContent?.trim() === "All panes")')
+
+  named('Every pane, by what needs you')?.click()
+  const reached = await waitFor(showsDashboard, 'choosing a menu item did not reach the window')
+
+  // And away again, which is both what that command does and what leaves the
+  // window as the checks after this one expect to find it.
+  if (reached) {
+    named('Every pane, by what needs you')?.click()
+    await waitFor(async () => !(await showsDashboard()), 'choosing the same menu item again did not put the view away')
+  }
+}
+
+/**
  * The surfaces that only exist once there is a worktree open.
  *
  * `checkWindowSurfaces` above presses the two buttons that work on a first
@@ -423,6 +514,37 @@ async function checkWorktreeSurfaces(ask) {
       ),
     `no tab for the pane the runtime opened (${title})`
   )
+
+  // The menu bar's New terminal, chosen the way the platform chooses it, opens
+  // a second pane in this worktree. `checkMenuBar` above proved a menu item
+  // reaches the window; this proves one that needs a worktree open acts on the
+  // right one, which the enablement alone cannot say.
+  const menuItem = (label) => {
+    const walk = (menu) => (menu?.items ?? []).flatMap((item) => [item, ...(item.submenu ? walk(item.submenu) : [])])
+    return walk(Menu.getApplicationMenu()).find((item) => item.label === label)
+  }
+  // Tabs, not buttons: every tab carries its own close button beside it, so a
+  // count of buttons rises by two per pane and a check written against it
+  // reported the menu as broken the first time it ran.
+  const tabCount = () => ask(`document.querySelectorAll('[role="tab"]').length`)
+  const before = await tabCount()
+  const newTerminal = menuItem('New terminal')
+  if (newTerminal?.enabled !== true) {
+    failures.push('New terminal is not live in the menu bar with a worktree open')
+  } else {
+    newTerminal.click()
+    const opened = await waitFor(
+      async () => (await tabCount()) === before + 1,
+      'choosing New terminal from the menu bar did not open a pane in the open worktree'
+    )
+    if (!opened) {
+      // Whatever the window said about it, so the failure names a cause.
+      const said = await ask(
+        `[...document.querySelectorAll('.notice, [role="status"], [role="alert"]')].map((n) => n.textContent).join(' | ')`
+      )
+      if (said) failures.push(`the window said: ${said}`)
+    }
+  }
 
   // And the decision that a quiet shell closes on one press. A pane running an
   // agent, or one still producing output, is asked about first — that is

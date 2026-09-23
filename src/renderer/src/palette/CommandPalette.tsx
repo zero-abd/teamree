@@ -4,11 +4,17 @@
 import { useMemo, useState } from 'react'
 import { Modal } from '../dialogs/Modal'
 import type { PlatformModifier } from '../keyboard/platformModifier'
+import { isCommandAvailable, runWorkspaceCommand } from '../keyboard/workspaceCommands'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { buildPaletteItems, filterPalette, moveSelection, type PaletteAction, type PaletteItem } from './paletteModel'
 
-/** Palette actions that are also a key chord, so the palette can show it. */
+/**
+ * Palette actions that are also workspace commands — so the palette can show
+ * the chord, and so that choosing the row runs the same dispatcher the chord
+ * and the menu item run. The rows that are not in this table are the palette's
+ * own and have no chord and no menu item.
+ */
 const ACTION_SHORTCUTS: Partial<Record<PaletteAction, WorkspaceCommand>> = {
   'new-worktree': 'new-worktree',
   'new-terminal': 'new-terminal',
@@ -56,7 +62,36 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
     [worktrees, projects, activeWorktreeId, agents, update, cli, modifier]
   )
 
-  const matches = useMemo(() => filterPalette(items, query), [items, query])
+  // Nothing offered that cannot work, here as in the menu bar: a row for a
+  // command the window would refuse is left out rather than drawn in black
+  // letters and ignored. Asked as of the moment after the palette closes,
+  // because that is when the command would run — the palette is itself the
+  // dialog `isCommandAvailable` refuses everything under.
+  const consent = useWorkspaceStore((state) => state.consent)
+  const layouts = useWorkspaceStore((state) => state.layouts)
+  const watches = useWorkspaceStore((state) => state.watches)
+  const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
+  const offered = useMemo(
+    () =>
+      items.filter((item) => {
+        if (item.kind !== 'action') return true
+        const command = ACTION_SHORTCUTS[item.id]
+        if (!command) return true
+        return isCommandAvailable(command, {
+          consent,
+          dialog: null,
+          projects,
+          worktrees,
+          activeWorktreeId,
+          layouts,
+          watches,
+          focusedWatchId
+        })
+      }),
+    [items, consent, projects, worktrees, activeWorktreeId, layouts, watches, focusedWatchId]
+  )
+
+  const matches = useMemo(() => filterPalette(offered, query), [offered, query])
   // The list can shrink under a selection that was valid a keystroke ago.
   const cursor = Math.min(selected, Math.max(matches.length - 1, 0))
 
@@ -77,30 +112,18 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
       return
     }
 
+    // A row that is also a command goes through the one dispatcher, so that
+    // what the palette does and what the chord does cannot come apart. This
+    // used to be a third copy of the same switch.
+    const command = ACTION_SHORTCUTS[item.id]
+    if (command) {
+      runWorkspaceCommand(command, store)
+      return
+    }
+
     switch (item.id) {
-      case 'new-worktree': {
-        const active = store.worktrees.find((worktree) => worktree.id === store.activeWorktreeId)
-        const projectId = active?.projectId ?? store.projects[0]?.id
-        if (projectId) store.openDialog({ kind: 'new-task', projectId })
-        break
-      }
-      case 'new-terminal':
-        if (store.activeWorktreeId) void store.createTerminal(store.activeWorktreeId)
-        break
-      case 'split-right':
-        void store.splitFocusedPane('row')
-        break
-      case 'split-down':
-        void store.splitFocusedPane('column')
-        break
       case 'toggle-changes':
         store.toggleChanges()
-        break
-      case 'open-dashboard':
-        store.toggleDashboard()
-        break
-      case 'toggle-sidebar':
-        store.toggleSidebar()
         break
       case 'add-project':
         store.openDialog({ kind: 'add-project' })
@@ -108,14 +131,8 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
       case 'open-settings':
         store.toggleSettings()
         break
-      case 'open-help':
-        store.toggleHelp()
-        break
       case 'install-cli':
         store.openDialog({ kind: 'install-cli' })
-        break
-      case 'open-appearance':
-        store.openDialog({ kind: 'appearance' })
         break
       case 'check-for-updates':
         // The palette has already closed. The answer arrives as the card, or as

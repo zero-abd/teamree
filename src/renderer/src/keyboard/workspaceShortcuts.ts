@@ -36,9 +36,9 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in pane' },
   { command: 'open-dashboard', chord: { key: 'e' }, title: 'Every pane, by what needs you' },
   // Comma, because on this platform that is where settings live and nobody has
-  // to be told. It is not in the application menu — see appMenu.ts, which
-  // carries Electron's own roles and nothing invented — so the key reaches the
-  // renderer rather than being eaten by a menu equivalent.
+  // to be told. The menu bar carries it too, as Settings… in the application
+  // menu, which is the platform's name for the item and where a Mac user looks
+  // for it; `menuBar.ts` is where that label is chosen.
   { command: 'open-appearance', chord: { key: ',' }, title: 'Appearance' },
   // Slash, which is what a person presses when they want to be told how
   // something works, and the one chord in this table that is worth pressing
@@ -58,6 +58,21 @@ export function commandForEvent(
     if (matchesChord(event, shortcut.chord, modifier)) return shortcut.command
   }
   return null
+}
+
+/**
+ * The command this name stands for, or null if this window has no such command.
+ *
+ * The table is the authority on what a command is, so the question is asked
+ * here rather than anywhere that happens to be holding a string. It is asked at
+ * all because the menu bar brought a name back across a process boundary: what
+ * arrives is the `command` of an item this window itself published a moment
+ * earlier, and "it can only be one of ours" is the kind of thing that stays
+ * true right up until it does not.
+ */
+export function commandNamed(value: string): WorkspaceCommand | null {
+  const shortcut = WORKSPACE_SHORTCUTS.find((entry) => entry.command === value)
+  return shortcut ? shortcut.command : null
 }
 
 export function shortcutHint(command: WorkspaceCommand, modifier: PlatformModifier): string {
