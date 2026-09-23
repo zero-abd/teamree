@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
-import { WebglAddon } from '@xterm/addon-webgl'
 import type { IDisposable, ILinkHandler, ITerminalOptions } from '@xterm/xterm'
 import { Terminal as XTerm } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
@@ -28,6 +27,7 @@ import type { TerminalOptions } from '../state/preferences'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere } from './handsHere'
+import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
 import { showPane } from './shownPanes'
@@ -134,20 +134,9 @@ export function TerminalView({
     const unshow = showPane(terminalId, term)
     copyOnSelect(term, () => optionsRef.current.copyOnSelect, copyText)
 
-    // WebGL is the fast path; a machine without a working context simply keeps
-    // the DOM renderer, and a lost context tears the addon back down.
-    let webgl: WebglAddon | null = null
-    try {
-      webgl = new WebglAddon()
-      webgl.onContextLoss(() => {
-        webgl?.dispose()
-        webgl = null
-      })
-      term.loadAddon(webgl)
-    } catch {
-      webgl?.dispose()
-      webgl = null
-    }
+    const gpu = paneWebgl(term)
+    const scrollbar = syncScrollbarPerFrame(term)
+    const output = frameWrites((data) => term.write(data))
 
     // Said once: an exited pane does not un-exit, and a line per keystroke
     // would bury the scrollback.
@@ -162,6 +151,7 @@ export function TerminalView({
         const notice = refusedWriteNotice(error)
         if (notice === null || saidExited || !alive) return
         saidExited = true
+        output.flush()
         term.write(notice)
       })
     }
@@ -199,8 +189,9 @@ export function TerminalView({
       if (!alive) return
       if (event.type === 'data') {
         if (replaying) pending.push(event.data)
-        else term.write(event.data)
+        else output.push(event.data)
       } else if (event.type === 'exit') {
+        output.flush()
         term.write(`\r\n\u001b[38;5;244m[process exited with code ${event.exitCode}]\u001b[0m\r\n`)
       }
     }
@@ -219,7 +210,7 @@ export function TerminalView({
         if (!alive || !snapshot) return
         term.write(snapshot.data)
         replaying = false
-        for (const chunk of pending.splice(0)) term.write(chunk)
+        for (const chunk of pending.splice(0)) output.push(chunk)
       })
       .catch(() => {
         replaying = false
@@ -232,6 +223,7 @@ export function TerminalView({
       frame = requestAnimationFrame(() => {
         frame = 0
         if (!alive || host.clientWidth === 0 || host.clientHeight === 0) return
+        gpu.retry()
         try {
           fit.fit()
         } catch {
@@ -263,14 +255,21 @@ export function TerminalView({
     const observer = new ResizeObserver(scheduleFit)
     observer.observe(host)
     fitOnMount()
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') gpu.retry()
+    }
+    document.addEventListener('visibilitychange', onVisible)
 
     return () => {
       alive = false
       if (frame) cancelAnimationFrame(frame)
       observer.disconnect()
+      document.removeEventListener('visibilitychange', onVisible)
       subscription?.close()
       hands.stop()
-      webgl?.dispose()
+      output.dispose()
+      scrollbar.dispose()
+      gpu.dispose()
       unshow()
       term.dispose()
       termRef.current = null
