@@ -166,12 +166,18 @@ Sections, in order, six at most:
    as its poster; the frame never resizes when a clip swaps in.
 2. **A worktree per task.** h2, one line: `Start from any ref. Attempts never
    see each other's files; abandoning one is deleting a directory.` Clip slot
-   `data-demo="worktrees"`.
+   `data-demo="every-pane"`. A second row, media on the left, h3 `Changes open
+   beside panes`: `The diff opens beside the panes. Stage or discard a hunk,
+   commit, publish the branch, then open its review on the forge.` Clip slot
+   `data-demo="review-and-ship"`.
 3. **A state per pane.** h2, one line: `Working, waiting, finished or failed,
    read off the PTY. One view lists every pane, failures first.` Beside it the
    four dots with their words, in the app's colours. Then: `Split terminals,
    nested, a real PTY in each. Finds claude, codex, gemini, opencode and droid on
-   your PATH.` Clip slot `data-demo="terminals"`.
+   your PATH.` Clip slot `data-demo="waiting-on-you"`. A second row, media on
+   the left, h3 `Pane history survives relaunch`: `Quit and relaunch: file tabs
+   and shell scrollback come back, each shell starts fresh, and an agent with a
+   conversation resumes it.` Clip slot `data-demo="pick-it-back-up"`.
 4. **A CLI agents can drive.** h2, one line: `Create worktrees, run commands and
    read output over a local socket. Every command takes --json.` A four-line
    command block, mono, with a Copy button. Clip slot `data-demo="cli"`.
@@ -182,6 +188,10 @@ Sections, in order, six at most:
    first launch: press Done, not Move to Trash, then clear the flag.` The
    quarantine command and the checksum command, each with Copy. Link:
    `docs/install.md`.
+
+A section holds at most two rows; the second is `.section-row.reverse`, media
+left and copy right above 900px, copy first below it, 80px under the first (48px
+under 900px).
 
 Clip slots keep the `site/tools/sync-demos.mjs` contract exactly: the
 `demo:video:parked` comments, `data-demo` ids, `width`/`height` on each

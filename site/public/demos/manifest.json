@@ -6,10 +6,32 @@
       "poster": "demos/new-task.jpg",
       "width": 1728,
       "height": 1080,
-      "seconds": 17.6,
-      "bytes": 1295855,
+      "seconds": 14.8,
+      "bytes": 1186885,
       "title": "Two agents, one task",
-      "caption": "Type the task once, pick claude and codex, and each starts in its own worktree with the task as its first prompt."
+      "caption": "Type the task once, pick Claude Code and Codex, and each starts in its own worktree with the task as its first prompt."
+    },
+    {
+      "id": "every-pane",
+      "file": "demos/every-pane.mp4",
+      "poster": "demos/every-pane.jpg",
+      "width": 1728,
+      "height": 1080,
+      "seconds": 15.0,
+      "bytes": 1644209,
+      "title": "Every pane at a glance",
+      "caption": "Worktrees in the sidebar, a mark per pane; the + menu adds a terminal or Claude Code, and the panes share the room."
+    },
+    {
+      "id": "review-and-ship",
+      "file": "demos/review-and-ship.mp4",
+      "poster": "demos/review-and-ship.jpg",
+      "width": 1728,
+      "height": 1080,
+      "seconds": 14.9,
+      "bytes": 1350970,
+      "title": "Stage, commit, publish, review",
+      "caption": "One hunk staged, then Commit All, Publish branch and Open review from the Changes tab."
     },
     {
       "id": "waiting-on-you",
@@ -23,37 +45,26 @@
       "caption": "claude asks before editing; the dot and the All panes board say so until you answer, then it finishes."
     },
     {
-      "id": "review-and-ship",
-      "file": "demos/review-and-ship.mp4",
-      "poster": "demos/review-and-ship.jpg",
-      "width": 1728,
-      "height": 1080,
-      "seconds": 20.0,
-      "bytes": 2525466,
-      "title": "Stage, commit, push, review",
-      "caption": "Changed files, the patch, one hunk staged, a commit from the panel, a push, and the link to open the review."
-    },
-    {
       "id": "pick-it-back-up",
       "file": "demos/pick-it-back-up.mp4",
       "poster": "demos/pick-it-back-up.jpg",
       "width": 1728,
       "height": 1080,
-      "seconds": 20.0,
-      "bytes": 4099653,
+      "seconds": 13.93,
+      "bytes": 1677170,
       "title": "Quit, relaunch, carry on",
-      "caption": "Panes come back with their names, scrollback and a resumed badge, and claude still knows what it changed."
+      "caption": "Recorded shell output stays above a fresh shell; the file tabs return and Codex resumes its conversation."
     },
     {
-      "id": "every-pane",
-      "file": "demos/every-pane.mp4",
-      "poster": "demos/every-pane.jpg",
+      "id": "open-anything",
+      "file": "demos/open-anything.mp4",
+      "poster": "demos/open-anything.jpg",
       "width": 1728,
       "height": 1080,
-      "seconds": 20.0,
-      "bytes": 3827981,
-      "title": "Every pane at a glance",
-      "caption": "Five worktrees in the sidebar, the All panes board by what needs you, and ⌘K to jump between them."
+      "seconds": 13.27,
+      "bytes": 1387106,
+      "title": "Open anything",
+      "caption": "⌘P opens a code file, a markdown page and an image in the file column beside the terminal."
     }
   ]
 }

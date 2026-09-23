@@ -287,9 +287,10 @@ nobody has watched fail is a gate nobody knows works.
 
 ## The screen captures
 
-The hero clip, its `screenshot.png` fallback and the feature clips under
-`site/public/demos/` were retaken on 0.2.0 from the packaged app, on a throwaway
-profile against a small demo repository. The `cli` and `teamwork` clips still do
+The hero clip and the feature clips under `site/public/demos/` other than
+`waiting-on-you` were retaken from a `main` build after 0.2.0, in a hidden window
+on a throwaway profile against a small demo repository; `waiting-on-you` and the
+`screenshot.png` fallback are still 0.2.0's. The `cli` and `teamwork` clips still do
 not exist and ship parked in an HTML comment; the teamwork `aria-label` is
 written against 0.2.0, so whoever shoots it shoots the consent prompt. `og.png`, `favicon.svg`
 and the icon set are the mark rather than the app, so they never needed
