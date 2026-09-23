@@ -2,10 +2,8 @@
 // for `team accept`, run through `createGitRunner` (shell: false, timeout,
 // output cap, sanitised environment) rather than a second copy of all four.
 
-import { GitCommandError } from '../main/git/errors.js'
+import { runClone, type CloneFailure as GitCloneFailure } from '../main/git/clone.js'
 import { createGitRunner } from '../main/git/gitProcess.js'
-import { splitProgress, sshCommand } from '../main/teamwork/publish.js'
-import { pushFailureKind } from '../main/git/worktreePush.js'
 import { checkTransport, type TransportCheck } from '../shared/origin.js'
 
 /** As long as a push may take: a default two minutes reports a healthy large clone as a failure. */
@@ -44,11 +42,7 @@ export type CloneOptions = {
   onProgress?: (line: string) => void
 }
 
-/**
- * Copies the repository, or says why it could not in words git wrote. ssh runs
- * in batch mode: `GIT_TERMINAL_PROMPT=0` does nothing to ssh, which opens
- * `/dev/tty` itself for a passphrase or an unknown host key and would wait ten minutes.
- */
+/** Copies the repository, or says why it could not in words git wrote; see `runClone`. */
 export async function cloneRepository(options: CloneOptions): Promise<CloneOutcome> {
   // This is the function that starts the process, so the guarantee holds here.
   const cloneable = checkCloneable(options.origin)
@@ -61,78 +55,44 @@ export async function cloneRepository(options: CloneOptions): Promise<CloneOutco
     }
   }
 
-  const runner = createGitRunner()
-  // The same ssh a publish uses; `cwd` because there is no checkout yet, so
-  // only global config and the environment can be read.
-  const ssh = await sshCommand(runner, options.cwd)
-
-  let result
-  try {
-    result = await runner.tryRun({
-      // `--` first: the origin arrives in a link somebody was sent and must never be an option.
-      args: ['clone', '--progress', '--', options.origin, options.into],
-      cwd: options.cwd,
-      timeoutMs: CLONE_TIMEOUT_MS,
-      env: { GIT_SSH_COMMAND: ssh },
-      onStderr: (chunk) => {
-        if (options.onProgress) for (const line of splitProgress(chunk)) options.onProgress(line)
-      }
-    })
-  } catch (error) {
-    // `tryRun` rejects only for a git that never finished or never started.
-    if (!(error instanceof GitCommandError)) throw error
-    if (error.timedOut) {
-      return {
-        ok: false,
-        kind: 'timeout',
-        error: clip(error.stderr) || `git clone produced nothing for ${Math.round(CLONE_TIMEOUT_MS / 60_000)} minutes`,
-        advice:
-          `git never finished copying ${options.origin}. That is usually a credential this command cannot be ` +
-          'asked for, or a host that is not answering; running the same clone once in a terminal says which.'
-      }
+  const result = await runClone(createGitRunner(), {
+    origin: options.origin,
+    into: options.into,
+    cwd: options.cwd,
+    timeoutMs: CLONE_TIMEOUT_MS,
+    ...(options.onProgress ? { onProgress: options.onProgress } : {})
+  })
+  if (result.ok) return { ok: true, path: options.into }
+  if (result.kind === 'timeout') {
+    return {
+      ok: false,
+      kind: 'timeout',
+      error: clip(result.stderr) || `git clone produced nothing for ${Math.round(CLONE_TIMEOUT_MS / 60_000)} minutes`,
+      advice:
+        `git never finished copying ${options.origin}. That is usually a credential this command cannot be ` +
+        'asked for, or a host that is not answering; running the same clone once in a terminal says which.'
     }
-    throw error
   }
-
-  if (result.exitCode === 0) return { ok: true, path: options.into }
-  const error = clip(result.stderr) || clip(result.stdout) || `git exited ${result.exitCode}`
   return {
     ok: false,
-    kind: cloneFailureKind(result.stderr),
-    error,
-    advice: cloneRefusal(result.stderr, options.origin)
+    kind: result.kind === 'auth' || result.kind === 'host-key' ? result.kind : 'other',
+    error: clip(result.stderr) || 'git clone failed',
+    advice: cloneRefusal(result.kind, result.stderr, options.origin)
   }
 }
-
-/**
- * Which kind of refusal this is, via the push classifier: those patterns read
- * the transport, which a clone and a push share. `rejected` cannot be reached
- * here, since there is no ref to be behind yet.
- */
-function cloneFailureKind(stderr: string): CloneFailure {
-  // Before the classifier: `pushFailureKind` reads "repository not found" as
-  // an auth failure, right for a push and wrong for a typo in an address.
-  if (NOT_FOUND.test(stderr)) return 'other'
-  const kind = pushFailureKind(stderr)
-  return kind === 'auth' || kind === 'host-key' ? kind : 'other'
-}
-
-/** What git says when there is nothing at the address, in its several spellings. */
-const NOT_FOUND = /repository not found|does not appear to be a git repository|not a git repository/i
 
 /**
  * The one thing to do about a clone that did not happen. Over https "repository
  * not found" covers both a missing repository and one this account may not read.
  */
-function cloneRefusal(stderr: string, origin: string): string {
+function cloneRefusal(kind: GitCloneFailure, stderr: string, origin: string): string {
   const text = stderr.trim()
-  if (NOT_FOUND.test(text)) {
-    return (
-      `git found no repository at ${origin}. Either the invitation names the wrong place, or this machine is not ` +
-      'allowed to see it — check the address with whoever sent the invitation.'
-    )
-  }
-  switch (cloneFailureKind(text)) {
+  switch (kind) {
+    case 'not-found':
+      return (
+        `git found no repository at ${origin}. Either the invitation names the wrong place, or this machine is not ` +
+        'allowed to see it — check the address with whoever sent the invitation.'
+      )
     case 'host-key':
       return (
         `ssh has never accepted the host key for ${origin} and will not guess at one. Run ssh against that host ` +

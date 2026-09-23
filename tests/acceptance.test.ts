@@ -2,8 +2,8 @@
 // assertion through the built CLI over the agent's socket. Nothing is mocked.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type {
@@ -248,4 +248,36 @@ describe('milestone 1 acceptance', () => {
     }
     expect(stranded).toEqual([])
   }, 30_000)
+})
+
+describe('project clone', () => {
+  let bare: string
+
+  beforeAll(() => {
+    // Local only: nothing in this suite reaches the network.
+    bare = join(root, 'shared.git')
+    execFileSync('git', ['clone', '--quiet', '--bare', repoPath, bare])
+  })
+
+  it('clones a local bare repository and adds the checkout as a project', () => {
+    const into = join(root, 'clones', 'shared')
+    const project = cli<Project>(['project', 'clone', bare, into])
+
+    expect(project.name).toBe('shared')
+    expect(project.path).toBe(realpathSync(into))
+    expect(project.baseRef).toBe('origin/main')
+    expect(existsSync(join(into, 'README.md'))).toBe(true)
+    expect(cli<Project[]>(['project', 'list']).map((row) => row.id)).toContain(project.id)
+  }, 60_000)
+
+  it('says in one line why a clone did not happen, and adds nothing', () => {
+    const before = cli<Project[]>(['project', 'list']).length
+    const failed = spawnSync('node', [CLI, 'project', 'clone', bare, repoPath, '--json'], { encoding: 'utf8', env })
+
+    expect(failed.status).not.toBe(0)
+    const document = JSON.parse(failed.stderr || failed.stdout) as { error: { code: string; message: string } }
+    expect(document.error.code).toBe('clone_failed')
+    expect(document.error.message).toBe('Destination exists')
+    expect(cli<Project[]>(['project', 'list'])).toHaveLength(before)
+  }, 60_000)
 })

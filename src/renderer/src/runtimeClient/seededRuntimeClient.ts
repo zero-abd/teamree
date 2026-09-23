@@ -511,6 +511,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'projects' })
       return project
     },
+    // Nothing to clone from in a demo.
+    'project.clone': () => {
+      throw new Error('Repository not found')
+    },
+    'project.cloneProgress': () => null,
+    'project.cancelClone': () => ({ cancelled: false }),
     'project.setPaths': ({ projectId, linkedPaths, copiedPaths, setupCommand }) => {
       const project = required(projects.get(projectId), 'project')
       const next: Project = { ...project }

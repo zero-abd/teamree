@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import type {
   CliInstall,
+  CloneProgress,
   CliStatus,
   FileContent,
   FileWritten,
@@ -151,6 +152,18 @@ export const Params = {
   /** `init`: a folder that is not a repository gets `git init` and an empty first commit before it is added. */
   projectAdd: z.object({ path: z.string().min(1), name: z.string().min(1).optional(), init: z.boolean().optional() }),
   projectRemove: z.object({ projectId: z.string().min(1) }),
+  /**
+   * `git clone` and then `project.add`. `path` is absolute or starts with `~`;
+   * omitted, it is `~/code/<repo>`. Credentials come from git's own helper, never from here.
+   */
+  projectClone: z.object({
+    url: z.string().trim().min(1).max(4096),
+    path: z.string().min(1).max(4096).optional(),
+    name: z.string().min(1).optional()
+  }),
+  projectCloneProgress: z.object({ url: z.string().trim().min(1) }),
+  /** Stops the running clone of `url` and removes what it wrote. */
+  projectCancelClone: z.object({ url: z.string().trim().min(1) }),
   /**
    * What a new worktree of this project carries from the primary checkout:
    * gitignored directories to symlink, gitignored files to copy. Each list
@@ -601,6 +614,10 @@ export type MethodContract = {
   'project.list': { params: z.infer<typeof Params.projectList>; result: Project[] }
   'project.add': { params: z.infer<typeof Params.projectAdd>; result: Project }
   'project.remove': { params: z.infer<typeof Params.projectRemove>; result: { removed: true } }
+  'project.clone': { params: z.infer<typeof Params.projectClone>; result: Project }
+  /** Null when no clone of that URL is running. */
+  'project.cloneProgress': { params: z.infer<typeof Params.projectCloneProgress>; result: CloneProgress | null }
+  'project.cancelClone': { params: z.infer<typeof Params.projectCancelClone>; result: { cancelled: boolean } }
   /** Answers with the project as stored, so a caller sees what was kept. */
   'project.setPaths': { params: z.infer<typeof Params.projectSetPaths>; result: Project }
 

@@ -145,6 +145,10 @@ describe('dispatcher', () => {
       'peer.presence',
       'peer.subscribe',
       'project.add',
+      // Local: git on this machine, with this machine's credentials.
+      'project.cancelClone',
+      'project.clone',
+      'project.cloneProgress',
       'project.list',
       'project.remove',
       // Local: what this machine's checkouts carry over is nobody else's setting.
