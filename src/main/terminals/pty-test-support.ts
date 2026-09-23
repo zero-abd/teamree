@@ -12,7 +12,7 @@
 // `scripts/vitest-skip-allowlist.mjs` fails the run if these suites skip
 // without it. What is left here is the skip itself, and saying why.
 
-import { writeFile } from 'node:fs/promises'
+import { chmod, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { spawn } from 'node-pty'
 import { resolveLoginShell, shellFamily } from './shell-environment'
@@ -96,6 +96,32 @@ export async function writeProcessTreeProbe(directory: string): Promise<string> 
   // a POSIX shell would read as escapes, and either shell may hand a pane a
   // temp directory with a space in it.
   return `"${process.execPath}" "${script}"`
+}
+
+/**
+ * A program the agent rules will recognise as `claude`, which prints the
+ * arguments it was given and exits.
+ *
+ * Named `claude` on disk because that is the whole of what `detectAgent` reads:
+ * the basename in command position. Printing the arguments is what makes the
+ * session id this app pinned visible to a test — the command line is never
+ * echoed into the pane, so the only way to see which id a launch carried is to
+ * have the program say so.
+ *
+ * Returns the command line to run it with, quoted: a temp directory can have a
+ * space in it, and on Windows a path has separators a POSIX shell would read
+ * as escapes.
+ */
+export async function writeFakeAgent(directory: string, exitCode = 0): Promise<string> {
+  if (process.platform === 'win32') {
+    const batch = path.join(directory, 'claude.cmd')
+    await writeFile(batch, `@echo off\r\necho agent args: %*\r\nexit /b ${exitCode}\r\n`, 'utf8')
+    return `"${batch}"`
+  }
+  const script = path.join(directory, 'claude')
+  await writeFile(script, `#!/bin/sh\necho "agent args: $@"\nexit ${exitCode}\n`, 'utf8')
+  await chmod(script, 0o755)
+  return `"${script}"`
 }
 
 /** Polls `condition` until it holds, rejecting on timeout so a test fails fast

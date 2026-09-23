@@ -188,6 +188,33 @@ export const terminalCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['terminal', 'relaunch'],
+    summary: 'Run an exited pane again, in place.',
+    details:
+      'The pane keeps its id, its directory and its place in the split tree, and what it printed stays above ' +
+      'the line where the new run starts.\n\n' +
+      'An agent pane starts the agent over under a fresh session id rather than resuming the old ' +
+      'conversation: whether there is one worth coming back to is a question answered at startup, and this ' +
+      'is for the pane that has already ended. Anything else comes back as a shell in the same directory.\n\n' +
+      'Refused while the pane is still running.',
+    args: [TERMINAL_ARG],
+    examples: ['teamree terminal relaunch t_12'],
+    run: async (context) => {
+      const terminalId = context.args[0] as string
+      const terminal = await context.client.call('terminal.relaunch', { terminalId })
+      return {
+        data: terminal,
+        text: formatFields([
+          ['id', terminal.id],
+          ['title', terminal.title],
+          ['agent', terminal.agent ?? '-'],
+          ['cwd', terminal.cwd],
+          ['running', terminal.running ? 'yes' : 'no']
+        ])
+      }
+    }
+  },
+  {
     path: ['terminal', 'close'],
     summary: 'Close a terminal and its pane.',
     args: [TERMINAL_ARG],

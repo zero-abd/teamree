@@ -154,6 +154,26 @@
   letter-spacing: 0.02em;
 }
 
+/* The one thing to do with a pane that has exited, beside the badge saying it
+   has. Always visible rather than revealed on hover like the close button: it
+   is an offer rather than a control you go looking for, and a pane nobody is
+   pointing at is exactly the one that has been sitting there dead. */
+.pane__again {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pane__again:hover {
+  background: var(--bg-press);
+  color: var(--fg);
+}
+
 .pane--exited .pane__title {
   color: var(--fg-muted);
 }

@@ -636,19 +636,21 @@ recorded so none of them is discovered by surprise later.
   over, and a dim line in the pane says in as many words that nothing was resumed,
   that the agent's own reason is directly above it, and that a conversation can be
   gone for ordinary reasons. What none of that does is leave you with a working
-  pane. You are looking at a scrollback, and to carry on you open a new pane in the
-  same directory yourself.
+  pane. You are looking at a scrollback, and carrying on takes one press.
 
-  It is recorded rather than fixed because the obvious fix is a guess about what
-  was wanted. A pane that silently started a fresh conversation in place of the one
-  it could not find would look exactly like a resume that worked, in the one case
-  where the difference matters most: the agent knows nothing of the work being
-  continued, and the first person to notice would be whoever read its answer and
-  believed it. Starting over is what a never-typed pane does, and it is safe there
-  precisely because there was nothing to lose. Here there was something, and it is
-  gone, and saying so and stopping is the smaller wrong. An offer — a line in the
-  pane to press for a fresh conversation in this directory — is the shape the fix
-  would take, and it has not been built.
+  Not a silent restart, which was the fix rejected here and still is. A pane that
+  started a fresh conversation in place of the one it could not find would look
+  exactly like a resume that worked, in the one case where the difference matters
+  most: the agent knows nothing of the work being continued, and the first person
+  to notice would be whoever read its answer and believed it. Starting over is
+  what a never-typed pane does, and it is safe there precisely because there was
+  nothing to lose. Here there was something, and it is gone, and saying so and
+  stopping is the smaller wrong. The offer this entry described as the shape of
+  the fix is now in the pane's own header — `Run claude again`, beside the badge
+  saying it exited — and `terminal.relaunch` is what it calls: same pane, same id,
+  same leaf, the agent started over under a fresh session id, with everything the
+  dead pane printed kept above a line saying where the new run begins. It is
+  pressed rather than done for you, which is the whole of the difference.
 
   It is one launch rather than every launch, at least. The pane writes down that
   there is nothing to resume, so the launch after the refusal starts the agent

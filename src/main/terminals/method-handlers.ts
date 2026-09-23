@@ -44,6 +44,7 @@ export type TerminalMethodName =
   | 'terminal.read'
   | 'terminal.subscribe'
   | 'terminal.split'
+  | 'terminal.relaunch'
   | 'layout.get'
   | 'layout.set'
   | 'agent.list'
@@ -65,6 +66,7 @@ export const terminalMethodSchemas = {
   'terminal.read': Params.terminalRead,
   'terminal.subscribe': Params.terminalSubscribe,
   'terminal.split': Params.terminalSplit,
+  'terminal.relaunch': Params.terminalRelaunch,
   'layout.get': Params.layoutGet,
   'layout.set': Params.layoutSet,
   'agent.list': Params.agentList
@@ -138,6 +140,7 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
       }
     },
     'terminal.split': async (params) => manager.split(params),
+    'terminal.relaunch': async (params) => manager.relaunch(params),
     'layout.get': async (params) => manager.layoutGet(params.worktreeId),
     'layout.set': async (params) => manager.layoutSet(params)
   }
@@ -164,6 +167,7 @@ export function registerTerminalHandlers(registry: MethodRegistry, service: Term
   registry.register('terminal.read', service.schemas['terminal.read'], service.handlers['terminal.read'])
   registry.register('terminal.subscribe', service.schemas['terminal.subscribe'], service.handlers['terminal.subscribe'])
   registry.register('terminal.split', service.schemas['terminal.split'], service.handlers['terminal.split'])
+  registry.register('terminal.relaunch', service.schemas['terminal.relaunch'], service.handlers['terminal.relaunch'])
   registry.register('layout.get', service.schemas['layout.get'], service.handlers['layout.get'])
   registry.register('layout.set', service.schemas['layout.set'], service.handlers['layout.set'])
   registry.register('agent.list', service.schemas['agent.list'], service.handlers['agent.list'])

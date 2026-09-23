@@ -571,6 +571,8 @@ type WorkspaceState = {
   closeTerminal: (terminalId: string) => Promise<void>
   /** Goes through with it, once the question this app asked has been answered. */
   forceCloseTerminal: (terminalId: string) => Promise<void>
+  /** Runs an exited pane's program again, in the same pane. */
+  relaunchTerminal: (terminalId: string) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
   focusNextPane: () => void
   /** The other way round the same cycle. See `paneCycle`. */
@@ -1674,6 +1676,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // for the tree back, whether or not it was meant as one.
         return { terminals, ...(state.expandedTerminalId === terminalId ? { expandedTerminalId: null } : {}) }
       })
+    },
+
+    /**
+     * Runs an exited pane again, in place.
+     *
+     * Nothing is asked first, unlike closing: the pane is already dead, so
+     * there is no work to lose, and what it printed is kept above the new run
+     * rather than replaced by it.
+     */
+    async relaunchTerminal(terminalId) {
+      try {
+        const terminal = await runtimeClient.call('terminal.relaunch', { terminalId })
+        set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+      } catch (error) {
+        failed('Could not run this pane again')(error)
+      }
     },
 
     async createTerminal(worktreeId) {

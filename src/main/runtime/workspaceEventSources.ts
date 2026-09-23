@@ -166,6 +166,15 @@ export function publishTerminalEvents(
     return result
   })
 
+  // The pane is running again, so `running`, `exitCode` and the agent it is
+  // under have all changed. The layout has not: relaunch keeps the terminal id
+  // and its leaf precisely so nothing has to move.
+  registry.register('terminal.relaunch', schemas['terminal.relaunch'], async (params, call) => {
+    const terminal = await handlers['terminal.relaunch'](params, call)
+    bus.emit({ type: 'terminals' })
+    return terminal
+  })
+
   registry.register('terminal.close', schemas['terminal.close'], async (params, call) => {
     // Read before closing: afterwards the session is gone and with it the only
     // record of which worktree's layout just changed.

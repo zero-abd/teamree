@@ -1139,6 +1139,18 @@ export function createSeededRuntimeClient(): RuntimeClient {
       required(terminals.get(terminalId), 'terminal')
       return { subscription: nextId('sub') }
     },
+    // The seeded pane comes back alive with what it printed still above it, so
+    // the control in the pane bar does in the demo window what it does for real.
+    'terminal.relaunch': ({ terminalId }) => {
+      const terminal = required(terminals.get(terminalId), 'terminal')
+      terminal.record = { ...terminal.record, running: true, busy: false, lastOutputAt: Date.now() }
+      delete terminal.record.exitCode
+      const again = `\r\n${dim('[end of record — a new shell starts below]')}\r\n${prompt(terminal)}`
+      terminal.buffer += again
+      emit(terminal, { type: 'data', data: again })
+      announce({ type: 'terminals' })
+      return terminal.record
+    },
     'terminal.split': ({ terminalId, direction }) => {
       const source = required(terminals.get(terminalId), 'terminal')
       const worktreeId = source.record.worktreeId

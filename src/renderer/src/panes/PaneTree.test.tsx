@@ -46,6 +46,7 @@ const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
 
 const onFocus = vi.fn()
 const onClose = vi.fn()
+const onRelaunch = vi.fn()
 const onResize = vi.fn()
 
 function mount(node: PaneNode, terminals: Terminal[], focusedTerminalId: string | null = null): void {
@@ -57,6 +58,7 @@ function mount(node: PaneNode, terminals: Terminal[], focusedTerminalId: string 
       focusedTerminalId={focusedTerminalId}
       onFocus={onFocus}
       onClose={onClose}
+      onRelaunch={onRelaunch}
       onResize={onResize}
       isAppChord={() => false}
       closeHint="⌘W"
@@ -87,6 +89,7 @@ const row = (...children: PaneNode[]): PaneNode => ({
 beforeEach(() => {
   onFocus.mockReset()
   onClose.mockReset()
+  onRelaunch.mockReset()
   onResize.mockReset()
 })
 
@@ -141,6 +144,39 @@ describe('one pane', () => {
     mount(leaf('t1'), [terminal('t1')])
     expect(screen.queryByText('resumed')).toBeNull()
     expect(screen.queryByText('new shell')).toBeNull()
+  })
+
+  // The pane that died is the one somebody is standing in front of wondering
+  // what to do, and there is only ever one answer: run it again.
+  it('offers to run the agent again, by name, once the pane has exited', () => {
+    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 1, agent: 'claude' })])
+    screen.getByRole('button', { name: 'Run claude again' }).click()
+    expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t1')
+  })
+
+  it('offers a shell for an exited pane that was not running an agent', () => {
+    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0 })])
+    expect(screen.getByRole('button', { name: 'New shell' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /again/ })).toBeNull()
+  })
+
+  it('offers it to the pane that died and not to the live one beside it', () => {
+    mount(row(leaf('t1'), leaf('t2')), [
+      terminal('t1', { running: false, agent: 'claude' }),
+      terminal('t2', { agent: 'claude' })
+    ])
+    expect(screen.getAllByRole('button', { name: 'Run claude again' })).toHaveLength(1)
+    const alive = screen.getByRole('region', { name: 't2' })
+    expect(within(alive).queryByRole('button', { name: /again|New shell/ })).toBeNull()
+  })
+
+  it('offers each dead pane its own, out of two', () => {
+    mount(row(leaf('t1'), leaf('t2')), [
+      terminal('t1', { running: false, agent: 'claude' }),
+      terminal('t2', { running: false, agent: 'codex' })
+    ])
+    screen.getByRole('button', { name: 'Run codex again' }).click()
+    expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t2')
   })
 
   it('marks only the focused pane as focused', () => {
