@@ -74,7 +74,8 @@ const handlers = {
   onReveal: vi.fn(),
   onCopyPath: vi.fn(),
   onCopyBranch: vi.fn(),
-  onOpenInEditor: vi.fn()
+  onOpenInEditor: vi.fn(),
+  onRename: vi.fn()
 }
 
 function mount(
@@ -412,12 +413,12 @@ describe('what the panes under it are doing', () => {
 // One menu, three ways in, and the destructive item at the bottom of it rather than on the row,
 // where a `×` was the easiest thing to hit by accident.
 describe('the row menu', () => {
-  it('opens on a right-click, with the five things a row can do, in order', () => {
+  it('opens on a right-click, with the six things a row can do, in order', () => {
     mount()
     fireEvent.contextMenu(row())
 
     expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
-    expect(labels()).toEqual(['Reveal in Finder', 'Copy path', 'Copy branch', 'Open in Zed', 'Remove'])
+    expect(labels()).toEqual(['Rename…', 'Reveal in Finder', 'Copy path', 'Copy branch', 'Open in Zed', 'Remove'])
   })
 
   // A one-pixel miss on the row must not open the question that destroys a checkout.
@@ -431,7 +432,7 @@ describe('the row menu', () => {
   it('names the editor this project would use', () => {
     mount({ editorLabel: 'VS Code' })
     fireEvent.contextMenu(row())
-    expect(labels()[3]).toBe('Open in VS Code')
+    expect(labels()[4]).toBe('Open in VS Code')
   })
 
   it('opens the same menu from the ⋯ beside the row', () => {
@@ -475,7 +476,7 @@ describe('the row menu from the keyboard', () => {
     fireEvent.keyDown(row(), { key: 'ContextMenu' })
 
     expect(screen.getByRole('menu')).toBeTruthy()
-    expect(document.activeElement?.textContent).toBe('Reveal in Finder')
+    expect(document.activeElement?.textContent).toBe('Rename…')
 
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
     fireEvent.keyDown(row(), { key: 'F10', shiftKey: true })
@@ -488,7 +489,7 @@ describe('the row menu from the keyboard', () => {
     fireEvent.keyDown(row(), { key: 'ContextMenu' })
 
     const menu = screen.getByRole('menu')
-    for (let press = 0; press < 4; press += 1) fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    for (let press = 0; press < 5; press += 1) fireEvent.keyDown(menu, { key: 'ArrowDown' })
     expect(document.activeElement?.textContent).toBe('Remove')
 
     fireEvent.keyDown(menu, { key: 'Enter' })
@@ -515,6 +516,79 @@ describe('the row menu from the keyboard', () => {
     expect(screen.queryByRole('menu')).toBeNull()
     expect(document.activeElement).toBe(openButton())
     expect(handlers.onRemove).not.toHaveBeenCalled()
+  })
+})
+
+// The name typed in the composer is a first draft; the winner of a race deserves a better one.
+describe('renaming', () => {
+  const field = (): HTMLInputElement => screen.getByRole('textbox', { name: 'Worktree name' })
+
+  it('edits the name in place from the menu, and commits on Return', () => {
+    mount()
+    fireEvent.contextMenu(row())
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename…' }))
+
+    expect(document.activeElement).toBe(field())
+    expect(field().value).toBe('Rewrite the pager')
+    fireEvent.change(field(), { target: { value: '  pager, the winner ' } })
+    fireEvent.keyDown(field(), { key: 'Enter' })
+
+    expect(handlers.onRename).toHaveBeenCalledExactlyOnceWith('pager, the winner')
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(document.activeElement).toBe(openButton())
+  })
+
+  it('edits on a double-click of the name', () => {
+    mount()
+    fireEvent.doubleClick(screen.getByText('Rewrite the pager'))
+    expect(field().value).toBe('Rewrite the pager')
+  })
+
+  it('edits on Return at a focused row instead of opening it', () => {
+    mount()
+    openButton().focus()
+    fireEvent.keyDown(openButton(), { key: 'Enter' })
+
+    expect(document.activeElement).toBe(field())
+    expect(handlers.onOpen).not.toHaveBeenCalled()
+  })
+
+  it('puts the old name back on Escape', () => {
+    mount()
+    fireEvent.doubleClick(screen.getByText('Rewrite the pager'))
+    fireEvent.change(field(), { target: { value: 'something else' } })
+    fireEvent.keyDown(field(), { key: 'Escape' })
+
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.getByText('Rewrite the pager')).toBeTruthy()
+    expect(handlers.onRename).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(openButton())
+  })
+
+  it('refuses an empty name and keeps editing', () => {
+    mount()
+    fireEvent.doubleClick(screen.getByText('Rewrite the pager'))
+    fireEvent.change(field(), { target: { value: '   ' } })
+    fireEvent.keyDown(field(), { key: 'Enter' })
+
+    expect(field().getAttribute('aria-invalid')).toBe('true')
+    expect(handlers.onRename).not.toHaveBeenCalled()
+
+    fireEvent.blur(field())
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(handlers.onRename).not.toHaveBeenCalled()
+  })
+
+  it('commits on blur, once, and says nothing for an unchanged name', () => {
+    mount()
+    fireEvent.doubleClick(screen.getByText('Rewrite the pager'))
+    fireEvent.keyDown(field(), { key: 'Enter' })
+    expect(handlers.onRename).not.toHaveBeenCalled()
+
+    fireEvent.doubleClick(screen.getByText('Rewrite the pager'))
+    fireEvent.change(field(), { target: { value: 'renamed' } })
+    fireEvent.blur(field())
+    expect(handlers.onRename).toHaveBeenCalledExactlyOnceWith('renamed')
   })
 })
 

@@ -2,7 +2,7 @@
 // failed, and ready on paper but gone from disk. Everything a row can do besides
 // being opened is in one menu: right-click, the `⋯`, or the context-menu key.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   hasCheckout,
   type Terminal,
@@ -16,6 +16,7 @@ import { PaneRows } from './PaneRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
+import { WorktreeNameField } from './WorktreeNameField'
 
 type WorktreeRowProps = {
   worktree: Worktree
@@ -42,6 +43,7 @@ type WorktreeRowProps = {
   onCopyPath: () => void
   onCopyBranch: () => void
   onOpenInEditor: () => void
+  onRename: (name: string) => void
   /**
    * What the Open in item is called. A bare word when no editor was found: the
    * item is offered either way, and the refusal says what to do.
@@ -67,6 +69,7 @@ export function WorktreeRow({
   onCopyPath,
   onCopyBranch,
   onOpenInEditor,
+  onRename,
   editorLabel
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
@@ -79,6 +82,14 @@ export function WorktreeRow({
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   const openControl = useRef<HTMLButtonElement | null>(null)
   const opener = useRef<HTMLElement | null>(null)
+  const [renaming, setRenaming] = useState(false)
+  const wasRenaming = useRef(false)
+
+  // A field removed while focused leaves the focus on `document.body`; after a blur it is already elsewhere.
+  useEffect(() => {
+    if (wasRenaming.current && !renaming && document.activeElement === document.body) openControl.current?.focus()
+    wasRenaming.current = renaming
+  }, [renaming])
 
   const openMenu = (at: RowMenuAnchor, from: HTMLElement | null): void => {
     opener.current = from
@@ -103,6 +114,7 @@ export function WorktreeRow({
   const items: RowMenuItem[] = missing
     ? [remove]
     : [
+        { label: 'Rename…', onChoose: () => setRenaming(true) },
         { label: 'Reveal in Finder', onChoose: onReveal },
         { label: 'Copy path', onChoose: onCopyPath },
         { label: 'Copy branch', onChoose: onCopyBranch },
@@ -113,6 +125,55 @@ export function WorktreeRow({
   const overall = worktreeActivity(rows)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
+
+  const body = (
+    <>
+      {/* The task name gets a line of its own but for the activity dot.
+        Everything else is a small fact about the branch, and sharing the
+        line below with the branch is what stops four badges from
+        squeezing the one thing that identifies the row. */}
+      <span className="worktree__title">
+        {renaming ? (
+          <WorktreeNameField name={worktree.name} onRename={onRename} onDone={() => setRenaming(false)} />
+        ) : (
+          <span
+            className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
+            title={worktree.task ?? worktree.name}
+            onDoubleClick={() => setRenaming(true)}
+          >
+            {worktree.name}
+          </span>
+        )}
+        {overall ? (
+          <span
+            className={`activity activity--${overall}`}
+            title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${ACTIVITY_LABEL[overall]}`}
+            aria-label={ACTIVITY_LABEL[overall]}
+          />
+        ) : null}
+        {/* Beside the dot rather than instead of it: what a pane is doing
+          and whether you have read it are two facts, and a pane can be
+          finished and unread, or working and already seen. */}
+        {unreadHere ? <span className="pip" title="unread" /> : null}
+      </span>
+      <span className="worktree__meta">
+        <span className="worktree__branch">{worktree.branch}</span>
+        {ready ? <GitStatusChips status={status} /> : null}
+        {badge ? (
+          <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
+            {badge.label}
+          </span>
+        ) : null}
+        {creating ? <span className="chip worktree__tag">creating</span> : null}
+        {failed ? <span className="chip worktree__tag worktree__tag--failed">failed</span> : null}
+        {missing ? (
+          <span className="chip worktree__tag worktree__tag--missing" title={`${worktree.path} is not on disk`}>
+            missing
+          </span>
+        ) : null}
+      </span>
+    </>
+  )
 
   return (
     <li
@@ -137,54 +198,26 @@ export function WorktreeRow({
       }}
     >
       <div className="worktree__row">
-        <button
-          type="button"
-          className="worktree__open"
-          ref={openControl}
-          onClick={onOpen}
-          disabled={creating || failed || missing}
-          aria-current={active ? 'true' : undefined}
-        >
-          {/* The task name gets a line of its own but for the activity dot.
-              Everything else is a small fact about the branch, and sharing the
-              line below with the branch is what stops four badges from
-              squeezing the one thing that identifies the row. */}
-          <span className="worktree__title">
-            <span
-              className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
-              title={worktree.task ?? worktree.name}
-            >
-              {worktree.name}
-            </span>
-            {overall ? (
-              <span
-                className={`activity activity--${overall}`}
-                title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${ACTIVITY_LABEL[overall]}`}
-                aria-label={ACTIVITY_LABEL[overall]}
-              />
-            ) : null}
-            {/* Beside the dot rather than instead of it: what a pane is doing
-                and whether you have read it are two facts, and a pane can be
-                finished and unread, or working and already seen. */}
-            {unreadHere ? <span className="pip" title="unread" /> : null}
-          </span>
-          <span className="worktree__meta">
-            <span className="worktree__branch">{worktree.branch}</span>
-            {ready ? <GitStatusChips status={status} /> : null}
-            {badge ? (
-              <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
-                {badge.label}
-              </span>
-            ) : null}
-            {creating ? <span className="chip worktree__tag">creating</span> : null}
-            {failed ? <span className="chip worktree__tag worktree__tag--failed">failed</span> : null}
-            {missing ? (
-              <span className="chip worktree__tag worktree__tag--missing" title={`${worktree.path} is not on disk`}>
-                missing
-              </span>
-            ) : null}
-          </span>
-        </button>
+        {/* A field cannot sit inside a button, so while renaming the row is a plain box. */}
+        {renaming ? (
+          <div className="worktree__open worktree__open--renaming">{body}</div>
+        ) : (
+          <button
+            type="button"
+            className="worktree__open"
+            ref={openControl}
+            onClick={onOpen}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+              event.preventDefault()
+              setRenaming(true)
+            }}
+            disabled={creating || failed || missing}
+            aria-current={active ? 'true' : undefined}
+          >
+            {body}
+          </button>
+        )}
         {/* The only button on the row besides the row itself, and it opens the
             same menu the right button does. Named for what it opens rather than
             for what it looks like: "More" is what a `⋯` is called by anybody

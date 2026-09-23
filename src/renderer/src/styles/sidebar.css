@@ -394,6 +394,28 @@
   font-size: var(--text-base);
 }
 
+.worktree__open--renaming {
+  cursor: default;
+}
+
+.worktree__name-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: -1px 0 -1px -5px;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  outline: none;
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-base);
+}
+
+.worktree__name-field[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
 /* Pushed to the row's right edge rather than sitting against the name, so the
    dots line up into a column that can be read down. */
 .worktree__title .activity {

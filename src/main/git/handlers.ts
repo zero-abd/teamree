@@ -16,6 +16,7 @@ export const GIT_METHODS = [
   'worktree.get',
   'worktree.create',
   'worktree.remove',
+  'worktree.rename',
   'worktree.status',
   'worktree.changes',
   'worktree.diff',
@@ -46,6 +47,7 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.get': (params) => service.getWorktree(params),
     'worktree.create': (params) => service.createWorktree(params),
     'worktree.remove': (params) => service.removeWorktree(params),
+    'worktree.rename': (params) => service.renameWorktree(params),
     'worktree.status': (params) => service.worktreeStatus(params),
     'worktree.changes': (params) => service.worktreeChanges(params),
     'worktree.diff': (params) => service.worktreeDiff(params),
@@ -72,6 +74,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.get', Params.worktreeGet, handlers['worktree.get'])
   registry.register('worktree.create', Params.worktreeCreate, handlers['worktree.create'])
   registry.register('worktree.remove', Params.worktreeRemove, handlers['worktree.remove'])
+  registry.register('worktree.rename', Params.worktreeRename, handlers['worktree.rename'])
   registry.register('worktree.status', Params.worktreeStatus, handlers['worktree.status'])
   registry.register('worktree.changes', Params.worktreeChanges, handlers['worktree.changes'])
   registry.register('worktree.diff', Params.worktreeDiff, handlers['worktree.diff'])

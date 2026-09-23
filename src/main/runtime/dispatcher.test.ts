@@ -212,6 +212,7 @@ describe('dispatcher', () => {
       'worktree.mergePreview',
       'worktree.push',
       'worktree.remove',
+      'worktree.rename',
       'worktree.stageHunk',
       'worktree.startPoints',
       'worktree.status',
