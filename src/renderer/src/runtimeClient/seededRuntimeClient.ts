@@ -568,7 +568,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.list': ({ projectId }) =>
       [...worktrees.values()].filter((worktree) => !projectId || worktree.projectId === projectId),
     'worktree.get': ({ worktreeId }) => required(worktrees.get(worktreeId), 'worktree'),
-    'worktree.create': ({ projectId, name, startedFrom, branch }) => {
+    'worktree.create': ({ projectId, name, startedFrom, branch, task }) => {
       const project = required(projects.get(projectId), 'project')
       const slug =
         name
@@ -583,7 +583,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
         path: `${project.path}/.worktrees/${slug}`,
         startedFrom: startedFrom ?? project.baseRef,
         state: 'creating',
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        ...(task === undefined ? {} : { task })
       }
       worktrees.set(worktree.id, worktree)
       announce({ type: 'worktrees' })

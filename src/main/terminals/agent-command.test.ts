@@ -3,6 +3,7 @@ import {
   carriesSelector,
   detectAgent,
   executableIndex,
+  firstPromptCommand,
   isUsableSessionId,
   newSessionId,
   pinSessionCommand,
@@ -289,5 +290,24 @@ describe('quoteArgument', () => {
   it('quotes a space, and escapes a quote inside one', () => {
     expect(quoteArgument('two words')).toBe(`'two words'`)
     expect(quoteArgument("it's")).toBe(`'it'\\''s'`)
+  })
+})
+
+describe('firstPromptCommand', () => {
+  // Positional for both, after everything else on the line: the session id
+  // is teamree's and goes on first, and the prompt is what the person typed.
+  it('hands claude and codex the prompt as their positional argument, quoted', () => {
+    expect(firstPromptCommand('claude --session-id abc', 'claude', 'Make the pager stream')).toBe(
+      "claude --session-id abc 'Make the pager stream'"
+    )
+    expect(firstPromptCommand('codex', 'codex', "don't buffer")).toBe(`codex 'don'\\''t buffer'`)
+  })
+
+  it('keeps a prompt with several lines as one argument', () => {
+    expect(firstPromptCommand('claude', 'claude', 'first\nsecond')).toBe("claude 'first\nsecond'")
+  })
+
+  it('leaves the line alone for an agent with no way to take one', () => {
+    expect(firstPromptCommand('droid', 'droid', 'hello')).toBe('droid')
   })
 })

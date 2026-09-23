@@ -55,6 +55,16 @@ describe('workspace store', () => {
     expect((await readdir(join(directory, 'state'))).filter((name) => name.endsWith('.tmp'))).toEqual([])
   })
 
+  it('brings a worktree back with its task', async () => {
+    const store = await WorkspaceStore.open(filePath)
+    store.putProject(project)
+    store.putWorktree({ ...worktree('w1'), task: 'Make the pager stream' })
+    await store.flush()
+
+    const reopened = await WorkspaceStore.open(filePath)
+    expect(reopened.getWorktree('w1')?.task).toBe('Make the pager stream')
+  })
+
   it('coalesces a burst of mutations into a durable final state', async () => {
     const store = await WorkspaceStore.open(filePath)
     store.putProject(project)

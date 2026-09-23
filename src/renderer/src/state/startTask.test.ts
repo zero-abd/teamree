@@ -43,7 +43,7 @@ it('creates the worktree, then runs the chosen agent in it', { timeout: 20_000 }
     store.startTask({
       projectId,
       startedFrom: 'origin/main',
-      creates: [{ name: 'Rewrite the pager', agentCommand: agent.command }]
+      creates: [{ name: 'Rewrite the pager', agentCommand: agent.command, task: 'Rewrite the pager so it streams' }]
     })
 
     // The dialog is gone before any of the work is: the sidebar row narrates it.
@@ -73,11 +73,20 @@ it('creates the worktree, then runs the chosen agent in it', { timeout: 20_000 }
     // The pane is named after what was typed in the composer. Three agents on
     // three approaches are three panes called `claude` without this, and the
     // description is the only thing on record that says which is which.
+    // And the description travels with the pane as its first prompt, and with
+    // the checkout as its record: the branch and the label were all the text
+    // ever became before, and the agent was launched with nothing to do.
     expect(agentPanes[0]![1]).toEqual({
       worktreeId: created.id,
       command: agent.command,
-      label: 'Rewrite the pager'
+      label: 'Rewrite the pager',
+      prompt: 'Rewrite the pager so it streams'
     })
+    const creates = call.mock.calls.filter(([method]) => method === 'worktree.create')
+    expect(creates[0]![1]).toEqual(
+      expect.objectContaining({ name: 'Rewrite the pager', task: 'Rewrite the pager so it streams' })
+    )
+    expect(state.worktrees.find((worktree) => worktree.id === created.id)?.task).toBe('Rewrite the pager so it streams')
 
     const layout = state.layouts[created.id]!
     const terminals = await runtimeClient.call('terminal.list', { worktreeId: created.id })
@@ -101,7 +110,10 @@ it('reports why a task that could not be created failed, and starts no agent', {
 
     // The seeded runtime fails any task whose name says so, which is the only
     // way to reach this path without a real repository to break.
-    store.startTask({ projectId, creates: [{ name: 'fail on purpose', agentCommand: 'claude' }] })
+    store.startTask({
+      projectId,
+      creates: [{ name: 'fail on purpose', agentCommand: 'claude', task: 'fail on purpose' }]
+    })
 
     await until(() => useWorkspaceStore.getState().notices.length > 0, 'the failure to be reported')
 

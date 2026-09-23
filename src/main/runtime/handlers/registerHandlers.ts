@@ -125,6 +125,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     // Terminals open in their worktree's checkout, so the store is the authority
     // on where that is.
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
+    resolveWorktreeTask: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.task,
     layouts: registry.context.store,
     sessions: registry.context.store,
     // Beside the workspace file rather than in it: a pane's description belongs

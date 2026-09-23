@@ -1,4 +1,5 @@
 import type { PaneNode, Worktree } from '../../shared/entities.js'
+import { MAX_AGENT_ARGS_CHARS } from '../../shared/agentLaunch.js'
 import { parsePatch, type PatchHunk } from '../../shared/patch.js'
 import { taskNamesForAgents } from '../../main/git/worktreeNaming.js'
 import type { CommandContext, CommandSpec } from '../command-spec.js'
@@ -7,6 +8,38 @@ import { formatFields, formatTable } from '../output.js'
 import { resolveProject, resolveWorktree } from '../selectors.js'
 import { DEFAULT_WAIT_TIMEOUT_MS, waitForState } from '../waiting.js'
 import { CliError, ExitCode } from '../exit.js'
+
+/**
+ * The task `--prompt` names, or undefined without the flag.
+ *
+ * Refused up front, before any checkout exists, for the two things the runtime
+ * would refuse later or do nothing with: a prompt too long for the one command
+ * line it goes on, and a prompt with no agent to be given to — a create that
+ * accepted one would write a task nobody is ever told.
+ */
+async function readPrompt(context: CommandContext, agents: number): Promise<string | undefined> {
+  const flag = readString(context.flags, 'prompt')
+  if (flag === undefined) return undefined
+  if (agents === 0) {
+    throw new CliError({
+      code: 'prompt_without_agent',
+      message: '--prompt is given to an agent; add --agent <command>.',
+      exitCode: ExitCode.Usage
+    })
+  }
+  const text = (flag === '-' ? await context.stdin() : flag).trim()
+  if (text.length === 0) {
+    throw new CliError({ code: 'empty_prompt', message: '--prompt is empty.', exitCode: ExitCode.Usage })
+  }
+  if (text.length > MAX_AGENT_ARGS_CHARS) {
+    throw new CliError({
+      code: 'prompt_too_long',
+      message: `--prompt is ${text.length} characters; the most one command line takes is ${MAX_AGENT_ARGS_CHARS}.`,
+      exitCode: ExitCode.Usage
+    })
+  }
+  return text
+}
 
 export const worktreeCommands: readonly CommandSpec[] = [
   {
@@ -44,6 +77,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
       'start point, and its agent is started once the checkout is ready.\n' +
       'One agent keeps --name; several name each worktree "<name> <agent>", numbering a repeated agent ' +
       'from its second run.\n' +
+      '--prompt is the task: written on each worktree record and given to each agent as its first prompt. ' +
+      'Pass - to read it from stdin.\n' +
       'With --agent, --json carries every created record as a list; without it, the one record as before.',
     flags: [
       {
@@ -80,6 +115,12 @@ export const worktreeCommands: readonly CommandSpec[] = [
         description: 'Start this command in the new worktree. Repeat it for one worktree each.'
       },
       {
+        name: 'prompt',
+        kind: 'string',
+        placeholder: '<text>',
+        description: 'The task, handed to each --agent as its first prompt and kept on the worktree. - reads stdin.'
+      },
+      {
         name: 'timeout-ms',
         kind: 'number',
         placeholder: '<ms>',
@@ -88,7 +129,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
     ],
     examples: [
       'teamree worktree create --project api --name fix-login --from origin/main',
-      'teamree worktree create --project api --name fix-login --agent claude --agent claude --agent codex'
+      'teamree worktree create --project api --name fix-login --agent claude --agent claude --agent codex',
+      'teamree worktree create --project api --name fix-login --agent claude --prompt "Fix the login form; it posts twice."'
     ],
     run: async (context) => {
       const project = await resolveProject(context.client, requireString(context.flags, 'project'))
@@ -96,6 +138,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
       const branch = readString(context.flags, 'branch')
       const agents = readStrings(context.flags, 'agent')
       const timeoutMs = readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WAIT_TIMEOUT_MS
+      const task = await readPrompt(context, agents.length)
 
       // An explicit branch name is one name, so it cannot answer for several
       // checkouts. Refusing is the only honest reading: silently creating one,
@@ -121,7 +164,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
             projectId: project.id,
             name,
             ...(startedFrom === undefined ? {} : { startedFrom }),
-            ...(branch === undefined ? {} : { branch })
+            ...(branch === undefined ? {} : { branch }),
+            ...(task === undefined ? {} : { task })
           })
         )
       }
@@ -142,7 +186,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
           await context.client.call('terminal.create', {
             worktreeId: ready.id,
             command: agent,
-            label: names[index] as string
+            label: names[index] as string,
+            ...(task === undefined ? {} : { prompt: task })
           })
           return ready
         })
