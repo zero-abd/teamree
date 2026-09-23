@@ -8,6 +8,12 @@ is not in here is wrong; fix it here first. `brand/README.md` holds the mark.
 For developers who run more than one coding agent at a time, teamree replaces a
 row of terminal tabs and a repository the agents overwrite for each other.
 
+The promise is speed through parallelism: a team on teamree ships more because
+every agent works in its own worktree at the same time, and every teammate sees
+all of it in one window. Say it with the plain words *ship* and *parallel*.
+Never a multiplier ("10x", "100x", "n times faster"): a competitor owns one, and
+none of them is a fact about the product.
+
 Category, used everywhere the product is described in a sentence:
 **the agentic development environment for teams**. Short form: *an ADE for
 teams*. Not "IDE": there is no editor in the app, and its own menu sends you to
@@ -16,14 +22,23 @@ protocol.
 
 ## Tagline
 
-| Candidate | Words | Why |
-| --- | --- | --- |
-| **Run your agents like a team.** (recommended) | 6 | A verb, the name's own word, and it covers all four truths: many agents, kept apart, watched, shared. |
-| Every agent, one window. | 4 | The flattest statement of the product; strongest as a thumbnail. |
-| See which agent needs you. | 5 | The attention story, which no terminal tab has; narrowest. |
+Ten candidates were written for the shipping message; the first is the one.
 
-Sub-line (14 words): **Each agent in its own git worktree. One window says which
-one needs you.**
+| Candidate | Words | Why, or why not |
+| --- | --- | --- |
+| **Your whole team ships in parallel.** (chosen) | 6 | The name's own word, the verb that matters, and the mechanism (worktrees side by side) in one plain sentence about the people, not the agents. |
+| Ship in parallel, not in turns. | 6 | The contrast is right, but it names the old way instead of the product. |
+| One window. Every agent. Everything shipping. | 6 | Good as a thumbnail; three fragments and no subject. |
+| Agents that ship like teammates. | 5 | Sells the agents; teamree is for the people running them. |
+| Ship every branch at once. | 5 | Concrete, but "branch" undersells a worktree and the team is missing. |
+| Your team ships as fast as its agents. | 8 | True, and the comparison points at the agents rather than the team. |
+| Run five tasks at once. Ship all five. | 8 | Too long, and the number is arbitrary. |
+| More agents, more shipped. | 4 | Flat; any tool could say it. |
+| Every agent, one window. | 4 | Says nothing about shipping. |
+| Run your agents like a team. | 6 | The previous line, retired: it describes the window, not what the team gets from it. |
+
+Sub-line (12 words): **Every agent in its own git worktree. Every teammate in the
+same window.** Two parallel sentences, two facts: kept apart, shared.
 
 The tagline is the `h1` on the site, the og card's line, the README's first
 line, and the app's About. Nowhere else is a second slogan allowed. Every other
@@ -33,18 +48,18 @@ surface states a fact.
 
 | Surface | Exact copy |
 | --- | --- |
-| Site `<title>` | `teamree — run your agents like a team` |
-| Site hero h1 | `Run your agents like a team.` |
-| Site hero sub-line | `Each agent in its own git worktree. One window says which one needs you.` |
+| Site `<title>` | `teamree — your whole team ships in parallel` |
+| Site hero h1 | `Your whole team ships in parallel.` |
+| Site hero sub-line | `Every agent in its own git worktree. Every teammate in the same window.` |
 | Site hero buttons | `Download for macOS` · `Source on GitHub` |
 | Site hero note | `Free. macOS 12 or later. Universal build.` |
 | Site section h2 | `A worktree per task` · `A state per pane` · `A CLI agents can drive` · `Teammates in the window` · `Install` |
-| Site meta / og description | `The agentic development environment for teams. Claude Code, Codex and other coding agents side by side, each in its own git worktree, in one window your teammates can watch.` |
-| og card | h1 `Run your agents like a team.` — line `Each agent in its own git worktree. One window says which one needs you.` — foot `teamree.us` |
-| README first line | `**Run your agents like a team.**` then the sub-line |
-| README description (GitHub, `package.json`) | `The agentic development environment for teams: coding agents side by side, one git worktree each, one window.` |
-| GitHub repo description | `Run your agents like a team. The agentic development environment for teams, for macOS.` |
-| App About / DMG | `teamree` — `Run your agents like a team.` — version |
+| Site meta / og description | `The agentic development environment for teams. Claude Code, Codex and other coding agents shipping side by side, each in its own git worktree, in one window your teammates can watch.` |
+| og card | h1 `Your whole team ships in parallel.` — line `Every agent in its own git worktree. Every teammate in the same window.` — foot `teamree.us` |
+| README first line | `**Your whole team ships in parallel.**` then the sub-line |
+| `package.json` description | `Your whole team ships in parallel. Every agent in its own git worktree. Every teammate in the same window.` |
+| GitHub repo description | `Your whole team ships in parallel.` |
+| App About / DMG | `teamree` — `Your whole team ships in parallel.` — version |
 | App welcome (empty window) | Unchanged: `No terminals here yet` and the three buttons. No slogan in the app. |
 | 404 | `Not found.` — `The link is old or the page moved.` — `Back to teamree` |
 
@@ -128,14 +143,14 @@ The mark:
 
 Header. At scroll 0: full width, flush, 60px tall, transparent over the
 vignette: lockup on the left, `Worktrees · Panes · Teamwork · Install` and a
-`GitHub` button on the right. Past 80px of scroll it becomes a fixed, centred
-pill: 48px tall, at most 760px wide, `--tile` at 80% over `backdrop-filter:
-blur(16px)`, one `--line` border, radius 999px, holding the same lockup, links
-and button. The change is one transition on width, height, top, radius and
-background, on a `linear()` spring (or 320ms `cubic-bezier(.2,0,0,1)` where
-`linear()` is unsupported), driven by a scroll listener so a reversed scroll
-reverses it mid-flight. Under `prefers-reduced-motion` it switches with no
-transition. On phones both states hold the lockup and a `Menu` disclosure; the
+`GitHub` button on the right. Past 32px of scroll it becomes a fixed, centred
+pill (back below 8px): 48px tall, 12px from the top, at most 760px wide, `--tile`
+at 80% over `backdrop-filter: blur(16px)`, one `--line` border, radius 999px,
+holding the same lockup, links and button. The row never resizes: the lockup
+and links translate inward while the pill fades in and narrows from the row's
+width with its edges riding on them, all in one 640ms `cubic-bezier(.2,.8,.2,1)`
+that a reversed scroll reverses mid-flight. Under `prefers-reduced-motion` the
+contents switch at once and the pill cross-fades in 200ms. On phones both states hold the lockup and a `Menu` disclosure; the
 pill is 48px tall and spans the width less 16px each side.
 
 Footer. One row: the lockup on its tile at the left; `Source · Releases · MIT ·
