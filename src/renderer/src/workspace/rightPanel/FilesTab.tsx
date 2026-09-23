@@ -1,17 +1,5 @@
-// The worktree's files, one directory at a time, and a field that finds one by
-// name.
-//
-// A tree and not a file viewer: clicking a file opens it in the editor this
-// project uses, because an editor is the thing that shows a file, and this app
-// has one wired up already. What the tree adds is what an editor's own tree
-// cannot: the letter beside a changed file is the one the changes tab prints,
-// read off the same list, and an ignored entry is drawn dimmed by git's own
-// rules rather than by a second reading of them.
-//
-// No watcher — see `fileTree.ts`. A folder is read when it is opened and read
-// again when it is opened again; the reload control at the top reads every
-// open folder once more. The letters, which are the half that moves while an
-// agent works, ride the store's own worktree events.
+// The worktree's files one directory at a time, plus find by name. Clicking opens the project's editor;
+// the tree adds the changes tab's letters and git's ignored dimming. No watcher; see `fileTree.ts`.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Worktree, WorktreeFileMatches } from '@shared/entities'
@@ -55,9 +43,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
   const [query, setQuery] = useState('')
   const [found, setFound] = useState<WorktreeFileMatches | null>(null)
   const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
-  // Answers for a worktree this tab has moved on from are dropped. The parent
-  // keys this component by worktree, so in practice that is an unmount; the
-  // ref is what makes it true even if it were not.
+  // Answers for a worktree this tab has left are dropped.
   const alive = useRef(true)
   useEffect(() => {
     alive.current = true
@@ -86,8 +72,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
     void readDir(ROOT)
   }, [readDir])
 
-  // The find field asks the runtime, not the tree: the tree holds only what
-  // has been opened, and a name somebody types is usually one it has not.
+  // Find asks the runtime: the tree holds only what has been opened.
   useEffect(() => {
     const wanted = query.trim()
     if (wanted === '') {

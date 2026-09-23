@@ -1,17 +1,5 @@
-// Choosing what the window looks like.
-//
-// The dialog has no Save and no Cancel, and that is the design rather than an
-// omission: colour is judged by looking at it, the window behind this panel is
-// the preview, and every control here writes through to the stored appearance
-// the moment it moves. What would a Cancel restore — the palette from before
-// the eleven changes, or from before the last one? "Reset" answers the question
-// the honest way, by naming exactly what it puts back.
-//
-// It is also why nothing here validates. A colour that would make text
-// unreadable is not refused, it is lifted off its surface by the derivation in
-// `@shared/theme` before it reaches the screen, so the worst a person can do to
-// themselves in here is make something ugly. See `theme.test.ts`, which proves
-// that by trying.
+// Choosing what the window looks like. No Save or Cancel: every control writes through and the window is
+// the preview; Reset names what it restores. Nothing validates, since `@shared/theme` keeps text legible.
 
 import { useState } from 'react'
 import { opaqueHex, parseColor } from '@shared/color'
@@ -37,9 +25,7 @@ export function AppearanceDialog(): React.JSX.Element {
   const palette = resolvePalette(appearance)
   const preset = themeById(appearance.themeId)
   const edited = !isPristine(appearance)
-  // Four of the tokens are translucent so they can land on any surface. A
-  // swatch has to be a colour, so they are shown composited over the ground —
-  // which is the surface they are most often seen on anyway.
+  // Translucent tokens are shown composited over the ground, where they are mostly seen.
   const ground = parseColor(palette['bg-window']) ?? { r: 0, g: 0, b: 0 }
   const well = (value: string): string => opaqueHex(value, ground) ?? '#000000'
 
@@ -47,9 +33,7 @@ export function AppearanceDialog(): React.JSX.Element {
     void setAppearance({ ...appearance, ...next })
   }
 
-  // A preset is a fresh start, not a layer: keeping somebody's per-token edits
-  // across a switch would hand them a theme that is neither of the two they
-  // have picked, and no way to tell which colours came from where.
+  // A preset is a fresh start: carried-over edits would make a theme that is neither.
   const choose = (themeId: string): void => {
     void setAppearance({ themeId, ground: null, accent: null, overrides: {} })
   }
@@ -221,14 +205,7 @@ export function AppearanceDialog(): React.JSX.Element {
   )
 }
 
-/**
- * A colour, as the platform's own picker.
- *
- * `type="color"` rather than a hex field because this runs on one platform and
- * that platform has a good colour picker with an eyedropper in it. The input is
- * the swatch — no separate preview to keep in step — and the label is there for
- * anybody reading the window rather than looking at it.
- */
+/** A colour, as the platform's own picker (it has an eyedropper); the input is the swatch. */
 function ColourWell({
   label,
   value,

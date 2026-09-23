@@ -1,16 +1,5 @@
-// The files tab's tree, as data: which directories are open, what each one
-// was last read as, and which rows that makes.
-//
-// No watcher. The runtime lists one directory per call and never recurses,
-// and this holds those answers and nothing more: a directory is read when it
-// is opened and read again when it is opened again, and a file an agent writes
-// meanwhile appears the next time its folder is opened. That is a deliberate
-// trade — a watcher over a checkout with `node_modules` in it is the thing
-// that makes an app feel heavy — and the store's own worktree events already
-// move the letters beside the rows, which is the half a person is watching.
-//
-// Everything here is a pure function of the state, so the component is only
-// the calls and the clicks and this file is what the tests are written against.
+// The files tab's tree as pure data: open directories, their last listings, and the rows that makes.
+// No watcher (one over `node_modules` is what makes an app heavy): a directory is re-read when opened.
 
 import type {
   WorktreeChangeKind,
@@ -85,12 +74,7 @@ export function failListing(tree: TreeState, path: string, error: string): TreeS
   return { ...tree, dirs: { ...tree.dirs, [path]: { ...current, loading: false, error } } }
 }
 
-/**
- * Opens a directory. `read` is always true, and is returned rather than
- * assumed so the caller's "and now list it" sits beside the reason: there is
- * no watcher, so every open is a fresh read, even of a folder read a second
- * ago. Whatever it read last is drawn meanwhile.
- */
+/** Opens a directory; `read` is always true since there is no watcher, and the last listing shows meanwhile. */
 export function expandDir(tree: TreeState, path: string): { tree: TreeState; read: boolean } {
   return { tree: { ...tree, expanded: { ...tree.expanded, [path]: true } }, read: true }
 }

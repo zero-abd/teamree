@@ -1,15 +1,5 @@
-// What each colour is for, in the words somebody editing it would use.
-//
-// The editor lists forty-two tokens, and a list of forty-two hex fields named
-// `--bg-rail` and `--fg-secondary` is a list nobody can use: the only way to
-// find out what a token does is to change it and look. So every one of them
-// carries a label and, more usefully, a sentence naming something on screen —
-// "the sidebar and the status rail", "what a failing test is printed in" — and
-// they are grouped so the six that move together are together.
-//
-// The order inside a group is the order the tokens are declared in, which is
-// the order they climb: ground, then each surface above it. Editing them top to
-// bottom is editing the window from the back forwards.
+// What each colour token is for, in an editor's words, grouped by what moves together; within a group,
+// declaration order, ground first, so editing top to bottom goes back to front.
 
 import { THEME_TOKENS, type ThemeToken } from '@shared/theme'
 
@@ -101,13 +91,7 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
   }
 ]
 
-/**
- * Every token the groups above account for.
- *
- * Exported so a test can hold it against `THEME_TOKENS`: a colour the theme
- * layer can produce and the editor cannot reach is a colour nobody can change,
- * and the failure mode is silence rather than an error.
- */
+/** Every token the groups account for; a test holds it against `THEME_TOKENS` so none is unreachable. */
 export const GROUPED_TOKENS: readonly ThemeToken[] = TOKEN_GROUPS.flatMap((group) =>
   group.tokens.map((entry) => entry.token)
 )

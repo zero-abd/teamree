@@ -1,20 +1,5 @@
-// The front door: what the main column shows when there is nothing in it.
-//
-// It used to be a different card for each of three situations — no project, no
-// worktree picked, a worktree with no panes — and the last of those was a row
-// of buttons, one per agent this machine has installed. The owner's note on
-// that: "it should be like create project or open project, no need to have
-// buttons for claude, codex". An agent is chosen in the task composer and in
-// the panes tab's picker; the front door is not a third place to choose one.
-//
-// So one card for all three: the mark, the name, the two things a person opens
-// this app to do — and a terminal, when there is a worktree under it to open
-// one in, because a shell is a different thing from an agent — then the three
-// chords worth knowing in the first hour, named the way the menu bar names
-// them. No headline sentence: the buttons carry the meaning. And no more
-// chords than three: this is the one surface in the window that teaches any,
-// besides the menu bar, the palette and the help page, which is the owner's
-// rule — "too many places explaining shortcuts".
+// The front door, one card whatever is missing: the mark, New task and Add project, a terminal when
+// there is a checkout, and three chords. No agent buttons and no headline; the buttons carry the meaning.
 
 import { hasCheckout, type Project, type Worktree } from '@shared/entities'
 import type { PlatformModifier } from '../keyboard/platformModifier'
@@ -26,13 +11,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 
 export const REPOSITORY_URL = 'https://github.com/zero-abd/teamree'
 
-/**
- * The shortcut list, in the order somebody would need them: the chord that
- * makes a task, the one that reaches everything else, and the one that gives
- * the panes the whole window. Commands rather than words, so the label and the
- * chord are both read from the table the menu bar is built from and cannot
- * drift from it.
- */
+/** The three chords worth knowing first, as commands so label and key come from the menu's table. */
 const SHORTCUT_COMMANDS: readonly WorkspaceCommand[] = ['new-worktree', 'open-palette', 'toggle-sidebar']
 
 export function Welcome({

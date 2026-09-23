@@ -1,8 +1,5 @@
-// The Cloudflare entry point, and the only file in the relay that names a
-// Cloudflare type. It does three things: answer a health check, turn the path's
-// rendezvous name into a Durable Object, and hand the upgrade over. Every rule
-// about pairing, limits and misbehaviour is in core, one import away and shared
-// with the Node host byte for byte.
+// The Cloudflare entry point, the only relay file naming a Cloudflare type: health check, rendezvous
+// name to Durable Object, hand over the upgrade. Every rule lives in core, shared with the Node host.
 
 import { configFromEnv } from '../core/config.js'
 import { RendezvousPair, type PairEnvironment, type PairSocket } from './rendezvousPair.js'
@@ -33,15 +30,8 @@ export class RelayPair implements DurableObject {
     const client = pair[0]
     const server = pair[1]
     const origin = request.headers.get('CF-Connecting-IP') ?? 'unknown'
-    // The object's name is chosen by whoever dialled, with no token behind it,
-    // so anyone may address any object. What stops that being a way to pile an
-    // unbounded number of sockets into one is that the object bounds what it
-    // holds. It makes room for an arriving connection rather than refusing it,
-    // so this is the last resort and not the first answer: a rendezvous every
-    // one of whose pairing slots is held by a connection that presented its
-    // token. A WebSocket client cannot read this status — it is handed the same
-    // transport error it gets when there is no relay at all — which is why a
-    // refusal must not be what an ordinary teammate meets.
+    // Anyone may address any object; the object bounds what it holds and makes room rather than refusing.
+    // A client cannot read this status, so ordinary teammates must never meet it.
     if (!this.pair.accept(server as unknown as PairSocket, origin)) {
       return new Response('this rendezvous already has as many connections as it can hold', { status: 503 })
     }
@@ -72,9 +62,7 @@ export default {
     const url = new URL(request.url)
 
     if (request.method === 'GET' && url.pathname === '/healthz') {
-      // Deliberately thinner than the Node host's: a Worker has no global view
-      // of who is connected, and inventing one would mean collecting exactly the
-      // thing this relay is built not to collect.
+      // Thinner than the Node host's: a Worker has no global view, and building one would collect what this relay avoids.
       return new Response('{"status":"ok"}', {
         status: 200,
         headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
@@ -84,9 +72,7 @@ export default {
     const prefix = `${config.path}/`
     if (!url.pathname.startsWith(prefix)) return new Response('not found', { status: 404 })
 
-    // The name is a hash of the rendezvous, never the rendezvous itself: a URL
-    // reaches logs and analytics, and a token in one would let whoever read it
-    // claim the pairing. A hash names it without conferring that.
+    // A hash of the rendezvous: URLs reach logs, and the token would let a reader claim the pairing.
     const name = url.pathname.slice(prefix.length)
     if (!RENDEZVOUS_NAME.test(name)) return new Response('not found', { status: 404 })
 

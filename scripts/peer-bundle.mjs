@@ -1,21 +1,6 @@
-// Bundles `src/shared/peer` so a runtime that cannot read TypeScript can run it.
-//
-// The peer library is the one part of this project whose correctness depends on
-// which JavaScript runtime it is executing in, because it reaches for cipher
-// primitives that Node and Electron do not both provide. Proving it works under
-// Electron therefore means running *this* source under Electron, and Electron
-// cannot import a `.ts` file any more than Node can.
-//
-// So: esbuild, at check time, into a throwaway directory. Not `out/`, because
-// `npm test` runs before `npm run build` in the release sequence, and a check
-// that silently needs a prior build step is a check that silently does not run.
-//
-// Three entry points rather than one. `index.ts` is the public API and is what
-// the product actually calls, but the published Noise vectors put a payload in
-// the first handshake message and `session.ts` refuses one on purpose, so
-// replaying them needs `noise.ts` and `primitives.ts` underneath. Code splitting
-// keeps the three sharing one copy of the module graph, so the handshake the
-// check runs and the primitives it known-answer-tests are the same instances.
+// Bundles `src/shared/peer` with esbuild into a temp dir so Electron can run the real source (its
+// ciphers differ from Node's). Not `out/`: tests run before the build. Three entries share one module
+// graph: the public API, plus `noise.ts` and `primitives.ts` for vectors that `session.ts` refuses.
 import { build } from 'esbuild'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -24,13 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-/**
- * `@noble/ciphers` is bundled in rather than left external: the output lands in
- * a temporary directory with no `node_modules` beside it, so an external import
- * would not resolve. `node:crypto` stays external because `platform: 'node'`
- * leaves the built-ins alone, which is the point — the check has to reach the
- * host runtime's crypto, not a copy of somebody else's.
- */
+/** `@noble/ciphers` is bundled (no node_modules beside the output); `node:crypto` stays the host's. */
 export async function buildPeerBundle(outdir = mkdtempSync(join(tmpdir(), 'teamree-peer-bundle-'))) {
   await build({
     entryPoints: {

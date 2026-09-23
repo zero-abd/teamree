@@ -1,21 +1,6 @@
-// A question with two answers, in the one shape every such question takes.
-//
-// Everything a confirm in this app is made of is decided here and nowhere
-// else: the frame is `Modal`'s, the title is the question, the body is one
-// line, and the two buttons sit in one right-aligned row with the answer that
-// changes nothing first and the answer that goes through with it last. When
-// going through with it destroys something the last button is red.
-//
-// The keyboard follows the same rule. Escape is always the cancel — `Modal`
-// already does that — and Enter is whichever answer is safe to give without
-// reading: the cancel when the confirm destroys something, the confirm when it
-// does not. That is done by putting the focus there on open, so the key that
-// activates a focused button is the key, and there is no second handler that
-// could disagree with what the focus ring shows.
-//
-// The two confirms that existed before this used to lay themselves out — each
-// with its own actions row and neither with the padding the frame gave its
-// title, so their sentence started further left than the question above it.
+// A question with two answers, in one shape: `Modal`'s frame, the question as title, one body line, and
+// the no-op answer before the one that acts (red when it destroys). Focus starts on the safe answer,
+// so Enter never needs a second handler.
 
 import { Modal } from './Modal'
 

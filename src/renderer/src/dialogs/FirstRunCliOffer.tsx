@@ -1,18 +1,5 @@
-// The one time teamree brings this up by itself.
-//
-// Deliberately not a modal. A modal on first launch is the most annoying thing
-// a program can do: it takes the keyboard from somebody who has not yet seen
-// the window they just opened, and the fastest way past it is to agree with a
-// sentence nobody read — which is a poor way to reach a question whose answer
-// may put a password dialog on the screen. This is a card in the corner. The
-// window is usable behind it, nothing is focused for you, and both buttons are
-// real answers: the question is recorded as asked either way and is never put
-// again, with the sidebar and the palette left as the way back in.
-//
-// It says the same two sentences the panel says — the destination and the
-// password — before either button is pressed, because "Install CLI? [Yes]" with
-// a system password prompt behind the yes is how an app teaches people to stop
-// reading password prompts.
+// The one time teamree offers the CLI by itself: a corner card, never a modal, asked once either way.
+// It says where the link goes and that a password is coming before either button is pressed.
 
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { cliOffer } from './cliInstallModel'
@@ -21,17 +8,13 @@ import { modalOnScreen } from './modalLayer'
 export function FirstRunCliOffer(): React.JSX.Element | null {
   const status = useWorkspaceStore((state) => state.cli)
   const dialog = useWorkspaceStore((state) => state.dialog)
-  // The other half of what can be on top of the window, and the half this card
-  // was written before: a question about a teammate's keystrokes. It is not in
-  // `dialog` because nobody in this window opened it, but it is a modal with a
-  // scrim all the same, and this card was drawing itself underneath one.
+  // A remote-keystrokes question is not in `dialog` but has a scrim; the card must not draw under it.
   const consent = useWorkspaceStore((state) => state.consent)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const dismissCliPrompt = useWorkspaceStore((state) => state.dismissCliPrompt)
 
   const offer = cliOffer(status)
-  // Nothing to say, or something else is already on top of the window saying
-  // something: a card behind a modal is a card being talked over.
+  // Nothing to say, or something modal on top.
   if (offer === null || modalOnScreen({ dialog, consent })) return null
 
   return (
@@ -48,10 +31,7 @@ export function FirstRunCliOffer(): React.JSX.Element | null {
           type="button"
           className="button button--primary"
           onClick={() => {
-            // Opening the panel rather than linking from here, so that the one
-            // place that makes the link is also the one place that reports
-            // what it did — and so nobody meets the password dialog on a
-            // single click from a card they were still reading.
+            // Opens the panel, which makes and reports the link; no password prompt one click from a card.
             openDialog({ kind: 'install-cli' })
             void dismissCliPrompt()
           }}

@@ -1,24 +1,5 @@
-// Whether Electron needs a display put in front of it on this machine, and what
-// to launch it with.
-//
-// Electron is a window. With no X server and no `$DISPLAY` it prints "Missing X
-// server or $DISPLAY" and dies of SIGSEGV before the main script is evaluated,
-// so the smoke test — the one gate that boots the app — cannot run in a
-// container at all.
-//
-// That is worth adapting to rather than documenting, because of how this
-// project is checked. There is no CI; `scripts/release.mjs` explains why every
-// gate moved onto the machine cutting the release. So the only checks that
-// exist are the ones a person or an agent runs locally, and a growing share of
-// that runs in headless Linux containers. A gate that cannot start there is a
-// gate those runs silently skip, and the next person to notice is whoever the
-// release reaches.
-//
-// Same judgement as electron-sandbox.mjs, and deliberately the same narrow
-// shape: a fact about the machine, acted on only by the machine that has it.
-// macOS is the supported platform and always has a display, so nothing here
-// ever fires on it. Wrapping only the Electron launch, rather than re-executing
-// the whole launcher, keeps the bundling that runs before it in plain Node.
+// Whether Electron needs a virtual display here (no X server kills it with SIGSEGV), and what to launch
+// it with. There is no CI, so the smoke gate must run in headless Linux containers; macOS never fires this.
 import { existsSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 
@@ -32,12 +13,7 @@ function onPath(name, pathValue) {
   return undefined
 }
 
-/**
- * How to launch `command`, given the machine it is being launched on.
- *
- * The machine is a parameter so this can be asked about machines other than
- * this one, which is the only way it is testable on either of them.
- */
+/** How to launch `command` on the given machine, a parameter so it is testable anywhere. */
 export function displayPlan(command, args, machine = {}) {
   const { platform = process.platform, env = process.env, lookup = onPath } = machine
 
@@ -55,8 +31,7 @@ export function displayPlan(command, args, machine = {}) {
     }
   }
 
-  // `-a` picks a free display number rather than a fixed one, so two runs on
-  // the same machine — a person's and an agent's, say — cannot collide.
+  // `-a` picks a free display number so concurrent runs cannot collide.
   return {
     command: xvfbRun,
     args: ['-a', command, ...args],

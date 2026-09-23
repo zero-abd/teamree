@@ -1,14 +1,5 @@
-// Every pane in every worktree, in one list, ordered by what would make
-// somebody look.
-//
-// The sidebar answers "what is this worktree doing" one worktree at a time,
-// which is the wrong shape for the question eight parallel agents actually
-// create: not "how is atlas doing" but "which of these wants me". Scanning a
-// tree to find that out is exactly the work this view exists to remove.
-//
-// The states come from `agentRows` unchanged. There is one vocabulary for what
-// a pane is doing, and it is the one the sidebar already speaks — a second
-// reading of the same PTY would only give a reader two answers to reconcile.
+// Every pane in every worktree in one list, ordered by what wants a person; states come from
+// `agentRows` unchanged so the board and the sidebar speak one vocabulary.
 
 import type { Project, Terminal, Worktree } from '@shared/entities'
 import { agentRows, type AgentActivity, type AgentRow } from '../sidebar/agentRows'
@@ -21,18 +12,7 @@ export type DashboardRow = AgentRow & {
   projectName: string
 }
 
-/**
- * The order attention is owed in.
- *
- * A failure is finished and wrong, so it outranks a question that is merely
- * unanswered; a pane that has asked for something outranks one still working,
- * because yours is the only hand that can move it; a pane still producing
- * output is further along than one that has stopped and said nothing about why;
- * a finished pane is the only one asking for nothing. It is the same precedence
- * `worktreeActivity` collapses a worktree by, deliberately: a dashboard that
- * ranked the five states differently from the sidebar would be teaching a
- * second reading of the same evidence.
- */
+/** The order attention is owed in: failed, asking, working, quiet, done; `worktreeActivity`'s precedence. */
 export const ACTIVITIES_BY_ATTENTION: readonly AgentActivity[] = ['failed', 'waiting', 'working', 'quiet', 'done']
 
 export type DashboardInput = {
@@ -42,11 +22,7 @@ export type DashboardInput = {
   now: number
 }
 
-/**
- * Panes belonging to a worktree the runtime no longer lists are dropped rather
- * than shown unplaced: a row whose only purpose is to say where to look is
- * worse than no row when it cannot say where.
- */
+/** Panes of a worktree the runtime no longer lists are dropped: a row that cannot say where is worse than none. */
 export function dashboardRows(input: DashboardInput): DashboardRow[] {
   const projectName = new Map(input.projects.map((project) => [project.id, project.name]))
 
@@ -60,10 +36,7 @@ export function dashboardRows(input: DashboardInput): DashboardRow[] {
     }))
   )
 
-  // Longest-silent first inside a group: between two panes in the same state,
-  // the one that has been sitting there is the one being neglected. Ties fall
-  // back to names so the list does not reshuffle itself under the pointer every
-  // time the clock ticks.
+  // Longest-silent first within a state; ties fall back to names so the clock tick does not reshuffle.
   return rows.sort(
     (left, right) =>
       ACTIVITIES_BY_ATTENTION.indexOf(left.activity) - ACTIVITIES_BY_ATTENTION.indexOf(right.activity) ||
@@ -76,11 +49,7 @@ export function dashboardRows(input: DashboardInput): DashboardRow[] {
 
 export type ActivityCounts = Record<AgentActivity, number>
 
-/**
- * How many panes are in each state. Every state is present, zeros included, so
- * the header keeps its shape as panes move between them rather than jumping
- * about while somebody is reading it.
- */
+/** How many panes are in each state, zeros included so the header keeps its shape. */
 export function activityCounts(rows: readonly DashboardRow[]): ActivityCounts {
   const counts: ActivityCounts = { failed: 0, waiting: 0, working: 0, quiet: 0, done: 0 }
   for (const row of rows) counts[row.activity] += 1

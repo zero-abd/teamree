@@ -36,50 +36,28 @@ export function App(): React.JSX.Element {
   )
   const modifier = useMemo(() => resolvePlatformModifier(platform), [platform])
   const isAppChord = useWorkspaceShortcuts(modifier)
-  // And the same commands in the menu bar, which is the other half of the same
-  // thing: the chord and the menu item run one dispatcher over one table, so
-  // neither can offer what the other refuses. See src/renderer/src/menu.
+  // The same commands in the menu bar, through one dispatcher over one table.
   useMenuBar()
-  // And the only other thing this window says about itself to the process
-  // outside it: what it wants an agent going quiet to do, and which pane it is
-  // already looking at. See src/renderer/src/notices.
+  // What this window tells the main process about agent notices. See src/renderer/src/notices.
   useAgentNotices()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   const dialog = useWorkspaceStore((state) => state.dialog)
-  // Somebody else's keystrokes, waiting on this machine's owner. Read outside
-  // `dialog` because it is not this window's own action: a teammate raised it,
-  // it has a deadline of its own, and it must not be closed by opening
-  // something else or cleared by whatever the user was in the middle of.
+  // Outside `dialog`: a teammate raised it, it has its own deadline, and nothing else may close it.
   const consent = useWorkspaceStore((state) => state.consent)
   const asking = firstQuestion(consent)
   const notices = useWorkspaceStore((state) => state.notices)
   const dismissNotice = useWorkspaceStore((state) => state.dismissNotice)
   const appearance = useWorkspaceStore((state) => state.appearance)
 
-  // The one place a colour is applied. `tokens.css` has already painted the
-  // window in the default palette by the time this runs, so the common case —
-  // the default theme, unedited — writes the same values back and nothing
-  // flickers; anything else takes over here, before the first frame anybody
-  // looks at.
-  //
-  // A layout effect, and that is not about avoiding a flash of the old colours
-  // — it is about the panes. Every emulator re-reads the palette off this
-  // element in an effect of its own, because xterm cannot read CSS, and React
-  // flushes effects child-first: an ordinary `useEffect` here would run *after*
-  // every pane's, so each pane would read the palette this component had not
-  // written yet and repaint itself in the theme before last. Layout effects all
-  // run before any passive one, which puts the write back in front of the reads
-  // it exists for. See `terminalTheme.ts` and the two views that call it.
+  // The one place a colour is applied. A layout effect because xterm reads the palette off this element
+  // in each pane's effect, and passive effects run child-first: this write must come before those reads.
   useLayoutEffect(() => {
     applyPalette(document.documentElement, resolvePalette(appearance))
   }, [appearance])
 
-  // One subscription for the whole window: the runtime says what changed and
-  // the store re-reads it, so work done in another window or from the CLI shows
-  // up here on its own. Started before the first read, because an event that
-  // arrives during bootstrap must not be missed.
+  // One subscription for the window, started before the first read so no bootstrap-time event is missed.
   useEffect(() => {
     const stopWatching = useWorkspaceStore.getState().startWatching()
     void useWorkspaceStore.getState().bootstrap()
@@ -88,15 +66,12 @@ export function App(): React.JSX.Element {
 
   return (
     <div
-      // There is no title strip. The window's top edge is the sidebar's own
-      // header on the left and the pane strip on the right, and on macOS the
-      // window buttons sit over whichever of the two is at the left edge —
-      // the class list says which, and the stylesheet moves the inset.
+      // No title strip: on macOS the window buttons sit over the sidebar header or the pane strip, whichever
+      // is at the left edge; the class list says which.
       className={shellClassName(platform, sidebarVisible)}
       style={{
         ['--sidebar-width' as string]: `${sidebarWidth}px`,
-        // Both come from src/shared/windowChrome.ts, which the main process also
-        // reads to place the macOS window buttons.
+        // From src/shared/windowChrome.ts, which main also reads to place the window buttons.
         ['--titlebar-h' as string]: `${TITLEBAR_HEIGHT_PX}px`,
         ['--titlebar-inset' as string]: `${MAC_CONTENT_INSET_PX}px`
       }}
@@ -118,9 +93,7 @@ export function App(): React.JSX.Element {
             <div className={`notice notice--${notice.tone}`} key={notice.id}>
               <span className="notice__text">{notice.text}</span>
               {notice.action === undefined ? null : (
-                // The verb is the whole button. What it would open is in the
-                // sentence beside it, and a notice is not the place for a
-                // second sentence explaining the first.
+                // The verb is the whole button.
                 <button
                   type="button"
                   className="notice__action"

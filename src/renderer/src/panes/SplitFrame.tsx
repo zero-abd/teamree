@@ -1,31 +1,11 @@
-// The flex box a split is drawn as, and the draggable gutters between its
-// children.
-//
-// This came out of `PaneTree` when a teammate's pane stopped floating over the
-// window and took a slot beside your own panes. There are two places in this
-// app where panes sit side by side now, and they have to behave identically:
-// the same hairline that thickens under the pointer, the same arithmetic in
-// `applyGutterDrag`, the same arrow-key nudge for somebody who is not holding a
-// mouse. A second implementation of that would be a second set of feels, and
-// the whole point of the change was that a teammate's pane stops feeling like
-// a different application.
-//
-// Sizes are tracked locally while a handle is held so the drag stays at frame
-// rate, and only the released position is handed back to be persisted.
+// The flex box a split is drawn as, with draggable gutters; shared by the pane tree and the watched-pane
+// row so both feel identical. Sizes are local during a drag; only the released position is persisted.
 
 import { Fragment, useCallback, useRef, useState } from 'react'
 import { applyGutterDrag, GUTTER_PX, normalizeSizes, splitChildBases } from './paneLayout'
 import { usePointerDrag } from './usePointerDrag'
 
-/**
- * One child of a split: what to draw, and a key that follows it.
- *
- * The key is the caller's rather than the index because siblings come and go —
- * a watched pane opens to the right of your tree, and another closes from the
- * middle of the row. Keyed by position, closing the first of three would remount
- * the other two, which for a pane means tearing down an emulator and reopening
- * a stream nobody asked to reopen.
- */
+/** One child of a split and a caller-owned key, so closing a sibling does not remount the others. */
 export type SplitCell = { key: string; node: React.ReactNode }
 
 export function SplitFrame({
@@ -47,9 +27,7 @@ export function SplitFrame({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const startDrag = usePointerDrag()
   const [draft, setDraft] = useState<number[] | null>(null)
-  // Normalized against the cells rather than against itself: a cell can appear
-  // or disappear between renders, and a fraction per pane that no longer exists
-  // would leave the last one with no basis at all.
+  // Normalized against the cells: one can appear or disappear between renders.
   const current = draft ?? normalizeSizes(sizes, cells.length)
   const bases = splitChildBases(current)
 

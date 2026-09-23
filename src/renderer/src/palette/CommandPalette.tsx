@@ -18,8 +18,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
   const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
   const update = useWorkspaceStore((state) => state.update)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
-  // Names one of the actions: what is wrong with the CLI link decides what the
-  // row offering to fix it is called.
+  // The CLI link's state names the row that fixes it.
   const cli = useWorkspaceStore((state) => state.cli)
 
   const [query, setQuery] = useState('')
@@ -35,9 +34,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         defaultAgent,
         update,
         cli,
-        // The chord, for the rows that have one. `shortcutHint` answers with an
-        // empty string for a command bound to no key, which is every row the
-        // palette is the only way to reach.
+        // Empty for a command with no key.
         hintFor: (action) => {
           const command = commandNamed(action)
           return command ? shortcutHint(command, modifier) : ''
@@ -46,11 +43,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
     [worktrees, projects, activeWorktreeId, agents, defaultAgent, update, cli, modifier]
   )
 
-  // Nothing offered that cannot work, here as in the menu bar: a row for a
-  // command the window would refuse is left out rather than drawn in black
-  // letters and ignored. Asked as of the moment after the palette closes,
-  // because that is when the command would run — the palette is itself the
-  // dialog `isCommandAvailable` refuses everything under.
+  // Rows the window would refuse are left out, asked as of after the palette closes (it is a dialog too).
   const consent = useWorkspaceStore((state) => state.consent)
   const layouts = useWorkspaceStore((state) => state.layouts)
   const watches = useWorkspaceStore((state) => state.watches)
@@ -93,16 +86,13 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
       return
     }
 
-    // The command, not the kind: this is the thing the pane will run, and the
-    // runtime pins the session id so a pane started here resumes like any other.
+    // The command, not the kind; the runtime pins the session id so it resumes like any other pane.
     if (item.kind === 'agent') {
       void store.startAgent(item.id)
       return
     }
 
-    // A row that is also a command goes through the one dispatcher, so that
-    // what the palette does and what the chord does cannot come apart. This
-    // used to be a third copy of the same switch.
+    // Commands go through the one dispatcher, so palette and chord cannot come apart.
     const command = commandNamed(item.id)
     if (command) {
       runWorkspaceCommand(command, store)
@@ -123,9 +113,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         store.openDialog({ kind: 'install-cli' })
         break
       case 'check-for-updates':
-        // The palette has already closed. The answer arrives as the card, or as
-        // a notice saying this build is the latest — never as a dialog, because
-        // this is news and news does not take the keyboard.
+        // The answer arrives as the card or a notice, never a dialog.
         void store.checkForUpdates()
         break
       case 'toggle-automatic-updates':
@@ -180,8 +168,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
                   role="option"
                   aria-selected={index === cursor}
                   className={`palette__row${index === cursor ? ' palette__row--selected' : ''}`}
-                  // Pointer selection follows the mouse, so clicking never runs
-                  // a different row than the one under the cursor.
+                  // Selection follows the pointer, so a click runs the row under it.
                   onMouseMove={() => setSelected(index)}
                   onClick={() => run(item)}
                 >

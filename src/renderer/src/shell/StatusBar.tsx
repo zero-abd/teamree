@@ -1,10 +1,5 @@
-// The bottom rail: is the runtime there, what am I looking at, how much of it
-// is running, and — at the left end, beside the runtime — the two things the
-// machine itself is doing for this window: staying awake, and paying for it.
-// Everything here is a fact. Two of them are also the way into something: the
-// git line opens the changes panel, and the two utilities open small panels of
-// their own. It shows state and never instructions; the chords are in the
-// menu bar, the palette, the help page and the front door, and nowhere else.
+// The bottom rail: runtime, what is on screen, how much is running, and keep-awake and its cost.
+// State only, never instructions; the git line and the two utilities open panels.
 
 import { collectTerminalIds } from '../panes/paneLayout'
 import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
@@ -14,13 +9,7 @@ import { useKeepAwake } from './keepAwake'
 import { KeepAwakeControl } from './KeepAwakeControl'
 import { ResourcesControl } from './ResourcesControl'
 
-/**
- * What the runtime dot says on hover, by phase. On the rail itself it is the
- * dot alone: green when the runtime answers, amber while it is starting or
- * coming back, red when it is down. `● Runtime ready 0.2.0` was three facts
- * where one glance needs one, and the version has its places in Settings and
- * the About box.
- */
+/** The runtime dot's hover text by phase; the rail shows only the coloured dot. */
 const CONNECTION_LABEL: Record<string, string> = {
   connecting: 'Runtime starting',
   ready: 'Runtime',
@@ -39,20 +28,16 @@ export function StatusBar(): React.JSX.Element {
     state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
   )
   const totalTerminals = useWorkspaceStore((state) => Object.keys(state.terminals).length)
-  // Pressed while the changes tab is what the right panel shows: that is the
-  // one state the click below closes rather than opens.
+  // Pressed while the changes tab is showing, the one state the click closes.
   const changesOpen = useWorkspaceStore((state) => state.rightPanelOpen && state.rightPanelTab === 'changes')
   const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
 
-  // The rail is always mounted, which makes it the right place to keep the
-  // main process told which way this Mac's sleep should go.
+  // The rail is always mounted, so it keeps main told which way sleep should go.
   useKeepAwake()
 
   const paneCount = collectTerminalIds(layout?.root ?? null).length
   const summary = summarizeWorktreeStatus(status)
 
-  // The error while there is one, the version once the runtime answers, and
-  // the phase in between.
   const runtimeTitle =
     connection.detail ??
     (connection.phase === 'ready' && runtimeVersion
@@ -86,10 +71,7 @@ export function StatusBar(): React.JSX.Element {
       </span>
 
       {summary && status ? (
-        // The count is in the name as well as on the button, so somebody
-        // driving this by voice can say what they see. Offered for a clean tree
-        // too: the panel is where the last commits are read, not only where
-        // dirty files are staged.
+        // The count is in the accessible name too; offered on a clean tree for reading the last commits.
         <button
           type="button"
           className={`statusbar__item statusbar__button${changesOpen ? ' statusbar__button--on' : ''}`}
