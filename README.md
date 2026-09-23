@@ -12,8 +12,8 @@
 </p>
 
 <p align="center">
-  <strong>Run your agents like a team.</strong><br/>
-  Each agent in its own git worktree. One window says which one needs you.
+  <strong>Your whole team ships in parallel.</strong><br/>
+  Every agent in its own git worktree. Every teammate in the same window.
 </p>
 
 <p align="center">
