@@ -112,13 +112,25 @@ function finish() {
     process.exitCode = 0
   }
   // `app.quit()` rather than `app.exit()`, and the difference is the whole of
-  // the fix. `exit` tears the process down under the ptys this check opened,
-  // and a pty whose child is still being reaped when its native handle goes
-  // throws from inside node-pty with nothing left to catch it — the process
-  // died with SIGABRT after printing its success line, once there were three
-  // panes open rather than one. `quit` goes through the app's own `before-quit`,
-  // which stops the runtime and every pane first; that is the sequence a person
-  // pressing ⌘Q gets and it is the one that ends cleanly.
+  // the fix. This gate used to print its success line and then die with
+  // SIGABRT — "terminating due to uncaught exception of type Napi::Error" —
+  // on any run that had opened a pane, and the mechanism is in node-pty's
+  // `SetupExitCallback` (src/unix/pty.cc): every pty gets a thread of its own
+  // that waits for the child to die and then calls back into JavaScript
+  // through a ThreadSafeFunction. `app.exit()` starts tearing the Node
+  // environment down while those children are still alive; they die as the
+  // process goes, their threads wake, and a callback into an environment that
+  // is closing throws a C++ exception that nothing on that thread catches.
+  // How often it happened tracked how many panes were open — one was usually
+  // fine, three was every time — and the menu bar's arrival shifted the
+  // timing enough that one pane started to hit it too.
+  //
+  // `quit` goes through the app's own `before-quit`, and that sequence stops
+  // the runtime first, which kills every pty and *awaits* each exit callback
+  // (`terminals.shutdown()` in `startRuntime.ts`) before the process leaves.
+  // No thread is left to wake late. It is the sequence a person pressing ⌘Q
+  // gets, and it is the one that ends cleanly; the exit code rides on
+  // `process.exitCode`, which `quit` honours and `exit` never needed to.
   app.quit()
 }
 
