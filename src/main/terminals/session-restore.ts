@@ -65,6 +65,14 @@ export type TerminalRecord = {
    * Input is the part that only happens when somebody meant it — which is the
    * strongest thing that can be said for it, and not strong enough on its own.
    *
+   * It is a statement about a person at all only because the window says which
+   * writes were one. A terminal answers the device queries a program asks it —
+   * what kind of terminal it is, where the cursor is — by *sending bytes*, down
+   * the same path a keystroke takes, and an agent asks within a second of
+   * starting. So this said `true` of every agent pane before anybody had looked
+   * at one. `handsHere.ts` is where the distinction is drawn, and
+   * `PtySession.write` is where it arrives.
+   *
    * Three values and not two, which is the part worth being careful about.
    * `false` is this version saying nobody has typed. Absent is *unknown* — a
    * record written before this field existed, which is every record in every

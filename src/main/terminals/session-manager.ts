@@ -345,18 +345,22 @@ export class TerminalSessionManager {
    * the one thing a keystroke changes that anyone else needs to hear about.
    * Reported rather than published here, so the manager stays unaware of the
    * workspace stream.
+   *
+   * `byHand` is false only for the emulator answering the program's own
+   * questions — bytes for the pty and nothing for the record. See
+   * `PtySession.write`.
    */
-  write(terminalId: string, data: string): boolean {
+  write(terminalId: string, data: string, byHand = true): boolean {
     const session = this.require(terminalId)
     const wasRestored = session.snapshot().restored !== undefined
     const wasUntouched = !session.wasTypedInto
-    session.write(data)
+    session.write(data, byHand)
     // The first keystroke a pane ever gets is the moment its agent can have a
     // conversation worth resuming, and the next launch has to know. Written
     // once per pane rather than once per keystroke: this runs on the typing
     // path, and the store persists on every put.
-    if (wasUntouched) this.rememberTyped(terminalId)
-    return wasRestored
+    if (byHand && wasUntouched) this.rememberTyped(terminalId)
+    return byHand && wasRestored
   }
 
   /**

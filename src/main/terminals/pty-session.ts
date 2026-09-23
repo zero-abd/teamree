@@ -344,19 +344,39 @@ export class PtySession {
     }
   }
 
-  write(data: string): void {
+  /**
+   * Puts bytes on the pty, and records who put them there.
+   *
+   * `byHand` is false for the bytes the emulator sends of its own accord — its
+   * answers to the device queries a full-screen program asks constantly. Those
+   * belong on the pty like any other, and they are the one kind of write that
+   * says nothing about whether anybody is here: an agent pane produces them
+   * within a second of starting, before the window is even looked at. Only the
+   * window can tell them from a keystroke, so it is the window that says; see
+   * `handsHere.ts`.
+   *
+   * Defaulting to a person is the safe direction of the two. Everything else
+   * that writes here is one — the CLI's `terminal send`, a teammate's keystroke
+   * — and the cost of getting it wrong that way is a resume attempted for a
+   * pane that had nothing to resume, which now says so and starts over. The
+   * other way round loses a real conversation.
+   */
+  write(data: string, byHand = true): void {
     // Draining counts as exited here: the child has been reaped, so there is
     // nothing on the other end to read this, however the event is still held.
     if (!this.running || this.draining) {
       throw new TerminalServiceError(ErrorCode.Conflict, `terminal ${this.id} has exited`)
     }
-    // Typing into a restored pane is the user taking it over; the badge has
-    // said what it had to say by then.
-    this.restored = undefined
-    this.typedInto = true
-    // And a bell is a question: this is somebody answering it. Leaving it set
-    // would leave the pane asking for something it has just been given.
-    this.lastBellAt = undefined
+    if (byHand) {
+      // Typing into a restored pane is the user taking it over; the badge has
+      // said what it had to say by then.
+      this.restored = undefined
+      this.typedInto = true
+      // And a bell is a question: this is somebody answering it. Leaving it set
+      // would leave the pane asking for something it has just been given. An
+      // emulator's reply answers nobody's question, so it leaves the bell up.
+      this.lastBellAt = undefined
+    }
     this.pty.write(data)
   }
 

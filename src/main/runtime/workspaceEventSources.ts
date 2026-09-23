@@ -198,12 +198,17 @@ export function publishTerminalEvents(
   // which retires its badge. Every other write changes nothing a client holds,
   // and publishing per keystroke would be absurd — hence the manager reporting
   // whether this particular write mattered rather than a blanket producer.
+  //
+  // Asked on both sides of the write rather than only before it, because not
+  // every write retires the badge any more: an emulator answering the program's
+  // own questions leaves a restored pane restored, and a pane that is still
+  // restored has nothing to announce.
   registry.register('terminal.write', schemas['terminal.write'], async (params, call) => {
-    const wasRestored = terminals.manager
-      .list()
-      .some((terminal) => terminal.id === params.terminalId && terminal.restored !== undefined)
+    const restored = (): boolean =>
+      terminals.manager.list().some((terminal) => terminal.id === params.terminalId && terminal.restored !== undefined)
+    const wasRestored = restored()
     const result = await handlers['terminal.write'](params, call)
-    if (wasRestored) bus.emit({ type: 'terminals' })
+    if (wasRestored && !restored()) bus.emit({ type: 'terminals' })
     return result
   })
 

@@ -123,7 +123,9 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
     'agent.list': async () => findInstalledAgents(),
     'terminal.create': async (params) => manager.create(params),
     'terminal.write': async (params) => {
-      manager.write(params.terminalId, params.data)
+      // Absent means a person: every caller but the pane view is one, and the
+      // pane view is the only one that can see the difference.
+      manager.write(params.terminalId, params.data, params.byHand !== false)
       return { written: true }
     },
     'terminal.resize': async (params) => manager.resize(params.terminalId, params.cols, params.rows),

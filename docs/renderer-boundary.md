@@ -308,7 +308,7 @@ nothing, is that promise being false at the exact moment somebody is making a
 decision on the strength of it.
 
 The fix is that the view sends only bytes a person in this window produced.
-`handsHere` in `WatchedPaneView.tsx` marks the moments somebody acted — every
+`handsHere` in `handsHere.ts` marks the moments somebody acted — every
 way xterm turns an action into data begins as a DOM event inside the terminal's
 own element, and a capture listener there runs before xterm's own handler does.
 A reply has no such event behind it. The mark lasts one microtask, which is
