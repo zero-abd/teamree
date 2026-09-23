@@ -60,6 +60,21 @@ export function commandForEvent(
   return null
 }
 
+/**
+ * The command this name stands for, or null if this window has no such command.
+ *
+ * The table is the authority on what a command is, so the question is asked
+ * here rather than anywhere that happens to be holding a string. It is asked at
+ * all because the menu bar brought a name back across a process boundary: what
+ * arrives is the `command` of an item this window itself published a moment
+ * earlier, and "it can only be one of ours" is the kind of thing that stays
+ * true right up until it does not.
+ */
+export function commandNamed(value: string): WorkspaceCommand | null {
+  const shortcut = WORKSPACE_SHORTCUTS.find((entry) => entry.command === value)
+  return shortcut ? shortcut.command : null
+}
+
 export function shortcutHint(command: WorkspaceCommand, modifier: PlatformModifier): string {
   const shortcut = WORKSPACE_SHORTCUTS.find((entry) => entry.command === command)
   return shortcut ? formatChord(shortcut.chord, modifier) : ''

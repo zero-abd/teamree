@@ -75,7 +75,14 @@ describe('the renderer transport names one set of channels', () => {
       // the value of this check is that adding a channel makes somebody come
       // here and say where it is answered: a glob would have quietly adopted
       // the next one and stopped being a check at all.
-      ...(await channelsNamedIn('src/main/reveal/revealPath.ts'))
+      ...(await channelsNamedIn('src/main/reveal/revealPath.ts')),
+      // And the menu bar's two, which are that same arrangement again: the
+      // window publishes what its own menus should contain, the main process
+      // draws them and says when one was chosen. Both literals live beside the
+      // module that serves them, and they are named here for the reason above
+      // — adding a channel should make somebody come to this list and say where
+      // it is answered.
+      ...(await channelsNamedIn('src/main/menuBar.ts'))
     ])
 
     expect([...preload].filter((channel) => !served.has(channel))).toEqual([])
