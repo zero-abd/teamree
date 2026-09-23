@@ -42,6 +42,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
+  const closePanes = useWorkspaceStore((state) => state.closePanes)
   const renamePane = useWorkspaceStore((state) => state.renamePane)
   const unsavedFiles = useWorkspaceStore((state) => state.unsavedFiles)
   const namingMarkdown = useWorkspaceStore((state) => state.namingMarkdown)
@@ -109,7 +110,8 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
             const active = tab.terminalId === focusedTerminalId
             const isUnread = unread.has(tab.terminalId)
             const isFile = tab.kind === 'file'
-            const unsaved = isFile && unsavedFiles[tab.terminalId] === true
+            const files = tab.files ?? [tab.terminalId]
+            const unsaved = isFile && files.some((id) => unsavedFiles[id] === true)
             return (
               <div
                 className={`tab${active ? ' tab--active' : ''}${isUnread ? ' tab--unread' : ''}`}
@@ -165,6 +167,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                     {isFile ? null : <PaneGlyph agent={tab.agent} />}
                     {/* Shortened here only; the tooltip and the record keep all of it. */}
                     {tab.text === '' ? null : <span className="tab__name">{truncateName(tab.text)}</span>}
+                    {files.length > 1 ? <span className="tab__more">+{files.length - 1}</span> : null}
                     {unsaved ? <UnsavedDot /> : null}
                   </button>
                 )}
@@ -186,9 +189,9 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                 <button
                   type="button"
                   className="tab__close"
-                  title={`Close pane ${tab.label}`}
-                  aria-label={`Close pane ${tab.label}`}
-                  onClick={() => void closeTerminal(tab.terminalId)}
+                  title={files.length > 1 ? `Close ${files.length} files` : `Close pane ${tab.label}`}
+                  aria-label={files.length > 1 ? `Close ${files.length} files` : `Close pane ${tab.label}`}
+                  onClick={() => void (files.length > 1 ? closePanes(files) : closeTerminal(tab.terminalId))}
                 >
                   <svg viewBox="0 0 12 12" aria-hidden="true">
                     <path d="M3 3 L9 9 M9 3 L3 9" />

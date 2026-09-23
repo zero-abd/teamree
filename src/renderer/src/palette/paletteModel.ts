@@ -157,6 +157,8 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'focus-next-pane': 'focus next pane forward right',
   'select-next-pane': 'select next pane tab switch cycle',
   'select-previous-pane': 'select previous pane tab switch cycle back',
+  'next-file-tab': 'next file tab column page switch',
+  'previous-file-tab': 'previous file tab column page switch back',
   'expand-pane': 'maximize maximise expand pane full zoom',
   'previous-worktree': 'previous worktree up back',
   'next-worktree': 'next worktree down forward',

@@ -2,7 +2,7 @@
 // the key handler declines, and `runWorkspaceCommand` is what happens either way.
 
 import { describe, expect, it, vi } from 'vitest'
-import type { ConsentRequest } from '@shared/entities'
+import type { PaneNode, ConsentRequest } from '@shared/entities'
 import type { CommandActions, CommandState, Workspace } from './workspaceCommands'
 import { isCommandAvailable, paneNumberTarget, runWorkspaceCommand } from './workspaceCommands'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand } from './workspaceShortcuts'
@@ -421,6 +421,55 @@ describe('the tab strip by key', () => {
   it('names none under a dialog or a teammate’s question', () => {
     expect(paneNumberTarget(1, { ...THREE_TABS, dialog: { kind: 'palette' } })).toBeNull()
     expect(paneNumberTarget(1, { ...THREE_TABS, consent: QUESTION })).toBeNull()
+  })
+})
+
+describe('the file column by key', () => {
+  const file = (id: string): PaneNode => ({ kind: 'leaf', terminalId: id, pane: 'file', path: `${id}.ts` })
+  const COLUMN: CommandState = {
+    ...THREE_TABS,
+    layouts: {
+      w1: {
+        worktreeId: 'w1',
+        root: {
+          kind: 'split',
+          direction: 'row',
+          sizes: [0.5, 0.5],
+          children: [
+            { kind: 'leaf', terminalId: 't1' },
+            {
+              kind: 'split',
+              direction: 'column',
+              sizes: [1 / 3, 1 / 3, 1 / 3],
+              children: [file('f1'), file('f2'), file('f3')],
+              tabs: true,
+              shown: 'f2'
+            }
+          ]
+        },
+        focusedTerminalId: 't1'
+      }
+    }
+  }
+  const shown = (command: WorkspaceCommand, state: CommandState): unknown => {
+    const showPane = vi.fn()
+    runWorkspaceCommand(command, { ...workspace(state), showPane })
+    return showPane.mock.calls[0]?.[0]
+  }
+
+  it('is one stop for ⌃Tab and the numbers, landing on its shown file', () => {
+    expect(shown('select-next-pane', COLUMN)).toBe('f2')
+    expect(shown('select-next-pane', focusedOn(COLUMN, 'f2'))).toBe('t1')
+    expect(paneNumberTarget(2, COLUMN)).toBe('f2')
+    expect(paneNumberTarget(3, COLUMN)).toBeNull()
+  })
+
+  it('steps through its own tabs, wrapping, only while one of them has the focus', () => {
+    expect(isCommandAvailable('next-file-tab', COLUMN)).toBe(false)
+    expect(isCommandAvailable('next-file-tab', focusedOn(COLUMN, 'f2'))).toBe(true)
+    expect(shown('next-file-tab', focusedOn(COLUMN, 'f2'))).toBe('f3')
+    expect(shown('next-file-tab', focusedOn(COLUMN, 'f3'))).toBe('f1')
+    expect(shown('previous-file-tab', focusedOn(COLUMN, 'f2'))).toBe('f1')
   })
 })
 

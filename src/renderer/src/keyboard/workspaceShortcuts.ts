@@ -19,6 +19,8 @@ export type WorkspaceCommand =
   | 'focus-previous-pane'
   | 'select-next-pane'
   | 'select-previous-pane'
+  | 'next-file-tab'
+  | 'previous-file-tab'
   | 'expand-pane'
   | 'previous-worktree'
   | 'next-worktree'
@@ -61,6 +63,9 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // Control on a Mac too, as in Safari and Terminal; the strip's tabs only, where ⌘] also visits teammates' panes.
   { command: 'select-next-pane', chord: { key: 'Tab', ctrl: true }, title: 'Select Next Pane' },
   { command: 'select-previous-pane', chord: { key: 'Tab', ctrl: true, shift: true }, title: 'Select Previous Pane' },
+  // Within the file column, as editors page their tabs.
+  { command: 'next-file-tab', chord: { key: 'PageDown', ctrl: true }, title: 'Next File Tab' },
+  { command: 'previous-file-tab', chord: { key: 'PageUp', ctrl: true }, title: 'Previous File Tab' },
   // Shifted, since ⌘↩ is a send key in many pane programs; pressed again it restores. American
   // spelling to match Electron's own `minimize` role in the same menu.
   { command: 'expand-pane', chord: { key: 'Enter', shift: true }, title: 'Maximize pane' },

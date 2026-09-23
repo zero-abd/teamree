@@ -118,6 +118,8 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'focus-next-pane': { section: 'window' },
   'select-previous-pane': { section: 'window' },
   'select-next-pane': { section: 'window' },
+  'previous-file-tab': { section: 'window' },
+  'next-file-tab': { section: 'window' },
   // Which pane fills the window is the same subject as how they are arranged,
   // so it is read under the same menu — and under the walk rather than above
   // it, because it is the thing you do once you have arrived.

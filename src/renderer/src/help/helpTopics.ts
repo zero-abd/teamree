@@ -34,6 +34,8 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'focus-previous-pane': 'panes',
   'select-next-pane': 'panes',
   'select-previous-pane': 'panes',
+  'next-file-tab': 'panes',
+  'previous-file-tab': 'panes',
   'expand-pane': 'panes',
   'new-worktree': 'around',
   'previous-worktree': 'around',

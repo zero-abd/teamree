@@ -27,6 +27,14 @@ export function collectLeaves(node: PaneNode | null): Extract<PaneNode, { kind: 
   return node.children.flatMap(collectLeaves)
 }
 
+/** Leaf ids in reading order with the file column as one stop, its shown tab: the strip's and the walks' order. */
+export function paneStops(node: PaneNode | null): string[] {
+  if (!node) return []
+  if (node.kind === 'leaf') return [node.terminalId]
+  if (isFileColumn(node)) return [shownTabId(node) ?? []].flat()
+  return node.children.flatMap(paneStops)
+}
+
 export function hasTerminal(node: PaneNode | null, terminalId: string): boolean {
   return collectTerminalIds(node).includes(terminalId)
 }

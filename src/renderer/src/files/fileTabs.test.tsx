@@ -181,6 +181,21 @@ describe('file tabs in the store', () => {
   })
 })
 
+describe('the strip over a file column', () => {
+  it('shows the column as one tab: the shown file, the others counted, a click focusing it', () => {
+    for (const path of ['a.ts', 'src/app.ts', 'b.ts', 'c.ts']) useWorkspaceStore.getState().openFilePane('w1', path)
+    const app = fileLeavesIn(layout().root)[1]!.terminalId
+    useWorkspaceStore.getState().focusPane(app)
+    useWorkspaceStore.getState().focusPane('t1')
+    render(<TerminalTabs modifier={resolvePlatformModifier('darwin')} />)
+    const tabs = within(screen.getByRole('tablist', { name: 'Terminals in this worktree' })).getAllByRole('tab')
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['terminal', 'app.ts+3'])
+    fireEvent.click(tabs[1]!)
+    expect(layout().focusedTerminalId).toBe(app)
+    expect(screen.getByRole('button', { name: 'Close 4 files' })).toBeTruthy()
+  })
+})
+
 describe('the file viewer', () => {
   const mount = (path = 'src/app.ts') =>
     render(<FileView paneId="file:1" worktreeId="w1" path={path} focused onFocus={() => {}} onClose={() => {}} />)
