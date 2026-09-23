@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
-import { FileGlyph } from '../files/FileView'
+import { FileGlyph, UnsavedDot } from '../files/FileBar'
 import { usePaneMenu } from './paneMenu'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { useStartMenuItems } from './startMenu'
@@ -165,7 +165,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                     {isFile ? null : <PaneGlyph agent={tab.agent} />}
                     {/* Shortened here only; the tooltip and the record keep all of it. */}
                     {tab.text === '' ? null : <span className="tab__name">{truncateName(tab.text)}</span>}
-                    {unsaved ? <span className="tab__unsaved" data-testid="unsaved" aria-hidden="true" /> : null}
+                    {unsaved ? <UnsavedDot /> : null}
                   </button>
                 )}
                 {/* A button besides double-click: F2 is a brightness key on a Mac keyboard. A file pane is named by its file. */}

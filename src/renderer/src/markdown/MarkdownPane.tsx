@@ -4,14 +4,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FileContent } from '@shared/entities'
 import { filePaneName } from '@shared/filePane'
+import { FileBar } from '../files/FileBar'
+import { DiffBody, DiffTools, useFileDiff } from '../files/FileDiff'
 import type { FilePaneProps } from '../panes/FilePane'
-import { PaneCloseButton } from '../panes/PaneCloseButton'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { openInBrowser } from '../shell/openInBrowser'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { NEW_CHAT_URL } from './artifactUrl'
 import { createAutosave } from './autosave'
 import { MarkdownEditor, type MarkdownEditorHandle } from './MarkdownEditor'
+import { registerPage } from './openAsArtifact'
 
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i
 
@@ -48,12 +49,13 @@ export function MarkdownPane({
   focused,
   onFocus,
   onClose,
-  onHeaderMenu
+  onHeaderMenu,
+  onMenu
 }: FilePaneProps): React.JSX.Element {
+  const worktreePath = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.path)
   const dirty = useWorkspaceStore((state) => state.unsavedFiles[paneId] === true)
   const setFileUnsaved = useWorkspaceStore((state) => state.setFileUnsaved)
   const setEditingMarkdown = useWorkspaceStore((state) => state.setEditingMarkdown)
-  const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
   const filesEpoch = useWorkspaceStore((state) => state.worktreeFilesEpoch)
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -65,6 +67,7 @@ export function MarkdownPane({
   // Each image's URL by worktree path; the editor draws every image twice as it starts.
   const images = useRef(new Map<string, Promise<string | null>>())
   const name = filePaneName(path)
+  const diff = useFileDiff(paneId, worktreeId, path)
 
   const autosave = useMemo(
     () =>
@@ -118,8 +121,10 @@ export function MarkdownPane({
 
   // The keyboard follows the focus here, so a new page can be typed on at once.
   useEffect(() => {
-    if (focused && loaded !== null) editor.current?.focus()
-  }, [focused, loaded])
+    if (focused && loaded !== null && !diff.shown) editor.current?.focus()
+  }, [focused, loaded, diff.shown])
+
+  useEffect(() => registerPage(paneId, () => editor.current?.getMarkdown() ?? known.current.content), [paneId])
 
   // A change reported by the worktree is taken when the page has nothing of its own to lose.
   useEffect(() => {
@@ -167,11 +172,6 @@ export function MarkdownPane({
     [autosave, paneId, setFileUnsaved]
   )
 
-  const openAsArtifact = async (): Promise<void> => {
-    await copyToClipboard(editor.current?.getMarkdown() ?? known.current.content, name)
-    openInBrowser(NEW_CHAT_URL)
-  }
-
   // Only through a grant the runtime confined to the worktree; a URL passes as written but for `file:`.
   const resolveImage = useCallback(
     (src: string): Promise<string | null> => {
@@ -196,15 +196,15 @@ export function MarkdownPane({
       aria-label={name}
       onMouseDownCapture={onFocus}
     >
-      <header className="pane__bar" onContextMenu={onHeaderMenu}>
-        <span
-          className={`md-dot${dirty ? ' md-dot--unsaved' : ''}`}
-          title={dirty ? 'Unsaved' : 'Saved'}
-          aria-hidden="true"
-        />
-        <span className="pane__title" title={path}>
-          {name}
-        </span>
+      <FileBar
+        path={path}
+        name={name}
+        title={worktreePath === undefined ? path : `${worktreePath}/${path}`}
+        unsaved={dirty}
+        onHeaderMenu={onHeaderMenu}
+        onMenu={onMenu}
+        onClose={onClose}
+      >
         {error === null ? null : (
           <span className="chip pane__exit" title={error}>
             not saved
@@ -215,28 +215,25 @@ export function MarkdownPane({
             Reload
           </button>
         )}
-        <button
-          type="button"
-          className="pane__again md-artifact-button"
-          title="Copy, then open claude.ai"
-          onClick={() => void openAsArtifact()}
-        >
-          Open as artifact
-        </button>
-        <PaneCloseButton name={name} onClose={onClose} />
-      </header>
-      {loaded === null ? (
-        <div className="md-frame" />
-      ) : (
-        <MarkdownEditor
-          ref={editor}
-          initial={loaded.content}
-          onChange={onChange}
-          onFocusChange={setEditingMarkdown}
-          onOpenUrl={openInBrowser}
-          resolveImage={resolveImage}
-        />
-      )}
+        <DiffTools diff={diff} />
+      </FileBar>
+      <div className="file__body" ref={diff.body}>
+        {diff.shown ? <DiffBody worktreeId={worktreeId} diff={diff} /> : null}
+        <div className="file__view" hidden={diff.shown}>
+          {loaded === null ? (
+            <div className="md-frame" />
+          ) : (
+            <MarkdownEditor
+              ref={editor}
+              initial={loaded.content}
+              onChange={onChange}
+              onFocusChange={setEditingMarkdown}
+              onOpenUrl={openInBrowser}
+              resolveImage={resolveImage}
+            />
+          )}
+        </div>
+      </div>
     </section>
   )
 }

@@ -4,28 +4,10 @@
   background: var(--bg-window);
 }
 
-/* The bar's dot: the file is on disk, or the page is ahead of it. */
-.md-dot {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 99px;
-  border: 1px solid var(--fg-muted);
-  background: transparent;
-}
-
-.md-dot--unsaved {
-  border-color: var(--warning);
-  background: var(--warning);
-}
-
-.md-artifact-button {
-  margin-left: auto;
-}
-
 .md-frame {
   position: relative;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
 }

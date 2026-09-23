@@ -13,6 +13,8 @@ export type FilePaneProps = {
   onClose: () => void
   /** A right-click on the header: the pane's menu. */
   onHeaderMenu?: (event: React.MouseEvent<HTMLElement>) => void
+  /** The header's `⋯`: the same menu, hung from it. */
+  onMenu?: (event: React.MouseEvent<HTMLElement>) => void
   /** Bumped to open the find bar. */
   searchToken?: number
 }
