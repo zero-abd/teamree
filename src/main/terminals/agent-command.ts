@@ -65,10 +65,116 @@ const AGENTS: Readonly<Record<AgentKind, AgentSpec>> = {
     executables: ['droid'],
     resume: (sessionId) => ['--resume', sessionId],
     selectors: [{ flag: '--resume', takesValue: true }]
+  },
+  grok: {
+    executables: ['grok'],
+    resume: (sessionId) => ['--resume', sessionId],
+    resumeLatest: ['-c'],
+    selectors: [
+      { flag: '--resume', takesValue: true },
+      { flag: '-c', takesValue: false }
+    ]
+  },
+  cursor: {
+    executables: ['cursor-agent'],
+    resume: (sessionId) => ['--resume', sessionId],
+    resumeLatest: ['--continue'],
+    selectors: [
+      { flag: '--resume', takesValue: true },
+      { flag: '--continue', takesValue: false }
+    ],
+    prompt: (text) => [text]
+  },
+  copilot: {
+    executables: ['copilot'],
+    resume: (sessionId) => ['--resume', sessionId],
+    resumeLatest: ['--continue'],
+    selectors: [
+      { flag: '--resume', takesValue: true },
+      { flag: '--continue', takesValue: false }
+    ],
+    prompt: (text) => ['--interactive', text]
+  },
+  // An entry with only executables is start-only: its session flags are unconfirmed.
+  amp: { executables: ['amp'], selectors: [] },
+  pi: {
+    executables: ['pi'],
+    resume: (sessionId) => ['--session', sessionId],
+    resumeLatest: ['--continue'],
+    selectors: [
+      { flag: '--session', takesValue: true },
+      { flag: '--continue', takesValue: false },
+      { flag: '-c', takesValue: false }
+    ],
+    prompt: (text) => [text]
+  },
+  goose: { executables: ['goose'], selectors: [] },
+  auggie: {
+    executables: ['auggie'],
+    resume: (sessionId) => ['--resume', sessionId],
+    resumeLatest: ['--continue'],
+    selectors: [
+      { flag: '--resume', takesValue: true },
+      { flag: '--continue', takesValue: false },
+      { flag: '-c', takesValue: false }
+    ]
+  },
+  crush: { executables: ['crush'], selectors: [] },
+  cline: { executables: ['cline'], selectors: [] },
+  codebuff: { executables: ['codebuff'], selectors: [] },
+  continue: {
+    executables: ['cn'],
+    resumeLatest: ['--resume'],
+    selectors: [{ flag: '--resume', takesValue: false }]
+  },
+  kilo: { executables: ['kilo', 'kilocode'], selectors: [] },
+  kimi: {
+    executables: ['kimi'],
+    resume: (sessionId) => ['--session', sessionId],
+    resumeLatest: ['--continue'],
+    selectors: [
+      { flag: '--session', takesValue: true },
+      { flag: '--continue', takesValue: false },
+      { flag: '-c', takesValue: false }
+    ]
+  },
+  // Resuming is `kiro-cli chat --resume`, a subcommand this module cannot splice.
+  kiro: { executables: ['kiro-cli'], selectors: [] },
+  vibe: {
+    executables: ['vibe'],
+    resume: (sessionId) => ['--resume', sessionId],
+    resumeLatest: ['--continue'],
+    selectors: [
+      { flag: '--resume', takesValue: true },
+      { flag: '--continue', takesValue: false },
+      { flag: '-c', takesValue: false }
+    ]
+  },
+  qwen: {
+    executables: ['qwen'],
+    resume: (sessionId) => ['--resume', sessionId],
+    resumeLatest: ['--continue'],
+    selectors: [
+      { flag: '--resume', takesValue: true },
+      { flag: '--continue', takesValue: false }
+    ],
+    prompt: (text) => ['--prompt-interactive', text]
   }
 }
 
 export const AGENT_KINDS = Object.keys(AGENTS) as AgentKind[]
+
+/** The names a harness runs under, the one discovery prefers first. */
+export function agentExecutables(agent: AgentKind): readonly string[] {
+  return AGENTS[agent].executables
+}
+
+/** The harness a foreground process name belongs to. CLIs run by `node` show as `node` and stay unknown. */
+export function agentForProcess(name: string): AgentKind | null {
+  const base = (name.split(/[\\/]/).pop() ?? '').replace(/\.(exe|cmd|bat|ps1)$/i, '')
+  if (base.length === 0) return null
+  return AGENT_KINDS.find((kind) => AGENTS[kind].executables.includes(base)) ?? null
+}
 
 /** True when this agent lets us choose the session id before it starts. */
 export function pinsOwnSessionId(agent: AgentKind): boolean {

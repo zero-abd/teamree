@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AGENT_KINDS,
+  agentExecutables,
+  agentForProcess,
   carriesSelector,
   detectAgent,
   executableIndex,
@@ -90,6 +93,14 @@ describe('detectAgent', () => {
     expect(detectAgent('droid')).toBe('droid')
   })
 
+  it('knows a harness by an executable name that is not its kind', () => {
+    expect(detectAgent('cursor-agent --model gpt-5')).toBe('cursor')
+    expect(detectAgent('kiro-cli chat')).toBe('kiro')
+    expect(detectAgent('cn')).toBe('continue')
+    expect(detectAgent('kilocode')).toBe('kilo')
+    expect(detectAgent('vibe')).toBe('vibe')
+  })
+
   it('says nothing for an ordinary command', () => {
     expect(detectAgent('npm run dev')).toBeNull()
     expect(detectAgent('vim src/app.ts')).toBeNull()
@@ -128,6 +139,29 @@ describe('pinSessionCommand', () => {
   })
 })
 
+describe('the catalogue', () => {
+  it('gives every harness at least one executable, and no executable to two', () => {
+    const all = AGENT_KINDS.flatMap((kind) => agentExecutables(kind))
+    for (const kind of AGENT_KINDS) expect(agentExecutables(kind).length).toBeGreaterThan(0)
+    expect(new Set(all).size).toBe(all.length)
+  })
+})
+
+describe('agentForProcess', () => {
+  it('names the harness a foreground process belongs to', () => {
+    expect(agentForProcess('claude')).toBe('claude')
+    expect(agentForProcess('codex')).toBe('codex')
+    expect(agentForProcess('cursor-agent')).toBe('cursor')
+    expect(agentForProcess('C:\\tools\\codex.exe')).toBe('codex')
+  })
+
+  it('says nothing for a shell, an interpreter or an empty name', () => {
+    expect(agentForProcess('zsh')).toBeNull()
+    expect(agentForProcess('node')).toBeNull()
+    expect(agentForProcess('')).toBeNull()
+  })
+})
+
 describe('resumeSessionCommand', () => {
   it('resumes the id it was given', () => {
     expect(resumeSessionCommand('claude', 'claude', 'abc-123')).toBe('claude --resume abc-123')
@@ -142,6 +176,20 @@ describe('resumeSessionCommand', () => {
 
   it('says so rather than guessing when the agent offers no way back', () => {
     expect(resumeSessionCommand('gemini', 'gemini', null)).toBeNull()
+    expect(resumeSessionCommand('amp', 'amp', null)).toBeNull()
+    expect(resumeSessionCommand('kiro-cli', 'kiro', 'abc-123')).toBeNull()
+  })
+
+  it('resumes the harnesses whose flags are documented', () => {
+    expect(resumeSessionCommand('grok', 'grok', null)).toBe('grok -c')
+    expect(resumeSessionCommand('cursor-agent', 'cursor', null)).toBe('cursor-agent --continue')
+    expect(resumeSessionCommand('copilot --continue', 'copilot', 'abc-123')).toBe('copilot --resume abc-123')
+    expect(resumeSessionCommand('pi', 'pi', null)).toBe('pi --continue')
+    expect(resumeSessionCommand('auggie', 'auggie', null)).toBe('auggie --continue')
+    expect(resumeSessionCommand('cn', 'continue', null)).toBe('cn --resume')
+    expect(resumeSessionCommand('kimi', 'kimi', null)).toBe('kimi --continue')
+    expect(resumeSessionCommand('vibe -c', 'vibe', null)).toBe('vibe --continue')
+    expect(resumeSessionCommand('qwen', 'qwen', null)).toBe('qwen --continue')
   })
 
   // Two selectors, and which one won was the CLI's business.
@@ -292,5 +340,12 @@ describe('firstPromptCommand', () => {
 
   it('leaves the line alone for an agent with no way to take one', () => {
     expect(firstPromptCommand('droid', 'droid', 'hello')).toBe('droid')
+    expect(firstPromptCommand('goose', 'goose', 'hello')).toBe('goose')
+  })
+
+  it('uses each harness’s interactive prompt form', () => {
+    expect(firstPromptCommand('copilot', 'copilot', 'go')).toBe('copilot --interactive go')
+    expect(firstPromptCommand('qwen', 'qwen', 'go')).toBe('qwen --prompt-interactive go')
+    expect(firstPromptCommand('cursor-agent', 'cursor', 'go')).toBe('cursor-agent go')
   })
 })
