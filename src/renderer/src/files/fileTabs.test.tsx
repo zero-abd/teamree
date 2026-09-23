@@ -4,11 +4,12 @@
 // rewriting the tree, and held open by a question while it has unsaved edits.
 // The viewer under it reads, edits and saves through the runtime.
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { EditorView } from '@codemirror/view'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FileContent, FileView as FileViewAnswer, Layout } from '@shared/entities'
-import { fileLeavesIn } from '@shared/filePane'
+import type { FileContent, FileView as FileViewAnswer, Layout, PaneNode, Worktree } from '@shared/entities'
+import { fileLeaf, fileLeavesIn } from '@shared/filePane'
+import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 const call = vi.fn()
 
@@ -24,9 +25,13 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   RUNTIME_IS_SEEDED: false
 }))
 
+vi.mock('../terminal/TerminalView', () => ({ TerminalView: () => <div /> }))
+
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { FileView } = await import('./FileView')
 const { paneTabs } = await import('../workspace/paneTabs')
+const { PaneTree } = await import('../panes/PaneTree')
+const { TerminalTabs } = await import('../workspace/TerminalTabs')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -288,6 +293,149 @@ describe('the file viewer', () => {
     expect(document.querySelector('.patch')).toBeNull()
     expect(diff.disabled).toBe(false)
     fireEvent.click(diff)
+    await waitFor(() => expect(diff.disabled).toBe(true))
+  })
+})
+
+describe('one header for code and markdown', () => {
+  const MAC = resolvePlatformModifier('darwin')
+  const worktree = { id: 'w1', projectId: 'p1', name: 'w', branch: 'w', path: '/repos/w', state: 'ready' } as Worktree
+  const root: PaneNode = {
+    kind: 'split',
+    direction: 'row',
+    sizes: [0.5, 0.5],
+    children: [fileLeaf('file:code', 'src/app.ts'), fileLeaf('file:md', 'docs/guide.md')]
+  }
+  const patch = (path: string): string =>
+    `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1 +1 @@\n-b\n+a\n`
+  let total = 1
+
+  beforeEach(() => {
+    total = 1
+    call.mockImplementation(async (method: string, params: { path: string; staged?: boolean }) => {
+      if (method === 'file.read') return { ...text('a\n'), path: params.path }
+      if (method === 'worktree.changes')
+        return { worktreeId: 'w1', changes: [], total, limit: 1, truncated: false, readAt: 1 }
+      if (method === 'worktree.diff') {
+        const body = params.staged ? '' : patch(params.path)
+        return { worktreeId: 'w1', path: params.path, staged: false, patch: body, truncated: false, readAt: 1 }
+      }
+      return undefined
+    })
+    useWorkspaceStore.setState({
+      worktrees: [worktree],
+      layouts: { w1: { worktreeId: 'w1', root, focusedTerminalId: 'file:code' } },
+      loadEditors: async () => {}
+    })
+    render(
+      <>
+        <TerminalTabs modifier={MAC} />
+        <PaneTree
+          node={root}
+          path={[]}
+          worktreeId="w1"
+          terminals={{}}
+          focusedTerminalId="file:code"
+          onFocus={() => {}}
+          onClose={() => {}}
+          onRelaunch={() => {}}
+          onResize={() => {}}
+          isAppChord={() => false}
+          modifier={MAC}
+          searchTerminalId={null}
+          searchToken={0}
+          onCloseSearch={() => {}}
+        />
+      </>
+    )
+  })
+
+  const header = (name: string): HTMLElement => screen.getByRole('region', { name }).querySelector('header')!
+  /** The bar left to right: glyph, `dir/` and name, the dot, then every button by its name. */
+  const parts = (name: string): string[] =>
+    [...header(name).children].flatMap((part) => {
+      if (part.classList.contains('file__glyph')) return ['glyph']
+      if (part.classList.contains('file__path'))
+        return [`${part.querySelector('.file__dir')?.textContent}|${part.textContent}`]
+      if (part.classList.contains('file__unsaved')) return ['dot']
+      if (part.tagName === 'BUTTON') return [part.getAttribute('aria-label') ?? part.textContent ?? '']
+      return []
+    })
+  const menuLabels = (): string[] =>
+    within(screen.getByRole('menu'))
+      .getAllByRole('menuitem')
+      .filter((item) => item.parentElement === screen.getByRole('menu'))
+      .map((item) => item.querySelector('.row-menu__label')?.textContent ?? '')
+
+  it('lays both out alike: glyph, path, the dot only when dirty, tools, ⋯, ×', async () => {
+    await screen.findByText('a', { selector: '.ProseMirror p' })
+    expect(parts('app.ts')).toEqual(['glyph', 'src/|src/app.ts', 'Diff', 'More for app.ts', 'Close pane app.ts'])
+    expect(parts('guide.md')).toEqual([
+      'glyph',
+      'docs/|docs/guide.md',
+      'Diff',
+      'More for guide.md',
+      'Close pane guide.md'
+    ])
+
+    act(() => useWorkspaceStore.setState({ unsavedFiles: { 'file:code': true, 'file:md': true } }))
+    expect(parts('app.ts').slice(0, 3)).toEqual(['glyph', 'src/|src/app.ts', 'dot'])
+    expect(parts('guide.md').slice(0, 3)).toEqual(['glyph', 'docs/|docs/guide.md', 'dot'])
+  })
+
+  it('draws the tab’s dirty dot as the header draws it', () => {
+    act(() => useWorkspaceStore.setState({ unsavedFiles: { 'file:md': true } }))
+    const tabDot = within(screen.getByRole('tab', { name: 'guide.md' })).getByTestId('unsaved')
+    expect(header('guide.md').querySelector('.file__unsaved')?.outerHTML).toBe(tabDot.outerHTML)
+  })
+
+  it('opens the right-click menu from ⋯, Open as artifact in it for a page', async () => {
+    for (const name of ['app.ts', 'guide.md']) {
+      fireEvent.contextMenu(header(name), { clientX: 300, clientY: 60 })
+      const rightClick = menuLabels()
+      fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+      fireEvent.click(screen.getByRole('button', { name: `More for ${name}` }))
+      expect(menuLabels()).toEqual(rightClick)
+      expect(rightClick.includes('Open as artifact')).toBe(name === 'guide.md')
+      fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    }
+    expect(screen.queryByRole('button', { name: 'Open as artifact' })).toBeNull()
+  })
+
+  it('closes on a second ⋯, the focus back on it', () => {
+    const more = screen.getByRole('button', { name: 'More for app.ts' })
+    fireEvent.click(more)
+    expect(screen.getByRole('menu')).toBeTruthy()
+    fireEvent.click(more)
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(more)
+  })
+
+  it('copies the page as it stands from Open as artifact, then opens a new chat', async () => {
+    const copy = vi.fn(async () => {})
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    useWorkspaceStore.setState({ copyToClipboard: copy })
+    await screen.findByText('a', { selector: '.ProseMirror p' })
+    fireEvent.click(screen.getByRole('button', { name: 'More for guide.md' }))
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Open as artifact' }))
+    await waitFor(() => expect(open).toHaveBeenCalledWith('https://claude.ai/new', '_blank', 'noopener'))
+    expect(copy).toHaveBeenCalledWith('a\n', 'guide.md')
+    open.mockRestore()
+  })
+
+  it('offers a page its diff when it has changes, as a code file', async () => {
+    const diff = within(header('guide.md')).getByRole('button', { name: 'Diff' }) as HTMLButtonElement
+    await waitFor(() => expect(diff.disabled).toBe(false))
+    fireEvent.click(diff)
+    await waitFor(() => expect(screen.getByRole('region', { name: 'guide.md' }).querySelector('.patch')).not.toBeNull())
+    expect(diff.getAttribute('aria-pressed')).toBe('true')
+    expect(within(header('guide.md')).getByRole('button', { name: 'Inline' })).toBeTruthy()
+  })
+
+  it('leaves Diff off on a page with nothing changed', async () => {
+    total = 0
+    act(() => useWorkspaceStore.setState((state) => ({ worktreeFilesEpoch: state.worktreeFilesEpoch + 1 })))
+    const diff = within(header('guide.md')).getByRole('button', { name: 'Diff' }) as HTMLButtonElement
     await waitFor(() => expect(diff.disabled).toBe(true))
   })
 })

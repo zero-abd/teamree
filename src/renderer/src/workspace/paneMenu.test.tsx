@@ -39,8 +39,7 @@ vi.mock('../terminal/TerminalView', () => ({ TerminalView: () => <div /> }))
 vi.mock('../files/FileView', () => ({
   FileView: ({ onHeaderMenu }: { onHeaderMenu?: (event: React.MouseEvent<HTMLElement>) => void }) => (
     <header data-testid="file-header" onContextMenu={onHeaderMenu} />
-  ),
-  FileGlyph: () => <span />
+  )
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
@@ -253,6 +252,7 @@ describe('a file tab', () => {
       'Copy path',
       'Reveal in Finder',
       'Open in',
+      'Open as artifact',
       'Maximize',
       'Close',
       'Close Others'

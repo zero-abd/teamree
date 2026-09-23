@@ -74,6 +74,7 @@ function FileLeaf({
         onFocus={() => onFocus(paneId)}
         onClose={() => onClose(paneId)}
         onHeaderMenu={(event) => menu.onContextMenu(paneId, filePaneName(path), event)}
+        onMenu={(event) => menu.onButton(paneId, filePaneName(path), event)}
         searchToken={searchTerminalId === paneId ? searchToken : 0}
       />
       {menu.menu}

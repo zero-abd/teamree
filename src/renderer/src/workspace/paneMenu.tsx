@@ -1,10 +1,11 @@
 // The menu a tab or a pane header opens: what can be done to that pane, whichever has the focus.
-// Raised by right-click, ⇧F10 or the context-menu key; the chords are the shortcut table's.
+// Raised by right-click, ⇧F10, the context-menu key or a file pane's `⋯`; the chords are the shortcut table's.
 
 import { useCallback, useState } from 'react'
-import { fileLeavesIn } from '@shared/filePane'
+import { fileLeavesIn, fileViewerFor } from '@shared/filePane'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
+import { openAsArtifact } from '../markdown/openAsArtifact'
 import { collectTerminalIds } from '../panes/paneLayout'
 import { useOpenIn } from '../sidebar/openIn'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from '../sidebar/RowMenu'
@@ -13,12 +14,20 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 /** About the widest row with its chord; nearer the window's right edge than this, the menu hangs leftwards. */
 const MENU_WIDTH_PX = 240
 
-type Opened = { terminalId: string; name: string; anchor: RowMenuAnchor; returnTo: Element | null }
+type Opened = {
+  terminalId: string
+  name: string
+  anchor: RowMenuAnchor
+  returnTo: Element | null
+  opener?: HTMLElement
+}
 
 export type PaneMenu = {
   onContextMenu: (terminalId: string, name: string, event: React.MouseEvent<HTMLElement>) => void
   /** ⇧F10 and the context-menu key, on a focused element. */
   onKeyDown: (terminalId: string, name: string, event: React.KeyboardEvent<HTMLElement>) => void
+  /** A `⋯` press: the menu hangs under it, and a second press closes it. */
+  onButton: (terminalId: string, name: string, event: React.MouseEvent<HTMLElement>) => void
   menu: React.JSX.Element | null
 }
 
@@ -59,9 +68,31 @@ export function usePaneMenu(modifier: PlatformModifier): PaneMenu {
       event.preventDefault()
       open(terminalId, name, event.currentTarget)
     },
+    onButton: (terminalId, name, event) => {
+      const opener = event.currentTarget
+      if (opened?.opener === opener) {
+        close()
+        return
+      }
+      void loadEditors()
+      const box = opener.getBoundingClientRect()
+      setOpened({
+        terminalId,
+        name,
+        anchor: { x: box.right, y: box.bottom + 4, align: 'right' },
+        returnTo: opener,
+        opener
+      })
+    },
     menu:
       opened === null || items.length === 0 ? null : (
-        <RowMenu label={`Actions for ${opened.name}`} anchor={opened.anchor} onClose={close} items={items} />
+        <RowMenu
+          label={`Actions for ${opened.name}`}
+          anchor={opened.anchor}
+          onClose={close}
+          items={items}
+          opener={opened.opener ?? null}
+        />
       )
   }
 }
@@ -101,6 +132,9 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
       { label: 'Copy path', onChoose: () => void store.copyToClipboard(absolute, `the path to ${file.path}`) },
       { label: 'Reveal in Finder', onChoose: () => void store.revealInFinder(absolute, file.path) },
       { label: 'Open in', onChoose: () => {}, items: openIn(worktree.projectId, absolute, file.path, true) },
+      ...(fileViewerFor(file.path) === 'markdown'
+        ? [{ label: 'Open as artifact', onChoose: () => void openAsArtifact(terminalId, name) }]
+        : []),
       { ...maximize, separated: true },
       ...closing
     ]
