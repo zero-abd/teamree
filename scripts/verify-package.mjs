@@ -392,7 +392,9 @@ ok(`fixture repository at ${repo}`)
 // single-instance lock from handing the run to an app the developer already has
 // open. TEAMREE_BACKGROUND_LAUNCH stops the window from stealing focus.
 const child = spawn(app.binary, [`--user-data-dir=${userData}`, ...electronSandboxArgs()], {
-  env: { ...process.env, TEAMREE_BACKGROUND_LAUNCH: '1' },
+  // And the checkout it makes under the same scratch, so a verify run leaves
+  // nothing in the folder the real app lists.
+  env: { ...process.env, TEAMREE_BACKGROUND_LAUNCH: '1', TEAMREE_WORKTREES_ROOT: join(scratch, 'worktrees') },
   stdio: ['ignore', 'pipe', 'pipe']
 })
 let appOutput = ''
@@ -403,8 +405,10 @@ child.on('error', (error) => fail(`could not launch ${app.binary}`, String(error
 let exited = null
 child.on('exit', (code, signal) => (exited = { code, signal }))
 
-// Worktree checkouts are created under the user's home, not under the scratch
-// directory, so they have to be handed back before the app goes away.
+// The checkout goes under the scratch directory now (TEAMREE_WORKTREES_ROOT
+// above), but it is still handed back through the app first: a worktree removed
+// under a running runtime is one the runtime knows is gone, and the branch it
+// made in the fixture repository goes with it.
 let createdWorktree = null
 
 function cleanup() {
