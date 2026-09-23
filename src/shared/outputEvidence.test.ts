@@ -182,3 +182,43 @@ describe('evidenceLine, over the app’s own marks', () => {
     expect(evidenceLine('[build] 12 modules transformed')).toBe('[build] 12 modules transformed')
   })
 })
+
+describe('evidenceLine, over an agent’s own chrome', () => {
+  it('skips a rule, and a rule with a footer drawn over it', () => {
+    expect(evidenceLine(`Added subtract to calc.js\n${'─'.repeat(80)}\n`)).toBe('Added subtract to calc.js')
+    expect(evidenceLine('Added subtract to calc.js\n──➤ auto mode on (shift+tab to cycle)\n')).toBe(
+      'Added subtract to calc.js'
+    )
+    expect(evidenceLine('Added subtract to calc.js\n╭──── Claude Code ────╮\n')).toBe('Added subtract to calc.js')
+  })
+
+  it('skips the status footers agents keep at the bottom of the screen', () => {
+    for (const footer of [
+      '⏵⏵ auto mode on (shift+tab to cycle)',
+      '⏸ plan mode on (shift+tab to cycle)',
+      '? for shortcuts',
+      '✻ Booping… (12s · esc to interrupt)',
+      '• Working (10s • esc to interrupt)',
+      '100% context left · ? for shortcuts',
+      '⏎ send   ⇧⏎ newline   ⌃T transcript   ⌃C quit',
+      '(disable recaps in /config)'
+    ]) {
+      expect(evidenceLine(`3 tests passed\n${footer}\n`)).toBe('3 tests passed')
+    }
+  })
+
+  // What sits in an agent's composer was typed or suggested, not printed.
+  it('skips the composer line and cuts off a composer drawn over output', () => {
+    expect(evidenceLine('Added subtract\n❯ commit this 7s · done 5:18 PM')).toBe('Added subtract')
+    expect(
+      evidenceLine(
+        '• Added the one-line subtract function next to add in calc.js.›Explain this codebasegpt-5.6 default · /tmp/x'
+      )
+    ).toBe('Added the one-line subtract function next to add in calc.js.')
+  })
+
+  it('drops the bullet an agent opens each message with', () => {
+    expect(evidenceLine('⏺ Added to calc.js:3')).toBe('Added to calc.js:3')
+    expect(evidenceLine('• Edited calc.js (+1 -0)')).toBe('Edited calc.js (+1 -0)')
+  })
+})

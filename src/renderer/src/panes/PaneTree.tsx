@@ -7,7 +7,7 @@ import { filePaneName, isFileLeaf } from '@shared/filePane'
 import { freshAgentLabel } from '@shared/paneRestore'
 import { minExtent, type Box } from '@shared/paneRoom'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { ACTIVITY_LABEL, activityOf, dotClass, dotTone, paneAgent, paneNames } from '../sidebar/agentRows'
+import { activityOf, dotClass, dotTone, paneAgent, paneNames, TONE_LABEL } from '../sidebar/agentRows'
 import { TerminalView } from '../terminal/TerminalView'
 import { usePaneMenu } from '../workspace/paneMenu'
 import { FilePane } from './FilePane'
@@ -113,20 +113,14 @@ function PaneLeaf({
   // One name per pane, shared by strip, bar, close button and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
   // The same reading the sidebar row, the tab and the board give this pane.
-  const activity = terminal === undefined ? null : activityOf(terminal)
+  const tone = terminal === undefined ? null : dotTone(activityOf(terminal), paneAgent(terminal))
   // The grid size is on the name's hover: nobody acts on it.
   const hover = terminal === undefined ? name : `${name} · ${terminal.cols}×${terminal.rows}`
 
   return (
     <section className={`pane${focused ? ' pane--focused' : ''}${exited ? ' pane--exited' : ''}`} aria-label={name}>
       <header className="pane__bar" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
-        <span
-          className={dotClass(
-            activity === null || terminal === undefined ? null : dotTone(activity, paneAgent(terminal))
-          )}
-          title={activity === null ? undefined : ACTIVITY_LABEL[activity]}
-          aria-hidden="true"
-        />
+        <span className={dotClass(tone)} title={tone === null ? undefined : TONE_LABEL[tone]} aria-hidden="true" />
         <span className="pane__title" title={hover}>
           {name}
         </span>

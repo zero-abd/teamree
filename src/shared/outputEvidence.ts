@@ -166,16 +166,40 @@ function inAlternateScreen(output: string): boolean {
 /** Braille spinner frames, which would make a stable row flicker for nothing. */
 const LEADING_SPINNER = /^[⠀-⣿]+[ \t]+/
 
+/** The mark an agent opens each message with. */
+const LEADING_BULLET = /^[•⏺●][ \t]*/u
+
+/** Codex's composer glyph: from here on the line is the composer drawn over the output, never output. */
+const COMPOSER_GLYPH = '›'
+
 function tidy(line: string): string {
-  return line.replace(LEADING_SPINNER, '').replace(/\s+/g, ' ').trim()
+  const output = line.split(COMPOSER_GLYPH, 1)[0] ?? ''
+  return output.replace(/\s+/g, ' ').trim().replace(LEADING_SPINNER, '').replace(LEADING_BULLET, '')
 }
+
+/** Two box-drawing or block characters: a TUI's frame or rule, whatever is drawn over the rest of it. */
+const FRAME = /^[\u2500-\u259f]{2}/u
+
+/** A composer's line: what sits there was typed or suggested, not printed. */
+const COMPOSER_LINE = /^[❯›] /u
+
+/** The status lines agents keep at the foot of the screen: modes, key hints, context left. */
+const AGENT_FOOTERS = [
+  /\(shift\+tab to cycle\)/iu,
+  /\? for shortcuts/u,
+  /\besc to interrupt\b/iu,
+  /\b\d+% context left\b/iu,
+  /⏎ send/u,
+  /\(disable recaps in \/config\)/u
+]
 
 /** The asides the app writes around a restored pane's record (see `scrollbackRecord.ts`); not the program's output. */
 const OWN_MARK = /^\[(?:record — up to |end of record — |resume refused — |no conversation to resume — )/
 
-/** A line with nothing to act on: a bare prompt, a rule, a spinner frame on its own, the app's own mark. */
+/** A line with nothing to act on: a bare prompt, a frame, an agent's footer or composer, a spinner frame, the app's own mark. */
 function isUninformative(line: string): boolean {
   if (!/[\p{L}\p{N}]/u.test(line)) return true
+  if (FRAME.test(line) || COMPOSER_LINE.test(line) || AGENT_FOOTERS.some((footer) => footer.test(line))) return true
   return OWN_MARK.test(line) || isBarePrompt(line)
 }
 

@@ -10,7 +10,7 @@
 // The rail is drawn even while the panel is closed, down the window's right
 // edge, so the three tabs stay findable — see `RightRail.tsx`.
 
-import { collectTerminalIds } from '../../panes/paneLayout'
+import { paneCount } from '../../sidebar/agentRows'
 import { EdgeResizer } from '../../shell/EdgeResizer'
 import { useWorkspaceStore } from '../../state/workspaceStore'
 import { ChangesTab } from './ChangesTab'
@@ -27,8 +27,9 @@ export function RightPanel(): React.JSX.Element | null {
   const status = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
   )
-  const paneCount = useWorkspaceStore((state) =>
-    state.activeWorktreeId ? collectTerminalIds(state.layouts[state.activeWorktreeId]?.root ?? null).length : 0
+  const panes = useWorkspaceStore(
+    (state) =>
+      paneCount(Object.values(state.terminals), state.worktrees.map((entry) => entry.id), state.activeWorktreeId).here
   )
   const showRightPanelTab = useWorkspaceStore((state) => state.showRightPanelTab)
   const toggleRightPanel = useWorkspaceStore((state) => state.toggleRightPanel)
@@ -41,7 +42,7 @@ export function RightPanel(): React.JSX.Element | null {
       open={open}
       tab={tab}
       status={status}
-      panes={paneCount}
+      panes={panes}
       onPick={showRightPanelTab}
       onToggle={toggleRightPanel}
     />

@@ -14,7 +14,8 @@ import { Brand, SidebarGlyph } from '../shell/Brand'
 import { useOpenIn } from './openIn'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
-import { teamworkControlLabel, teamworkSummary } from './teamworkSummary'
+import { agentWords, worktreeTitles } from './agentRows'
+import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { worktreesByProject } from './worktreeOrder'
 import { WorktreeRow } from './WorktreeRow'
@@ -58,6 +59,8 @@ export function Sidebar({
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
   const closeTeamwork = useWorkspaceStore((state) => state.closeTeamwork)
   const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar)
+  const agents = useWorkspaceStore((state) => state.agents)
+  const kindOf = useMemo(() => agentWords(agents), [agents])
 
   // Which editors are on this machine, asked once from the one thing always
   // mounted while a row exists.
@@ -285,6 +288,7 @@ export function Sidebar({
             const reading = attentionByPane(watching[project.id])
             // Roster teammates never heard from: not away, and not without worktrees.
             const unheard = unheardTeammates(teammates[project.id])
+            const titles = worktreeTitles(rows, kindOf)
             return (
               <section className="project" key={project.id}>
                 <div className="project__head">
@@ -326,27 +330,19 @@ export function Sidebar({
                 </div>
                 <div className="project__meta">
                   <p className="project__base">{project.baseRef}</p>
-                  {/* One control: the state is its text and the reason is its
-                    hover. It is honest about all of "not set up", "cannot reach
-                    the relay", "nobody is connected" and "somebody answered and
-                    was not who they should be" — a word or two each — and
-                    pressing it opens the setup. It used to be a chip saying
-                    "Teamwork off" beside a button saying "Teamwork", which is
-                    the same word twice with no way to tell which one to press.
-
-                    Named with the project for the accessibility tree, because
-                    the rail has an entry called Teamwork too: two buttons with
-                    one name are one button to anybody listening rather than
-                    looking. */}
-                  <button
-                    type="button"
-                    className={`project__teamwork${summary ? ` project__teamwork--${summary.tone}` : ''}`}
-                    aria-label={`${teamworkControlLabel(summary)} in ${project.name}`}
-                    title={summary ? summary.detail : `Teamwork in ${project.name}`}
-                    onClick={() => openTeamwork(project.id)}
-                  >
-                    {teamworkControlLabel(summary)}
-                  </button>
+                  {/* Only where teamwork is on; the rail reaches the setup either way. Named with the
+                      project, because the rail has a Teamwork entry too. */}
+                  {teamworkOn(teamwork[project.id]) ? (
+                    <button
+                      type="button"
+                      className={`project__teamwork${summary ? ` project__teamwork--${summary.tone}` : ''}`}
+                      aria-label={`${teamworkControlLabel(summary)} in ${project.name}`}
+                      title={summary ? summary.detail : `Teamwork in ${project.name}`}
+                      onClick={() => openTeamwork(project.id)}
+                    >
+                      {teamworkControlLabel(summary)}
+                    </button>
+                  ) : null}
                 </div>
 
                 {isCollapsed ? null : (
@@ -355,6 +351,7 @@ export function Sidebar({
                       <WorktreeRow
                         key={worktree.id}
                         worktree={worktree}
+                        title={titles.get(worktree.id)}
                         status={statuses[worktree.id]}
                         mergePreview={mergePreviews[worktree.id]}
                         terminals={paneList}
@@ -396,7 +393,7 @@ export function Sidebar({
                             {'No worktrees yet '}
                             <button
                               type="button"
-                              className="project__none-action"
+                              className="button button--ghost button--tiny"
                               onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
                             >
                               Start one

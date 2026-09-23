@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Project, Terminal, Worktree } from '@shared/entities'
-import { activityCounts, dashboardRows, type DashboardRow } from './dashboardRows'
+import { dashboardRows, toneCounts, type DashboardRow } from './dashboardRows'
 
 const projects: Project[] = [
   { id: 'p1', name: 'atlas', path: '/repos/atlas', baseRef: 'origin/main' },
@@ -67,11 +67,12 @@ describe('dashboardRows', () => {
   // Ordered by what would make somebody look. A failure is finished and wrong;
   // a pane that has asked for something cannot move without you; work in
   // progress is merely unfinished; a finished pane asks for nothing.
-  it('ranks failures above asking, asking above working, working above waiting, waiting above finished', () => {
+  it('ranks failures above asking, asking above working, working above stopped, stopped above idle, idle above finished', () => {
     const rows = build(
       [
         terminal({ id: 'done', running: false, exitCode: 0 }),
-        terminal({ id: 'quiet' }),
+        terminal({ id: 'idle' }),
+        terminal({ id: 'quiet', agent: 'codex' }),
         terminal({ id: 'working', busy: true }),
         terminal({ id: 'waiting', agent: 'claude', lastBellAt: 1_000 }),
         terminal({ id: 'failed', running: false, exitCode: 1 })
@@ -79,7 +80,7 @@ describe('dashboardRows', () => {
       [worktree({ id: 'wt1' })]
     )
 
-    expect(rows.map((row) => row.terminalId)).toEqual(['failed', 'waiting', 'working', 'quiet', 'done'])
+    expect(rows.map((row) => row.terminalId)).toEqual(['failed', 'waiting', 'working', 'quiet', 'idle', 'done'])
   })
 
   // The case the board exists for: five panes, four of them fine, and the one
@@ -145,24 +146,24 @@ describe('dashboardRows', () => {
   })
 })
 
-describe('activityCounts', () => {
-  it('counts the panes in each state', () => {
+describe('toneCounts', () => {
+  it('counts the panes by the colour of their dot, a quiet agent apart from a quiet shell', () => {
     const rows = build(
       [
         terminal({ id: 'a' }),
-        terminal({ id: 'b' }),
+        terminal({ id: 'b', agent: 'codex' }),
         terminal({ id: 'c', busy: true }),
         terminal({ id: 'd', running: false, exitCode: 2 })
       ],
       [worktree({ id: 'wt1' })]
     )
 
-    expect(activityCounts(rows)).toEqual({ failed: 1, waiting: 0, working: 1, quiet: 2, done: 0 })
+    expect(toneCounts(rows)).toEqual({ failed: 1, waiting: 0, working: 1, quiet: 1, idle: 1, done: 0 })
   })
 
   // Every state present, so the row of counts keeps its shape as panes move
   // between them rather than reflowing under the reader.
   it('reports a zero for a state nothing is in, including with no panes at all', () => {
-    expect(activityCounts([])).toEqual({ failed: 0, waiting: 0, working: 0, quiet: 0, done: 0 })
+    expect(toneCounts([])).toEqual({ failed: 0, waiting: 0, working: 0, quiet: 0, idle: 0, done: 0 })
   })
 })

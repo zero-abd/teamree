@@ -2,9 +2,9 @@
 // PTY, not an agent's protocol: the readings are bytes arriving, how the process
 // ended, the title, the bell, and — outranking all of them — what the agent's hooks report.
 
-import type { AgentEvent, AgentKind, PaneWatcher, Terminal } from '@shared/entities'
+import type { AgentEvent, AgentKind, InstalledAgent, PaneWatcher, Terminal } from '@shared/entities'
 import type { TitleOpinion } from '@shared/titleOpinion'
-import { harnessName } from '../agents/harnesses'
+import { HARNESSES, harnessName } from '../agents/harnesses'
 
 export type AgentActivity =
   /** The pane has said it wants something: it rang the bell, or its title says so. */
@@ -33,17 +33,21 @@ export type AgentRow = {
   evidence: string | null
 }
 
-/** One phrase per state, shared by the sidebar and the dashboard. */
-export const ACTIVITY_LABEL: Record<AgentActivity, string> = {
-  waiting: 'waiting on you',
-  working: 'working',
-  quiet: 'idle',
-  done: 'finished',
-  failed: 'exited with an error'
-}
-
 /** What a dot is coloured: `idle` is a quiet pane with no agent, so only an agent is ever amber. */
 export type DotTone = AgentActivity | 'idle'
+
+/** The one word for each tone, wherever a dot is explained: rows, hovers, tabs and the board's legend. */
+export const TONE_LABEL: Record<DotTone, string> = {
+  failed: 'failed',
+  waiting: 'asking',
+  working: 'working',
+  quiet: 'stopped',
+  idle: 'idle',
+  done: 'finished'
+}
+
+/** The order attention is owed in; the board's legend and its sort. */
+export const TONES_BY_ATTENTION: readonly DotTone[] = ['failed', 'waiting', 'working', 'quiet', 'idle', 'done']
 
 export function dotTone(activity: AgentActivity, agent: AgentKind | undefined): DotTone {
   return activity === 'quiet' && agent === undefined ? 'idle' : activity
@@ -77,15 +81,6 @@ function listOf(handles: readonly string[]): string {
   return `${handles.slice(0, -1).join(', ')} and ${last} are `
 }
 
-/** The one-word form, for counts and column headings. */
-export const ACTIVITY_NOUN: Record<AgentActivity, string> = {
-  waiting: 'asking',
-  working: 'working',
-  quiet: 'idle',
-  done: 'finished',
-  failed: 'failed'
-}
-
 /**
  * The facts an activity is read from. Narrower than `Terminal` so a teammate's
  * pane, which crosses the wire as metadata, is read by the same function.
@@ -110,6 +105,8 @@ export type PaneActivitySource = {
  */
 const NOT_A_REQUEST = new Set([
   'auth_success',
+  // Claude's reminder that a finished turn is still finished; a hookless agent says nothing, and must read the same.
+  'idle_prompt',
   'agent_completed',
   'quota_auto_resume_fired',
   'quota_auto_resume_stale',
@@ -293,6 +290,78 @@ export function worktreeTone(rows: readonly AgentRow[]): DotTone | null {
   const overall = worktreeActivity(rows)
   if (overall !== 'quiet') return overall
   return rows.some((row) => row.activity === 'quiet' && row.agent !== undefined) ? 'quiet' : 'idle'
+}
+
+/** How many panes there are, by the one rule every count follows: terminals the runtime lists, file panes aside. */
+export type PaneCount = {
+  /** In the worktree on screen: what its Panes tab lists. */
+  here: number
+  /** In every listed worktree: what the board lists. */
+  total: number
+  /** How many worktrees those are spread over. */
+  worktrees: number
+}
+
+export function paneCount(
+  terminals: readonly { worktreeId: string }[],
+  worktreeIds: readonly string[],
+  activeWorktreeId: string | null
+): PaneCount {
+  const listed = new Set(worktreeIds)
+  const counted = terminals.filter((terminal) => listed.has(terminal.worktreeId))
+  return {
+    here: counted.filter((terminal) => terminal.worktreeId === activeWorktreeId).length,
+    total: counted.length,
+    worktrees: new Set(counted.map((terminal) => terminal.worktreeId)).size
+  }
+}
+
+/** A worktree's name as its row draws it: a run of a task shared with other agents leads with its agent. */
+export type WorktreeTitle = { text: string; agent?: { kind: AgentKind; text: string } }
+
+/** Which words name an agent: every kind, and the command each installed agent runs as. */
+export function agentWords(installed: readonly InstalledAgent[]): (word: string) => AgentKind | undefined {
+  const commands = new Map(installed.map((agent) => [agent.command, agent.kind]))
+  return (word) => (Object.hasOwn(HARNESSES, word) ? (word as AgentKind) : commands.get(word))
+}
+
+/**
+ * One project's rows, keyed by id. Undoes `taskNamesForAgents`: only names that share a task with
+ * another agent's run are split, so a lone `pager claude` or a renamed run keeps its name whole.
+ */
+export function worktreeTitles(
+  worktrees: readonly { id: string; name: string }[],
+  kindOf: (word: string) => AgentKind | undefined
+): Map<string, WorktreeTitle> {
+  const runs = worktrees.map((worktree) => ({
+    id: worktree.id,
+    name: worktree.name,
+    run: taskRun(worktree.name, kindOf)
+  }))
+  const perTask = new Map<string, number>()
+  for (const { run } of runs) if (run) perTask.set(run.task, (perTask.get(run.task) ?? 0) + 1)
+  return new Map(
+    runs.map(({ id, name, run }) => [
+      id,
+      run && (perTask.get(run.task) ?? 0) > 1
+        ? { text: run.task, agent: { kind: run.kind, text: run.agent } }
+        : { text: name }
+    ])
+  )
+}
+
+/** `task agent` or `task agent 2`, as `taskNamesForAgents` writes them, when the word names an agent. */
+function taskRun(
+  name: string,
+  kindOf: (word: string) => AgentKind | undefined
+): { task: string; agent: string; kind: AgentKind } | null {
+  for (const shape of [/^(.*\S)\s+(\S+)(\s+\d+)$/u, /^(.*\S)\s+(\S+)()$/u]) {
+    const [, task, word, nth] = shape.exec(name.trim()) ?? []
+    const kind = word === undefined ? undefined : kindOf(word)
+    if (task !== undefined && kind !== undefined)
+      return { task, agent: `${word}${nth ?? ''}`.replace(/\s+/gu, ' '), kind }
+  }
+  return null
 }
 
 /**

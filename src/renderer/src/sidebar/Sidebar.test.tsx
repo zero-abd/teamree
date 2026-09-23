@@ -159,7 +159,9 @@ describe('having nothing to show', () => {
   it('offers to start one when a project has no worktrees', () => {
     mount()
     expect(screen.getByText(/No worktrees yet/)).toBeTruthy()
-    screen.getByRole('button', { name: 'Start one' }).click()
+    const start = screen.getByRole('button', { name: 'Start one' })
+    expect(start.className).toBe('button button--ghost button--tiny')
+    start.click()
     expect(openDialog).toHaveBeenCalledWith({ kind: 'new-task', projectId: 'p1' })
   })
 
@@ -199,47 +201,56 @@ describe('a project header', () => {
     expect(toggleProject).toHaveBeenCalledExactlyOnceWith('p1')
   })
 
-  // Collapsing six causes into "offline" sends somebody to check their wifi because a colleague shut a laptop.
-  it('says which of the ways teamwork is not working applies here', () => {
-    const status: TeamworkStatus = {
-      state: 'read',
-      projectId: 'p1',
-      relay: null,
-      disabledReason: 'no .teamree/relay in this project',
-      origin: { ok: true, url: 'https://example.com/ada/pager.git' },
-      enrolled: false,
-      links: [],
-      readAt: NOW
-    }
-    seed({ teamwork: { p1: status } })
+  const read = (overrides: Partial<Extract<TeamworkStatus, { state: 'read' }>> = {}): TeamworkStatus => ({
+    state: 'read',
+    projectId: 'p1',
+    relay: null,
+    disabledReason: null,
+    origin: { ok: true, url: 'https://example.com/ada/pager.git' },
+    enrolled: false,
+    links: [],
+    readAt: NOW,
+    ...overrides
+  })
+
+  // `Teamwork · off` on every project was a fact nobody asked for; the rail still reaches the setup.
+  it('says nothing about teamwork where it is off', () => {
+    seed({ teamwork: { p1: read({ disabledReason: 'no .teamree/relay in this project' }) } })
     mount()
-    // One control, whose text is the state and whose hover is the reason.
-    const control = screen.getByRole('button', { name: 'Teamwork · off in pager' })
-    expect(control.textContent).toBe('Teamwork · off')
-    expect(control.getAttribute('title')).toBe('no .teamree/relay in this project')
-    expect(control.classList.contains('project__teamwork--off')).toBe(true)
-    expect(screen.queryByText('Teamwork off')).toBeNull()
-    expect(document.querySelectorAll('.project__meta button')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /Teamwork · off/ })).toBeNull()
+    expect(document.querySelectorAll('.project__meta button')).toHaveLength(0)
   })
 
   it('says nothing about teamwork before anything has been read', () => {
     mount()
-    expect(screen.queryByText(/off|No teammates|refused/)).toBeNull()
-    expect(screen.getByRole('button', { name: 'Teamwork in pager' }).textContent).toBe('Teamwork')
+    expect(screen.queryByRole('button', { name: 'Teamwork in pager' })).toBeNull()
+  })
+
+  // Collapsing the causes into "offline" sends somebody to check their wifi because a colleague shut a laptop.
+  it('says which of the ways teamwork is not working applies here, once it is on', () => {
+    seed({ teamwork: { p1: read() } })
+    mount()
+    // One control, whose text is the state and whose hover is the reason.
+    const control = screen.getByRole('button', { name: 'Teamwork · no key in pager' })
+    expect(control.textContent).toBe('Teamwork · no key')
+    expect(control.classList.contains('project__teamwork--off')).toBe(true)
+    expect(document.querySelectorAll('.project__meta button')).toHaveLength(1)
   })
 
   // Named with the project: the rail has an entry of the same name, and two "Teamwork" buttons are one to a listener.
   it('opens the setup view for the project it belongs to', () => {
+    seed({ teamwork: { p1: read() } })
     mount()
-    screen.getByRole('button', { name: 'Teamwork in pager' }).click()
+    screen.getByRole('button', { name: 'Teamwork · no key in pager' }).click()
     expect(openTeamwork).toHaveBeenCalledWith('p1')
   })
 
   it('lays the base ref and the teamwork control out as the one row under the name', () => {
+    seed({ teamwork: { p1: read() } })
     mount()
     const meta = document.querySelector('.project__meta') as HTMLElement
     expect(meta.firstElementChild?.textContent).toBe('origin/main')
-    expect(meta.lastElementChild).toBe(screen.getByRole('button', { name: 'Teamwork in pager' }))
+    expect(meta.lastElementChild).toBe(screen.getByRole('button', { name: 'Teamwork · no key in pager' }))
     expect(meta.children).toHaveLength(2)
   })
 
@@ -649,5 +660,26 @@ describe('the row menu acts on the worktree it was opened on', () => {
 
     expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite' })
     expect(useWorkspaceStore.getState().notices.at(-1)?.text).toContain('no editor found')
+  })
+})
+
+// Two agents on one task were "Add a subtract function to c…" twice at the sidebar's width.
+describe('several runs of one task', () => {
+  it('leads each with its agent, so the part that differs is the part never cut', () => {
+    seed({
+      worktrees: [
+        worktree({ id: 'w1', name: 'Add a subtract function to claude', branch: 'add-a-subtract-function-to-claude' }),
+        worktree({ id: 'w2', name: 'Add a subtract function to codex', branch: 'add-a-subtract-function-to-codex' })
+      ]
+    })
+    mount()
+    const heads = [...document.querySelectorAll('.worktree__title')]
+    expect(heads.map((head) => head.querySelector('.worktree__agent')?.textContent)).toEqual(['claude', 'codex'])
+    expect(heads.map((head) => head.querySelector('.worktree__name')?.textContent)).toEqual([
+      'Add a subtract function to',
+      'Add a subtract function to'
+    ])
+    // The branch line said the name again, slugified.
+    expect(screen.queryByText('add-a-subtract-function-to-claude')).toBeNull()
   })
 })

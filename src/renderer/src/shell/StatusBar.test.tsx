@@ -10,7 +10,7 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project, SystemResources, Worktree, WorktreeStatus } from '@shared/entities'
+import type { Project, SystemResources, Terminal, Worktree, WorktreeStatus } from '@shared/entities'
 
 const MB = 1024 * 1024
 
@@ -153,6 +153,40 @@ describe('the rail as a whole', () => {
     expect(document.querySelectorAll('kbd')).toHaveLength(0)
     expect(screen.queryByText('split')).toBeNull()
     expect(screen.queryByText('move')).toBeNull()
+  })
+})
+
+describe('the pane count', () => {
+  const pane = (id: string, worktreeId: string): Terminal => ({
+    id,
+    worktreeId,
+    title: 'zsh',
+    cwd: '/repos/pager-wt',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: false,
+    lastOutputAt: 0
+  })
+
+  // `terminals 1 / 14` beside a Panes badge of 4: two numbers, neither the tab's.
+  it('shows one number, every pane in the window, with the split on hover', () => {
+    const other: Worktree = { ...worktree, id: 'w2', name: 'Fix the index' }
+    seed({
+      worktrees: [worktree, other],
+      terminals: { a: pane('a', 'w1'), b: pane('b', 'w2'), c: pane('c', 'w2'), d: pane('d', 'gone') }
+    })
+    mount()
+    const count = screen.getByText('3 panes')
+    expect(count.getAttribute('title')).toBe('1 in this worktree · 3 across 2 worktrees')
+    expect(screen.queryByText('terminals')).toBeNull()
+  })
+
+  it('says one pane in the singular', () => {
+    seed({ terminals: { a: pane('a', 'w1') } })
+    mount()
+    expect(screen.getByText('1 pane')).toBeTruthy()
   })
 })
 

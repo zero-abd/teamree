@@ -313,6 +313,9 @@
 }
 
 .project__none {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
   padding: var(--s2) var(--s2) var(--s2) 28px;
   color: var(--fg-muted);
   font-size: var(--text-xs);
@@ -413,6 +416,21 @@
 
 .worktree__name-field[aria-invalid='true'] {
   border-color: var(--danger);
+}
+
+/* One of several runs of a task: the agent is the part that differs, so it never gives way. */
+.worktree__agent {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.worktree__agent .agent-glyph {
+  width: 12px;
+  height: 12px;
 }
 
 /* Pushed to the row's right edge rather than sitting against the name, so the
@@ -706,7 +724,17 @@
 }
 
 .worktree__merge--clean {
+  display: inline-flex;
+  flex: none;
   color: var(--success);
+}
+
+.worktree__merge--clean svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.2;
 }
 
 .worktree__merge--conflicts {
@@ -715,20 +743,8 @@
 }
 
 
-/* The empty project's own call to action, so the first worktree is one click
-   from where the absence of one is noticed. */
-.project__none-action {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent-bright);
-  font: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-/* What each pane in this worktree is doing: asking, working, idle, finished,
-   failed. Only an agent is ever amber; a shell at rest is grey. */
+/* What each pane in this worktree is doing; the words are `TONE_LABEL`'s.
+   Only an agent is ever amber; a shell at rest is grey. */
 .activity {
   width: 7px;
   height: 7px;
@@ -832,6 +848,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The last line, in the name's place, for the pane named after its worktree. */
+.pane-row__quote {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
 }
 
 .pane-row__since {

@@ -96,6 +96,55 @@ beforeEach(() => {
   seed()
 })
 
+// `0 asking` beside two amber rows labelled idle: the legend and the rows spoke two vocabularies.
+describe('the legend', () => {
+  function seedMixed(): void {
+    seed({
+      terminals: {
+        agent: { ...PANE, id: 'agent', agent: 'codex', title: 'codex' },
+        shell: { ...PANE, id: 'shell', title: 'zsh' },
+        busy: { ...PANE, id: 'busy', title: 'npm test', busy: true }
+      }
+    })
+  }
+
+  it('has one entry per dot colour, with its dot and its word', () => {
+    seedMixed()
+    render(<Dashboard />)
+    const entries = [...document.querySelectorAll('.board-count')].map((entry) => [
+      entry.querySelector('.activity')?.className,
+      entry.querySelector('.board-count__label')?.textContent
+    ])
+    expect(entries).toEqual([
+      ['activity activity--failed', 'failed'],
+      ['activity activity--waiting', 'asking'],
+      ['activity activity--working', 'working'],
+      ['activity activity--quiet', 'stopped'],
+      ['activity activity--idle', 'idle'],
+      ['activity activity--done', 'finished']
+    ])
+  })
+
+  it('counts what the rows show, word for word, and adds up to the rows', () => {
+    seedMixed()
+    render(<Dashboard />)
+    const count = (word: string): number =>
+      Number(
+        [...document.querySelectorAll('.board-count')]
+          .find((entry) => entry.querySelector('.board-count__label')?.textContent === word)
+          ?.querySelector('.board-count__number')?.textContent
+      )
+    const states = [...document.querySelectorAll('.board-row__state')].map((state) => state.textContent ?? '')
+    expect(states.sort()).toEqual(['idle', 'stopped', 'working'])
+    for (const word of ['stopped', 'idle', 'working']) expect(count(word)).toBe(1)
+    const total = [...document.querySelectorAll('.board-count__number')].reduce(
+      (sum, number) => sum + Number(number.textContent),
+      0
+    )
+    expect(total).toBe(states.length)
+  })
+})
+
 describe('leaving the board', () => {
   it('closes on Escape, which is what a reader tries first', () => {
     render(<Dashboard />)

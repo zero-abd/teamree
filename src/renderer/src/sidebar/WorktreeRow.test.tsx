@@ -7,6 +7,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneWatcher, Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import type { PaneAttention } from '../state/paneAttention'
+import type { WorktreeTitle } from './agentRows'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -91,6 +92,7 @@ function mount(
     unread?: Iterable<string>
     active?: boolean
     openIn?: { label: string; onChoose: () => void }[]
+    title?: WorktreeTitle
   } = {}
 ): void {
   render(
@@ -105,6 +107,7 @@ function mount(
         unread={new Set(overrides.unread ?? [])}
         now={NOW}
         active={overrides.active ?? false}
+        {...(overrides.title === undefined ? {} : { title: overrides.title })}
         openIn={
           overrides.openIn ?? [
             { label: 'Zed', onChoose: openInZed },
@@ -246,8 +249,30 @@ describe('a worktree that is ready', () => {
   })
 
   it('names its branch as well as its task', () => {
+    mount({ worktree: worktree({ branch: 'ada/pager' }) })
+    expect(within(openButton()).getByText('ada/pager')).toBeTruthy()
+  })
+
+  // `scratch / scratch`: a branch that is only the name slugified says it twice.
+  it('leaves out a branch that is only its name slugified', () => {
     mount()
-    expect(within(openButton()).getByText('rewrite-the-pager')).toBeTruthy()
+    expect(within(openButton()).queryByText('rewrite-the-pager')).toBeNull()
+  })
+
+  it('draws a clean merge as a mark, with the sentence on hover', () => {
+    mount({
+      mergePreview: {
+        worktreeId: 'w1',
+        baseRef: 'origin/main',
+        state: 'clean',
+        ahead: 2,
+        conflicts: [],
+        readAt: NOW
+      } as WorktreeMergePreview
+    })
+    expect(screen.queryByText('merges')).toBeNull()
+    const mark = screen.getByRole('img', { name: '2 commits merge cleanly into origin/main' })
+    expect(mark.getAttribute('title')).toBe('2 commits merge cleanly into origin/main')
   })
 
   it('reads git out in words, not only as coloured chips', () => {
@@ -279,6 +304,40 @@ describe('a worktree that is ready', () => {
     })
     const badge = screen.getByText('2 conflicts')
     expect(badge.getAttribute('title')).toContain('src/pager.ts')
+  })
+})
+
+describe('one of several runs of a task', () => {
+  const title: WorktreeTitle = { text: 'Add a subtract function to', agent: { kind: 'codex', text: 'codex' } }
+
+  it('leads with its agent, glyph and name, ahead of the task', () => {
+    mount({ worktree: worktree({ name: 'Add a subtract function to codex' }), title })
+    const head = document.querySelector('.worktree__title') as HTMLElement
+    const slot = head.firstElementChild as HTMLElement
+    expect(slot.className).toBe('worktree__agent')
+    expect(slot.querySelector('[data-agent="codex"]')).not.toBeNull()
+    expect(slot.textContent).toBe('codex')
+    expect(head.querySelector('.worktree__name')?.textContent).toBe('Add a subtract function to')
+  })
+
+  it('reads agent first, then the task, and keeps the stored name on hover', () => {
+    mount({ worktree: worktree({ name: 'Add a subtract function to codex' }), title })
+    expect(screen.getByRole('button', { name: /^codex ?Add a subtract function to/ })).toBeTruthy()
+    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe('Add a subtract function to codex')
+  })
+
+  // The task pane is named after the worktree; saying it again under the row is noise.
+  it('draws the pane named after it as its glyph and last line alone', () => {
+    mount({
+      worktree: worktree({ name: 'Add a subtract function to codex' }),
+      title,
+      terminals: [terminal({ id: 't1', agent: 'codex', label: 'Add a subtract function to codex' })],
+      evidence: { t1: 'Edited calc.js (+1 -0)' }
+    })
+    const pane = document.querySelector('.pane-row') as HTMLElement
+    expect(within(pane).getByRole('img', { name: 'Codex' })).toBeTruthy()
+    expect(pane.querySelector('.pane-row__label')).toBeNull()
+    expect(pane.querySelector('.pane-row__head')?.textContent).toContain('Edited calc.js (+1 -0)')
   })
 })
 
@@ -403,7 +462,7 @@ describe('what the panes under it are doing', () => {
         terminal({ id: 't3', worktreeId: 'other' })
       ]
     })
-    expect(screen.getByLabelText('exited with an error')).toBeTruthy()
+    expect(screen.getByLabelText('failed')).toBeTruthy()
   })
 
   it('leaves out panes belonging to another worktree', () => {

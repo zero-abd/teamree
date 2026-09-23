@@ -12,8 +12,16 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fileLeavesIn } from '@shared/filePane'
-import type { Layout, Project, Worktree, WorktreeChanges, WorktreeFiles, WorktreeStatus } from '@shared/entities'
+import { fileLeaf, fileLeavesIn } from '@shared/filePane'
+import type {
+  Layout,
+  Project,
+  Terminal,
+  Worktree,
+  WorktreeChanges,
+  WorktreeFiles,
+  WorktreeStatus
+} from '@shared/entities'
 
 const call = vi.fn()
 
@@ -46,6 +54,19 @@ const worktree = (overrides: Partial<Worktree> = {}): Worktree => ({
   state: 'ready',
   createdAt: 0,
   ...overrides
+})
+
+const terminal = (worktreeId: string): Terminal => ({
+  id: `t-${worktreeId}`,
+  worktreeId,
+  title: 'zsh',
+  cwd: '/repos/pager-wt',
+  shell: '/bin/zsh',
+  cols: 80,
+  rows: 24,
+  running: true,
+  busy: false,
+  lastOutputAt: 0
 })
 
 const layout = (worktreeId: string): Layout => ({
@@ -125,6 +146,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       activeWorktreeId: 'w1',
       openWorktreeIds: ['w1', 'w2'],
       layouts: { w1: layout('w1'), w2: layout('w2') },
+      terminals: { 't-w1': terminal('w1'), 't-w2': terminal('w2') },
       changes: { w1: changes },
       statuses: { w1: status },
       rightPanelOpen: false,
@@ -163,6 +185,24 @@ describe('the rail', () => {
     expect(useWorkspaceStore.getState().rightPanelTab).toBe('panes')
     expect(screen.getByRole('tab', { name: 'Panes, 1' })).toHaveProperty('ariaSelected', 'true')
     expect(screen.getByRole('region', { name: 'Panes in this worktree' })).toBeTruthy()
+  })
+
+  // The badge said 4 over a tab listing 1 pane: it counted file panes the tab does not list.
+  it('counts on the Panes badge exactly what the Panes tab lists', () => {
+    const withFiles: Layout = {
+      worktreeId: 'w1',
+      root: {
+        kind: 'split',
+        direction: 'row',
+        sizes: [1, 1, 1],
+        children: [{ kind: 'leaf', terminalId: 't-w1' }, fileLeaf('file:a', 'README.md'), fileLeaf('file:b', 'app.ts')]
+      },
+      focusedTerminalId: 't-w1'
+    }
+    seed({ rightPanelOpen: true, rightPanelTab: 'panes', layouts: { w1: withFiles, w2: layout('w2') } })
+    mount()
+    expect(screen.getByRole('tab', { name: 'Panes, 1' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Panes in this worktree' }).textContent).toContain('1 pane')
   })
 
   it('switches between the three tabs, one at a time', async () => {

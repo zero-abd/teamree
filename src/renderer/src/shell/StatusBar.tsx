@@ -1,8 +1,7 @@
 // The bottom rail: runtime, what is on screen, how much is running, and keep-awake and its cost.
 // State only, never instructions; the git line and the two utilities open panels.
 
-import { isFilePaneId } from '@shared/filePane'
-import { collectTerminalIds } from '../panes/paneLayout'
+import { paneCount } from '../sidebar/agentRows'
 import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -22,13 +21,12 @@ export function StatusBar(): React.JSX.Element {
   const connection = useWorkspaceStore((state) => state.connection)
   const runtimeVersion = useWorkspaceStore((state) => state.runtimeVersion)
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
-  const layout = useWorkspaceStore((state) =>
-    state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
-  )
   const status = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
   )
-  const totalTerminals = useWorkspaceStore((state) => Object.keys(state.terminals).length)
+  const terminals = useWorkspaceStore((state) => state.terminals)
+  const worktrees = useWorkspaceStore((state) => state.worktrees)
+  const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   // Pressed while the changes tab is showing, the one state the click closes.
   const changesOpen = useWorkspaceStore((state) => state.rightPanelOpen && state.rightPanelTab === 'changes')
   const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
@@ -36,7 +34,7 @@ export function StatusBar(): React.JSX.Element {
   // The rail is always mounted, so it keeps main told which way sleep should go.
   useKeepAwake()
 
-  const paneCount = collectTerminalIds(layout?.root ?? null).filter((id) => !isFilePaneId(id)).length
+  const panes = paneCount(Object.values(terminals), worktrees.map((entry) => entry.id), activeWorktreeId)
   const summary = summarizeWorktreeStatus(status)
 
   const runtimeTitle =
@@ -90,10 +88,13 @@ export function StatusBar(): React.JSX.Element {
 
       {RUNTIME_IS_SEEDED ? <span className="statusbar__badge">seeded data</span> : null}
 
-      <span className="statusbar__item" title={`${totalTerminals} terminals across all worktrees`}>
-        <span className="statusbar__muted">terminals</span>
-        {paneCount}
-        <span className="statusbar__muted">/ {totalTerminals}</span>
+      <span
+        className="statusbar__item"
+        title={`${
+          worktree ? `${panes.here} in this worktree · ` : ''
+        }${panes.total} across ${panes.worktrees} worktree${panes.worktrees === 1 ? '' : 's'}`}
+      >
+        {`${panes.total} pane${panes.total === 1 ? '' : 's'}`}
       </span>
     </footer>
   )

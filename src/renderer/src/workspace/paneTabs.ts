@@ -5,11 +5,12 @@ import type { AgentKind, PaneNode, Terminal } from '@shared/entities'
 import { isFileLeaf, filePaneName } from '@shared/filePane'
 import { collectLeaves } from '../panes/paneLayout'
 import {
-  ACTIVITY_LABEL,
   activityOf,
+  dotTone,
   paneAgent,
   paneNames,
   paneText,
+  TONE_LABEL,
   type AgentActivity,
   type PaneNameSource
 } from '../sidebar/agentRows'
@@ -63,7 +64,7 @@ export function tabAfter(ids: readonly string[], current: string | null, step: 1
 /** A leaf whose record has not arrived, as a name is read from it. */
 const UNARRIVED: PaneNameSource = { title: 'terminal', shell: '' }
 
-/** A tab's tooltip: its name, plus the sidebar's `ACTIVITY_LABEL` phrase when the state is known. */
+/** A tab's tooltip: its name, plus its dot's `TONE_LABEL` word when the state is known. */
 export function paneTabTitle(tab: PaneTab): string {
-  return tab.activity === null ? tab.label : `${tab.label} · ${ACTIVITY_LABEL[tab.activity]}`
+  return tab.activity === null ? tab.label : `${tab.label} · ${TONE_LABEL[dotTone(tab.activity, tab.agent)]}`
 }

@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { Terminal } from '@shared/entities'
 import {
-  ACTIVITY_LABEL,
-  ACTIVITY_NOUN,
   activityOf,
+  agentWords,
+  paneAgent,
+  paneCount,
+  TONE_LABEL,
+  TONES_BY_ATTENTION,
+  worktreeTitles,
+  type WorktreeTitle,
   dotClass,
   dotTone,
   agentRows,
@@ -169,9 +174,10 @@ describe('activityOf, when the agent has said something', () => {
     expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, agentEvent: said }))).toBe('waiting')
   })
 
-  it('is waiting when the agent has been idle at its prompt long enough to say so', () => {
+  // Claude's reminder that it is still at its prompt; no hookless agent can say it, so it is not a request.
+  it('stays quiet when the agent says only that it is still idle at its prompt', () => {
     const said = { event: 'Notification' as const, at: 1_000, detail: 'idle_prompt' }
-    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, agentEvent: said }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, agentEvent: said }))).toBe('quiet')
   })
 
   // A model call prints nothing; the turn is running because the agent said it started.
@@ -492,17 +498,97 @@ describe('agoLabel', () => {
   })
 })
 
-describe('ACTIVITY_LABEL', () => {
-  // "waiting on you" and "waiting — no output" are opposites that started with the same word.
-  it('does not start the two opposite states with the same word', () => {
-    const [waiting] = ACTIVITY_LABEL.waiting.split(/\s/)
-    const [quiet] = ACTIVITY_LABEL.quiet.split(/\s/)
-    expect(waiting).not.toBe(quiet)
-    expect(ACTIVITY_LABEL.quiet).toBe('idle')
+describe('TONE_LABEL', () => {
+  // A quiet agent drew amber under the word a grey shell used; two colours, one word.
+  it('gives every tone its own word', () => {
+    const words = TONES_BY_ATTENTION.map((tone) => TONE_LABEL[tone])
+    expect(new Set(words).size).toBe(words.length)
+    expect(Object.keys(TONE_LABEL).sort()).toEqual([...TONES_BY_ATTENTION].sort())
   })
 
-  // "2 waiting" beside "0 asking" spent the attention word on shells at a prompt.
-  it('names the quiet column idle', () => {
-    expect(ACTIVITY_NOUN.quiet).toBe('idle')
+  it('pairs each tone with its word', () => {
+    expect(TONE_LABEL).toEqual({
+      failed: 'failed',
+      waiting: 'asking',
+      working: 'working',
+      quiet: 'stopped',
+      idle: 'idle',
+      done: 'finished'
+    })
+  })
+
+  it('calls a quiet agent stopped and a quiet shell idle', () => {
+    expect(TONE_LABEL[dotTone('quiet', 'codex')]).toBe('stopped')
+    expect(TONE_LABEL[dotTone('quiet', undefined)]).toBe('idle')
+  })
+})
+
+describe('an agent back at its prompt after a turn', () => {
+  // Claude reports the turn ended, then a minute later that it is idle; codex reports nothing.
+  it('reads the same with hooks as without', () => {
+    const claude = terminal({ id: 'a', agent: 'claude', agentEvent: { event: 'Stop', at: 1_000 } })
+    const claudeLater = terminal({
+      id: 'b',
+      agent: 'claude',
+      agentEvent: { event: 'Notification', at: 61_000, detail: 'idle_prompt' }
+    })
+    const codex = terminal({ id: 'c', agent: 'codex', lastOutputAt: 1_000 })
+    const tones = [claude, claudeLater, codex].map((pane) => dotTone(activityOf(pane), paneAgent(pane)))
+    expect(tones).toEqual(['quiet', 'quiet', 'quiet'])
+  })
+})
+
+describe('paneCount', () => {
+  const panes = [
+    terminal({ id: 'a', worktreeId: 'wt1' }),
+    terminal({ id: 'b', worktreeId: 'wt1', running: false, exitCode: 0 }),
+    terminal({ id: 'c', worktreeId: 'wt2' }),
+    terminal({ id: 'd', worktreeId: 'gone' })
+  ]
+
+  // The rail's badge, the Panes tab and the status bar all count with this.
+  it('counts the terminals the Panes tab lists, here and across listed worktrees', () => {
+    expect(paneCount(panes, ['wt1', 'wt2'], 'wt1')).toEqual({ here: 2, total: 3, worktrees: 2 })
+    expect(paneCount(panes, ['wt1', 'wt2'], 'wt1').here).toBe(agentRows(panes, 'wt1', 0).length)
+  })
+
+  it('counts nothing here when no worktree is open', () => {
+    expect(paneCount(panes, ['wt1', 'wt2'], null)).toEqual({ here: 0, total: 3, worktrees: 2 })
+  })
+})
+
+describe('worktreeTitles', () => {
+  const kindOf = agentWords([{ kind: 'cursor', command: 'cursor-agent', binary: '/bin/cursor-agent' }])
+  const titles = (names: string[]): (WorktreeTitle | undefined)[] => {
+    const map = worktreeTitles(
+      names.map((name, index) => ({ id: `w${index}`, name })),
+      kindOf
+    )
+    return names.map((_, index) => map.get(`w${index}`))
+  }
+
+  // At the sidebar's width both read "Add a subtract function to c…".
+  it('leads each run of one task with its agent', () => {
+    expect(titles(['Add a subtract function to claude', 'Add a subtract function to codex'])).toEqual([
+      { text: 'Add a subtract function to', agent: { kind: 'claude', text: 'claude' } },
+      { text: 'Add a subtract function to', agent: { kind: 'codex', text: 'codex' } }
+    ])
+  })
+
+  it('keeps the counter with the agent and knows installed commands', () => {
+    expect(titles(['pager claude', 'pager claude 2', 'pager cursor-agent'])).toEqual([
+      { text: 'pager', agent: { kind: 'claude', text: 'claude' } },
+      { text: 'pager', agent: { kind: 'claude', text: 'claude 2' } },
+      { text: 'pager', agent: { kind: 'cursor', text: 'cursor-agent' } }
+    ])
+  })
+
+  it('leaves a lone run, a renamed run and an ordinary name whole', () => {
+    expect(titles(['pager claude', 'scratch', 'fix login'])).toEqual([
+      { text: 'pager claude' },
+      { text: 'scratch' },
+      { text: 'fix login' }
+    ])
+    expect(titles(['fix claude', 'fix login'])).toEqual([{ text: 'fix claude' }, { text: 'fix login' }])
   })
 })
