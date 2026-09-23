@@ -198,7 +198,12 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         editor?.commands.setContent(file.current.doc, { emitUpdate: false })
       },
       getMarkdown: () => (editor ? writeMarkdownFile(editor.getJSON(), file.current) : file.current.text),
-      focus: () => editor?.commands.focus()
+      // A frame late: a click that focused the pane has placed its caret by then, and focusing
+      // now would write the old selection over it before Chrome reports the move.
+      focus: () =>
+        void requestAnimationFrame(() => {
+          if (editor && !editor.isDestroyed && !editor.view.hasFocus()) editor.commands.focus()
+        })
     }),
     [editor]
   )

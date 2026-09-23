@@ -3,8 +3,8 @@
 // Opening a page never writes the file; an edit writes only what it changed.
 
 import type { Editor } from '@tiptap/core'
-import { act, render, waitFor } from '@testing-library/react'
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, waitFor } from '@testing-library/react'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FileContent } from '@shared/entities'
 import { AUTOSAVE_DELAY_MS } from './autosave'
 
@@ -123,6 +123,75 @@ describe('the markdown pane', () => {
         }
       ]
     ])
+  })
+})
+
+describe('taking the focus', () => {
+  const frames = () => act(() => new Promise((resolve) => setTimeout(resolve, 100)))
+  const pane = (focused: boolean, onFocus: () => void) => (
+    <MarkdownPane
+      paneId="md:1"
+      worktreeId="w1"
+      path="README.md"
+      focused={focused}
+      onFocus={onFocus}
+      onClose={() => {}}
+    />
+  )
+  const literal = (): Text =>
+    [...document.querySelectorAll('.md-editor p')].find((p) => p.textContent?.startsWith('Literal'))!.firstChild as Text
+  // The browser's own part of a click: the page takes the focus with the caret under the pointer.
+  // Chrome reports the move after the next frame, where jsdom reports it at once.
+  const held = (event: Event): void => event.stopImmediatePropagation()
+  const placeCaret = (text: Text, offset: number, editor: Editor): void => {
+    window.addEventListener('selectionchange', held, true)
+    act(() => {
+      editor.view.dom.focus()
+      getSelection()!.collapse(text, offset)
+    })
+    requestAnimationFrame(() => {
+      window.removeEventListener('selectionchange', held, true)
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+  }
+
+  afterEach(() => {
+    window.removeEventListener('selectionchange', held, true)
+    Reflect.deleteProperty(document, 'elementFromPoint')
+  })
+
+  it('leaves the caret where a click put it in a page that did not have the focus', async () => {
+    let focus = (): void => {}
+    const view = render(pane(false, () => focus()))
+    focus = () => view.rerender(pane(true, () => {}))
+    const editor = await page()
+    await frames()
+    const text = literal()
+    // jsdom has no layout; the page asks what is under the pointer.
+    document.elementFromPoint = () => text.parentElement
+    fireEvent.mouseDown(text.parentElement!)
+    placeCaret(text, 8, editor)
+    await frames()
+    expect(getSelection()!.anchorNode).toBe(text)
+    expect(getSelection()!.anchorOffset).toBe(8)
+  })
+
+  it('puts the caret back where it was when the pane gets the focus again', async () => {
+    const view = render(pane(true, () => {}))
+    const editor = await page()
+    await frames()
+    const text = literal()
+    placeCaret(text, 8, editor)
+    await frames()
+    const at = editor.state.selection.from
+    view.rerender(pane(false, () => {}))
+    act(() => editor.view.dom.blur())
+    view.rerender(pane(true, () => {}))
+    await frames()
+    expect(document.activeElement).toBe(editor.view.dom)
+    expect(editor.state.selection.from).toBe(at)
+    expect(getSelection()!.anchorNode).toBe(text)
+    expect(getSelection()!.anchorOffset).toBe(8)
   })
 })
 
