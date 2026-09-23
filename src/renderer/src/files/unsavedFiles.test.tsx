@@ -28,6 +28,7 @@ const { FileView } = await import('./FileView')
 const { ConfirmCloseFileDialog } = await import('../dialogs/ConfirmCloseFileDialog')
 const { ConfirmUnsavedDialog } = await import('../dialogs/ConfirmUnsavedDialog')
 const { draftFor, dropDraft, keepDraft, keptDrafts } = await import('./fileDrafts')
+const { runWorkspaceCommand } = await import('../keyboard/workspaceCommands')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -160,6 +161,25 @@ describe('quitting with edits', () => {
     expect(store().editedFiles[id]).toEqual({ worktreeId: 'w1', path: 'src/math.ts' })
     return id
   }
+
+  it('writes nothing on Save or Save All when nothing was edited, or the edit was undone', async () => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'file.read') return { ...text('a\r\nb\nc\r\n'), lineEnding: '\r\n' }
+      return undefined
+    })
+    store().openFilePane('w1', 'src/math.ts')
+    const id = fileLeavesIn(layout().root)[0]!.terminalId
+    render(<FileView paneId={id} worktreeId="w1" path="src/math.ts" focused onFocus={() => {}} onClose={() => {}} />)
+    const view = await editorView()
+    runWorkspaceCommand('save-file', store())
+    runWorkspaceCommand('save-all', store())
+    expect(await store().saveFiles([id])).toBe(true)
+    act(() => view.dispatch({ changes: { from: 0, to: 1, insert: 'x' } }))
+    act(() => view.dispatch({ changes: { from: 0, to: 1, insert: 'a' } }))
+    expect(await store().saveFiles([id])).toBe(true)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(writes()).toEqual([])
+  })
 
   it('lets a quit through at once with nothing edited', async () => {
     expect(await store().askBeforeLeaving('quit')).toBe(true)

@@ -6,21 +6,20 @@ import MarkdownIt from 'markdown-it'
 import type StateCore from 'markdown-it/lib/rules_core/state_core.mjs'
 import type Token from 'markdown-it/lib/token.mjs'
 import type { Node as ProseNode } from '@tiptap/pm/model'
-import { MarkdownParser, MarkdownSerializer, type MarkdownSerializerState, type ParseSpec } from 'prosemirror-markdown'
+import { MarkdownParser, MarkdownSerializer, MarkdownSerializerState, type ParseSpec } from 'prosemirror-markdown'
 import { isArtifactUrl } from './artifactUrl'
 import { markdownExtensions } from './markdownExtensions'
 
-const TASK_MARKER = /^\[( |x|X)\](?: |$)/
+const TASK_MARKER = /^\[( |x|X)\](?:[ \t]|$)/
 
-/** Bullet lists whose every item starts `[ ]` or `[x]` become task lists. */
+/** Items opening `[ ]` or `[x]` are task items; a bullet list of nothing else is a task list. */
 function taskLists(state: StateCore): void {
   const tokens = state.tokens
   for (let index = 0; index < tokens.length; index += 1) {
     const open = tokens[index]
-    if (open === undefined || open.type !== 'bullet_list_open') continue
+    if (open === undefined || (open.type !== 'bullet_list_open' && open.type !== 'ordered_list_open')) continue
     const close = matchingClose(tokens, index)
     if (close === -1) continue
-    const items: { open: number; inline: Token; checked: boolean }[] = []
     let allTasks = true
     for (let at = index + 1; at < close; at += 1) {
       const token = tokens[at]
@@ -30,23 +29,18 @@ function taskLists(state: StateCore): void {
       const match = marker === undefined ? null : TASK_MARKER.exec(marker.content)
       if (marker === undefined || match === null) {
         allTasks = false
-        break
+        continue
       }
-      items.push({ open: at, inline: marker, checked: match[1] !== ' ' })
-    }
-    if (!allTasks || items.length === 0) continue
-    open.type = 'task_list_open'
-    const last = tokens[close]
-    if (last !== undefined) last.type = 'task_list_close'
-    for (const item of items) {
-      const token = tokens[item.open]
-      if (token === undefined) continue
+      const end = tokens[matchingClose(tokens, at)]
       token.type = 'task_item_open'
-      token.attrSet('checked', item.checked ? 'true' : 'false')
-      const end = matchingClose(tokens, item.open)
-      const closing = tokens[end]
-      if (closing !== undefined) closing.type = 'task_item_close'
-      item.inline.content = item.inline.content.replace(TASK_MARKER, '')
+      token.attrSet('checked', match[1] === ' ' ? 'false' : 'true')
+      if (end !== undefined) end.type = 'task_item_close'
+      marker.content = marker.content.replace(TASK_MARKER, '')
+    }
+    const last = tokens[close]
+    if (allTasks && open.type === 'bullet_list_open' && last !== undefined) {
+      open.type = 'task_list_open'
+      last.type = 'task_list_close'
     }
   }
 }
@@ -107,6 +101,8 @@ function artifactCards(state: StateCore): void {
       card.attrSet('url', href)
       card.attrSet('title', text.content)
       card.level = open.level
+      card.map = open.map
+      card.block = true
       out.push(card)
       index += 2
       continue
@@ -124,9 +120,35 @@ function createTokenizer(): MarkdownIt {
   return md
 }
 
+/** A block the tokenizer read: the node it becomes and the source lines it came from. */
+export type BlockToken = { name: string; map: [number, number] | null; children: BlockToken[] }
+
+function blockTree(tokens: readonly Token[]): BlockToken[] {
+  const root: BlockToken = { name: 'doc', map: null, children: [] }
+  const stack = [root]
+  for (const token of tokens) {
+    if (!token.block || token.type === 'inline') continue
+    const base = token.type.replace(/_(open|close)$/, '')
+    const spec = TOKENS[base]
+    if (spec === undefined || spec.ignore === true) continue
+    if (token.nesting === -1) {
+      if (stack.length > 1) stack.pop()
+      continue
+    }
+    const node: BlockToken = {
+      name: spec.block ?? spec.node ?? base,
+      map: token.map === null ? null : [token.map[0], token.map[1]],
+      children: []
+    }
+    stack[stack.length - 1]?.children.push(node)
+    if (token.nesting === 1) stack.push(node)
+  }
+  return root.children
+}
+
 const TOKENS: Record<string, ParseSpec> = {
   paragraph: { block: 'paragraph' },
-  heading: { block: 'heading', getAttrs: (token) => ({ level: Math.min(3, Number(token.tag.slice(1)) || 1) }) },
+  heading: { block: 'heading', getAttrs: (token) => ({ level: Number(token.tag.slice(1)) || 1 }) },
   blockquote: { block: 'blockquote' },
   bullet_list: { block: 'bulletList' },
   ordered_list: { block: 'orderedList', getAttrs: (token) => ({ start: Number(token.attrGet('start')) || 1 }) },
@@ -164,7 +186,7 @@ const TOKENS: Record<string, ParseSpec> = {
   em: { mark: 'italic' },
   strong: { mark: 'bold' },
   s: { mark: 'strike' },
-  link: { mark: 'link', getAttrs: (token) => ({ href: token.attrGet('href') }) },
+  link: { mark: 'link', getAttrs: (token) => ({ href: token.attrGet('href'), title: token.attrGet('title') || null }) },
   code_inline: { mark: 'code', noCloseToken: true }
 }
 
@@ -219,6 +241,24 @@ function listMarker(parent: ProseNode, index: number, family: { kinds: string[];
   return family.markers[run % 2] ?? '-'
 }
 
+/** The box a task item writes after its list marker. */
+function box(list: ProseNode, at: number): string {
+  const item = list.child(at)
+  if (item.type.name !== 'taskItem') return ''
+  return item.attrs.checked ? '[x] ' : '[ ] '
+}
+
+/** Escapes a backslash that would escape what follows, and what a line start would misread. */
+function lightEsc(text: string, startOfLine = false): string {
+  const out = text.replace(/\\(?=[!-/:-@[-`{-~]|$)/g, '\\\\')
+  if (!startOfLine) return out
+  return out
+    .replace(/^([-*+])(?=[ \t]|$)/, '\\$1')
+    .replace(/^>/, '\\>')
+    .replace(/^(\s*)(#{1,6})(\s|$)/, '$1\\$2$3')
+    .replace(/^(\s*\d+)([.)])(\s|$)/, '$1\\$2$3')
+}
+
 function fenceFor(text: string): string {
   const runs = text.match(/`{3,}/g)
   return runs ? `${runs.sort().slice(-1)[0]}\`` : '```'
@@ -251,7 +291,7 @@ const NODES: Record<string, NodeWriter> = {
   },
   bulletList(state, node, parent, index) {
     const bullet = listMarker(parent, index, BULLETS)
-    renderList(state, node, '  ', () => `${bullet} `)
+    renderList(state, node, '  ', (at) => `${bullet} ${box(node, at)}`)
   },
   orderedList(state, node, parent, index) {
     const start = Number(node.attrs.start) || 1
@@ -259,7 +299,7 @@ const NODES: Record<string, NodeWriter> = {
     const delimiter = listMarker(parent, index, ORDERED)
     renderList(state, node, ' '.repeat(width + 2), (at) => {
       const number = String(start + at)
-      return `${' '.repeat(width - number.length)}${number}${delimiter} `
+      return `${' '.repeat(width - number.length)}${number}${delimiter} ${box(node, at)}`
     })
   },
   listItem(state, node) {
@@ -267,7 +307,7 @@ const NODES: Record<string, NodeWriter> = {
   },
   taskList(state, node, parent, index) {
     const bullet = listMarker(parent, index, BULLETS)
-    renderList(state, node, '  ', (at) => (node.child(at).attrs.checked ? `${bullet} [x] ` : `${bullet} [ ] `))
+    renderList(state, node, '  ', (at) => `${bullet} ${box(node, at)}`)
   },
   taskItem(state, node) {
     state.renderContent(node)
@@ -317,10 +357,24 @@ const NODES: Record<string, NodeWriter> = {
   }
 }
 
+/** The state the serializer builds, whose constructor and output its typings keep internal. */
+type OpenState = MarkdownSerializerState & { out: string }
+
+function newState(): OpenState {
+  const State = MarkdownSerializerState as unknown as new (
+    nodes: typeof NODES,
+    marks: typeof MARKS,
+    options: typeof OPTIONS
+  ) => OpenState
+  return new State(NODES, MARKS, OPTIONS)
+}
+
 /** A cell's blocks on one line, pipes escaped: the same writer, run on the cell alone. */
-function cellText(_state: MarkdownSerializerState, cell: ProseNode): string {
-  const written = serializer.serialize(schema.node('doc', null, cell.content))
-  return written
+function cellText(state: MarkdownSerializerState, cell: ProseNode): string {
+  const inner = newState()
+  inner.esc = state.esc
+  inner.renderContent(schema.node('doc', null, cell.content))
+  return inner.out
     .replace(/\s*\n\s*/g, ' ')
     .replace(/\|/g, '\\|')
     .trim()
@@ -359,19 +413,48 @@ const MARKS: ConstructorParameters<typeof MarkdownSerializer>[1] = {
     close(state, mark) {
       const autolink = internals(state).inAutolink
       internals(state).inAutolink = undefined
-      return autolink ? '>' : `](${String(mark.attrs.href ?? '').replace(/[()"]/g, '\\$&')})`
+      if (autolink) return '>'
+      const title = mark.attrs.title ? ` "${String(mark.attrs.title).replace(/"/g, '\\"')}"` : ''
+      return `](${String(mark.attrs.href ?? '').replace(/[()"]/g, '\\$&')}${title})`
     },
     mixable: true
   }
 }
 
 const schema = getSchema(markdownExtensions())
-const parser = new MarkdownParser(schema, createTokenizer(), TOKENS)
-const serializer = new MarkdownSerializer(NODES, MARKS, { hardBreakNodeName: 'hardBreak' })
+const tokenizer = createTokenizer()
+// The parser tokenizes on its own; this keeps its tokens for the line map.
+let lastTokens: Token[] = []
+const recording = { parse: (text: string, env: object) => (lastTokens = tokenizer.parse(text, env)) }
+const parser = new MarkdownParser(schema, recording as unknown as MarkdownIt, TOKENS)
+const OPTIONS = { hardBreakNodeName: 'hardBreak' }
+const serializer = new MarkdownSerializer(NODES, MARKS, OPTIONS)
 
-/** The document the editor shows for this file. */
-export function parseMarkdown(text: string): JSONContent {
-  return parser.parse(text).toJSON() as JSONContent
+export const markdownSchema = schema
+
+export type References = Record<string, unknown>
+
+/** The document for this text, its blocks' source lines, and the link definitions it holds. */
+export function readMarkdownTree(
+  text: string,
+  references?: References
+): { doc: ProseNode; blocks: BlockToken[]; references: References } {
+  const env: { references?: References } = references === undefined ? {} : { references: { ...references } }
+  const doc = parser.parse(text, env)
+  return { doc, blocks: blockTree(lastTokens), references: env.references ?? {} }
+}
+
+/** These blocks as markdown, escaping only at line starts when `light`, else wherever markdown could. */
+export function writeBlocks(nodes: readonly ProseNode[], light: boolean): string {
+  const state = newState()
+  if (light) state.esc = lightEsc
+  state.renderContent(schema.node('doc', null, [...nodes]))
+  return state.out.replace(/\s+$/, '')
+}
+
+/** Text escaped as `writeBlocks` would escape it. */
+export function escapeText(text: string, light: boolean, startOfLine: boolean): string {
+  return light ? lightEsc(text, startOfLine) : newState().esc(text, startOfLine)
 }
 
 /** The file for this document, ending in one newline. */

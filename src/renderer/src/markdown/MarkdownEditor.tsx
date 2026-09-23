@@ -7,8 +7,8 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { artifactTitle } from './artifactUrl'
-import { parseMarkdown, serializeMarkdown } from './markdownDocument'
 import { markdownExtensions } from './markdownExtensions'
+import { readMarkdownFile, writeMarkdownFile, type MarkdownFile } from './markdownFile'
 import { slashItems, type SlashItem } from './slashCommands'
 
 export type MarkdownEditorHandle = {
@@ -134,6 +134,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   // The latest callbacks, read by an editor built once.
   const latest = useRef({ onChange, onFocusChange, onOpenUrl })
   latest.current = { onChange, onFocusChange, onOpenUrl }
+  // The file as last read; what the page did not change is written back from it.
+  const [firstFile] = useState(() => readMarkdownFile(initial))
+  const file = useRef<MarkdownFile>(firstFile)
 
   const hooks = useRef<SlashMenuHooks>({
     show: (state) => {
@@ -167,7 +170,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 
   const editor = useEditor({
     extensions,
-    content: parseMarkdown(initial),
+    content: firstFile.doc,
     editorProps: {
       attributes: { class: 'md-editor', spellcheck: 'true' },
       handleClick: (_view, _pos, event) => {
@@ -177,7 +180,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         return true
       }
     },
-    onUpdate: ({ editor: updated }) => latest.current.onChange(serializeMarkdown(updated.getJSON())),
+    onUpdate: ({ editor: updated, transaction }) => {
+      // Only the page's own upkeep changed it, such as the trailing paragraph added on focus.
+      if (!transaction.docChanged) return
+      latest.current.onChange(writeMarkdownFile(updated.getJSON(), file.current))
+    },
     onFocus: () => latest.current.onFocusChange(true),
     onBlur: () => latest.current.onFocusChange(false)
   })
@@ -186,9 +193,10 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     ref,
     () => ({
       setMarkdown: (text) => {
-        editor?.commands.setContent(parseMarkdown(text), { emitUpdate: false })
+        file.current = readMarkdownFile(text)
+        editor?.commands.setContent(file.current.doc, { emitUpdate: false })
       },
-      getMarkdown: () => (editor ? serializeMarkdown(editor.getJSON()) : ''),
+      getMarkdown: () => (editor ? writeMarkdownFile(editor.getJSON(), file.current) : file.current.text),
       focus: () => editor?.commands.focus()
     }),
     [editor]

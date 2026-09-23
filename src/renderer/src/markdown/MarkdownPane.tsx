@@ -2,6 +2,7 @@
 // the file kept in step — written as the typing pauses, re-read when it moves.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { FileContent } from '@shared/entities'
 import { filePaneName } from '@shared/filePane'
 import type { FilePaneProps } from '../panes/FilePane'
 import { PaneCloseButton } from '../panes/PaneCloseButton'
@@ -12,7 +13,15 @@ import { NEW_CHAT_URL } from './artifactUrl'
 import { createAutosave } from './autosave'
 import { MarkdownEditor, type MarkdownEditorHandle } from './MarkdownEditor'
 
-type Loaded = { content: string; modifiedAt: number }
+type Loaded = { content: string; modifiedAt: number; encoding?: 'utf-8' | 'utf-8-bom' }
+
+function loadedFrom(file: FileContent): Loaded {
+  return {
+    content: file.content,
+    modifiedAt: file.modifiedAt,
+    ...(file.encoding === undefined ? {} : { encoding: file.encoding })
+  }
+}
 
 export function MarkdownPane({
   paneId,
@@ -42,9 +51,19 @@ export function MarkdownPane({
     () =>
       createAutosave({
         save: async (content) => {
+          if (content === known.current.content) {
+            setFileUnsaved(paneId, false)
+            return
+          }
           try {
-            const written = await runtimeClient.call('file.write', { worktreeId, path, content })
-            known.current = { content, modifiedAt: written.modifiedAt }
+            const { encoding } = known.current
+            const written = await runtimeClient.call('file.write', {
+              worktreeId,
+              path,
+              content,
+              ...(encoding === undefined ? {} : { encoding })
+            })
+            known.current = { ...known.current, content, modifiedAt: written.modifiedAt }
             setFileUnsaved(paneId, false)
             setError(null)
           } catch (failure) {
@@ -61,8 +80,8 @@ export function MarkdownPane({
       .call('file.read', { worktreeId, path })
       .then((file) => {
         if (!alive) return
-        known.current = { content: file.content, modifiedAt: file.modifiedAt }
-        setLoaded({ content: file.content, modifiedAt: file.modifiedAt })
+        known.current = loadedFrom(file)
+        setLoaded(known.current)
       })
       .catch((failure: unknown) => {
         if (alive) setError(failure instanceof Error ? failure.message : String(failure))
@@ -91,7 +110,7 @@ export function MarkdownPane({
       .call('file.read', { worktreeId, path })
       .then((file) => {
         if (!alive || file.modifiedAt === known.current.modifiedAt || file.content === known.current.content) return
-        const next = { content: file.content, modifiedAt: file.modifiedAt }
+        const next = loadedFrom(file)
         if (autosave.pending() || useWorkspaceStore.getState().unsavedFiles[paneId] === true) {
           setOnDisk(next)
           return

@@ -2,7 +2,7 @@
 // headless parser and serializer, so the file and the screen agree.
 
 import type { AnyExtension } from '@tiptap/core'
-import { TaskItem, TaskList } from '@tiptap/extension-list'
+import { BulletList, OrderedList, TaskItem, TaskList } from '@tiptap/extension-list'
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
 import StarterKit from '@tiptap/starter-kit'
 import { lowlight } from './codeLanguages'
@@ -20,7 +20,9 @@ export function markdownExtensions(options: MarkdownExtensionOptions = {}): AnyE
       // Markdown has no underline, so the editor offers none.
       underline: false,
       link: { openOnClick: false, autolink: true, linkOnPaste: true },
-      codeBlock: false
+      codeBlock: false,
+      bulletList: false,
+      orderedList: false
     }),
     CodeBlockWithLanguage.configure({ lowlight, defaultLanguage: null }),
     Table.configure({ resizable: false }),
@@ -29,6 +31,10 @@ export function markdownExtensions(options: MarkdownExtensionOptions = {}): AnyE
     TableCell,
     TaskList,
     TaskItem.configure({ nested: true }),
+    // After the task list, so `[ ]` typed on a line still wraps in one. GFM lets
+    // any list mix task items with plain ones.
+    BulletList.extend({ content: '(listItem | taskItem)+' }),
+    OrderedList.extend({ content: '(listItem | taskItem)+' }),
     ImageByPath.configure({ inline: true, allowBase64: false, resolve: options.resolveImage ?? ((src) => src) }),
     HtmlBlock,
     HtmlInline,

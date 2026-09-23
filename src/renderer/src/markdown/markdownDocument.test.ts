@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseMarkdown, serializeMarkdown } from './markdownDocument'
+import type { JSONContent } from '@tiptap/core'
+import { readMarkdownTree, serializeMarkdown } from './markdownDocument'
 
 const root = path.resolve(import.meta.dirname, '../../../..')
+const parseMarkdown = (text: string): JSONContent => readMarkdownTree(text).doc.toJSON() as JSONContent
 const pass = (text: string): string => serializeMarkdown(parseMarkdown(text))
 
 describe('the app’s own documents', () => {
@@ -93,8 +95,8 @@ describe('constructs', () => {
     expect(pass(source)).toBe(source)
   })
 
-  it('reads a heading deeper than three as a third-level one', () => {
-    expect(pass('#### four\n')).toBe('### four\n')
+  it('keeps a heading deeper than three at its level', () => {
+    expect(pass('#### four\n')).toBe('#### four\n')
   })
 
   it('writes an empty document as nothing', () => {
@@ -115,5 +117,25 @@ describe('lists side by side', () => {
     const text = '1. one\n\n1) again\n'
     expect(parseMarkdown(text).content?.map((node) => node.type)).toEqual(['orderedList', 'orderedList'])
     expect(pass(text)).toBe(text)
+  })
+})
+
+describe('task lists', () => {
+  it('reads GFM task items in any list, beside plain items', () => {
+    const doc = parseMarkdown('- [x] done\n- plain\n\n1. [ ] first\n\n+ [X] plus\n  * [ ] nested\n')
+    expect(doc.content?.map((node) => node.type)).toEqual(['bulletList', 'orderedList', 'taskList'])
+    const items = (at: number): unknown[] =>
+      doc.content?.[at]?.content?.map((node) => [node.type, node.attrs?.checked]) ?? []
+    expect(items(0)).toEqual([
+      ['taskItem', true],
+      ['listItem', undefined]
+    ])
+    expect(items(1)).toEqual([['taskItem', false]])
+    expect(doc.content?.[2]?.content?.[0]?.content?.[1]?.type).toBe('taskList')
+  })
+
+  it('writes task items anew with their boxes, never escaped', () => {
+    const doc = parseMarkdown('- [x] done\n- plain\n\n1. [ ] first\n')
+    expect(serializeMarkdown(doc)).toBe('- [x] done\n- plain\n\n1. [ ] first\n')
   })
 })

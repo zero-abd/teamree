@@ -1,9 +1,12 @@
 /** @vitest-environment jsdom */
 import { Editor } from '@tiptap/core'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runSlashItem } from './MarkdownEditor'
 import { serializeMarkdown } from './markdownDocument'
 import { markdownExtensions } from './markdownExtensions'
+import { readMarkdownFile, writeMarkdownFile } from './markdownFile'
 import { slashItems } from './slashCommands'
 
 let editor: Editor | null = null
@@ -65,5 +68,28 @@ describe('markdown typed as markdown', () => {
     const target = page()
     type(target, typed)
     expect(serializeMarkdown(target.getJSON())).toBe(written)
+  })
+})
+
+it('wraps `[ ] ` typed on a line in a task list', () => {
+  const target = page()
+  type(target, '[ ] task')
+  expect(target.getJSON().content?.[0]?.type).toBe('taskList')
+})
+
+describe('a page opened on a file', () => {
+  const root = path.resolve(import.meta.dirname, '../../../..')
+  it.each([
+    'README.md',
+    'ROADMAP.md',
+    ...['tasks', 'tables', 'code', 'misc', 'html'].map((name) => `src/renderer/src/markdown/fixtures/${name}.md`)
+  ])('%s is written back unchanged after the page takes focus', (name) => {
+    const text = readFileSync(path.join(root, name), 'utf8')
+    const file = readMarkdownFile(text)
+    editor = new Editor({ element: document.createElement('div'), extensions: markdownExtensions(), content: file.doc })
+    expect(editor.getJSON()).toEqual(file.doc)
+    editor.commands.focus('end')
+    editor.commands.focus('start')
+    expect(writeMarkdownFile(editor.getJSON(), file)).toBe(text)
   })
 })

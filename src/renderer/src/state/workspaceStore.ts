@@ -1726,6 +1726,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async saveFiles(paneIds) {
       for (const paneId of paneIds) {
+        // A pane with no edit is what is on disk; writing it could still change its line endings.
+        if (get().editedFiles[paneId] === undefined) continue
         // A mounted editor saves its own text and says so on its bar when it cannot.
         const save = saverFor(paneId)
         if (save !== undefined) {
