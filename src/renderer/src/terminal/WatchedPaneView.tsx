@@ -18,7 +18,7 @@
 // a pane of your own that is a conversation with your own shell. On this one it
 // would be the far end's output typing into the far end's pty under this
 // reader's name. So only what somebody in this window actually did is sent, and
-// `handsHere` at the foot of this file is the whole of that argument.
+// `handsHere.ts` is the whole of that argument.
 //
 // **And it is a request somebody has to answer.** Unless the owner has already
 // said this teammate may type in this pane, their machine holds the bytes and
@@ -69,6 +69,7 @@ import { teammatesHeard, type TeammatePresence } from '@shared/entities'
 import type { WatchedPaneEvent } from '@shared/methods'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { handsHere, type HandsHere } from './handsHere'
 import { readTerminalTheme, TERMINAL_FONT_FAMILY } from './terminalTheme'
 
 /** Written into the pane itself, because that is where the fact belongs. */
@@ -706,81 +707,6 @@ export function readWatchedPaneEvent(value: unknown): WatchedPaneEvent | null {
       return typeof reason === 'string' ? { type: 'lost', reason } : null
     default:
       return null
-  }
-}
-
-/**
- * Whether somebody in this window is doing something to this pane right now.
- *
- * THE EMULATOR TALKS BACK, AND NOT ONLY WHEN IT IS TYPED INTO. Terminal output
- * is a stream of instructions, and several of them are questions: a
- * cursor-position report, a device-attributes request, a mode query, ENQ's
- * answerback. An emulator answers them by *sending bytes*, and xterm delivers
- * those answers on the very same `onData` a keystroke arrives on, with nothing
- * to tell the two apart. `scrollbackRecord.ts` already made this argument for a
- * record replayed off disk and said, correctly, that live it is merely a
- * conversation — a program asked its own terminal a question and read the answer
- * on its own stdin.
- *
- * That sentence is true of a pane of your own and false of this one. Here the
- * program is on somebody else's machine, this emulator is a second one reading
- * the same bytes, and its answer does not go back to the program: it goes to
- * `teamwork.type`, which is a keystroke, with this reader's name on it. So a
- * teammate whose agent prints `ESC[6n` — which full-screen programs do
- * constantly — would have every watcher's window type a cursor report into
- * their pty, land it in their audit log as the watcher's keystrokes, and put
- * "ana is typing" on their pane while ana did nothing at all. Worse where the
- * watcher has no standing permission: the owner's machine holds the bytes and
- * asks them to consent to a keystroke nobody pressed.
- *
- * So the bytes this view sends are the ones a person here produced. Every way
- * xterm turns an action into data — a key, an IME composition, a paste, a mouse
- * report — begins as a DOM event inside the terminal's own element, and a
- * capture listener there runs before xterm's own handler does. A reply has no
- * such event behind it, which is exactly the distinction that was missing.
- * The mark lasts one microtask, which is long enough: xterm raises `onData`
- * synchronously inside the handler for the event that caused it, and its replies
- * come out of `write()` in a later task.
- */
-export type HandsHere = { acting: () => boolean; stop: () => void }
-
-/**
- * The events that count as somebody acting on this pane.
- *
- * Deliberately the broad list rather than just `keydown`: composition is how
- * anything but a Latin keyboard types, `paste` is a menu item as well as a
- * chord, and the mouse is data whenever the far end has asked for mouse
- * reporting. Missing one of these would not be a hole — it would be a pane that
- * quietly stopped accepting a way of typing.
- */
-const HANDS_EVENTS = [
-  'keydown',
-  'keypress',
-  'input',
-  'compositionstart',
-  'compositionupdate',
-  'compositionend',
-  'paste',
-  'mousedown',
-  'mouseup',
-  'mousemove',
-  'wheel'
-] as const
-
-export function handsHere(element: HTMLElement | undefined): HandsHere {
-  let acting = false
-  const mark = (): void => {
-    acting = true
-    queueMicrotask(() => {
-      acting = false
-    })
-  }
-  for (const type of HANDS_EVENTS) element?.addEventListener(type, mark, true)
-  return {
-    acting: () => acting,
-    stop: () => {
-      for (const type of HANDS_EVENTS) element?.removeEventListener(type, mark, true)
-    }
   }
 }
 

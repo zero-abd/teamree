@@ -41,6 +41,7 @@ import { sinceLabel, typedBy, watchedBy } from '../sidebar/agentRows'
 import { hasBeenTyped, paneAttention, typingNow, type PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { handsHere } from './handsHere'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
 import { readSearchDecorations, readTerminalTheme, TERMINAL_FONT_FAMILY } from './terminalTheme'
@@ -185,9 +186,18 @@ export function TerminalView({
     // scrollback somebody is still reading.
     let saidExited = false
 
-    /** Bytes on their way to the pty, and the one door they leave by. */
-    const send = (data: string): void => {
-      void runtimeClient.call('terminal.write', { terminalId, data }).catch((error: unknown) => {
+    /**
+     * Bytes on their way to the pty, and the one door they leave by.
+     *
+     * `byHand` travels with them because the runtime cannot work it out and
+     * this window can: an emulator answers the program's device queries by
+     * sending bytes down this same door, and a write the runtime reads as
+     * typing is a pane recorded as having a conversation in it. Defaults to a
+     * person, so the only bytes that have to prove themselves are the ones
+     * nobody pressed. See `handsHere.ts`.
+     */
+    const send = (data: string, byHand = true): void => {
+      void runtimeClient.call('terminal.write', { terminalId, data, byHand }).catch((error: unknown) => {
         const notice = refusedWriteNotice(error)
         if (notice === null || saidExited || !alive) return
         saidExited = true
@@ -195,16 +205,22 @@ export function TerminalView({
       })
     }
 
+    const hands = handsHere(term.element)
+
     term.attachCustomKeyEventHandler(
       paneKeyHandler({
         isAppChord: (event) => chordRef.current(event),
         term,
         modifier: modifierRef.current,
-        send
+        send,
+        // The clipboard read that a paste chord waits on outlives the keypress
+        // that asked for it, so the person behind it has to be vouched for
+        // rather than observed.
+        byHand: hands.mark
       })
     )
 
-    term.onData(send)
+    term.onData((data) => send(data, hands.acting()))
     term.onResize(({ cols, rows }) => {
       void runtimeClient
         .call('terminal.resize', { terminalId, cols, rows })
@@ -274,6 +290,7 @@ export function TerminalView({
       if (frame) cancelAnimationFrame(frame)
       observer.disconnect()
       subscription?.close()
+      hands.stop()
       webgl?.dispose()
       term.dispose()
       termRef.current = null
@@ -514,6 +531,13 @@ export type PaneKeys = {
   /** Bytes to the pty. */
   send: (data: string) => void
   /**
+   * Says that the write about to happen is this person's, for the one branch
+   * here that cannot be seen to be: a paste arrives from the clipboard a turn
+   * of the loop after the chord that asked for it, and goes in through the
+   * emulator, so nothing is in flight to connect the two. See `handsHere.ts`.
+   */
+  byHand?: () => void
+  /**
    * The system clipboard. Injected because a test that could not watch it
    * would be asserting the intent again rather than the thing that happens.
    */
@@ -559,6 +583,7 @@ export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolea
           // what puts the bracketed-paste markers around the text when the
           // program asked for them, and what stops a pasted newline running a
           // command nobody has finished reading.
+          keys.byHand?.()
           keys.term.paste(text)
         } catch {
           // Reading the clipboard is the one thing here that takes a turn of

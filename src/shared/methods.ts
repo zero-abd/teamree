@@ -557,7 +557,22 @@ export const Params = {
     // Capped here as well as at the receiving end, and in the same unit. This
     // is the frame `teamwork.type` turns into, so a paste that is too large for
     // the wire is refused on the machine it was pasted on.
-    data: atMostBytes(MAX_REMOTE_WRITE_BYTES)
+    data: atMostBytes(MAX_REMOTE_WRITE_BYTES),
+    /**
+     * False when the emulator produced these bytes rather than a person.
+     *
+     * A terminal answers the questions a program asks it — where the cursor is,
+     * what it can do — by sending bytes, and xterm hands those to the same
+     * callback a keystroke arrives on. They are a real write and belong on the
+     * pty; what they are not is somebody typing, which is what the runtime
+     * reads every write as (`TerminalRecord.typed`, the restored badge).
+     *
+     * Absent means a person, which is every caller but the pane view: the CLI's
+     * `terminal send` is somebody's intent, and a watched pane has already made
+     * this distinction before the bytes reach the wire. Only the window holding
+     * the emulator can tell the two apart, so only it says.
+     */
+    byHand: z.boolean().optional()
   }),
   terminalResize: z.object({
     terminalId: z.string().min(1),

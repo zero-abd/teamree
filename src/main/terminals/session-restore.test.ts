@@ -387,8 +387,15 @@ describePty('restoring terminals across a restart', () => {
    * is no record. It does not read the id — one conversation per fake is all
    * any of these tests needs — which keeps it to the same handful of lines the
    * shells above and below this one are written in.
+   *
+   * `loseTheConversation()` takes the record away between two launches, which
+   * is the one thing that turns this into an agent that refuses: it kept a
+   * conversation, the conversation went, and the next launch is told so by the
+   * agent itself rather than by anything this suite arranged.
    */
-  async function recordingAgent(name: string): Promise<{ checkout: string; launch: string; marker: string }> {
+  async function recordingAgent(
+    name: string
+  ): Promise<{ checkout: string; launch: string; marker: string; loseTheConversation: () => Promise<void> }> {
     const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-recording-'))
     created.push(base)
     const checkout = path.join(base, 'checkout')
@@ -419,7 +426,7 @@ describePty('restoring terminals across a restart', () => {
       )
       await chmod(binary, 0o755)
     }
-    return { checkout, launch: `"${binary}"`, marker }
+    return { checkout, launch: `"${binary}"`, marker, loseTheConversation: () => rm(kept, { force: true }) }
   }
 
   function manager(
@@ -624,6 +631,33 @@ describePty('restoring terminals across a restart', () => {
     expect(second.list('wt_1').find((terminal) => terminal.id === agentPane.id)?.restored).toBeUndefined()
     // A second keystroke has nothing left to announce.
     expect(second.write(agentPane.id, 'y')).toBe(false)
+  }, 20_000)
+
+  // The bytes that arrive looking exactly like typing and are not. A terminal
+  // answers the questions a program asks it — what kind of terminal it is,
+  // where the cursor is — by sending bytes back up the pty, and an agent asks
+  // within a second of starting. They come in through the same door a keystroke
+  // does, so the pane recorded "somebody has typed here" about a pane nobody
+  // had looked at, and every one of them retired a restored pane's badge. Only
+  // the window holding the emulator can tell them apart, and it now says.
+  it('does not read the emulator answering the agent as a person typing', async () => {
+    const { checkout, launch } = await fakeAgent('claude')
+    const repositories = createRepositories()
+
+    const first = manager(repositories, checkout)
+    const pane = first.create({ worktreeId: 'wt_1', command: launch })
+    await waitUntil(() => first.read(pane.id).includes('AGENT ARGS:'), 'the agent to print its arguments')
+
+    // A device-attributes reply and a cursor-position report, which is what
+    // xterm sends back when the agent asks — and nothing an announcement is
+    // owed for, because nothing a client holds has changed.
+    expect(first.write(pane.id, '\u001b[?62;c', false)).toBe(false)
+    first.write(pane.id, '\u001b[1;1R', false)
+    expect(repositories.listTerminals()[0]?.typed).toBe(false)
+
+    // And one keystroke says what all of those could not.
+    first.write(pane.id, 'hello\r')
+    expect(repositories.listTerminals()[0]?.typed).toBe(true)
   }, 20_000)
 
   it('forgets a pane the user closed, so a restart does not reopen it', async () => {
@@ -843,6 +877,55 @@ describePty('restoring terminals across a restart', () => {
     // the life of the record.
     expect(fresh?.agentSessionId).toBeDefined()
     expect(fresh?.command).toContain(`--session-id ${fresh?.agentSessionId as string}`)
+    expect(fresh?.command).not.toContain('--resume')
+    expect(fresh?.typed).toBe(false)
+  }, 20_000)
+
+  // The same restart, in the pane the app actually ships — where it never once
+  // happened. A restored pane stops being a restored pane the moment anything
+  // is written into it, and the first thing written into a real one is not a
+  // person: xterm answers the agent's opening device queries within a second of
+  // the pane appearing, which is a beat before a refused resume has finished
+  // exiting. So the honest line printed into a pane that had already been
+  // demoted, and the fresh agent it promises never started. Proved here against
+  // the agent that keeps a real conversation and loses it, so the refusal on
+  // the second launch is the CLI's own.
+  it('starts the fresh agent even after the emulator has answered in the pane', async () => {
+    const { checkout, launch, loseTheConversation } = await recordingAgent('claude')
+    const repositories = createRepositories()
+
+    const first = manager(repositories, checkout)
+    const opened = first.create({ worktreeId: 'wt_1', command: launch })
+    await waitUntil(() => first.read(opened.id).includes('AGENT ARGS:'), 'the agent to print its arguments')
+    // Said to the agent, so there is a conversation to come back for and the
+    // record says `typed`. The emulator's answers below are the other kind.
+    first.write(opened.id, 'something worth coming back to\r')
+    await first.shutdown()
+
+    // And between the two launches it goes, the way a conversation does.
+    await loseTheConversation()
+
+    const second = manager(repositories, checkout)
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 1 })
+
+    // Immediately, which is the point: this is what a window does with a pane
+    // it has just drawn, and it used to be the end of the restart.
+    second.write(opened.id, '\u001b[?62;c', false)
+    second.write(opened.id, '\u001b[1;1R', false)
+    expect(second.list('wt_1')[0]?.restored).toBe('agent')
+
+    await waitUntil(() => second.read(opened.id).includes('nothing was resumed'), 'the pane to say what happened')
+    const shown = second.read(opened.id)
+    expect(shown).toContain(NOT_FOUND)
+    expect(shown).toContain('A fresh agent is starting below')
+
+    const fresh = repositories.listTerminals()[0]
+    await waitUntil(
+      () => second.read(opened.id).includes(`--session-id ${fresh?.agentSessionId as string}`),
+      'a fresh agent to start in the pane'
+    )
+    expect(second.list('wt_1')[0]?.running).toBe(true)
+    expect(second.list('wt_1')[0]?.exitCode).toBeUndefined()
     expect(fresh?.command).not.toContain('--resume')
     expect(fresh?.typed).toBe(false)
   }, 20_000)
