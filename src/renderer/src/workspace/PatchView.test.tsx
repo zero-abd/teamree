@@ -44,7 +44,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { FileView } = await import('../files/FileView')
-const { fitLayout } = await import('./PatchView')
+const { fitLayout, PatchView } = await import('./PatchView')
 const { readStoredDiffLayout } = await import('../state/preferences')
 const { ConfirmDiscardDialog } = await import('../dialogs/ConfirmDiscardDialog')
 type ConfirmDiscardProps = Parameters<typeof ConfirmDiscardDialog>[0]
@@ -344,6 +344,140 @@ describe('discarding one hunk from the patch', () => {
       }
     })
     expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
+  })
+})
+
+/** An added file of `count` lines, as git would write it. */
+function addedFile(
+  path: string,
+  count: number,
+  line = (at: number) => `export const entry${at} = { id: ${at} }`
+): string {
+  const body = Array.from({ length: count }, (_, at) => `+${line(at)}`).join('\n')
+  return `diff --git a/${path} b/${path}\nnew file mode 100644\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1,${count} @@\n${body}\n`
+}
+
+/** A modified file with `hunks` hunks of `size` added lines each. */
+function editedFile(path: string, hunks: number, size: number): string {
+  const parts = Array.from({ length: hunks }, (_, at) => {
+    const start = at * 1000 + 1
+    const lines = Array.from({ length: size }, (_, line) => `+  "k${at}-${line}": "v"`).join('\n')
+    return `@@ -${start},1 +${start},${size + 1} @@\n "a${at}",\n${lines}`
+  })
+  return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n${parts.join('\n')}\n`
+}
+
+describe('a big patch', () => {
+  it('draws a hunk over 500 lines folded, and all of it when asked', async () => {
+    render(<PatchView patch={addedFile('src/big.ts', 14278)} truncated={false} layout="inline" />)
+
+    expect(document.querySelectorAll('.patch__row')).toHaveLength(0)
+    expect(document.querySelector('.patch__hunkAt')?.textContent).toBe('@@ -0,0 +1,14278 @@')
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Show 14,278 lines' }))
+
+    // The top at once, the rest behind it.
+    const first = document.querySelectorAll('.patch__row').length
+    expect(first).toBeGreaterThan(0)
+    expect(first).toBeLessThan(14278)
+    await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(14278), { timeout: 20_000 })
+    expect(screen.queryByRole('button', { name: /^Show / })).toBeNull()
+  })
+
+  it('draws a 1 MB added file in under 5,000 elements', () => {
+    const { container } = render(<PatchView patch={addedFile('src/big.ts', 14278)} truncated={false} layout="split" />)
+    expect(container.querySelectorAll('*').length).toBeLessThan(5000)
+  })
+
+  it('draws a hunk of 500 lines whole', () => {
+    render(<PatchView patch={addedFile('src/mid.ts', 500)} truncated={false} layout="inline" />)
+    const first = document.querySelectorAll('.patch__row').length
+    expect(first).toBeGreaterThan(0)
+    expect(first).toBeLessThan(14278)
+  })
+
+  // One line of a minified bundle is as many tokens as a file.
+  it('folds a hunk whose lines are few but long', () => {
+    render(
+      <PatchView patch={addedFile('dist/index.js', 3, () => 'a=1;'.repeat(20000))} truncated={false} layout="inline" />
+    )
+    expect(document.querySelectorAll('.patch__row')).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Show 3 lines' })).toBeTruthy()
+  })
+
+  it('stops drawing hunks once the patch has drawn its share, and folds the rest', () => {
+    render(<PatchView patch={editedFile('src/wide.ts', 12, 400)} truncated={false} layout="inline" />)
+    const shown = document.querySelectorAll('.patch__lines').length
+    expect(shown).toBeGreaterThan(0)
+    expect(shown).toBeLessThan(12)
+    expect(screen.getAllByRole('button', { name: 'Show 401 lines' })).toHaveLength(12 - shown)
+  })
+
+  it.each([
+    'package-lock.json',
+    'web/yarn.lock',
+    'Cargo.lock',
+    'pnpm-lock.yaml',
+    'go.sum',
+    'public/app.min.js',
+    'app.min.css'
+  ])('starts %s folded, however small', (path) => {
+    render(<PatchView patch={editedFile(path, 1, 2)} truncated={false} layout="inline" />)
+    expect(document.querySelectorAll('.patch__row')).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Show 3 lines' })).toBeTruthy()
+  })
+
+  it('draws a small edit to an ordinary file', () => {
+    render(<PatchView patch={editedFile('src/lockstep.ts', 1, 2)} truncated={false} layout="inline" />)
+    expect(document.querySelectorAll('.patch__row')).toHaveLength(3)
+  })
+
+  it('stages and discards a folded hunk from its header', async () => {
+    const onHunk = vi.fn()
+    const onDiscard = vi.fn()
+    render(
+      <PatchView
+        patch={editedFile('package-lock.json', 2, 2)}
+        truncated={false}
+        layout="inline"
+        action="Stage"
+        onHunk={onHunk}
+        onDiscard={onDiscard}
+      />
+    )
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Stage' })[1] as HTMLElement)
+    await userEvent.click(screen.getAllByRole('button', { name: 'Discard' })[1] as HTMLElement)
+
+    expect(onHunk).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'package-lock.json' }),
+      expect.objectContaining({ oldStart: 1001, newCount: 3 })
+    )
+    expect(onDiscard).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'package-lock.json' }),
+      expect.objectContaining({ oldStart: 1001, newCount: 3 })
+    )
+    // Folded still: the controls act on the hunk without drawing it.
+    expect(document.querySelectorAll('.patch__row')).toHaveLength(0)
+  })
+
+  it('keeps a hunk shown across a refresh of the same patch', async () => {
+    const patch = addedFile('src/big.ts', 600)
+    const { rerender } = render(<PatchView patch={patch} truncated={false} layout="inline" />)
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Show 600 lines' }))
+
+    rerender(<PatchView patch={`${patch}`} truncated={false} layout="split" />)
+    await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(600))
+  })
+
+  it('leaves focus on the hunk it unfolded', async () => {
+    render(<PatchView patch={addedFile('src/big.ts', 600)} truncated={false} layout="inline" />)
+    const { default: userEvent } = await import('@testing-library/user-event')
+    screen.getByRole('button', { name: 'Show 600 lines' }).focus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(document.activeElement?.className).toBe('patch__hunkHead')
   })
 })
 

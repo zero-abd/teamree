@@ -662,6 +662,27 @@
   font-size: var(--text-sm);
 }
 
+/* A hunk not drawn on open. Pinned like the headers, so a wide patch does not scroll it away. */
+.patch__more {
+  position: sticky;
+  left: 0;
+  display: block;
+  width: 100cqi;
+  padding: var(--s2) var(--s4);
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.patch__more:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
 .patch__row {
   display: flex;
   align-items: baseline;
