@@ -87,7 +87,10 @@ import {
   readStoredKeepAwake,
   readStoredStartPoints,
   readStoredTerminalFontSize,
+  readStoredTerminalOptions,
+  sanitizeTerminalOptions,
   type AgentNoticePreference,
+  type TerminalOptions,
   type KeepAwakeMode,
   withAgentArgs,
   withEditorCommand,
@@ -99,7 +102,8 @@ import {
   writeStoredEditorCommands,
   writeStoredKeepAwake,
   writeStoredStartPoints,
-  writeStoredTerminalFontSize
+  writeStoredTerminalFontSize,
+  writeStoredTerminalOptions
 } from './preferences'
 import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen } from './paneSeen'
 import type { PatchHunk } from '@shared/patch'
@@ -337,8 +341,9 @@ type WorkspaceState = {
   paneSearch: PaneSearch | null
   dialog: DialogState
   notices: Notice[]
-  /** Pane text size in CSS pixels, and each project's preferred start point. Held in the store so panes re-render. */
+  /** Pane text size in CSS pixels, the rest of how panes draw, and each project's preferred start point. Held in the store so panes re-render. */
   terminalFontSize: number
+  terminalOptions: TerminalOptions
   startPointDefaults: Record<string, string>
   /** Whether an agent stopping while you are elsewhere may say so. The reader is the main process, via `useAgentNotices`. */
   agentNotices: AgentNoticePreference
@@ -516,6 +521,8 @@ type WorkspaceState = {
   revealInFinder: (path: string, what: string) => Promise<void>
   /** Sets the size of the text in every pane, and remembers it. */
   setTerminalFontSize: (size: number) => void
+  /** Changes some of how every pane draws and reads keys, and remembers all of it. */
+  setTerminalOptions: (patch: Partial<TerminalOptions>) => void
   /** Sets what an agent going quiet may do, and remembers it. */
   setAgentNotices: (preference: AgentNoticePreference) => void
   /** Sets whether this Mac may sleep, and remembers it. */
@@ -654,7 +661,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
    * lets the runtime's default stand, as it does for a pane the CLI opens.
    */
   const paneSizeFor = (worktreeId: string): { cols?: number; rows?: number } =>
-    newPaneSize(get().terminalFontSize, get().layouts[worktreeId]?.root ?? null) ?? {}
+    newPaneSize(get().terminalFontSize, get().terminalOptions.fontFamily, get().layouts[worktreeId]?.root ?? null) ?? {}
 
   const refreshLayout = async (worktreeId: string): Promise<void> => {
     // Nothing on screen depends on the layout of a worktree with no tab open.
@@ -1058,6 +1065,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     dialog: null,
     notices: [],
     terminalFontSize: readStoredTerminalFontSize(storage),
+    terminalOptions: readStoredTerminalOptions(storage),
     startPointDefaults: readStoredStartPoints(storage),
     agentNotices: readStoredAgentNotices(storage),
     keepAwake: readStoredKeepAwake(storage),
@@ -2209,6 +2217,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const clamped = clampTerminalFontSize(size)
       set({ terminalFontSize: clamped })
       writeStoredTerminalFontSize(storage, clamped)
+    },
+
+    setTerminalOptions(patch) {
+      const next = sanitizeTerminalOptions({ ...get().terminalOptions, ...patch })
+      set({ terminalOptions: next })
+      writeStoredTerminalOptions(storage, next)
     },
 
     setAgentNotices(preference) {

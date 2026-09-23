@@ -23,6 +23,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { resolvePlatformModifier } = await import('../keyboard/platformModifier')
 const { SettingsView } = await import('./SettingsView')
+const { TERMINAL_OPTIONS_DEFAULT } = await import('../state/preferences')
 
 const INITIAL = useWorkspaceStore.getState()
 const modifier = resolvePlatformModifier('darwin')
@@ -102,6 +103,7 @@ const revealInFinder = vi.fn()
 const setStartPointDefault = vi.fn()
 const setProjectPaths = vi.fn()
 const setTerminalFontSize = vi.fn()
+const setTerminalOptions = vi.fn()
 const setDefaultAgent = vi.fn()
 const setAgentArgs = vi.fn()
 const setAutomaticUpdates = vi.fn()
@@ -127,6 +129,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       setStartPointDefault,
       setProjectPaths,
       setTerminalFontSize,
+      setTerminalOptions,
       setDefaultAgent,
       setAgentArgs,
       setAutomaticUpdates,
@@ -158,6 +161,7 @@ beforeEach(() => {
     setStartPointDefault,
     setProjectPaths,
     setTerminalFontSize,
+    setTerminalOptions,
     setDefaultAgent,
     setAgentArgs,
     setAutomaticUpdates,
@@ -358,7 +362,7 @@ describe('updates', () => {
     render(<SettingsView modifier={modifier} />)
     expect(screen.getByText('teamree 0.0.0-dev (not a release)')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Check for updates' })).toBeNull()
-    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Check automatically' })).toBeNull()
   })
 
   it('checks on request, and says when the last one was', () => {
@@ -403,6 +407,47 @@ describe('panes', () => {
     seed({ terminalFontSize: 15 })
     render(<SettingsView modifier={modifier} />)
     expect(screen.getByText('15px')).toBeTruthy()
+  })
+
+  it('previews a font as it is typed and keeps it once the field is left', () => {
+    render(<SettingsView modifier={modifier} />)
+    const field = screen.getByLabelText('Font') as HTMLInputElement
+    expect(field.value).toBe(TERMINAL_OPTIONS_DEFAULT.fontFamily)
+
+    fireEvent.change(field, { target: { value: 'Menlo' } })
+    expect(screen.getByTestId('settings-font-preview').style.fontFamily).toBe('Menlo')
+    expect(setTerminalOptions).not.toHaveBeenCalled()
+
+    fireEvent.blur(field)
+    expect(setTerminalOptions).toHaveBeenCalledWith({ fontFamily: 'Menlo' })
+  })
+
+  it('sets the cursor shape and whether it blinks', () => {
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.change(screen.getByLabelText('Cursor'), { target: { value: 'underline' } })
+    expect(setTerminalOptions).toHaveBeenCalledWith({ cursorStyle: 'underline' })
+    const blink = screen.getByLabelText('Blink') as HTMLInputElement
+    expect(blink.checked).toBe(true)
+    fireEvent.click(blink)
+    expect(setTerminalOptions).toHaveBeenCalledWith({ cursorBlink: false })
+  })
+
+  it('turns Option as Meta and copy on select on', () => {
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.click(screen.getByLabelText('Option as Meta'))
+    expect(setTerminalOptions).toHaveBeenCalledWith({ optionIsMeta: true })
+    fireEvent.click(screen.getByLabelText('Copy on select'))
+    expect(setTerminalOptions).toHaveBeenCalledWith({ copyOnSelect: true })
+  })
+
+  it('takes a scrollback length on Enter, and leaves the bounds to the store', () => {
+    seed({ terminalOptions: { ...TERMINAL_OPTIONS_DEFAULT, scrollback: 10_000 } })
+    render(<SettingsView modifier={modifier} />)
+    const field = screen.getByLabelText('Scrollback lines') as HTMLInputElement
+    expect(field.value).toBe('10000')
+    fireEvent.change(field, { target: { value: '25000' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(setTerminalOptions).toHaveBeenCalledWith({ scrollback: 25_000 })
   })
 })
 

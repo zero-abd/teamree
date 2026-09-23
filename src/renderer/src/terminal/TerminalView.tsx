@@ -7,7 +7,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
-import type { ILinkHandler } from '@xterm/xterm'
+import type { IDisposable, ILinkHandler, ITerminalOptions } from '@xterm/xterm'
 import { Terminal as XTerm } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { PaneTypist } from '@shared/entities'
@@ -24,13 +24,14 @@ import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { openInBrowser } from '../shell/openInBrowser'
 import { agoLabel, typedBy, watchedBy } from '../sidebar/agentRows'
 import { hasBeenTyped, paneAttention, typingNow, type PaneAttention } from '../state/paneAttention'
+import type { TerminalOptions } from '../state/preferences'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere } from './handsHere'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
 import { TERMINAL_LINE_HEIGHT } from './paneMetrics'
-import { readSearchDecorations, readTerminalTheme, TERMINAL_FONT_FAMILY } from './terminalTheme'
+import { readSearchDecorations, readTerminalTheme } from './terminalTheme'
 
 type TerminalViewProps = {
   terminalId: string
@@ -73,6 +74,7 @@ export function TerminalView({
   // Seeded from the store so a pane created under a preference opens at it
   // rather than flickering from the default.
   const fontSizeRef = useRef(useWorkspaceStore.getState().terminalFontSize)
+  const optionsRef = useRef(useWorkspaceStore.getState().terminalOptions)
   const [search, dispatch] = useReducer(paneSearchReducer, EMPTY_PANE_SEARCH)
 
   const watchers = useWorkspaceStore((state) => state.watchers)
@@ -84,6 +86,7 @@ export function TerminalView({
   const appearance = useWorkspaceStore((state) => state.appearance)
   // Read live so a size change in settings reaches panes that have been running for hours.
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
+  const terminalOptions = useWorkspaceStore((state) => state.terminalOptions)
 
   useEffect(() => {
     const host = hostRef.current
@@ -93,23 +96,18 @@ export function TerminalView({
     const term = new XTerm({
       allowProposedApi: true,
       convertEol: false,
-      cursorBlink: true,
-      cursorStyle: 'bar',
       cursorInactiveStyle: 'none',
-      fontFamily: TERMINAL_FONT_FAMILY,
-      // From the ref: this effect is keyed on the terminal id alone, and a
-      // size change must not rebuild the emulator.
+      // From the refs: this effect is keyed on the terminal id alone, and a
+      // preference change must not rebuild the emulator.
       fontSize: fontSizeRef.current,
       lineHeight: TERMINAL_LINE_HEIGHT,
       letterSpacing: 0,
-      scrollback: 5000,
+      ...emulatorOptions(optionsRef.current),
       theme: readTerminalTheme(document.documentElement),
       // OSC 8 hyperlinks (`gh`, `npm`) come from xterm's own provider. Without
       // this xterm asks in a `confirm()` and calls `window.open()` with no URL,
       // which the main process denies. See PANE_LINK_HANDLER.
-      linkHandler: PANE_LINK_HANDLER,
-      // The app's chords reach the window handler instead of the emulator.
-      macOptionIsMeta: false
+      linkHandler: PANE_LINK_HANDLER
     })
     termRef.current = term
 
@@ -131,6 +129,7 @@ export function TerminalView({
     })
 
     term.open(host)
+    copyOnSelect(term, () => optionsRef.current.copyOnSelect, copyText)
 
     // WebGL is the fast path; a machine without a working context simply keeps
     // the DOM renderer, and a lost context tears the addon back down.
@@ -296,6 +295,18 @@ export function TerminalView({
     }
   }, [fontSize])
 
+  // Scrollback too: xterm resizes the buffer in place, trimming only the oldest lines when it shrinks.
+  useEffect(() => {
+    optionsRef.current = terminalOptions
+    const term = termRef.current
+    if (!term || !applyEmulatorOptions(term, terminalOptions)) return
+    try {
+      fitRef.current?.fit()
+    } catch {
+      // As for the size: the resize observer refits it once there is a box.
+    }
+  }, [terminalOptions])
+
   // Reads the custom properties back off the document after `App` has written
   // them — that write is a *layout* effect; React flushes passive effects
   // child-first, so a plain `useEffect` there would leave panes a theme behind.
@@ -423,6 +434,40 @@ export function refusedWriteNotice(error: unknown): string | null {
   return '\r\n\u001b[38;5;244m[this pane has exited]\u001b[0m\r\n'
 }
 
+/** The preferences xterm reads, in its own names. */
+export function emulatorOptions(options: TerminalOptions): ITerminalOptions {
+  return {
+    fontFamily: options.fontFamily,
+    cursorStyle: options.cursorStyle,
+    cursorBlink: options.cursorBlink,
+    macOptionIsMeta: options.optionIsMeta,
+    scrollback: options.scrollback
+  }
+}
+
+/** Writes only what changed into a running emulator; true when the font moved and the pane needs a refit. */
+export function applyEmulatorOptions(term: Pick<XTerm, 'options'>, options: TerminalOptions): boolean {
+  const next = emulatorOptions(options)
+  const fontMoved = term.options.fontFamily !== next.fontFamily
+  for (const [key, value] of Object.entries(next) as [keyof ITerminalOptions, unknown][]) {
+    if (term.options[key] !== value) Object.assign(term.options, { [key]: value })
+  }
+  return fontMoved
+}
+
+/** Copies each new selection while `enabled` says so; a cleared selection copies nothing. */
+export function copyOnSelect(
+  term: Pick<XTerm, 'onSelectionChange' | 'hasSelection' | 'getSelection'>,
+  enabled: () => boolean,
+  copy: (text: string) => void
+): IDisposable {
+  return term.onSelectionChange(() => {
+    if (!enabled() || !term.hasSelection()) return
+    const text = term.getSelection()
+    if (text !== '') copy(text)
+  })
+}
+
 /** The byte a terminal sends for "stop what you are doing". */
 const INTERRUPT = '\u0003'
 
@@ -491,8 +536,7 @@ export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolea
  * Who a keypress belongs to once the app's chords have had it. The copy chord
  * is two commands: with a selection it copies, without one it is the interrupt.
  * Only where the modifier is the command key (macOS); elsewhere Ctrl+C is the
- * interrupt itself and must never be lost. No copy-on-selection: a stray
- * double-click would overwrite the clipboard.
+ * interrupt itself and must never be lost.
  */
 export type PaneKeyIntent = 'copy' | 'interrupt' | 'paste' | 'emulator'
 

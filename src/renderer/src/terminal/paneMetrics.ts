@@ -3,7 +3,6 @@
 // any cell this misses.
 
 import type { PaneNode } from '@shared/entities'
-import { TERMINAL_FONT_FAMILY } from './terminalTheme'
 
 /** The line height every pane's emulator is built with. Stated once. */
 export const TERMINAL_LINE_HEIGHT = 1.25
@@ -53,7 +52,7 @@ export function paneSizeFrom(box: Box, cell: Box, share: PaneShare = { width: 1,
  * One cell of pane text, measured with the emulator's font stack, line height applied after as xterm
  * does. Undefined when there is nothing to measure; callers then send no size.
  */
-export function measureCell(fontSize: number, doc: Document | undefined): Box | undefined {
+export function measureCell(fontSize: number, fontFamily: string, doc: Document | undefined): Box | undefined {
   const body = doc?.body
   if (!body) return undefined
   const probe = doc.createElement('span')
@@ -64,7 +63,7 @@ export function measureCell(fontSize: number, doc: Document | undefined): Box | 
     'left:-9999px',
     'white-space:pre',
     'visibility:hidden',
-    `font-family:${TERMINAL_FONT_FAMILY}`,
+    `font-family:${fontFamily}`,
     `font-size:${fontSize}px`,
     'line-height:normal'
   ].join(';')
@@ -79,12 +78,13 @@ export function measureCell(fontSize: number, doc: Document | undefined): Box | 
 /** The size to open a pane at, or nothing when the window cannot answer; the runtime default stands. */
 export function newPaneSize(
   fontSize: number,
+  fontFamily: string,
   root: PaneNode | null,
   doc: Document | undefined = globalThis.document
 ): PaneSize | undefined {
   const grid = doc?.querySelector(PANE_GRID_SELECTOR)
   if (!grid) return undefined
-  const cell = measureCell(fontSize, doc)
+  const cell = measureCell(fontSize, fontFamily, doc)
   if (!cell) return undefined
   const box = grid.getBoundingClientRect()
   const share = appendedPaneShare(root)

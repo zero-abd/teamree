@@ -11,7 +11,10 @@ import {
   NO_DEFAULT_AGENT,
   TERMINAL_FONT_MAX_PX,
   TERMINAL_FONT_MIN_PX,
-  type AgentNoticePreference
+  TERMINAL_SCROLLBACK_MAX,
+  TERMINAL_SCROLLBACK_MIN,
+  type AgentNoticePreference,
+  type TerminalCursorStyle
 } from '../state/preferences'
 import { useNow } from '../state/useNow'
 import { modalOnScreen } from '../dialogs/modalLayer'
@@ -341,10 +344,17 @@ function NoticesSection(): React.JSX.Element {
   )
 }
 
-/** The one thing about a pane that is a preference rather than a layout. */
+/** How every pane draws and reads keys. */
 function PanesSection(): React.JSX.Element {
   const terminalFontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const setTerminalFontSize = useWorkspaceStore((state) => state.setTerminalFontSize)
+  const options = useWorkspaceStore((state) => state.terminalOptions)
+  const setOptions = useWorkspaceStore((state) => state.setTerminalOptions)
+  const font = useDraft(options.fontFamily, (value) => setOptions({ fontFamily: value }))
+  const scrollback = useDraft(String(options.scrollback), (value) => {
+    const lines = Number.parseInt(value, 10)
+    if (Number.isFinite(lines)) setOptions({ scrollback: lines })
+  })
 
   return (
     <section className="settings-section" aria-labelledby="settings-panes">
@@ -373,9 +383,125 @@ function PanesSection(): React.JSX.Element {
             </output>
           </div>
         </div>
+
+        <div className="settings-field">
+          <label className="settings-field__label" htmlFor="settings-font">
+            Font
+          </label>
+          <input id="settings-font" className="settings-field__input" type="text" {...font} />
+          {/* The draft, not the stored value: the point is to see a face before keeping it. */}
+          <div
+            className="settings-font-preview"
+            data-testid="settings-font-preview"
+            style={{ fontFamily: font.value, fontSize: terminalFontSize }}
+          >
+            ~/repo $ git status 0O 1lI {'{}'} =&gt; !=
+          </div>
+        </div>
+
+        <div className="settings-field">
+          <label className="settings-field__label" htmlFor="settings-cursor">
+            Cursor
+          </label>
+          <div className="settings-field__row">
+            <select
+              id="settings-cursor"
+              className="settings-select"
+              value={options.cursorStyle}
+              onChange={(event) => setOptions({ cursorStyle: event.target.value as TerminalCursorStyle })}
+            >
+              <option value="bar">Bar</option>
+              <option value="block">Block</option>
+              <option value="underline">Underline</option>
+            </select>
+            <label className="settings-check">
+              <input
+                type="checkbox"
+                checked={options.cursorBlink}
+                onChange={(event) => setOptions({ cursorBlink: event.target.checked })}
+              />
+              <span>Blink</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-field">
+          <label className="settings-field__label" htmlFor="settings-option-meta">
+            Option as Meta
+          </label>
+          <input
+            id="settings-option-meta"
+            className="settings-field__check"
+            type="checkbox"
+            checked={options.optionIsMeta}
+            onChange={(event) => setOptions({ optionIsMeta: event.target.checked })}
+          />
+        </div>
+
+        <div className="settings-field">
+          <label className="settings-field__label" htmlFor="settings-copy-on-select">
+            Copy on select
+          </label>
+          <input
+            id="settings-copy-on-select"
+            className="settings-field__check"
+            type="checkbox"
+            checked={options.copyOnSelect}
+            onChange={(event) => setOptions({ copyOnSelect: event.target.checked })}
+          />
+        </div>
+
+        <div className="settings-field">
+          <label className="settings-field__label" htmlFor="settings-scrollback">
+            Scrollback lines
+          </label>
+          <input
+            id="settings-scrollback"
+            className="settings-field__input settings-field__input--number"
+            type="number"
+            min={TERMINAL_SCROLLBACK_MIN}
+            max={TERMINAL_SCROLLBACK_MAX}
+            step={1000}
+            {...scrollback}
+          />
+        </div>
       </div>
     </section>
   )
+}
+
+/** A text field that keeps its value on blur or Enter, and takes the stored spelling back whenever that moves. */
+function useDraft(
+  stored: string,
+  commit: (value: string) => void
+): Pick<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  'onChange' | 'onBlur' | 'onKeyDown' | 'autoComplete' | 'spellCheck'
+> & {
+  value: string
+} {
+  const [draft, setDraft] = useState(stored)
+  useEffect(() => {
+    setDraft(stored)
+  }, [stored])
+  // Reset first: a value the store clamps back to what it held changes nothing the effect can see.
+  const keep = (): void => {
+    const next = draft.trim()
+    setDraft(stored)
+    if (next !== stored) commit(next)
+  }
+  return {
+    value: draft,
+    autoComplete: 'off',
+    spellCheck: false,
+    onChange: (event) => setDraft(event.target.value),
+    onBlur: keep,
+    onKeyDown: (event) => {
+      if (event.key !== 'Enter') return
+      event.preventDefault()
+      keep()
+    }
+  }
 }
 
 /**

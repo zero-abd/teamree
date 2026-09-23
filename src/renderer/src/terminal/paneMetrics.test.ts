@@ -72,11 +72,11 @@ describe('with no window to measure', () => {
   // throw in a headless renderer test, a bootstrap before the grid exists, or
   // the first paint.
   it('measures no cell without a document', () => {
-    expect(measureCell(13, undefined)).toBeUndefined()
+    expect(measureCell(13, 'monospace', undefined)).toBeUndefined()
   })
 
   it('offers no size without a document', () => {
-    expect(newPaneSize(13, null, undefined)).toBeUndefined()
+    expect(newPaneSize(13, 'monospace', null, undefined)).toBeUndefined()
   })
 })
 

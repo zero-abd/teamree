@@ -14,7 +14,11 @@ import {
   readStoredEditorCommands,
   readStoredStartPoints,
   readStoredTerminalFontSize,
+  readStoredTerminalOptions,
   KEEP_AWAKE_DEFAULT,
+  TERMINAL_OPTIONS_DEFAULT,
+  TERMINAL_SCROLLBACK_MAX,
+  TERMINAL_SCROLLBACK_MIN,
   TERMINAL_FONT_DEFAULT_PX,
   TERMINAL_FONT_MAX_PX,
   TERMINAL_FONT_MIN_PX,
@@ -27,7 +31,8 @@ import {
   writeStoredKeepAwake,
   writeStoredEditorCommands,
   writeStoredStartPoints,
-  writeStoredTerminalFontSize
+  writeStoredTerminalFontSize,
+  writeStoredTerminalOptions
 } from './preferences'
 
 /** A storage that holds what it is given, which is all these functions need. */
@@ -292,5 +297,80 @@ describe('whether this Mac may sleep', () => {
   it('survives a storage that refuses, in both directions', () => {
     expect(readStoredKeepAwake(refusingStorage)).toBe('agent')
     expect(() => writeStoredKeepAwake(refusingStorage, 'on')).not.toThrow()
+  })
+})
+
+describe('how a pane draws and reads keys', () => {
+  it('starts at what the emulator was hard-coded to', () => {
+    expect(readStoredTerminalOptions(memoryStorage())).toEqual(TERMINAL_OPTIONS_DEFAULT)
+    expect(TERMINAL_OPTIONS_DEFAULT).toMatchObject({
+      cursorStyle: 'bar',
+      cursorBlink: true,
+      optionIsMeta: false,
+      copyOnSelect: false,
+      scrollback: 5000
+    })
+  })
+
+  it('remembers the font', () => {
+    const storage = memoryStorage()
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, fontFamily: '"Iosevka Term", monospace' })
+    expect(readStoredTerminalOptions(storage).fontFamily).toBe('"Iosevka Term", monospace')
+  })
+
+  it('remembers the cursor shape and whether it blinks', () => {
+    const storage = memoryStorage()
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, cursorStyle: 'underline', cursorBlink: false })
+    expect(readStoredTerminalOptions(storage)).toMatchObject({ cursorStyle: 'underline', cursorBlink: false })
+  })
+
+  it('remembers Option as Meta', () => {
+    const storage = memoryStorage()
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, optionIsMeta: true })
+    expect(readStoredTerminalOptions(storage).optionIsMeta).toBe(true)
+  })
+
+  it('remembers copy on select', () => {
+    const storage = memoryStorage()
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, copyOnSelect: true })
+    expect(readStoredTerminalOptions(storage).copyOnSelect).toBe(true)
+  })
+
+  it('remembers the scrollback, held between its bounds', () => {
+    const storage = memoryStorage()
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, scrollback: 20_000 })
+    expect(readStoredTerminalOptions(storage).scrollback).toBe(20_000)
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, scrollback: 10 })
+    expect(readStoredTerminalOptions(storage).scrollback).toBe(TERMINAL_SCROLLBACK_MIN)
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, scrollback: 9_000_000 })
+    expect(readStoredTerminalOptions(storage).scrollback).toBe(TERMINAL_SCROLLBACK_MAX)
+  })
+
+  // Field by field: one bad value costs that field its default, not the rest their values.
+  it('drops what it cannot use and keeps the rest', () => {
+    const raw = JSON.stringify({
+      fontFamily: '   ',
+      cursorStyle: 'beam',
+      cursorBlink: 'yes',
+      optionIsMeta: true,
+      copyOnSelect: 1,
+      scrollback: 'lots'
+    })
+    expect(readStoredTerminalOptions(memoryStorage({ 'teamree.terminal.options': raw }))).toEqual({
+      ...TERMINAL_OPTIONS_DEFAULT,
+      optionIsMeta: true
+    })
+    expect(readStoredTerminalOptions(memoryStorage({ 'teamree.terminal.options': '[1]' }))).toEqual(
+      TERMINAL_OPTIONS_DEFAULT
+    )
+    expect(readStoredTerminalOptions(memoryStorage({ 'teamree.terminal.options': '{' }))).toEqual(
+      TERMINAL_OPTIONS_DEFAULT
+    )
+  })
+
+  it('survives a storage that refuses, in both directions', () => {
+    expect(readStoredTerminalOptions(refusingStorage)).toEqual(TERMINAL_OPTIONS_DEFAULT)
+    expect(() => writeStoredTerminalOptions(refusingStorage, TERMINAL_OPTIONS_DEFAULT)).not.toThrow()
+    expect(readStoredTerminalOptions(undefined)).toEqual(TERMINAL_OPTIONS_DEFAULT)
   })
 })

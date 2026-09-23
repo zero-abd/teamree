@@ -1,3 +1,5 @@
+/** @vitest-environment jsdom */
+
 // The two rules `TerminalView` states as functions: what a keystroke the
 // runtime refused puts on the screen, and who a keypress in a pane belongs to.
 //
@@ -7,8 +9,10 @@
 // and nothing is the one answer this app does not give.
 
 import { describe, expect, it } from 'vitest'
+import { Terminal as XTerm } from '@xterm/xterm'
 import { resolvePlatformModifier, type ModifierState } from '../keyboard/platformModifier'
-import { paneKeyIntent, refusedWriteNotice } from './TerminalView'
+import { TERMINAL_OPTIONS_DEFAULT } from '../state/preferences'
+import { applyEmulatorOptions, copyOnSelect, emulatorOptions, paneKeyIntent, refusedWriteNotice } from './TerminalView'
 
 const APPLE = resolvePlatformModifier('darwin')
 
@@ -79,5 +83,110 @@ describe('paneKeyIntent', () => {
     expect(paneKeyIntent(press('c', { ctrlKey: true }), pc, true)).toBe('emulator')
     expect(paneKeyIntent(press('c', { ctrlKey: true }), pc, false)).toBe('emulator')
     expect(paneKeyIntent(press('v', { ctrlKey: true }), pc, false)).toBe('emulator')
+  })
+})
+
+function openTerm(options: ConstructorParameters<typeof XTerm>[0] = {}): {
+  term: XTerm
+  write: (data: string) => Promise<void>
+} {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const term = new XTerm({ allowProposedApi: true, cols: 40, rows: 5, ...options })
+  term.open(host)
+  return { term, write: (data) => new Promise((resolve) => term.write(data, resolve)) }
+}
+
+describe('the emulator options a pane is built with', () => {
+  it('are the preferences, in the names xterm reads', () => {
+    expect(
+      emulatorOptions({
+        fontFamily: 'Iosevka',
+        cursorStyle: 'block',
+        cursorBlink: false,
+        optionIsMeta: true,
+        copyOnSelect: true,
+        scrollback: 20_000
+      })
+    ).toEqual({
+      fontFamily: 'Iosevka',
+      cursorStyle: 'block',
+      cursorBlink: false,
+      macOptionIsMeta: true,
+      scrollback: 20_000
+    })
+  })
+})
+
+describe('changing a running pane', () => {
+  it('takes every option without rebuilding it, and keeps what has scrolled by', async () => {
+    const { term, write } = openTerm(emulatorOptions(TERMINAL_OPTIONS_DEFAULT))
+    await write(Array.from({ length: 50 }, (_, line) => `line ${line}`).join('\r\n'))
+    const lines = term.buffer.active.length
+    expect(lines).toBeGreaterThan(term.rows)
+
+    const refit = applyEmulatorOptions(term, {
+      fontFamily: 'Menlo',
+      cursorStyle: 'underline',
+      cursorBlink: false,
+      optionIsMeta: true,
+      copyOnSelect: true,
+      scrollback: 20_000
+    })
+
+    expect(term.options).toMatchObject({
+      fontFamily: 'Menlo',
+      cursorStyle: 'underline',
+      cursorBlink: false,
+      macOptionIsMeta: true,
+      scrollback: 20_000
+    })
+    expect(term.buffer.active.length).toBe(lines)
+    expect(term.buffer.active.getLine(0)?.translateToString(true)).toBe('line 0')
+    // A new face changes the cell, so the pty needs a new size.
+    expect(refit).toBe(true)
+  })
+
+  it('asks for no refit when the font did not move', () => {
+    const { term } = openTerm(emulatorOptions(TERMINAL_OPTIONS_DEFAULT))
+    expect(applyEmulatorOptions(term, { ...TERMINAL_OPTIONS_DEFAULT, cursorStyle: 'block' })).toBe(false)
+  })
+})
+
+describe('copy on select', () => {
+  it('copies a selection while on, and nothing while off', async () => {
+    const { term, write } = openTerm()
+    await write('npm test')
+    const copied: string[] = []
+    let enabled = false
+    copyOnSelect(
+      term,
+      () => enabled,
+      (text) => copied.push(text)
+    )
+
+    term.selectAll()
+    expect(copied).toEqual([])
+
+    term.clearSelection()
+    enabled = true
+    term.selectAll()
+    expect(copied).toHaveLength(1)
+    expect(copied[0]).toContain('npm test')
+  })
+
+  // Clearing a selection is a selection change too, and must not empty the clipboard.
+  it('leaves the clipboard alone when the selection goes away', async () => {
+    const { term, write } = openTerm()
+    await write('npm test')
+    const copied: string[] = []
+    copyOnSelect(
+      term,
+      () => true,
+      (text) => copied.push(text)
+    )
+    term.selectAll()
+    term.clearSelection()
+    expect(copied).toHaveLength(1)
   })
 })

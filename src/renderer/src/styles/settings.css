@@ -351,6 +351,30 @@
   box-shadow: var(--ring);
 }
 
+/* Six digits and the stepper; any wider reads as a text field. */
+.settings-field__input--number {
+  justify-self: start;
+  width: 12ch;
+  padding-right: 2px;
+}
+
+/* A lone checkbox in the control column, centred on the label's line. */
+.settings-field__check {
+  justify-self: start;
+  align-self: start;
+  margin: 6px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-font-preview {
+  overflow: hidden;
+  color: var(--fg-secondary);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
 /* The line a pane will run, under the field that changes it: output, so dimmed and unboxed. */
 .settings-launch {
   color: var(--fg-muted);

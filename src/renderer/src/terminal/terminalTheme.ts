@@ -103,6 +103,3 @@ export function readSearchDecorations(root: Element | null): SearchDecorations {
     activeMatchColorOverviewRuler: read('activeMatchColorOverviewRuler')
   }
 }
-
-export const TERMINAL_FONT_FAMILY =
-  'ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace'
