@@ -21,8 +21,8 @@ import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { WebSocket } from 'ws'
-import { Inbox, TestPeer } from '../../support/harness.js'
+import { WebSocket, type ClientOptions } from 'ws'
+import { Inbox, TestPeer, type Closed } from '../../support/harness.js'
 
 const require = createRequire(import.meta.url)
 const relayRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -39,6 +39,16 @@ const READY_TIMEOUT_MS = 90_000
  * rather than trusting the number.
  */
 export const EVICTION_QUIET_MS = 14_000
+
+// workerd holds the TCP connection open for about ten seconds after the closing
+// handshake of a socket that never sent a frame. The code has arrived by then.
+const CLOSE_HANDSHAKE_GRACE_MS = 500
+
+// A crash restart, or a rebuild because a bundle input changed on disk. Either
+// cuts every connection without a close frame, which a client sees as 1006.
+const RUNTIME_RESTART = /The Workers runtime crashed|Reloading local server/
+/** Only ever waited on after a connection was cut. */
+const RESTART_NOTICE_MS = 5_000
 
 /**
  * Why this suite cannot run here, or null when it can. Only ever about things
@@ -89,6 +99,8 @@ export type WorkerdRelay = {
   origin: string
   /** Every structured line the Worker has logged, awaitable as it arrives. */
   log: Inbox<LogRecord>
+  /** Wrangler's own lines saying the runtime restarted under the suite. */
+  restarts: Inbox<string>
   /**
    * The address label the object will put in its next `connection.opened`. Call
    * it before opening the connection it is about. The labels are random and held
@@ -109,6 +121,7 @@ export type WorkerdRelay = {
 export async function startWorkerdRelay(vars: Record<string, string> = {}): Promise<WorkerdRelay> {
   const log = new Inbox<LogRecord>()
   const output: string[] = []
+  const restarts = new Inbox<string>()
   const ready = new Inbox<string>()
 
   const args = [
@@ -141,6 +154,7 @@ export async function startWorkerdRelay(vars: Record<string, string> = {}): Prom
     for (const line of chunk.toString('utf8').split('\n')) {
       if (line.trim() === '') continue
       output.push(line)
+      if (RUNTIME_RESTART.test(line)) restarts.push(line.trim())
       // The Worker's own logger writes one JSON object per line, and wrangler
       // passes console output straight through.
       const start = line.indexOf('{')
@@ -197,6 +211,7 @@ export async function startWorkerdRelay(vars: Record<string, string> = {}): Prom
     url: (token) => `ws://127.0.0.1:${port}/v1/relay/${rendezvousName(token)}`,
     origin: `http://127.0.0.1:${port}`,
     log,
+    restarts,
     addressRefOnNextOpen: async () => {
       const already = log.items.length
       const seen = await log.until((items) => items.slice(already).some(isConnectionOpened))
@@ -215,17 +230,46 @@ function rendezvousName(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
-export async function connectWorkerdPeer(relay: WorkerdRelay, token: string): Promise<TestPeer> {
-  const socket = new WebSocket(relay.url(token))
+/** A peer whose cut connection names the runtime restart that cut it, rather than a bare 1006. */
+export class WorkerdPeer extends TestPeer {
+  private readonly restarts: Inbox<string>
+  private readonly restartsBefore: number
+
+  constructor(socket: WebSocket, relay: WorkerdRelay) {
+    super(socket)
+    this.restarts = relay.restarts
+    this.restartsBefore = relay.restarts.items.length
+  }
+
+  override async waitClosed(): Promise<Closed> {
+    const closed = await super.waitClosed()
+    if (closed.code !== 1006) return closed
+    // The socket drops before wrangler notices and says why, so give it the chance.
+    await Promise.race([this.restarts.atLeast(this.restartsBefore + 1), delay(RESTART_NOTICE_MS)])
+    const restarts = this.restarts.items.slice(this.restartsBefore)
+    if (restarts.length > 0)
+      throw new Error(`the local runtime restarted and cut this connection: ${restarts.join(' | ')}`)
+    return closed
+  }
+}
+
+function dial(relay: WorkerdRelay, token: string): WebSocket {
+  // Documented by ws but missing from its type definitions.
+  const options = { closeTimeout: CLOSE_HANDSHAKE_GRACE_MS } as ClientOptions
+  return new WebSocket(relay.url(token), options)
+}
+
+export async function connectWorkerdPeer(relay: WorkerdRelay, token: string): Promise<WorkerdPeer> {
+  const socket = dial(relay, token)
   await new Promise<void>((accepted, refused) => {
     socket.once('open', () => accepted())
     socket.once('error', refused)
   })
-  return new TestPeer(socket)
+  return new WorkerdPeer(socket, relay)
 }
 
 /** Connects and greets, resolving once the Worker has answered the hello. */
-export async function joinWorkerdPeer(relay: WorkerdRelay, token: string): Promise<TestPeer> {
+export async function joinWorkerdPeer(relay: WorkerdRelay, token: string): Promise<WorkerdPeer> {
   const peer = await connectWorkerdPeer(relay, token)
   peer.hello(token)
   await peer.control.atLeast(1)
@@ -237,12 +281,12 @@ export async function joinWorkerdPeer(relay: WorkerdRelay, token: string): Promi
  * arrives as an HTTP status rather than as a socket, which is the whole point of
  * spending it there: nothing is ever upgraded.
  */
-export type Offer = { accepted: true; peer: TestPeer } | { accepted: false; status: number }
+export type Offer = { accepted: true; peer: WorkerdPeer } | { accepted: false; status: number }
 
 export async function offerWorkerdPeer(relay: WorkerdRelay, token: string): Promise<Offer> {
-  const socket = new WebSocket(relay.url(token))
+  const socket = dial(relay, token)
   return new Promise((settled) => {
-    socket.once('open', () => settled({ accepted: true, peer: new TestPeer(socket) }))
+    socket.once('open', () => settled({ accepted: true, peer: new WorkerdPeer(socket, relay) }))
     socket.once('error', (error: Error) => {
       settled({ accepted: false, status: Number(/(\d{3})\s*$/.exec(error.message)?.[1] ?? 0) })
     })

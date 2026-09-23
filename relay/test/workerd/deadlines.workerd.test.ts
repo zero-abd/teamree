@@ -32,6 +32,10 @@ import {
 const IDLE_TIMEOUT_MS = 6_000
 const ALARM_INTERVAL_MS = 2_000
 
+// The shortest the relay accepts for each, so a silent socket is closed on the first alarm.
+const SILENT_HELLO_TIMEOUT_MS = 1_000
+const SILENT_ALARM_INTERVAL_MS = 1_000
+
 const unavailable = workerdUnavailable()
 if (unavailable !== null) announceSkip(unavailable)
 
@@ -42,7 +46,6 @@ describe.skipIf(unavailable !== null)('the durable object alarm, run by workerd'
     relay = await startWorkerdRelay({
       RELAY_IDLE_TIMEOUT_MS: String(IDLE_TIMEOUT_MS),
       RELAY_PAIR_TIMEOUT_MS: String(IDLE_TIMEOUT_MS),
-      RELAY_HELLO_TIMEOUT_MS: String(IDLE_TIMEOUT_MS),
       RELAY_KEEPALIVE_INTERVAL_MS: String(ALARM_INTERVAL_MS)
     })
   }, 120_000)
@@ -83,23 +86,6 @@ describe.skipIf(unavailable !== null)('the durable object alarm, run by workerd'
     expect(first.control.items.some((frame) => frame.t === 'pong')).toBe(true)
   }, 40_000)
 
-  it('closes a connection that opened and then said nothing at all', async () => {
-    // The cheapest way to hold a slot is to connect and never speak, so this is
-    // the one deadline that has to be armed by the upgrade itself rather than by
-    // a frame — there is no frame. Nothing else in this suite would notice if
-    // the arming were dropped on the way out of the Worker's response.
-    const silent = await connectWorkerdPeer(relay, rendezvousToken())
-
-    // Both are asserted, and in this order, because they do not arrive together.
-    // For a socket that never delivered a frame to the object, workerd holds the
-    // close handshake back for about ten seconds after the relay asks for it; the
-    // in-band frame goes out on time. That gap is exactly why the protocol gives
-    // the reason in-band as well as in the close frame, and README.md carries it.
-    const told = await silent.control.until((frames) => frames.some((frame) => frame.t === 'closing'))
-    expect(told.at(-1)).toMatchObject({ t: 'closing', code: CloseCode.BadHello })
-    expect(await silent.waitClosed()).toMatchObject({ code: CloseCode.BadHello })
-  }, 45_000)
-
   it('sends an unpaired peer away when nobody ever joins it', async () => {
     const lonely = await joinWorkerdPeer(relay, rendezvousToken())
     expect(lonely.control.items[0]).toEqual({ t: 'waiting' })
@@ -127,4 +113,30 @@ describe.skipIf(unavailable !== null)('the durable object alarm, run by workerd'
     await connectWorkerdPeer(relay, token)
     expect(await openedAgain).not.toBe(whileResident)
   }, 60_000)
+})
+
+describe.skipIf(unavailable !== null)('the hello deadline, run by workerd', () => {
+  let relay!: WorkerdRelay
+
+  // Its own server: at a one-second hello deadline, a loaded machine could close the joins above.
+  beforeAll(async () => {
+    relay = await startWorkerdRelay({
+      RELAY_HELLO_TIMEOUT_MS: String(SILENT_HELLO_TIMEOUT_MS),
+      RELAY_KEEPALIVE_INTERVAL_MS: String(SILENT_ALARM_INTERVAL_MS)
+    })
+  }, 120_000)
+
+  afterAll(async () => {
+    await relay?.stop()
+  })
+
+  it('closes a connection that opened and then said nothing at all', async () => {
+    // The one deadline armed by the upgrade itself: there is no frame to arm it.
+    const silent = await connectWorkerdPeer(relay, rendezvousToken())
+
+    const closed = await silent.waitClosed()
+    // The in-band frame goes out ahead of the close frame, so it is already here.
+    expect(silent.control.items.at(-1)).toMatchObject({ t: 'closing', code: CloseCode.BadHello })
+    expect(closed).toMatchObject({ code: CloseCode.BadHello })
+  }, 45_000)
 })
