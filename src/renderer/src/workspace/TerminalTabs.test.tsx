@@ -595,6 +595,9 @@ describe('panes that have printed since they were read', () => {
     expect(tabs.find((tab) => tab.textContent?.includes('npm test'))?.closest('.tab')?.className).not.toContain(
       'tab--unread'
     )
+    const spoke = tabs.find((tab) => tab.textContent?.includes('claude'))
+    expect(spoke?.querySelectorAll('.activity, .pip')).toHaveLength(1)
+    expect(spoke?.querySelector('.activity')?.classList.contains('activity--unread')).toBe(true)
   })
 
   it('leaves a pane alone when nothing has arrived since it was read', () => {

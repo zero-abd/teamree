@@ -5,7 +5,7 @@
 import type { PaneNode, Terminal } from '@shared/entities'
 import { isFileLeaf } from '@shared/filePane'
 import { freshAgentLabel } from '@shared/paneRestore'
-import { ACTIVITY_LABEL, activityOf, paneNames } from '../sidebar/agentRows'
+import { ACTIVITY_LABEL, activityOf, dotClass, dotTone, paneAgent, paneNames } from '../sidebar/agentRows'
 import { TerminalView } from '../terminal/TerminalView'
 import { FilePane } from './FilePane'
 import { collectLeaves } from './paneLayout'
@@ -93,7 +93,9 @@ function PaneLeaf({
     <section className={`pane${focused ? ' pane--focused' : ''}${exited ? ' pane--exited' : ''}`} aria-label={name}>
       <header className="pane__bar">
         <span
-          className={activity === null ? 'activity' : `activity activity--${activity}`}
+          className={dotClass(
+            activity === null || terminal === undefined ? null : dotTone(activity, paneAgent(terminal))
+          )}
           title={activity === null ? undefined : ACTIVITY_LABEL[activity]}
           aria-hidden="true"
         />

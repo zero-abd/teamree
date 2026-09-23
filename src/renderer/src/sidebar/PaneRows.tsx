@@ -4,7 +4,17 @@
 
 import { PaneGlyph } from '../agents/glyphs'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
-import { ACTIVITY_LABEL, agoLabel, sinceLabel, truncateName, typedBy, watchedBy, type AgentRow } from './agentRows'
+import {
+  ACTIVITY_LABEL,
+  agoLabel,
+  dotClass,
+  dotTone,
+  sinceLabel,
+  truncateName,
+  typedBy,
+  watchedBy,
+  type AgentRow
+} from './agentRows'
 
 type PaneRowsProps = {
   rows: readonly AgentRow[]
@@ -43,8 +53,7 @@ export function PaneRows({
               onClick={() => onFocusTerminal(row.terminalId)}
             >
               <span className="pane-row__head">
-                <span className={`activity activity--${row.activity}`} aria-hidden="true" />
-                {isUnread ? <span className="pip" aria-hidden="true" /> : null}
+                <span className={dotClass(dotTone(row.activity, row.agent), isUnread)} aria-hidden="true" />
                 {/* Shortened for the row only: the hover text carries the whole of it. */}
                 <PaneGlyph agent={row.agent} />
                 <span className="pane-row__label">{truncateName(row.text)}</span>

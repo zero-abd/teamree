@@ -73,7 +73,7 @@ describe('dashboardRows', () => {
         terminal({ id: 'done', running: false, exitCode: 0 }),
         terminal({ id: 'quiet' }),
         terminal({ id: 'working', busy: true }),
-        terminal({ id: 'waiting', lastBellAt: 1_000 }),
+        terminal({ id: 'waiting', agent: 'claude', lastBellAt: 1_000 }),
         terminal({ id: 'failed', running: false, exitCode: 1 })
       ],
       [worktree({ id: 'wt1' })]
@@ -89,7 +89,7 @@ describe('dashboardRows', () => {
       [
         terminal({ id: 'silent-an-hour', lastOutputAt: NOW - 3_600_000 }),
         terminal({ id: 'silent-ten-minutes', lastOutputAt: NOW - 600_000 }),
-        terminal({ id: 'rang-just-now', lastOutputAt: NOW - 5_000, lastBellAt: NOW - 5_000 })
+        terminal({ id: 'rang-just-now', agent: 'claude', lastOutputAt: NOW - 5_000, lastBellAt: NOW - 5_000 })
       ],
       [worktree({ id: 'wt1' })]
     )

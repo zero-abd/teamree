@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { evidenceLine } from '../../shared/outputEvidence'
 import {
   clockLabel,
   closingMark,
+  failedResumeMark,
+  noConversationMark,
   INERT_RECORD,
   openingMark,
   replayableRecord,
@@ -132,5 +135,14 @@ describe('the marks around a record', () => {
     expect(openingMark(at).startsWith(`${ESC}[0m`)).toBe(true)
     expect(closingMark().startsWith(`${ESC}[0m`)).toBe(true)
     expect(closingMark().endsWith(`${ESC}[0m\r\n`)).toBe(true)
+  })
+})
+
+describe('the marks, as a sidebar row quotes a restored pane', () => {
+  // The row's subtitle is the last real line, never the app's own aside.
+  it('are never the line a row quotes', () => {
+    const replayed = replayableRecord({ text: 'server listening on :3000\r\n', recordedAt: 0 })
+    expect(evidenceLine(`${replayed}user@host login-flow % `)).toBe('server listening on :3000')
+    expect(evidenceLine(`${failedResumeMark(1, true, false)}${noConversationMark('claude')}`)).toBeNull()
   })
 })

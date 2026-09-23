@@ -11,7 +11,7 @@ import {
   type WorktreeStatus
 } from '@shared/entities'
 import type { PaneAttention } from '../state/paneAttention'
-import { ACTIVITY_LABEL, agentRows, worktreeActivity } from './agentRows'
+import { ACTIVITY_LABEL, agentRows, dotClass, worktreeActivity, worktreeTone } from './agentRows'
 import { PaneRows } from './PaneRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
@@ -123,6 +123,7 @@ export function WorktreeRow({
       ]
   const rows = ready ? agentRows(terminals, worktree.id, now, evidence) : []
   const overall = worktreeActivity(rows)
+  const tone = worktreeTone(rows)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
 
@@ -146,15 +147,13 @@ export function WorktreeRow({
         )}
         {overall ? (
           <span
-            className={`activity activity--${overall}`}
-            title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${ACTIVITY_LABEL[overall]}`}
+            className={dotClass(tone, unreadHere)}
+            title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${ACTIVITY_LABEL[overall]}${
+              unreadHere ? ' · unread' : ''
+            }`}
             aria-label={ACTIVITY_LABEL[overall]}
           />
         ) : null}
-        {/* Beside the dot rather than instead of it: what a pane is doing
-          and whether you have read it are two facts, and a pane can be
-          finished and unread, or working and already seen. */}
-        {unreadHere ? <span className="pip" title="unread" /> : null}
       </span>
       <span className="worktree__meta">
         <span className="worktree__branch">{worktree.branch}</span>

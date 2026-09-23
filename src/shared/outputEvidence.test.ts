@@ -159,3 +159,26 @@ describe('evidenceLine', () => {
     expect(evidenceLine(output)).toBe('error: failed to push some refs')
   })
 })
+
+describe('evidenceLine, over the app’s own marks', () => {
+  // Written into a restored pane around its record; a row quoting one reads like debris.
+  it('walks past the record marks to the last real line', () => {
+    const output = [
+      `${ESC}[0m${ESC}[38;5;244m[record — up to 2026-09-23 11:40, nothing running]${ESC}[0m\r\n`,
+      'server listening on :3000\r\n',
+      `${ESC}[0m\r\n${ESC}[38;5;244m[end of record — new shell below]${ESC}[0m\r\n`,
+      'user@host login-flow % '
+    ].join('')
+    expect(evidenceLine(output)).toBe('server listening on :3000')
+  })
+
+  it('shows nothing when a mark is all there is', () => {
+    expect(evidenceLine('[end of record — new shell below]\r\n% ')).toBeNull()
+    expect(evidenceLine('[no conversation to resume — fresh claude below]\r\n')).toBeNull()
+    expect(evidenceLine('[resume refused — agent exited 1; open a new pane for a fresh one]\r\n')).toBeNull()
+  })
+
+  it('still quotes a program’s own bracketed line', () => {
+    expect(evidenceLine('[build] 12 modules transformed')).toBe('[build] 12 modules transformed')
+  })
+})
