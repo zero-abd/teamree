@@ -525,6 +525,55 @@ async function checkWorktreeSurfaces(ask) {
     'pressing the worktree did not give the main area back to the workspace'
   )
 
+  // The row's own menu, opened the way a right mouse button opens it.
+  //
+  // Everything about what is in that menu is a unit test. What only a running
+  // window can say is that the event a real right-click delivers reaches the
+  // row at all: the handler is on the `<li>` and every control inside it is a
+  // button of its own, so a menu wired one element off is invisible to a test
+  // that renders the component and asks it nicely. This is also the only place
+  // the row's one destructive action is now reached from, which makes "does the
+  // menu open" the same question as "can this worktree be removed".
+  const rightClicked = await ask(
+    `(() => {
+       const row = [...document.querySelectorAll('.worktree')].find(
+         (node) => node.textContent?.includes('smoke task')
+       )
+       if (!row) return false
+       row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, detail: 1, clientX: 60, clientY: 120 }))
+       return true
+     })()`
+  )
+  if (rightClicked !== true) {
+    failures.push('no worktree row in the sidebar to right-click')
+    return
+  }
+  const menuOpen = await waitFor(
+    () => ask(`document.querySelector('[role="menu"]') !== null`),
+    'a right-click on the worktree row put no menu on screen'
+  )
+  if (menuOpen) {
+    const items = JSON.parse(
+      await ask(
+        `JSON.stringify([...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((node) => node.textContent.trim()))`
+      )
+    )
+    // Last, and only last: the whole point of the menu is that the destructive
+    // item is somewhere nobody arrives at by momentum.
+    if (items.at(-1) !== 'Remove') failures.push(`the row menu does not end with Remove: ${JSON.stringify(items)}`)
+    if (items.length !== 5) failures.push(`the row menu has ${items.length} items rather than five`)
+  }
+  // Closed again, so nothing below this is driving a window with a menu over it.
+  await ask(
+    `(() => {
+       document
+         .querySelector('[role="menu"]')
+         ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+       return true
+     })()`
+  )
+  await waitFor(() => ask(`document.querySelector('[role="menu"]') === null`), 'the row menu would not close on Escape')
+
   const terminal = await call('terminal.create', { worktreeId })
   if (terminal.ok !== true) {
     failures.push(`could not open a terminal in the worktree: ${JSON.stringify(terminal.error ?? terminal)}`)

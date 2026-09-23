@@ -379,6 +379,7 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
 
       <StartPoint project={project} />
       <CarriedPaths project={project} />
+      <EditorCommand project={project} />
       <RelayBlock project={project} />
     </article>
   )
@@ -546,6 +547,83 @@ function PathList({
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
       />
+    </div>
+  )
+}
+
+/**
+ * Which editor this project's checkouts open in.
+ *
+ * Held and committed exactly the way the start point above is, and left empty
+ * by almost everybody: teamree looks for a short list of editors on PATH by
+ * itself, and this field is for the one it has never heard of.
+ *
+ * It names a program, not a command line. The main process resolves it on PATH
+ * and spawns it with the checkout as a single argument, so flags in here are
+ * part of a program name that does not exist rather than flags — which is the
+ * deliberate half of the bargain: there is no shell anywhere in that path, and
+ * a checkout is a directory somebody else may have named.
+ */
+function EditorCommand({ project }: { project: Project }): React.JSX.Element {
+  const stored = useWorkspaceStore((state) => state.editorCommands[project.id] ?? '')
+  const editors = useWorkspaceStore((state) => state.editors)
+  const setEditorCommand = useWorkspaceStore((state) => state.setEditorCommand)
+  const [draft, setDraft] = useState(stored)
+
+  useEffect(() => {
+    setDraft(stored)
+  }, [stored])
+
+  const commit = (): void => {
+    const next = draft.trim()
+    if (next === stored) return
+    setEditorCommand(project.id, next.length === 0 ? null : next)
+  }
+
+  const id = `settings-editor-${project.id}`
+  const found = editors?.map((editor) => editor.command).join(', ') ?? ''
+
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor={id}>
+        Open checkouts in
+      </label>
+      <div className="settings-field__row">
+        <input
+          id={id}
+          className="settings-field__input"
+          type="text"
+          value={draft}
+          placeholder={editors?.[0]?.command ?? 'code'}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commit()
+            }
+          }}
+        />
+        <button
+          type="button"
+          className="button button--small"
+          disabled={stored.length === 0}
+          onClick={() => setEditorCommand(project.id, null)}
+        >
+          Use what is on PATH
+        </button>
+      </div>
+      <p className="settings-note">
+        The name of one program, which teamree looks for on PATH and starts with the checkout as its only argument — not
+        a command line, so flags here are part of a name rather than flags.{' '}
+        {editors === null
+          ? 'teamree has not looked yet.'
+          : found.length === 0
+            ? 'teamree found none of code, cursor, zed, idea or subl on PATH.'
+            : `Left empty, teamree uses the first it found: ${found}.`}
+      </p>
     </div>
   )
 }

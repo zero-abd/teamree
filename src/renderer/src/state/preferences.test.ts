@@ -11,12 +11,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   clampTerminalFontSize,
+  readStoredEditorCommands,
   readStoredStartPoints,
   readStoredTerminalFontSize,
   TERMINAL_FONT_DEFAULT_PX,
   TERMINAL_FONT_MAX_PX,
   TERMINAL_FONT_MIN_PX,
+  withEditorCommand,
   withStartPoint,
+  writeStoredEditorCommands,
   writeStoredStartPoints,
   writeStoredTerminalFontSize
 } from './preferences'
@@ -138,5 +141,40 @@ describe('the ref a project starts new worktrees from', () => {
     expect(readStoredStartPoints(refusingStorage)).toEqual({})
     expect(() => writeStoredStartPoints(refusingStorage, { alpha: 'develop' })).not.toThrow()
     expect(readStoredStartPoints(undefined)).toEqual({})
+  })
+})
+
+// The same reader again, over a string that names a program rather than a ref.
+// Worth its own tests for one reason: this value reaches the main process,
+// which looks for it on PATH — so the shapes that are not a program name have
+// to stop here rather than in the sentence that says it was not found.
+describe('the editor a project opens its checkouts in', () => {
+  const KEY = 'teamree.editor.commands'
+
+  it('is empty when nothing has ever been written', () => {
+    expect(readStoredEditorCommands(memoryStorage())).toEqual({})
+  })
+
+  it('sets one project without disturbing another, and clearing removes the entry', () => {
+    expect(withEditorCommand({ alpha: 'code' }, 'beta', 'zed')).toEqual({ alpha: 'code', beta: 'zed' })
+    expect(withEditorCommand({ alpha: 'code' }, 'alpha', null)).toEqual({})
+    expect(withEditorCommand({ alpha: 'code' }, 'alpha', '   ')).toEqual({})
+  })
+
+  it('trims, so a stray space cannot become part of a program name', () => {
+    expect(withEditorCommand({}, 'alpha', '  code  ')).toEqual({ alpha: 'code' })
+    expect(readStoredEditorCommands(memoryStorage({ [KEY]: '{"a":"  zed  "}' }))).toEqual({ a: 'zed' })
+  })
+
+  it('drops anything that is not a command, and anything that is not a map of them', () => {
+    expect(readStoredEditorCommands(memoryStorage({ [KEY]: 'not json at all' }))).toEqual({})
+    expect(readStoredEditorCommands(memoryStorage({ [KEY]: '["code"]' }))).toEqual({})
+    expect(readStoredEditorCommands(memoryStorage({ [KEY]: '{"a":7,"b":"code","c":""}' }))).toEqual({ b: 'code' })
+  })
+
+  it('survives a storage that refuses, in both directions', () => {
+    expect(readStoredEditorCommands(refusingStorage)).toEqual({})
+    expect(() => writeStoredEditorCommands(refusingStorage, { alpha: 'code' })).not.toThrow()
+    expect(readStoredEditorCommands(undefined)).toEqual({})
   })
 })

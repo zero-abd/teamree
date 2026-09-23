@@ -24,6 +24,7 @@
 import { dirname } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
 import { CliService, createAdministratorRunner, findShippedCli, registerCliHandlers } from '../../cli'
+import { createEditorActions, registerEditorHandlers } from '../../editor'
 import { GitService, registerGitHandlers } from '../../git'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
@@ -247,6 +248,12 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       }
     })
   )
+
+  // Two probes of PATH and, at most, one detached process. Nothing to tear down
+  // and nothing to watch: an editor teamree started is not its child in any
+  // sense that matters, and quitting must not close the window somebody is
+  // working in.
+  registerEditorHandlers(registry, createEditorActions())
 
   // One timer and no other resource, and nothing here reaches the network until
   // it fires — `start()` is the runtime's to call, well after a window is up.

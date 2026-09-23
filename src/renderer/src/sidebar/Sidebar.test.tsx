@@ -18,7 +18,7 @@
 // no projects, no worktrees, and a teammate on the roster nothing has ever been
 // heard from are three different sentences.
 
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project, TeammatePresence, TeammatePresenceRead, TeamworkStatus, Worktree } from '@shared/entities'
 
@@ -461,5 +461,69 @@ describe('the order the chords walk', () => {
     const drawn = [...container.querySelectorAll('.worktree__name')].map((node) => node.textContent)
     expect(drawn).toEqual(['one', 'three', 'two', 'four'])
     expect(drawn).toEqual(worktreeOrder(projects, worktrees).map((entry) => entry.name))
+  })
+})
+
+// What the row menu is wired to. The menu itself is `WorktreeRow.test.tsx`'s;
+// what is only true here is that choosing an item acts on the right worktree
+// with the right project's editor — which is the half a component test of the
+// row structurally cannot see.
+describe('the row menu acts on the worktree it was opened on', () => {
+  const openMenu = (): void => {
+    mount()
+    fireEvent.contextMenu(document.querySelector('.worktree') as HTMLElement)
+  }
+
+  it('puts the checkout path on the clipboard', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    seed({ worktrees: [worktree()] })
+    openMenu()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy path' }))
+    await act(async () => undefined)
+
+    expect(writeText).toHaveBeenCalledWith('/repos/pager-wt/rewrite')
+    expect(useWorkspaceStore.getState().notices.at(-1)?.text).toContain('Copied')
+  })
+
+  it('copies the branch rather than the path when that is what was chosen', async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    seed({ worktrees: [worktree()] })
+    openMenu()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy branch' }))
+    await act(async () => undefined)
+
+    expect(writeText).toHaveBeenCalledWith('rewrite-the-pager')
+  })
+
+  // The editor is the project's, and the path is the worktree's. Nothing else
+  // in the window pairs those two, which is why this is asserted here.
+  it('opens the checkout in the editor this project names', async () => {
+    call.mockResolvedValue({ opened: true, editor: 'mate' })
+    seed({ worktrees: [worktree()], editorCommands: { p1: 'mate' } })
+    openMenu()
+
+    expect(screen.getByRole('menuitem', { name: 'Open in mate' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open in mate' }))
+    await act(async () => undefined)
+
+    expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite', command: 'mate' })
+  })
+
+  // A refusal is the ordinary answer on a machine with no editor set up, and it
+  // has to reach the screen: a menu item that did nothing and said nothing is
+  // the broken button this menu exists to stop being.
+  it('says why nothing opened', async () => {
+    call.mockResolvedValue({ opened: false, reason: 'teamree found no editor on PATH.' })
+    seed({ worktrees: [worktree()] })
+    openMenu()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Open in/ }))
+    await act(async () => undefined)
+
+    expect(useWorkspaceStore.getState().notices.at(-1)?.text).toContain('found no editor on PATH')
   })
 })
