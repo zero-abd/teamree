@@ -536,6 +536,49 @@ describe('the row menu acts on the worktree it was opened on', () => {
     expect(writeText).toHaveBeenCalledWith('rewrite-the-pager')
   })
 
+  /** What a mouse actually sends an element, in the order it sends it. */
+  const mouseClick = (target: Element): void => {
+    fireEvent.pointerDown(target, { button: 0, pointerType: 'mouse' })
+    fireEvent.mouseDown(target, { button: 0 })
+    fireEvent.pointerUp(target, { button: 0, pointerType: 'mouse' })
+    fireEvent.mouseUp(target, { button: 0 })
+    fireEvent.click(target, { button: 0, detail: 1 })
+  }
+
+  // Reported as doing nothing twice, through a driver that sends press and
+  // release with no click count — which never makes a click event. A mouse
+  // does, and the menu's own outside-press dismissal is not in its way: the
+  // press lands inside the menu.
+  it('asks the runtime to remove the worktree when Remove is clicked with a mouse', async () => {
+    call.mockResolvedValue({ removed: true })
+    seed({ worktrees: [worktree()] })
+    mount()
+    mouseClick(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
+    expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
+
+    mouseClick(screen.getByRole('menuitem', { name: 'Remove' }))
+    await act(async () => undefined)
+
+    expect(call).toHaveBeenCalledWith('worktree.remove', { worktreeId: 'w1' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(useWorkspaceStore.getState().worktrees).toEqual([])
+  })
+
+  it('puts the runtime’s refusal in front of you as the question it is', async () => {
+    call.mockRejectedValue(
+      Object.assign(new Error('worktree "Rewrite the pager" has uncommitted changes'), { code: 'conflict' })
+    )
+    seed({ worktrees: [worktree()] })
+    mount()
+    mouseClick(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
+
+    mouseClick(screen.getByRole('menuitem', { name: 'Remove' }))
+    await act(async () => undefined)
+
+    expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })
+    expect(useWorkspaceStore.getState().worktrees).toHaveLength(1)
+  })
+
   // The editor is the project's, and the path is the worktree's. Nothing else
   // in the window pairs those two, which is why this is asserted here.
   it('opens the checkout in the editor this project names', async () => {

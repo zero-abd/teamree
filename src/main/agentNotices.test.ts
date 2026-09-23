@@ -1,12 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import type { IpcMain, IpcMainEvent } from 'electron'
+import { describe, expect, it, vi } from 'vitest'
 import {
   badgeCount,
+  installAgentNotices,
   noticeBody,
   noticeIsSilent,
   quietPanesAfter,
   readNoticeSettings,
   shouldNotify,
   NO_QUIET_PANES,
+  NOTICE_PUBLISH_CHANNEL,
+  NOTICE_REVEAL_CHANNEL,
   type AgentNotice,
   type NoticeSettings
 } from './agentNotices'
@@ -157,5 +161,116 @@ describe('what the window publishes', () => {
   it('drops anything that is not an object', () => {
     expect(readNoticeSettings('notify')).toBeNull()
     expect(readNoticeSettings(null)).toBeNull()
+  })
+})
+
+// The incident this pins: somebody was typing into their own pane when the
+// active worktree changed under them and the keystrokes ran in another
+// worktree's agent. The one programmatic road from "an agent stopped" to
+// "open that pane" runs through here, so this is where it is shown that the
+// road has exactly one gate — the click on the notification — and that
+// delivering the notice, on its own, sends the window nothing.
+describe('what a stopped agent is allowed to do to the window', () => {
+  type Shown = { title: string; body: string; silent: boolean; onActivate: () => void }
+
+  function install(windowFocused = true) {
+    const listeners = new Map<string, (event: IpcMainEvent, payload: unknown) => void>()
+    const ipc = {
+      on: (channel: string, listener: (event: IpcMainEvent, payload: unknown) => void) =>
+        listeners.set(channel, listener),
+      removeAllListeners: (channel: string) => listeners.delete(channel)
+    } as unknown as IpcMain
+    const sent: unknown[][] = []
+    const sender = { isDestroyed: () => false, send: (...args: unknown[]) => sent.push(args), mainFrame: {} }
+    const shown: Shown[] = []
+    const host = {
+      windowFocused: () => windowFocused,
+      show: (spec: Shown) => shown.push(spec),
+      setBadge: vi.fn(),
+      focusWindow: vi.fn(),
+      fromMainFrame: () => true
+    }
+    const channel = installAgentNotices(ipc, host)
+    const publish = (settings: NoticeSettings): void => {
+      const listener = listeners.get(NOTICE_PUBLISH_CHANNEL)
+      if (!listener) throw new Error('nothing is listening for the window’s settings')
+      listener({ sender, senderFrame: sender.mainFrame } as unknown as IpcMainEvent, settings)
+    }
+    return { channel, publish, sent, shown, host }
+  }
+
+  const stopped: AgentNotice = {
+    terminalId: 'term_theirs',
+    worktreeId: 'wt_theirs',
+    worktree: 'Plan the spend summary',
+    reason: 'quiet',
+    line: 'Login successful. Press Enter to continue'
+  }
+
+  it('raises the notification and tells the window nothing', () => {
+    const { channel, publish, sent, shown, host } = install()
+    // Somebody is typing into a pane of their own; the agent that stopped is in
+    // another worktree.
+    publish({ preference: 'notify', focusedPaneId: 'term_mine' })
+
+    channel.deliver(stopped)
+
+    expect(shown).toHaveLength(1)
+    expect(shown[0]?.title).toBe('Plan the spend summary')
+    expect(sent).toEqual([])
+    expect(host.focusWindow).not.toHaveBeenCalled()
+  })
+
+  it('tells the window nothing when the window is not even in front', () => {
+    const { channel, publish, sent, host } = install(false)
+    publish({ preference: 'notify', focusedPaneId: 'term_mine' })
+
+    channel.deliver(stopped)
+
+    expect(sent).toEqual([])
+    expect(host.focusWindow).not.toHaveBeenCalled()
+  })
+
+  it('reveals the pane from the click on the notification, and from nothing else', () => {
+    const { channel, publish, sent, shown, host } = install()
+    publish({ preference: 'notify', focusedPaneId: 'term_mine' })
+    channel.deliver(stopped)
+    // Nothing, however long it sits in the notification centre.
+    expect(sent).toEqual([])
+
+    shown[0]?.onActivate()
+
+    expect(host.focusWindow).toHaveBeenCalledOnce()
+    expect(sent).toEqual([[NOTICE_REVEAL_CHANNEL, { worktreeId: 'wt_theirs', terminalId: 'term_theirs' }]])
+  })
+
+  it('drops the click once the window that published is gone', () => {
+    const listeners = new Map<string, (event: IpcMainEvent, payload: unknown) => void>()
+    const ipc = {
+      on: (channel: string, listener: (event: IpcMainEvent, payload: unknown) => void) =>
+        listeners.set(channel, listener),
+      removeAllListeners: () => {}
+    } as unknown as IpcMain
+    const sent: unknown[][] = []
+    let closed = false
+    const sender = { isDestroyed: () => closed, send: (...args: unknown[]) => sent.push(args), mainFrame: {} }
+    const shown: Shown[] = []
+    const channel = installAgentNotices(ipc, {
+      windowFocused: () => false,
+      show: (spec: Shown) => shown.push(spec),
+      setBadge: () => {},
+      focusWindow: () => {},
+      fromMainFrame: () => true
+    })
+    listeners.get(NOTICE_PUBLISH_CHANNEL)?.({ sender, senderFrame: sender.mainFrame } as unknown as IpcMainEvent, {
+      preference: 'notify',
+      focusedPaneId: null
+    })
+    channel.deliver(stopped)
+    closed = true
+
+    shown[0]?.onActivate()
+
+    expect(sent).toEqual([])
   })
 })
