@@ -65,12 +65,15 @@ function menuName(platform: NodeJS.Platform, name: string): string {
  * rather than all sixteen commands, one per section and two more in File.
  */
 const SHOWN: readonly WorkspaceCommand[] = [
-  'open-appearance',
+  'open-settings',
   'new-worktree',
   'new-terminal',
   'close-pane',
   'find-in-pane',
   'open-palette',
+  // The one command in the slice with no chord, which is the other thing an
+  // item's accelerator can be.
+  'open-appearance',
   'split-right',
   'open-help'
 ]
@@ -92,7 +95,10 @@ const EMPTY: CommandState = {
   activeWorktreeId: null,
   layouts: {},
   watches: [],
-  focusedWatchId: null
+  focusedWatchId: null,
+  statuses: {},
+  changesOpen: false,
+  pushing: false
 }
 
 const SPEC: readonly MenuBarItem[] = menuBarSpec(EMPTY)
@@ -128,7 +134,11 @@ describe('the application menu', () => {
       const accelerators = items(template)
         .filter((item) => item.accelerator !== undefined)
         .map((item) => item.accelerator)
-      expect(accelerators.sort(), platform).toEqual(SPEC.map((item) => item.accelerator).sort())
+      expect(accelerators.sort(), platform).toEqual(
+        SPEC.map((item) => item.accelerator)
+          .filter((accelerator) => accelerator !== '')
+          .sort()
+      )
     }
   })
 
@@ -249,7 +259,7 @@ describe('the window’s own commands in the menu bar', () => {
     expect(labelsOf(template, 'Edit').slice(-2)).toEqual(['—', 'Find in pane'])
     // The window's own word for ⌘K, read out of the published menu rather than
     // written down again here.
-    expect(labelsOf(template, 'View').slice(0, 2)).toEqual([shipped('open-palette'), '—'])
+    expect(labelsOf(template, 'View').slice(0, 3)).toEqual([shipped('open-palette'), shipped('open-appearance'), '—'])
     expect(shipped('open-palette')).toBe('Go to worktree or command')
     expect(labelsOf(template, 'Window')).toEqual(['Split pane right', '—', 'minimize', 'zoom', '—', 'front'])
     expect(labelsOf(template, 'Help')).toEqual([shipped('open-help')])
@@ -271,8 +281,13 @@ describe('the window’s own commands in the menu bar', () => {
     const template = applicationMenuTemplate({ platform: 'darwin', commands: published() })
     for (const item of SPEC) {
       const found = items(template).find((entry) => entry.label === item.label)
-      expect(found?.accelerator, item.command).toBe(item.accelerator)
+      // A command the window binds to no key publishes an empty accelerator,
+      // and the item is built with none at all: Electron reads a string it
+      // cannot parse as a fault rather than as "no key".
+      expect(found?.accelerator, item.command).toBe(item.accelerator === '' ? undefined : item.accelerator)
     }
+    expect(shipped('open-appearance')).toBe('Appearance…')
+    expect(SPEC.find((item) => item.command === 'open-appearance')?.accelerator).toBe('')
   })
 
   // Display-only where the platform honours it, so Windows and Linux keep the
@@ -282,8 +297,10 @@ describe('the window’s own commands in the menu bar', () => {
   it('asks not to register any of these accelerators with the system', () => {
     for (const platform of ['darwin', 'win32', 'linux'] as const) {
       const template = applicationMenuTemplate({ platform, commands: published() })
+      // Bar the item with no chord, which is not asking the system for a key
+      // and so has nothing to ask it not to register.
       const commandItems = items(template).filter((item) => item.accelerator !== undefined)
-      expect(commandItems.length, platform).toBe(SPEC.length)
+      expect(commandItems.length, platform).toBe(SPEC.filter((item) => item.accelerator !== '').length)
       expect(
         commandItems.every((item) => item.registerAccelerator === false),
         platform

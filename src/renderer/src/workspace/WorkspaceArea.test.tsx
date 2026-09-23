@@ -504,3 +504,25 @@ describe('a teammate’s pane beside your own', () => {
     expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
   })
 })
+
+// The strip under the empty state spelled `maximise pane` while the menu two
+// clicks away said `Maximize pane`, and called six other commands by names that
+// appear nowhere else in the app. One wording per command: the strip reads the
+// menu's label rather than a second set of words.
+describe('the shortcut strip and the menu bar use one set of words', () => {
+  it('names every command exactly as the menu bar names it', async () => {
+    const { menuBarSpec } = await import('../menu/menuBar')
+    const { commandNamed } = await import('../keyboard/workspaceShortcuts')
+    seed({ projects: [project], worktrees: [] })
+    mount()
+
+    const menu = new Map(menuBarSpec(useWorkspaceStore.getState()).map((item) => [item.command, item.label]))
+    const entries = [...document.querySelectorAll('.legend > div')]
+    expect(entries.length).toBeGreaterThan(5)
+    for (const entry of entries) {
+      const command = commandNamed(entry.getAttribute('data-command') ?? '')
+      expect(command, entry.textContent ?? '').not.toBeNull()
+      expect(entry.querySelector('dd')?.textContent, command ?? '').toBe(menu.get(command as never))
+    }
+  })
+})

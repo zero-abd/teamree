@@ -20,11 +20,25 @@ export type WorkspaceCommand =
   | 'find-in-pane'
   | 'open-dashboard'
   | 'open-appearance'
+  | 'open-settings'
+  | 'commit-changes'
+  | 'push-worktree'
   | 'open-help'
 
 export type WorkspaceShortcut = {
   command: WorkspaceCommand
-  chord: Chord
+  /**
+   * The key that runs it, when there is one.
+   *
+   * Absent for a command that belongs in this table and has no chord to spare.
+   * The table is the one list of what this window can be asked to do — the menu
+   * bar, the palette and the help page are all built from it — and a command
+   * left out of it to avoid inventing a keystroke is a command with no menu
+   * item and no palette row. Better to say there is no key: the menu draws the
+   * item with nothing beside it, and `shortcutHint` answers with an empty
+   * string, which every caller already renders as no chord at all.
+   */
+  chord?: Chord
   title: string
 }
 
@@ -68,10 +82,30 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // phrase, never a description of an ordering.
   { command: 'open-dashboard', chord: { key: 'e' }, title: 'All panes' },
   // Comma, because on this platform that is where settings live and nobody has
-  // to be told. The menu bar carries it too, as Settings… in the application
-  // menu, which is the platform's name for the item and where a Mac user looks
-  // for it; `menuBar.ts` is where that label is chosen.
-  { command: 'open-appearance', chord: { key: ',' }, title: 'Appearance' },
+  // to be told — and it opens the settings page, which is the page with the CLI
+  // link, the update preference, the terminal text size, the default agent and
+  // the relay on it. It used to open the theme editor, so ⌘, in a window whose
+  // owner wanted to change where teamree's binary points landed on 42 colour
+  // swatches. The menu bar carries it as Settings… in the application menu,
+  // which is the platform's name for the item; `menuBar.ts` chooses that label.
+  { command: 'open-settings', chord: { key: ',' }, title: 'Settings' },
+  // And the theme editor, with no chord of its own. ⌘⇧, is the obvious second
+  // punctuation chord and is not one this window can bind: `matchesChord`
+  // compares `KeyboardEvent.key`, and shift and a comma produce `<` on a US
+  // layout, so the binding would be for a character whose key name is not the
+  // one written here. It keeps its menu item, its palette row and its rail
+  // button, which is three ways in and none of them a key that does nothing.
+  { command: 'open-appearance', title: 'Appearance' },
+  // The two git commands. No chords — ⌘P and ⌘⇧P are a print dialog and a
+  // palette everywhere else, and taking either would surprise more people than
+  // it helped — but they belong in this table all the same: it is what the menu
+  // bar and the palette are built from, and until now neither could reach the
+  // two things a person does with a worktree once the agent has finished.
+  //
+  // Commit asks for a message, so it opens the panel that has the box for one,
+  // and the ellipsis says so.
+  { command: 'commit-changes', title: 'Commit…' },
+  { command: 'push-worktree', title: 'Push' },
   // Slash, which is what a person presses when they want to be told how
   // something works, and the one chord in this table that is worth pressing
   // precisely because you do not know the others yet. Deliberately not a shift
@@ -90,7 +124,7 @@ export function commandForEvent(
   modifier: PlatformModifier
 ): WorkspaceCommand | null {
   for (const shortcut of WORKSPACE_SHORTCUTS) {
-    if (matchesChord(event, shortcut.chord, modifier)) return shortcut.command
+    if (shortcut.chord && matchesChord(event, shortcut.chord, modifier)) return shortcut.command
   }
   return null
 }
@@ -112,5 +146,5 @@ export function commandNamed(value: string): WorkspaceCommand | null {
 
 export function shortcutHint(command: WorkspaceCommand, modifier: PlatformModifier): string {
   const shortcut = WORKSPACE_SHORTCUTS.find((entry) => entry.command === command)
-  return shortcut ? formatChord(shortcut.chord, modifier) : ''
+  return shortcut?.chord ? formatChord(shortcut.chord, modifier) : ''
 }

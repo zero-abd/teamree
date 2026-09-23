@@ -135,8 +135,8 @@ describe('the rows that are also commands', () => {
   // letters that runs nothing is what this used to do.
   it('offers no command the window would refuse', () => {
     mount()
-    expect(labels()).not.toContain('Split right')
-    expect(labels()).not.toContain('Split down')
+    expect(labels()).not.toContain('Split pane right')
+    expect(labels()).not.toContain('Split pane down')
     expect(labels()).toContain('New terminal')
     expect(labels()).toContain('New task')
   })
@@ -146,7 +146,7 @@ describe('the rows that are also commands', () => {
       layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } }
     })
     mount()
-    expect(labels()).toContain('Split right')
+    expect(labels()).toContain('Split pane right')
   })
 
   // Through the one dispatcher, which is the only way a row and a chord stay
@@ -162,5 +162,49 @@ describe('the rows that are also commands', () => {
     fireEvent.click(rows()[0] as HTMLElement)
     expect(splitFocusedPane).toHaveBeenCalledExactlyOnceWith('row')
     expect(closeDialog).toHaveBeenCalledOnce()
+  })
+})
+
+// The rows the palette gained from the command table, and the predicate that
+// decides whether each is on offer. Same answer as the menu bar's, because it
+// is the same function: a row for a command the window would refuse is left out
+// rather than drawn and ignored.
+describe('the git rows are offered exactly when they could do something', () => {
+  const labels = (): string[] => rows().map((row) => row.querySelector('.palette__label')?.textContent ?? '')
+
+  const status = (overrides: Record<string, number> = {}): Record<string, unknown> => ({
+    w1: {
+      worktreeId: 'w1',
+      branch: 'rewrite-the-pager',
+      ahead: 0,
+      behind: 0,
+      staged: 0,
+      unstaged: 0,
+      untracked: 0,
+      conflicted: 0,
+      readAt: 0,
+      ...overrides
+    }
+  })
+
+  it('offers neither on a worktree with nothing to send and nothing changed', () => {
+    seed({ statuses: status() })
+    mount()
+    expect(labels()).not.toContain('Push')
+    expect(labels()).not.toContain('Commit…')
+  })
+
+  it('offers Push once there is a commit the remote has not', () => {
+    seed({ statuses: status({ ahead: 1 }) })
+    mount()
+    expect(labels()).toContain('Push')
+    expect(labels()).not.toContain('Commit…')
+  })
+
+  it('offers Commit… once a file has changed', () => {
+    seed({ statuses: status({ unstaged: 2 }) })
+    mount()
+    expect(labels()).toContain('Commit…')
+    expect(labels()).not.toContain('Push')
   })
 })

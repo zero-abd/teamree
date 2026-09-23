@@ -148,7 +148,10 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
       .filter((item) => item.section === section)
       .map((item) => ({
         label: item.label,
-        accelerator: item.accelerator,
+        // Undefined rather than empty for a command with no key: Electron reads
+        // an accelerator it cannot parse as a fault, and the item is meant to
+        // draw with nothing beside it.
+        accelerator: item.accelerator === '' ? undefined : item.accelerator,
         // The window's own answer to "would this do anything right now",
         // computed by the same function its key handler refuses on. An item
         // that cannot act is grey rather than pressable and ignored.

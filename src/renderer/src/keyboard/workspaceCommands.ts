@@ -24,7 +24,7 @@
 // argument is `modalLayer.ts`'s and it now has to hold for a menu item too,
 // because the menu bar is reachable while a modal is up.
 
-import type { ConsentRequest, Layout } from '@shared/entities'
+import type { ConsentRequest, Layout, WorktreeStatus } from '@shared/entities'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { collectTerminalIds } from '../panes/paneLayout'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
@@ -48,6 +48,16 @@ export type CommandState = {
   layouts: Readonly<Record<string, Layout>>
   watches: readonly unknown[]
   focusedWatchId: string | null
+  /**
+   * What git last said about each worktree. Only the two git commands read it,
+   * and only to answer whether there is anything for them to do — the counts
+   * the header chips are drawn from, read here rather than restated.
+   */
+  statuses: Readonly<Record<string, Partial<WorktreeStatus>>>
+  /** Whether the changes panel is already open, which decides whether Commit… opens it. */
+  changesOpen: boolean
+  /** A push already in flight, which is the one thing that makes Push inert. */
+  pushing: boolean
 }
 
 /** The store's own methods, named so this module does not import the store. */
@@ -66,9 +76,27 @@ export type CommandActions = {
   toggleHelp: () => void
   openDialog: (dialog: NonNullable<DialogState>) => void
   closeDialog: () => void
+  toggleSettings: () => void
+  toggleChanges: () => void
+  pushActiveWorktree: () => Promise<void>
 }
 
 export type Workspace = CommandState & CommandActions
+
+/** What git said about the worktree that is open, or undefined when none is. */
+function activeStatus(state: CommandState): Partial<WorktreeStatus> | undefined {
+  return state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
+}
+
+/**
+ * How many paths the worktree has changed, counted the way the header counts
+ * them — staged, unstaged, untracked and conflicted, which is every path git
+ * would have something to commit for.
+ */
+function changedCount(status: Partial<WorktreeStatus> | undefined): number {
+  if (!status) return 0
+  return (status.staged ?? 0) + (status.unstaged ?? 0) + (status.untracked ?? 0) + (status.conflicted ?? 0)
+}
 
 /** The layout of the worktree that is open, or undefined when none is. */
 function activeLayout(state: CommandState): Layout | undefined {
@@ -154,12 +182,23 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
       // sidebar's own order, so a worktree whose project is not on screen — one
       // this window could not walk to — is not counted as somewhere to go.
       return worktreeOrder(state.projects, state.worktrees).length >= 2
+    case 'commit-changes':
+      // Something to commit. The same count the header's Changes chip is drawn
+      // from, so the menu item and the chip cannot disagree about whether this
+      // worktree has anything in it.
+      return changedCount(activeStatus(state)) > 0
+    case 'push-worktree':
+      // Something to send, and nothing already being sent: `pushActiveWorktree`
+      // returns early while one is in flight, and an item that is lit over a
+      // function that returns early is the thing this rule forbids.
+      return !state.pushing && (activeStatus(state)?.ahead ?? 0) > 0
     case 'toggle-sidebar':
     case 'open-palette':
     case 'open-dashboard':
     case 'open-appearance':
+    case 'open-settings':
     case 'open-help':
-      // Four views and a sidebar, none of which needs anything to be open.
+      // Five views and a sidebar, none of which needs anything to be open.
       return true
   }
 }
@@ -236,6 +275,19 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       break
     case 'open-appearance':
       store.openDialog({ kind: 'appearance' })
+      break
+    case 'open-settings':
+      store.toggleSettings()
+      break
+    case 'commit-changes':
+      // The message box is in the changes panel, so this is the command that
+      // puts the panel on screen. Opens rather than toggles: somebody who asked
+      // to commit with the panel already up meant to commit, and closing it
+      // under them would be the opposite of what they pressed.
+      if (!store.changesOpen) store.toggleChanges()
+      break
+    case 'push-worktree':
+      void store.pushActiveWorktree()
       break
     case 'open-help':
       store.toggleHelp()

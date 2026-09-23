@@ -19,19 +19,34 @@ function grouped(): WorkspaceShortcut[] {
   return shortcutGroups().flatMap((group) => [...group.shortcuts])
 }
 
+/**
+ * The bindings, which is what the keyboard section is a list of. Commands in
+ * the table with no chord are reachable from the menu bar and the palette and
+ * are not keys; derived here rather than named, for the reason at the top.
+ */
+const BOUND: readonly WorkspaceShortcut[] = WORKSPACE_SHORTCUTS.filter((shortcut) => shortcut.chord !== undefined)
+
 describe('the shortcut groups', () => {
   // If the table were ever emptied this whole file would pass by describing
   // nothing, so the size it is checking is checked first.
   it('has a table to partition', () => {
-    expect(WORKSPACE_SHORTCUTS.length).toBeGreaterThan(5)
+    expect(BOUND.length).toBeGreaterThan(5)
   })
 
   it('holds every binding in the table, and each of them once', () => {
     const commands = grouped().map((shortcut) => shortcut.command)
-    for (const shortcut of WORKSPACE_SHORTCUTS) {
+    for (const shortcut of BOUND) {
       expect(commands.filter((command) => command === shortcut.command)).toEqual([shortcut.command])
     }
-    expect(commands).toHaveLength(WORKSPACE_SHORTCUTS.length)
+    expect(commands).toHaveLength(BOUND.length)
+  })
+
+  // A command with no key is not a row in a list of keys.
+  it('leaves out a command the table binds to nothing', () => {
+    const commands = grouped().map((shortcut) => shortcut.command)
+    for (const shortcut of WORKSPACE_SHORTCUTS) {
+      if (shortcut.chord === undefined) expect(commands, shortcut.command).not.toContain(shortcut.command)
+    }
   })
 
   it('invents nothing the table does not have', () => {
@@ -50,7 +65,7 @@ describe('the shortcut groups', () => {
   // table: a binding this file has never heard of still has to come out the
   // other side.
   it('partitions a table it is handed, not the one it imported', () => {
-    const one = WORKSPACE_SHORTCUTS[0]
+    const one = BOUND[0]
     expect(one).toBeDefined()
     const groups = shortcutGroups([one as WorkspaceShortcut])
     expect(groups.flatMap((group) => [...group.shortcuts])).toEqual([one])

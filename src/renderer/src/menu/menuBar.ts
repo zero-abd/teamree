@@ -44,11 +44,16 @@ export const MENU_BAR_SECTIONS: readonly MenuBarSection[] = ['application', 'fil
 type Placement = {
   section: MenuBarSection
   /**
-   * What the item is called, when the platform names it rather than this app.
+   * What the item is called, when the menu names it rather than the table does.
    *
-   * There is exactly one of these and there should never be a second. Anything
-   * else would be a second wording of a command that already has one, which is
-   * the drift this whole file is arranged to prevent.
+   * There are two of these and there should never be a third. Both are the
+   * platform's wording rather than a second opinion about a command: macOS
+   * writes its settings item `Settings…`, and an item that opens an editor is
+   * written with an ellipsis. Anything else here would be a second wording of a
+   * command that already has one, which is the drift this file is arranged to
+   * prevent — and `menuLabel` is what every other surface reads, so a wording
+   * chosen here reaches the palette and the shortcut strip rather than being
+   * contradicted by them.
    */
   label?: string
 }
@@ -69,11 +74,17 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   // macOS the main process folds this section into File and the word goes with
   // it, which is where Windows keeps the same item; the platforms that would
   // want a different word are not ones this app ships on.
-  'open-appearance': { section: 'application', label: 'Settings…' },
+  'open-settings': { section: 'application', label: 'Settings…' },
 
   'new-worktree': { section: 'file' },
   'new-terminal': { section: 'file' },
   'close-pane': { section: 'file' },
+  // What a person does with a worktree once the agent has stopped, and until
+  // now the two things the menu bar could not reach at all. Under File rather
+  // than in a menu of their own: File is already where this app keeps the
+  // commands that act on the checkout in front of you.
+  'commit-changes': { section: 'file' },
+  'push-worktree': { section: 'file' },
 
   // Find is in Edit on this platform and has been since before the app existed.
   'find-in-pane': { section: 'edit' },
@@ -86,6 +97,10 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'next-worktree': { section: 'view' },
   'open-dashboard': { section: 'view' },
   'toggle-sidebar': { section: 'view' },
+  // The theme editor, which used to be the thing `Settings…` opened. It is a
+  // view of the window rather than a setting of the machine, and this is the
+  // menu somebody looks in for how the window looks.
+  'open-appearance': { section: 'view', label: 'Appearance…' },
 
   // Splitting and walking panes is arranging the window, which is the Window
   // menu's whole subject — it already holds Minimize, Zoom and Bring All to
@@ -105,6 +120,27 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
 
 /** Insertion order of the record above, which is the order inside each menu. */
 const ORDER: readonly string[] = Object.keys(PLACEMENT)
+
+/**
+ * Every command in the order the menus read, for anything that wants to offer
+ * the same list in the same order.
+ */
+export const MENU_ORDER = ORDER as readonly WorkspaceCommand[]
+
+/**
+ * What this command is called, anywhere it is offered.
+ *
+ * One wording per command, and this is where it is settled: the table's title
+ * unless the menu has the platform's own word for it. The palette reads this
+ * and so does the shortcut strip, because a command called two things in one
+ * window is a command a person cannot search for.
+ */
+export function menuLabel(
+  command: WorkspaceCommand,
+  shortcuts: readonly WorkspaceShortcut[] = WORKSPACE_SHORTCUTS
+): string {
+  return PLACEMENT[command].label ?? shortcuts.find((shortcut) => shortcut.command === command)?.title ?? command
+}
 
 /**
  * One item of the menu bar, in the shape that crosses to the main process.
@@ -178,7 +214,9 @@ export function menuBarSpec(
       return {
         command: shortcut.command,
         label: placement.label ?? shortcut.title,
-        accelerator: acceleratorForChord(shortcut.chord),
+        // Empty for a command with no chord, which the main process draws as an
+        // item with nothing beside it.
+        accelerator: shortcut.chord ? acceleratorForChord(shortcut.chord) : '',
         section: placement.section,
         enabled: isCommandAvailable(shortcut.command, state)
       }

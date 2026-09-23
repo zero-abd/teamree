@@ -308,8 +308,10 @@ describe('appearance', () => {
     expect(openDialog).toHaveBeenCalledWith({ kind: 'appearance' })
 
     const section = screen.getByRole('heading', { name: 'Appearance' }).parentElement as HTMLElement
-    // The chord is on the button, and nothing argues for it beside it.
-    expect(screen.getByRole('button', { name: 'Open the appearance panel' }).getAttribute('title')).toBe('⌘,')
+    // No chord on the button: ⌘, opens the page this button is on, and the
+    // theme editor is reached from here, from the View menu and from the
+    // palette. An empty tooltip would be worse than none.
+    expect(screen.getByRole('button', { name: 'Open the appearance panel' }).getAttribute('title')).toBeNull()
     expect(section.textContent).not.toContain('There is no second copy')
     // No swatch, no colour field, nothing that writes an appearance from here.
     expect(section.querySelectorAll('input')).toHaveLength(0)

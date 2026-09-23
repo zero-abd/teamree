@@ -119,7 +119,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
 }
 
 const mount = (): void => {
-  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," helpHint="⌘/" sidebarHint="⌘B" />)
+  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" settingsHint="⌘," helpHint="⌘/" sidebarHint="⌘B" />)
 }
 
 beforeEach(() => {
@@ -460,13 +460,15 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(screen.getByRole('button', { name: /Settings/ }).getAttribute('aria-current')).toBe('page')
   })
 
-  // Settings deliberately carries no chord — ⌘, is the appearance dialog's, and
-  // the row above says so — so this row must not show one either.
-  it('shows the help chord and offers no chord for settings', () => {
+  // ⌘, belongs to the settings page and is shown on its row. The theme editor
+  // one row up used to have it, and a Mac developer pressing the chord for an
+  // app's settings landed on 42 colour swatches.
+  it('shows the settings chord on settings, and none on the theme editor', () => {
     seed({ toggleHelp })
     mount()
     expect(within(screen.getByRole('button', { name: /Help/ })).getByText('⌘/')).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Settings/ }).querySelector('kbd')).toBeNull()
+    expect(within(screen.getByRole('button', { name: /Settings/ })).getByText('⌘,')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Appearance/ }).querySelector('kbd')).toBeNull()
     act(() => screen.getByRole('button', { name: /Help/ }).click())
     expect(toggleHelp).toHaveBeenCalled()
   })
@@ -490,7 +492,7 @@ describe('the order the chords walk', () => {
     ]
     seed({ projects, worktrees })
     const { container } = render(
-      <Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," helpHint="⌘/" sidebarHint="⌘B" />
+      <Sidebar newWorktreeHint="⌘N" searchHint="⌘K" settingsHint="⌘," helpHint="⌘/" sidebarHint="⌘B" />
     )
 
     const drawn = [...container.querySelectorAll('.worktree__name')].map((node) => node.textContent)

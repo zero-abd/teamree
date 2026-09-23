@@ -41,7 +41,7 @@ export const MENU_COMMAND_CHANNEL = 'teamree:menu:command'
 export type MenuBarItem = {
   command: string
   label: string
-  /** Electron's spelling of the chord, e.g. `CommandOrControl+Shift+D`. */
+  /** Electron's spelling of the chord, e.g. `CommandOrControl+Shift+D`, or empty for an item with no key. */
   accelerator: string
   section: string
   enabled: boolean
@@ -61,6 +61,10 @@ export type MenuBarItem = {
  * is the point of the list — `Tab`, `Escape` and `F4` are keys a menu item can
  * take off the platform itself, and none of them is in the table this is
  * guarding.
+ *
+ * The empty string is the other thing an accelerator may be, and it is checked
+ * separately below: the window has commands with no key at all, and an item for
+ * one of those claims nothing from the platform.
  */
 const ACCELERATOR = /^CommandOrControl(\+Alt)?(\+Shift)?\+([^+\s]|Up|Down|Left|Right|Enter)$/
 
@@ -80,7 +84,7 @@ function isMenuBarItem(value: unknown): value is MenuBarItem {
     typeof item.label === 'string' &&
     item.label.length > 0 &&
     typeof item.accelerator === 'string' &&
-    ACCELERATOR.test(item.accelerator) &&
+    (item.accelerator === '' || ACCELERATOR.test(item.accelerator)) &&
     typeof item.section === 'string' &&
     typeof item.enabled === 'boolean'
   )

@@ -25,7 +25,8 @@ import { teamworkFacts } from '@shared/entities'
 import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { shortcutHint } from '../keyboard/workspaceShortcuts'
+import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
+import { menuLabel } from '../menu/menuBar'
 import { shownRoot } from '../panes/paneLayout'
 import { PaneTree } from '../panes/PaneTree'
 import { SplitFrame } from '../panes/SplitFrame'
@@ -328,63 +329,18 @@ function WorkspaceView({
             </div>
           </div>
 
+          {/* One row per chord, named the way the menu bar names the same
+              command. The words used to be this file's own — `maximise pane`
+              against the menu's `Maximize pane`, `every pane` against `All
+              panes` — which is a person reading two names for one thing two
+              clicks apart and reasonably concluding they are two things. */}
           <dl className="legend">
-            <div>
-              <dt>{shortcutHint('new-worktree', modifier)}</dt>
-              <dd>new worktree</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('previous-worktree', modifier)}</dt>
-              <dd>previous worktree</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('next-worktree', modifier)}</dt>
-              <dd>next worktree</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('new-terminal', modifier)}</dt>
-              <dd>new terminal</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('split-right', modifier)}</dt>
-              <dd>split right</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('split-down', modifier)}</dt>
-              <dd>split down</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('close-pane', modifier)}</dt>
-              <dd>close pane</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('focus-previous-pane', modifier)}</dt>
-              <dd>previous pane</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('focus-next-pane', modifier)}</dt>
-              <dd>next pane</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('expand-pane', modifier)}</dt>
-              <dd>maximise pane</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('open-palette', modifier)}</dt>
-              <dd>go to anything</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('find-in-pane', modifier)}</dt>
-              <dd>find in pane</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('open-dashboard', modifier)}</dt>
-              <dd>every pane</dd>
-            </div>
-            <div>
-              <dt>{shortcutHint('open-help', modifier)}</dt>
-              <dd>how this works</dd>
-            </div>
+            {LEGEND_COMMANDS.map((command) => (
+              <div key={command} data-command={command}>
+                <dt>{shortcutHint(command, modifier)}</dt>
+                <dd>{menuLabel(command)}</dd>
+              </div>
+            ))}
           </dl>
 
           {/* The legend above is a dozen chords offered to somebody who may not
@@ -468,3 +424,29 @@ function WorkspaceView({
     </main>
   )
 }
+
+/**
+ * The chords the empty state offers, in the order somebody would need them.
+ *
+ * A subset of the table rather than all of it: this is a first-run card, not
+ * the help page, and a person who has never opened a worktree does not need
+ * Commit or the theme editor. What it is not is a second set of words for the
+ * commands it does list — `menuLabel` says what each is called, once.
+ */
+const LEGEND_COMMANDS: readonly WorkspaceCommand[] = [
+  'new-worktree',
+  'previous-worktree',
+  'next-worktree',
+  'new-terminal',
+  'split-right',
+  'split-down',
+  'close-pane',
+  'focus-previous-pane',
+  'focus-next-pane',
+  'expand-pane',
+  'open-palette',
+  'find-in-pane',
+  'open-dashboard',
+  'toggle-sidebar',
+  'open-help'
+]

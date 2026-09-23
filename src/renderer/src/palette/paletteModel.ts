@@ -6,21 +6,26 @@
 
 import type { CliStatus, InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
 import { cliActionLabel } from '../dialogs/cliInstallModel'
+import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
+import { MENU_ORDER, menuLabel } from '../menu/menuBar'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
 
+/**
+ * What a row can be asked to do: every command this window has, plus the few
+ * things the palette offers that are not commands.
+ *
+ * The commands are not listed here. They used to be — a hand-written dozen that
+ * had fallen six behind the menu bar, so Push, Commit, Close pane, Maximize
+ * pane, both pane walks and both worktree walks were in every menu and in no
+ * palette. Deriving the union from `WorkspaceCommand` is what makes that
+ * impossible: a command added to the table is a row here without anybody
+ * remembering to add one.
+ */
 export type PaletteAction =
-  | 'new-worktree'
-  | 'new-terminal'
-  | 'split-right'
-  | 'split-down'
+  | WorkspaceCommand
   | 'toggle-changes'
-  | 'toggle-sidebar'
-  | 'open-dashboard'
   | 'add-project'
   | 'install-cli'
-  | 'open-appearance'
-  | 'open-settings'
-  | 'open-help'
   | 'check-for-updates'
   | 'toggle-automatic-updates'
 
@@ -87,7 +92,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
       }
     })
 
-  const actions: PaletteItem[] = [...ACTIONS, ...updateActions(context)].map((action) => {
+  const actions: PaletteItem[] = [...commandActions(), ...ACTIONS, ...updateActions(context)].map((action) => {
     // One action is named after a state rather than fixed, because "Put teamree
     // on my PATH" is the wrong sentence to offer somebody whose PATH already
     // has a teamree on it that leads nowhere. The keywords stay whatever the
@@ -178,37 +183,67 @@ function updateActions(context: PaletteContext): { id: PaletteAction; label: str
   ]
 }
 
+/**
+ * One row per command, in the order the menus read, called what the menu calls
+ * it.
+ *
+ * The labels are not written here and must not be: the whole defect this
+ * replaces was a palette keeping its own wording and its own list, so that
+ * `Split pane right` in the menu was `Split right` in the palette and half the
+ * menu was in the palette not at all. `menuLabel` is the one answer to what a
+ * command is called, and `MENU_ORDER` the one answer to the order.
+ */
+function commandActions(): { id: PaletteAction; label: string; keywords: string }[] {
+  return MENU_ORDER.map((command) => ({
+    id: command,
+    label: menuLabel(command),
+    keywords: COMMAND_KEYWORDS[command]
+  }))
+}
+
+/**
+ * What somebody types looking for each command, beyond its own label.
+ *
+ * Total over the command union, for the reason `PLACEMENT` and `GROUP_OF` are:
+ * a command added to the table with no thought about what a person would type
+ * to find it stops the build here rather than shipping a row reachable only by
+ * its exact name. Keywords matter more now than they did — the matcher requires
+ * every typed word to actually appear — so a word left out is a word that finds
+ * nothing.
+ */
+const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
+  'new-worktree': 'new task create worktree branch start agent checkout',
+  'new-terminal': 'new terminal shell pane open',
+  'close-pane': 'close pane kill stop shut terminal',
+  'find-in-pane': 'find search pane scrollback text',
+  'split-right': 'split pane right vertical column',
+  'split-down': 'split pane down horizontal row',
+  'focus-previous-pane': 'focus previous pane back left',
+  'focus-next-pane': 'focus next pane forward right',
+  'expand-pane': 'maximize maximise expand pane full zoom',
+  'previous-worktree': 'previous worktree up back',
+  'next-worktree': 'next worktree down forward',
+  'open-palette': 'go to worktree command palette search anything',
+  'open-dashboard': 'all panes agents dashboard overview attention waiting failed working everywhere',
+  'toggle-sidebar': 'toggle sidebar hide show projects',
+  // The page with everything about this machine on it. The keywords are what
+  // people call the things that live there rather than what this app calls
+  // them: somebody looking for the CLI link or the relay is not typing
+  // "settings".
+  'open-settings': 'settings preferences options config cli path relay start point font size updates editor',
+  // Every word somebody might reach for the theme editor by, including both
+  // spellings of the one word it is mostly about. Not "settings": there is a
+  // page by that name now, and this is not it.
+  'open-appearance': 'appearance theme colour color dark black contrast accent ground swatch',
+  'commit-changes': 'commit changes diff git stage staged message files review',
+  'push-worktree': 'push send remote origin upload publish branch ahead',
+  'open-help': 'help shortcuts keys keyboard worktree cli docs how what'
+}
+
+/** The rows that are the palette's own, with no command and no menu item. */
 const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[] = [
-  { id: 'new-worktree', label: 'New task', keywords: 'create worktree branch start agent' },
-  { id: 'new-terminal', label: 'New terminal', keywords: 'shell pane open' },
-  { id: 'split-right', label: 'Split right', keywords: 'pane vertical column' },
-  { id: 'split-down', label: 'Split down', keywords: 'pane horizontal row' },
-  { id: 'toggle-changes', label: 'Show changes', keywords: 'diff git status files review' },
-  {
-    id: 'open-dashboard',
-    label: 'All panes',
-    keywords: 'agents dashboard overview attention waiting failed working everywhere'
-  },
-  { id: 'toggle-sidebar', label: 'Toggle sidebar', keywords: 'hide show projects' },
-  { id: 'add-project', label: 'Add project', keywords: 'repository repo folder clone' },
-  // Two surfaces that are about the window rather than about a worktree, and
-  // the palette is the one place somebody looks for a thing whose name they
-  // know and whose location they do not. The keywords carry what people call
-  // these rather than what this app calls them: nobody searches for "help"
-  // when what they want is the key that splits a pane.
-  {
-    id: 'open-settings',
-    label: 'Settings',
-    keywords: 'preferences options config cli path relay start point font size updates reveal'
-  },
-  { id: 'open-help', label: 'Help', keywords: 'shortcuts keys keyboard worktree cli docs how what' },
-  {
-    id: 'open-appearance',
-    label: 'Appearance',
-    // Every word somebody might reach for it by, including the two spellings of
-    // the one word this is mostly about.
-    keywords: 'theme colour color dark black contrast accent ground palette settings preferences'
-  },
+  { id: 'toggle-changes', label: 'Show changes', keywords: 'diff git status files review changes' },
+  { id: 'add-project', label: 'Add project', keywords: 'add project repository repo folder clone' },
   {
     id: 'install-cli',
     // Replaced at build time by `cliActionLabel` when the link is the problem
@@ -219,57 +254,99 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
 ]
 
 /**
- * Subsequence matching, scored by how the match sits rather than whether it
- * exists. Three things earn points, in the order a person would rank them: the
- * whole query appearing together, a match starting a word, and letters landing
- * next to each other. Everything else is a tie broken by the shorter label,
- * because the shorter one is more likely to be what was meant.
+ * Whether this row answers the query at all, and how well.
  *
- * Returns null when the letters are not all there, in order.
+ * The floor first, because the palette had none: every word typed has to be
+ * *in* the row — as a run of characters, or as the initials of consecutive
+ * words, which is how `nw` reaches "New worktree". Anything else returns null.
+ * What it replaces accepted any subsequence of the typed letters scattered
+ * anywhere at all, which is how `push` came back with "Stop checking for
+ * updates automatically" (s-t-o-**p**… **u**pdates… **s**topping at whatever
+ * letter came next) and `commit` with "Fix the broken teamree command". Those
+ * are not near misses; they contain nothing of what was typed, and a palette
+ * that answers with them is one nobody types into twice.
+ *
+ * Then the ranking, in the order a person would rank it: the whole query
+ * appearing together beats the same words apart, a match that starts a word
+ * beats one buried mid-word, an early match beats a late one, and an initialism
+ * comes last — it is the loosest of the three ways in, so it settles ties among
+ * rows that have already passed rather than admitting rows of its own.
+ *
+ * Returns null when any word of the query is not there.
  */
 export function score(text: string, query: string): number | null {
-  if (query === '') return 0
+  const trimmed = query.trim()
+  if (trimmed === '') return 0
   const haystack = text.toLowerCase()
-  const needle = query.toLowerCase()
-
-  const contiguous = haystack.indexOf(needle)
-  if (contiguous !== -1) {
-    // A whole-query hit beats any scattered one, and one at a word boundary
-    // beats a hit buried mid-word.
-    return 1000 + (isWordStart(haystack, contiguous) ? 200 : 0) - contiguous
-  }
 
   let points = 0
-  let at = 0
-  let previous = -2
-  for (const letter of needle) {
-    if (letter === ' ') continue
-    const found = nextOccurrence(haystack, letter, at)
-    if (found === -1) return null
-    if (found === previous + 1) points += 12
-    if (isWordStart(haystack, found)) points += 20
-    points -= Math.min(found - at, 8)
-    previous = found
-    at = found + 1
+  for (const word of trimmed.toLowerCase().split(/\s+/)) {
+    const found = place(haystack, word)
+    if (found === null) return null
+    points += found
   }
+
+  // The whole query as typed, in one piece. Worth more than any arrangement of
+  // its words, and worth more again at the start of one.
+  const whole = haystack.indexOf(trimmed.toLowerCase())
+  if (whole !== -1) points += 1000 + (isWordStart(haystack, whole) ? 200 : 0) - Math.min(whole, 100)
+
   return points
 }
 
+/** What one word of the query is worth against this text, or null if it is absent. */
+function place(haystack: string, word: string): number | null {
+  const at = nextOccurrence(haystack, word, 0)
+  if (at !== -1) return (isWordStart(haystack, at) ? 300 : 150) - Math.min(at, 100)
+
+  const acronym = initialsAt(haystack, word)
+  if (acronym !== -1) return 60 - Math.min(acronym, 50)
+
+  return null
+}
+
 /**
- * The next place this letter could match, preferring one that starts a word.
+ * The next place this word could match, preferring one that starts a word.
  *
  * Taking the first occurrence outright is the obvious implementation and the
- * wrong one: "nw" against "New worktree" would match the w inside "New" and
- * score no better than "now here", when an initialism is precisely how a
- * palette gets used.
+ * wrong one: "pane" against "Close pane" would match at the p of "pane" either
+ * way, but "term" against "Show interminable output, new terminal" would score
+ * the buried one and rank the row by it.
  */
-function nextOccurrence(haystack: string, letter: string, from: number): number {
-  const first = haystack.indexOf(letter, from)
+function nextOccurrence(haystack: string, word: string, from: number): number {
+  const first = haystack.indexOf(word, from)
   if (first === -1) return -1
-  for (let index = first; index !== -1; index = haystack.indexOf(letter, index + 1)) {
+  for (let index = first; index !== -1; index = haystack.indexOf(word, index + 1)) {
     if (isWordStart(haystack, index)) return index
   }
   return first
+}
+
+/**
+ * Where this word matches the initials of consecutive words, or -1.
+ *
+ * An initialism is how a palette gets used once somebody knows it — `nw` for
+ * "New worktree", `sr` for "Split pane right" — and it is the one loose match
+ * worth keeping. Consecutive is what keeps it from being the old defect again:
+ * letters may not skip a word to find the next one.
+ */
+function initialsAt(haystack: string, word: string): number {
+  if (word.length < 2) return -1
+  const starts: number[] = []
+  for (let index = 0; index < haystack.length; index += 1) {
+    if (haystack[index] !== ' ' && isWordStart(haystack, index)) starts.push(index)
+  }
+  for (let from = 0; from + word.length <= starts.length; from += 1) {
+    let all = true
+    for (let step = 0; step < word.length; step += 1) {
+      if (haystack[starts[from + step] as number] !== word[step]) {
+        all = false
+        break
+      }
+    }
+    if (all) return starts[from] as number
+  }
+  return -1
 }
 
 function isWordStart(text: string, index: number): boolean {
