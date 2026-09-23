@@ -226,9 +226,104 @@ describe('the page itself', () => {
   })
 })
 
+describe('the section list', () => {
+  const nav = (): HTMLElement => screen.getByRole('navigation', { name: 'Sections' })
+  const item = (name: string): HTMLElement => within(nav()).getByRole('button', { name })
+  const current = (): string[] =>
+    within(nav())
+      .getAllByRole('button')
+      .filter((button) => button.getAttribute('aria-current') === 'true')
+      .map((button) => button.textContent ?? '')
+
+  /** Lays the section headings out at these offsets from the top of the scrolling body. */
+  function layOut(tops: Record<string, number>): void {
+    for (const [id, top] of Object.entries(tops)) {
+      const heading = document.getElementById(`settings-${id}`) as HTMLElement
+      heading.getBoundingClientRect = () => ({ top }) as DOMRect
+    }
+  }
+
+  it('lists every section in page order, and leaves out Agents when there are none', () => {
+    seed({ agents: [claude] })
+    const { unmount } = render(<SettingsView modifier={modifier} />)
+    expect(
+      within(nav())
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['CLI', 'Updates', 'Notifications', 'Panes', 'Agents', 'Appearance', 'Projects'])
+    unmount()
+
+    seed({ agents: [] })
+    render(<SettingsView modifier={modifier} />)
+    expect(within(nav()).queryByRole('button', { name: 'Agents' })).toBeNull()
+  })
+
+  it('scrolls to a section, focuses it and marks it current', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    render(<SettingsView modifier={modifier} />)
+    fireEvent.click(item('Panes'))
+    const heading = document.getElementById('settings-panes')
+    expect(scrollIntoView.mock.instances).toEqual([heading])
+    expect(document.activeElement).toBe(heading)
+    expect(current()).toEqual(['Panes'])
+  })
+
+  it('moves between sections with the arrow keys', () => {
+    render(<SettingsView modifier={modifier} />)
+    item('Updates').focus()
+    fireEvent.keyDown(item('Updates'), { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(item('Notifications'))
+    fireEvent.keyDown(item('Notifications'), { key: 'ArrowUp' })
+    fireEvent.keyDown(item('Updates'), { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(item('CLI'))
+    fireEvent.keyDown(item('CLI'), { key: 'End' })
+    expect(document.activeElement).toBe(item('Projects'))
+  })
+
+  it('highlights the section scrolled into view', () => {
+    render(<SettingsView modifier={modifier} />)
+    const body = screen.getByTestId('settings-body')
+    layOut({ cli: -400, updates: -200, notices: 10, panes: 300, appearance: 600, projects: 900 })
+    fireEvent.scroll(body)
+    expect(current()).toEqual(['Notifications'])
+    layOut({ cli: -900, updates: -700, notices: -500, panes: -300, appearance: -100, projects: 200 })
+    fireEvent.scroll(body)
+    expect(current()).toEqual(['Appearance'])
+  })
+
+  // The last sections cannot scroll to the top, so at the bottom the one picked wins, else the last.
+  it('keeps a section picked near the end current once the page hits bottom', () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    render(<SettingsView modifier={modifier} />)
+    const body = screen.getByTestId('settings-body')
+    Object.defineProperties(body, {
+      scrollTop: { configurable: true, value: 500 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 900 }
+    })
+    layOut({ cli: -900, updates: -700, notices: -500, panes: -300, appearance: 100, projects: 200 })
+    fireEvent.click(item('Appearance'))
+    fireEvent.scroll(body)
+    expect(current()).toEqual(['Appearance'])
+
+    Object.defineProperty(body, 'scrollTop', { configurable: true, value: 300 })
+    fireEvent.scroll(body)
+    Object.defineProperty(body, 'scrollTop', { configurable: true, value: 500 })
+    fireEvent.scroll(body)
+    expect(current()).toEqual(['Projects'])
+  })
+
+  it('marks the section it was opened at current', () => {
+    seed({ agents: [claude], settingsSection: 'agents' })
+    render(<SettingsView modifier={modifier} />)
+    expect(current()).toEqual(['Agents'])
+  })
+})
+
 // One line of state and a button.
-describe('teamree on your PATH', () => {
-  const cliSection = (): HTMLElement => screen.getByRole('region', { name: 'teamree on your PATH' })
+describe('the CLI', () => {
+  const cliSection = (): HTMLElement => screen.getByRole('region', { name: 'CLI' })
 
   it('says where the link leads, in one line, with nothing to press', () => {
     render(<SettingsView modifier={modifier} />)
@@ -315,12 +410,12 @@ describe('appearance', () => {
   // One row that leads to the editor, no second set of swatches.
   it('sends the reader to the editor that already exists, and edits nothing itself', () => {
     render(<SettingsView modifier={modifier} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Open the appearance panel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance…' }))
     expect(openDialog).toHaveBeenCalledWith({ kind: 'appearance' })
 
     const section = screen.getByRole('heading', { name: 'Appearance' }).parentElement as HTMLElement
     // No chord (⌘, is this page) and no empty tooltip.
-    expect(screen.getByRole('button', { name: 'Open the appearance panel' }).getAttribute('title')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Appearance…' }).getAttribute('title')).toBeNull()
     expect(section.textContent).not.toContain('There is no second copy')
     // No swatch, no colour field, nothing that writes an appearance from here.
     expect(section.querySelectorAll('input')).toHaveLength(0)
@@ -553,6 +648,14 @@ describe('the agent you always use', () => {
     fireEvent.change(field, { target: { value: '  ' } })
     fireEvent.blur(field)
     expect(setAgentArgs).toHaveBeenCalledWith('claude', null)
+  })
+
+  it('gives its select the same style as every other select on the page', () => {
+    seed({ agents: [claude] })
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.getByLabelText('Default agent').className).toBe(
+      screen.getByLabelText('When an agent stops').className
+    )
   })
 
   // Every control in the section is about an agent this machine has.

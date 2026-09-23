@@ -18,11 +18,28 @@ import { modalOnScreen } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { cliLine, relayPanel, updatePanel } from './settingsModel'
 
+const SECTIONS = [
+  { id: 'cli', label: 'CLI' },
+  { id: 'updates', label: 'Updates' },
+  { id: 'notices', label: 'Notifications' },
+  { id: 'panes', label: 'Panes' },
+  { id: 'agents', label: 'Agents' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'projects', label: 'Projects' }
+] as const
+
+type SectionId = (typeof SECTIONS)[number]['id']
+
+/** A heading this close to the top of the scrolling body counts as the section in view. */
+const IN_VIEW_PX = 48
+
 export function SettingsView({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
   const loadCli = useWorkspaceStore((state) => state.loadCli)
   const loadUpdate = useWorkspaceStore((state) => state.loadUpdate)
+  const hasAgents = useWorkspaceStore((state) => state.agents.length > 0)
+  const sections = SECTIONS.filter((entry) => entry.id !== 'agents' || hasAgents)
 
   // Read again on open: both are facts about the world outside this window that may have moved.
   useEffect(() => {
@@ -44,19 +61,46 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [toggleSettings])
 
-  // Opened from a button elsewhere, so focus has to follow; the region, so the first Tab lands on
-  // the first section and the page's name is read out.
+  // Opened from a button elsewhere, so focus has to follow; the region, so Tab starts at the top
+  // of the page and the page's name is read out.
   const region = useRef<HTMLElement>(null)
   useEffect(() => {
     region.current?.focus()
   }, [])
+
+  const body = useRef<HTMLDivElement>(null)
+  const [active, setActive] = useState<SectionId>('cli')
+  // A section picked near the end cannot scroll to the top, so it stays current at the bottom.
+  const picked = useRef<SectionId | null>(null)
+
+  const goTo = (id: SectionId): void => {
+    const heading = document.getElementById(`settings-${id}`)
+    if (heading === null) return
+    heading.scrollIntoView({ block: 'start' })
+    heading.focus({ preventScroll: true })
+    picked.current = id
+    setActive(id)
+  }
+
+  const ids = sections.map((entry) => entry.id).join(' ')
+  useEffect(() => {
+    const scroller = body.current
+    if (scroller === null) return
+    const order = ids.split(' ') as SectionId[]
+    const onScroll = (): void => {
+      if (!atBottom(scroller)) picked.current = null
+      setActive(sectionInView(scroller, order, picked.current))
+    }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', onScroll)
+  }, [ids])
 
   // Opened at a section — the strip's "Agent settings…" — the page scrolls
   // there once and forgets the request, so the next plain open starts at the top.
   const section = useWorkspaceStore((state) => state.settingsSection)
   useEffect(() => {
     if (section === null) return
-    document.getElementById(`settings-${section}`)?.scrollIntoView({ block: 'start' })
+    goTo(section)
     useWorkspaceStore.setState({ settingsSection: null })
   }, [section])
 
@@ -81,18 +125,91 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
         </div>
       </header>
 
-      <div className="settings__body">
-        <div className="settings__column">
-          <CliSection />
-          <UpdatesSection />
-          <NoticesSection />
-          <PanesSection />
-          <AgentsSection />
-          <AppearanceSection modifier={modifier} />
-          <ProjectsSection projects={projects} />
+      <div className="settings__body" ref={body} data-testid="settings-body">
+        <div className="settings__layout">
+          <SectionList sections={sections} active={active} goTo={goTo} />
+          <div className="settings__content">
+            <CliSection />
+            <UpdatesSection />
+            <NoticesSection />
+            <PanesSection />
+            <AgentsSection />
+            <AppearanceSection modifier={modifier} />
+            <ProjectsSection projects={projects} />
+          </div>
         </div>
       </div>
     </main>
+  )
+}
+
+function atBottom(scroller: HTMLElement): boolean {
+  return scroller.scrollTop > 0 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+}
+
+/** The last section whose heading has reached the top; at the bottom, the one picked or the last. */
+function sectionInView(scroller: HTMLElement, order: readonly SectionId[], picked: SectionId | null): SectionId {
+  const top = scroller.getBoundingClientRect().top
+  const offset = (id: SectionId): number | null => {
+    const heading = document.getElementById(`settings-${id}`)
+    return heading === null ? null : heading.getBoundingClientRect().top - top
+  }
+  if (atBottom(scroller)) {
+    const at = picked === null ? null : offset(picked)
+    return picked !== null && at !== null && at >= 0 ? picked : (order.at(-1) ?? 'cli')
+  }
+  let current: SectionId = order[0] ?? 'cli'
+  for (const id of order) {
+    const at = offset(id)
+    if (at !== null && at <= IN_VIEW_PX) current = id
+  }
+  return current
+}
+
+function SectionList({
+  sections,
+  active,
+  goTo
+}: {
+  sections: readonly { id: SectionId; label: string }[]
+  active: SectionId
+  goTo: (id: SectionId) => void
+}): React.JSX.Element {
+  const onKeyDown = (event: React.KeyboardEvent<HTMLUListElement>): void => {
+    const buttons = [...event.currentTarget.querySelectorAll('button')]
+    const at = buttons.indexOf(event.target as HTMLButtonElement)
+    const next =
+      event.key === 'ArrowDown'
+        ? Math.min(at + 1, buttons.length - 1)
+        : event.key === 'ArrowUp'
+          ? Math.max(at - 1, 0)
+          : event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? buttons.length - 1
+              : null
+    if (next === null || at < 0) return
+    event.preventDefault()
+    buttons[next]?.focus()
+  }
+
+  return (
+    <nav className="settings-nav" aria-label="Sections">
+      <ul className="settings-nav__list" onKeyDown={onKeyDown}>
+        {sections.map((entry) => (
+          <li key={entry.id}>
+            <button
+              type="button"
+              className="settings-nav__item"
+              aria-current={entry.id === active ? 'true' : undefined}
+              onClick={() => goTo(entry.id)}
+            >
+              {entry.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
   )
 }
 
@@ -108,36 +225,35 @@ function CliSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-cli">
-      <h2 className="settings-section__title" id="settings-cli">
-        teamree on your PATH
+      <h2 className="settings-section__title" id="settings-cli" tabIndex={-1}>
+        CLI
       </h2>
-      <p className="settings-fact settings-fact--mono">{line.state}</p>
-
-      {line.manual ? (
-        <pre className="settings-command">
-          <code>{line.manual}</code>
-        </pre>
-      ) : null}
-
-      {/* The refusal stays where the button that caused it is: a file in the
-          way and a password not given are both things somebody is about to try
-          again from here. */}
-      {error ? <p className="settings-error">{error}</p> : null}
-      {install && error === null ? <p className="settings-done">{cliOutcome(install)}</p> : null}
-
-      {line.action ? (
-        <div className="settings-actions">
-          <button
-            type="button"
-            className="button button--primary"
-            disabled={pending}
-            title={line.title ?? undefined}
-            onClick={() => void installCli()}
-          >
-            {pending ? 'Linking…' : line.action}
-          </button>
+      <div className="settings-group">
+        <div className="settings-row">
+          <p className="settings-fact settings-fact--mono">{line.state}</p>
+          {line.action ? (
+            <button
+              type="button"
+              className="button button--small"
+              disabled={pending}
+              title={line.title ?? undefined}
+              onClick={() => void installCli()}
+            >
+              {pending ? 'Linking…' : line.action}
+            </button>
+          ) : null}
         </div>
-      ) : null}
+
+        {line.manual ? (
+          <pre className="settings-command">
+            <code>{line.manual}</code>
+          </pre>
+        ) : null}
+
+        {/* Beside the button that caused it: that is where the retry happens. */}
+        {error ? <p className="settings-error">{error}</p> : null}
+        {install && error === null ? <p className="settings-done">{cliOutcome(install)}</p> : null}
+      </div>
     </section>
   )
 }
@@ -154,45 +270,42 @@ function UpdatesSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-updates">
-      <h2 className="settings-section__title" id="settings-updates">
+      <h2 className="settings-section__title" id="settings-updates" tabIndex={-1}>
         Updates
       </h2>
-      <p className="settings-fact">{panel.headline}</p>
+      <div className="settings-group">
+        <div className="settings-row">
+          <p className="settings-fact">{panel.headline}</p>
+          {panel.offersCheck ? (
+            <div className="settings-actions">
+              {panel.lastChecked ? <span className="settings-aside">{panel.lastChecked}</span> : null}
+              <button
+                type="button"
+                className="button button--small"
+                disabled={update?.checking ?? false}
+                onClick={() => void checkForUpdates()}
+              >
+                {update?.checking ? 'Checking…' : 'Check for updates'}
+              </button>
+            </div>
+          ) : null}
+        </div>
 
-      {panel.offersCheck ? (
-        <>
+        {panel.offersCheck ? (
           <label className="settings-check">
             <input
               type="checkbox"
               checked={update?.automatic ?? false}
               onChange={(event) => void setAutomaticUpdates(event.target.checked)}
             />
-            {/* What this arms, for whoever reads the file rather than the page:
-                the runtime makes its first check half a minute after startup
-                and one every six hours after that, for as long as the window is
-                open. That was the label once, and a label is not the place for
-                a schedule — the checkbox is called what it does. */}
+            {/* Half a minute after startup, then every six hours; a label is not the place for a schedule. */}
             <span>Check automatically</span>
           </label>
+        ) : null}
 
-          <div className="settings-actions">
-            <button
-              type="button"
-              className="button button--small"
-              disabled={update?.checking ?? false}
-              onClick={() => void checkForUpdates()}
-            >
-              {update?.checking ? 'Checking…' : 'Check for updates'}
-            </button>
-            {panel.lastChecked ? <span className="settings-aside">{panel.lastChecked}</span> : null}
-          </div>
-        </>
-      ) : null}
-
-      {/* Kept rather than raised, the way the store keeps it: a check that could
-          not reach GitHub is not something the reader has to do anything about,
-          and it belongs beside the button that tried. */}
-      {panel.problem ? <p className="settings-warning">{panel.problem}</p> : null}
+        {/* Kept beside the button that tried rather than raised as a notice. */}
+        {panel.problem ? <p className="settings-warning">{panel.problem}</p> : null}
+      </div>
     </section>
   )
 }
@@ -204,24 +317,25 @@ function NoticesSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-notices">
-      <h2 className="settings-section__title" id="settings-notices">
+      <h2 className="settings-section__title" id="settings-notices" tabIndex={-1}>
         Notifications
       </h2>
-
-      <div className="settings-field">
-        <label className="settings-field__label" htmlFor="settings-agent-notices">
-          When an agent stops
-        </label>
-        <select
-          id="settings-agent-notices"
-          className="settings-field__select"
-          value={agentNotices}
-          onChange={(event) => setAgentNotices(event.target.value as AgentNoticePreference)}
-        >
-          <option value="off">Nothing</option>
-          <option value="notify">Notify</option>
-          <option value="sound">Notify with sound</option>
-        </select>
+      <div className="settings-group">
+        <div className="settings-field">
+          <label className="settings-field__label" htmlFor="settings-agent-notices">
+            When an agent stops
+          </label>
+          <select
+            id="settings-agent-notices"
+            className="settings-select"
+            value={agentNotices}
+            onChange={(event) => setAgentNotices(event.target.value as AgentNoticePreference)}
+          >
+            <option value="off">Nothing</option>
+            <option value="notify">Notify</option>
+            <option value="sound">Notify with sound</option>
+          </select>
+        </div>
       </div>
     </section>
   )
@@ -234,34 +348,32 @@ function PanesSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-panes">
-      <h2 className="settings-section__title" id="settings-panes">
+      <h2 className="settings-section__title" id="settings-panes" tabIndex={-1}>
         Panes
       </h2>
-      <div className="settings-size">
-        <label className="settings-size__label" htmlFor="settings-font-size">
-          Terminal text size
-        </label>
-        <input
-          id="settings-font-size"
-          className="settings-size__range"
-          type="range"
-          min={TERMINAL_FONT_MIN_PX}
-          max={TERMINAL_FONT_MAX_PX}
-          step={1}
-          value={terminalFontSize}
-          onChange={(event) => setTerminalFontSize(Number(event.target.value))}
-        />
-        {/* The number beside the slider, not a tooltip on it: "how big is it
-            now" is the question a slider with no scale cannot answer, and it is
-            the one somebody asks when comparing this window with another. */}
-        <output className="settings-size__value" htmlFor="settings-font-size">
-          {terminalFontSize}px
-        </output>
+      <div className="settings-group">
+        <div className="settings-field">
+          <label className="settings-field__label" htmlFor="settings-font-size">
+            Terminal text size
+          </label>
+          <div className="settings-size">
+            <input
+              id="settings-font-size"
+              className="settings-size__range"
+              type="range"
+              min={TERMINAL_FONT_MIN_PX}
+              max={TERMINAL_FONT_MAX_PX}
+              step={1}
+              value={terminalFontSize}
+              onChange={(event) => setTerminalFontSize(Number(event.target.value))}
+            />
+            {/* A slider with no scale cannot say how big it is now. */}
+            <output className="settings-size__value" htmlFor="settings-font-size">
+              {terminalFontSize}px
+            </output>
+          </div>
+        </div>
       </div>
-      {/* No line under the slider saying the size is remembered on this machine
-          only. It is — see `state/preferences.ts` — and it is true of every
-          other per-machine preference on this page as well, none of which says
-          so either. */}
     </section>
   )
 }
@@ -279,34 +391,34 @@ function AgentsSection(): React.JSX.Element | null {
 
   return (
     <section className="settings-section" aria-labelledby="settings-agents">
-      <h2 className="settings-section__title" id="settings-agents">
+      <h2 className="settings-section__title" id="settings-agents" tabIndex={-1}>
         Agents
       </h2>
+      <div className="settings-group">
+        <div className="settings-field">
+          <label className="settings-field__label" htmlFor="settings-default-agent">
+            Default agent
+          </label>
+          <select
+            id="settings-default-agent"
+            className="settings-select"
+            value={defaultAgent}
+            onChange={(event) => setDefaultAgent(event.target.value)}
+          >
+            {/* No preference is the rule that predates the preference, named after what it does. */}
+            <option value={NO_DEFAULT_AGENT}>First found</option>
+            {agents.map((agent) => (
+              <option key={agent.kind} value={agent.kind}>
+                {agent.command}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <div className="settings-field">
-        <label className="settings-field__label" htmlFor="settings-default-agent">
-          Default agent
-        </label>
-        <select
-          id="settings-default-agent"
-          className="settings-field__input settings-field__input--select"
-          value={defaultAgent}
-          onChange={(event) => setDefaultAgent(event.target.value)}
-        >
-          {/* The no-preference value is the rule that was here before there was
-              a preference, named after what it does rather than left blank. */}
-          <option value={NO_DEFAULT_AGENT}>First found</option>
-          {agents.map((agent) => (
-            <option key={agent.kind} value={agent.kind}>
-              {agent.command}
-            </option>
-          ))}
-        </select>
+        {agents.map((agent) => (
+          <AgentArguments key={agent.kind} agent={agent} />
+        ))}
       </div>
-
-      {agents.map((agent) => (
-        <AgentArguments key={agent.kind} agent={agent} />
-      ))}
     </section>
   )
 }
@@ -354,7 +466,7 @@ function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element
           }
         }}
       />
-      <code className="settings-command">{agentLaunchCommand(agent.command, draft)}</code>
+      <code className="settings-launch">{agentLaunchCommand(agent.command, draft)}</code>
     </div>
   )
 }
@@ -365,19 +477,21 @@ function AppearanceSection({ modifier }: { modifier: PlatformModifier }): React.
 
   return (
     <section className="settings-section" aria-labelledby="settings-appearance">
-      <h2 className="settings-section__title" id="settings-appearance">
+      <h2 className="settings-section__title" id="settings-appearance" tabIndex={-1}>
         Appearance
       </h2>
-      <div className="settings-actions">
-        <button
-          type="button"
-          className="button button--small"
-          // No chord (⌘, is the settings page's) and no empty tooltip, which flickers open over nothing.
-          title={shortcutHint('open-appearance', modifier) || undefined}
-          onClick={() => openDialog({ kind: 'appearance' })}
-        >
-          Open the appearance panel
-        </button>
+      <div className="settings-group">
+        <div className="settings-row">
+          <button
+            type="button"
+            className="button button--small"
+            // No chord (⌘, is the settings page's) and no empty tooltip, which flickers open over nothing.
+            title={shortcutHint('open-appearance', modifier) || undefined}
+            onClick={() => openDialog({ kind: 'appearance' })}
+          >
+            Appearance…
+          </button>
+        </div>
       </div>
     </section>
   )
@@ -386,11 +500,13 @@ function AppearanceSection({ modifier }: { modifier: PlatformModifier }): React.
 function ProjectsSection({ projects }: { projects: readonly Project[] }): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-projects">
-      <h2 className="settings-section__title" id="settings-projects">
+      <h2 className="settings-section__title" id="settings-projects" tabIndex={-1}>
         Projects
       </h2>
       {projects.length === 0 ? (
-        <p className="settings-note">No repositories yet.</p>
+        <div className="settings-group">
+          <p className="settings-note">No repositories yet.</p>
+        </div>
       ) : (
         projects.map((project) => <ProjectBlock key={project.id} project={project} />)
       )}
@@ -402,20 +518,19 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
 
   return (
-    <article className="settings-project">
-      <h3 className="settings-project__name">{project.name}</h3>
-
+    <article className="settings-group settings-project">
       <div className="settings-row">
-        <p className="settings-project__path">{project.path}</p>
-        <div className="settings-actions">
-          <button
-            type="button"
-            className="button button--small"
-            onClick={() => void revealInFinder(project.path, `the ${project.name} repository`)}
-          >
-            Reveal in Finder
-          </button>
+        <div className="settings-project__identity">
+          <h3 className="settings-project__name">{project.name}</h3>
+          <p className="settings-project__path">{project.path}</p>
         </div>
+        <button
+          type="button"
+          className="button button--small"
+          onClick={() => void revealInFinder(project.path, `the ${project.name} repository`)}
+        >
+          Reveal in Finder
+        </button>
       </div>
 
       <StartPoint project={project} />
@@ -478,10 +593,6 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
           Use {project.baseRef}
         </button>
       </div>
-      {/* No caption. What this sets is what the New task dialog offers first,
-          and the buttons above say so by naming the ref they would use; the
-          repository's own base ref is untouched, which is `startPointModel.ts`'s
-          business rather than a reassurance to print here. */}
     </div>
   )
 }
@@ -666,12 +777,6 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
           Use what is on PATH
         </button>
       </div>
-      {/* The field takes the name of one program, which teamree looks for on
-          PATH and starts with the checkout as its only argument. It is not a
-          command line: flags typed here are part of a name rather than flags.
-          That is the field's contract and it belongs here rather than on the
-          page — what is left on the page is the one thing the reader cannot
-          work out from the control, which is what this machine actually has. */}
       <p className="settings-note">
         {editors === null
           ? 'Looking…'
@@ -699,8 +804,8 @@ function RelayBlock({ project }: { project: Project }): React.JSX.Element {
   const panel = relayPanel(relay)
 
   return (
-    <div className="settings-relay">
-      <h4 className="settings-relay__title">Relay</h4>
+    <div className="settings-field settings-relay">
+      <h4 className="settings-field__label">Relay</h4>
       <p className="settings-fact">{panel.headline}</p>
       {panel.detail ? <p className="settings-note">{panel.detail}</p> : null}
       {panel.override ? <p className="settings-warning">{panel.override}</p> : null}

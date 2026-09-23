@@ -1,21 +1,14 @@
-/* The settings page: one scrolling column of sections, each a heading, a
-   sentence about what it changes, and the control that changes it.
-
-   It borrows the pane board's head — the same title, lede and corner close —
-   because the two are the same kind of surface and a second chrome would read
-   as a second kind of place. Where it differs is the body: the board is a list
-   read across its full width, and this is prose beside controls, which is
-   unreadable at 1600px. So everything sits in one measured column. */
+/* The settings page: a fixed head, then a sticky section list beside one measured column of grouped
+   rows, labels in a left column and controls aligned in the right one. */
 
 .settings {
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-/* The column the head and the body share, so the title sits above the thing it
-   titles rather than out at the window's edge. */
-.settings__column {
+.settings__column,
+.settings__layout {
   width: 100%;
-  max-width: 720px;
+  max-width: 860px;
   margin: 0 auto;
 }
 
@@ -70,7 +63,68 @@
 
 .settings__body {
   flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   padding: var(--s5) var(--s5) var(--s6);
+  container-type: inline-size;
+}
+
+.settings__layout {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: var(--s6);
+}
+
+.settings__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  min-width: 0;
+}
+
+/* Section list ------------------------------------------------------------ */
+
+.settings-nav {
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+.settings-nav__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-nav__item {
+  width: 100%;
+  padding: 4px var(--s2);
+  border: 0;
+  border-radius: var(--r2);
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-nav__item:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.settings-nav__item[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.settings-nav__item:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 /* Sections ---------------------------------------------------------------- */
@@ -78,34 +132,46 @@
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: var(--s3);
-  padding-bottom: var(--s5);
-}
-
-.settings-section + .settings-section {
-  padding-top: var(--s5);
-  border-top: 1px solid var(--line);
+  gap: var(--s2);
 }
 
 .settings-section__title {
-  font-size: var(--text-lg);
+  padding-left: var(--s1);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  scroll-margin-top: var(--s5);
 }
 
-/* The one line that is true right now — the version, the link, the URL being
-   dialled. Brighter than the prose around it because it is what somebody opened
-   the page to read. */
+.settings-section__title:focus {
+  outline: none;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+}
+
+.settings-group > * {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+}
+
+.settings-group > * + * {
+  border-top: 1px solid var(--line);
+}
+
 .settings-fact {
   color: var(--fg);
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: 560;
 }
 
-/* A path with an arrow in it reads as a path, not a sentence. */
 .settings-fact--mono {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
   font-weight: 500;
   word-break: break-all;
 }
@@ -134,39 +200,14 @@
   line-height: 1.5;
 }
 
-/* The half-sentence that belongs to a button rather than to the section: when
-   the last check was, where the other page goes. Beside the button, dim. */
 .settings-aside {
   color: var(--fg-muted);
   font-size: var(--text-xs);
   line-height: 1.4;
 }
 
-/* What a button will do, penned off from the prose above it so the destination
-   and the password are read rather than skimmed past. The same shape the CLI
-   dialog gives the same two sentences. */
-.settings-promise {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  padding: var(--s3);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
-  color: var(--fg-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.55;
-}
-
-.settings-promise__password {
-  color: var(--fg);
-}
-
 .settings-command {
-  margin: 0;
-  padding: var(--s3);
   overflow-x: auto;
-  border-radius: var(--r2);
-  background: var(--bg-panel);
   color: var(--fg-secondary);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -174,9 +215,6 @@
   white-space: pre;
 }
 
-/* Wraps rather than scrolls: the rows here are a button plus a sentence about
-   it, and a sentence pushed off the right edge of a narrow window is a sentence
-   that was not written. */
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
@@ -186,8 +224,7 @@
 
 /* Rows and fields --------------------------------------------------------- */
 
-/* Prose on the left, the control that acts on it on the right, and the two
-   stacked once there is no width for both. */
+/* Whatever the row is about on the left, its button on the right. */
 .settings-row {
   display: flex;
   flex-wrap: wrap;
@@ -196,68 +233,53 @@
   gap: var(--s3);
 }
 
-.settings-row > .settings-note,
-.settings-row > .settings-project__path {
-  flex: 1 1 260px;
+.settings-row > :first-child {
+  flex: 1 1 240px;
   min-width: 0;
+}
+
+.settings-row > :only-child {
+  flex: 0 1 auto;
 }
 
 .settings-check {
   display: flex;
-  align-items: baseline;
-  gap: var(--s3);
+  align-items: center;
+  gap: var(--s2);
   color: var(--fg);
   font-size: var(--text-sm);
-  line-height: 1.5;
   cursor: pointer;
 }
 
 .settings-check input {
   flex: none;
+  margin: 0;
   accent-color: var(--accent);
   cursor: pointer;
-}
-
-.settings-size {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s3);
-}
-
-.settings-size__label {
-  flex: none;
-  color: var(--fg);
-  font-size: var(--text-sm);
-}
-
-.settings-size__range {
-  flex: 1 1 200px;
-  min-width: 140px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-/* Tabular, so the number does not shuffle the slider sideways as it passes
-   from one digit to two. */
-.settings-size__value {
-  flex: none;
-  min-width: 5ch;
-  color: var(--fg);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 .settings-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
+  --settings-label: 190px;
+  display: grid;
+  grid-template-columns: var(--settings-label) minmax(0, 1fr);
+  column-gap: var(--s4);
+  row-gap: var(--s2);
 }
 
 .settings-field__label {
+  grid-column: 1;
+  align-self: start;
+  margin: 0;
+  padding-top: 5px;
   color: var(--fg);
   font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.settings-field > :not(.settings-field__label) {
+  grid-column: 2;
+  min-width: 0;
 }
 
 .settings-field__row {
@@ -267,108 +289,107 @@
   gap: var(--s2);
 }
 
-/* A field cut into black is read from its border, which is why it has one —
-   the same reasoning the dialog's fields are built on. Monospace because what
-   goes in it is a git ref. */
-.settings-field__input {
-  flex: 1 1 200px;
-  min-width: 0;
-  padding: 5px var(--s3);
+.settings-field__row > .settings-field__input {
+  flex: 1 1 160px;
+}
+
+.settings-field__input,
+.settings-select {
+  height: 26px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r2);
-  background: var(--bg-input);
+  background-color: var(--bg-input);
   color: var(--fg);
-  font-family: var(--font-mono);
   font-size: var(--text-sm);
+  line-height: 16px;
 }
 
-/* The same field, told it may hold a list. Vertical resize only: the width is
-   the column's, and a box somebody widened past it would overhang the page. */
+/* Monospace because what goes in it is a ref, a path or a command. */
+.settings-field__input {
+  width: 100%;
+  min-width: 0;
+  padding: 0 var(--s2);
+  font-family: var(--font-mono);
+}
+
 .settings-field__input--lines {
+  height: auto;
+  min-height: 26px;
+  padding: 4px var(--s2);
   resize: vertical;
-  line-height: 1.5;
-}
-
-/* The select is the same box as the field beside it, minus the platform's own
-   chrome — the dialog's fields are built the same way, for the same reason. */
-.settings-field__input--select {
-  appearance: none;
-  flex: 0 1 auto;
-  padding-right: var(--s5);
-  background-image: linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
-    linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
-  background-position: right 15px center, right 10px center;
-  background-size: 5px 5px;
-  background-repeat: no-repeat;
-}
-
-/* The line a pane will actually run, under the field that changes it. Dimmed
-   and unbordered: it is output, not another box to type in, and it must not
-   read as the field above it. It wraps rather than scrolls, because a command
-   with its end cut off is the half somebody is checking. */
-.settings-command {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--fg-muted);
-  overflow-wrap: anywhere;
-  user-select: text;
 }
 
 .settings-field__input::placeholder {
   color: var(--fg-muted);
 }
 
-.settings-field__input:focus-visible {
-  outline: none;
-  border-color: var(--accent-line);
-  box-shadow: var(--ring);
-}
-
-/* A choice out of three, so it is sized to the longest of them rather than to
-   the column: a select stretched across the page reads as a text field that
-   will not take text. The arrow is drawn rather than the platform's, the same
-   way the dialog's selects draw theirs. */
-.settings-field__select {
-  align-self: start;
-  min-width: 0;
-  padding: 5px var(--s5) 5px var(--s3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-  background-color: var(--bg-input);
-  color: var(--fg);
-  font-size: var(--text-sm);
+/* Sized to its longest option: a select stretched across the column reads as a text field. */
+.settings-select {
+  justify-self: start;
+  width: auto;
+  max-width: 100%;
+  padding: 0 24px 0 var(--s2);
+  font-family: var(--font-ui);
   appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
     linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
-  background-position: right 15px center, right 10px center;
+  background-position: right 12px center, right 7px center;
   background-size: 5px 5px;
   background-repeat: no-repeat;
 }
 
-/* Said rather than inherited: an open list is drawn by the platform on a ground
-   this page never painted, and a colour that only works on ours would be
-   unreadable in it. */
-.settings-field__select option {
+/* An open list is drawn by the platform on a ground this page never painted. */
+.settings-select option {
   background-color: var(--bg-input);
   color: var(--fg);
 }
 
-.settings-field__select:focus-visible {
+.settings-field__input:focus-visible,
+.settings-select:focus-visible {
   outline: none;
   border-color: var(--accent-line);
   box-shadow: var(--ring);
 }
 
+/* The line a pane will run, under the field that changes it: output, so dimmed and unboxed. */
+.settings-launch {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.settings-size {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 26px;
+  max-width: 320px;
+}
+
+.settings-size__range {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-size__value {
+  flex: none;
+  min-width: 4ch;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Projects ---------------------------------------------------------------- */
 
-.settings-project {
+.settings-project__identity {
   display: flex;
   flex-direction: column;
-  gap: var(--s3);
-  padding: var(--s4);
-  border: 1px solid var(--line);
-  border-radius: var(--r3);
-  background: var(--bg-raised);
+  gap: 2px;
 }
 
 .settings-project__name {
@@ -376,37 +397,45 @@
   font-weight: 600;
 }
 
-/* Breaks anywhere rather than scrolling: a checkout path is long, and a path
-   the reader has to drag a scrollbar along is a path they cannot compare with
-   the one in their terminal at a glance. */
 .settings-project__path {
-  color: var(--fg-secondary);
+  color: var(--fg-muted);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
-.settings-relay {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  padding: var(--s3);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
-}
-
-.settings-relay__title {
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-/* A relay URL is as long as somebody's tunnel hostname, and it sits inside a
-   sentence, so it wraps with the sentence rather than widening the card. */
 .settings-relay .settings-fact {
-  font-size: var(--text-sm);
+  padding-top: 5px;
   overflow-wrap: anywhere;
+}
+
+/* Narrow -------------------------------------------------------------------- */
+
+@container (max-width: 600px) {
+  .settings__layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s4);
+  }
+
+  .settings-nav {
+    position: static;
+  }
+
+  .settings-nav__list {
+    flex-flow: row wrap;
+  }
+
+  .settings-nav__item {
+    width: auto;
+  }
+
+  .settings-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-field__label,
+  .settings-field > :not(.settings-field__label) {
+    grid-column: 1;
+  }
 }
