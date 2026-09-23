@@ -76,3 +76,33 @@ describe('layout reconciliation at startup', () => {
     expect(manager.reconcileLayouts()).toBe(0)
   })
 })
+
+describe('file leaves at startup', () => {
+  it('keeps a file leaf while dropping the dead terminal beside it', () => {
+    const file = { kind: 'leaf' as const, terminalId: 'file:1', pane: 'file' as const, path: 'NOTES.md' }
+    const layouts = restoredLayouts([
+      {
+        worktreeId: 'w1',
+        root: {
+          kind: 'split',
+          direction: 'row',
+          sizes: [0.5, 0.5],
+          children: [{ kind: 'leaf', terminalId: 'dead' }, file]
+        },
+        focusedTerminalId: 'file:1'
+      }
+    ])
+    const manager = new TerminalSessionManager({ layouts })
+    expect(manager.reconcileLayouts()).toBe(1)
+    expect(layouts.getLayout('w1')).toEqual({ worktreeId: 'w1', root: file, focusedTerminalId: 'file:1' })
+  })
+
+  it('drops a leaf that only has a file id, with no path to open', () => {
+    const layouts = restoredLayouts([
+      { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 'file:2' }, focusedTerminalId: 'file:2' }
+    ])
+    const manager = new TerminalSessionManager({ layouts })
+    expect(manager.reconcileLayouts()).toBe(1)
+    expect(layouts.getLayout('w1')).toEqual({ worktreeId: 'w1', root: null, focusedTerminalId: null })
+  })
+})

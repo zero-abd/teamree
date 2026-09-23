@@ -6,6 +6,8 @@ import { z } from 'zod'
 import type {
   CliInstall,
   CliStatus,
+  FileContent,
+  FileWritten,
   InstalledAgent,
   Layout,
   MemberList,
@@ -41,6 +43,7 @@ import type {
   WorktreeStatus
 } from './entities'
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
+import { MAX_FILE_PANE_BYTES } from './filePane'
 import { THEME_TOKENS, type Appearance } from './theme'
 
 /**
@@ -532,6 +535,14 @@ export const Params = {
       })
   }),
 
+  /** One text file of a worktree, for a file pane; `path` may not leave the worktree. Local only. */
+  fileRead: z.object({ worktreeId: z.string().min(1), path: z.string().min(1).max(4096) }),
+  fileWrite: z.object({
+    worktreeId: z.string().min(1),
+    path: z.string().min(1).max(4096),
+    content: z.string().max(MAX_FILE_PANE_BYTES)
+  }),
+
   layoutGet: z.object({ worktreeId: z.string().min(1) }),
   layoutSet: z.object({ worktreeId: z.string().min(1), root: z.unknown(), focusedTerminalId: z.string().nullable() }),
 
@@ -669,6 +680,9 @@ export type MethodContract = {
   /** How this installation is painted. Per machine, not per project. */
   'appearance.get': { params: z.infer<typeof Params.appearanceGet>; result: Appearance }
   'appearance.set': { params: z.infer<typeof Params.appearanceSet>; result: Appearance }
+
+  'file.read': { params: z.infer<typeof Params.fileRead>; result: FileContent }
+  'file.write': { params: z.infer<typeof Params.fileWrite>; result: FileWritten }
 
   'layout.get': { params: z.infer<typeof Params.layoutGet>; result: Layout }
   'layout.set': { params: z.infer<typeof Params.layoutSet>; result: Layout }

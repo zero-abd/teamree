@@ -43,7 +43,12 @@ const WorktreeSchema = z.object({
 
 const PaneNodeSchema: z.ZodType<PaneNode> = z.lazy(() =>
   z.union([
-    z.object({ kind: z.literal('leaf'), terminalId: z.string().min(1) }),
+    z.object({
+      kind: z.literal('leaf'),
+      terminalId: z.string().min(1),
+      pane: z.enum(['terminal', 'file']).optional(),
+      path: z.string().min(1).optional()
+    }),
     z.object({
       kind: z.literal('split'),
       direction: z.enum(['row', 'column']),

@@ -3,6 +3,7 @@
 // entry per child and they sum to 1.
 
 import type { PaneNode } from '../../shared/entities'
+import { fileLeaf } from '../../shared/filePane'
 
 export type SplitDirection = 'row' | 'column'
 
@@ -150,7 +151,12 @@ function parseNode(value: unknown, depth: number): PaneNode | null {
   const node = value as Record<string, unknown>
 
   if (node.kind === 'leaf') {
-    return typeof node.terminalId === 'string' && node.terminalId.length > 0 ? leafPane(node.terminalId) : null
+    if (typeof node.terminalId !== 'string' || node.terminalId.length === 0) return null
+    // A file leaf keeps its path; every other `pane` value is a terminal.
+    if (node.pane === 'file') {
+      return typeof node.path === 'string' && node.path.length > 0 ? fileLeaf(node.terminalId, node.path) : null
+    }
+    return leafPane(node.terminalId)
   }
 
   if (node.kind !== 'split') return null

@@ -134,6 +134,8 @@ describe('dispatcher', () => {
       // Local: starts a program on this machine.
       'editor.list',
       'editor.open',
+      'file.read',
+      'file.write',
       'layout.get',
       'layout.set',
       'members.join',

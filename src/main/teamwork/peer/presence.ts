@@ -53,6 +53,7 @@ export function presenceFor(
   return { revision, handle, projects }
 }
 
+// Read off the terminals, never the layout, so a teammate hears nothing of a file pane.
 function describeWorktree(worktree: Worktree, terminals: readonly Terminal[], at: number): PeerWorktree {
   return {
     id: worktree.id,

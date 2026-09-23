@@ -6,6 +6,7 @@ import { statSync } from 'node:fs'
 import { agentLaunchCommand } from '../../shared/agentLaunch'
 import type { RestoredAs } from '../../shared/paneRestore'
 import type { AgentEvent, Layout, PaneNode, Terminal } from '../../shared/entities'
+import { fileLeavesIn } from '../../shared/filePane'
 import { evidenceLine } from '../../shared/outputEvidence'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
 import {
@@ -191,24 +192,35 @@ export class TerminalSessionManager {
 
   /** Starts a terminal in half of an existing pane. */
   split(params: ParamsOf<'terminal.split'>): { terminal: Terminal; layout: Layout } {
-    const target = this.require(params.terminalId)
-    const size = target.snapshot()
-    const session = this.startSession({
-      worktreeId: target.worktreeId,
-      shell: target.shell,
-      cwd: target.cwd,
-      cols: size.cols,
-      rows: size.rows,
-      ...(params.command === undefined ? {} : { command: params.command })
-    })
+    const target = this.sessions.get(params.terminalId)
+    const command = params.command === undefined ? {} : { command: params.command }
+    // Beside a file pane there is no session to copy: the shell opens in the
+    // worktree at the runtime's default size.
+    const session = target
+      ? this.startSession({
+          worktreeId: target.worktreeId,
+          shell: target.shell,
+          cwd: target.cwd,
+          cols: target.snapshot().cols,
+          rows: target.snapshot().rows,
+          ...command
+        })
+      : this.startSession({ worktreeId: this.worktreeOfPane(params.terminalId), ...command })
 
-    const layout = this.layoutFor(target.worktreeId)
+    const layout = this.layoutFor(session.worktreeId)
     const saved = this.saveLayout({
-      worktreeId: target.worktreeId,
-      root: splitPane(layout.root, target.id, params.direction, session.id),
+      worktreeId: session.worktreeId,
+      root: splitPane(layout.root, params.terminalId, params.direction, session.id),
       focusedTerminalId: session.id
     })
     return { terminal: session.snapshot(), layout: saved }
+  }
+
+  /** The worktree whose tree holds a pane that is not a session, or not found. */
+  private worktreeOfPane(paneId: string): string {
+    const holder = this.layouts.listLayouts?.().find((layout) => terminalIdsIn(layout.root).includes(paneId))
+    if (holder === undefined) throw notFound(`no such terminal: ${paneId}`)
+    return holder.worktreeId
   }
 
   /**
@@ -487,7 +499,9 @@ export class TerminalSessionManager {
 
     let changed = 0
     for (const layout of stored) {
-      const orphans = terminalIdsIn(layout.root).filter((id) => !this.sessions.has(id))
+      // A file leaf has no session to have died.
+      const files = new Set(fileLeavesIn(layout.root).map((leaf) => leaf.terminalId))
+      const orphans = terminalIdsIn(layout.root).filter((id) => !this.sessions.has(id) && !files.has(id))
       if (orphans.length === 0) continue
 
       let root = layout.root
@@ -497,7 +511,7 @@ export class TerminalSessionManager {
       this.layouts.putLayout({
         worktreeId: layout.worktreeId,
         root,
-        focusedTerminalId: focus !== null && this.sessions.has(focus) ? focus : null
+        focusedTerminalId: focus !== null && terminalIdsIn(root).includes(focus) ? focus : null
       })
       changed += 1
     }

@@ -395,11 +395,19 @@ export type ProcessKill = {
 }
 
 /**
- * Pane layout for one worktree. A leaf holds a terminal; a split divides its area
- * between children. Sizes are fractions summing to 1, positionally matched to `children`.
+ * Pane layout for one worktree. A leaf holds a terminal or a worktree file; a split divides its
+ * area between children. Sizes are fractions summing to 1, positionally matched to `children`.
  */
 export type PaneNode =
-  | { kind: 'leaf'; terminalId: string }
+  | {
+      kind: 'leaf'
+      /** The pane's id: a terminal's, or `file:` plus a uuid for a file pane. */
+      terminalId: string
+      /** What the leaf holds. Absent means a terminal, which is every leaf older clients wrote. */
+      pane?: 'terminal' | 'file'
+      /** The file a file leaf shows, relative to the worktree root; its extension picks the viewer. */
+      path?: string
+    }
   | { kind: 'split'; direction: 'row' | 'column'; sizes: number[]; children: PaneNode[] }
 
 export type Layout = {
@@ -407,6 +415,27 @@ export type Layout = {
   root: PaneNode | null
   /** Terminal that receives keyboard focus when this worktree is opened. */
   focusedTerminalId: string | null
+}
+
+/** One text file of a worktree, as `file.read` answers. */
+export type FileContent = {
+  worktreeId: string
+  /** Relative to the worktree root, forward slashes. */
+  path: string
+  /** Empty when the file does not exist yet; `exists` says which. */
+  content: string
+  exists: boolean
+  /** The file's mtime in ms, or 0 when it does not exist. */
+  modifiedAt: number
+  size: number
+}
+
+/** The receipt for `file.write`: the mtime the caller can compare later reads against. */
+export type FileWritten = {
+  worktreeId: string
+  path: string
+  modifiedAt: number
+  size: number
 }
 
 /** One thing a new worktree can branch from, as offered by the create dialog. */

@@ -6,6 +6,7 @@ import { dirname } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
 import { CliService, createAdministratorRunner, findShippedCli, registerCliHandlers } from '../../cli'
 import { createEditorActions, registerEditorHandlers } from '../../editor'
+import { registerFileHandlers } from '../../files'
 import { GitService, registerGitHandlers } from '../../git'
 import { startSetupCommand } from '../../git/worktreeSetup'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
@@ -69,6 +70,8 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)
   registerAppearanceHandlers(registry)
+  // One file of a worktree at a time, for a file pane.
+  registerFileHandlers(registry)
   const workspaceEvents = registry.context.workspaceEvents
 
   // The private key belongs beside the workspace file, never under a repository.
