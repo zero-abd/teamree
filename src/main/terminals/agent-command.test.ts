@@ -31,9 +31,7 @@ describe('tokenizeCommand', () => {
     expect(result.tokens).toEqual(['claude', '-p', 'two words', 'and more', 'one more'])
   })
 
-  // Everything below is a command whose meaning depends on more than the words
-  // in it. Cutting a token out of one could change what it runs, so it is not
-  // modelled at all.
+  // Cutting a token out of any of these could change what it runs.
   it('refuses anything that is more than a list of words', () => {
     for (const command of [
       'claude | tee log.txt',
@@ -73,7 +71,6 @@ describe('executableIndex', () => {
     expect(executableIndex(['C:\\tools\\claude.cmd'], ['claude'])).toBe(0)
   })
 
-  // The trap: an argument can end in the program's name without being it.
   it('does not mistake an argument that merely ends in the name', () => {
     expect(executableIndex(['ssh', '-i', '~/.ssh/claude'], ['claude'])).toBe(-1)
     expect(executableIndex(['cd', '/work/claude'], ['claude'])).toBe(-1)
@@ -147,8 +144,7 @@ describe('resumeSessionCommand', () => {
     expect(resumeSessionCommand('gemini', 'gemini', null)).toBeNull()
   })
 
-  // The defect this guards: a stored command that already carried a selector
-  // would end up with two, and which one won was the CLI's business, not ours.
+  // Two selectors, and which one won was the CLI's business.
   it('replaces a stale selector rather than competing with it', () => {
     expect(resumeSessionCommand('claude --resume old-id', 'claude', 'new-id')).toBe('claude --resume new-id')
     expect(resumeSessionCommand('claude --continue', 'claude', 'new-id')).toBe('claude --resume new-id')
@@ -166,10 +162,7 @@ describe('resumeSessionCommand', () => {
   })
 
   it('leaves a selector-shaped value belonging to another flag alone', () => {
-    // `--resume` here is the value of --model, not a selector of its own... but
-    // a flag's dash-leading value is exactly what the joined short form would
-    // be ambiguous with, so the conservative rule is what is tested: a bare
-    // `-rSOMETHING` is never treated as a selector.
+    // A bare `-rSOMETHING` is never a selector: indistinguishable from a dash-leading value.
     expect(resumeSessionCommand('claude -rABC', 'claude', 'new')).toBe('claude -rABC --resume new')
   })
 
@@ -184,7 +177,6 @@ describe('resumeSessionCommand', () => {
   })
 
   it('appends when the agent is not in command position at all', () => {
-    // Nothing here is safe to edit, so the fallback is the old behaviour.
     expect(resumeSessionCommand('ssh host claude', 'claude', 'new')).toBe('ssh host claude --resume new')
   })
 
@@ -213,8 +205,7 @@ describe('restartSessionCommand', () => {
     const restarted = restartSessionCommand('claude --model opus --session-id old-zzz', 'claude')
 
     expect(restarted?.command).not.toContain('old-zzz')
-    // Everything that was not about the session survives untouched: this is a
-    // command somebody wrote, and only the one stale part of it is wrong.
+    // Everything not about the session survives untouched.
     expect(restarted?.command).toContain('--model opus')
     expect(restarted?.command).toContain(`--session-id ${restarted?.agentSessionId}`)
   })
@@ -237,16 +228,13 @@ describe('restartSessionCommand', () => {
     const restarted = restartSessionCommand('claude --session-id old-zzz -- a prompt', 'claude')
 
     expect(restarted?.command).not.toContain('old-zzz')
-    // In front of the terminator, not after it: everything past `--` is the
-    // agent's own argument rather than a flag it will read.
+    // In front of the terminator: everything past `--` is argument, not flag.
     const line = restarted?.command ?? ''
     expect(line.indexOf('--session-id')).toBeLessThan(line.indexOf(' -- '))
     expect(line).toContain('-- a prompt')
   })
 
-  // A fresh id every time, because the old one has been handed to the agent
-  // once already and a CLI within its rights to refuse an id it has seen before
-  // would turn one silent failure into another.
+  // A CLI may refuse an id it has seen before.
   it('never hands back an id that has been used before', () => {
     const first = restartSessionCommand('claude', 'claude')
     const second = restartSessionCommand('claude', 'claude')
@@ -260,17 +248,13 @@ describe('restartSessionCommand', () => {
     expect(restartSessionCommand('codex --model gpt', 'codex')).toEqual({ command: 'codex --model gpt' })
   })
 
-  // The one place in this module where failing open is wrong. Everywhere else
-  // an unmodelable command comes back with a selector appended and the worst
-  // case is a CLI complaining. Here the caller also writes down the id it
-  // believes is on that line, so an append would leave the dead selector where
-  // it was, add a second, and record a third state agreeing with neither.
+  // The one place failing open is wrong: the caller also records the id it
+  // believes is on the line, and an append would leave three states agreeing with nothing.
   it('refuses a command it cannot read, rather than appending to it', () => {
     expect(restartSessionCommand('codex | tee log', 'codex')).toBeNull()
     expect(restartSessionCommand("claude --session-id 'unclosed", 'claude')).toBeNull()
     expect(restartSessionCommand('claude $(cat id)', 'claude')).toBeNull()
-    // The agent is in there, but not in command position, so nothing here knows
-    // which of these words is the program or where its flags would go.
+    // The agent is in there, but not in command position.
     expect(restartSessionCommand('ssh host claude --session-id old-zzz', 'claude')).toBeNull()
   })
 })
@@ -294,8 +278,7 @@ describe('quoteArgument', () => {
 })
 
 describe('firstPromptCommand', () => {
-  // Positional for both, after everything else on the line: the session id
-  // is teamree's and goes on first, and the prompt is what the person typed.
+  // Positional for both, after everything else on the line.
   it('hands claude and codex the prompt as their positional argument, quoted', () => {
     expect(firstPromptCommand('claude --session-id abc', 'claude', 'Make the pager stream')).toBe(
       "claude --session-id abc 'Make the pager stream'"

@@ -1,27 +1,7 @@
-// Keeping this Mac awake, when the window says so.
-//
-// Three modes. `on` holds the machine awake for as long as the app runs.
-// `agent` holds it only while an agent pane is on something — working, or
-// waiting on you — which is the default, because the app's premise is that
-// you start three agents and walk away, and a laptop that sleeps ten minutes
-// into that is three agents stopped mid-turn. `off` is the OS's own rules.
-//
-// The blocker is `prevent-app-suspension` in both awake modes. On macOS that
-// is a `PreventUserIdleSystemSleep` assertion: the machine stays up and the
-// display is still allowed to go dark, which is what somebody who has walked
-// away from a running agent wants. `prevent-display-sleep` would keep the
-// screen lit on a laptop nobody is looking at, and Electron documents that it
-// outranks the other, so a single kind is used and a single assertion held.
-//
-// Whether an agent is busy is decided in the window, not here. The main
-// process holds the raw facts — `busy`, `lastBellAt`, `agentEvent` — but the
-// rule that turns them into "working or waiting on you" is `activityOf` in the
-// sidebar's reducer, and it ranks a hook's word over a bell over a title.
-// Restating that rule here would be a second copy free to disagree with the
-// one the sidebar draws. So the window publishes one boolean beside the mode,
-// the way it publishes the menu bar's items, and this file holds nothing but
-// the edge: started once when the answer becomes yes, stopped once when it
-// becomes no.
+// Keeping this Mac awake, when the window says so. `prevent-app-suspension`
+// only: on macOS that is `PreventUserIdleSystemSleep`, the display may still
+// go dark, and Electron documents `prevent-display-sleep` outranking it.
+// Whether an agent is busy is decided in the window (`activityOf`), not here.
 
 import type { IpcMain, IpcMainEvent, PowerSaveBlocker } from 'electron'
 
@@ -42,13 +22,7 @@ function isMode(value: unknown): value is KeepAwakeMode {
   return typeof value === 'string' && (KEEP_AWAKE_MODES as readonly string[]).includes(value)
 }
 
-/**
- * The state, rebuilt field by field, or null if the message was not one.
- *
- * Rebuilt rather than passed through for the reason `readNoticeSettings` is:
- * this arrives over IPC, and a mode that is not one of the three would read
- * as "off" in a comparison written the obvious way.
- */
+/** The state, rebuilt field by field, or null. Rebuilt for the reason `readNoticeSettings` is. */
 export function readKeepAwakeState(value: unknown): KeepAwakeState | null {
   if (typeof value !== 'object' || value === null) return null
   const state = value as Record<string, unknown>
@@ -105,12 +79,8 @@ export type KeepAwakeHost = {
 }
 
 /**
- * Listens for the window's state. Returns the way to stop, which also lets
- * go of the machine.
- *
- * The assertion goes with the window that asked for it, the way the menu bar's
- * items go with the window that published them: an app with no window left
- * holding a laptop awake is the one outcome nobody chose.
+ * Listens for the window's state. Returns the way to stop, which also lets go
+ * of the machine. The assertion goes with the window that asked for it.
  */
 export function installKeepAwake(ipc: IpcMain, host: KeepAwakeHost): { stop: () => void; blocking: () => boolean } {
   const awake = createKeepAwake(host.blocker)

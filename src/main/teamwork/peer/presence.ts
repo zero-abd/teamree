@@ -1,18 +1,6 @@
-// What this runtime tells a teammate about itself, and the one rule that
-// decides how much of it they get.
-//
-// **A peer sees a project only if their key is in that project's roster.** A
-// session is pairwise and covers every repository two people happen to share,
-// so a snapshot built once and sent to everybody would show a teammate on one
-// repository the worktrees of another they have no part in. The roster is the
-// membership list, it is already read per project, and filtering by it here is
-// the same rule the handshake applies, applied once more where it decides
-// visibility rather than admission.
-//
-// Metadata only. `docs/teamwork.md` is exact about this: names, branches, pane
-// states, dimensions and how long each has been quiet are automatic; a pane's
-// actual output flows only for a pane somebody has opened, over a subscription
-// they asked for. Nothing in this file reads a scrollback.
+// What this runtime tells a teammate about itself. A peer sees a project only if their key is in that
+// project's roster: a session covers every repository two people share, and an unfiltered snapshot would
+// show worktrees of a repository they have no part in. Metadata only; nothing here reads a scrollback.
 
 import type { PeerPane, PeerPresence, PeerProject, PeerWorktree, Terminal, Worktree } from '../../../shared/entities'
 
@@ -82,13 +70,10 @@ function describePane(terminal: Terminal, at: number): PeerPane {
     shell: terminal.shell,
     running: terminal.running,
     busy: terminal.busy,
-    // The owner's dimensions, for a watcher to letterbox to. They are sent and
-    // never asked for: a reader that could change them would be resizing a pty
-    // under a program it is only reading.
+    // The owner's dimensions, sent and never asked for: a reader that could change them would be resizing a pty.
     cols: terminal.cols,
     rows: terminal.rows,
-    // Converted from an instant to a duration on the way out: the receiver's
-    // clock is the only one it can trust, and a duration survives the crossing.
+    // A duration rather than an instant: the receiver's clock is the only one it can trust.
     quietForMs: Math.max(0, at - terminal.lastOutputAt)
   }
   if (terminal.agent !== undefined) pane.agent = terminal.agent

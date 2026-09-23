@@ -1,26 +1,6 @@
-// What each teammate last showed, kept on this machine so that a laptop
-// closing does not empty the sidebar.
-//
-// `docs/teamwork.md` argues the point better than a comment can: a row
-// vanishing reads as "it was deleted", and for a worktree that is the one thing
-// this app must never wrongly say. So a snapshot outlives the link it arrived
-// on, and outlives this process too — a restart is the commonest way a peer
-// link goes away, and a cache that did not survive one would be a cache that
-// helps only with the case nobody notices.
-//
-// **It lives beside the workspace file, not inside it**, and that is a decision
-// rather than a convenience. Presence moves whenever a pane goes busy or quiet,
-// so folding it into `workspace.json` would rewrite the file holding somebody's
-// projects several times a minute for data that is regenerated the moment a
-// teammate reconnects. It also keeps bytes another machine sent out of the one
-// file this app cannot afford to lose — the store's rule about never writing
-// over something it could not read is about the user's own work, and nothing
-// here is that.
-//
-// **Everything in it is bounded**, because every byte came from somebody else's
-// disk. The peer is not assumed hostile; their workspace is assumed unknown,
-// which is enough reason not to let a count or a string from it decide how much
-// memory this process spends.
+// What each teammate last showed, kept so a laptop closing does not empty the
+// sidebar (see `docs/teamwork.md`). Beside the workspace file, not inside it:
+// presence moves several times a minute. Everything bounded: every byte came from another disk.
 
 import { rename, stat } from 'node:fs/promises'
 import { z } from 'zod'
@@ -38,13 +18,7 @@ export const MAX_CACHED_WORKTREES = 50
 export const MAX_CACHED_PANES = 24
 /** Names, branches, titles and shells. Long enough for every real one. */
 export const MAX_CACHED_TEXT = 160
-/**
- * Older than this and a snapshot has stopped being a picture of the project.
- *
- * It is not a correctness bound — a stale row says how old it is, and a
- * fortnight-old one says so plainly — but an unbounded one would keep a
- * colleague's worktrees on screen for as long as the app is installed.
- */
+/** Older than this and a snapshot has stopped being a picture of the project. */
 export const MAX_CACHE_AGE_MS = 14 * 24 * 60 * 60 * 1000
 /** Read before the file is: nothing this app wrote comes close. */
 export const MAX_CACHE_BYTES = 2_000_000
@@ -101,13 +75,8 @@ export type TeammateCacheDocument = {
 }
 
 /**
- * Never throws, and never trusts a count.
- *
- * A file written by another build of this app is the ordinary case, not the
- * exotic one, so a row that does not parse is dropped and the rest is kept —
- * the same trade `parseWorkspaceDocument` makes, for the same reason. Bounds
- * are applied here as well as on the way in, because the file is the boundary
- * whatever wrote it.
+ * Never throws: a row that does not parse is dropped and the rest kept.
+ * Bounded again here; the file is the boundary whatever wrote it.
  */
 export function parseTeammateCache(raw: unknown): TeammateCacheDocument {
   if (typeof raw !== 'object' || raw === null) return { version: TEAMMATE_CACHE_VERSION, teammates: [] }
@@ -161,13 +130,7 @@ export type TeammateCacheOptions = {
   now?: () => number
 }
 
-/**
- * The cache as a file, read once at startup and written back coalesced.
- *
- * Reads are synchronous because the peer service answers from memory; writes
- * are queued the way the workspace store queues its own, so a burst of
- * snapshots costs one rename.
- */
+/** The cache as a file, read once at startup and written back coalesced. */
 export class TeammateCacheStore implements TeammateCache {
   readonly #entries = new Map<string, CachedTeammate>()
   readonly #onProblem: (problem: StoreProblem) => void
@@ -194,8 +157,7 @@ export class TeammateCacheStore implements TeammateCache {
   static async open(filePath: string, options: TeammateCacheOptions = {}): Promise<TeammateCacheStore> {
     const oversized = await isOversized(filePath)
     if (oversized !== undefined) {
-      // Read before the bytes are, so a file that has somehow grown cannot make
-      // this process allocate it just to find out it was too big.
+      // Checked before the bytes are read, so a grown file is never allocated.
       const store = new TeammateCacheStore(filePath, [], options)
       store.#unreadableReason = oversized
       store.#onProblem({ kind: 'unreadable', filePath, reason: oversized })
@@ -220,15 +182,7 @@ export class TeammateCacheStore implements TeammateCache {
     return [...this.#entries.values()]
   }
 
-  /**
-   * Replaces what was held for this teammate in this repository.
-   *
-   * Never a merge, and that is the whole of how a removed worktree stops being
-   * shown: a teammate's snapshot is the complete list of what they have, so
-   * anything missing from it is gone rather than unmentioned. Merging would
-   * make the cache a place deleted work lived forever, which is the failure
-   * this feature exists to avoid the inverse of.
-   */
+  /** Replaces, never merges: a snapshot is the complete list, so what is missing is gone. */
   put(entry: CachedTeammate): void {
     this.#entries.set(keyFor(entry.publicKey, entry.projectKey), boundTeammate(entry))
     this.#prune()
@@ -285,14 +239,7 @@ export class TeammateCacheStore implements TeammateCache {
     })
   }
 
-  /**
-   * Moves an unreadable file aside before anything writes over it.
-   *
-   * Nothing in here is the user's own work — it is a cache, and the peers who
-   * filled it will fill it again — but "could not read" and "is not there" are
-   * two different events everywhere else in this directory, and a file this
-   * process failed to parse is the one piece of evidence about why.
-   */
+  /** Moves an unreadable file aside: the one piece of evidence about why it failed to parse. */
   async #keepUnreadableFile(): Promise<boolean> {
     if (this.#unreadableReason === undefined) return true
     const keptAt = `${this.filePath}.unreadable-${new Date(this.#now()).toISOString().replace(/[:.]/g, '-')}`

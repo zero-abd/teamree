@@ -1,17 +1,6 @@
-// THE SEAM. This is the whole surface the runtime wires up.
-//
-// In src/main/runtime/handlers/registerHandlers.ts:
-//
-//   import { CliService, findShippedCli, registerCliHandlers } from '../../cli'
-//   registerCliHandlers(registry, new CliService({ source: findShippedCli(), administrator: ... }))
-//
-// The privileged runner is passed in rather than defaulted, so that a service
-// built anywhere else — a test, a harness — has no way to reach osascript by
-// forgetting an argument.
-//
-// Handlers receive already-validated params and resolve with exactly the result
-// the contract declares. Everything they throw is a RuntimeError, so the
-// dispatcher preserves its ErrorCode.
+// THE SEAM: the whole surface the runtime wires up for the CLI. The privileged
+// runner is passed in, never defaulted, so a test cannot reach osascript by
+// forgetting an argument. Everything thrown is a RuntimeError.
 
 import { Params } from '../../shared/methods'
 import type { ParamsOf, ResultOf } from '../../shared/methods'

@@ -1,9 +1,5 @@
-// The behaviour somebody actually experiences: told once when there is
-// something to tell, and never bothered otherwise.
-//
-// Two of these are about what does *not* happen — a failed check says nothing,
-// and a relaunch does not ask again — and they are the ones that would rot
-// invisibly, because nothing on screen would be wrong either way.
+// Told once when there is something to tell, and never bothered otherwise.
+// The "does not happen" cases would rot invisibly.
 
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -85,8 +81,7 @@ describe('when there is a newer release', () => {
     expect(state.available).toMatchObject({ version: '0.2.0', tag: 'v0.2.0', notes: 'Faster panes.' })
     expect(state.available?.downloadUrl).toContain('.dmg')
     expect(state.problem).toBeNull()
-    // The window is told, because the check it is hearing about is one it may
-    // not have started: the menu item and the startup timer both land here.
+    // The window is told: the menu item and the startup timer both land here.
     expect(changes.length).toBeGreaterThan(0)
   })
 
@@ -152,8 +147,7 @@ describe('pre-releases', () => {
     expect(channels).toEqual(['stable'])
   })
 
-  // Belt and braces over the endpoint's own filtering: if a candidate reaches
-  // this service anyway, a stable build is still not offered it.
+  // Belt and braces over the endpoint's own filtering.
   it('refuses a candidate that reaches a stable build regardless', async () => {
     const { update } = service({
       version: '0.1.0',
@@ -202,8 +196,7 @@ describe('a check that could not be made', () => {
     const state = await update.check({ force: true })
 
     expect(held.lastSeenVersion).toBe('0.2.0')
-    // And the version it learned yesterday is still offered today, off the
-    // release page, because the notes were never written down.
+    // Still offered off the release page: the notes were never written down.
     expect(state.available).toMatchObject({ version: '0.2.0', notes: null, downloadUrl: null })
   })
 
@@ -235,8 +228,7 @@ describe('how often GitHub is asked', () => {
     await update.check()
     expect(asks).toBe(0)
 
-    // Somebody choosing "Check for updates" is owed an answer now: the limit is
-    // about what the app does unasked.
+    // The limit is about what the app does unasked.
     await update.check({ force: true })
     expect(asks).toBe(1)
   })
@@ -255,8 +247,7 @@ describe('how often GitHub is asked', () => {
     expect(asks).toBe(1)
   })
 
-  // The case in-memory state cannot see, and the one people actually create by
-  // quitting and reopening all morning.
+  // The case in-memory state cannot see.
   it('remembers across a restart, because the clock is on disk', async () => {
     const filePath = join(await mkdtemp(join(tmpdir(), 'teamree-updates-')), 'workspace.json')
     let asks = 0
@@ -292,7 +283,6 @@ describe('how often GitHub is asked', () => {
     // Nothing was asked, and the window is still told what the last run found.
     expect(state.available).toMatchObject({ version: '0.2.0', downloadUrl: null })
 
-    // And a third launch, after the interval, does ask.
     const third = await open()
     await from(third, NOW + AUTOMATIC_CHECK_INTERVAL_MS + 1).check()
     expect(asks).toBe(2)
@@ -315,8 +305,7 @@ describe('how often GitHub is asked', () => {
 describe('the preference', () => {
   it('is remembered, and stops the automatic check from being armed at all', () => {
     const { record, held } = settings()
-    // Captured rather than run by a timer: the point is that the preference is
-    // read when the check would fire, not when it was armed.
+    // The preference is read when the check fires, not when it was armed.
     let fire: (() => void) | undefined
     let armed = 0
     const update = new UpdateService({
@@ -335,9 +324,7 @@ describe('the preference', () => {
     expect(held.automatic).toBe(false)
     expect(update.state().automatic).toBe(false)
 
-    // Armed either way — the preference is read when the timer fires, so that
-    // turning it off during the first half-minute turns off the first check —
-    // and the run it would have made does not happen.
+    // Armed either way, so turning it off in the first half-minute stops the first check.
     update.start()
     expect(armed).toBe(1)
     fire?.()
@@ -350,8 +337,7 @@ describe('the preference', () => {
     expect((await update.check({ force: true })).available?.version).toBe('0.2.0')
   })
 
-  // Otherwise turning the check off would be outlived by the last thing it
-  // found: the version is still on disk, and every launch would offer it.
+  // The version is still on disk; every launch would otherwise offer it.
   it('stops offering what an earlier run found, once it is off', () => {
     const { record } = settings({ automatic: false, lastSeenVersion: '0.2.0' })
     const { update } = service({ record })
@@ -360,8 +346,7 @@ describe('the preference', () => {
 })
 
 describe('a build that is not a release', () => {
-  // `npm run dev` reports 0.0.0-dev, which every published version is newer
-  // than. Without this, every dev server announces an update on every launch.
+  // `npm run dev` reports 0.0.0-dev, which every published version is newer than.
   it('asks nobody anything, and says why', async () => {
     let asks = 0
     const { update } = service({

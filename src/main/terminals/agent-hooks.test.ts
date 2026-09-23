@@ -1,10 +1,5 @@
-// The agent's own word about what it is doing, and how it is asked for.
-//
-// Two halves. The pure one is the file handed to the agent and the line that
-// hands it over: both are strings a person can read back, and both are what
-// a wrong terminal id or a mis-quoted profile path would break silently. The
-// pty half is the file's life: written for the pane, kept across the pane's
-// program starting again, and gone with the pane.
+// The hook file and the line that hands it over, then the file's life on a
+// real pty: written for the pane, kept across a relaunch, gone with the pane.
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -37,12 +32,11 @@ describe('hookSettings', () => {
     expect(hook?.command).toContain(`${CLI} agent event`)
     expect(hook?.command).toContain('--terminal term_7')
     expect(hook?.command).toContain('--event Notification')
-    // The profile path has a space in it on every Mac, so it goes over quoted.
+    // A profile path has a space in it on every Mac.
     expect(hook?.command).toContain(`--user-data-dir '${USER_DATA}'`)
   })
 
-  // A hook that fails is a line in the agent's transcript, and a hook that
-  // hangs is a turn that hangs. Neither is allowed to be this app's fault.
+  // A failed hook is a line in the transcript; a hung hook is a hung turn.
   it('never fails the agent and never holds it for long', () => {
     for (const event of AGENT_HOOK_EVENTS) {
       const [hook] = settings.hooks[event][0]?.hooks ?? []
@@ -57,11 +51,8 @@ describe('hookSettings', () => {
   })
 })
 
-// The line names the CLI by the path the app found it at, and the app finds it
-// in one of two places (see `shippedCli.ts`). Both are spelled out here as the
-// hook would carry them, because a hook pointing at the checkout from inside an
-// installed app, or at a path with a bare space in it, fails without a word:
-// `|| true` sees to that, by design.
+// Both places the app finds its CLI (see `shippedCli.ts`), spelled as the hook
+// would carry them: a wrong path fails without a word, by design.
 describe('hookCommand', () => {
   const [packaged, checkout] = shippedCliCandidates({
     resourcesPath: '/Applications/teamree.app/Contents/Resources',
@@ -84,17 +75,13 @@ describe('hookCommand', () => {
     )
   })
 
-  // The hook runs under whatever environment the agent has, which is the
-  // pane's login shell, and an installed app cannot assume that shell has a
-  // Node on its PATH. The launcher the line names runs the bundle under the
-  // app's own binary and reaches for a system `node` only in a checkout.
+  // The pane's login shell cannot be assumed to have a Node on its PATH.
   it('names a launcher that needs no node on PATH inside the installed app', () => {
     const launcher = fileURLToPath(new URL('../../../resources/cli/teamree', import.meta.url))
     expect(statSync(launcher).mode & 0o111).not.toBe(0)
     const script = readFileSync(launcher, 'utf8')
     expect(script.startsWith('#!/bin/sh')).toBe(true)
     expect(script).toContain('ELECTRON_RUN_AS_NODE=1 exec "$host" "$bundle" "$@"')
-    // The app's binary is tried before PATH is consulted at all.
     expect(script.indexOf('ELECTRON_RUN_AS_NODE=1')).toBeLessThan(script.indexOf('command -v node'))
   })
 })
@@ -121,9 +108,7 @@ describe('hookedLaunch', () => {
     expect(hookedLaunch('claude', 'claude', spaced)).toBe(`claude --settings '${spaced}'`)
   })
 
-  // Claude Code takes one settings argument. Overriding the user's own would
-  // silently drop whatever they put in it, so theirs stands and this pane is
-  // read the old way.
+  // Claude Code takes one settings argument; the user's own stands.
   it('leaves a command that already carries a settings file alone', () => {
     expect(hookedLaunch('claude --settings mine.json', 'claude', file)).toBe('claude --settings mine.json')
     expect(hookedLaunch('claude --settings=mine.json', 'claude', file)).toBe('claude --settings=mine.json')
@@ -192,15 +177,13 @@ describePty('the settings file over a real pty', () => {
       const sessions = new Records()
       const first = manager(checkout, userDataDir, sessions)
 
-      // With a first prompt, which goes on the running line and not the record:
-      // the flag has to be on both, and in front of the prompt.
+      // The flag has to be on the running line and the record, in front of the prompt.
       const terminal = first.create({ worktreeId: WORKTREE, command: launch, prompt: 'first words' })
       const file = hookSettingsPath(userDataDir, terminal.id)
       expect(existsSync(file)).toBe(true)
       const written = JSON.parse(readFileSync(file, 'utf8')) as ReturnType<typeof hookSettings>
       expect(written.hooks.Stop[0]?.hooks[0]?.command).toContain(`--terminal ${terminal.id}`)
 
-      // The fake agent prints its arguments, so the pane shows what it was handed.
       await waitUntil(() => first.read(terminal.id).includes('first words'), 'the agent to print its arguments')
       const printed = first.read(terminal.id)
       expect(printed).toContain(file)
@@ -208,13 +191,13 @@ describePty('the settings file over a real pty', () => {
       expect(sessions.listTerminals()[0]?.command).toContain('--settings')
       expect(sessions.listTerminals()[0]?.command).not.toContain('first words')
 
-      // Ended, and started again: the same pane, the same file.
+      // Started again: the same pane, the same file.
       await waitUntil(() => !first.list().find((row) => row.id === terminal.id)?.running, 'the agent to exit')
       await first.relaunch({ terminalId: terminal.id })
       expect(existsSync(file)).toBe(true)
       await waitUntil(() => !first.list().find((row) => row.id === terminal.id)?.running, 'the relaunch to exit')
 
-      // Brought back on the next launch, under the same id: the same file again.
+      // Brought back on the next launch: the same file again.
       await first.shutdown()
       const second = manager(checkout, userDataDir, sessions)
       expect(second.restoreSessions()).toMatchObject({ restored: 1 })

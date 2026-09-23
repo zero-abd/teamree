@@ -6,12 +6,8 @@ import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 /**
- * What was at the path, told apart rather than flattened.
- *
- * A file that was never written and a file that could not be read are
- * different events: the first is how every first launch begins, and the second
- * is somebody's workspace that this process is one write away from destroying.
- * A caller that cannot distinguish them treats both as "start empty".
+ * What was at the path, told apart: a file never written is a first launch,
+ * a file that could not be read is somebody's workspace one write from gone.
  */
 export type JsonFileRead =
   | { kind: 'missing' }
@@ -47,8 +43,7 @@ export async function writeJsonFileAtomically(filePath: string, value: unknown):
   const serialized = `${JSON.stringify(value, null, 2)}\n`
   await mkdir(dirname(filePath), { recursive: true })
 
-  // The pid and a counter keep concurrent writers from clobbering each other's
-  // temp file, which would otherwise produce a torn rename.
+  // The pid and a counter keep concurrent writers off each other's temp file.
   const tempPath = `${filePath}.${process.pid}.${nextTempSuffix()}.tmp`
   try {
     const handle = await open(tempPath, 'w')

@@ -1,9 +1,5 @@
-// The rendezvous scheme, pinned.
-//
-// Two peers that disagree about any byte of this never meet, and they never
-// find out why — they simply sit on different rendezvous forever. So the parts
-// `relay/README.md` leaves to the client are fixed here with vectors rather
-// than with round-trips, because a round-trip test agrees with itself.
+// The rendezvous scheme, pinned with vectors rather than round-trips: two peers
+// that disagree about any byte of this never meet, and never find out why.
 
 import { describe, expect, it } from 'vitest'
 import {
@@ -29,11 +25,8 @@ describe('the token', () => {
   })
 
   it('derives from a versioned, unambiguous info the README leaves unspecified', () => {
-    // `info = epoch` has several readings, the relay cannot arbitrate between
-    // them, and two peers who disagree never meet and are never told why. The
-    // structure is pinned here — a version tag, a fixed-width project key and
-    // decimal digits, newline-separated, so no two inputs can collide — and so
-    // is the vector, so a change to any of it fails loudly rather than quietly
+    // `info = epoch` has several readings and the relay cannot arbitrate. The
+    // structure and the vector are pinned so a change fails loudly rather than
     // stranding every team on the spelling they had before.
     expect(rendezvousInfo(PROJECT, 470_000)).toBe(`teamree/rendezvous/v2\n${PROJECT}\n470000`)
     expect(rendezvousToken(SECRET, PROJECT, 470_000)).toBe(
@@ -42,11 +35,8 @@ describe('the token', () => {
   })
 
   it('is different for the same pair in a different repository', () => {
-    // The divergence from the README that matters. Its scheme is pairwise, so
-    // two people who share three repositories would hold one session of one
-    // shape with nothing in the transcript saying which project any of it is
-    // for, and every per-project rule would have to be re-derived by hand at
-    // every point of use.
+    // The divergence from the README that matters: its scheme is pairwise, and
+    // one session for three repositories has nothing in the transcript saying which.
     expect(rendezvousToken(SECRET, PROJECT, 470_000)).not.toBe(rendezvousToken(SECRET, OTHER_PROJECT, 470_000))
   })
 
@@ -75,10 +65,8 @@ describe('the token', () => {
 
 describe('the prologue', () => {
   it('binds the project and the pairing into the transcript, and is never empty', () => {
-    // `IK` authenticates two static keys and says nothing about the subject.
-    // The prologue is the only place a fact can go that both sides must already
-    // agree on and an attacker cannot influence — and an empty one, which is
-    // what the peer library defaults to, is a transcript that says nothing.
+    // `IK` says nothing about the subject, and an empty prologue (the peer
+    // library's default) is a transcript that says nothing.
     const prologue = sessionPrologue(PROJECT, rendezvousToken(SECRET, PROJECT, 470_000))
     expect(prologue).toHaveLength(32)
     expect(prologue.some((byte) => byte !== 0)).toBe(true)

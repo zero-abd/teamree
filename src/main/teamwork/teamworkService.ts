@@ -1,29 +1,6 @@
-// Identity and membership for a project.
-//
-// The entire trust model is here and it is deliberately small: a keypair per
-// installation, the public half committed to the repository, and no second list
-// anywhere. Push access is membership. There are no invitations, no accounts,
-// and nothing to administer, because every one of those would be a thing that
-// can disagree with the repository.
-//
-// Joining writes a file and stops. It does not stage it, commit it or push it —
-// not because that would be hard, but because doing it for someone would hide
-// the only step that means anything. A key nobody could push is not membership,
-// and a key this app pushed on your behalf is a claim you never made.
-//
-// The relay is here for the same reason and on the same terms. It is the other
-// fact a team has to agree on, it lives in the same directory, and setting it
-// writes `.teamree/relay` and stops — so the two of them are one commit rather
-// than one button and one heredoc.
-//
-// `publish` is that commit, and it does not weaken any of the above: it is a
-// separate call, made only when somebody presses a button that has already told
-// them the files, the message, the remote and the branch. The distinction that
-// matters was never "the app must not push" — it was "the app must not push
-// without you having said so", and a panel that hands out shell commands is not
-// a better way of asking. `setOrigin` is there for the same reason: the
-// identity of a project is a hash of its normalised origin, and a checkout
-// without one cannot take part however much of the rest is done.
+// Identity and membership for a project: a keypair per installation, the public
+// half committed to the repository, push access as membership. Joining and
+// setting the relay write a file and stop; `publish` is the commit, on a button.
 
 import { mkdir, open } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -65,46 +42,24 @@ export type ProjectSource = { getProject: (projectId: string) => Project | undef
 type PublishRun = { controller: AbortController; progress: TeamworkPublishProgress }
 
 /**
- * How much of git's chatter is worth keeping.
- *
- * Enough that the panel can show the last several lines and a reader can see
- * the shape of what happened; far short of the hundreds of redraws a meter
- * emits, which are the same sentence at different percentages.
+ * How much of git's chatter is worth keeping: enough for the panel's last few
+ * lines, far short of the hundreds of redraws a meter emits.
  */
 const MAX_PUBLISH_OUTPUT_LINES = 40
 
 export type TeamworkServiceOptions = {
   store: ProjectSource
-  /**
-   * The app's own data directory — where the private key goes. It is passed in
-   * rather than worked out here so nothing in this module can be tempted to put
-   * a secret somewhere relative to a repository.
-   */
+  /** The app's own data directory, where the private key goes: passed in so nothing here puts a secret beside a repository. */
   dataDir: string
   runner?: GitRunner
   now?: () => number
-  /**
-   * The environment the relay override is read from. Passed in rather than
-   * reached for so a test can say what this process can see.
-   */
+  /** The environment the relay override is read from, passed in so a test can say what this process sees. */
   env?: NodeJS.ProcessEnv
-  /**
-   * Whether this project's `.teamree` is being watched, so a roster read can
-   * say whether it will stay true by itself. Absent means nothing is watching,
-   * which is what a service built without a watcher should claim.
-   */
+  /** Whether this project's `.teamree` is being watched. Absent means nothing is watching. */
   watching?: (projectId: string) => boolean
-  /**
-   * Called once what is in `.teamree` has changed, so the workspace stream can
-   * say so. Attached to the service rather than to a transport, which is what
-   * lets a window notice a join made from anywhere else.
-   */
+  /** Called once what is in `.teamree` has changed, so the workspace stream can say so. */
   onRosterChange?: () => void
-  /**
-   * Where the relay project this build carries is, as the panel's deploy button
-   * needs it. Passed in so a test can say what is on disk; the default reads
-   * the two real places — a packaged app's resources, and the checkout.
-   */
+  /** Where the relay project this build carries is; the default reads a packaged app's resources and the checkout. */
   relayDeploy?: () => RelaySetting['deploy']
 }
 
@@ -118,27 +73,15 @@ export class TeamworkService {
   readonly #onRosterChange: (() => void) | undefined
   readonly #relayDeploy: () => RelaySetting['deploy']
   /**
-   * What the roster looked like the last time this service read one, per
-   * project.
-   *
-   * Kept so that *any* read can be the thing that notices a change — opening
-   * the Start teamwork panel after a pull, as much as a watch firing. It is only ever
-   * compared, never served: a reader gets what is on disk now.
+   * The roster as this service last read it, per project, so *any* read can be
+   * the thing that notices a change. Only ever compared, never served.
    */
   readonly #lastRoster = new Map<string, string>()
 
   /**
-   * The publish that is running for each project, and what it has said.
-   *
-   * Kept here rather than handed back through the call that started it, because
-   * the whole problem being solved is that that call does not return for as
-   * long as the push takes. A record somebody else can read is what lets a
-   * window ask "what is it doing, and for how long" while the answer is still
-   * being worked out — and it is what gives `cancelPublish` something to abort.
-   *
-   * A finished run stays in the map until the next one for that project
-   * replaces it, so the panel can report how long the last one took rather than
-   * having the evidence vanish at the moment it resolves.
+   * The publish running for each project and what it has said, kept so a window
+   * can ask while the call is still blocked and `cancelPublish` has something to
+   * abort. A finished run stays until the next one for that project replaces it.
    */
   readonly #publishRuns = new Map<string, PublishRun>()
 
@@ -158,10 +101,8 @@ export class TeamworkService {
   async listMembers(params: ParamsOf<'members.list'>): Promise<MemberList> {
     const project = this.#project(params.projectId)
     const roster = await readRoster(project.path)
-    // Belt and braces beside the watch on `.teamree`: a dialog opening is
-    // itself a read, and a read that finds the directory has moved is worth
-    // announcing however it came to happen. Only a *change* is announced, so
-    // the re-read this causes elsewhere finds the same roster and stops.
+    // Belt and braces beside the watch on `.teamree`. Only a *change* is
+    // announced, so the re-read this causes elsewhere finds the same roster and stops.
     this.#noteRoster(project.id, roster)
     return this.#describe(project, roster)
   }
@@ -172,9 +113,7 @@ export class TeamworkService {
     const roster = await readRoster(project.path)
 
     // Already in, possibly under a handle chosen on another machine. Joining
-    // twice is something a user will do — the button is there until the file is
-    // committed — and writing a second file for one key would be the duplicate
-    // the reader refuses.
+    // twice is ordinary, and a second file for one key is the duplicate the reader refuses.
     if (roster.entries.some((entry) => entry.publicKey === identity.publicKey)) {
       return this.#describe(project, roster, identity)
     }
@@ -199,34 +138,22 @@ export class TeamworkService {
       addedAt: isoDate(this.#now())
     })
 
-    // Re-read rather than splicing the new entry in: what the caller gets back
-    // is then what the next reader of the directory will see, including a
-    // problem if the file did not land the way it was written.
+    // Re-read rather than spliced in, so the caller gets what the next reader sees.
     const written = await readRoster(project.path)
-    // Recorded and then announced, rather than announced *because* it changed:
-    // a join is this app writing the file, and it says so whether or not
-    // anything had read the directory before.
+    // Recorded and then announced unconditionally: a join is this app writing the file.
     this.#lastRoster.set(project.id, fingerprint(written))
     this.#onRosterChange?.()
     return this.#describe(project, written, identity)
   }
 
-  /**
-   * Where this project's relay is recorded, and what each of the two places
-   * said — including the environment when it said nothing at all.
-   */
+  /** Where this project's relay is recorded, and what each of the two places said. */
   async readRelay(params: ParamsOf<'teamwork.relay'>): Promise<RelaySetting> {
     return this.#describeRelay(this.#project(params.projectId))
   }
 
   /**
-   * Writes the relay into the repository, beside the member keys.
-   *
-   * The one team-wide fact with no button until now: the URL is a file whose
-   * format somebody had to infer from a README, so the app's own template was
-   * exported and called by nothing. Writing it here is the same bargain as
-   * joining — the app writes the file and stops, because pushing it is what
-   * makes it the team's.
+   * Writes the relay into the repository, beside the member keys. The same
+   * bargain as joining: the app writes the file and stops.
    */
   async setRelay(params: ParamsOf<'teamwork.setRelay'>): Promise<RelaySetting> {
     const project = this.#project(params.projectId)
@@ -241,24 +168,10 @@ export class TeamworkService {
   }
 
   /**
-   * Points this checkout's `origin` at the remote everybody shares — the URL
-   * you both cloned, or the path the repository is mounted at on both Macs.
-   *
-   * The panel used to print `git remote add origin <url>` and leave. That is
-   * one command in a directory the app knows and the user has to find, and it
-   * is the first thing in the flow that cannot be done from the window — so it
-   * is here, refusing exactly what the project key would refuse, in the same
-   * sentence.
-   *
-   * A path is stored in its normalised spelling rather than as it was typed, so
-   * that `git remote -v` and the string being hashed are the same characters —
-   * which matters because those characters are what a teammate has to be given.
-   *
-   * A remote that is already there is replaced rather than refused. The whole
-   * reason somebody reaches this is a checkout whose origin teamree cannot
-   * compare, and "there is already an origin" would be the app naming the
-   * problem and declining to fix it. What it did is reported, so nothing is
-   * quiet about having overwritten a setting.
+   * Points this checkout's `origin` at the remote everybody shares. A path is
+   * stored normalised, so `git remote -v` and the hashed string are the same
+   * characters. An existing remote is replaced rather than refused, and the
+   * replacement is reported.
    */
   async setOrigin(params: ParamsOf<'teamwork.setOrigin'>): Promise<TeamworkOrigin> {
     const project = this.#project(params.projectId)
@@ -272,22 +185,15 @@ export class TeamworkService {
     })
     const replaced = existing.exitCode === 0
     const result = await this.#runner.tryRun({
-      // `--` because the URL is data and git would otherwise be entitled to
-      // read it as a flag. Nothing here is a shell — these are argv entries, so
-      // there was never a quoting hole — but an origin beginning with `-` is an
-      // option to git, and what stopped one reaching this line was `checkOrigin`
-      // in `src/shared/origin.ts` refusing that shape three calls away. Defence
-      // that lives in a distant function and is never mentioned here is defence
-      // that survives exactly until somebody relaxes that function for a good
-      // reason. Both `git remote add` and `git remote set-url` accept the
-      // separator (checked against git 2.50.1), so it costs nothing to say at
-      // the call site what the value is.
+      // `--` because an origin beginning with `-` is an option to git.
+      // `checkOrigin` refuses that shape three calls away, which holds only
+      // until somebody relaxes it. Both `remote add` and `remote set-url`
+      // accept the separator (git 2.50.1).
       args: ['remote', replaced ? 'set-url' : 'add', '--', 'origin', checked.remote],
       cwd: project.path
     })
     if (result.exitCode !== 0) {
-      // git's own words, because every one of them here names something only
-      // git knows: a repository that is not there, a config it cannot write.
+      // git's own words: every one of them names something only git knows.
       throw new TeamworkError(ErrorCode.GitFailed, result.stderr.trim() || `git exited ${result.exitCode}`)
     }
 
@@ -306,9 +212,8 @@ export class TeamworkService {
   /** Stages the two files, commits them, and pushes. Never more than those files. */
   async publish(params: ParamsOf<'teamwork.publish'>): Promise<TeamworkPublish> {
     const project = this.#project(params.projectId)
-    // Two at once would be two gits fighting over one index, and the second
-    // one's progress would overwrite the first's in the record above — so the
-    // window would show one push and the repository would be having two.
+    // Two at once would be two gits fighting over one index, and the second's
+    // progress overwriting the first's in the record above.
     const running = this.#publishRuns.get(project.id)
     if (running !== undefined && running.progress.finishedAt === null) {
       throw new TeamworkError(ErrorCode.Conflict, 'a push is already running for this project')
@@ -336,14 +241,8 @@ export class TeamworkService {
   }
 
   /**
-   * What the running publish is doing, or the last one did. Null when this
-   * project has never had one.
-   *
-   * A read rather than a stream, for the reason the deploy pane is read the
-   * same way: it matters only while somebody is looking at the panel that shows
-   * it, and a subscription that has to be set up, torn down and reasoned about
-   * for a thing that lives for ten seconds is more machinery than the question
-   * deserves.
+   * What the running publish is doing, or the last one did; null when this
+   * project has never had one. A read rather than a stream: it lives ten seconds.
    */
   async publishProgress(params: ParamsOf<'teamwork.publishProgress'>): Promise<TeamworkPublishProgress | null> {
     const project = this.#project(params.projectId)
@@ -353,13 +252,9 @@ export class TeamworkService {
   }
 
   /**
-   * Stops the publish that is running, if one is.
-   *
-   * The abort kills whichever git is in front of it, and `publish` turns that
-   * into a result naming the commit that did land. Nothing is undone: a commit
-   * that exists goes on existing, because throwing away somebody's commit to
-   * tidy up after a button they pressed by mistake is a far worse surprise than
-   * a commit they can push whenever they like.
+   * Stops the publish that is running, if one is. The abort kills whichever git
+   * is in front of it; a commit that landed stays, because throwing away
+   * somebody's commit is the worse surprise.
    */
   async cancelPublish(params: ParamsOf<'teamwork.cancelPublish'>): Promise<{ cancelled: boolean }> {
     const project = this.#project(params.projectId)
@@ -393,14 +288,7 @@ export class TeamworkService {
     run.progress.phase = phase
   }
 
-  /**
-   * One line git printed.
-   *
-   * Only the tail is kept. A push of a large repository prints its meter
-   * hundreds of times, and what a panel shows is the last few lines of it — so
-   * holding every one of them would be a slowly growing string in the main
-   * process in exchange for scrollback nobody reads.
-   */
+  /** One line git printed. Only the tail is kept: a push prints its meter hundreds of times. */
   #noteOutput(run: PublishRun, line: string): void {
     run.progress.lastOutputAt = this.#now()
     run.progress.output.push(line)
@@ -410,11 +298,8 @@ export class TeamworkService {
   }
 
   /**
-   * The two files teamwork writes, and the message that carries them.
-   *
-   * Named from what is on disk rather than from what was asked for: a key
-   * written on another machine and pulled in is already committed, and a relay
-   * that is only in the environment is not a file at all.
+   * The two files teamwork writes, and the message that carries them. Named from
+   * what is on disk: a pulled-in key is already committed, an environment relay is not a file.
    */
   async #publishTarget(project: Project): Promise<{
     projectId: string
@@ -482,9 +367,8 @@ export class TeamworkService {
   async #describe(project: Project, roster: Roster, known?: { publicKey: string }): Promise<MemberList> {
     const identity = known ?? (await loadIdentity(this.#dataDir))
     const mine = roster.entries.find((entry) => entry.publicKey === identity.publicKey)
-    // The handle the roster already files this key under wins over anything
-    // that could be derived: a member who renamed their file did so on purpose,
-    // and the app calling them something else would be arguing with the commit.
+    // The handle the roster already files this key under wins: a member who
+    // renamed their file did so on purpose.
     const handle = mine?.handle ?? resolveHandle({ gitEmail: await this.#gitEmail(project.path) }) ?? null
 
     const self: MemberIdentity = { handle, publicKey: identity.publicKey }
@@ -519,9 +403,8 @@ export class TeamworkService {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-      // The roster read said this key is not in the list, and yet the file is
-      // there — so it is a file teamree cannot read, and rewriting it would
-      // throw away whatever it actually is.
+      // The roster read said this key is not listed, yet the file is there: one
+      // teamree cannot read, and rewriting it would throw away whatever it is.
       throw rosterConflict(
         `${memberFileName(content.handle)} already exists but teamree could not read it as a member; look at it before replacing it`
       )
@@ -545,11 +428,8 @@ export class TeamworkService {
 }
 
 /**
- * Enough of a roster to tell two reads of it apart.
- *
- * The problems are in it as well as the members: a file that stopped being
- * readable is a member who has left the list, and that has to reach the rest of
- * the app the same way an added one does.
+ * Enough of a roster to tell two reads of it apart. Problems included: a file
+ * that stopped being readable is a member who has left the list.
  */
 function fingerprint(roster: Roster): string {
   return JSON.stringify([

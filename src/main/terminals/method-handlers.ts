@@ -1,30 +1,6 @@
-// THE SEAM. Everything the runtime needs from this service is in this file.
-//
-// createTerminalService() returns one `handlers` object keyed by the exact method
-// names in the contract, plus the matching Zod schema for each, plus a
-// registerTerminalHandlers() that feeds both into the runtime's MethodRegistry.
-// The whole wiring, in handlers/registerHandlers.ts:
-//
-//   const terminals = createTerminalService({
-//     subscriptions: registry.context.subscriptions,
-//     resolveWorktreeCwd: (id) => registry.context.store.getWorktree(id)?.path,
-//     layouts: registry.context.store
-//   })
-//   registerTerminalHandlers(registry, terminals)
-//
-// Keep `terminals` and call `await terminals.shutdown()` before the app quits:
-// that is what kills the PTYs, and nothing else does.
-//
-// Notes on the two halves neither side should guess at:
-//   - Subscriptions belong to the connection, so terminal.subscribe delegates to
-//     the hub and the global `unsubscribe` method keeps working untouched. With
-//     no hub configured the service keeps its own ids instead and pushes events
-//     through the `publish` option, which is how the tests run it headless.
-//   - Failures throw TerminalServiceError, a RuntimeError carrying an ErrorCode,
-//     so the dispatcher puts that code on the wire itself and a caller can
-//     branch on `not_found` instead of reading a message. Nothing here has to
-//     map it, and nothing here may throw a plain Error: that falls through as
-//     `internal` and tells a caller an expected condition was a runtime bug.
+// THE SEAM: everything the runtime needs from the terminal service. Call
+// `await terminals.shutdown()` before quit; nothing else kills the PTYs. Throw
+// only TerminalServiceError: a plain Error falls through as `internal`.
 
 import type { z } from 'zod'
 import { Params } from '../../shared/methods'
@@ -76,10 +52,7 @@ export const terminalMethodSchemas = {
   'agent.list': Params.agentList
 } as const
 
-/**
- * The runtime's subscription hub, reduced to the one call this service makes.
- * The source it is given returns the teardown for that subscription.
- */
+/** The runtime's subscription hub, reduced to the one call this service makes. */
 export type SubscriptionRegistrar = {
   subscribe(connectionId: string, source: (channel: StreamChannel) => () => void): string
 }
@@ -120,16 +93,11 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
 
   const handlers: TerminalHandlers = {
     'terminal.list': async (params) => manager.list(params.worktreeId),
-    // Probed rather than remembered: a list cached at startup goes stale the
-    // first time somebody installs an agent without restarting the app.
+    // Probed, not cached: an agent installed without a restart still appears.
     'agent.list': async () => findInstalledAgents(),
     'terminal.create': async (params) => manager.create(params),
     'terminal.write': async (params) => {
-      // Absent means a person: every caller but the pane view is one, and the
-      // pane view is the only one that can see the difference. What the write
-      // retired — a restored badge, a bell — is reported by the manager rather
-      // than answered here, so it reaches the window that is drawing the badge
-      // and not only the one that pressed the key.
+      // Absent means a person: only the pane view can see the difference.
       manager.write(params.terminalId, params.data, params.byHand !== false)
       return { written: true }
     },
@@ -173,8 +141,7 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
 }
 
 export function registerTerminalHandlers(registry: MethodRegistry, service: TerminalService): void {
-  // Listed one by one rather than looped so each registration keeps the method's
-  // own param and result types instead of collapsing to the union.
+  // One by one, so each registration keeps its own param and result types.
   registry.register('terminal.list', service.schemas['terminal.list'], service.handlers['terminal.list'])
   registry.register('terminal.create', service.schemas['terminal.create'], service.handlers['terminal.create'])
   registry.register('terminal.write', service.schemas['terminal.write'], service.handlers['terminal.write'])

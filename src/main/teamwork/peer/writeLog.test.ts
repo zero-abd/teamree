@@ -1,9 +1,5 @@
-// The owner's record of what teammates typed, and what it is allowed to hold.
-//
-// The first test in here is the one that matters: the log must not contain the
-// bytes. Everything else is bookkeeping — ordering, rotation, a half-written
-// last line — and bookkeeping can be fixed later. A log that quietly
-// accumulated its teammates' passphrases could not be.
+// The owner's record of what teammates typed. The first test is the one that matters: the log must not
+// contain the bytes. Everything else is bookkeeping, and bookkeeping can be fixed later.
 
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -34,9 +30,8 @@ describe('what the record holds', () => {
   it('holds who, when and which pane, and never what was typed', async () => {
     const dir = await dataDir()
     const log = createRemoteWriteLog({ dataDir: dir })
-    // What a teammate sends is input, not output, and input includes what a
-    // program deliberately does not echo. The shape of it is recorded; the
-    // thing itself is not, and is not passed to this module at all.
+    // Input includes what a program deliberately does not echo. The shape of it is recorded; the thing
+    // itself is not passed to this module at all.
     log.record(entry({ bytes: 'hunter2\r'.length, returns: 1 }))
     await log.flush()
 
@@ -74,9 +69,7 @@ describe('keeping the record straight', () => {
   it('keeps writes in the order they happened, however fast they arrive', async () => {
     const dir = await dataDir()
     const log = createRemoteWriteLog({ dataDir: dir })
-    // Recorded without awaiting anything, which is how the transport files
-    // them: a record of who typed what in which order is the whole point, so
-    // two appends must never be in flight against each other.
+    // Recorded without awaiting, as the transport files them: two appends must never be in flight together.
     for (let index = 0; index < 50; index += 1) log.record(entry({ at: index }))
     const read = await log.read()
     expect(read.writes.map((write) => write.at)).toEqual([...Array(50).keys()])
@@ -128,15 +121,13 @@ describe('keeping the record straight', () => {
 
     const read = await log.read()
     expect(read.writes).toHaveLength(1)
-    // An invented entry in an audit trail is worse than a missing one, because
-    // it would be believed.
+    // An invented entry in an audit trail is worse than a missing one, because it would be believed.
     expect(read.problem).toBe('1 entry could not be read')
   })
 
   it('says so rather than going quiet when it cannot reach the disk', async () => {
     const failures: unknown[] = []
-    // A path whose parent is a file, so every write to it fails the way a full
-    // or read-only disk does.
+    // A path whose parent is a file, so every write fails the way a full or read-only disk does.
     const dir = await dataDir()
     const blocked = join(dir, 'not-a-directory')
     await writeFile(blocked, 'in the way', 'utf8')

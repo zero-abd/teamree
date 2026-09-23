@@ -1,13 +1,5 @@
-// Which coding agents this machine can actually run.
-//
-// The app is built around agents but has never had a first-class way to start
-// one: you open a terminal and type the name yourself, and if you typo it or
-// have not installed it, you find out from the shell. Offering the ones that
-// are really on PATH turns that into a button.
-//
-// Deliberately a probe rather than a setting. A list the user has to fill in is
-// a list that goes stale the first time they install something, and the answer
-// is already sitting in PATH.
+// Which coding agents this machine can actually run. A probe, not a setting:
+// a list the user fills in goes stale the first time they install something.
 
 import { accessSync, constants, statSync } from 'node:fs'
 import path from 'node:path'
@@ -33,17 +25,8 @@ export type DiscoveryOptions = {
 }
 
 /**
- * Where to look for an agent: the PATH the user's login shell ends up with, and
- * the process PATH only when that could not be had.
- *
- * The process PATH was the whole answer here once, and on macOS it is the wrong
- * one every time the app is opened the way an app is opened — from Finder, the
- * Dock or Spotlight, where launchd hands it `/usr/bin:/bin:/usr/sbin:/sbin` and
- * nothing the user's profile adds. An agent installed under /opt/homebrew/bin
- * or by a version manager is then not on the PATH this process can see, while
- * being on the one every terminal on the machine can, teamree's own panes
- * included. Asking the login shell is what makes discovery agree with what the
- * user gets when they type the name themselves.
+ * The login shell's PATH, falling back to the process PATH: an app opened from
+ * the Dock gets launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, without /opt/homebrew/bin.
  */
 function agentSearchPath(platform: NodeJS.Platform = process.platform): string {
   return loginShellPath({ platform }) ?? process.env.PATH ?? ''
@@ -55,16 +38,12 @@ export function findInstalledAgents(options: DiscoveryOptions = {}): InstalledAg
   const pathValue = options.pathValue ?? agentSearchPath(platform)
   const isExecutable = options.isExecutable ?? canExecute
   const separator = platform === 'win32' ? ';' : ':'
-  // Joined with the flavour of the platform being asked about, not the one this
-  // process happens to run on. Everything else here is decided by `platform`,
-  // and a path built the host's way would quietly disagree with all of it — on
-  // a Windows host, asking about linux produced backslashes.
+  // Joined for the platform asked about: on a Windows host, asking about linux produced backslashes.
   const join = platform === 'win32' ? path.win32.join : path.posix.join
   const directories = pathValue
     .split(separator)
     .map((entry) => entry.trim())
-    // An empty PATH entry means the current directory on some shells, which is
-    // not somewhere to go looking for a program to run.
+    // An empty PATH entry means the current directory on some shells.
     .filter((entry) => entry.length > 0)
 
   const extensions =
@@ -93,8 +72,7 @@ function locate(
   for (const directory of directories) {
     for (const extension of extensions) {
       const candidate = join(directory, `${name}${extension}`)
-      // The first hit wins, the way a shell resolves it: a later directory
-      // shadowed by an earlier one is not the one that would run.
+      // The first hit wins, the way a shell resolves it.
       if (isExecutable(candidate)) return candidate
     }
   }

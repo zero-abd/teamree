@@ -1,14 +1,6 @@
-// Killing a pane means killing everything it started.
-//
-// An agent CLI in a pane spawns compilers, test runners and language servers.
-// Signalling only the direct child leaves those running with the PTY master
-// closed, so they survive the app and keep holding the worktree. On unix the PTY
-// child is a session leader, which makes its pid a process-group id: signalling
-// the negated pid reaches the whole group. Windows has no equivalent, so taskkill
-// walks the tree instead.
-//
-// Every OS call goes through `ProcessTreeHost` so the escalation can be driven
-// for all three platforms from one machine.
+// Killing a pane means killing everything it started. On unix the PTY child is
+// a session leader, so signalling the negated pid reaches the whole group;
+// Windows has no equivalent, so taskkill walks the tree.
 
 import { execFile } from 'node:child_process'
 
@@ -28,8 +20,7 @@ export type ProcessTreeHost = {
 
 /**
  * taskkill is addressed absolutely: an Electron app can inherit a PATH without
- * System32 on it, and a silently missing taskkill would orphan the whole tree.
- * `windowsHide` keeps a console window from flashing over the app on every close.
+ * System32. `windowsHide` keeps a console window from flashing on every close.
  */
 export function resolveTaskkill(env: NodeJS.ProcessEnv = process.env): string {
   const systemRoot = env['SystemRoot'] ?? env['SYSTEMROOT']

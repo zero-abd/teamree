@@ -1,9 +1,5 @@
-// Errors this service raises.
-//
-// They extend the runtime's RuntimeError for the same reason the git service's
-// do: the dispatcher recognises that type and only that type, and everything
-// else that escapes a handler reaches the caller as `internal` with its code
-// thrown away.
+// Errors this service raises. They extend RuntimeError because the dispatcher
+// recognises that type and only that type; anything else reaches the caller as `internal`.
 
 import { ErrorCode } from '../../shared/protocol'
 import { RuntimeError } from '../runtime/runtimeError'
@@ -20,20 +16,14 @@ export function badHandle(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.InvalidParams, message)
 }
 
-/**
- * What was typed is not a relay URL. The message carries the remedy rather than
- * only the diagnosis: `parseRelayUrl` works out what the corrected URL would be
- * when the input is recognisably the address a deploy printed.
- */
+/** What was typed is not a relay URL. The message carries the remedy `parseRelayUrl` worked out. */
 export function badRelayUrl(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.InvalidParams, message)
 }
 
 /**
- * What was typed is not an origin. Separate from the relay's refusal because
- * the mistake is a different one: this is usually a path, a path can be an
- * identity only when it is one two machines could both name, and the sentence
- * has to say which of those it fell short of.
+ * What was typed is not an origin: usually a path, and the sentence says which
+ * requirement it fell short of.
  */
 export function badOriginUrl(message: string): TeamworkError {
   return new TeamworkError(ErrorCode.InvalidParams, message)

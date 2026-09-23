@@ -1,16 +1,6 @@
-// Shared by the tests that spawn real PTYs.
-//
-// node-pty is a native module: on a machine where the prebuilt binary or the
-// spawn helper is unusable, every PTY test would otherwise hang on a promise
-// that never settles. The probe answers "can this environment fork a pty at
-// all" once, cheaply, so those suites can skip instead.
-//
-// Skipping is not on its own an acceptable answer, though — seven suites, sixty
-// tests, vanishing out of a green run. `scripts/require-test-environment.mjs`
-// asks this same question before the suite starts and refuses to run without a
-// pty unless TEAMREE_SKIP_PTY_TESTS=1 says so deliberately, and
-// `scripts/vitest-skip-allowlist.mjs` fails the run if these suites skip
-// without it. What is left here is the skip itself, and saying why.
+// Shared by the tests that spawn real PTYs. A broken node-pty would hang every
+// PTY test, so the probe lets them skip; `scripts/require-test-environment.mjs`
+// and `scripts/vitest-skip-allowlist.mjs` stop that skip passing silently.
 
 import { chmod, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -44,9 +34,7 @@ export function canSpawnPty(): boolean {
     }
     return true
   } catch (error) {
-    // Said out loud. A bare `false` was the whole of this branch once, and it
-    // was the only trace a broken node-pty left anywhere in a run: the reason
-    // the suites did not run was known here and thrown away here.
+    // Said out loud: this is the only trace a broken node-pty leaves in a run.
     console.warn(
       `canSpawnPty: no pty could be forked, so the PTY suites will skip — ${
         error instanceof Error ? error.message : String(error)
@@ -56,31 +44,20 @@ export function canSpawnPty(): boolean {
   }
 }
 
-/**
- * The shell a test pane should be opened with: the one this platform has.
- *
- * A test names a shell only because PtySession asks for one, and a name picked
- * by hand is a second rule about default shells that can disagree with the
- * app's. This is the app's rule, called from the test.
- */
+/** The shell a test pane should be opened with: the app's own rule, not a second one. */
 export function testShell(): string {
   return resolveLoginShell()
 }
 
 /** `text` on a line, then an exit with `code`, spelled for this platform's shell. */
 export function printThenExit(text: string, code: number): string {
-  // `;` separates commands everywhere a pane can land except cmd.exe, which
-  // reads it as part of the argument and would print it instead.
+  // cmd.exe reads `;` as part of the argument and would print it.
   return shellFamily(testShell()) === 'cmd' ? `echo ${text}& exit ${code}` : `echo ${text}; exit ${code}`
 }
 
 /**
- * A command that starts a process of its own, prints its pid, and then keeps
- * both alive — the shape a process-tree kill has to reach through.
- *
- * A script file rather than an inline program: the quoting that would survive
- * both cmd.exe and a POSIX shell is its own puzzle, and what is under test is
- * the killing, not the quoting. Returns the command line to run it with.
+ * A command that starts a process of its own, prints its pid, and keeps both
+ * alive. A script file, so no quoting has to survive both cmd.exe and a POSIX shell.
  */
 export async function writeProcessTreeProbe(directory: string): Promise<string> {
   const script = path.join(directory, 'grandchild.cjs')
@@ -92,25 +69,13 @@ export async function writeProcessTreeProbe(directory: string): Promise<string> 
       'setInterval(() => {}, 1000)\n',
     'utf8'
   )
-  // Quoted both sides: a Windows runner puts node under a path with separators
-  // a POSIX shell would read as escapes, and either shell may hand a pane a
-  // temp directory with a space in it.
+  // Quoted: Windows paths have separators a POSIX shell reads as escapes, and a temp dir may hold a space.
   return `"${process.execPath}" "${script}"`
 }
 
 /**
- * A program the agent rules will recognise as `claude`, which prints the
- * arguments it was given and exits.
- *
- * Named `claude` on disk because that is the whole of what `detectAgent` reads:
- * the basename in command position. Printing the arguments is what makes the
- * session id this app pinned visible to a test — the command line is never
- * echoed into the pane, so the only way to see which id a launch carried is to
- * have the program say so.
- *
- * Returns the command line to run it with, quoted: a temp directory can have a
- * space in it, and on Windows a path has separators a POSIX shell would read
- * as escapes.
+ * A program `detectAgent` will recognise as `claude` (by basename), which prints
+ * its arguments so a test can see which session id the launch carried. Quoted.
  */
 export async function writeFakeAgent(directory: string, exitCode = 0): Promise<string> {
   if (process.platform === 'win32') {
@@ -124,8 +89,7 @@ export async function writeFakeAgent(directory: string, exitCode = 0): Promise<s
   return `"${script}"`
 }
 
-/** Polls `condition` until it holds, rejecting on timeout so a test fails fast
- *  with a readable message rather than hanging until the runner gives up. */
+/** Polls `condition` until it holds, rejecting on timeout with a readable message. */
 export async function waitUntil(
   condition: () => boolean | Promise<boolean>,
   description: string,

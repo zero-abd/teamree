@@ -1,12 +1,6 @@
-// Fixing `origin` has to be noticed by the next thing that asks.
-//
-// The project key is a hash of the origin remote, read once per reconcile and
-// cached with the rest of a project's facts. Nothing else in this app watches
+// Fixing `origin` has to be noticed by the next thing that asks. Nothing watches
 // git's config, so before `refreshIfOriginMoved` a checkout that had its remote
-// added went on being told to add one — through a reopened panel, through a
-// restart of the window, until something unrelated in `.teamree` happened to
-// reconcile. Asked here through the dispatcher, because that is the path the
-// teamwork panel and the CLI both take.
+// added went on being told to add one. Asked through the dispatcher.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -42,12 +36,8 @@ async function runtimeFor(repo: TempRepo): Promise<PeerRuntime> {
 let asked = 0
 
 /**
- * Asked the way the panel asks, and insisting on a read.
- *
- * The method answers a union — a project teamwork has not read yet says so
- * rather than throwing — and every test here starts the service first, so the
- * unread answer would mean the reconcile behind `start()` did not happen and
- * nothing below would be about the origin at all.
+ * Asked the way the panel asks, and insisting on a read: an unread answer would
+ * mean the reconcile behind `start()` did not happen.
  */
 async function status(runtime: PeerRuntime): Promise<TeamworkRead> {
   asked += 1
@@ -64,8 +54,7 @@ async function status(runtime: PeerRuntime): Promise<TeamworkRead> {
 it('reports an origin set after the last reconcile, without an unrelated event', async () => {
   const repo = await createTempRepo()
   cleanups.push(() => repo.cleanup())
-  // A remote git cannot be asked to compare, which is the state the panel
-  // blocks on and the user then goes and fixes.
+  // A remote git cannot be asked to compare: the state the panel blocks on.
   await repo.git(['remote', 'add', 'origin', 'not a url'])
 
   const runtime = await runtimeFor(repo)
@@ -77,12 +66,10 @@ it('reports an origin set after the last reconcile, without an unrelated event',
 
   await repo.git(['remote', 'set-url', 'origin', 'https://example.invalid/team/app.git'])
 
-  // No restart, no roster change, no project added: the next read is the only
-  // thing that happens.
+  // No restart, no roster change, no project added: the next read is all that happens.
   const after = await status(runtime)
-  // The URL comes back with the verdict, because the thing that names the
-  // repository to a teammate — the invitation on the setup page — has to be
-  // able to say what to clone rather than describe it.
+  // The URL comes back with the verdict, so the invitation on the setup page
+  // can say what to clone.
   expect(after.origin).toEqual({ ok: true, url: 'https://example.invalid/team/app.git' })
 })
 

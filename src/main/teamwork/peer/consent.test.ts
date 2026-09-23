@@ -1,16 +1,6 @@
-// The owner's consent, asserted against the thing that actually decides.
-//
-// `docs/teamwork.md` used to say that a teammate's keystroke lands and that the
-// owner's only recourse is a mute afterwards. It does not say that any more:
-// nothing a teammate types runs on somebody else's machine until that person
-// has been shown it and has said yes. This file is the record of what that
-// promise means in practice, and every test in it is one clause of it.
-//
-// Nothing here goes near a relay. A verdict is a synchronous answer about this
-// machine's own rosters, panes and decisions, and driving it directly is what
-// lets a burst, a denial and an expiry be three ordinary assertions rather than
-// three races. `relayWatch.test.ts` and `tests/teamwork/scenario.test.ts` do
-// the same thing across a real relay with a real pty behind it.
+// The owner's consent, asserted against the thing that actually decides:
+// nothing a teammate types runs until the owner has been shown it and said yes.
+// Nothing here goes near a relay; `relayWatch.test.ts` does the same across one.
 
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -55,12 +45,7 @@ type Owner = {
   consent: ReturnType<typeof standingConsent>
 }
 
-/**
- * The owner, with two panes of their own and Alice on the roster.
- *
- * No standing permission unless a test asks for one, because "nobody may type
- * here until I say" is the state every one of these starts from.
- */
+/** The owner, with two panes of their own and Alice on the roster. No standing permission unless a test asks. */
 async function owner(granted: readonly { terminalId: string; publicKey?: string }[] = []): Promise<Owner> {
   const aliceData = await mkdtemp(join(tmpdir(), 'teamree-alice-'))
   const aliceKey = (await loadIdentity(aliceData)).publicKey
@@ -109,14 +94,11 @@ describe('a teammate’s keystroke waits for the owner', () => {
 
     const verdict = runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: 'rm -rf .\r', bytes: 9 })
 
-    // Not a refusal and not a permission: a promise, which is the only shape
-    // that can leave the teammate's own request open while a person decides.
+    // Not a refusal and not a permission: a promise, which leaves the teammate's request open.
     expect('held' in verdict).toBe(true)
-    // Nothing has reached the pty, because nothing has reached the dispatcher:
-    // the verdict is what dispatches, and there is not one yet.
+    // Nothing has reached the pty, because nothing has reached the dispatcher.
     expect(await logOf(runtime)).toEqual([])
-    // And no attribution either. "Who is typing here" is about keystrokes that
-    // happened, and this one has not.
+    // And no attribution: this keystroke has not happened.
     expect(typistsOn(runtime, 't_a1')).toEqual([])
   })
 
@@ -130,9 +112,8 @@ describe('a teammate’s keystroke waits for the owner', () => {
     const [question] = questions(runtime)
     expect(question).toMatchObject({ handle: 'alice', terminalId: 't_a1', projectId: 'p_a', writes: 1 })
     expect(question?.publicKey).not.toBe('')
-    // Every byte visible, none of it able to do anything: the escape is in
-    // caret notation, the return is a mark, and the override — which is how
-    // text is made to read backwards on screen — is named rather than obeyed.
+    // Every byte visible, none able to do anything: caret for the escape, a
+    // mark for the return, the override named rather than obeyed.
     expect(question?.preview).toBe('^[[2Jsudo \\u202erm⏎')
   })
 
@@ -148,8 +129,7 @@ describe('a teammate’s keystroke waits for the owner', () => {
       { outcome: 'written', handle: 'alice' }
     ])
     expect(typistsOn(runtime, 't_a1').map((row) => row.writes)).toEqual([1])
-    // The question is gone, and nothing was left standing behind it: "once"
-    // means once.
+    // The question is gone and nothing was left standing: "once" means once.
     expect(questions(runtime)).toEqual([])
     expect(standing(runtime)).toEqual([])
   })
@@ -183,8 +163,7 @@ describe('a teammate’s keystroke waits for the owner', () => {
     const log = await logOf(runtime)
     expect(log.map((entry) => entry.outcome)).toEqual(['denied'])
     expect(log.every((entry) => entry.outcome !== 'written')).toBe(true)
-    // The bytes are gone from this machine: a denial that kept them for later
-    // would be a denial that could be undone by anything but the owner.
+    // The bytes are gone from this machine.
     expect(questions(runtime)).toEqual([])
     expect(JSON.stringify(log)).not.toContain('curl evil')
   })
@@ -193,8 +172,7 @@ describe('a teammate’s keystroke waits for the owner', () => {
     const { runtime, scheduler, linkId } = await owner()
     const held = heldBy(runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: 'x', bytes: 1 }))
 
-    // The owner has gone to lunch. A held keystroke must not wait for them
-    // forever: the person who typed it is owed an end, whatever the end is.
+    // The owner has gone to lunch; the person who typed is owed an end.
     await scheduler.advance(CONSENT_WINDOW_MS + 1)
 
     expect(await held).toEqual({
@@ -211,8 +189,7 @@ describe('a burst is one question', () => {
   it('gathers a run of keystrokes at one pane into a single request', async () => {
     const { runtime, linkId } = await owner()
 
-    // Somebody typing `npm test` and pressing return: nine keystrokes, and
-    // nine modal dialogs would be a modal nobody reads.
+    // `npm test` and return: nine keystrokes, and nine modals is a modal nobody reads.
     const held = [...'npm test\r'].map((character) =>
       heldBy(runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: character, bytes: 1 }))
     )
@@ -229,13 +206,11 @@ describe('a burst is one question', () => {
     const seen = [...'ls'].map((character) =>
       heldBy(runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: character, bytes: 1 }))
     )
-    // What the owner's window drew, and therefore the whole of what their click
-    // is an answer about.
+    // What the owner's window drew, and so the whole of what their click answers.
     const shown = questions(runtime)[0]
     expect(shown?.writes).toBe(2)
 
-    // Typed while the question was on screen, and never seen by the person
-    // answering it.
+    // Typed while the question was on screen, never seen by the person answering.
     const unseen = heldBy(runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: '; rm -rf .\r', bytes: 11 }))
 
     runtime.service.decide({ requestId: shown?.id ?? '', decision: 'once', through: shown?.writes ?? 0 })
@@ -261,9 +236,8 @@ describe('a burst is one question', () => {
 
   it('stops holding once one link has questions at more panes than anybody types at', async () => {
     const { runtime, linkId } = await owner()
-    // Every pane this machine has is already a question, which is fewer than
-    // the cap — so the cap is reached with panes that do not exist, and those
-    // are refused for not existing rather than for the cap.
+    // Every pane this machine has is already a question, fewer than the cap; the
+    // cap is reached only with panes that do not exist, refused for that instead.
     runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: 'a', bytes: 1 })
     runtime.service.remoteWrite(linkId, { terminalId: 't_a2', data: 'b', bytes: 1 })
     expect(questions(runtime)).toHaveLength(2)
@@ -295,8 +269,7 @@ describe('a standing permission is the owner’s and stays visible', () => {
 
     runtime.service.revoke({ terminalId: 't_a1', publicKey: aliceKey })
     expect(standing(runtime)).toEqual([])
-    // And it takes effect on the next keystroke, which is every keystroke that
-    // has not already been written.
+    // And it takes effect on the next keystroke.
     expect('held' in runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: 'b', bytes: 1 })).toBe(true)
   })
 
@@ -312,9 +285,8 @@ describe('a standing permission is the owner’s and stays visible', () => {
   })
 
   it('is already in force when the pane comes back under the same id', async () => {
-    // What `session-restore.ts` guarantees: a pane returns as the pane it was,
-    // so a permission that did not return with it would be the owner's
-    // decision discarded at the one moment nothing on screen says so.
+    // `session-restore.ts` brings a pane back as the pane it was, so a
+    // permission that did not return with it would be the owner's decision discarded.
     const { runtime, linkId } = await owner([{ terminalId: 't_a1' }])
     expect(decided(runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: 'a', bytes: 1 }))).toEqual({
       ok: true
@@ -330,8 +302,7 @@ describe('a mute answers the question before it is asked', () => {
 
     const verdict = decided(runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: 'a', bytes: 1 }))
     expect(verdict).toEqual({ ok: false, code: ErrorCode.Conflict, message: 'the owner has muted this pane' })
-    // Nothing to answer: a question whose every answer is already decided is a
-    // question that should not be on anybody's screen.
+    // Nothing to answer: every answer is already decided.
     expect(questions(runtime)).toEqual([])
     expect(standing(runtime)).toEqual([])
     expect(aliceKey).not.toBe('')
@@ -357,10 +328,9 @@ describe('a mute answers the question before it is asked', () => {
 describe('a question is never a way to find out what a teammate cannot see', () => {
   it('refuses a pane of a project they are not on outright, exactly as one that is not there', async () => {
     const { runtime, linkId } = await owner()
-    // A pane id nobody has ever had. Both of these are answered at once, in the
-    // same words, and neither becomes a question — because a question is a
-    // fact about a pane existing, and waiting where a refusal returns would say
-    // so from the other end of the relay as plainly as showing it would.
+    // A pane id nobody has ever had: answered at once, in the same words, and
+    // never a question, since waiting where a refusal returns would confirm a
+    // pane exists from the other end of the relay.
     const invented = decided(runtime.service.remoteWrite(linkId, { terminalId: 't_nothing', data: 'x', bytes: 1 }))
     expect(invented).toEqual({
       ok: false,
@@ -372,8 +342,7 @@ describe('a question is never a way to find out what a teammate cannot see', () 
 
   it('never puts a request on a project the asker is not on', async () => {
     const { runtime } = await owner()
-    // A connection the peer service never opened is not a link, so there is
-    // nobody to ask about and nothing to ask.
+    // A connection the peer service never opened is not a link.
     const verdict = decided(runtime.service.remoteWrite('not_a_peer_link', { terminalId: 't_a1', data: 'x', bytes: 1 }))
     expect(verdict).toMatchObject({ ok: false, code: ErrorCode.NotFound })
     expect(questions(runtime)).toEqual([])

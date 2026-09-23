@@ -1,13 +1,6 @@
-// Reading `.teamree/members` off disk.
-//
-// The governing rule is that one bad file costs one member and never the list.
-// A roster is read to answer "who is on this team", and there is no answer
-// worse than a wrong empty one: it reads as "nobody", which is a statement
-// about the team rather than about a typo in a file.
-//
-// So every failure is local. A file that cannot be read, cannot be parsed,
-// disagrees with its own name, or duplicates a key already claimed becomes a
-// problem with a reason attached, and the other eight members list normally.
+// Reading `.teamree/members` off disk. One bad file costs one member and never
+// the list: a wrong empty roster reads as "nobody", a statement about the team
+// rather than about a typo. Every failure becomes a problem with a reason.
 
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -37,11 +30,7 @@ export function memberFilePath(projectPath: string, handle: string): string {
   return join(membersDirectory(projectPath), `${handle}${MEMBER_FILE_SUFFIX}`)
 }
 
-/**
- * How a member file is named in the UI and in an error. Always with forward
- * slashes: it is how git spells the path, and it is the spelling somebody will
- * paste into a command.
- */
+/** How a member file is named in the UI and in an error: forward slashes, as git spells the path. */
 export function memberFileName(handle: string): string {
   return [...MEMBERS_DIR_SEGMENTS, `${handle}${MEMBER_FILE_SUFFIX}`].join('/')
 }
@@ -61,18 +50,10 @@ export async function readRoster(projectPath: string): Promise<Roster> {
       problems.push({ file: relative, reason })
     }
 
-    // The suffix has to be exactly `.pub`, not `.PUB`. Listing is deliberately
-    // case-insensitive so a file like this is *seen* and reported; matching is
-    // exact so it is never a member.
-    //
-    // This is attribution, not tidiness. A case-insensitive suffix with a
-    // case-sensitive stem accepts `bob.PUB` as a fully authorised member named
-    // "bob", so anyone with push access could file their own key under a
-    // colleague's name — and the live attribution, the watcher badge and the
-    // audit log that make "anyone can type" survivable would all say the
-    // colleague. Worse on macOS and Windows, where `bob.pub` and `bob.PUB` in
-    // one commit fold to a single file, so the roster depends on who checked
-    // it out.
+    // Listing is case-insensitive so `bob.PUB` is *seen* and reported; matching
+    // is exact so it is never a member. A case-insensitive match would let
+    // anyone with push access file a key under a colleague's name, and on macOS
+    // and Windows `bob.pub` and `bob.PUB` in one commit fold to a single file.
     if (!file.endsWith(MEMBER_FILE_SUFFIX)) {
       reject(`the name does not end in "${MEMBER_FILE_SUFFIX}" exactly, so teamree will not read it as a member`)
       continue
@@ -84,12 +65,9 @@ export async function readRoster(projectPath: string): Promise<Roster> {
       continue
     }
 
-    // Belt and braces over the two rules above, which between them already make
-    // this impossible: a stem is unique within a directory and has to be
-    // canonical. It is here anyway because "one handle names one person" is the
-    // property the whole attribution story rests on, and a property that holds
-    // only as an emergent consequence of two other rules is one a later change
-    // to either of them can quietly remove.
+    // Belt and braces: the two rules above already make this impossible, but
+    // "one handle names one person" is the property attribution rests on and
+    // must not hold only as a consequence of two other rules.
     const namesake = claimedHandles.get(stem)
     if (namesake !== undefined) {
       reject(`claims the handle "${quote(stem)}", which ${namesake} already holds`)
@@ -109,9 +87,7 @@ export async function readRoster(projectPath: string): Promise<Roster> {
       reject(parsed.reason)
       continue
     }
-    // The filename is what a reviewer sees in a diff, so it is what decides who
-    // the key belongs to. A file whose contents name somebody else is not a
-    // member teamree is willing to guess about.
+    // The filename is what a reviewer sees in a diff, so it decides who the key belongs to.
     if (parsed.value.handle !== stem) {
       reject(`names "${quote(parsed.value.handle)}" but is filed under "${quote(stem)}"`)
       continue
@@ -132,11 +108,7 @@ export async function readRoster(projectPath: string): Promise<Roster> {
   return { entries, problems }
 }
 
-/**
- * Sorted, so the roster does not depend on the order a filesystem hands out
- * directory entries — and so the duplicate-key check above blames the same file
- * on every machine.
- */
+/** Sorted, so the roster and the duplicate-key blame do not depend on the filesystem's order. */
 async function listMemberFiles(directory: string): Promise<string[]> {
   let names: string[]
   try {

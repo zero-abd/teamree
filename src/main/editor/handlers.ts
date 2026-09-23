@@ -1,17 +1,6 @@
-// THE SEAM. This is the whole surface the runtime wires up.
-//
-// In src/main/runtime/handlers/registerHandlers.ts:
-//
-//   import { createEditorActions, registerEditorHandlers } from '../../editor'
-//   registerEditorHandlers(registry, createEditorActions())
-//
-// The actions are passed in rather than defaulted, so that a test wires its own
-// probe and its own spawner and no harness can start an editor by forgetting an
-// argument.
-//
-// Neither method is on `PEER_METHODS`, and that is the point of them being
-// local: a teammate across a relay has no business launching a program on
-// somebody else's machine, and `peerTransport.test.ts` says so by name.
+// The whole surface the runtime wires up, from registerHandlers.ts. Actions are
+// passed in, not defaulted, so no harness starts an editor by forgetting an
+// argument. Neither method is on `PEER_METHODS`: a teammate must not launch programs here.
 
 import { Params } from '../../shared/methods'
 import type { MethodRegistry } from '../runtime/methodRegistry'

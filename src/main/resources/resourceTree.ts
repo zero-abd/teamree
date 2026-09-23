@@ -1,17 +1,6 @@
-// The table, read per pane.
-//
-// A pane is its pty child and everything that child started. On unix the
-// child is a session leader, so its descendants are reachable by walking
-// parent ids from it — which is what this does, from one table, for every
-// pane at once. The app is the same walk from its own pid, minus the panes:
-// they are children of the main process too, and counting them twice would
-// put the whole workspace on the row that says what the app itself costs.
-//
-// What this deliberately leaves out: a process whose parent has died. The
-// kernel reparents it to pid 1, it leaves every tree here, and no row claims
-// it. That is the honest answer — nothing this app started still owns it —
-// and the alternative, guessing by name, would attribute somebody's own
-// editor to a pane because both are called `node`.
+// The process table, read per pane by walking parent ids from each pty child;
+// the app is the same walk from its own pid minus the panes. A process
+// reparented to pid 1 is claimed by no row: guessing by name would be worse.
 
 import type { PaneResources, ResourceProcess, SystemResources } from '../../shared/entities'
 
@@ -86,13 +75,8 @@ function round(cpu: number): number {
 export type KillTarget = { kind: 'group' | 'process'; pid: number; terminalId: string }
 
 /**
- * The one thing a kill may do with a pid, or null.
- *
- * Null is the answer for this app's own processes, for a pid nobody here
- * spawned, and for a pane whose child is already gone — every one of them is
- * a pid that, signalled, would reach something other than what the row
- * offered. The caller looks this up in a sample it just took, not the one it
- * drew from: a pid can be reused between two.
+ * The one thing a kill may do with a pid, or null for anything not a pane's.
+ * Looked up in a sample just taken, not the one drawn from: pids are reused.
  */
 export function killTarget(sample: SystemResources, pid: number): KillTarget | null {
   if (!Number.isInteger(pid) || pid <= 0) return null

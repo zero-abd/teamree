@@ -37,21 +37,10 @@ describePty('recoverTailOnTeardown', () => {
   it(
     'recovers output that node-pty closed the pty without ever delivering',
     async () => {
-      // A reader that stops before the pty is empty is the accident behind the
-      // lost tail; here it is made deliberate, so the state that used to happen
-      // one run in five happens every run.
-      //
-      // The teardown is then triggered the way node-pty triggers it — by
-      // destroying the socket — rather than by killing the child and waiting
-      // for an exit. Two earlier versions waited for the child instead and both
-      // hung on macOS for the whole timeout: with the reader stopped, how much
-      // output fits before the child blocks, and when the platform reports the
-      // exit at all, are properties of the platform rather than of the code
-      // under test. What is under test is the last moment before the descriptor
-      // closes, and this reaches exactly that moment on every platform.
-      //
-      // The end-to-end path — a real command, a real exit, no interference —
-      // is covered by the volume test in pty-session.test.ts.
+      // The reader stopping early is made deliberate, and teardown is triggered
+      // by destroying the socket, as node-pty does: waiting for the child hung
+      // on macOS for the whole timeout, with the reader stopped. End to end is
+      // covered by the volume test in pty-session.test.ts.
       const handle = run(`for i in $(seq 1 ${LINES}); do echo "tail line $i"; done; sleep 60`)
       const delivered: string[] = []
       handle.onData((chunk) => delivered.push(chunk))
@@ -59,15 +48,13 @@ describePty('recoverTailOnTeardown', () => {
       recoverTailOnTeardown(handle, process.platform, (chunk) => recovered.push(chunk))
       handle.pause()
 
-      // Long enough for the child to write into the pty, short enough to stay
-      // a test. Nothing is read out of it in the meantime.
+      // Long enough for the child to write into the pty.
       await new Promise<void>((resolve) => setTimeout(resolve, 500))
 
       const socket = (handle as unknown as { _socket: { destroy: () => void } })._socket
       socket.destroy()
 
-      // Without the drain this is empty: the socket was stopped before any of
-      // it was read, and the descriptor closes without anyone looking again.
+      // Without the drain this is empty.
       expect(recovered.join('')).toMatch(/tail line \d+/)
       expect(recovered.join('').length).toBeGreaterThan(delivered.join('').length)
     },

@@ -1,18 +1,6 @@
-// ⌘Q pressed in the second before the app has finished starting.
-//
-// The window is real and it is narrow. `startRuntime` restores the panes of the
-// last session — a pty per recorded pane, agents resumed — and only then binds
-// the CLI socket, writes the discovery file and installs the renderer bridge,
-// and only then hands back the handle whose `stop` can kill any of it. A quit
-// let through in between ends the process with those panes still running: they
-// die of a master fd closing under them rather than of a kill, which is the one
-// death that writes no transcript.
-//
-// So this is the real thing rather than a fake of it: a real workspace file
-// naming a real pane, a real pty brought back from it, a real scrollback
-// archive, and a quit fired while the runtime handle is still undefined. What
-// is asserted is what the user would find afterwards — the pane's process gone,
-// and what it printed on disk where the next launch will look for it.
+// ⌘Q pressed in the second before the app has finished starting: `startRuntime`
+// restores panes before it hands back the handle whose `stop` can kill them.
+// Real workspace file, real pty, real archive; asserted is what the user finds after.
 
 import { existsSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -25,12 +13,9 @@ import { SCROLLBACK_DIR_NAME } from './store/scrollbackArchive'
 import { WorkspaceStore } from './store/workspaceStore'
 import { canSpawnPty, testShell, waitUntil } from './terminals/pty-test-support'
 
-// The renderer bridge is the last thing a launch does, and the one step after
-// the panes are back that can genuinely throw: `ipcMain.handle` refuses a
-// channel that is already taken. Standing in for it here is a module that
-// refuses on demand, so that "the launch failed" can be a fact of a test rather
-// than a wait for the day it happens. The gate is what makes the failure land
-// after the restored pane is up, which is the only moment worth testing.
+// The renderer bridge is the last step of a launch and the one that can throw
+// (`ipcMain.handle` refuses a taken channel); the gate lands the failure after
+// the restored pane is up.
 const bridge = vi.hoisted(() => ({ beforeInstalling: async (): Promise<void> => {} }))
 vi.mock('./runtime/ipcBridge', async () => {
   await bridge.beforeInstalling()
@@ -59,18 +44,13 @@ const temporaryDirs: string[] = []
 const runtimes: Runtime[] = []
 
 afterEach(async () => {
-  // A test that failed has left a pane running, which is the whole subject
-  // here: it is killed now rather than left to outlive the run.
+  // A test that failed has left a pane running.
   await Promise.all(runtimes.splice(0).map((runtime) => runtime.stop()))
   await Promise.all(temporaryDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   bridge.beforeInstalling = async (): Promise<void> => {}
 })
 
-/**
- * A workspace file with one agent pane in it, and an agent for it to come back
- * as: a stand-in that reports the pid it is running under, says it is up, and
- * then sits there the way a real agent waiting for a turn does.
- */
+/** A workspace file with one agent pane, and a stand-in agent that reports its pid and sits there. */
 async function lastSession(): Promise<LastSession> {
   const base = await mkdtemp(join(tmpdir(), 'teamree-quit-startup-'))
   temporaryDirs.push(base)
@@ -82,9 +62,7 @@ async function lastSession(): Promise<LastSession> {
   await mkdir(userDataDir, { recursive: true })
 
   const pidFile = join(base, 'pane.pid')
-  // Named for the agent it stands in for, because that name is how the restore
-  // decides this pane has a conversation to resume rather than a command to
-  // leave alone.
+  // Named for the agent: that is how the restore decides this pane resumes.
   const binary = join(bin, 'claude')
   await writeFile(binary, `#!/bin/sh\necho $$ > ${pidFile}\necho READY\nwhile true; do sleep 0.2; done\n`, 'utf8')
   await chmod(binary, 0o755)
@@ -122,9 +100,7 @@ function launch(userDataDir: string, options: { serveRenderer: boolean }): Promi
   return startRuntime({
     userDataDir,
     version: '0.0.0-test',
-    // The CLI socket and the relay are their own suites' subject; what this one
-    // is about is the panes, and every transport left on is one more reason for
-    // a launch to take a different amount of time than the test expects.
+    // Every transport left on is one more reason for a launch to take a different time.
     serveCli: false,
     serveTeamwork: false,
     checkForUpdates: false,
@@ -157,18 +133,15 @@ describePty('quitting before the app has finished starting', () => {
       const quit = vi.fn()
       const preventDefault = vi.fn()
 
-      // The launch as index.ts holds it: the runtime, and then the rest of the
-      // work that has to happen before a window is up. Standing in for that
-      // rest here is the wait for the restored pane to report itself, which is
-      // what makes the pane these assertions are about one that certainly ran.
+      // The launch as index.ts holds it; the wait for the pane to report itself
+      // stands in for the rest of the work before a window is up.
       const launched = (async () => {
         runtime = await launch(session.userDataDir, { serveRenderer: false })
         runtimes.push(runtime)
         await waitUntil(() => existsSync(session.pidFile), 'the restored pane to report its pid')
       })()
 
-      // ⌘Q now — before the workspace file has even been opened, and a long way
-      // before there is a handle to stop anything with.
+      // ⌘Q now, before there is a handle to stop anything with.
       expect(runtime).toBeUndefined()
       createQuitSequence({ whenStarted: () => launched, stop: () => runtime?.stop() ?? Promise.resolve(), quit })({
         preventDefault
@@ -177,27 +150,20 @@ describePty('quitting before the app has finished starting', () => {
       expect(quit).not.toHaveBeenCalled()
 
       await waitUntil(() => quit.mock.calls.length === 1, 'the quit to be asked for once the teardown is done', 20_000)
-      // The launch finishes either way — what is under test is whether the quit
-      // waited for it — so awaiting it here means the pane read below is the
-      // same pane whichever way the quit behaved.
+      // The launch finishes either way; awaiting it makes the pane below the same whichever way the quit went.
       await launched
 
       const pid = await pidOfRestoredPane(session.pidFile)
       expect(alive(pid), 'the restored pane was left to die of a closed master fd').toBe(false)
 
-      // And the last thing it printed is where the next launch will look for
-      // it: the flush is the final step of the teardown, so a quit that did not
-      // wait loses this even when it does kill the pane.
+      // The flush is the final step of the teardown: a quit that did not wait loses this.
       const record = JSON.parse(await readFile(session.scrollbackRecord, 'utf8')) as { text: string }
       expect(record.text).toContain('READY')
     },
     TEST_TIMEOUT_MS
   )
 
-  // The launch that never arrives at a runtime at all. Orphaned panes under a
-  // window that never opened are a worse ending than the failure that caused
-  // them, so the failing launch releases what it built on its way out — and the
-  // quit still quits, which is the rule the failing teardown already follows.
+  // A failing launch releases what it built on its way out, and the quit still quits.
   it(
     'kills them too when the launch fails outright, and quits anyway',
     async () => {
@@ -209,9 +175,7 @@ describePty('quitting before the app has finished starting', () => {
       const failures: unknown[] = []
       const quit = vi.fn()
 
-      // index.ts survives a launch that failed — a window with no runtime
-      // behind it is still a window that can say so — so the promise the quit
-      // waits on is one that resolves either way.
+      // index.ts survives a failed launch, so the promise the quit waits on resolves either way.
       const launched = launch(session.userDataDir, { serveRenderer: true }).then(
         (started) => {
           runtime = started

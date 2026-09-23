@@ -1,9 +1,5 @@
-// What the app is willing to believe about a release.
-//
-// Every test here is about the response being somebody else's data. The stub
-// answers with real `Response` objects rather than plain objects, so the byte
-// budget, the status check and the body reader are all the ones that run in the
-// app rather than shapes that resemble them.
+// What the app is willing to believe about a release. The stub answers with
+// real `Response` objects, so the byte budget and body reader are the real ones.
 
 import { describe, expect, it } from 'vitest'
 import { isReleaseDownload, plainText, readLatestRelease, MAX_NOTES_CHARS } from './latestRelease'
@@ -82,10 +78,7 @@ describe('reading the latest release', () => {
 
 describe('what it refuses to believe', () => {
   it('drops a release whose tag is not one of this project’s', async () => {
-    // The traversal case names `etc/hosts` rather than the file secret
-    // scanners are trained to look for: the assertion is about the `../`, and
-    // the target is arbitrary, so there is no reason to spend a permanently
-    // red security check on the spelling of a string this test never resolves.
+    // `etc/hosts` rather than the file secret scanners look for: the assertion is about the `../`.
     for (const tag of ['latest', 'v0.2', '../../../etc/hosts', 'v0.2.0?x=1']) {
       const { found } = await read(release({ tag_name: tag }))
       expect(found, tag).toBeNull()
@@ -102,8 +95,7 @@ describe('what it refuses to believe', () => {
     expect(found?.prerelease).toBe(true)
   })
 
-  // The field that ends up in somebody's browser. A string comparison against
-  // "https://github.com" is passed by `https://github.com.example.invalid/`.
+  // A string comparison against "https://github.com" is passed by `https://github.com.example.invalid/`.
   it('refuses a download link that does not lead into this repository', async () => {
     for (const url of [
       'https://github.com.example.invalid/owner/project/releases/download/v0.2.0/x.dmg',
@@ -114,8 +106,7 @@ describe('what it refuses to believe', () => {
     ]) {
       const { found } = await read(release({ assets: [{ name: 'x.dmg', browser_download_url: url }] }))
       expect(found?.downloadUrl, url).toBeNull()
-      // And the release itself still stands: there is a newer version, and the
-      // page it lives on is a link this app composed.
+      // The release itself still stands, on a link this app composed.
       expect(found?.releaseUrl, url).toBe(`https://github.com/${REPOSITORY}/releases/tag/v0.2.0`)
     }
   })
@@ -123,8 +114,7 @@ describe('what it refuses to believe', () => {
   it('survives a body that is not the shape the API documents', async () => {
     expect((await read({ nothing: 'useful' })).found).toBeNull()
     expect((await read([{ tag_name: 42 }], 'prerelease')).found).toBeNull()
-    // Not JSON at all is a failed check rather than "no release", because the
-    // two are different facts and only one of them is worth remembering.
+    // Not JSON at all is a failed check rather than "no release".
     await expect(read('not json at all')).rejects.toThrow()
   })
 
@@ -139,19 +129,13 @@ describe('release notes, before anything shows them', () => {
     expect(plainText('Line one\r\nLine two\u001b[31m red')).toBe('Line one\nLine two[31m red')
   })
 
-  // The eight-bit forms too. U+009B is CSI and U+009D is OSC — the same
-  // sequences as `ESC [` and `ESC ]` in a single byte each, which is how a
-  // filter written as "drop ESC" gets walked straight past. Nothing renders
-  // these today; it is asserted because the whole worth of the sentence above
-  // is that it is true of the range rather than of the one character somebody
-  // happened to think of.
+  // U+009B is CSI and U+009D is OSC in a single byte each: a filter written as "drop ESC" misses them.
   it('loses the eight-bit controls as well as the seven-bit ones', () => {
     expect(plainText('before\u009b6nafter')).toBe('before6nafter')
     expect(plainText('title\u009d0;renamed')).toBe('title0;renamed')
   })
 
-  // Markup stays markup: it is not rendered anywhere, and taking it out would
-  // quietly rewrite what a maintainer wrote. The card puts this in a text node.
+  // The card puts this in a text node; stripping it would rewrite what a maintainer wrote.
   it('leaves markup exactly as written, because nothing renders it', () => {
     const body = '<img src=x onerror="alert(1)"> and <b>bold</b>'
     expect(plainText(body)).toBe(body)

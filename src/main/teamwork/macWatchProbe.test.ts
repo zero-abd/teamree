@@ -1,36 +1,5 @@
-// DIAGNOSTIC. Not a test: it asserts nothing and prints what the platform
-// actually did, so a Mac can be read as an instrument.
-//
-// Why it exists. `teamreeWatcher.test.ts` fails on macOS and never on Linux,
-// always with `nothing was reported`, and three fixes in a row were guesses at
-// what macOS puts in an event's `filename` — each made on a Linux box, each
-// disproved by the next run on a Mac. This asks the platform instead of
-// guessing at it.
-//
-// It is skipped unless `TEAMREE_MAC_PROBE=1`, because it spends a minute in
-// sleeps and belongs to nobody's ordinary suite. A GitHub Actions workflow used
-// to set it on a macOS runner; that has been removed along with the rest of
-// them, so it is now a command somebody types on a Mac:
-//
-//   TEAMREE_MAC_PROBE=1 npx vitest run src/main/teamwork/macWatchProbe.test.ts
-//
-// Read the log for lines beginning `[probe]`:
-//
-//   `0`  does a bare `fs.watch` on a directory fire at all — under `os.tmpdir()`
-//        and under its resolved path, with `persistent` both ways. A `NEVER
-//        FIRED` line here says the primitive is the problem and nothing in
-//        `teamreeWatcher.ts` can be blamed for it.
-//   `A`  the failing test's exact sequence, watched for twenty seconds rather
-//        than five. `events=0` means the event never came; a first event past
-//        5000ms means it came too late for the test and the watch is alive.
-//   `B`  the same with a second's pause after attaching. If `A` is silent and
-//        `B` is not, `fs.watch` returns before the watch is listening.
-//   `C`  how long after `fs.watch` returns the watch starts delivering, poked
-//        every 25ms until it speaks. This is the number the fix is sized
-//        against.
-//   `D`  what a non-recursive watch on the checkout root is told about a write
-//        three levels down, and about `.teamree` being removed.
-//
+// DIAGNOSTIC, not a test: asserts nothing, prints what macOS's `fs.watch` actually did as `[probe]` lines.
+// Skipped unless set: TEAMREE_MAC_PROBE=1 npx vitest run src/main/teamwork/macWatchProbe.test.ts
 // Delete this file once the answer is in the watcher.
 
 import { watch as fsWatch, type FSWatcher } from 'node:fs'
@@ -133,8 +102,7 @@ describe('macOS watch probe', () => {
     say(`tmpdir=${tmpdir()} realpath=${await realpath(tmpdir())}`)
   })
 
-  // The blunt question first: does fs.watch on a directory fire at all here,
-  // under each of the four combinations that could explain silence?
+  // Does fs.watch on a directory fire at all here, under each of the four combinations that could explain silence?
   it.skipIf(!probing)(
     'probe 0: does a bare fs.watch on one directory ever fire',
     async () => {

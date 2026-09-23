@@ -1,17 +1,12 @@
-// What the owner reads before they let somebody else's bytes run.
-//
-// The prompt is the one place in the product where a teammate chooses what
-// appears on the owner's screen, so this is the boundary that decides whether
-// the question can be painted by the person it is about. Everything below is a
-// way of painting it, and every one of them comes out as text.
+// What the owner reads before they let somebody else's bytes run: the boundary
+// that decides whether the question can be painted by the person it is about.
 
 import { describe, expect, it } from 'vitest'
 import { MAX_PREVIEW_CHARS, previewOf } from './writePreview'
 
 describe('a held burst is shown as text and never as terminal instructions', () => {
   it('leaves an ordinary command exactly as it was typed', () => {
-    // The other half of the job, and the half that makes the prompt worth
-    // reading: an owner has to be able to recognise `npm test` at a glance.
+    // The half that makes the prompt worth reading: `npm test` recognisable at a glance.
     expect(previewOf(['npm test'])).toEqual({ preview: 'npm test', clipped: false })
   })
 
@@ -32,8 +27,7 @@ describe('a held burst is shown as text and never as terminal instructions', () 
   })
 
   it('names the characters that make text read as something else', () => {
-    // The right-to-left override, which is the classic one: everything after
-    // it reads backwards, so a command can be made to look like a filename.
+    // The right-to-left override: everything after it reads backwards.
     expect(previewOf(['\u202erm -rf /']).preview).toBe('\\u202erm -rf /')
     // And the invisible ones, which do it by hiding rather than by reversing.
     expect(previewOf(['su\u200bdo']).preview).toBe('su\\u200bdo')
@@ -47,8 +41,7 @@ describe('a held burst is shown as text and never as terminal instructions', () 
   })
 
   it('keeps non-ASCII text that is merely non-ASCII', () => {
-    // Refusing everything unfamiliar would be a preview nobody could read: a
-    // branch name in Japanese is not an attack, and neither is an emoji.
+    // A branch name in Japanese is not an attack, and neither is an emoji.
     expect(previewOf(['git switch 機能/検索 🚀']).preview).toBe('git switch 機能/検索 🚀')
   })
 
@@ -57,8 +50,7 @@ describe('a held burst is shown as text and never as terminal instructions', () 
     expect(long.clipped).toBe(true)
     expect(long.preview.length).toBe(MAX_PREVIEW_CHARS + 1)
     // A preview that looked complete and was not would be the same lie as a
-    // keystroke that vanished: the owner would be answering about bytes they
-    // were never shown.
+    // keystroke that vanished.
     expect(long.preview.endsWith('…')).toBe(true)
   })
 

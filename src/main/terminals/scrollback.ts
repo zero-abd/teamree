@@ -1,16 +1,11 @@
-// Bounded scrollback for one terminal.
-//
-// An agent CLI can print megabytes a second, so retention is capped in bytes
-// rather than lines: line counts say nothing about memory, and a single line of
-// a progress bar can be enormous. Bytes are kept, not decoded text, because the
-// cap has to mean something predictable and because a tail slice must be able to
-// repair a cut in the middle of a multi-byte character.
+// Bounded scrollback for one terminal, capped in bytes rather than lines (a
+// progress bar's line can be enormous) and kept as bytes so a tail slice can
+// repair a cut mid-character.
 
 /** Retained output per terminal. Roughly a few thousand dense lines. */
 export const SCROLLBACK_CAP_BYTES = 4 * 1024 * 1024
 
-/** Small writes are merged into the tail chunk so a chatty process cannot turn
- *  the cap into millions of one-byte array entries. */
+/** Small writes are merged into the tail chunk, not millions of one-byte entries. */
 const COALESCE_BELOW_BYTES = 8 * 1024
 
 export class ScrollbackBuffer {
@@ -78,11 +73,7 @@ export class ScrollbackBuffer {
     this.bytes = 0
   }
 
-  /**
-   * Lowers the cap for the rest of this buffer's life, evicting down to it now.
-   * One-way: a buffer that has been told to keep less is never asked to keep
-   * more, and a request for more than it already keeps is not one.
-   */
+  /** Lowers the cap for the rest of this buffer's life, evicting down to it now. One-way. */
   restrictTo(capBytes: number): void {
     if (capBytes <= 0) throw new RangeError('scrollback cap must be positive')
     if (capBytes >= this.capBytes) return
@@ -109,8 +100,7 @@ export class ScrollbackBuffer {
   }
 }
 
-/** Drops UTF-8 continuation bytes left dangling by a byte-aligned cut, so a tail
- *  never opens with a replacement character. */
+/** Drops UTF-8 continuation bytes left dangling by a byte-aligned cut. */
 function decodeFromCharacterBoundary(buffer: Buffer): string {
   let start = 0
   while (start < buffer.byteLength && ((buffer[start] ?? 0) & 0xc0) === 0x80) start++

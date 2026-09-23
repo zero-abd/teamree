@@ -1,17 +1,6 @@
-// The same two peers, over the relay itself.
-//
-// Everything in `peerLink.test.ts` runs against a fake relay in this process,
-// which is the only way to drive a relay restart or a displaced rendezvous on
-// demand. A handshake proved only against that is a handshake proved against
-// something this repository also wrote, so this file runs the real thing: the
-// container host, as a child process, on a real port, over real WebSockets,
-// with real Noise between two real identities.
-//
-// It needs the relay built, which is a separate package with its own
-// dependencies and its own `dist/`. When that is absent the file says so
-// loudly and skips rather than failing, because a missing build of another
-// package is not a broken peer transport — but a skip that says nothing is how
-// a suite quietly stops testing the thing it was written for.
+// The same two peers, over the real relay: the container host as a child process, on a real port, over
+// real WebSockets, with real Noise. Needs the relay built (a separate package with its own `dist/`); when
+// absent it says so loudly and skips, because a silent skip is how a suite stops testing its subject.
 
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -56,11 +45,7 @@ const realScheduler: LinkScheduler = {
 
 type RunningRelay = { url: string; stop: () => Promise<void> }
 
-/**
- * The relay on a port the OS picked, learned from the line it logs rather than
- * from a guess — a hard-coded port is how a suite starts failing the moment
- * anything else on the machine wants one.
- */
+/** The relay on a port the OS picked, learned from the line it logs: a hard-coded one fails once anything wants it. */
 async function startRelay(): Promise<RunningRelay> {
   const child = spawn(process.execPath, [RELAY_ENTRY], {
     cwd: join(REPO_ROOT, 'relay'),
@@ -114,12 +99,8 @@ async function startRelay(): Promise<RunningRelay> {
 }
 
 /**
- * Waits for a condition the runtime itself announces.
- *
- * Every change to a link's phase or to what a teammate is showing fires
- * `onChange`, so this resolves on the event rather than on a timer. The timeout
- * is a failure mode, not a delay: nothing here waits for it when the thing
- * being waited on happens.
+ * Waits for a condition the runtime itself announces through `onChange`, so this resolves on the event
+ * rather than on a timer. The timeout is a failure mode, not a delay.
  */
 function until(waiters: Set<() => void>, predicate: () => boolean, what: string, timeoutMs = 20_000): Promise<void> {
   if (predicate()) return Promise.resolve()
@@ -242,9 +223,7 @@ describe.skipIf(!RELAY_BUILT)('two peers over the real relay', () => {
     bob.service.stop()
     await until(waiters, () => phase(alice, 'p_alice') !== 'connected', 'Alice to notice Bob has gone')
 
-    // Not one row fewer. A worktree row disappearing reads as a worktree
-    // deleted, and over a real relay that is exactly what a closed laptop would
-    // otherwise look like.
+    // Not one row fewer: a worktree row disappearing reads as a worktree deleted, the shape of a closed laptop.
     const away = presenceOf(alice.service, 'p_alice')
     expect(away.worktrees.map((entry) => entry.name)).toEqual(before)
     expect(away.worktrees.some((entry) => entry.live)).toBe(false)

@@ -1,25 +1,6 @@
-// The four ways a push goes wrong that a panel has to be able to survive.
-//
-// This file exists because of a report — "the steps get stuck at git push as it
-// doesn't show any updates" — and because every one of these cases used to look
-// identical from the window: a button that said "Pushing…" and a wait of up to
-// ten minutes with nothing behind it. So each of them is pinned here by what
-// somebody can *see* while it happens and what they are told afterwards:
-//
-//   - a push that stalls, which must report git's own progress and the two
-//     timestamps a panel counts a wait with;
-//   - a push refused for credentials, which must come back naming the remedy
-//     rather than "push failed";
-//   - a push rejected non-fast-forward, which is the ordinary one — two people
-//     joined at once — and must say to pull rather than to force;
-//   - and Stop, which must actually end it and must still report the commit
-//     that landed before it was stopped.
-//
-// The git here is scripted rather than real, and deliberately: a genuine stall
-// is a test that takes as long as the thing it is testing, and a genuine
-// credential refusal needs a remote that refuses credentials. What is being
-// checked is this app's behaviour in the face of a git that behaves in each of
-// those ways, which is exactly what a script can state.
+// The four ways a push goes wrong that a panel has to survive: a stall, a credential refusal, a
+// non-fast-forward rejection, and Stop. Each is pinned by what somebody can see while it happens.
+// The git is scripted: a genuine stall is a test that takes as long as the thing it is testing.
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -39,14 +20,8 @@ afterEach(async () => {
 type PushScript = (run: GitRun) => Promise<GitOutput>
 
 /**
- * A push that never finishes on its own, and ends the way a real one does when
- * it is killed.
- *
- * Honouring the signal is not decoration. `spawnGit` rejects with a cancelled
- * `GitCommandError` when the process is aborted, and a fake that merely hung
- * for ever would let a test pass that leaves `publish` waiting on a promise
- * nothing will settle — which is the very bug this file is about, reproduced in
- * the test harness instead of in the app.
+ * A push that never finishes on its own, and ends the way a real one does when killed. `spawnGit`
+ * rejects with a cancelled `GitCommandError` on abort; a fake that merely hung would let `publish` wait for ever.
  */
 const stalls: PushScript = (run) =>
   new Promise<GitOutput>((_resolve, reject) => {
@@ -66,12 +41,8 @@ type Fake = {
 }
 
 /**
- * A git that answers every question `publish` asks and does whatever the script
- * says when it reaches the push.
- *
- * Every read here is the real command with the real arguments, because the
- * point is to exercise `publish` rather than a rewritten version of it: change
- * the order or the flags in `publish.ts` and the answers stop matching.
+ * A git that answers every question `publish` asks and does whatever the script says at the push.
+ * Every read is the real command with the real arguments: change `publish.ts` and the answers stop matching.
  */
 async function wire(push: PushScript): Promise<Fake> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'teamree-publish-'))
@@ -144,8 +115,7 @@ async function untilPushing(fake: Fake): Promise<void> {
 }
 
 describe('a push that is taking a long time', () => {
-  // The whole of the original complaint. Every one of these three facts was
-  // being produced by git and thrown away between the process and the window.
+  // Every one of these three facts was being produced by git and thrown away before the window.
   it('reports what git is printing, and how long it has been going', async () => {
     const fake = await wire(stalls)
     const running = fake.service.publish({ projectId: fake.project.id })
@@ -159,9 +129,7 @@ describe('a push that is taking a long time', () => {
     expect(progress?.phase).toBe('pushing')
     expect(progress?.output).toContain('Enumerating objects: 12, done.')
     expect(progress?.output.at(-1)).toBe('Writing objects:  60% (6/10)')
-    // The two numbers a panel counts with: when this started, and when git last
-    // said anything. Reading them out is `publishActivity`'s job, and its own
-    // test's; what matters here is that they are measured at all.
+    // The two numbers a panel counts with; reading them out is `publishActivity`'s job.
     expect(progress!.lastOutputAt - progress!.startedAt).toBe(4_000)
     expect(progress!.finishedAt).toBeNull()
 
@@ -169,10 +137,7 @@ describe('a push that is taking a long time', () => {
     await running.catch(() => undefined)
   })
 
-  // A push that has said nothing at all is still a push somebody is watching,
-  // and the record has to exist from the first moment rather than from the
-  // first line of output — otherwise the quietest failure is the one with
-  // nothing on screen.
+  // The record has to exist from the first moment, or the quietest failure is the one with nothing on screen.
   it('has something to report before git has printed a word', async () => {
     const fake = await wire(stalls)
     const running = fake.service.publish({ projectId: fake.project.id })
@@ -197,9 +162,7 @@ describe('stopping a push', () => {
     expect(await fake.service.cancelPublish({ projectId: fake.project.id })).toEqual({ cancelled: true })
     const result = await running
 
-    // The half that worked is still reported. Throwing the commit away to tidy
-    // up after a button somebody pressed by mistake would be a far worse
-    // surprise than a commit they can push whenever they like.
+    // The half that worked is still reported: throwing the commit away would be the worse surprise.
     expect(result.commit?.shortSha).toBe('9f1d2c3')
     expect(result.push.ok).toBe(false)
     if (!result.push.ok) {
@@ -215,9 +178,7 @@ describe('stopping a push', () => {
     expect(await fake.service.cancelPublish({ projectId: fake.project.id })).toEqual({ cancelled: false })
   })
 
-  // Two gits fighting over one index, and the second one's progress overwriting
-  // the first's — so the window would show one push while the repository had
-  // two.
+  // Two gits fighting over one index, and the window showing one push while the repository had two.
   it('refuses to start a second push while one is running', async () => {
     const fake = await wire(stalls)
     const running = fake.service.publish({ projectId: fake.project.id })
@@ -231,9 +192,7 @@ describe('stopping a push', () => {
 })
 
 describe('a push the remote would not take', () => {
-  // This app runs git with no terminal to prompt on, so a push that would have
-  // asked for a password simply refuses. "Check that this machine can write to
-  // it" was a diagnosis dressed as a remedy; the remedy is a command.
+  // No terminal to prompt on, so a push that would have asked for a password refuses; the remedy is a command.
   it('names the credential remedy rather than reporting that the push failed', async () => {
     const fake = await wire(() =>
       Promise.resolve({
@@ -249,15 +208,12 @@ describe('a push the remote would not take', () => {
     if (!result.push.ok) {
       expect(result.push.kind).toBe('auth')
       expect(result.push.advice).toMatch(/credential\.helper osxkeychain/)
-      // git's own words, whole, because the paraphrase is not what anybody can
-      // search for.
+      // git's own words, whole, because the paraphrase is not what anybody can search for.
       expect(result.push.error).toMatch(/terminal prompts disabled/)
     }
   })
 
-  // ssh is a separate program and GIT_TERMINAL_PROMPT means nothing to it, so
-  // this is the refusal a machine with no key in the agent now gets instead of
-  // a ten-minute wait on a question nobody can see.
+  // ssh is a separate program and GIT_TERMINAL_PROMPT means nothing to it.
   it('names the key remedy when ssh had nothing the remote would accept', async () => {
     const fake = await wire(() =>
       Promise.resolve({
@@ -276,9 +232,7 @@ describe('a push the remote would not take', () => {
     }
   })
 
-  // The one that everybody hits on the day they set this up: both people commit
-  // a key onto the same base and the second push is turned away. It is not a
-  // merge conflict and the instinct it provokes — forcing — is the wrong one.
+  // Both people commit a key onto the same base and the second push is turned away; forcing is the wrong instinct.
   it('says to pull rather than to force when somebody pushed first', async () => {
     const fake = await wire(() =>
       Promise.resolve({
@@ -318,8 +272,7 @@ describe('a push the remote would not take', () => {
 })
 
 describe('what the push is run with', () => {
-  // Two flags that are the difference between a window that can report progress
-  // and one that cannot, and between a refusal and a hang.
+  // The difference between a window that can report progress and one that cannot, and between a refusal and a hang.
   it('asks git for progress, and forbids ssh from asking this machine anything', async () => {
     let seen: GitRun | undefined
     const fake = await wire((run) => {
@@ -329,8 +282,7 @@ describe('what the push is run with', () => {
 
     await fake.service.publish({ projectId: fake.project.id })
 
-    // Without --progress git draws no meter at all, because a pipe is not a
-    // terminal: the slowest part of this flow would print one line at the end.
+    // Without --progress git draws no meter at all, because a pipe is not a terminal.
     expect(seen?.args).toContain('--progress')
     // BatchMode is what turns "ssh is waiting on /dev/tty for a passphrase
     // nobody can see" into an immediate refusal with a sentence in it.
@@ -339,9 +291,7 @@ describe('what the push is run with', () => {
     expect(seen?.args).not.toContain('--force')
   })
 
-  // `GIT_SSH_COMMAND` outranks `core.sshCommand`, so a team that configures one
-  // would otherwise find teamree pushing with a different key than every other
-  // tool on the machine.
+  // `GIT_SSH_COMMAND` outranks `core.sshCommand`, so teamree would otherwise push with a key other tools do not use.
   it('builds on the ssh the user already asked for rather than replacing it', async () => {
     let seen: GitRun | undefined
     const fake = await wire((run) => {

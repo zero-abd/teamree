@@ -1,13 +1,5 @@
-// One `ps` call, read into rows.
-//
-// `ps -axo pid,ppid,pcpu,rss,comm` is the one sample: every process on the
-// machine, its parent, its share of a core and its resident size, in one
-// spawn. Everything that reads per pane reads this table, because a process
-// spawned per pid per sample is a fan on a laptop with forty panes open.
-//
-// `comm` is the last column on purpose. On macOS it is the executable's full
-// path and that path has spaces in it — `teamree Helper (Renderer)` — so the
-// four numbers are read from the front and whatever is left is the command.
+// One `ps` call, read into rows: one spawn per sample, not one per pid. `comm`
+// is last because on macOS it is a full path with spaces in it.
 
 import type { ResourceProcess } from '../../shared/entities'
 
@@ -23,9 +15,7 @@ export function parsePsTable(text: string): ResourceProcess[] {
   const rows: ResourceProcess[] = []
   for (const line of text.split('\n')) {
     const match = ROW.exec(line)
-    // The header, a blank line, or a line that is not a row: none of them is
-    // a process, and a table with none of them is an empty answer rather than
-    // a broken one.
+    // The header, a blank line, or a line that is not a row.
     if (!match) continue
     rows.push({
       pid: Number(match[1]),

@@ -2,46 +2,28 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { Response, StreamEvent } from '../shared/protocol'
 
 // Channel names are spelled out rather than imported: preload belongs to both
-// TypeScript projects, and a module outside src/preload or src/shared would drag
-// main-process files into the renderer's compilation. Keep these in step with
-// src/main/runtime/ipcChannels.ts.
+// TypeScript projects, and importing from src/main would drag it into the
+// renderer's compilation. Keep in step with src/main/runtime/ipcChannels.ts.
 const RPC_CALL_CHANNEL = 'teamree:rpc:call'
 const RPC_STREAM_CHANNEL = 'teamree:rpc:stream'
 const RPC_RELEASE_CHANNEL = 'teamree:rpc:release'
-// And this one with src/main/reveal/revealPath.ts, for the same reason.
+// src/main/reveal/revealPath.ts
 const REVEAL_PATH_CHANNEL = 'teamree:reveal-path'
-// And these two with src/main/menuBar.ts. The first carries the window's
-// description of its own menus outward; the second is the only thing in this
-// file that carries anything inward other than the RPC stream, and what it
-// carries is one string — the `command` of a menu item this window itself
-// published a moment earlier.
+// src/main/menuBar.ts; the command channel carries one string inward.
 const MENU_PUBLISH_CHANNEL = 'teamree:menu:publish'
 const MENU_COMMAND_CHANNEL = 'teamree:menu:command'
-// And these two with src/main/agentNotices.ts. The same shape as the pair
-// above: the window says what it wants and which pane it is looking at, and
-// what comes back is one pane to go to.
+// src/main/agentNotices.ts
 const NOTICE_PUBLISH_CHANNEL = 'teamree:notices:publish'
 const NOTICE_REVEAL_CHANNEL = 'teamree:notices:reveal'
-// And this one with src/main/keepAwake.ts. Outward only: the window says
-// which way it wants this Mac's sleep, and nothing comes back.
+// src/main/keepAwake.ts; outward only.
 const KEEP_AWAKE_PUBLISH_CHANNEL = 'teamree:keep-awake:publish'
 
-/**
- * What the main process answers a reveal with, declared structurally here.
- *
- * Not imported from src/main: preload is compiled into both TypeScript
- * projects, so a type taken from there would drag the whole main-process tree
- * into the renderer's. The shape is small and the main-process definition is
- * the one that has to stay in step with it.
- */
+/** What the main process answers a reveal with, declared structurally (not imported from src/main). */
 type RevealResult = { revealed: true } | { revealed: false; reason: string }
 
 /**
  * One item of the window's own menus, declared structurally for the same reason
- * `RevealResult` is: the definition that matters belongs to the renderer
- * (`src/renderer/src/menu/menuBar.ts`) and the main process has a third copy it
- * parses incoming items against, because neither of those trees may be imported
- * from here. Plain strings and a boolean, so it crosses the bridge by value.
+ * `RevealResult` is; the renderer and main each hold their own copy.
  */
 type MenuBarItem = {
   command: string
@@ -53,26 +35,15 @@ type MenuBarItem = {
 
 /**
  * What the window tells the main process about notifications, and what comes
- * back — both declared structurally here for the same reason `MenuBarItem` is.
- *
- * `preference` is a plain string rather than the union of the three the window
- * knows: the main process parses it against its own list and ignores anything
- * else, which is the behaviour a wide type makes obvious and a narrow one would
- * hide behind a cast.
+ * back. `preference` is a plain string: the main process parses it against its own list.
  */
 type NoticeSettings = { preference: string; focusedPaneId: string | null }
 type PaneAddress = { worktreeId: string; terminalId: string }
 
-/**
- * What the window says about sleep, declared structurally for the same reason
- * `NoticeSettings` is. `mode` is a plain string: the main process parses it
- * against its own three and ignores anything else.
- */
+/** What the window says about sleep. `mode` is a plain string, parsed by the main process. */
 type KeepAwakeState = { mode: string; agentBusy: boolean }
 
-// The renderer never sees ipcRenderer: it gets three plain functions over the
-// context bridge. Everything crossing the bridge is structured-cloneable, so the
-// renderer cannot reach a live main-process object through them.
+// The renderer never sees ipcRenderer; everything crossing the bridge is structured-cloneable.
 
 const streamListeners = new Set<(frame: StreamEvent) => void>()
 
@@ -107,23 +78,13 @@ const runtime = {
 const menuCommandListeners = new Set<(command: string) => void>()
 
 ipcRenderer.on(MENU_COMMAND_CHANNEL, (_event, command: string) => {
-  // Copied first, for the same reason the stream listeners are: a listener may
-  // unsubscribe while the command is being delivered.
+  // Copied first: a listener may unsubscribe while the command is being delivered.
   for (const listener of [...menuCommandListeners]) listener(command)
 })
 
 /**
- * The application menu, which only the main process can install.
- *
- * Two functions and nothing else. `publish` hands over a finished description
- * of teamree's own menus — labels, accelerators and which of them are live —
- * built in the window because that is where the command table and the state
- * that enables each command both are. `onCommand` is how the choice comes back.
- *
- * This grants the page nothing it did not already have: it can name the items
- * of a menu bar it is looking at, and it is told when one is chosen. Everything
- * a choice then does is done by the window's own code, through the same store
- * the chord goes through.
+ * The application menu, which only the main process can install. `publish`
+ * hands over the window's own menus; `onCommand` is how the choice comes back.
  */
 const menu = {
   publish(items: readonly MenuBarItem[]): void {
@@ -141,23 +102,13 @@ const menu = {
 const revealListeners = new Set<(pane: PaneAddress) => void>()
 
 ipcRenderer.on(NOTICE_REVEAL_CHANNEL, (_event, pane: PaneAddress) => {
-  // Copied first, for the reason the two sets above are.
+  // Copied first, as above.
   for (const listener of [...revealListeners]) listener(pane)
 })
 
 /**
- * Notifications for an agent that stopped while nobody was looking.
- *
- * Only the main process can raise one, and it is the process that knows least
- * about what is going on: which pane has the focus and whether the person wants
- * to be told at all are both facts about the window. So `publish` hands those
- * over whenever they change, and `onReveal` is how a click on a notification
- * comes back — as one pane, which the window then opens the way the sidebar
- * opens one.
- *
- * This grants the page nothing: what arrives is a worktree and a terminal to go
- * to, and going there is the window's own code doing what pressing a sidebar
- * row already does.
+ * Notifications for an agent that stopped while nobody was looking. `publish`
+ * hands over the window's facts; `onReveal` is a click coming back as one pane.
  */
 const notices = {
   publish(settings: NoticeSettings): void {
@@ -173,15 +124,8 @@ const notices = {
 } as const
 
 /**
- * Whether this Mac may sleep.
- *
- * One function, outward. The window publishes the mode somebody chose and
- * whether any agent pane is on something, whenever either changes, and the
- * main process starts or stops one power-save assertion on that. This grants
- * the page one thing: it can hold this machine awake while it is open, which
- * is the feature. It cannot hold it awake after the window is gone — the
- * assertion goes with the web contents that published it — and it cannot ask
- * for anything else.
+ * Whether this Mac may sleep. Outward only; the assertion goes with the web
+ * contents that published it, so the page cannot hold the machine awake after closing.
  */
 const keepAwake = {
   publish(state: KeepAwakeState): void {
@@ -195,13 +139,8 @@ const api = {
   },
 
   /**
-   * Asks the OS file manager to show a path — Finder on macOS, Explorer on
-   * Windows, whatever the desktop uses on Linux.
-   *
-   * Never rejects for an ordinary failure. A path that has been deleted or
-   * moved comes back as `{ revealed: false, reason }`, because the main process
-   * checks before it asks the OS: `showItemInFolder` on a missing path is
-   * silent, and a caller that could not tell has nothing to put on screen.
+   * Asks the OS file manager to show a path. A missing path comes back as
+   * `{ revealed: false, reason }`: `showItemInFolder` on one is silent.
    */
   revealPath(path: string): Promise<RevealResult> {
     return ipcRenderer.invoke(REVEAL_PATH_CHANNEL, path)

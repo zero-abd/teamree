@@ -8,14 +8,7 @@ import {
 } from './scrollbackCheckpoints'
 import { QUIET_AFTER_MS } from './pty-session'
 
-/**
- * A clock that only moves when a test moves it, and the timers waiting on it.
- *
- * Real timers would make every assertion here a race, and the thing under test
- * is precisely *when* something happens; `armed` is also how a test says the
- * strongest thing there is to say about an idle pane, which is that nothing is
- * waiting to run against it.
- */
+/** A clock that only moves when a test moves it; `armed` says nothing is waiting on an idle pane. */
 function fakeTimers(): {
   schedule: (run: () => void, delayMs: number) => () => void
   armed: number
@@ -72,7 +65,6 @@ function prints(
 }
 
 describe('ScrollbackCheckpoints', () => {
-  // The whole point: a pane that is still running reaches the disk anyway.
   it('writes down what a pane has printed without waiting for it to exit', () => {
     const harnessed = harness()
     prints(harnessed, 'step 1 of 40\r\n')
@@ -82,9 +74,7 @@ describe('ScrollbackCheckpoints', () => {
     expect(harnessed.written).toEqual([{ terminalId: 'term_1', text: 'step 1 of 40\r\n' }])
   })
 
-  // The cost of this feature is meant to be proportional to the thing it
-  // protects, which means an app full of panes sitting at a prompt pays nothing
-  // at all — not a write, and not a timer waiting to make one.
+  // Panes sitting at a prompt pay nothing: not a write, not a timer.
   it('costs a quiet pane nothing', () => {
     const harnessed = harness()
     expect(harnessed.timers.armed).toBe(0)
@@ -94,18 +84,14 @@ describe('ScrollbackCheckpoints', () => {
     harnessed.timers.advance(CHECKPOINT_INTERVAL_MS)
     expect(harnessed.written).toHaveLength(1)
 
-    // And having written once it goes back to costing nothing, however long
-    // the pane then sits there.
+    // And having written once it goes back to costing nothing.
     expect(harnessed.timers.armed).toBe(0)
     expect(harnessed.checkpoints.armedCount).toBe(0)
     harnessed.timers.advance(CHECKPOINT_INTERVAL_MS * 100)
     expect(harnessed.written).toHaveLength(1)
   })
 
-  // An agent can print thousands of times a second. The floor is what stops
-  // that being thousands of writes, and it is the interval itself: a
-  // checkpoint is armed only when none is armed, and re-armed only by output
-  // that arrives after one has fired.
+  // A checkpoint is armed only when none is, and re-armed only by output after one fires.
   it('writes once for a burst, however much of it there is', () => {
     const harnessed = harness()
     for (let line = 0; line < 10_000; line++) prints(harnessed, `line ${line}\r\n`)
@@ -121,8 +107,7 @@ describe('ScrollbackCheckpoints', () => {
     prints(harnessed, 'first\r\n')
     harnessed.timers.advance(CHECKPOINT_INTERVAL_MS)
 
-    // Output through the whole of the next interval, arriving a tick after the
-    // write that just happened.
+    // Output through the whole of the next interval.
     for (let step = 0; step < CHECKPOINT_INTERVAL_MS; step += 100) {
       prints(harnessed, 'more\r\n')
       harnessed.timers.advance(100)
@@ -141,8 +126,7 @@ describe('ScrollbackCheckpoints', () => {
     expect(harnessed.written).toEqual([])
   })
 
-  // A pane that is closed has its record removed on purpose. A checkpoint
-  // armed by its last chunk of output would put the file straight back.
+  // A checkpoint armed by a closed pane's last chunk would put the file straight back.
   it('forgets a pane that has been closed before its checkpoint comes due', () => {
     const harnessed = harness()
     prints(harnessed, 'output\r\n')
@@ -166,8 +150,7 @@ describe('ScrollbackCheckpoints', () => {
     expect(harnessed.written).toEqual([])
   })
 
-  // `put` takes empty text as a removal. A checkpoint is not allowed to be the
-  // reason a record disappears — only a pane being closed is.
+  // `put` takes empty text as a removal; only a pane being closed may cause one.
   it('never removes a record by checkpointing an empty pane', () => {
     const harnessed = harness()
     harnessed.checkpoints.note('term_1')
@@ -194,8 +177,7 @@ describe('ScrollbackCheckpoints', () => {
 })
 
 describe('what the interval is chosen against', () => {
-  // Both halves of the argument in `scrollbackCheckpoints.ts`, asserted so that
-  // moving one of these numbers has to be a decision rather than an accident.
+  // Asserted so moving one of these numbers has to be a decision.
   it('is longer than the window this app calls a pane quiet in', () => {
     expect(CHECKPOINT_INTERVAL_MS).toBeGreaterThan(QUIET_AFTER_MS)
   })
@@ -204,9 +186,7 @@ describe('what the interval is chosen against', () => {
     expect(CHECKPOINT_INTERVAL_MS).toBeLessThan(60_000)
   })
 
-  // The sanitizer is linear in what it is handed and runs on the thread that
-  // pumps every PTY, so a checkpoint reads a window rather than the pane's
-  // whole four-megabyte buffer — with room for the escapes that get dropped.
+  // The sanitizer runs on the thread that pumps every PTY, so it reads a window, not the whole buffer.
   it('reads twice what it can keep, and no more', () => {
     expect(CHECKPOINT_SOURCE_BYTES).toBe(MAX_RECORD_BYTES * 2)
   })

@@ -1,24 +1,6 @@
-// Watching a teammate's pane, end to end, with nothing in the middle faked.
-//
-// The relay is the real container host in a child process, on a real port. The
-// crypto is real Noise between real identities. The pane is a real PTY with a
-// real process in it, reached through the terminal service exactly as it was
-// already written — which is the claim milestone C rests on: `terminal.read`
-// and `terminal.subscribe` do not learn that the caller is two thousand miles
-// away, and nothing in `src/main/terminals` was touched to make this work.
-//
-// Milestone D is here too, and the same claim holds one method wider: a
-// teammate's keystroke is `terminal.write`, answered by the terminal service
-// exactly as it was already written, with `src/main/terminals` still untouched.
-// What is new is everything around that write — whose it was, whether the owner
-// still wants it, and the record of it either way — and none of that is
-// assertable against a stand-in, because the whole question is what happens
-// between two real machines that do not trust the wire between them.
-//
-// `paneWatch.test.ts` is the companion to this file and covers the one thing it
-// cannot: the join between the scrollback and the live tail with the two
-// answers resolved in an order chosen by hand. Everything here is real and
-// therefore arrives when it arrives.
+// Watching and typing into a teammate's pane, end to end, with nothing faked: a
+// real relay in a child process, real Noise, a real PTY reached through the
+// terminal service unchanged. `paneWatch.test.ts` covers the scrollback join by hand.
 
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -123,11 +105,8 @@ async function startRelay(): Promise<RunningRelay> {
 }
 
 /**
- * Polls a condition the test cannot be woken for.
- *
- * The link's own changes fire `onChange`, but a byte arriving at a pane does
- * not, and neither does a PTY getting round to echoing it. The timeout is a
- * failure mode, not a delay.
+ * Polls a condition the test cannot be woken for: a byte arriving at a pane
+ * fires no `onChange`. The timeout is a failure mode, not a delay.
  */
 async function until(predicate: () => boolean, what: string, timeoutMs = 20_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
@@ -204,17 +183,9 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
   }
 
   /**
-   * Bob, answering the question his own machine puts up the first time somebody
-   * types at one of his panes.
-   *
-   * Driven through the real thing rather than around it — the request is read
-   * out of `teamwork.requests` and answered through `teamwork.decide` — because
-   * these are the tests that prove the feature across a relay, and a fixture
-   * that granted permission by reaching into the service would prove the
-   * feature with the prompt taken out of it.
-   *
-   * `always` by default, so a test about typing is not a test about being asked
-   * once per keystroke. The tests that are about the asking say so.
+   * Bob, answering the prompt through `teamwork.requests` and `teamwork.decide`:
+   * a fixture that reached into the service would prove the feature with the
+   * prompt taken out. `always` by default; the tests about the asking say so.
    */
   const bobAllows = async (handle: string, decision: ConsentDecision = 'always'): Promise<void> => {
     await until(
@@ -322,15 +293,12 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     })
     terminalId = created?.id ?? ''
     // The namespace `teamwork.presence` puts on a teammate's ids, rebuilt here
-    // rather than read out of a snapshot, so a change to either is a failure
-    // and not a test that quietly agrees with itself.
+    // rather than read out of a snapshot, so a change to either is a failure.
     paneId = `peer:${bobKey.slice(0, 12)}:${terminalId}`
     bob.changed()
 
-    // Carol is a link and not a runtime: she is here to ask for things, and
-    // what she is allowed to ask is the whole point of her. She still answers
-    // presence, because Bob's own link to her subscribes to it the moment it
-    // confirms and would tear the session down if nobody were home.
+    // Carol is a link, not a runtime: here to ask for things. She still answers
+    // presence, or Bob's own link to her would tear the session down.
     const carolHub = new SubscriptionHub()
     const carolRegistry = new MethodRegistry(
       createRuntimeContext({ version: 'test', store: {} as never, subscriptions: carolHub })
@@ -392,8 +360,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     const window = openWindow(alice, 'window_join')
     const opened = await aliceWatch(paneId, 'window_join')
 
-    // The scrollback contains what the pane said while nobody was watching,
-    // which is the point of reading it at all.
+    // The scrollback holds what the pane said while nobody was watching.
     await until(() => window.outputOn(opened.subscription).includes('before anybody was looking'), 'the scrollback')
 
     say('and this is live')
@@ -417,14 +384,12 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     expect(opened.cols).toBe(before?.cols)
     expect(opened.rows).toBe(before?.rows)
 
-    // And nothing a watcher did changed them. There is no method through which
-    // it could: `terminal.resize` is not on the teammate's allow-list.
+    // Nothing a watcher did changed them: `terminal.resize` is not on the allow-list.
     const after = bob.terminals?.manager.list('wt_b1')[0]
     expect(after?.cols).toBe(before?.cols)
     expect(after?.rows).toBe(before?.rows)
 
-    // And output does reach this window, so the sizes above are not the answer
-    // to a watch that never opened.
+    // And output reaches this window, so the sizes are not from a watch that never opened.
     await until(() => window.outputOn(opened.subscription).length > 0, 'the scrollback')
     await aliceRelease(opened.subscription, 'window_size')
   })
@@ -457,9 +422,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
 
     expect(pane?.watchers[0]?.since).toBeGreaterThan(0)
 
-    // Waited for rather than assumed: this says the row above was a real watch
-    // and not a name Bob filed against a stream that never carried anything,
-    // and frames arrive over a socket rather than in the turn that asked.
+    // Waited for rather than assumed: frames arrive over a socket, not in the turn that asked.
     await until(() => window.frames.length > 0, 'the watch to deliver something')
 
     await aliceRelease(opened.subscription, 'window_named')
@@ -491,9 +454,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
   })
 
   it('refuses everything outside the allow-list, typing being the only thing added to it', async () => {
-    // A teammate's window is not this pane's window and their keyboard is not
-    // its power switch. Milestone D widened the list by `terminal.write` and by
-    // nothing else, and these are the three that must stay off it.
+    // A teammate's keyboard is not this pane's power switch: these three must stay off the allow-list.
     await expect(carol.call('terminal.resize', { terminalId, cols: 10, rows: 5 })).rejects.toMatchObject({
       code: ErrorCode.UnknownMethod
     })
@@ -504,8 +465,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
       code: ErrorCode.UnknownMethod
     })
 
-    // The pane is still there, still the size it was, and still says what it is
-    // told to. Nothing a teammate asked for changed any of that.
+    // The pane is still there.
     expect(bob.terminals?.manager.list('wt_b1')).toHaveLength(1)
   })
 
@@ -535,8 +495,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     const window = openWindow(alice, 'window_exit')
     const opened = await aliceWatch(mortal.paneId, 'window_exit')
     // Bob's own books are the only honest evidence the watch is live: this pane
-    // has said nothing yet, so waiting on its output would be waiting on a
-    // condition that is already true and therefore on nothing at all.
+    // has said nothing yet.
     await until(
       () => bob.service.watchers({ projectId: 'p_bob' }).panes.some((row) => row.terminalId === mortal.terminalId),
       'Bob to see the reader'
@@ -576,13 +535,11 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
   })
 
   it('says a pane of this project closed, and says nothing at all about one that is not', async () => {
-    // The same close, without the race that makes it intermittent through a
-    // watcher: the read that follows a subscription is the one a closing pane
-    // overtakes, and here it is simply issued afterwards, by hand.
+    // The same close, without the race a watcher makes intermittent: the read
+    // is issued afterwards, by hand.
     const doomed = await openPane('stty -echo 2>/dev/null; cat')
 
-    // Carol reads it while it is there, which is what makes her somebody this
-    // machine has already shown the pane to.
+    // Carol reads it while it is there, so this machine has shown her the pane.
     await expect(carol.call('terminal.read', { terminalId: doomed.terminalId })).resolves.toMatchObject({
       data: expect.any(String)
     })
@@ -596,9 +553,8 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
       message: 'the owner closed this pane'
     })
 
-    // And the boundary that must not move: an id this project has never had is
-    // answered exactly as a pane of a project Carol holds no key for is — she
-    // cannot use this to ask whether a pane exists somewhere on Bob's machine.
+    // The boundary that must not move: an id this project never had is answered
+    // exactly as a pane of a project Carol holds no key for.
     await expect(carol.call('terminal.read', { terminalId: 'term_not_a_pane' })).rejects.toMatchObject({
       code: ErrorCode.NotFound,
       message: 'there is no pane term_not_a_pane in this project'
@@ -609,11 +565,8 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     const window = openWindow(alice, 'window_type_1')
     const opened = await aliceWatch(paneId, 'window_type_1')
     // Bob's own books, not Alice's output: `length >= 0` is true of an empty
-    // array, so waiting on it waits on nothing, and the keystroke below would
-    // then race the watch it is supposed to be seen through. Losing that race
-    // means the pty echoes into a stream nobody is attached to yet and the echo
-    // never arrives — which is a test that fails under load and passes alone,
-    // the worst kind to leave in the suite that proves this feature.
+    // array, and losing that race means the pty echoes into a stream nobody is
+    // attached to yet, a test that fails under load and passes alone.
     await until(
       () => bob.service.watchers({ projectId: 'p_bob' }).panes.some((row) => row.terminalId === terminalId),
       'Bob to see the reader'
@@ -625,12 +578,10 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     await bobAllows('alice')
     expect(await answer).toMatchObject({ ok: true, result: { written: true } })
 
-    // Through a real pty and back out again, which is the only proof that the
-    // bytes reached a process rather than a promise.
+    // Through a real pty and back, the only proof the bytes reached a process.
     await until(() => window.outputOn(opened.subscription).includes('a-keystroke-from-alice'), 'the echo to come back')
 
-    // And the owner's half: named, by the handle their roster files the key
-    // under, with the counts beside it.
+    // And the owner's half: named by the roster's handle, with the counts.
     const [typist] = bobTypists(terminalId)
     expect(typist?.handle).toBe('alice')
     expect(typist?.writes).toBeGreaterThan(0)
@@ -647,9 +598,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
       bytes: 'a-keystroke-from-alice\n'.length,
       returns: 1
     })
-    // The one thing the record must never hold. What was typed is on the
-    // owner's screen; keeping it here would make this file a store of whatever
-    // a teammate's terminal chose not to echo.
+    // The one thing the record must never hold: what was typed.
     expect(JSON.stringify(log)).not.toContain('a-keystroke-from-alice')
 
     // And the permission he gave stands: the next keystroke is not a question.
@@ -669,10 +618,8 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
 
     await bobMute(terminalId, true)
 
-    // Both of them, because a mute is of a pane and not of a person — and both
-    // of them without a prompt, which is the point: a mute answers the question
-    // before it is asked. Alice had a standing permission a moment ago and
-    // Carol has never had one, and the mute makes no distinction between them.
+    // Both, because a mute is of a pane and not a person, and both without a
+    // prompt: a mute answers the question before it is asked.
     expect(errorOf(await aliceType(paneId, 'after-the-mute\n')).code).toBe(ErrorCode.Conflict)
     await expect(carol.call('terminal.write', { terminalId, data: 'carol-after-the-mute\n' })).rejects.toMatchObject({
       code: ErrorCode.Conflict
@@ -691,9 +638,7 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     expect(bobTypists(terminalId).every((typist) => typist.refused > 0)).toBe(true)
 
     await bobMute(terminalId, false)
-    // The mute took the standing permission with it — a permission that
-    // outlived a mute would make the mute last exactly as long as the next
-    // unmute — so Bob is asked again, and says yes again.
+    // The mute took the standing permission with it, so Bob is asked again.
     const after = aliceType(paneId, 'after-the-unmute\n')
     await bobAllows('alice')
     expect((await after).ok).toBe(true)
@@ -731,10 +676,8 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     // that merged two people into one would get wrong.
     const both = aliceType(paneId, 'alices-line\n')
     carol.call('terminal.write', { terminalId, data: 'carols-line\n' }).catch(() => {})
-    // Two people, two questions. A request is one teammate at one pane, so
-    // these are two of them and never one — which is exactly the case an
-    // attribution, or a permission, that merged them would get wrong. Alice is
-    // asked again because the mute two tests above took her permission with it.
+    // Two people, two questions: a request is one teammate at one pane. Alice
+    // is asked again because the mute two tests above took her permission.
     await bobAllows('alice')
     await bobAllows('carol')
     expect((await both).ok).toBe(true)
@@ -769,10 +712,8 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
   })
 
   it('refuses a keystroke from a connection that is not a link at all', () => {
-    // The guard's own answer, asked directly, because the roster is what makes
-    // a keystroke a teammate's and not a stranger's. Nothing reached a pane and
-    // the refusal is in the record under a name that says it could not be
-    // attributed.
+    // The guard's own answer, asked directly: nothing reached a pane and the
+    // refusal is recorded as unattributable.
     const verdict = bob.service.remoteWrite('not_a_peer_link', { terminalId, data: 'x', bytes: 1 })
     expect(verdict).toMatchObject({ ok: false, code: ErrorCode.NotFound })
   })
@@ -817,10 +758,8 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
     const before = (await bobLog()).writes.length
     const settled: string[] = []
 
-    // Sent and then pulled out from under: whichever of the two wins the race,
-    // the keystroke either landed and was recorded or was refused and said so.
-    // The failure this rules out is the third outcome — a promise that resolves
-    // "written" for bytes nothing ever ran.
+    // Whichever wins the race, the keystroke either landed and was recorded or
+    // was refused and said so; never "written" for bytes nothing ran.
     const inFlight = aliceType(paneId, 'into-the-void\n').then((response) => {
       settled.push('ok' in response && response.ok ? 'written' : 'refused')
     })
@@ -843,14 +782,11 @@ describe.skipIf(!RELAY_BUILT || !PTYS_WORK)('watching a teammate’s pane over t
   }, 40_000)
 
   it('stops taking a teammate’s keystrokes once their key leaves the roster', async () => {
-    // Revocation at fetch speed, which is what `docs/teamwork.md` promises and
-    // all it promises: the key leaves the directory, the next read drops the
-    // link, and nothing that teammate sends reaches a pane again.
+    // Revocation at fetch speed: the key leaves the directory, the next read drops the link.
     const landedBefore = (await bobLog()).writes.filter(
       (write) => write.handle === 'carol' && write.outcome === 'written'
     ).length
-    // She was a real member a moment ago, so this is a revocation and not a
-    // stranger being turned away at the door.
+    // She was a real member a moment ago, so this is a revocation.
     expect(landedBefore).toBeGreaterThan(0)
 
     await unlink(join(bobProjectDir, ...MEMBERS_DIR_SEGMENTS, `carol${MEMBER_FILE_SUFFIX}`))

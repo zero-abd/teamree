@@ -1,16 +1,6 @@
-// The member file format, both directions.
-//
-// This file is committed, so it is read in a diff far more often than it is
-// read by the parser below. That is what the format is for: a short header
-// saying what the thing is, then three labelled lines, so somebody reviewing a
-// pull request can see at a glance that a person was added and which key they
-// were added with.
-//
-// The parser is forgiving about everything that does not change whose key it
-// is — blank lines, comments, ordering, stray whitespace, labels it has never
-// heard of — and unforgiving about everything that does. A file it cannot read
-// exactly is refused, never guessed at, because a guess here is a stranger in
-// the roster.
+// The member file format, both directions. Read in a diff far more often than by the parser, hence a
+// header and three labelled lines. The parser is forgiving about everything that does not change whose
+// key it is, and refuses rather than guesses at everything that does: a guess here is a stranger in the roster.
 
 import { sanitiseHandle } from './handle'
 
@@ -64,15 +54,8 @@ export function parseMemberFile(text: string): MemberFileParse {
     const separator = trimmed.indexOf(':')
     if (separator === -1) return { ok: false, reason: `line ${index + 1} is neither a comment nor a "label: value"` }
     const label = trimmed.slice(0, separator).trim().toLowerCase()
-    // A label appearing twice is the one shape of damage that would otherwise
-    // resolve silently, and whichever of the two won would be a coin toss over
-    // who this key belongs to.
-    //
-    // Quoted through `quote`, because everything on this line came out of a
-    // committed file that anybody with push access wrote, and this reason
-    // travels to the renderer in a `members.list` result. A 200,000-character
-    // label should cost its author a truncated message, not everyone else a
-    // 200,000-character row.
+    // A label appearing twice would otherwise resolve silently, a coin toss over whose key this is.
+    // Quoted through `quote`: anybody with push access wrote this line, and the reason reaches the renderer.
     if (fields.has(label)) return { ok: false, reason: `"${quote(label)}" appears more than once` }
     fields.set(label, trimmed.slice(separator + 1).trim())
   }
@@ -97,24 +80,15 @@ export function parseMemberFile(text: string): MemberFileParse {
   return { ok: true, value: { handle, publicKey, addedAt } }
 }
 
-/**
- * The longest a quoted scrap of a committed file may be when it is echoed back
- * in a problem. Long enough to recognise a typo in, short enough that a row is
- * a row.
- */
+/** The longest a quoted scrap of a committed file may be in a problem: enough to recognise a typo in. */
 export const MAX_QUOTED_LENGTH = 60
 
 /**
- * One piece of attacker-controlled text, made safe to put in a message.
- *
- * Everything in a member file was written by somebody with push access, and
- * problems travel to the renderer in a `members.list` result. Truncating is not
- * politeness; it is the difference between a bad file costing its author a
- * clipped message and costing every reader a screen of one.
+ * One piece of attacker-controlled text, made safe to put in a message: a bad file should cost its author
+ * a clipped message, not every reader a screen of one.
  */
 export function quote(raw: string): string {
-  // Control characters and newlines would break out of the one line a problem
-  // is rendered on, which is its own small kind of forgery.
+  // Control characters and newlines would break out of the one line a problem is rendered on.
   // oxlint-disable-next-line no-control-regex -- matching them is the point
   const flattened = raw.replace(/[\u0000-\u001f\u007f]/g, ' ')
   return flattened.length <= MAX_QUOTED_LENGTH ? flattened : `${flattened.slice(0, MAX_QUOTED_LENGTH)}…`
@@ -125,18 +99,12 @@ export function isPublicKey(value: string): boolean {
   if (!PUBLIC_KEY_BASE64.test(value)) return false
   const decoded = Buffer.from(value, 'base64')
   if (decoded.length !== 32) return false
-  // X25519 ignores the top bit of the last byte — RFC 7748 masks it before the
-  // scalar multiplication — so `K` and `K | 2^255` are the same identity spelled
-  // two ways. Every comparison in this codebase is on the base64 string, so two
-  // spellings of one key would walk straight past the duplicate-key check and
-  // arrive as two members with, as far as the handshake is concerned, the same
-  // key. No conforming encoder produces one: a public key is a field element
-  // below 2^255 - 19, so this bit is always clear in anything real.
+  // RFC 7748 masks the top bit of the last byte, so `K` and `K | 2^255` are one identity spelled two
+  // ways, and comparisons here are on the base64 string. No conforming encoder sets it: a public key
+  // is a field element below 2^255 - 19.
   if ((decoded[31] as number) & 0x80) return false
-  // base64 leaves two unused bits in the last character, so a string can match
-  // the shape, decode to the right length, and still not be what an encoder
-  // would ever produce. Re-encoding is the cheapest way to insist on one
-  // spelling per key, which matters because keys are compared as strings.
+  // base64 leaves two unused bits in the last character; re-encoding insists on one spelling per key,
+  // which matters because keys are compared as strings.
   return decoded.toString('base64') === value
 }
 

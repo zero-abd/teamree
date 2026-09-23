@@ -1,34 +1,6 @@
-// The one step teamree used to refuse: committing the two files and pushing them.
-//
-// The refusal was right about why and wrong about what to do. Being able to
-// push `.teamree/members/<you>.pub` is the whole of what membership means, so a
-// key this app pushed silently would be a claim the user never made — but the
-// answer to that is consent, not a wall of shell commands in a panel inside an
-// app that owns terminals and git. So this says exactly what it will do first
-// (`readPublishPlan`) and then does exactly that and nothing else.
-//
-// Three refusals shape it, and they are the same shape as `worktreeCommit`'s:
-//
-//   - It stages paths, never the tree. `git add -- <files>` with the two files
-//     named, and the commit is path-limited too, so work somebody had already
-//     staged for a commit of their own stays staged and uncommitted.
-//   - It never forces. There is no flag for it, for the reason `worktreePush`
-//     has none: the value of a force push is overwriting somebody else's work.
-//   - It reports the commit even when the push failed. "Your teammate pushed
-//     first" is the ordinary way this goes wrong, and calling the whole thing a
-//     failure would leave somebody believing no commit exists.
-//
-// The fourth thing it does is newer and is why this file has a `signal` and an
-// `onOutput` in it. A push is the only part of setting teamwork up that crosses
-// a network, and until it reported otherwise the window had exactly two states
-// for it: "Pushing…" and, up to ten minutes later, a result. Every way this
-// goes slowly looked the same from outside — a big first push, a credential
-// nobody can be asked for, a relay of a repository that is simply not there —
-// and the only way out was to wait for a timeout that said none of them apart.
-// So the push now runs with `--progress` and hands every line of it out as it
-// arrives, the whole thing takes an `AbortSignal`, and a run that was stopped
-// or that ran out of time comes back as a *result* with the commit in it rather
-// than as a throw that loses the half that worked.
+// Committing the two teamwork files and pushing them, with consent: it says what
+// it will do (`readPublishPlan`), stages paths never the tree, never forces,
+// reports the commit even when the push failed, and streams `--progress`.
 
 import type { PushFailureKind, TeamworkPublish, TeamworkPublishPlan } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
@@ -39,13 +11,8 @@ import { parsePushStatus, pushFailureKind, pushRefusal, type PushRefStatus } fro
 import { TeamworkError } from './errors'
 
 /**
- * A push crosses a network, so it gets far longer than a local command.
- *
- * It is still bounded, and the bound is still generous, because the alternative
- * to a timeout is a git process nothing will ever reap holding a panel open for
- * the life of the app. What makes ten minutes tolerable now is that they are no
- * longer silent: the progress is on screen, the wait is counted, and Stop is a
- * button rather than a timeout somebody has to sit out.
+ * A push crosses a network, so far longer than a local command, but bounded:
+ * the alternative is an unreaped git holding a panel open for the life of the app.
  */
 const PUSH_TIMEOUT_MS = 10 * 60_000
 /** Hooks run on a commit, and a hook can be slow. */
@@ -67,11 +34,8 @@ export type PublishTarget = {
   remote?: string
   now?: () => number
   /**
-   * Aborting kills whichever git is running and ends the call.
-   *
-   * A cancel during the push is reported rather than thrown, for the same
-   * reason a rejection is: the commit may well have landed, and a caller that
-   * hears only "cancelled" would go on believing it had not.
+   * Aborting kills whichever git is running. A cancel during the push is
+   * reported rather than thrown: the commit may well have landed.
    */
   signal?: AbortSignal
   /** Called as each phase begins, so a panel can say which command is running. */
@@ -81,11 +45,8 @@ export type PublishTarget = {
 }
 
 /**
- * What the button would do, in the words it will be described with.
- *
- * Every blocker it can report is a thing the panel has to be able to say in one
- * sentence that names the fix, because the alternative is a button that looks
- * live and then explains itself only after it has been pressed.
+ * What the button would do, in the words it will be described with. Every
+ * blocker names its fix in one sentence.
  */
 export async function readPublishPlan(runner: GitRunner, target: PublishTarget): Promise<TeamworkPublishPlan> {
   const remote = target.remote ?? 'origin'
@@ -140,10 +101,8 @@ async function blockerFor(
 }
 
 /**
- * Stages the named files, commits them, and pushes the branch.
- *
- * Refuses before touching anything when the plan says it cannot be done, so the
- * refusal a caller gets is the same sentence the panel was already showing.
+ * Stages the named files, commits them, and pushes the branch. Refuses before
+ * touching anything when the plan has a blocker, in the panel's own sentence.
  */
 export async function publish(runner: GitRunner, target: PublishTarget): Promise<TeamworkPublish> {
   const plan = await readPublishPlan(runner, target)
@@ -223,10 +182,7 @@ async function pushOnce(
   try {
     pushed = await runner.tryRun({
       // `--progress` because git draws its meter only when it believes
-      // something is watching, and a pipe is not a terminal. Without it the
-      // slowest part of this whole flow prints one line at the end, which is
-      // the difference between a panel that can say "writing objects, 60%" and
-      // one that can only say "Pushing…".
+      // something is watching, and a pipe is not a terminal.
       args: [
         'push',
         '--progress',
@@ -244,11 +200,9 @@ async function pushOnce(
       ...signal
     })
   } catch (error) {
-    // A push that was stopped or that ran out of time is still a publish with
-    // a commit in it, so it comes back as a verdict rather than as a throw.
-    // `tryRun` rejects for exactly these two and for a git that would not start
-    // at all; the last of those is nobody's remedy but an installation's, and
-    // it keeps git's own sentence.
+    // A push that was stopped or timed out is still a publish with a commit in
+    // it, so it comes back as a verdict rather than a throw. A git that would
+    // not start at all keeps git's own sentence.
     if (!(error instanceof GitCommandError)) throw error
     if (error.cancelled) {
       return {
@@ -283,8 +237,7 @@ async function pushOnce(
     }
   }
   return {
-    // git's own words, whole. The panel prints them as git printed them,
-    // because the one thing a refused push must not be is paraphrased into
+    // git's own words, whole: a refused push must not be paraphrased into
     // something nobody can search for.
     ok: false,
     kind: kindOf(pushed.stderr, pushed.exitCode, reported),
@@ -303,26 +256,12 @@ function kindOf(stderr: string, exitCode: number, reported: PushRefStatus | null
 }
 
 /**
- * The ssh this push is allowed to use, which is the caller's own with one thing
- * added: it may not stop and ask this machine's user anything.
- *
- * This is the bug the report was about. `GIT_TERMINAL_PROMPT=0` stops *git*
- * prompting, and does nothing whatever to ssh — which is a separate program
- * that opens `/dev/tty` directly for a key passphrase or for a host key it has
- * never seen. Started from a terminal, as teamree in development is, that tty
- * exists and is behind the app's own window, so the push waits on a question
- * nobody can see for as long as the timeout allows. `BatchMode=yes` turns that
- * wait into an immediate refusal with a sentence in it, which is the whole
- * difference between a hang and an error message.
- *
- * It is built on top of whatever ssh the user already asked for rather than
- * replacing it: `GIT_SSH_COMMAND` outranks `core.sshCommand`, so a team that
- * sets one in their config would otherwise find teamree quietly pushing with a
- * different key than every other tool on the machine.
- *
- * Exported because `teamree team accept` clones, and a clone meets exactly the
- * same ssh with exactly the same tty behind the app's window. Two copies of this
- * would be two answers to one question.
+ * The caller's own ssh with `BatchMode=yes` added. `GIT_TERMINAL_PROMPT=0` stops
+ * *git* prompting and does nothing to ssh, which opens `/dev/tty` itself for a
+ * passphrase or an unknown host key; started from a terminal that tty exists
+ * behind the app's window, so the push hung until the timeout. Built on
+ * `GIT_SSH_COMMAND` then `core.sshCommand`, so teamree pushes with the same key
+ * as every other tool. Exported because `teamree team accept` clones and meets the same tty.
  */
 export async function sshCommand(runner: GitRunner, cwd: string): Promise<string> {
   const configured = await runner.tryRun({
@@ -337,13 +276,8 @@ export async function sshCommand(runner: GitRunner, cwd: string): Promise<string
 }
 
 /**
- * git's progress, as lines.
- *
- * A meter redraws itself with a carriage return rather than a newline, so a
- * chunk of it is one line as far as anything counting `\n` is concerned and
- * forty as far as a reader is. Both separators split here, and empties go, so
- * what a panel shows is the last thing git actually said rather than a
- * kilobyte of the same sentence at different percentages.
+ * git's progress, as lines: a meter redraws with a carriage return rather than
+ * a newline, so both separators split here and empties go.
  */
 export function splitProgress(chunk: string): string[] {
   return chunk

@@ -1,10 +1,5 @@
-// The one place a real WebSocket is opened, kept behind an interface so every
-// rule above it can be tested without a network.
-//
-// It is deliberately thin: a socket, four callbacks, and no knowledge of the
-// relay's protocol. `relayConnection.ts` owns that, which is what lets the
-// whole greeting-and-pairing state machine run against a socket made of two
-// arrays in a test and against Cloudflare in production, with the same code.
+// The one place a real WebSocket is opened, behind an interface so every rule above it runs without a
+// network. Thin on purpose: a socket, four callbacks, and no knowledge of the relay's protocol.
 
 /** What the rest of the peer transport is allowed to do to a socket. */
 export type RelaySocket = {
@@ -19,10 +14,8 @@ export type RelaySocketHandlers = {
   onText: (text: string) => void
   onBinary: (payload: Uint8Array) => void
   /**
-   * Terminal, and called exactly once however the socket ended. `code` is 0
-   * when the socket failed before it ever produced one — a DNS failure, a
-   * refused connection — which is the difference between "the relay said no"
-   * and "there was no relay".
+   * Terminal, and called exactly once however the socket ended. `code` is 0 when the socket failed
+   * before it ever produced one: "there was no relay" rather than "the relay said no".
    */
   onClosed: (code: number, reason: string) => void
 }
@@ -45,8 +38,7 @@ export const webSocketDialer: RelayDialer = (url, handlers) => {
   try {
     socket = new WebSocket(url)
   } catch (error) {
-    // A URL the runtime will not even open — reported asynchronously so a
-    // caller never has to handle this one failure differently from the rest.
+    // Reported asynchronously so a caller never handles this one failure differently from the rest.
     queueMicrotask(() => finish(NO_CLOSE_CODE, messageOf(error)))
     return { sendText: () => {}, sendBinary: () => {}, close: () => {} }
   }
@@ -54,9 +46,7 @@ export const webSocketDialer: RelayDialer = (url, handlers) => {
   socket.binaryType = 'arraybuffer'
   socket.addEventListener('open', () => handlers.onOpen())
   socket.addEventListener('message', (event: MessageEvent) => {
-    // Control is text and content is binary, with no exceptions, in both
-    // directions. Anything that arrives as the wrong one is not a frame this
-    // protocol has, so it is dropped rather than guessed at.
+    // Control is text and content is binary, no exceptions; the wrong one is dropped rather than guessed at.
     if (typeof event.data === 'string') handlers.onText(event.data)
     else if (event.data instanceof ArrayBuffer) handlers.onBinary(new Uint8Array(event.data))
   })
@@ -73,8 +63,7 @@ export const webSocketDialer: RelayDialer = (url, handlers) => {
       if (socket.readyState === 1) socket.send(payload)
     },
     close: (code, reason) => {
-      // readyState 0 and 1 are the two a close is legal from; past that the
-      // socket is already going and asking again throws.
+      // readyState 0 and 1 are the two a close is legal from; past that asking again throws.
       if (socket.readyState <= 1) socket.close(code, reason)
     }
   }

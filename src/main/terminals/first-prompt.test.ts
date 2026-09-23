@@ -1,11 +1,5 @@
-// The task, on its way to the agent, on a real pty.
-//
-// A pane opened for a task ran `claude --session-id <id>` and nothing else: the
-// description became the branch and the label and never reached the program it
-// was written for. These prove the other half — the prompt is on the launched
-// line, once, after the session id — and the two places it must *not* be: a
-// resume, which is a conversation that already has it, and any record, which
-// is the string a resume is rewritten from.
+// The task on its way to the agent, on a real pty: on the launched line, once,
+// after the session id, and never on a resume or in the record.
 
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -109,8 +103,7 @@ describePty('the task as the first prompt', () => {
       expect(sessionId).toBeDefined()
       expect(printed).toEqual(['--model', 'opus', '--session-id', sessionId, TASK])
 
-      // The record keeps the line a resume is rewritten from, and the prompt is
-      // not on it: a resume is a conversation that has already been told.
+      // The record is what a resume is rewritten from, and a resume has already been told.
       expect(stores.records.get(opened.id)?.command).not.toContain(TASK)
     },
     TEST_TIMEOUT_MS
@@ -173,8 +166,7 @@ describePty('the task as the first prompt', () => {
     async () => {
       const { checkout, launch } = await fakeAgent('claude')
 
-      // A relaunched pane keeps what the dead one printed above the new run,
-      // so only the arguments printed after the first run's are the relaunch's.
+      // Only the arguments printed after the first run's are the relaunch's.
       const untouched = manager(repositories(), checkout, 'absent')
       const quiet = untouched.create({ worktreeId: 'wt_1', command: launch, prompt: TASK })
       const before = await printedArgs(untouched, quiet.id)

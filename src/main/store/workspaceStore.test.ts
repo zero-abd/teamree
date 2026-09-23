@@ -88,9 +88,7 @@ describe('workspace store', () => {
     expect(JSON.parse(await readFile(corruptPath, 'utf8'))).toMatchObject({ projects: [project] })
   })
 
-  // An empty sidebar is what a first launch looks like, so the one thing that
-  // distinguishes it from somebody's whole workspace failing to load has to be
-  // said rather than left for them to work out.
+  // An empty sidebar is what a first launch looks like.
   it('says a file could not be read instead of opening as if there were none', async () => {
     const path = join(directory, 'workspace.json')
     await writeFile(path, '{"projects": [{"id": "p1"', 'utf8')
@@ -104,11 +102,7 @@ describe('workspace store', () => {
     expect(missing.unreadable).toBeUndefined()
   })
 
-  // Crash-atomic writes make this unlikely, not impossible — a disk that filled
-  // mid-write, a filesystem that did not honour the rename, a file from an
-  // older build. Whatever it holds is somebody's projects, worktrees and agent
-  // session ids, and this process is the only thing between them and a fresh
-  // empty file written over the top.
+  // Whatever an unreadable file holds is somebody's projects and session ids.
   it('keeps the bytes of a file it could not read before writing over them', async () => {
     const path = join(directory, 'workspace.json')
     const original = '{"projects": [{"id": "p1"'
@@ -126,7 +120,7 @@ describe('workspace store', () => {
     expect(await readFile(kept, 'utf8')).toBe(original)
     expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({ projects: [project] })
     expect(problems.map((problem) => problem.kind)).toEqual(['unreadable', 'keptAside'])
-    // Said once: the file has been dealt with and is now an ordinary one.
+    // Said once.
     store.putWorktree(worktree('w1'))
     await store.flush()
     expect(problems).toHaveLength(2)
@@ -136,7 +130,7 @@ describe('workspace store', () => {
     const path = join(directory, 'workspace.json')
     const original = '{"projects": [{"id": "p1"'
     await writeFile(path, original, 'utf8')
-    // Nowhere to put it: something is already sitting where it would go.
+    // Something is already sitting where it would go.
     const occupied = join(directory, 'workspace.json.unreadable-2026-01-02T03-04-05-678Z')
     await mkdir(occupied)
     await writeFile(join(occupied, 'in-the-way'), 'x', 'utf8')
@@ -153,8 +147,6 @@ describe('workspace store', () => {
     expect(problems.map((problem) => problem.kind)).toEqual(['unreadable', 'notWritten'])
   })
 
-  // Finding out at shutdown that nothing has been saved all session is finding
-  // out too late to do anything about it.
   it('reports a failing write when it fails, not when the app quits', async () => {
     const home = join(directory, 'state')
     await mkdir(home)
@@ -171,7 +163,7 @@ describe('workspace store', () => {
 
     expect(problems.map((problem) => problem.kind)).toEqual(['writeFailed'])
 
-    // And said once, however many mutations follow: a full disk is one fact.
+    // Said once: a full disk is one fact.
     store.putWorktree(worktree('w1'))
     await store.flush().catch(() => {})
     expect(problems).toHaveLength(1)
@@ -222,8 +214,6 @@ describe('workspace store', () => {
     expect(store.removeProject('p1')).toBe(false)
     expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [], terminals: [] })
   })
-  // A question asked once has to stay asked across a quit, or "ask once" means
-  // "ask once per launch" — which is the thing this exists to avoid.
   describe('one-time questions', () => {
     it('has asked nothing on a fresh installation', async () => {
       const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
@@ -312,10 +302,7 @@ describe('workspace store', () => {
       expect((await WorkspaceStore.open(path)).listMutedTerminals()).toEqual(['t1'])
     })
   })
-  // The theme is a preference about the installation rather than about the
-  // workspace, and it lives in this file for the same reason `asked` does: the
-  // main process needs it before a window exists, to open that window in the
-  // colour it is about to paint itself.
+  // In this file because the main process needs it before a window exists.
   describe('how this installation is painted', () => {
     it('opens on absolute black until somebody chooses otherwise', async () => {
       const store = await WorkspaceStore.open(filePath)
@@ -337,9 +324,7 @@ describe('workspace store', () => {
       })
     })
 
-    // A colour file is hand-edited more often than anybody admits, and the cost
-    // of being strict about one bad hex would be an app that opens with no
-    // theme at all.
+    // Strictness about one bad hex would be an app that opens with no theme at all.
     it('keeps the colours it understands out of a file somebody has edited', async () => {
       const path = join(directory, 'workspace.json')
       await writeFile(
@@ -426,9 +411,7 @@ describe('workspace store', () => {
       await writeFile(path, JSON.stringify({ version: 1, projects: [project] }), 'utf8')
       expect((await WorkspaceStore.open(path)).listStandingConsent()).toEqual([])
 
-      // Salvaged row by row, like everything else here: a permission nobody can
-      // read is not a permission, and refusing the whole file over one would
-      // lose the ones that are still good.
+      // Salvaged row by row: a permission nobody can read is not a permission.
       await writeFile(
         path,
         JSON.stringify({
@@ -444,16 +427,8 @@ describe('workspace store', () => {
   })
 
   /**
-   * A pane's name is the one thing on its record that a person typed, and
-   * `terminal rename --help` promises in so many words that it survives a
-   * restart. It did not: the name was written to the file and then dropped on
-   * the way back in, because the schema that reads the file had never heard of
-   * it. Nothing failed and nothing was logged — the pane simply came back
-   * called whatever it was running, which for three agents racing one task is
-   * the same word three times.
-   *
-   * So the round trip is the test, both halves of it, out of the same bytes on
-   * disk: written by one store, read by the next.
+   * `terminal rename --help` promises the name survives a restart; a schema that
+   * had never heard of it dropped it silently. Both halves of the round trip are the test.
    */
   describe('what a pane is called, across a restart', () => {
     const named = (id: string, label?: string): TerminalRecord => ({
@@ -503,15 +478,8 @@ describe('workspace store', () => {
   })
 
   /**
-   * `typed` decides, on the launch after this one, whether a pane's pinned
-   * session id names a conversation worth resuming at all; the argument for it
-   * is written out on `TerminalRecord` in `session-restore.ts`. Every test of
-   * that decision hands `restoreLaunch` a record built in memory, so not one of
-   * them would notice the field being dropped on the way to the file or on the
-   * way back out of it. Dropped, nothing fails and nothing is logged: every
-   * record reads as never-typed for ever, and every agent pane starts its
-   * conversation over instead of resuming it. So the round trip is the test —
-   * written by one store, read by the next, out of the same bytes on disk.
+   * Every test of `restoreLaunch` builds its record in memory, so none would
+   * notice `typed` being dropped on the way through the file. The round trip is the test.
    */
   describe('whether anybody ever typed in a pane, across a restart', () => {
     const terminal = (id: string, typed?: boolean): TerminalRecord => ({
@@ -522,9 +490,7 @@ describe('workspace store', () => {
       command: 'claude --session-id s-1',
       agent: 'claude',
       agentSessionId: 's-1',
-      // Spread rather than assigned, so "no answer" is a key that is not there
-      // rather than a key holding undefined — which is what the file itself can
-      // represent, and the distinction the tests below are about.
+      // Spread, so "no answer" is a missing key rather than one holding undefined.
       ...(typed === undefined ? {} : { typed }),
       cols: 80,
       rows: 24,
@@ -536,8 +502,7 @@ describe('workspace store', () => {
       store.putTerminal(terminal('t1', true))
       await store.flush()
 
-      // Both halves, because either one alone can lose the field silently: the
-      // bytes that were written, and what a second store makes of them.
+      // Both halves: either alone can lose the field silently.
       const written = JSON.parse(await readFile(filePath, 'utf8')) as { terminals: TerminalRecord[] }
       expect(written.terminals[0]?.typed).toBe(true)
 
@@ -553,12 +518,8 @@ describe('workspace store', () => {
       const reopened = await WorkspaceStore.open(filePath)
       const [record] = reopened.listTerminals()
       expect(record).toEqual(terminal('t1'))
-      // `toEqual` above cannot tell a missing key from one holding undefined,
-      // and it is the missing key that matters: `restoreLaunch` reads absent as
-      // unknown and tries the resume, where it reads `false` as nobody having
-      // spoken and starts the agent over. A record that came back as `false`
-      // because it went through here would take the resume away from every
-      // pane in every workspace file written before the field existed.
+      // `toEqual` cannot tell a missing key from undefined, and `restoreLaunch`
+      // reads absent as unknown (tries the resume) but `false` as start over.
       expect(Object.keys(record ?? {})).not.toContain('typed')
     })
 
@@ -575,9 +536,7 @@ describe('workspace store', () => {
       expect(Object.keys(byId.get('t2') ?? {})).not.toContain('typed')
     })
 
-    // A `false` that survives the trip is what lets a pane stop failing the
-    // same way for ever: a resume that finds no conversation writes the answer
-    // down, and the launch after that starts the agent over instead.
+    // A `false` that survives the trip is what lets a pane stop failing the same way for ever.
     it('remembers a no through more than one restart', async () => {
       const store = await WorkspaceStore.open(filePath)
       store.putTerminal(terminal('t1'))
@@ -609,23 +568,13 @@ describe('workspace store', () => {
 
       const store = await WorkspaceStore.open(path)
 
-      // Salvaged row by row like every other list in this file: a row nobody
-      // can read costs that row and nothing around it. The pane is gone rather
-      // than back with a guessed answer, which is the safer of the two — a pane
-      // that does not come back is visible, and a conversation resumed on a
-      // guess is not.
+      // Row by row: a pane that does not come back is visible, a conversation resumed on a guess is not.
       expect(store.listTerminals()).toEqual([terminal('t1', true)])
       expect(store.listProjects()).toEqual([project])
     })
   })
 
-  /**
-   * Three features landed on the same day, each adding a field to this file and
-   * each written on a branch where it was the only new one. On disk they are
-   * now neighbours, so the property that matters is the one none of them could
-   * assert alone: each is salvaged on its own terms, and a field somebody — or
-   * a half-written flush — has mangled costs that field and nothing else.
-   */
+  /** Each field is salvaged on its own terms: a mangled one costs that field and nothing else. */
   describe('three fields that arrived separately, in one file', () => {
     const ANA = 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='
 
@@ -667,19 +616,13 @@ describe('workspace store', () => {
 
       const store = await WorkspaceStore.open(path)
       expect(store.getAppearance().themeId).toBe('graphite')
-      // Absent rather than false: a preference nobody can read has not been
-      // expressed, and the app goes on checking.
+      // Absent rather than false: the app goes on checking.
       expect(store.updateSettings().automatic).toBe(true)
       expect(store.listStandingConsent()).toEqual([])
       expect(store.snapshot().projects).toEqual([project])
     })
 
-    // The other direction of the same day: a file this build wrote, opened by a
-    // build from before any of the three existed, and then written back. Each
-    // field is read where it is missing as "not chosen", which is what makes
-    // that survivable in one direction — and the round trip through an older
-    // build drops all three, which is a fact about the format worth having
-    // stated rather than discovered.
+    // A round trip through an older build drops all three; a fact about the format.
     it('reads a file from before any of the three, as though nothing had been chosen', async () => {
       const path = join(directory, 'workspace.json')
       await writeFile(path, JSON.stringify({ version: 1, projects: [project], worktrees: [] }), 'utf8')

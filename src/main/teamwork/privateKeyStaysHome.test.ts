@@ -1,14 +1,6 @@
-// The one property this milestone cannot get wrong.
-//
-// Everything else here is a convenience: a roster that miscounts is annoying, a
-// handle that reads badly is a rename. A private key that reaches a repository
-// is unrecoverable, because the repository is the thing the team pushes to each
-// other, and a key in a diff is a key everybody has.
-//
-// So this suite does not read the implementation. It runs a real join against a
-// real repository and then goes looking for the secret: every byte under the
-// checkout, everything the call handed back, and everything the process said
-// out loud while it happened.
+// The one property that cannot be got wrong: a private key that reaches a repository is unrecoverable,
+// because a key in a diff is a key everybody has. This suite runs a real join against a real repository
+// and then goes looking for the secret in every byte under the checkout, every result, and every log line.
 
 import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises'
 import os from 'node:os'
@@ -35,8 +27,7 @@ describe('the private key never leaves the machine', () => {
     dirs.push(dataDir)
     const project: Project = { id: 'p', name: 'repo', path: repo.repoPath, baseRef: 'main' }
 
-    // Said out loud is as bad as written down, so the process is bugged for the
-    // length of the call: anything a handler printed would be in somebody's log.
+    // Said out loud is as bad as written down, so the process is bugged for the length of the call.
     const spoken: string[] = []
     const stopListening = captureOutput(spoken)
     let list: unknown
@@ -47,8 +38,7 @@ describe('the private key never leaves the machine', () => {
       stopListening()
     }
 
-    // Committed too, because a secret that only reached the index is still one
-    // `git push` away from the whole team.
+    // Committed too, because a secret that only reached the index is one `git push` from the team.
     await repo.commit('add my key')
 
     const secrets = await secretShapes(path.join(dataDir, IDENTITY_FILE_NAME))
@@ -60,8 +50,7 @@ describe('the private key never leaves the machine', () => {
     }
 
     expect(leaking).toEqual([])
-    // A search that found nothing because it was searching for nothing would
-    // pass this suite for ever without checking anything.
+    // A search that found nothing because it was searching for nothing would pass for ever.
     expect(files.length).toBeGreaterThan(5)
     expect(secrets).toHaveLength(4)
 
@@ -83,9 +72,8 @@ describe('the private key never leaves the machine', () => {
 })
 
 /**
- * Every form the secret could plausibly take on its way out: the file as
- * stored, its base64 body without the PEM furniture, and the raw key bytes in
- * both of the encodings anything in this codebase would reach for.
+ * Every form the secret could plausibly take on its way out: the file as stored, its base64 body without
+ * the PEM furniture, and the raw key bytes in both encodings this codebase would reach for.
  */
 async function secretShapes(privateKeyPath: string): Promise<string[]> {
   const pem = await readFile(privateKeyPath, 'utf8')

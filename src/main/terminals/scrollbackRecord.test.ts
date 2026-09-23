@@ -22,10 +22,7 @@ describe('sanitizeRecordedOutput', () => {
     expect(sanitizeRecordedOutput(output)).toBe(output)
   })
 
-  // The sequences that make an emulator transmit. Live, each of these was an
-  // answer to a program that asked; replayed, the answer would be typed into a
-  // shell that never asked anything — bytes on somebody's command line, out of
-  // a file, at launch.
+  // Replayed, each answer would be typed into a shell that never asked.
   it('drops everything that would make the terminal send bytes back', () => {
     const asking = [
       `${ESC}[6n`, // cursor position report
@@ -61,9 +58,7 @@ describe('sanitizeRecordedOutput', () => {
   })
 
   it('drops the sequences that would rewrite what is already on screen', () => {
-    // A record must not be able to clear the pane it was replayed into, switch
-    // it to the alternate screen — which would hide everything printed after
-    // it — or reset the emulator out from under the shell.
+    // Clear, alternate screen, reset, home, charset: none may reach the pane.
     for (const sequence of [`${ESC}[2J`, `${ESC}[?1049h`, `${ESC}c`, `${ESC}[H`, `${ESC}(0`]) {
       expect(sanitizeRecordedOutput(`before${sequence}after`), sequence).toBe('beforeafter')
     }
@@ -122,8 +117,6 @@ describe('the marks around a record', () => {
     expect(framed).toContain('nothing running')
     expect(framed).toContain('new shell below')
     expect(framed).toContain('built in 4.2s')
-    // The output is between the two marks, which is what makes the second one
-    // the boundary: whatever the new shell prints lands under it.
     expect(framed.indexOf('nothing running')).toBeLessThan(framed.indexOf('built in 4.2s'))
     expect(framed.indexOf('built in 4.2s')).toBeLessThan(framed.indexOf('new shell below'))
   })
@@ -131,10 +124,7 @@ describe('the marks around a record', () => {
   it('dates the record, and resets the colour on both sides of itself', () => {
     const at = Date.parse('2026-03-04T09:05:00Z')
     expect(openingMark(at)).toContain(clockLabel(at))
-    // The date is the moment the record was written down, not the moment the
-    // pane stopped: a record checkpointed while its pane was still running ends
-    // wherever the last checkpoint reached, and the mark has to say so rather
-    // than promise the reader the whole of what the pane printed.
+    // The date is when the record was written down, not when the pane stopped.
     expect(openingMark(at)).toContain('up to')
     expect(openingMark(at)).toContain('nothing running')
     expect(clockLabel(at)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
