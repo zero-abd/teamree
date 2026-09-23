@@ -125,6 +125,25 @@ describe('walking the panes', () => {
   })
 })
 
+describe('showing a pane from the strip', () => {
+  beforeEach(() => {
+    useWorkspaceStore.setState({ activeWorktreeId: 'w1', layouts: { w1: layout('t1') } })
+  })
+
+  it('gives the tree back first, then focuses the pane', () => {
+    useWorkspaceStore.setState({ expandedTerminalId: 't1' })
+    store().showPane('t2')
+    expect(store().expandedTerminalId).toBeNull()
+    expect(store().layouts.w1?.focusedTerminalId).toBe('t2')
+  })
+
+  it('restores even when the maximized pane is the one asked for', () => {
+    useWorkspaceStore.setState({ expandedTerminalId: 't1' })
+    store().showPane('t1')
+    expect(store().expandedTerminalId).toBeNull()
+  })
+})
+
 describe('maximising a pane', () => {
   beforeEach(() => {
     useWorkspaceStore.setState({ activeWorktreeId: 'w1', layouts: { w1: layout('t2') } })

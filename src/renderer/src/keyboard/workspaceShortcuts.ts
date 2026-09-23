@@ -2,7 +2,7 @@
 // the status bar are derived from it, so a rebind cannot leave a stale label.
 
 import type { Chord, ModifierState, PlatformModifier } from './platformModifier'
-import { formatChord, matchesChord } from './platformModifier'
+import { formatChord, holdsModifier, matchesChord } from './platformModifier'
 
 export type WorkspaceCommand =
   | 'split-right'
@@ -15,6 +15,8 @@ export type WorkspaceCommand =
   | 'toggle-right-panel'
   | 'focus-next-pane'
   | 'focus-previous-pane'
+  | 'select-next-pane'
+  | 'select-previous-pane'
   | 'expand-pane'
   | 'previous-worktree'
   | 'next-worktree'
@@ -51,6 +53,9 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // Unshifted: `matchesChord` compares `KeyboardEvent.key`, and shift+bracket yields a brace.
   { command: 'focus-previous-pane', chord: { key: '[' }, title: 'Focus previous pane' },
   { command: 'focus-next-pane', chord: { key: ']' }, title: 'Focus next pane' },
+  // Control on a Mac too, as in Safari and Terminal; the strip's tabs only, where ⌘] also visits teammates' panes.
+  { command: 'select-next-pane', chord: { key: 'Tab', ctrl: true }, title: 'Select Next Pane' },
+  { command: 'select-previous-pane', chord: { key: 'Tab', ctrl: true, shift: true }, title: 'Select Previous Pane' },
   // Shifted, since ⌘↩ is a send key in many pane programs; pressed again it restores. American
   // spelling to match Electron's own `minimize` role in the same menu.
   { command: 'expand-pane', chord: { key: 'Enter', shift: true }, title: 'Maximize pane' },
@@ -87,6 +92,12 @@ export function commandForEvent(
     if (shortcut.chord && matchesChord(pressed, shortcut.chord, modifier)) return shortcut.command
   }
   return null
+}
+
+/** ⌘1–⌘9 as a tab number, or null. Outside the table: nine rows would crowd the menu bar and palette. */
+export function paneNumberForEvent(event: ModifierState & { key: string }, modifier: PlatformModifier): number | null {
+  if (!holdsModifier(event, modifier) || event.shiftKey || event.altKey) return null
+  return /^[1-9]$/.test(event.key) ? Number(event.key) : null
 }
 
 /**

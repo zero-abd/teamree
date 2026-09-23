@@ -11,7 +11,7 @@
 
 import { fireEvent, render } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConsentRequest } from '@shared/entities'
+import type { ConsentRequest, Layout } from '@shared/entities'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -55,6 +55,14 @@ function seed(overrides: Record<string, unknown>): void {
     true
   )
   render(<Harness />)
+}
+
+/** The last `isAppChord` a harness was handed: what the terminals ask before keeping a key. */
+let isAppChord: ((event: KeyboardEvent) => boolean) | null = null
+
+function ChordHarness(): null {
+  isAppChord = useWorkspaceShortcuts(MAC)
+  return null
 }
 
 /** The close chord, on macOS, where the whole app runs. */
@@ -118,6 +126,72 @@ describe('the close chord', () => {
 // cannot get back to. Cmd-, opened the colour editor under the scrim and took
 // the focus with it; Cmd-W stopped a watch the owner was in the middle of being
 // asked about.
+/** A terminal, a markdown file and a terminal, with the first maximized. */
+const STRIP: Layout = {
+  worktreeId: 'w1',
+  root: {
+    kind: 'split',
+    direction: 'row',
+    sizes: [0.4, 0.3, 0.3],
+    children: [
+      { kind: 'leaf', terminalId: 't1' },
+      { kind: 'leaf', terminalId: 'file:n', pane: 'file', path: 'NOTES.md' },
+      { kind: 'leaf', terminalId: 't3' }
+    ]
+  },
+  focusedTerminalId: 't1'
+}
+
+describe('the tab chords', () => {
+  const focused = (): string | null | undefined => useWorkspaceStore.getState().layouts.w1?.focusedTerminalId
+
+  beforeEach(() => {
+    useWorkspaceStore.setState(
+      { ...INITIAL, activeWorktreeId: 'w1', layouts: { w1: STRIP }, expandedTerminalId: 't1' },
+      true
+    )
+    render(<ChordHarness />)
+  })
+
+  it('shows the Nth tab on ⌘N and the last on ⌘9, out of a maximized pane', () => {
+    const press = new KeyboardEvent('keydown', { key: '2', metaKey: true, bubbles: true, cancelable: true })
+    window.dispatchEvent(press)
+    expect(press.defaultPrevented).toBe(true)
+    expect(focused()).toBe('file:n')
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBeNull()
+
+    fireEvent.keyDown(window, { key: '9', metaKey: true })
+    expect(focused()).toBe('t3')
+  })
+
+  it('leaves a number with no tab alone', () => {
+    const press = new KeyboardEvent('keydown', { key: '5', metaKey: true, bubbles: true, cancelable: true })
+    window.dispatchEvent(press)
+    expect(press.defaultPrevented).toBe(false)
+    expect(focused()).toBe('t1')
+  })
+
+  it('walks the strip on ⌃Tab and back on ⌃⇧Tab', () => {
+    fireEvent.keyDown(window, { key: 'Tab', ctrlKey: true })
+    expect(focused()).toBe('file:n')
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBeNull()
+    fireEvent.keyDown(window, { key: 'Tab', ctrlKey: true, shiftKey: true })
+    fireEvent.keyDown(window, { key: 'Tab', ctrlKey: true, shiftKey: true })
+    expect(focused()).toBe('t3')
+  })
+
+  // What keeps the chords from the pty: the terminal's key handler refuses an app chord.
+  it('counts both as app chords, so a terminal never types them', () => {
+    const chord = (init: KeyboardEventInit): boolean => isAppChord?.(new KeyboardEvent('keydown', init)) ?? false
+    expect(chord({ key: '1', metaKey: true })).toBe(true)
+    expect(chord({ key: '9', metaKey: true })).toBe(true)
+    expect(chord({ key: 'Tab', ctrlKey: true })).toBe(true)
+    expect(chord({ key: 'Tab', ctrlKey: true, shiftKey: true })).toBe(true)
+    expect(chord({ key: 'Tab' })).toBe(false)
+    expect(chord({ key: '1', ctrlKey: true })).toBe(false)
+  })
+})
+
 describe('a question waiting on the owner', () => {
   it('takes the keyboard, exactly as a dialog of this window\u2019s own does', () => {
     seed({ consent: question() })

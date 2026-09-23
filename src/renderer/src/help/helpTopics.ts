@@ -3,6 +3,7 @@
 
 import type { CliStatus } from '@shared/entities'
 import { cliPanel } from '../dialogs/cliInstallModel'
+import { formatChord, type PlatformModifier } from '../keyboard/platformModifier'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand, type WorkspaceShortcut } from '../keyboard/workspaceShortcuts'
 
 export const HELP_TITLE = 'Help'
@@ -29,6 +30,8 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'find-in-pane': 'panes',
   'focus-next-pane': 'panes',
   'focus-previous-pane': 'panes',
+  'select-next-pane': 'panes',
+  'select-previous-pane': 'panes',
   'expand-pane': 'panes',
   'new-worktree': 'around',
   'previous-worktree': 'around',
@@ -70,6 +73,15 @@ export function shortcutGroups(
   return GROUP_ORDER.map((entry) => ({ ...entry, shortcuts: buckets.get(entry.id) ?? [] })).filter(
     (group) => group.shortcuts.length > 0
   )
+}
+
+/** The ⌘1–⌘9 rows, read under Panes; the digits live outside the table (see `paneNumberForEvent`). */
+export function paneNumberRows(modifier: PlatformModifier): readonly { title: string; chord: string }[] {
+  const chord = (key: string): string => formatChord({ key }, modifier)
+  return [
+    { title: 'Pane 1–8', chord: `${chord('1')}–${chord('8')}` },
+    { title: 'Last pane', chord: chord('9') }
+  ]
 }
 
 /* What a worktree is ------------------------------------------------------ */

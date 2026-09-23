@@ -9,6 +9,7 @@ export type PlatformModifier = {
   label: string
   shiftLabel: string
   altLabel: string
+  controlLabel: string
   /** Apple keyboards stack glyphs; everywhere else the parts are joined. */
   separator: string
 }
@@ -18,6 +19,7 @@ const APPLE: PlatformModifier = {
   label: '⌘',
   shiftLabel: '⇧',
   altLabel: '⌥',
+  controlLabel: '⌃',
   separator: ''
 }
 
@@ -26,6 +28,7 @@ const PC: PlatformModifier = {
   label: 'Ctrl',
   shiftLabel: 'Shift',
   altLabel: 'Alt',
+  controlLabel: 'Ctrl',
   separator: '+'
 }
 
@@ -66,6 +69,8 @@ export type Chord = {
   key: string
   shift?: boolean
   alt?: boolean
+  /** Held as Control in place of the app modifier, which on a Mac is a different key. */
+  ctrl?: boolean
 }
 
 export function matchesChord(
@@ -73,7 +78,8 @@ export function matchesChord(
   chord: Chord,
   modifier: PlatformModifier
 ): boolean {
-  if (!holdsModifier(event, modifier)) return false
+  const held = chord.ctrl ? event.ctrlKey && !event.metaKey : holdsModifier(event, modifier)
+  if (!held) return false
   if (event.shiftKey !== Boolean(chord.shift)) return false
   if (event.altKey !== Boolean(chord.alt)) return false
   return event.key.toLowerCase() === chord.key.toLowerCase()
@@ -81,7 +87,7 @@ export function matchesChord(
 
 /** Renders a chord the way this platform's users expect to read it. */
 export function formatChord(chord: Chord, modifier: PlatformModifier): string {
-  const parts = [modifier.label]
+  const parts = [chord.ctrl ? modifier.controlLabel : modifier.label]
   if (chord.alt) parts.push(modifier.altLabel)
   if (chord.shift) parts.push(modifier.shiftLabel)
   parts.push(formatKeyName(chord.key))

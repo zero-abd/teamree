@@ -45,7 +45,7 @@ function keypressFor(accelerator: string): ModifierState & { key: string } {
   return {
     key: EVENT_KEY_NAMES[key] ?? key,
     metaKey: parts.includes('CommandOrControl'),
-    ctrlKey: false,
+    ctrlKey: parts.includes('Control'),
     shiftKey: parts.includes('Shift'),
     altKey: parts.includes('Alt')
   }
@@ -79,6 +79,9 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     expect(acceleratorForChord({ key: '=' })).toBe('CommandOrControl+=')
     expect(acceleratorForChord({ key: '-' })).toBe('CommandOrControl+-')
     expect(acceleratorForChord({ key: '0' })).toBe('CommandOrControl+0')
+    // Control itself, not ⌘, on a Mac.
+    expect(acceleratorForChord({ key: 'Tab', ctrl: true })).toBe('Control+Tab')
+    expect(acceleratorForChord({ key: 'Tab', ctrl: true, shift: true })).toBe('Control+Shift+Tab')
   })
 
   // Labels come from the table too: one wording per command.
@@ -122,6 +125,8 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'split-down',
       'focus-previous-pane',
       'focus-next-pane',
+      'select-previous-pane',
+      'select-next-pane',
       'expand-pane'
     ])
     expect(sectionOrder('text')).toEqual(['actual-size', 'bigger-text', 'smaller-text'])
@@ -136,6 +141,23 @@ describe('the menu bar is built from the table the keyboard reads', () => {
   })
 })
 
+// Safari's and Terminal's wording for the same walk.
+describe('the tab walk', () => {
+  it('is in the Window menu on ⌃Tab and ⌃⇧Tab', () => {
+    const spec = menuBarSpec(WORKING)
+    expect(spec.find((item) => item.command === 'select-next-pane')).toMatchObject({
+      label: 'Select Next Pane',
+      accelerator: 'Control+Tab',
+      section: 'window'
+    })
+    expect(spec.find((item) => item.command === 'select-previous-pane')).toMatchObject({
+      label: 'Select Previous Pane',
+      accelerator: 'Control+Shift+Tab',
+      section: 'window'
+    })
+  })
+})
+
 describe('what the menu bar says can be done', () => {
   // Nothing offered that cannot work: a first launch greys what has nothing to act on.
   it('greys the pane commands in a window with no panes', () => {
@@ -147,6 +169,8 @@ describe('what the menu bar says can be done', () => {
       'find-in-pane': false,
       'focus-next-pane': false,
       'focus-previous-pane': false,
+      'select-next-pane': false,
+      'select-previous-pane': false,
       'expand-pane': false,
       'previous-worktree': false,
       'next-worktree': false,
@@ -175,6 +199,8 @@ describe('what the menu bar says can be done', () => {
       'actual-size',
       'focus-next-pane',
       'focus-previous-pane',
+      'select-next-pane',
+      'select-previous-pane',
       'previous-worktree',
       'next-worktree',
       'commit-changes',

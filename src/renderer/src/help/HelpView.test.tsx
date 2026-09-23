@@ -69,7 +69,16 @@ describe('the keyboard section', () => {
 
   it('lists no more and no fewer than the table has', () => {
     const { container } = render(<HelpView modifier={APPLE} />)
-    expect(container.querySelectorAll('.help-key')).toHaveLength(BOUND.length)
+    // Plus the two digit rows, which live outside the table.
+    expect(container.querySelectorAll('.help-key')).toHaveLength(BOUND.length + 2)
+  })
+
+  it('lists the tab numbers under Panes', () => {
+    render(<HelpView modifier={APPLE} />)
+    expect(screen.getByText('Pane 1–8')).toBeDefined()
+    expect(screen.getByText('⌘1–⌘8').tagName).toBe('KBD')
+    expect(screen.getByText('Last pane')).toBeDefined()
+    expect(screen.getByText('⌘9').tagName).toBe('KBD')
   })
 
   // The chords are read off the same table on both platforms, and the glyph is
@@ -84,7 +93,9 @@ describe('the keyboard section', () => {
       render(<HelpView modifier={modifier} />)
       for (const shortcut of BOUND) {
         const chord = formatChord(shortcut.chord as Chord, modifier)
-        expect(chord.startsWith(glyph), `${shortcut.command} is written ${chord}`).toBe(true)
+        // ⌃Tab is Control on every platform.
+        const lead = shortcut.chord?.ctrl ? modifier.controlLabel : glyph
+        expect(chord.startsWith(lead), `${shortcut.command} is written ${chord}`).toBe(true)
         expect(screen.getByText(chord).tagName).toBe('KBD')
       }
     }

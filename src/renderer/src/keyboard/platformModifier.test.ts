@@ -7,7 +7,13 @@ import {
   matchesChord,
   resolvePlatformModifier
 } from './platformModifier'
-import { commandForEvent, commandNamed, shortcutHint, WORKSPACE_SHORTCUTS } from './workspaceShortcuts'
+import {
+  commandForEvent,
+  commandNamed,
+  paneNumberForEvent,
+  shortcutHint,
+  WORKSPACE_SHORTCUTS
+} from './workspaceShortcuts'
 
 const mac = resolvePlatformModifier('darwin')
 const pc = resolvePlatformModifier('win32')
@@ -75,6 +81,15 @@ describe('matchesChord', () => {
     expect(matchesChord(event({ metaKey: true, shiftKey: true }), { key: 'd' }, mac)).toBe(false)
     expect(matchesChord(event({ metaKey: true, shiftKey: true }), { key: 'd', shift: true }, mac)).toBe(true)
   })
+
+  // ⌃Tab is Control on a Mac too, where Control is not the app modifier.
+  it('reads a control chord as Control on every platform', () => {
+    const chord = { key: 'Tab', ctrl: true }
+    expect(matchesChord(event({ key: 'Tab', ctrlKey: true }), chord, mac)).toBe(true)
+    expect(matchesChord(event({ key: 'Tab', metaKey: true }), chord, mac)).toBe(false)
+    expect(matchesChord(event({ key: 'Tab', ctrlKey: true, metaKey: true }), chord, mac)).toBe(false)
+    expect(matchesChord(event({ key: 'Tab', ctrlKey: true }), chord, pc)).toBe(true)
+  })
 })
 
 describe('formatChord', () => {
@@ -86,6 +101,12 @@ describe('formatChord', () => {
   it('joins the parts elsewhere', () => {
     expect(formatChord({ key: 'd' }, pc)).toBe('Ctrl+D')
     expect(formatChord({ key: 'd', shift: true }, pc)).toBe('Ctrl+Shift+D')
+  })
+
+  it('draws Control as Control', () => {
+    expect(formatChord({ key: 'Tab', ctrl: true }, mac)).toBe('⌃Tab')
+    expect(formatChord({ key: 'Tab', ctrl: true, shift: true }, mac)).toBe('⌃⇧Tab')
+    expect(formatChord({ key: 'Tab', ctrl: true, shift: true }, pc)).toBe('Ctrl+Shift+Tab')
   })
 
   // A key whose name is a word is drawn as the glyph on the keycap. `ArrowUp`
@@ -130,6 +151,34 @@ describe('workspace shortcuts', () => {
     expect(commandForEvent(event({ key: '+', metaKey: true, altKey: true }), mac)).toBeNull()
   })
 
+  // Every tabbed macOS app; the terminal apps too.
+  it('reads ⌃Tab and ⌃⇧Tab as the tab walk, and ⌘Tab as nothing', () => {
+    expect(commandForEvent(event({ key: 'Tab', ctrlKey: true }), mac)).toBe('select-next-pane')
+    expect(commandForEvent(event({ key: 'Tab', ctrlKey: true, shiftKey: true }), mac)).toBe('select-previous-pane')
+    expect(commandForEvent(event({ key: 'Tab', ctrlKey: true }), pc)).toBe('select-next-pane')
+    expect(commandForEvent(event({ key: 'Tab', metaKey: true }), mac)).toBeNull()
+    expect(commandForEvent(event({ key: 'Tab' }), mac)).toBeNull()
+  })
+
+  it('reads ⌘1–⌘9 as a tab number, and nothing else as one', () => {
+    for (const digit of [1, 2, 8, 9]) {
+      expect(paneNumberForEvent(event({ key: String(digit), metaKey: true }), mac)).toBe(digit)
+    }
+    expect(paneNumberForEvent(event({ key: '3', ctrlKey: true }), pc)).toBe(3)
+    expect(paneNumberForEvent(event({ key: '0', metaKey: true }), mac)).toBeNull()
+    expect(paneNumberForEvent(event({ key: '3', ctrlKey: true }), mac)).toBeNull()
+    expect(paneNumberForEvent(event({ key: '3', metaKey: true, altKey: true }), mac)).toBeNull()
+    expect(paneNumberForEvent(event({ key: '3', metaKey: true, shiftKey: true }), mac)).toBeNull()
+    expect(paneNumberForEvent(event({ key: '3' }), mac)).toBeNull()
+  })
+
+  // The digits live outside the table, so the table must leave them free.
+  it('binds nothing in the table to a tab number', () => {
+    for (const digit of '123456789') {
+      expect(commandForEvent(event({ key: digit, metaKey: true }), mac), digit).toBeNull()
+    }
+  })
+
   it('claims nothing without the modifier', () => {
     expect(commandForEvent(event({ key: 'd' }), mac)).toBeNull()
     expect(commandForEvent(event({ key: 'd', ctrlKey: true }), mac)).toBeNull()
@@ -140,7 +189,8 @@ describe('workspace shortcuts', () => {
   // menu bar and the palette and from no key at all.
   it('has no duplicate bindings', () => {
     const seen = WORKSPACE_SHORTCUTS.filter((shortcut) => shortcut.chord !== undefined).map(
-      (shortcut) => `${shortcut.chord?.key}:${Boolean(shortcut.chord?.shift)}:${Boolean(shortcut.chord?.alt)}`
+      (shortcut) =>
+        `${shortcut.chord?.key}:${Boolean(shortcut.chord?.ctrl)}:${Boolean(shortcut.chord?.shift)}:${Boolean(shortcut.chord?.alt)}`
     )
     expect(new Set(seen).size).toBe(seen.length)
     expect(seen.length).toBeGreaterThan(5)
@@ -158,6 +208,8 @@ describe('workspace shortcuts', () => {
     expect(shortcutHint('next-worktree', mac)).toBe('⌘⌥↓')
     expect(shortcutHint('focus-previous-pane', mac)).toBe('⌘[')
     expect(shortcutHint('expand-pane', mac)).toBe('⌘⇧↩')
+    expect(shortcutHint('select-next-pane', mac)).toBe('⌃Tab')
+    expect(shortcutHint('select-previous-pane', pc)).toBe('Ctrl+Shift+Tab')
   })
 
   // The menu bar sends a command's name back from the main process, so a

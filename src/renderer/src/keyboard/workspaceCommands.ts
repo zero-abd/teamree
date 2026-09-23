@@ -8,6 +8,7 @@ import { isFilePaneId } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { collectTerminalIds } from '../panes/paneLayout'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
+import { numberedTab, tabAfter } from '../workspace/paneTabs'
 import { TERMINAL_FONT_DEFAULT_PX, TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
 import type { DialogState } from '../state/workspaceStore'
 import type { WorkspaceCommand } from './workspaceShortcuts'
@@ -41,6 +42,7 @@ export type CommandActions = {
   closeWatchedPane: (id: string) => void
   focusNextPane: () => void
   focusPreviousPane: () => void
+  showPane: (paneId: string) => void
   toggleExpandedPane: () => void
   stepWorktree: (step: 1 | -1) => void
   openPaneSearch: () => void
@@ -86,6 +88,22 @@ function ownFocusedPane(state: CommandState): string | null {
   return activeLayout(state)?.focusedTerminalId ?? null
 }
 
+/** The strip's tabs, every kind, in the order it draws them (`paneTabs`). */
+function stripTabs(state: CommandState): string[] {
+  return collectTerminalIds(activeLayout(state)?.root ?? null)
+}
+
+/** The tab the strip marks; none while a teammate's pane has the focus. */
+function stripFocus(state: CommandState): string | null {
+  return state.focusedWatchId === null ? (activeLayout(state)?.focusedTerminalId ?? null) : null
+}
+
+/** The tab ⌘`n` would show now, or null; refused under the same modal guards as the table's commands. */
+export function paneNumberTarget(n: number, state: CommandState): string | null {
+  if (firstQuestion(state.consent) !== null || state.dialog) return null
+  return numberedTab(stripTabs(state), n)
+}
+
 function fontSize(state: CommandState): number {
   return state.terminalFontSize ?? TERMINAL_FONT_DEFAULT_PX
 }
@@ -127,6 +145,9 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
     case 'focus-previous-pane':
       // Two or more, counting watched panes as the walk does; with one, `focusPane` returns early.
       return collectTerminalIds(activeLayout(state)?.root ?? null).length + state.watches.length >= 2
+    case 'select-next-pane':
+    case 'select-previous-pane':
+      return stripTabs(state).length >= 2
     case 'expand-pane':
       // A pane of your own, as `splitFocusedPane` requires; a lone pane can still be maximised.
       return ownFocusedPane(state) !== null
@@ -203,6 +224,12 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'focus-previous-pane':
       store.focusPreviousPane()
       break
+    case 'select-next-pane':
+    case 'select-previous-pane': {
+      const next = tabAfter(stripTabs(store), stripFocus(store), command === 'select-next-pane' ? 1 : -1)
+      if (next) store.showPane(next)
+      break
+    }
     case 'expand-pane':
       store.toggleExpandedPane()
       break

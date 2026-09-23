@@ -59,6 +59,7 @@ import {
   WATCH_TAIL_CHARS,
   type WatchedPane
 } from '../panes/watchedPanes'
+import { tabAfter } from '../workspace/paneTabs'
 import { awaitWorktreeReady } from './awaitWorktreeReady'
 import {
   relayLauncherCommand,
@@ -429,6 +430,8 @@ type WorkspaceState = {
   focusNextPane: () => void
   /** The other way round the same cycle. See `paneCycle`. */
   focusPreviousPane: () => void
+  /** Focuses a pane of your own, giving the tree back first if a pane is maximized. */
+  showPane: (paneId: string) => void
   /** Fills the workspace with the focused pane, or gives the tree back. */
   toggleExpandedPane: () => void
   /** Fills the workspace with this pane, or gives the tree back when it already does. */
@@ -1022,13 +1025,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const stepFocus = (step: 1 | -1): void => {
     const layout = activeLayout()
     const ids = paneCycle(layout?.root ?? null, get().watches)
-    if (ids.length === 0) return
-    const current = get().focusedWatchId ?? layout?.focusedTerminalId ?? null
-    const index = current === null ? -1 : ids.indexOf(current)
-    // From nowhere, forwards is the first pane and backwards is the last.
-    const from = index === -1 ? (step === 1 ? -1 : 0) : index
-    const next = ids[(from + step + ids.length) % ids.length]
-    if (next !== undefined) get().focusPane(next)
+    const next = tabAfter(ids, get().focusedWatchId ?? layout?.focusedTerminalId ?? null, step)
+    if (next !== null) get().focusPane(next)
   }
 
   return {
@@ -1645,6 +1643,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     focusPreviousPane() {
       stepFocus(-1)
+    },
+
+    showPane(paneId) {
+      if (get().expandedTerminalId !== null) set({ expandedTerminalId: null })
+      get().focusPane(paneId)
     },
 
     /**

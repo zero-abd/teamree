@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ConsentRequest } from '@shared/entities'
 import type { CommandActions, CommandState, Workspace } from './workspaceCommands'
-import { isCommandAvailable, runWorkspaceCommand } from './workspaceCommands'
+import { isCommandAvailable, paneNumberTarget, runWorkspaceCommand } from './workspaceCommands'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand } from './workspaceShortcuts'
 
 const EMPTY: CommandState = {
@@ -90,6 +90,7 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     closeWatchedPane: vi.fn(),
     focusNextPane: vi.fn(),
     focusPreviousPane: vi.fn(),
+    showPane: vi.fn(),
     toggleExpandedPane: vi.fn(),
     stepWorktree: vi.fn(),
     openPaneSearch: vi.fn(),
@@ -257,6 +258,9 @@ describe('running a command', () => {
       ['toggle-right-panel', 'toggleRightPanel', []],
       ['focus-next-pane', 'focusNextPane', []],
       ['focus-previous-pane', 'focusPreviousPane', []],
+      // From t1 of two, both ways land on t2.
+      ['select-next-pane', 'showPane', ['t2']],
+      ['select-previous-pane', 'showPane', ['t2']],
       ['expand-pane', 'toggleExpandedPane', []],
       // One method with a direction argument, so the two chords undo each other.
       ['previous-worktree', 'stepWorktree', [-1]],
@@ -271,7 +275,7 @@ describe('running a command', () => {
 
     for (const [command, method, args] of cases) {
       // Only the walks need somewhere to go; the git pair has its own case below.
-      const paneWalk = command === 'focus-next-pane' || command === 'focus-previous-pane'
+      const paneWalk = /^(focus|select)-(next|previous)-pane$/.test(command)
       const worktreeWalk = command === 'previous-worktree' || command === 'next-worktree'
       const store = workspace(paneWalk ? TWO_PANES : worktreeWalk ? TWO_WORKTREES : WORKING)
       runWorkspaceCommand(command, store)
@@ -324,6 +328,74 @@ describe('running a command', () => {
       runWorkspaceCommand(command, store)
       expect(callCount(store), command).toBe(0)
     }
+  })
+})
+
+/** A terminal, a markdown file and a terminal, focused on the first: the strip reads t1, NOTES.md, t3. */
+const THREE_TABS: CommandState = {
+  ...WORKING,
+  layouts: {
+    w1: {
+      worktreeId: 'w1',
+      root: {
+        kind: 'split',
+        direction: 'row',
+        sizes: [0.4, 0.3, 0.3],
+        children: [
+          { kind: 'leaf', terminalId: 't1' },
+          { kind: 'leaf', terminalId: 'file:n', pane: 'file', path: 'NOTES.md' },
+          { kind: 'leaf', terminalId: 't3' }
+        ]
+      },
+      focusedTerminalId: 't1'
+    }
+  }
+}
+
+const focusedOn = (state: CommandState, id: string): CommandState => ({
+  ...state,
+  layouts: { w1: { ...(state.layouts.w1 as NonNullable<CommandState['layouts']['w1']>), focusedTerminalId: id } }
+})
+
+describe('the tab strip by key', () => {
+  const shown = (command: WorkspaceCommand, state: CommandState): unknown => {
+    const showPane = vi.fn()
+    runWorkspaceCommand(command, { ...workspace(state), showPane })
+    return showPane.mock.calls[0]?.[0]
+  }
+
+  it('walks every kind of tab in strip order, wrapping at both ends', () => {
+    expect(shown('select-next-pane', THREE_TABS)).toBe('file:n')
+    expect(shown('select-next-pane', focusedOn(THREE_TABS, 'file:n'))).toBe('t3')
+    expect(shown('select-next-pane', focusedOn(THREE_TABS, 't3'))).toBe('t1')
+    expect(shown('select-previous-pane', THREE_TABS)).toBe('t3')
+  })
+
+  // The strip marks no tab while a teammate's pane has the focus.
+  it('starts from an end when a teammate’s pane has the focus', () => {
+    const watching = { ...THREE_TABS, focusedWatchId: 'watch:p1:priya:t7' }
+    expect(shown('select-next-pane', watching)).toBe('t1')
+    expect(shown('select-previous-pane', watching)).toBe('t3')
+  })
+
+  it('needs two tabs to walk', () => {
+    expect(isCommandAvailable('select-next-pane', WORKING)).toBe(false)
+    expect(isCommandAvailable('select-previous-pane', THREE_TABS)).toBe(true)
+  })
+
+  it('names the Nth tab for 1 to 8 and the last for 9', () => {
+    expect(paneNumberTarget(1, THREE_TABS)).toBe('t1')
+    expect(paneNumberTarget(2, THREE_TABS)).toBe('file:n')
+    expect(paneNumberTarget(3, THREE_TABS)).toBe('t3')
+    expect(paneNumberTarget(4, THREE_TABS)).toBeNull()
+    expect(paneNumberTarget(9, THREE_TABS)).toBe('t3')
+    expect(paneNumberTarget(9, WORKING)).toBe('t1')
+    expect(paneNumberTarget(1, EMPTY)).toBeNull()
+  })
+
+  it('names none under a dialog or a teammate’s question', () => {
+    expect(paneNumberTarget(1, { ...THREE_TABS, dialog: { kind: 'palette' } })).toBeNull()
+    expect(paneNumberTarget(1, { ...THREE_TABS, consent: QUESTION })).toBeNull()
   })
 })
 
