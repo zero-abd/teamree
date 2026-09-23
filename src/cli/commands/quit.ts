@@ -1,13 +1,6 @@
-// Ending the app from a shell.
-//
-// Everything else here drives a running app; this is the one command that ends
-// one, and it exists because the alternative people were reaching for is a
-// signal. A signal is precisely the wrong ending: the ptys, the socket, the
-// discovery file and every pane's transcript are released by `before-quit`, and
-// nothing but the app's own quit runs it.
-//
-// Top-level rather than under a noun, beside `status`: both are about the
-// running app itself rather than about anything in the workspace.
+// Ending the app from a shell. A signal is the wrong ending: the ptys, socket,
+// discovery file and transcripts are released by `before-quit`, which only the
+// app's own quit runs.
 
 import { readNumber } from '../argv.js'
 import type { CommandSpec } from '../command-spec.js'
@@ -44,10 +37,8 @@ export const quitCommands: readonly CommandSpec[] = [
       try {
         pid = (await context.client.call('app.quit', {})).pid
       } catch (error) {
-        // The quit takes the connection the reply was travelling on, so a
-        // connection that dies here says nothing about whether the app went.
-        // The endpoint below settles that, and it is the better evidence
-        // anyway.
+        // The quit takes the connection the reply was travelling on; the
+        // endpoint below is the better evidence.
         if (!(error instanceof CliError) || !LEAVING.has(error.code)) throw error
       }
 

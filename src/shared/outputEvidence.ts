@@ -1,27 +1,8 @@
-// Picks the one line of a terminal's output that is worth putting on a sidebar
-// row — or into a notification, which is why this is here rather than beside
-// the sidebar that was its only reader.
-//
-// It is in the contract directory for the narrow reason that two processes now
-// answer the same question about the same bytes: the window writes this line on
-// a row, and the main process writes it in the body of the notification it
-// raises when an agent stops. A second copy in `src/main` would be a second
-// idea of what a pane last said, and the two would drift on the first program
-// that redraws its last line. Nothing else about this is contract — it types no
-// method and crosses no wire — and it has no dependencies at all, so it costs
-// the renderer and the CLI nothing to have it here.
-//
-// This is evidence, not status: teamree watches a PTY, so all it ever has is
-// what a program printed. Nothing here knows what the program meant, and the
-// UI must not pretend otherwise.
-//
-// Raw output is a poor source for a single line. It carries SGR colour, cursor
-// moves and OSC titles; a progress bar rewrites one line with carriage returns
-// so that the last bytes are a fragment of the last state rather than the state
-// itself; spinners erase the line and redraw it; and the final line is very
-// often an empty prompt waiting for input. So the tail is replayed the way a
-// terminal would apply it to a line buffer, and the result is then filtered for
-// lines that would tell a reader nothing.
+// Picks the one line of a terminal's output worth putting on a sidebar row or
+// in a notification; shared so the window and the main process cannot drift.
+// Evidence, not status: all teamree has is what a program printed. The tail is
+// replayed onto a line buffer as a terminal would, then filtered for lines
+// that would tell a reader nothing.
 
 /** Cap on the returned line. The row ellipsises visually; this stops a program
  *  that prints a megabyte without a newline from reaching the DOM at all. */
@@ -41,15 +22,11 @@ const PROMPT_GLYPHS = '$%#>❯➜»'
 /** The two of those that also appear at the end of ordinary output. */
 const AMBIGUOUS_GLYPHS = '%>'
 
-/**
- * The last line of `output` that says something, or null when the honest answer
- * is that there is nothing worth showing.
- */
+/** The last line of `output` that says something, or null when nothing is worth showing. */
 export function evidenceLine(output: string, maxChars: number = EVIDENCE_MAX_CHARS): string | null {
   if (output.length === 0) return null
 
-  // A full-screen program addresses the whole grid; its bottom line is not the
-  // end of a story and quoting one row of it would be inventing meaning.
+  // A full-screen program addresses the whole grid; one row of it means nothing.
   if (inAlternateScreen(output)) return null
 
   const lines = replayLines(output)
@@ -62,15 +39,9 @@ export function evidenceLine(output: string, maxChars: number = EVIDENCE_MAX_CHA
 }
 
 /**
- * Replays the stream onto a line buffer the way a terminal would: carriage
- * returns and backspaces move the write position, erase-line sequences clear
- * what is around it, and everything written lands on top of whatever was there.
- * A progress line therefore collapses to its final state instead of to the last
- * fragment that happened to be written.
- *
- * Cursor addressing (up, down, absolute position) is deliberately not emulated.
- * A program that moves between rows is drawing a picture, not printing lines,
- * and a half-emulated grid would produce confident nonsense.
+ * Replays the stream onto a line buffer as a terminal would (CR, backspace,
+ * erase-line), so a progress line collapses to its final state. Cursor
+ * addressing between rows is not emulated: a half-emulated grid is confident nonsense.
  */
 export function replayLines(output: string): string[] {
   const lines: string[] = []
@@ -123,13 +94,11 @@ export function replayLines(output: string): string[] {
         cursor = Math.max(0, cursor - 1)
         break
       case '\t':
-        // Columns are meaningless once the line is squeezed onto a sidebar row,
-        // so a tab is spacing rather than an alignment stop.
+        // Columns mean nothing on a sidebar row, so a tab is spacing.
         write(' ')
         break
       default:
-        // Remaining C0 and DEL are signalling, not text: a bell must not become
-        // a glyph in the middle of the evidence.
+        // Remaining C0 and DEL are signalling, not text.
         if (char >= ' ' && char !== '\x7f') write(char)
         break
     }
@@ -143,10 +112,8 @@ export function replayLines(output: string): string[] {
 type EscapeSequence = { end: number; final?: string; params?: string }
 
 /**
- * Consumes the escape sequence starting at `start`. Only the sequences that
- * change what a line *holds* are reported back: erase-line and the three
- * horizontal cursor moves. Colour, cursor visibility and the rest change how
- * output looks, which a one-line summary cannot show anyway.
+ * Consumes the escape sequence at `start`. Only sequences that change what a
+ * line holds are reported: erase-line and the three horizontal cursor moves.
  */
 function readEscape(output: string, start: number): EscapeSequence {
   const next = output[start + 1]
@@ -188,10 +155,7 @@ function count(params: string | undefined): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
 }
 
-/**
- * True when the tail ends inside the alternate screen buffer, which is how a
- * full-screen program announces that it owns the grid.
- */
+/** True when the tail ends inside the alternate screen buffer: a full-screen program owns the grid. */
 function inAlternateScreen(output: string): boolean {
   const entered = Math.max(output.lastIndexOf(`${ESC}[?1049h`), output.lastIndexOf(`${ESC}[?47h`))
   if (entered === -1) return false
@@ -199,17 +163,14 @@ function inAlternateScreen(output: string): boolean {
   return left < entered
 }
 
-/** Braille spinner frames, which change several times a second and would make
- *  an otherwise stable row flicker for no information at all. */
+/** Braille spinner frames, which would make a stable row flicker for nothing. */
 const LEADING_SPINNER = /^[⠀-⣿]+[ \t]+/
 
 function tidy(line: string): string {
   return line.replace(LEADING_SPINNER, '').replace(/\s+/g, ' ').trim()
 }
 
-/** A line with nothing a reader could act on: a bare prompt, a rule, a spinner
- *  frame on its own. Showing one of these would be worse than showing nothing,
- *  because it reads as if the pane had said something. */
+/** A line with nothing to act on: a bare prompt, a rule, a spinner frame on its own. */
 function isUninformative(line: string): boolean {
   if (!/[\p{L}\p{N}]/u.test(line)) return true
   return isBarePrompt(line)
@@ -220,13 +181,10 @@ function isBarePrompt(line: string): boolean {
   if (!PROMPT_GLYPHS.includes(glyph)) return false
 
   const head = line.slice(0, -1)
-  // "45%" and "step 3 >" end in a prompt glyph too. These two glyphs carry
-  // meaning in ordinary output, so they only read as a prompt when nothing but
-  // whitespace or punctuation precedes them — unlike "$", which a default bash
-  // prompt puts directly against the path.
+  // "45%" and "step 3 >" end in a prompt glyph too, so these two only read as a
+  // prompt after whitespace or punctuation; "$" sits directly against a bash path.
   if (AMBIGUOUS_GLYPHS.includes(glyph) && /[\p{L}\p{N}]$/u.test(head)) return false
-  // A prompt is a location, not a sentence. Two words covers the widest common
-  // form, "[user@host dir]#", and a virtualenv prefix.
+  // A prompt is a location, not a sentence; two words covers "[user@host dir]#" plus a virtualenv prefix.
   return head.length <= 80 && head.trim().split(/\s+/).filter(Boolean).length <= 2
 }
 

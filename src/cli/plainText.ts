@@ -1,23 +1,6 @@
-// A terminal's scrollback as text a script can read.
-//
-// `terminal read` hands back exactly what the pty produced, which is what a
-// caller writing bytes back into a terminal needs and what anybody grepping it
-// does not: a zsh prompt alone carries half a dozen SGR sequences, an OSC title,
-// a bracketed-paste marker and a carriage return that rewrites the line, so the
-// line reading `exit` arrives as `^[[?2004he^Hexit^[[?2004l^M`.
-//
-// So the bytes are replayed the way a terminal would apply them — escape
-// sequences consumed, carriage returns and backspaces moving a cursor over a
-// line buffer, erase-line clearing around it — and what is left is what the
-// screen would have shown.
-//
-// `outputEvidence.replayLines` in src/shared does something adjacent and is
-// deliberately not reused: it answers "which single line of this is worth
-// putting on a sidebar row", so it collapses every tab to one space and leaves
-// the payload of a DCS or APC sequence as text, neither of which matters for a
-// one-line summary and both of which would show up in a transcript. Widening it
-// would change what the sidebar and the notifications say; this is its own
-// question, asked where its only caller is.
+// A terminal's scrollback replayed the way a terminal would apply it, so a
+// script can grep it. `outputEvidence.replayLines` is deliberately not reused:
+// it collapses tabs and keeps DCS/APC payloads, which suits a sidebar row, not a transcript.
 
 const ESC = '\x1b'
 const BEL = '\x07'
@@ -32,21 +15,9 @@ const STRING_8BIT = '\u0090\u0098\u009e\u009f'
 const TAB_WIDTH = 8
 
 /**
- * The visible text of a raw terminal stream.
- *
- * Every escape sequence is consumed and dropped: CSI (including the private
- * `?`-parameter modes bracketed paste uses), OSC with any of its three
- * terminators, the string sequences DCS/SOS/PM/APC, the single shifts SS2 and
- * SS3, and every remaining two-character escape. Of the CSI sequences, the four
- * that change what a line *holds* rather than how it looks are honoured —
- * erase-line and the three horizontal cursor moves.
- *
- * Cursor addressing between rows is deliberately not emulated. A program that
- * moves around the grid is drawing a picture, and a half-emulated grid produces
- * confident nonsense; a full-screen program's output is better read raw.
- *
- * Trailing whitespace goes from every line, because a prompt redrawn over a
- * longer one leaves the tail of the longer one behind as spaces.
+ * The visible text of a raw terminal stream: every escape consumed, erase-line and
+ * the horizontal cursor moves honoured. Row addressing is not emulated: a
+ * half-emulated grid produces confident nonsense. Trailing spaces from redrawn prompts are trimmed.
  */
 export function plainText(raw: string): string {
   const lines: string[] = []
@@ -91,8 +62,7 @@ export function plainText(raw: string): string {
         write(' '.repeat(TAB_WIDTH - (cursor % TAB_WIDTH)))
         break
       default:
-        // The rest of C0 and DEL are signalling rather than text: a bell must
-        // not become a glyph in the middle of a line.
+        // The rest of C0 and DEL are signalling, not text.
         if (char >= ' ' && char !== DEL) write(char)
         break
     }
@@ -105,13 +75,7 @@ export function plainText(raw: string): string {
 /** One escape sequence: where it ends, and — for a CSI — what it asked for. */
 type EscapeSequence = { end: number; final?: string; params?: string }
 
-/**
- * Consumes the escape sequence starting at `start` and reports where it ends.
- *
- * A sequence the tail cut in half ends at the end of the input, which is the
- * right answer for a snapshot: the bytes that would have completed it are on
- * the far side of a boundary this caller never saw.
- */
+// Consumes the escape at `start`; one the tail cut in half ends at the end of the input.
 function readEscape(raw: string, start: number): EscapeSequence {
   const introducer = raw[start] as string
   // An 8-bit introducer is one character where the 7-bit form is two.
@@ -122,8 +86,7 @@ function readEscape(raw: string, start: number): EscapeSequence {
   if (next === '[' || next === CSI_8BIT) {
     let index = body
     let params = ''
-    // CSI runs through parameter and intermediate bytes to a final byte in
-    // 0x40..0x7e.
+    // CSI runs through parameter and intermediate bytes to a final byte in 0x40..0x7e.
     while (index < raw.length) {
       const char = raw[index] as string
       if (char >= '\x40' && char <= '\x7e') return { end: index, final: char, params }
@@ -133,8 +96,7 @@ function readEscape(raw: string, start: number): EscapeSequence {
     return { end: raw.length }
   }
 
-  // OSC and the string sequences — DCS, SOS, PM, APC — differ only in what
-  // their payload means, and none of it is text the screen showed.
+  // OSC and the string sequences (DCS, SOS, PM, APC): none of the payload is text the screen showed.
   if (
     next === ']' ||
     next === OSC_8BIT ||
@@ -154,13 +116,11 @@ function readEscape(raw: string, start: number): EscapeSequence {
     return { end: raw.length }
   }
 
-  // SS2 and SS3 shift the single character after them into another set; the
-  // character is part of the sequence, not of the line.
+  // SS2 and SS3: the character after them is part of the sequence, not the line.
   if (next === 'N' || next === 'O') return { end: Math.min(body, raw.length - 1) }
 
-  // An intermediate byte means more of them may follow before the final one:
-  // `ESC ( B`, which selects the ASCII character set, is three bytes and losing
-  // the last of them puts a stray `B` in front of the line.
+  // Intermediate bytes may precede the final: `ESC ( B` is three bytes, and
+  // losing the last puts a stray `B` in front of the line.
   if (next >= '\x20' && next <= '\x2f') {
     let index = body
     while (index < raw.length) {

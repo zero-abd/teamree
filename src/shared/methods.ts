@@ -44,31 +44,17 @@ import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { THEME_TOKENS, type Appearance } from './theme'
 
 /**
- * The most one remote keystroke may carry.
- *
- * `relay/README.md` gives a connection 200 frames and 4 MiB a second, shared
- * with whatever output that same link is streaming back. Sixty-four kilobytes
- * is a very large paste and a sixteenth of that second; past it, a write is not
- * typing, and carrying it would cost the pane the live output it is being typed
- * into. Refusing outright rather than chunking is deliberate — half a paste
- * landing in somebody's shell is worse than none of it.
- *
- * Counted in bytes everywhere, including here. It used to be characters in the
- * schema and bytes at the far end, which is two caps wearing one name: a paste
- * of this many non-ASCII characters passed the sender's own machine and came
- * back from the teammate's refused as three times the size. The person who
- * pasted was told their teammate would not take it, by a machine that could
- * have told them itself. One unit, and the refusal where the typing is.
+ * The most one remote keystroke may carry, counted in bytes at both ends (it was
+ * once characters here and bytes at the far end, so a non-ASCII paste passed
+ * here and was refused there). Past this a write is not typing and would cost
+ * the pane its live output under `relay/README.md`'s per-connection budget;
+ * refused outright, never chunked — half a paste in a shell is worse than none.
  */
 export const MAX_REMOTE_WRITE_BYTES = 65_536
 
 /**
- * A string field capped by what it weighs rather than by how long it reads.
- *
- * `.max()` counts UTF-16 code units, and every bound in this file that a wire
- * has to honour is a bound on bytes. The two agree for ASCII and disagree by up
- * to three times for everything else, which is the whole of the bug this
- * replaces: an emoji is one character and four bytes.
+ * A string capped by bytes: `.max()` counts UTF-16 code units and every wire
+ * bound here is bytes — an emoji is one character and four bytes.
  */
 function atMostBytes(bytes: number, minimum = 0) {
   return z
@@ -88,73 +74,39 @@ function utf8Length(text: string): number {
 }
 
 /**
- * The most a pane id a remote keystroke names may be.
- *
- * Every id this runtime mints is a short word and a counter — `term_12` — so
- * this is three orders of magnitude of headroom and refuses nothing anybody
- * types. It is here because `data` was capped and the id beside it was not, and
- * the id is copied further than the data ever goes: into the owner's write log,
- * onto their disk, and into the map that remembers who typed where. An
- * unbounded id is therefore a megabyte of somebody else's choosing in a file
- * that is supposed to be the owner's evidence — see `writeLog.ts`, which bounds
- * the entry as well, and `peerTransport.judgeWrite`, which refuses past this
- * before the schema is ever reached.
+ * Cap on the pane id a remote keystroke names. Minted ids are `term_12`-sized;
+ * the id is copied into the owner's write log on disk, so an unbounded one is a
+ * megabyte of somebody else's choosing in the owner's evidence. See
+ * `writeLog.ts` and `peerTransport.judgeWrite`, which refuses before the schema.
  */
 export const MAX_TERMINAL_ID_CHARS = 256
 
-/**
- * Cap on a pane's name, checked here so a paste of a whole file cannot become
- * one. Generous on purpose: what a user typed is kept whole and shortened only
- * where it is drawn, because a row is narrow and a record is not.
- */
+/** Cap on a pane's name. Generous: what was typed is kept whole and shortened only where drawn. */
 export const MAX_PANE_LABEL_CHARS = 512
 
-// Defined in `agentLaunch.ts`, which the renderer can import without zod;
-// re-exported here so its callers are unchanged. See the note there.
+// Defined in `agentLaunch.ts` (importable without zod); re-exported for callers.
 export { MAX_AGENT_ARGS_CHARS }
 
 /**
- * How long an agent event's qualifier may be. It is a notification type — a
- * word with underscores in it — copied from the agent's own stdin by a CLI
- * that does not check it, so the bound is here, where every other string on
- * the wire is bounded.
+ * Cap on an agent event's qualifier: a notification type copied from the
+ * agent's stdin by a CLI that does not check it.
  */
 export const MAX_AGENT_EVENT_DETAIL_CHARS = 64
 
-/**
- * How long a project's setup command may be.
- *
- * The same generous bound `MAX_AGENT_ARGS_CHARS` is, and for the same reason:
- * the value is one shell line somebody wrote, and every string this contract
- * stores is bounded somewhere.
- */
+/** Cap on a project's setup command: one shell line, bounded like `MAX_AGENT_ARGS_CHARS`. */
 export const MAX_SETUP_COMMAND_CHARS = 4096
 
 /**
- * The most lines one hunk may carry over the wire.
- *
- * Generous — a hunk that size is a file somebody replaced, not a change
- * anybody reviews — and here so a caller cannot hand the runtime a megabyte of
- * "hunk" to reassemble. The protocol's own frame ceiling is the outer bound;
- * this is the one that says what a hunk is.
+ * The most lines one hunk may carry over the wire, so a caller cannot hand the
+ * runtime a megabyte of "hunk" to reassemble.
  */
 export const MAX_HUNK_LINES = 20_000
 
 /**
- * One hunk of a patch, carried whole rather than named by its position.
- *
- * The alternative was an index into the diff plus a fingerprint of the hunk's
- * content, and it is the weaker of the two for the same reason: it makes the
- * runtime re-derive the hunk from a diff it must re-read with whatever context
- * width the caller happened to use, so a disagreement becomes an argument about
- * arithmetic rather than about content. Sent whole, the hunk *is* the patch —
- * git checks it against the index and against the working tree itself, and a
- * stale one is refused by the only thing qualified to refuse it.
- *
- * Line numbers per line are deliberately absent: those are the parser's output,
- * and the header already carries the two the format needs. What travels is what
- * the hunk is made of. A `PatchHunk` from `parsePatch` satisfies this as it
- * stands, which is the point — a caller hands back what it was shown.
+ * One hunk of a patch, carried whole rather than by index: git checks it against
+ * the index and working tree itself, so a stale one is refused by git. Per-line
+ * numbers are deliberately absent; the header carries the two the format needs.
+ * A `PatchHunk` from `parsePatch` satisfies this as it stands.
  */
 export const Hunk = z.object({
   oldStart: z.number().int().min(0),
@@ -180,12 +132,8 @@ export type HunkInput = z.infer<typeof Hunk>
 export const Params = {
   statusGet: z.object({}),
   /**
-   * Asks the app to quit itself, the way the quit key does.
-   *
-   * Additive, and answered before anything is torn down: the caller gets the
-   * pid it is about to lose and then watches the endpoint disappear. A runtime
-   * with no app around it — the acceptance host, a vitest worker — has nothing
-   * to quit and refuses rather than pretending.
+   * Asks the app to quit, as the quit key does. Answered with the pid before
+   * teardown; a runtime with no app around it refuses.
    */
   appQuit: z.object({}),
 
@@ -193,35 +141,20 @@ export const Params = {
   projectAdd: z.object({ path: z.string().min(1), name: z.string().min(1).optional() }),
   projectRemove: z.object({ projectId: z.string().min(1) }),
   /**
-   * What a new worktree of this project carries over from the primary
-   * checkout: gitignored directories to symlink, gitignored files to copy.
-   *
-   * Each list replaces the stored one whole, and an omitted list is left
-   * alone — the same shape `appearance.set` uses, and for the same reason: two
-   * fields that move independently, each of which somebody edits as a whole.
-   * An empty array is how a list is cleared.
-   *
-   * Only the shape of each path is judged here and at the moment it is stored:
-   * relative, inside the repository, and not pathspec magic. Whether it exists,
-   * is ignored, and is untracked is a fact about the repository right now, so
-   * it is judged when a worktree is actually being prepared.
+   * What a new worktree of this project carries from the primary checkout:
+   * gitignored directories to symlink, gitignored files to copy. Each list
+   * replaces the stored one whole; omitted leaves it alone; empty clears it.
+   * Only path shape is judged here (relative, inside the repository, no pathspec
+   * magic); existence and ignore status are judged when a worktree is prepared.
    */
   projectSetPaths: z.object({
     projectId: z.string().min(1),
     linkedPaths: z.array(z.string().min(1).max(512)).max(64).optional(),
     copiedPaths: z.array(z.string().min(1).max(512)).max(64).optional(),
     /**
-     * The command every new worktree of this project runs once its checkout is
-     * ready. Additive and optional, and here rather than under a method of its
-     * own because it is set where the two lists are set, by the same field on
-     * the same settings panel and the same kind of CLI command: this one method
-     * is "what a new worktree of this project gets".
-     *
-     * Omitted leaves the stored command alone; an empty string clears it, which
-     * is how the lists above are cleared. Nothing about it is judged — not the
-     * program, not the syntax — because it runs in the developer's own shell in
-     * their own checkout, and a command this app second-guessed would be a
-     * command they could not write.
+     * Command every new worktree runs once its checkout is ready. Omitted leaves
+     * the stored one alone; empty string clears it. Not judged at all: it runs
+     * in the developer's own shell.
      */
     setupCommand: z.string().max(MAX_SETUP_COMMAND_CHARS).optional()
   }),
@@ -236,8 +169,7 @@ export const Params = {
     branch: z.string().min(1).optional(),
     /**
      * What the worktree is for, as typed; see `Worktree.task`. Bounded like
-     * `agentArgs`, and for the same reason: it is handed to the agent on the
-     * command line the runtime builds.
+     * `agentArgs`: it goes on the agent's command line.
      */
     task: z.string().min(1).max(MAX_AGENT_ARGS_CHARS).optional()
   }),
@@ -254,20 +186,14 @@ export const Params = {
     worktreeId: z.string().min(1),
     limit: z.number().int().positive().optional()
   }),
-  /**
-   * Commits staged work. Nothing is staged on the caller's behalf beyond the
-   * paths named, and there is deliberately no "commit everything".
-   */
+  /** Commits staged work plus the paths named. Deliberately no "commit everything". */
   worktreeCommit: z.object({
     worktreeId: z.string().min(1),
     message: z.string().min(1),
     /** Stage these before committing. Omitted commits what is already staged. */
     paths: z.array(z.string().min(1)).optional()
   }),
-  /**
-   * Sends the branch to its remote. There is deliberately no force: the value
-   * of one is overwriting somebody else's history.
-   */
+  /** Sends the branch to its remote. Deliberately no force. */
   worktreePush: z.object({
     worktreeId: z.string().min(1),
     /** Defaults to origin. */
@@ -292,11 +218,8 @@ export const Params = {
     maxBytes: z.number().int().positive().optional()
   }),
   /**
-   * One directory of a worktree: names and kinds, never contents.
-   *
-   * `path` is relative to the worktree root and may not leave it; the read
-   * refuses anything that resolves outside rather than answering for it. One
-   * directory per call and no recursion, so a tree is read as it is opened.
+   * One directory of a worktree: names and kinds, never contents. `path` is
+   * relative to the root and may not leave it; one directory per call, no recursion.
    */
   worktreeFiles: z.object({
     worktreeId: z.string().min(1),
@@ -304,10 +227,7 @@ export const Params = {
     path: z.string().max(4096).optional(),
     limit: z.number().int().positive().max(10_000).optional()
   }),
-  /**
-   * Paths in a worktree whose name contains `query`, case-insensitively, over
-   * everything git tracks or would track — ignored files are left out.
-   */
+  /** Paths whose name contains `query`, case-insensitively, over what git tracks or would track. */
   worktreeFindFiles: z.object({
     worktreeId: z.string().min(1),
     query: z.string().max(512),
@@ -321,15 +241,9 @@ export const Params = {
 
   /**
    * Puts one hunk of the working-tree patch into the index, and nothing else.
-   *
-   * Whole-file staging is `worktree.commit`'s `paths`; this is the other half
-   * of the same idea, for the change that is two unrelated edits in one file.
    * The hunk is the one read out of `worktree.diff` for this path, handed back
-   * as it was read. Only the index is written — the working tree is never
-   * touched, so nothing a person has open changes underneath them.
-   *
-   * A binary file and an untracked one have no hunk to name: both stage whole,
-   * and this refuses them rather than inventing a partial answer.
+   * as read. Only the index is written, never the working tree. Binary and
+   * untracked files have no hunk to name and are refused.
    */
   worktreeStageHunk: z.object({
     worktreeId: z.string().min(1),
@@ -346,42 +260,22 @@ export const Params = {
   /** Coding agents found on PATH, so a pane can start one without being told. */
   agentList: z.object({}),
 
-  /**
-   * Where this app's CLI is, what is at the path it would be linked to, and
-   * whether that path is somewhere a shell would find it.
-   */
+  /** Where this app's CLI is, what is at its link path, and whether a shell would find it. */
   cliStatus: z.object({}),
   /**
-   * Puts the CLI on PATH, asking for an administrator password only when the
-   * destination directory cannot be written without one.
-   *
-   * Takes nothing: the destination is `/usr/local/bin/teamree` and the source
-   * is this app's own CLI, so there is no argument that could be got wrong and
-   * no way for a caller to aim the link somewhere else.
+   * Puts the CLI on PATH, asking for an administrator password only when needed.
+   * Takes nothing: destination `/usr/local/bin/teamree`, source this app's own CLI.
    */
   cliInstall: z.object({}),
-  /**
-   * Records that this installation has now been asked, so the offer made on
-   * first run is made once and never again. Declining is an answer.
-   */
+  /** Records that the first-run offer has been answered, so it is never made again. */
   cliDismissPrompt: z.object({}),
 
-  /**
-   * Which of the editors teamree knows how to look for are on this machine.
-   *
-   * A probe of PATH rather than a setting, for the reason `agent-discovery.ts`
-   * gives about agents: a list somebody has to fill in goes stale the first
-   * time they install something. Takes nothing, because the list of names
-   * looked for is this app's and not a caller's to aim.
-   */
+  /** Which known editors are on this machine: a probe of PATH, not a setting. */
   editorList: z.object({}),
   /**
-   * Opens a path in an editor, or says why it did not.
-   *
-   * `command` is the free-text editor a project names in Settings, and it is
-   * the name of one program rather than a command line: it is resolved on PATH
-   * and spawned with the path as an argument, never interpolated into a shell.
-   * Absent, teamree opens the first editor it can find.
+   * Opens a path in an editor. `command` is the name of one program, resolved on
+   * PATH and spawned with the path as argument, never a shell line. Absent, the
+   * first editor found.
    */
   editorOpen: z.object({
     path: z.string().min(1),
@@ -389,45 +283,26 @@ export const Params = {
   }),
 
   /**
-   * What this build is, what the download page has, and whether teamree looks.
-   *
-   * A read out of memory: it never asks GitHub anything. The answer includes
-   * whatever the last check found, including a check made in an earlier run.
+   * This build, what the download page has, and whether teamree checks. Read
+   * from memory, never asks GitHub; includes what an earlier run's check found.
    */
   updateState: z.object({}),
-  /**
-   * Asks GitHub now, because somebody chose to.
-   *
-   * The rate limit that governs the automatic check does not apply here: it
-   * exists to stop the app asking on its own account, and a person who has just
-   * picked "Check for updates" is owed an answer rather than a cached one.
-   */
+  /** Asks GitHub now. The automatic check's rate limit does not apply: a person asked. */
   updateCheck: z.object({}),
   /** Turns the automatic check on or off. Remembered between runs. */
   updateSetAutomatic: z.object({ automatic: z.boolean() }),
   /**
-   * Opens the newer release's download in the user's browser.
-   *
-   * Takes no URL, and that is the point: the address came off the GitHub API,
-   * so the only thing this can open is the release the runtime is already
-   * holding. A call that named a page would be a way to aim somebody's browser
-   * through this app.
+   * Opens the newer release's download in the browser. Takes no URL: only the
+   * release the runtime already holds can be opened, so nobody aims a browser through this app.
    */
   updateDownload: z.object({}),
 
-  /**
-   * Everyone whose public key is committed to the project, and who this
-   * installation is next to them.
-   */
+  /** Everyone whose public key is committed to the project, and who this installation is. */
   membersList: z.object({ projectId: z.string().min(1) }),
   /**
-   * Writes this installation's public key into the project's roster.
-   *
-   * It writes the file and stops there: it does not stage, commit or push.
-   * Getting the file into the repository is the user's, and it has to be,
-   * because being able to push it is the whole of what membership means.
-   * `teamwork.publish` is that second act, on its own button, after it has said
-   * what it will do — deliberately a separate call and not a flag on this one.
+   * Writes this installation's public key into the project's roster. Writes the
+   * file and stops: no stage, commit or push. `teamwork.publish` is that
+   * separate act, deliberately not a flag on this one.
    */
   membersJoin: z.object({
     projectId: z.string().min(1),
@@ -436,54 +311,29 @@ export const Params = {
   }),
 
   /**
-   * Where the project's relay is recorded, and what each of the two places
-   * said — the committed file and the per-machine override, reported whichever
-   * one is in effect.
+   * Where the project's relay is recorded: the committed file and the
+   * per-machine override, and which is in effect.
    */
   teamworkRelay: z.object({ projectId: z.string().min(1) }),
   /**
-   * Writes the relay URL into the project, at `.teamree/relay`.
-   *
-   * Like joining, it writes the file and stops: the relay is a team-wide fact,
-   * and it becomes the team's when somebody pushes it. A URL that is not a
-   * WebSocket one is refused with what to type instead rather than guessed at.
+   * Writes the relay URL to `.teamree/relay` and stops. A non-WebSocket URL is
+   * refused with what to type instead.
    */
   teamworkSetRelay: z.object({ projectId: z.string().min(1), url: z.string().min(1) }),
 
   /**
-   * Points this checkout's `origin` at the remote everybody shares.
-   *
-   * The one piece of setup that used to be a shell command in a panel. It is
-   * here rather than left to the user because the identity of a project is the
-   * hash of its normalised origin, so a checkout without one cannot take part
-   * however much of the rest is done — and `git remote add origin <url>` typed
-   * into the wrong directory is a thing that happens.
-   *
-   * Either the URL you both cloned or the absolute path a shared volume is
-   * mounted at on both Macs. A path is stored normalised, because those are the
-   * characters a teammate has to match: nothing on either machine can tell that
-   * one volume mounted at two paths is one repository, so the paths agreeing is
-   * the identity. Anything that could not be agreed on — a relative path, a `~`,
-   * a `..` — is refused with what to type instead.
+   * Points this checkout's `origin` at the shared remote: the URL both cloned,
+   * or the absolute path a shared volume is mounted at on both Macs. A project's
+   * identity is the hash of its normalised origin, so a path is stored
+   * normalised; a relative path, `~` or `..` is refused with what to type instead.
    */
   teamworkSetOrigin: z.object({ projectId: z.string().min(1), url: z.string().min(1) }),
 
-  /**
-   * What `teamwork.publish` would do, so it can be said before it is done.
-   *
-   * Read separately from the act because the act is outward-facing: it makes a
-   * commit in somebody's repository and sends it to a remote, and a button that
-   * did that without first naming the files, the message, the remote and the
-   * branch would be taking a decision on their behalf.
-   */
+  /** What `teamwork.publish` would do, so it can be said before it is done. */
   teamworkPublishPlan: z.object({ projectId: z.string().min(1) }),
   /**
-   * Stages the two files teamwork needs, commits them, and pushes.
-   *
-   * Exactly the files `teamwork.publishPlan` named and nothing else: it is
-   * `git add` with paths, never `git add -A`, so a repository full of somebody's
-   * work in progress cannot be swept into a commit they did not ask for. It
-   * never forces, for the same reason `worktree.push` does not.
+   * Stages exactly the files `teamwork.publishPlan` named, commits, pushes.
+   * `git add` with paths, never `-A`; never forces.
    */
   teamworkPublish: z.object({
     projectId: z.string().min(1),
@@ -491,74 +341,39 @@ export const Params = {
     message: z.string().min(1).optional()
   }),
   /**
-   * What the publish that is running is doing, while it is still doing it.
-   *
-   * `teamwork.publish` does not answer until the push is over, which for the
-   * one call here that crosses a network can be minutes — so without a second
-   * question to ask, a window has nothing to show between the button and the
-   * result. This is that question: the phase, what git has printed, when it
-   * started and when it last said anything.
+   * What the running publish is doing: phase, git's output, when it started and
+   * last spoke. `teamwork.publish` itself does not answer until the push is over.
    */
   teamworkPublishProgress: z.object({ projectId: z.string().min(1) }),
-  /**
-   * Stops the publish that is running.
-   *
-   * A way out is not a nicety on a call that can wait ten minutes on a
-   * credential nothing can supply. Whatever was committed stays committed;
-   * `teamwork.publish` reports it.
-   */
+  /** Stops the running publish. Whatever was committed stays committed. */
   teamworkCancelPublish: z.object({ projectId: z.string().min(1) }),
 
   /**
-   * Whether teamwork is running for a project, and how each link is going.
-   *
-   * Answers "not configured" as readily as "connected", because a project with
-   * no relay is not offline and must not be shown as though it were. And it
-   * answers `state: 'unread'` as readily as either, for a project the workspace
-   * has that teamwork has not read yet — the window between `project.add` and
-   * the reconcile it sets off, and the whole of startup before the peer service
-   * is up. An error there would say "no such project" about a project that is
-   * on screen; see `TeamworkUnread`.
-   *
-   * "No such project" therefore means what it says: nothing in this workspace
-   * has that id.
+   * Whether teamwork is running for a project and how each link is going.
+   * Answers "not configured" as readily as "connected", and `state: 'unread'`
+   * for a project teamwork has not read yet (between `project.add` and its
+   * reconcile, and during startup); see `TeamworkUnread`. "No such project"
+   * therefore means nothing in this workspace has that id.
    */
   teamworkStatus: z.object({ projectId: z.string().min(1) }),
   /**
-   * A teammate's worktrees and panes in one project, as last heard.
-   *
-   * A union on the same window and for the same reason as `teamwork.status`,
-   * because the roster is the other half of the same reconcile. `state:
-   * 'unread'` says the project exists and nothing has been read about it; an
-   * empty roster would say the repository was read and holds nobody but you,
-   * which is a different sentence and the one that empties a sidebar. See
-   * `TeammatePresence`.
+   * A teammate's worktrees and panes in one project, as last heard. `state:
+   * 'unread'` means nothing has been read yet; an empty roster means it was
+   * read and holds nobody but you. See `TeammatePresence`.
    */
   teamworkPresence: z.object({ projectId: z.string().min(1) }),
   /**
-   * Opens a teammate's pane for reading.
-   *
-   * `paneId` is the namespaced id `teamwork.presence` hands out, and the
-   * project is named alongside it because one teammate can be reached over one
-   * link per shared repository and a pane id alone does not say which.
-   *
-   * Nothing streams until this is called, and everything stops when the
-   * subscription is released: output flows only for a pane somebody has open.
+   * Opens a teammate's pane for reading. `paneId` is the namespaced id
+   * `teamwork.presence` hands out; the project is named because there is one
+   * link per shared repository. Output flows only while the subscription is held.
    */
   teamworkWatch: z.object({ projectId: z.string().min(1), paneId: z.string().min(1) }),
   /**
-   * Types into a teammate's pane, over the link that is already watching it.
-   *
-   * The companion to `teamwork.watch`, and the reason milestone D needed the
-   * most care: what crosses the wire under this is `terminal.write`, answered
-   * by the owner's own terminal service. It resolves to nothing unless that
-   * teammate is on this project's roster and their session is confirmed, and
-   * the owner's end refuses it outright when the pane is muted — so a caller
-   * has to be ready to be told no, and has to say so rather than swallow it.
-   *
-   * `data` is capped here as well as at the far end. Keystrokes are small and a
-   * paste is not, and one write large enough to spend a connection's whole
-   * second of relay budget would cost the pane its live output to carry it.
+   * Types into a teammate's pane over the link already watching it. Crosses the
+   * wire as `terminal.write`; resolves to nothing unless the teammate is on the
+   * roster with a confirmed session, and the owner refuses it when the pane is
+   * muted — a caller must surface the refusal. `data` is capped here and at the
+   * far end.
    */
   teamworkType: z.object({
     projectId: z.string().min(1),
@@ -566,91 +381,45 @@ export const Params = {
     data: atMostBytes(MAX_REMOTE_WRITE_BYTES, 1)
   }),
   /**
-   * Who is reading and typing into this machine's panes, right now, in one
-   * project.
-   *
-   * One shape rather than the union above, because every fact in it is this
-   * machine's own and none of it waits on a reconcile — the argument is written
-   * out on `PaneWatchers`. It answers for a project teamwork has not read yet
-   * rather than refusing one, which is what lets a restored window read the
-   * mutes on panes it is already drawing.
+   * Who is reading and typing into this machine's panes in one project. One
+   * shape, not the union: every fact is this machine's own (see `PaneWatchers`).
+   * Answers for a project teamwork has not read yet, so a restored window can
+   * read its mutes.
    */
   teamworkWatchers: z.object({ projectId: z.string().min(1) }),
   /**
    * Whose keystrokes are waiting on the owner in one project, and which
-   * teammates already have a standing permission there.
-   *
-   * Read on the same invalidation everything else in teamwork is: a request
-   * appearing, growing, being answered or expiring all move the same
-   * `teammates` event, because the window that has to put the question on
-   * screen is the window that is already listening for it.
-   *
-   * Answers for a project teamwork has not read yet, on `teamwork.watchers`'
-   * argument: see `PaneConsent`. A permission the owner cannot see is a
-   * permission they cannot lift, and refusing the project outright was the most
-   * complete way to hide one.
+   * teammates have a standing permission. Invalidated by the `teammates` event.
+   * Answers for a project teamwork has not read yet (see `PaneConsent`): a
+   * permission the owner cannot see is one they cannot lift.
    */
   teamworkRequests: z.object({ projectId: z.string().min(1) }),
   /**
-   * The owner's answer to one held burst.
-   *
-   * `through` is how many of the burst's keystrokes the owner was actually
-   * shown. It matters only for `once`, and it matters there absolutely: a burst
-   * grows while the prompt is up, so a decision taken about four keystrokes
-   * must not admit the fourteen that are held by the time the click lands. The
-   * window sends the count it drew; anything still held after that stays held
-   * and asks again. Omitted, the answer covers everything waiting — which is
-   * the right default for a CLI, where the list was printed and answered in one
-   * breath, and the wrong one for a screen somebody is reading.
+   * The owner's answer to one held burst. `through` is how many keystrokes the
+   * owner was shown; it matters only for `once`, where a burst grows while the
+   * prompt is up and anything held past it stays held and asks again. Omitted
+   * covers everything waiting — right for a CLI, wrong for a screen.
    */
   teamworkDecide: z.object({
     requestId: z.string().min(1),
     decision: z.enum(['once', 'session', 'always', 'deny']),
     through: z.number().int().positive().optional()
   }),
-  /**
-   * Takes back a standing permission.
-   *
-   * The owner's alone, like the mute, and for the same reason: a permission
-   * that needed the other side's agreement to end would not be a permission,
-   * it would be a contract. It takes effect on the next keystroke, which is
-   * every keystroke that has not already been written.
-   */
+  /** Takes back a standing permission. The owner's alone; effective from the next keystroke. */
   teamworkRevoke: z.object({ terminalId: z.string().min(1), publicKey: z.string().min(1) }),
   /**
-   * Stops, or restarts, remote keystrokes reaching one of *this machine's*
-   * panes.
-   *
-   * The owner's alone: there is no project id because there is nobody to agree
-   * with and nothing to negotiate, and no handle because a mute is of a pane
-   * rather than of a person. A muted pane keeps streaming and keeps appearing
-   * in everyone's sidebar — `docs/teamwork.md` is explicit that mute stops the
-   * bytes and does not hide the worktree.
+   * Stops or restarts remote keystrokes reaching one of this machine's panes.
+   * The owner's alone: no project id, no handle. A muted pane keeps streaming
+   * and stays in every sidebar — `docs/teamwork.md`.
    */
   teamworkMute: z.object({ terminalId: z.string().min(1), muted: z.boolean() }),
   /**
-   * The owner's record of every remote write their machine made a decision
-   * about, oldest first.
-   *
-   * Local, on their machine, and readable after the fact — including after a
-   * restart, which is what makes it a record rather than a display.
-   *
-   * "Made a decision about" and not "every write that arrived", because the two
-   * are different and the difference is deliberate. Everything the *owner's*
-   * side judges is here whether it landed or not — not a member, no such pane,
-   * the pane has exited, the pane is muted — because those are bounded by the
-   * owner's own state and each one is a thing somebody may need to account for
-   * later.
-   *
-   * What the transport refuses before that — a write larger than one keystroke
-   * may carry, one arriving faster than a person types, one on an unconfirmed
-   * session, one that is not a write at all — is answered to the teammate and
-   * not written here. A caller chooses how many of those to send and how large
-   * each is, so recording them is a way of filling this file from the other end
-   * of a relay, which is the one thing it must survive: see
-   * `tests/security/auditLogErasure.test.ts`, and the note on `PEER_WRITE_BURST`
-   * in `peerTransport.ts`. A count of them belongs somewhere; a line each does
-   * not.
+   * The owner's record of every remote write their machine decided about,
+   * oldest first; local, kept across restarts. Every write the owner's side
+   * judges is here whether it landed or not. What the transport refuses first
+   * (too large, too fast, unconfirmed session, not a write) is not written, or a
+   * caller could fill this file from the far end of a relay: see
+   * `tests/security/auditLogErasure.test.ts` and `PEER_WRITE_BURST` in `peerTransport.ts`.
    */
   teamworkWriteLog: z.object({
     /** Trailing entries to return. Defaults to everything retained. */
@@ -658,11 +427,8 @@ export const Params = {
   }),
 
   /**
-   * PEER-ONLY. Reachable over the peer transport and nowhere else.
-   *
-   * What this runtime is doing, for a teammate: worktrees, branches, panes and
-   * their activity. Metadata, and never a byte of terminal output — that is
-   * milestone C, and the seam for it is `PEER_METHODS` in peerTransport.ts.
+   * PEER-ONLY: reachable over the peer transport and nowhere else. This
+   * runtime's worktrees, branches, panes and activity — metadata, never output.
    */
   peerPresence: z.object({}),
   /** PEER-ONLY. Streams this runtime's presence: once now, and on every change. */
@@ -679,20 +445,14 @@ export const Params = {
     label: z.string().min(1).max(MAX_PANE_LABEL_CHARS).optional(),
     /**
      * Appended to `command` before the runtime rewrites it: the flags this
-     * machine's owner always passes this agent, as one command-line fragment.
-     *
-     * A fragment rather than an argv because that is what they typed, and the
-     * pane runs a shell — see `src/shared/agentLaunch.ts`. Capped only in
-     * length; a fragment the rewriter cannot model costs the session-id
-     * rewrite and nothing else.
+     * owner always passes this agent, as one command-line fragment (see
+     * `src/shared/agentLaunch.ts`). Capped only in length.
      */
     agentArgs: z.string().max(MAX_AGENT_ARGS_CHARS).optional(),
     /**
-     * The agent's first prompt, given the way its CLI takes one — see the
-     * agent table in `src/main/terminals/agent-command.ts`. Only the launch
-     * carries it: the record a resume is rewritten from does not, because a
-     * conversation being resumed has already been told. Ignored for a command
-     * that runs no known agent.
+     * The agent's first prompt, given the way its CLI takes one (see
+     * `src/main/terminals/agent-command.ts`). Only the launch carries it, not a
+     * resume. Ignored for a command that runs no known agent.
      */
     prompt: z.string().min(1).max(MAX_AGENT_ARGS_CHARS).optional(),
     cwd: z.string().min(1).optional(),
@@ -701,23 +461,14 @@ export const Params = {
   }),
   terminalWrite: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
-    // Capped here as well as at the receiving end, and in the same unit. This
-    // is the frame `teamwork.type` turns into, so a paste that is too large for
-    // the wire is refused on the machine it was pasted on.
+    // Capped here as well as at the receiving end, in the same unit: this is the
+    // frame `teamwork.type` turns into.
     data: atMostBytes(MAX_REMOTE_WRITE_BYTES),
     /**
-     * False when the emulator produced these bytes rather than a person.
-     *
-     * A terminal answers the questions a program asks it — where the cursor is,
-     * what it can do — by sending bytes, and xterm hands those to the same
-     * callback a keystroke arrives on. They are a real write and belong on the
-     * pty; what they are not is somebody typing, which is what the runtime
-     * reads every write as (`TerminalRecord.typed`, the restored badge).
-     *
-     * Absent means a person, which is every caller but the pane view: the CLI's
-     * `terminal send` is somebody's intent, and a watched pane has already made
-     * this distinction before the bytes reach the wire. Only the window holding
-     * the emulator can tell the two apart, so only it says.
+     * False when the emulator produced these bytes rather than a person: xterm
+     * answers a program's queries on the same callback a keystroke arrives on.
+     * They belong on the pty but are not typing (`TerminalRecord.typed`). Absent
+     * means a person; only the window holding the emulator can tell.
      */
     byHand: z.boolean().optional()
   }),
@@ -727,11 +478,7 @@ export const Params = {
     rows: z.number().int().positive()
   }),
   terminalClose: z.object({ terminalId: z.string().min(1) }),
-  /**
-   * Renames a pane. Null clears the name rather than setting an empty one, so
-   * there is one way to say "go back to being called whatever you are" and the
-   * pane falls back to the program's own name instead of drawing a blank row.
-   */
+  /** Renames a pane. Null clears the name, falling back to the program's own. */
   terminalRename: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
     label: z.string().max(MAX_PANE_LABEL_CHARS).nullable()
@@ -743,20 +490,13 @@ export const Params = {
     tailBytes: z.number().int().positive().optional()
   }),
   terminalSubscribe: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
-  /**
-   * Starts an exited pane's program over, in the pane it left behind. Refused
-   * while the pane is still running: there is nothing to run again yet.
-   */
+  /** Starts an exited pane's program over in the same pane. Refused while still running. */
   terminalRelaunch: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
   /**
-   * The agent in a pane reporting its own state, through a hook this app
-   * configured for it -- see `src/main/terminals/agent-hooks.ts`.
-   *
-   * Called by `teamree agent event` from inside the agent's process, which is
-   * why it is a method rather than something the pty could read: the one fact
-   * the sidebar most needs, that the agent is blocked on a question, leaves no
-   * byte in the pty. The event names are the agent's own; the detail is capped
-   * because it is copied from the agent's stdin and shown nowhere.
+   * The agent in a pane reporting its own state through a hook this app
+   * configured (`src/main/terminals/agent-hooks.ts`), via `teamree agent
+   * event`: "blocked on a question" leaves no byte in the pty. Event names are
+   * the agent's own; `detail` is copied from its stdin and shown nowhere.
    */
   terminalAgentEvent: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
@@ -773,14 +513,9 @@ export const Params = {
 
   appearanceGet: z.object({}),
   /**
-   * The whole appearance, replaced.
-   *
-   * Replaced rather than patched because that is what the editor has in its
-   * hand: a preset, two choices and a bag of edits, all of which move together
-   * when somebody presses a swatch. The schema only checks shape and size — a
-   * value that is not a colour is dropped by `sanitizeAppearance` on the way in
-   * rather than refused here, because a stored theme with one bad hex in it
-   * should cost that colour and nothing else.
+   * The whole appearance, replaced (the editor moves all of it together). Only
+   * shape and size are checked: a value that is not a colour is dropped by
+   * `sanitizeAppearance`, so one bad hex costs that colour and nothing else.
    */
   appearanceSet: z.object({
     themeId: z.string().min(1).max(64),
@@ -796,23 +531,11 @@ export const Params = {
   layoutGet: z.object({ worktreeId: z.string().min(1) }),
   layoutSet: z.object({ worktreeId: z.string().min(1), root: z.unknown(), focusedTerminalId: z.string().nullable() }),
 
-  /**
-   * Streams coarse invalidations for everything the workspace owns. Deliberately
-   * coarse: the client refetches the affected collection rather than applying a
-   * patch, which removes a whole class of state-divergence bugs and costs one
-   * small request per change. This is what lets a GUI reflect work a CLI did.
-   */
-  /**
-   * What everything this app spawned is costing, right now, from one `ps`
-   * call — see `src/main/resources`. Read by the status bar and by
-   * `teamree resources`.
-   */
+  /** What everything this app spawned is costing, from one `ps` call — see `src/main/resources`. */
   systemResources: z.object({}),
   /**
-   * SIGTERM to one process in a pane's tree, or to the whole group when the
-   * pid is the pane's own child. Refused for any pid that is not under a pane,
-   * which is what keeps it off this app's own processes: the runtime looks the
-   * pid up in a fresh sample before it signals anything.
+   * SIGTERM to one process in a pane's tree, or the whole group when the pid is
+   * the pane's own child. Refused for any pid not under a pane, from a fresh sample.
    */
   systemKill: z.object({ pid: z.number().int().positive() }),
 
@@ -824,11 +547,7 @@ export const Params = {
 /** Maps every method name to its params schema and its result type. */
 export type MethodContract = {
   'status.get': { params: z.infer<typeof Params.statusGet>; result: RuntimeStatus }
-  /**
-   * The reply is sent before the teardown starts, so `quitting` is a promise
-   * rather than a receipt; what proves the app went is the endpoint going with
-   * it, which is what the CLI waits for.
-   */
+  /** The reply is sent before teardown, so `quitting` is a promise; the endpoint going is the receipt. */
   'app.quit': { params: z.infer<typeof Params.appQuit>; result: { quitting: true; pid: number } }
 
   'project.list': { params: z.infer<typeof Params.projectList>; result: Project[] }
@@ -840,9 +559,8 @@ export type MethodContract = {
   'worktree.list': { params: z.infer<typeof Params.worktreeList>; result: Worktree[] }
   'worktree.get': { params: z.infer<typeof Params.worktreeGet>; result: Worktree }
   'worktree.create': { params: z.infer<typeof Params.worktreeCreate>; result: Worktree }
-  // `checkoutLeftAt` is set when the row was dropped but the directory was
-  // not: git had never heard of the checkout, or refused to read it. The files
-  // are all still there, and this is the last thing that knows where.
+  // `checkoutLeftAt`: the row was dropped but the directory was not (git never
+  // heard of the checkout, or refused to read it). Last thing that knows where.
   'worktree.remove': {
     params: z.infer<typeof Params.worktreeRemove>
     result: { removed: true; checkoutLeftAt?: string }
@@ -874,10 +592,7 @@ export type MethodContract = {
     params: z.infer<typeof Params.editorList>
     result: { editors: { command: string; label: string }[] }
   }
-  /**
-   * A refusal is a result rather than an error: the caller is a menu item, and
-   * a menu item told why nothing happened can say so.
-   */
+  /** A refusal is a result, not an error: a menu item told why can say so. */
   'editor.open': {
     params: z.infer<typeof Params.editorOpen>
     result: { opened: true; editor: string } | { opened: false; reason: string }
@@ -942,11 +657,7 @@ export type MethodContract = {
   'terminal.read': { params: z.infer<typeof Params.terminalRead>; result: { data: string } }
   'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
   'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
-  /**
-   * The same pane, running its program again: same id, same leaf, same
-   * directory, and the agent started over rather than resumed. Answers with the
-   * pane, which is the same record wearing a new process.
-   */
+  /** The same pane running its program again: same id, leaf, directory; agent started over, not resumed. */
   'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }
   /** Answers with the pane, now carrying what its agent just said. */
   'terminal.agentEvent': { params: z.infer<typeof Params.terminalAgentEvent>; result: Terminal }
@@ -971,39 +682,24 @@ export type ParamsOf<M extends MethodName> = MethodContract[M]['params']
 export type ResultOf<M extends MethodName> = MethodContract[M]['result']
 
 /**
- * Events pushed on a workspace.subscribe subscription. Each names a collection
- * that changed; the client refetches it. `layout` and `terminalExited` carry the
- * id that changed so a client can skip work it does not care about.
+ * Events pushed on a workspace.subscribe subscription: each names a collection
+ * that changed and the client refetches it. `layout` and `terminalExited` carry the id.
  */
 export type WorkspaceEvent =
   | { type: 'projects' }
   | { type: 'worktrees' }
   | { type: 'terminals' }
   /**
-   * A project's roster changed on disk. Deliberately carries no project id:
-   * events are coalesced by their key, and an id would have to appear in that
-   * key for two projects' changes to survive one burst. A roster is a directory
-   * read, so re-reading the few a window is showing costs less than the
-   * bookkeeping to narrow it.
+   * A project's roster changed on disk. Carries no project id: events are
+   * coalesced by key, and a roster is a cheap directory read.
    */
   | { type: 'members' }
-  /**
-   * A link to a teammate changed, or what one of them is showing did.
-   *
-   * Carries no project id for the same reason `members` does not: events are
-   * coalesced by their key, and both collections are cheap to re-read for the
-   * few projects a window has open.
-   */
+  /** A link to a teammate changed, or what one shows did. No project id, as `members`. */
   | { type: 'teammates' }
   /**
-   * The update check has something new to say: it ran, it finished, or the
-   * preference changed.
-   *
-   * On this stream rather than on one of its own because the check is started
-   * from places the window cannot see — a timer half a minute after launch, and
-   * the macOS app menu, which lives in the main process — and this is already
-   * the channel by which a window hears about work it did not do. Like every
-   * other event here it names no detail: the client re-reads `update.state`.
+   * The update check ran, finished, or its preference changed. On this stream
+   * because the check starts from places the window cannot see (a timer, the
+   * macOS app menu). Names no detail: the client re-reads `update.state`.
    */
   | { type: 'updates' }
   | { type: 'layout'; worktreeId: string }
@@ -1015,30 +711,16 @@ export type TerminalEvent =
   | { type: 'exit'; exitCode: number }
   | { type: 'title'; title: string }
   /**
-   * The pane rang the terminal bell, with the owner's clock reading at the
-   * time.
-   *
-   * Reported because it is the one byte a program sends for no reason except to
-   * be noticed, and because everything downstream of here quite correctly
-   * throws it away: it is not text, it draws nothing, and a line quoted with a
-   * bell in it would be a line with a control character in it.
+   * The pane rang the bell, at the owner's clock. Reported because everything
+   * downstream correctly throws the byte away: it is not text and draws nothing.
    */
   | { type: 'bell'; at: number }
 
 /**
- * Events pushed on a teamwork.watch subscription.
- *
- * A teammate's pane says everything a local one does, plus the two things only
- * a reader on the far end of a relay can be told, and both exist because a
- * viewer that quietly showed less than the truth would be a lie:
- *
- * `elided` is output the owner produced and this side will never see, because
- * the pane outran what `relay/README.md` budgets for one connection. It carries
- * the byte count so the gap can be drawn where it happened.
- *
- * `lost` is the link going away underneath the stream. A watcher whose teammate
- * closed their laptop must not be left looking at a frozen pane that appears
- * live.
+ * Events pushed on a teamwork.watch subscription: everything a local pane says,
+ * plus `elided` (bytes the owner produced that outran `relay/README.md`'s
+ * per-connection budget, carried as a count so the gap can be drawn) and
+ * `lost` (the link went away; a watcher must not see a frozen pane as live).
  */
 export type WatchedPaneEvent = TerminalEvent | { type: 'elided'; bytes: number } | { type: 'lost'; reason: string }
 

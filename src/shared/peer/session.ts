@@ -1,38 +1,9 @@
-// The public surface: one `Noise_IK_25519_ChaChaPoly_SHA256` session, as bytes
-// in and bytes out.
-//
-// `IK` because each side already knows the other's static public key before it
-// starts — the roster in `.teamree/members/` is exactly the "known in advance"
-// that IK assumes. The initiator authenticates the responder by encrypting the
-// first message to a key only that responder holds; the responder authenticates
-// the initiator by the static key it decrypts out of that same message, which it
-// checks against the roster before answering. Neither side ever sends its
-// identity in the clear, so a relay that splices the two streams together learns
-// only that two anonymous endpoints paired.
-//
-// This library does not frame. A Noise transport message is a bare ciphertext,
-// and something underneath — a WebSocket, or the newline framing in
-// `protocol.ts` — must preserve message boundaries. Handing `decrypt` two
-// concatenated messages, or half of one, will fail, which is the correct
-// outcome but not a substitute for framing.
-//
-// Three properties the tests pin, because they are what makes it hard to misuse:
-//
-//   * Every method checks the session's stage first, so calling them out of
-//     order is a typed `PeerError`, never undefined behaviour.
-//   * Any failure that came from the wire closes the session permanently. Noise
-//     transport carries no nonce and has no replay window: a message that fails
-//     to authenticate is indistinguishable from a message out of sequence, and
-//     in both cases the stream can no longer be trusted or resynchronised.
-//     Rejected *local* input — a plaintext that is too long — consumes nothing
-//     and leaves the session usable.
-//   * `established` is not the same thing as authenticated, and the API says so
-//     rather than leaving it to a comment. Message one of IK is replayable by
-//     anyone who recorded it, so a responder can reach `established` opposite
-//     something that holds no private key at all. `confirmed` is the state that
-//     means the peer proved possession of the static key it claimed, and it is
-//     what gates `remoteStaticPublicKey()`. Message one carries no payload, so
-//     there is nothing for a replay to deliver either.
+// One `Noise_IK_25519_ChaChaPoly_SHA256` session, bytes in and out. IK because
+// the roster in `.teamree/members/` is the "known in advance" it assumes; neither
+// side sends its identity in the clear. Does not frame: the layer beneath must
+// preserve message boundaries. Any wire failure closes the session for good
+// (no replay window to resync in); `established` is not `confirmed`, since IK's
+// message one is replayable.
 
 import { PeerErrorCode, peerError } from './errors'
 import {
@@ -81,25 +52,12 @@ const IK_PATTERN: HandshakePattern = {
 
 export const PROTOCOL_NAME = protocolNameFor(IK_PATTERN)
 
-/**
- * What each IK handshake message spends on tokens before the payload's own
- * tag: message one carries an ephemeral, an encrypted static and a tag;
- * message two carries an ephemeral and a tag. Kept here so an over-long payload
- * is refused before the handshake state has been touched.
- *
- * Message one's budget is not an invitation: see `FIRST_MESSAGE`, which allows
- * it no payload at all.
- */
+// What each IK message spends on tokens before the payload's tag, so an over-long
+// payload is refused before the handshake state is touched.
 const HANDSHAKE_OVERHEAD: readonly number[] = [DH_LEN + (DH_LEN + TAG_LEN) + TAG_LEN, DH_LEN + TAG_LEN]
 
-/**
- * IK's first message is replayable and cannot be otherwise: the responder has
- * no state yet with which to recognise a repeat, so a recorded message one
- * replayed by anyone — a relay, above all, which holds both the frame and the
- * rendezvous that delivers it — is accepted again, payload and all. So this
- * library carries nothing there. Message two and every transport message after
- * it are bound to a live ephemeral and can say whatever the caller wants.
- */
+// IK's first message is replayable (the responder has no state to spot a repeat,
+// and the relay holds the frame), so this library carries no payload in it.
 const FIRST_MESSAGE = 0
 
 /** The largest plaintext a single transport message can carry. */
@@ -122,23 +80,11 @@ export type InitiatorOptions = {
 export type ResponderOptions = {
   readonly staticPrivateKey: Uint8Array
   /**
-   * The roster check, run against the initiator's static key once the whole of
-   * its first message has been processed and before anything is sent back.
-   * Returning false aborts the handshake with `unknown_peer`. It deliberately
-   * does not run the moment that key is decrypted; `noise.ts` says why, and the
-   * short version is that deciding earlier would tell a stranger who is on the
-   * roster by how long we took to refuse it.
-   *
-   * Being on the roster is not yet proof of anything: the key arrived in a
-   * message a replayer could have recorded. `confirmed` is what turns a claimed
-   * identity into a proved one.
-   *
-   * Note for whatever puts this on a socket: `unknown_peer` and
-   * `decryption_failed` are distinguishable here on purpose, because the local
-   * operator wants to know which happened. Do not relay that distinction to the
-   * peer. Locally it is a diagnostic; on the wire it is an oracle that tells a
-   * caller whether it failed because it is not a member or because it dialled
-   * the wrong machine. Drop the connection the same way for both.
+   * The roster check on the initiator's static key, run once its whole first
+   * message is processed (`noise.ts` says why) and before anything is sent back;
+   * false aborts with `unknown_peer`. Being on the roster is not proof: `confirmed` is.
+   * Do not relay the `unknown_peer` / `decryption_failed` distinction to the peer:
+   * on the wire it is a membership oracle. Drop the connection the same way for both.
    */
   readonly isAuthorisedPeer: (staticPublicKey: Uint8Array) => boolean
   readonly prologue?: Uint8Array
@@ -149,32 +95,18 @@ export type PeerSession = {
   readonly role: PeerRole
   readonly stage: SessionStage
   /**
-   * True once the peer has proved it holds the private half of the static key
-   * it claimed, and the session is still usable. Gate anything actionable on
-   * this rather than on `stage === 'established'`.
-   *
-   * An initiator is confirmed the moment it is established: only the responder
-   * it addressed could have produced message two. A responder is confirmed by
-   * the first transport message that decrypts, because those keys need the
-   * initiator's ephemeral *and* static private keys — which is exactly what a
-   * replayer of message one does not have.
+   * True once the peer proved it holds the static key it claimed and the session
+   * is usable; gate anything actionable on this, not on `stage === 'established'`.
+   * An initiator is confirmed on establishing; a responder by the first transport message that decrypts.
    */
   readonly confirmed: boolean
   /** True when this side owes the wire the next handshake message. */
   readonly expectsHandshakeWrite: boolean
   /** True when this side is waiting for the next handshake message. */
   readonly expectsHandshakeRead: boolean
-  /**
-   * Writes the next handshake message. The first one takes no payload and
-   * refuses a non-empty one with `replayable_payload`; the second may carry
-   * anything that fits.
-   */
+  /** Writes the next handshake message; the first refuses a payload with `replayable_payload`. */
   writeHandshakeMessage(payload?: Uint8Array): Uint8Array
-  /**
-   * Reads the next handshake message and returns its payload. A non-empty
-   * payload on the first message is refused with `replayable_payload`, so what
-   * a responder gets back from its first read is always empty.
-   */
+  /** Reads the next handshake message and returns its payload; non-empty on the first is `replayable_payload`. */
   readHandshakeMessage(message: Uint8Array): Uint8Array
   encrypt(plaintext: Uint8Array): Uint8Array
   decrypt(message: Uint8Array): Uint8Array
@@ -212,11 +144,7 @@ export function createResponderSession(options: ResponderOptions): PeerSession {
   })
 }
 
-/**
- * The common case of a roster with a fixed set of keys. Comparison is
- * length-checked and constant-time — membership is public information, so this
- * is belt and braces rather than a requirement.
- */
+/** A roster with a fixed set of keys; constant-time comparison is belt and braces, membership being public. */
 export function rosterOf(publicKeys: readonly Uint8Array[]): (candidate: Uint8Array) => boolean {
   const roster = publicKeys.map(copyKey)
   return (candidate) => roster.some((known) => equalBytes(known, candidate))
@@ -243,13 +171,8 @@ type SessionConfig = {
   readonly random: RandomSource
 }
 
-/**
- * Built from closures rather than fields on purpose. Keys, chaining keys and
- * nonces live in this function's scope and are reachable only through the
- * methods below, so `console.log(session)`, `util.inspect(session)` and
- * `JSON.stringify(session)` have nothing secret to print — which is the shape a
- * log line actually takes.
- */
+// Closures, not fields, so keys and nonces are unreachable and `console.log(session)`
+// or `JSON.stringify(session)` has nothing secret to print.
 function createSession(config: SessionConfig): PeerSession {
   const initiator = config.role === 'initiator'
 
@@ -271,13 +194,11 @@ function createSession(config: SessionConfig): PeerSession {
 
   const shutDown = (): void => {
     stage = 'closed'
-    // A dead session confirms nothing, so a caller polling `confirmed` cannot
-    // be told yes about a peer it can no longer hear from.
+    // A dead session confirms nothing.
     confirmed = false
     if (handshake) destroyHandshake(handshake)
     handshake = null
-    // The static private key here is this session's own copy, so erasing it
-    // cannot disturb the caller's.
+    // This session's own copy, so erasing it cannot disturb the caller's.
     wipe(config.staticKeyPair.privateKey)
     wipe(sending?.k ?? null)
     wipe(receiving?.k ?? null)
@@ -308,10 +229,8 @@ function createSession(config: SessionConfig): PeerSession {
     receiving = initiator ? transport.responderToInitiator : transport.initiatorToResponder
     remoteStatic = hs.rs ? hs.rs.slice() : null
     transcript = transcriptHash(hs)
-    // An initiator reaching this point has decrypted message two, which only
-    // the responder it addressed could have written; that is key confirmation
-    // and there is nothing further to wait for. A responder reaching it has
-    // only a claimed identity, and waits for a transport message.
+    // An initiator has decrypted message two, which only the addressed responder
+    // could write: key confirmation. A responder has only a claimed identity.
     confirmed = initiator
     destroyHandshake(hs)
     handshake = null
@@ -339,8 +258,7 @@ function createSession(config: SessionConfig): PeerSession {
       requireStage('handshake')
       const hs = handshake
       if (!hs || !owesWrite()) throw peerError(PeerErrorCode.OutOfTurn)
-      // Both checks run before the handshake state is touched, so a refused
-      // payload leaves the session exactly as it was.
+      // Both checks precede any handshake mutation, so a refused payload leaves the session as it was.
       if (hs.messageIndex === FIRST_MESSAGE && payload.length > 0) throw peerError(PeerErrorCode.ReplayablePayload)
       const overhead = HANDSHAKE_OVERHEAD[hs.messageIndex] ?? MAX_MESSAGE_LEN
       if (payload.length > MAX_MESSAGE_LEN - overhead) throw peerError(PeerErrorCode.MessageTooLong)
@@ -360,14 +278,10 @@ function createSession(config: SessionConfig): PeerSession {
 
       return failClosed(() => {
         const step = readMessage(hs, message)
-        // A peer that puts something in the replayable message is not one this
-        // library knows how to talk to, and the refusal is after the fact
-        // rather than before it only because the length is not knowable until
-        // the message has been opened.
+        // Refused after the fact only because the length is unknowable until the message is opened.
         if (first && step.bytes.length > 0) throw peerError(PeerErrorCode.ReplayablePayload)
         if (step.transport) adopt(step.transport, hs)
-        // Copied: with no handshake key yet in play the payload can be a view
-        // into the caller's own buffer.
+        // Copied: with no handshake key yet the payload can be a view into the caller's buffer.
         return step.bytes.slice()
       })
     },
@@ -377,8 +291,7 @@ function createSession(config: SessionConfig): PeerSession {
       const cs = sending
       if (!cs) throw peerError(PeerErrorCode.OutOfTurn)
       if (plaintext.length > MAX_PLAINTEXT_LEN) throw peerError(PeerErrorCode.MessageTooLong)
-      // Transport messages are authenticated with no associated data: the
-      // transcript is already bound into the keys by Split().
+      // No associated data: the transcript is already bound into the keys by Split().
       return failClosed(() => encryptWithAd(cs, EMPTY, plaintext))
     },
 
@@ -389,10 +302,8 @@ function createSession(config: SessionConfig): PeerSession {
       return failClosed(() => {
         if (message.length > MAX_MESSAGE_LEN) throw peerError(PeerErrorCode.MessageTooLong)
         const plaintext = decryptWithAd(cs, EMPTY, message)
-        // Key confirmation: these keys came out of Split() over ee, es, se and
-        // ss, so a message that authenticates under them was written by
-        // something holding the ephemeral and static private keys of the peer
-        // we think we are talking to.
+        // Key confirmation: these keys came out of Split() over ee, es, se and ss,
+        // so whatever wrote this holds the peer's ephemeral and static private keys.
         confirmed = true
         return plaintext
       })
@@ -400,8 +311,7 @@ function createSession(config: SessionConfig): PeerSession {
 
     remoteStaticPublicKey() {
       requireStage('established')
-      // Withheld until the peer has proved the identity it claimed, so a
-      // replayed message one cannot be attributed to the person it names.
+      // Withheld until proved, so a replayed message one cannot be attributed to the person it names.
       if (!confirmed) throw peerError(PeerErrorCode.UnconfirmedPeer)
       if (!remoteStatic) throw peerError(PeerErrorCode.OutOfTurn)
       return remoteStatic.slice()

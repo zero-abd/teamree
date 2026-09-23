@@ -1,14 +1,6 @@
-// One peer's state machine and its share of the limits, written against a socket
-// port rather than a socket. Every rule the relay has about a single connection
-// lives here, so a different host runtime supplies a `PeerSocket` and inherits
-// all of it.
-//
-// The splice itself is four lines in `onBinary`, and that is on purpose: every
-// other line in this file exists to decide whether those four lines run. The
-// payload is read for its length and for nothing else — never parsed, never
-// copied into a string, never logged. If you are auditing the claim that the
-// relay cannot read content, `partner.deliver(payload)` is the only place a
-// payload goes.
+// One peer's state machine and limits, written against a `PeerSocket` port so
+// any host inherits every rule. The payload is read for its length and nothing
+// else; `partner.deliver(payload)` in `onBinary` is the only place it goes.
 
 import type { Clock } from './clock.js'
 import type { RelayConfig } from './config.js'
@@ -28,11 +20,7 @@ export type PeerSocket = {
   close: (code: number, reason: string) => void
   /** No handshake. For a peer that has already stopped answering. */
   terminate: () => void
-  /**
-   * A WebSocket-protocol ping, or null where the host does not expose one. Null
-   * means the host detects dead sockets itself and core leaves liveness alone;
-   * peers can still drive the application-level ping in `protocol.ts`.
-   */
+  /** A WebSocket-protocol ping, or null where the host detects dead sockets itself and core leaves liveness alone. */
   ping: (() => void) | null
 }
 
@@ -46,12 +34,7 @@ export type SessionHost = {
 
 export type SessionState = 'greeting' | 'waiting' | 'paired' | 'closed'
 
-/**
- * Everything a session is, as plain data. A host that is evicted from memory
- * between frames — which is the normal, cheap case for a pair that has been
- * quiet for hours — stores this beside the socket and builds the session back
- * from it, so none of the rules below have to know that happened.
- */
+/** Everything a session is, as plain data, so a host evicted between frames can rebuild it. */
 export type SessionSnapshot = {
   id: string
   origin: string
@@ -157,22 +140,16 @@ export class PeerSession implements Peer {
     const now = this.host.clock.now()
     this.lastHeardAt = now
 
-    // The hello is the one frame that is not charged, and it is safe not to
-    // charge because there can only ever be one: `onHello` either closes this
-    // connection or moves it out of `greeting`, so no second frame is ever read
-    // in this state. Everything after it is charged like content.
+    // The hello is the one uncharged frame, safe because there is only ever one:
+    // `onHello` closes the connection or moves it out of `greeting`.
     if (this.state === 'greeting') {
       this.onHello(text)
       return
     }
 
-    // A frame is a frame. Control frames cost the relay the same event loop that
-    // content frames cost it, and one that nothing charges for is one a single
-    // connection can send several hundred thousand times a second — so the
-    // budget is taken here, before the frame is looked at, exactly as in
-    // `onBinary`. The frame token goes first because it is the O(1) one: an
-    // oversized frame should not buy a scan of itself from a peer that is
-    // already over its budget.
+    // Control frames cost the same event loop as content, so they are charged
+    // before being looked at, as in `onBinary`. The O(1) frame token goes first:
+    // an oversized frame should not buy a scan of itself from a peer over budget.
     if (!this.frameBudget.take(1, now)) {
       this.close(CloseCode.RateLimited, 'over the per-connection frame or byte budget')
       return
@@ -188,12 +165,8 @@ export class PeerSession implements Peer {
     }
 
     if (text === PING_FRAME) {
-      // The pong is the relay's own write, so the same rule that governs a
-      // spliced frame governs it: past the buffer bound the relay does not
-      // queue. `onBinary` measures the partner because the partner is who the
-      // write is for; here the write is for this peer, and a peer that is not
-      // reading its own pongs is the one case nothing else measures at all —
-      // a connection with no partner is never looked at otherwise.
+      // The pong is the relay's own write, so the buffer bound applies; a peer not
+      // reading its own pongs is the one case nothing else measures.
       if (this.socket.backlog() > this.host.config.maxBufferedBytes) {
         this.host.log.warn('peer.slow', { conn: this.id, pair: this.pairRef ?? undefined })
         this.close(CloseCode.SlowConsumer, 'not reading fast enough to stay spliced')
@@ -203,10 +176,7 @@ export class PeerSession implements Peer {
       return
     }
 
-    // Otherwise: control is text and content is binary, in both directions and
-    // with no exceptions. A peer sending anything else here is either a
-    // different protocol or a confused one, and guessing which is not the
-    // relay's job.
+    // Control is text and content is binary, both directions, no exceptions.
     this.close(CloseCode.Protocol, 'text frame after hello')
   }
 
@@ -220,15 +190,13 @@ export class PeerSession implements Peer {
       return
     }
 
-    // Enforced here as well as by whatever parser the host uses, so the cap is a
-    // property of the relay rather than of the library underneath it.
+    // Enforced here as well as by the host's parser, so the cap is the relay's, not the library's.
     if (payload.byteLength > this.host.config.maxFrameBytes) {
       this.close(CloseCode.TooLarge, 'frame over the size cap')
       return
     }
 
-    // Budgets next: they protect the relay, so they are checked before anything
-    // that costs it work.
+    // Budgets protect the relay, so they are checked before anything that costs it work.
     if (!this.frameBudget.take(1, now) || !this.byteBudget.take(payload.byteLength, now)) {
       this.close(CloseCode.RateLimited, 'over the per-connection frame or byte budget')
       return
@@ -241,22 +209,16 @@ export class PeerSession implements Peer {
 
     const partner = this.host.rendezvous.partnerOf(this)
     if (partner === undefined) {
-      // This connection says it is paired and the relay's own table does not
-      // agree. That is the relay having lost state — a host rebuilds this table
-      // from what is attached to each socket, and a socket it could not read for
-      // one event is a socket the pairing was rebuilt without. The peer did
-      // nothing wrong and has nothing to fix, so it is told the same thing any
-      // other lost session is told: go away and come back. A protocol complaint
-      // here reads to a client as its own bug and stops it retrying at all.
+      // Paired by its own account, not by the table: the relay lost state (a
+      // socket unreadable for one event is rebuilt without). Told to go away and
+      // come back; a protocol complaint reads as the client's own bug and stops retries.
       this.host.log.warn('session.lost', { conn: this.id, pair: this.pairRef ?? undefined })
       this.close(CloseCode.GoingAway, 'the relay lost this session; reconnect')
       return
     }
 
-    // The bound that keeps this a pipe rather than a queue. Past it the relay
-    // does not buffer, does not silently drop frames and does not slow the
-    // sender down: it closes the peer that stopped reading and lets the pair
-    // rebuild, because a Noise stream with a hole in it is over anyway.
+    // The bound that keeps this a pipe, not a queue: past it the peer that stopped
+    // reading is closed, since a Noise stream with a hole in it is over anyway.
     if (partner.backlog() > this.host.config.maxBufferedBytes) {
       this.host.log.warn('peer.slow', { conn: partner.id, pair: this.pairRef ?? undefined })
       partner.close(CloseCode.SlowConsumer, 'not reading fast enough to stay spliced')
@@ -273,12 +235,7 @@ export class PeerSession implements Peer {
     this.lastHeardAt = this.host.clock.now()
   }
 
-  /**
-   * A sign of life the host saw without core being given a frame for it. The
-   * Durable Object host needs this and the container host does not: there the
-   * runtime answers a peer's keepalive on the object's behalf, without waking
-   * it, so a timestamp read back afterwards is the only evidence the peer left.
-   */
+  /** A sign of life the host saw without core being given a frame: the Durable Object runtime answers keepalives itself. */
   noteHeard(at: number): void {
     if (at > this.lastHeardAt) this.lastHeardAt = at
   }
@@ -327,8 +284,7 @@ export class PeerSession implements Peer {
     if (this.state === 'closed') return
     this.state = 'closed'
     if (this.socket.isOpen()) {
-      // Said in-band as well as in the close frame: close reasons are capped at
-      // 123 bytes on the wire and some clients never surface them at all.
+      // In-band too: close reasons are capped at 123 bytes and some clients never surface them.
       this.notify({ t: 'closing', code, reason })
       this.socket.close(code, reason.slice(0, 100))
     } else {
@@ -337,26 +293,19 @@ export class PeerSession implements Peer {
     this.releaseRendezvous()
   }
 
-  /**
-   * Keepalive and deadline enforcement, driven by one sweep across all
-   * connections rather than by a timer per connection.
-   */
+  /** Keepalive and deadlines, driven by one sweep across all connections rather than a timer each. */
   sweep(now: number): void {
     if (this.state === 'closed') return
     const { config } = this.host
 
-    // A connection that opens and says nothing is the cheapest way to hold a
-    // slot, so the greeting has the tightest deadline of anything here.
+    // Opening and saying nothing is the cheapest way to hold a slot, so the tightest deadline.
     if (this.state === 'greeting' && now - this.openedAt >= config.helloTimeoutMs) {
       this.close(CloseCode.BadHello, 'no hello within the greeting deadline')
       return
     }
 
-    // Idle means nothing at all has happened here: no content in either
-    // direction, and no sign of life from the peer. Counting content alone
-    // would hang up on a pair that was keeping itself alive in exactly the way
-    // this relay documents, and telling somebody to send keepalives that do not
-    // work is worse than having no keepalive to offer.
+    // Idle counts keepalives as life: content alone would hang up on a pair
+    // keeping itself alive exactly the way this relay documents.
     const quietSince = Math.max(this.lastSpliceAt, this.lastHeardAt)
     if (this.state === 'paired' && config.idleTimeoutMs > 0 && now - quietSince >= config.idleTimeoutMs) {
       this.endForSilence()
@@ -367,15 +316,13 @@ export class PeerSession implements Peer {
     const ping = this.socket.ping
     if (ping === null) return
 
-    // Anything heard within the last keepalive interval is proof enough of life,
-    // so sweeping again at the same instant is a no-op. That is what lets the
-    // deadlines be driven one step at a time instead of waited out.
+    // Anything heard within the interval is proof of life, so a repeat sweep at
+    // the same instant is a no-op; deadlines can be driven one step at a time.
     if (now - this.lastHeardAt < config.keepaliveIntervalMs) return
 
     if (this.awaitingPong) {
       if (now - this.lastPingAt < config.keepaliveIntervalMs) return
-      // A NAT that forgot the mapping leaves a socket that looks open and will
-      // never speak again. There is nothing polite to send it, so it is cut.
+      // A NAT that forgot the mapping leaves a socket that looks open and never speaks again.
       this.host.log.info('peer.unresponsive', { conn: this.id, pair: this.pairRef ?? undefined })
       this.state = 'closed'
       this.socket.terminate()
@@ -390,11 +337,8 @@ export class PeerSession implements Peer {
     }
   }
 
-  /**
-   * Both halves hear the same true thing. Closing this one on its own would
-   * leave `leave` to tell the other that its partner disconnected, and nothing
-   * disconnected: they were both quiet, and both are being reaped for it.
-   */
+  // Both halves hear the same true thing; closing one alone would have `leave`
+  // tell the other its partner disconnected, and nothing did.
   private endForSilence(): void {
     const reason = 'no sign of life on this session within the idle budget'
     if (this.token !== null && this.host.rendezvous.endSession(this.token, this, CloseCode.Idle, reason)) return
@@ -424,8 +368,7 @@ export class PeerSession implements Peer {
       return
     }
 
-    // State and session id were set by `markPaired` from inside `join`, for both
-    // halves at once; there is nothing left here but to say it happened.
+    // State and session id were set by `markPaired` from inside `join`, for both halves.
     this.host.log.info('session.opened', { conn: this.id, pair: outcome.pairRef, session: outcome.sessionId })
   }
 
@@ -435,11 +378,8 @@ export class PeerSession implements Peer {
   }
 }
 
-/**
- * What a text frame costs in bytes on the wire, without allocating a copy of it
- * to find out. Frames arrive already validated as UTF-8 by whatever parsed them,
- * so a high surrogate here is always the first half of a pair.
- */
+// Wire bytes of a text frame without allocating a copy. Frames arrive validated
+// as UTF-8, so a high surrogate here is always the first half of a pair.
 function utf8Length(text: string): number {
   let bytes = 0
   for (let index = 0; index < text.length; index += 1) {

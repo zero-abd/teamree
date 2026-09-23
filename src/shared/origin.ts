@@ -1,64 +1,19 @@
 // What an `origin` remote has to be, said once for every process that asks.
-//
-// Two checkouts are the same project when the hash of their normalised origin
-// matches, so the origin is the identity and there is nothing else underneath
-// it. Most origins are URLs, and two people who cloned one repository over ssh
-// and over https agree about it without having to agree about anything else:
-// the host and the path are a fact about a server both machines can name.
-//
-// A repository shared over a mounted volume or a directory on a file server has
-// no such server to name, and sharing one that way is an ordinary thing for a
-// team to do. What it has instead is a path, and a path is a fact about a mount
-// rather than about the repository: nothing readable from this Mac can show
-// that `/Volumes/team/app.git` here and `/Users/ada/mnt/team/app.git` there are
-// one directory. There is no third party to ask, and a volume UUID or an inode
-// answers a question about this machine's mount rather than about the
-// repository two people share.
-//
-// So a path is an identity on exactly one condition, and the condition is said
-// out loud rather than hidden: **both Macs have to reach the repository at the
-// same absolute path, spelled the same way.** That much is checkable, because
-// it is the string being hashed, and the rest of this file follows from
-// refusing to pretend to more. Nothing is folded away that could name a
-// different directory on some filesystem, and every surface that sets a path
-// origin shows the exact string it will hash, so the person at the other end is
-// given it rather than left to guess at it.
-//
-// Two properties the rules below are written to keep:
-//
-// **A path can never collide with a URL.** A normalised URL is `host/path` with
-// a host in it, so it never begins with a slash; a normalised path always does.
-// That leading slash is the whole namespace, and it is free: it also leaves
-// every URL's key byte-for-byte what it was before paths were allowed here,
-// which matters because a key that quietly changed is a team that quietly stops
-// meeting.
-//
-// **A path is never a default.** The origin is whatever git already has. An
-// origin that is a URL is read as a URL and nothing about it changes.
-//
-// One rule here is not about identity at all. `checkTransport` asks whether the
-// remote is a place or a program, which is a different question from whether two
-// checkouts could agree on it — and it is here because *every* process that
-// writes an origin has to ask it. The CLI had its own copy and the window and
-// the runtime could not reach it, so `teamwork.setOrigin` wrote whatever
-// `checkOrigin` said yes to.
+// The hash of the normalised origin is the project identity. A URL normalises to
+// `host/path`; a path is an identity only if both Macs reach the repository at
+// the same absolute path, spelled the same way, so nothing is folded that could
+// name a different directory and every surface shows the exact string hashed.
+// A normalised path starts with `/` and a URL never does, so the two cannot
+// collide and every URL key stays byte-for-byte what it was. A path is never a
+// default: the origin is whatever git already has.
 
 /** What kind of place an origin names, once it is known to be usable. */
 export type OriginKind = 'url' | 'path'
 
 /**
- * The remote's identity, spelled one way.
- *
- * Two people clone the same repository over ssh and https and mean the same
- * thing, so for a URL the scheme, credentials, port, a trailing `.git` and the
- * case of the host are all normalised away; what is left is host and path,
- * which is what two clones of one repository agree on. For a path, far less is
- * normalised away and `normalisePath` says why of each one.
- *
- * Defined in terms of `checkOrigin` rather than beside it, because a remote
- * this returns a key for and a remote the panel accepts have to be the same
- * remote: two spellings of one rule is how somebody gets told two different
- * things about one origin.
+ * The remote's identity, spelled one way: for a URL the scheme, credentials, port,
+ * trailing `.git` and host case are folded away; for a path see `normalisePath`.
+ * Defined via `checkOrigin` so the key and what the panel accepts are one rule.
  */
 export function normaliseRemote(remote: string): string | undefined {
   const checked = checkOrigin(remote)
@@ -70,10 +25,8 @@ export type OriginCheck =
       ok: true
       kind: OriginKind
       /**
-       * What to give git. A URL is kept exactly as it was typed, because the
-       * spelling carries a choice — ssh against https — that is the user's and
-       * not this file's. A path is the normalised one, so that what
-       * `git remote -v` shows and what gets hashed are the same characters.
+       * What to give git. A URL is kept as typed (ssh against https is the user's
+       * choice); a path is the normalised one, so `git remote -v` and the hash agree.
        */
       remote: string
       /** The string that gets hashed, which for a path is the thing to show. */
@@ -83,13 +36,9 @@ export type OriginCheck =
   | { ok: false; reason: string }
 
 /**
- * Whether this is an origin teamree can match against a teammate's, and why not
- * when it is not.
- *
- * The path cases are answered before anything tries to read a URL out of the
- * string, because several of them would otherwise parse as one: `file:/srv/app`
- * has a scheme in it, and `/Volumes/a:b/app.git` has a colon in it, and either
- * read as a host would be an identity that names a machine nobody has.
+ * Whether this is an origin teamree can match against a teammate's, and why not.
+ * Path cases go first: `file:/srv/app` and `/Volumes/a:b/app.git` would otherwise
+ * parse as URLs naming a machine nobody has.
  */
 export function checkOrigin(raw: string): OriginCheck {
   const remote = raw.trim()
@@ -101,10 +50,8 @@ export function checkOrigin(raw: string): OriginCheck {
     if (!path.ok) return path
     return { ok: true, kind: 'path', remote: path.path, normalised: path.path }
   }
-  // Before the rule about spaces, because `ext::sh -c id` has a space in it and
-  // "a remote URL has no spaces in it" would be a true sentence about the wrong
-  // thing: the transport is what is wrong with it, and the person reading the
-  // refusal is better off told that than sent to delete a space.
+  // Before the space rule: `ext::sh -c id` has a space in it, and the transport
+  // is what is wrong with it.
   const transport = checkTransport(remote)
   if (!transport.ok) return transport
   if (/\s/.test(remote)) return { ok: false, reason: 'a remote URL has no spaces in it' }
@@ -120,44 +67,26 @@ export function checkOrigin(raw: string): OriginCheck {
 }
 
 /**
- * The transports teamree will hand git, as a list of what it means to allow.
- *
- * `file` is here because a repository on a mounted volume is an ordinary
- * teamree origin. `checkOrigin` reads `file:` as the path it names long before
- * this is asked, so inside this file the entry is never reached; it is for a
- * caller that holds a remote straight out of somebody's `.git/config` and asks
- * only this question about it, which has to get the same answer.
+ * The transports teamree will hand git. `file` is never reached inside this file
+ * (`checkOrigin` reads `file:` as a path first); it is for a caller holding a raw
+ * `.git/config` remote that asks only this question and must get the same answer.
  */
 const TRANSPORTS = new Set(['https', 'http', 'ssh', 'git', 'file'])
 
 export type TransportCheck = { ok: true } | { ok: false; reason: string }
 
 /**
- * Whether the remote names a transport teamree means to allow, or a reason it
- * does not.
+ * Whether the remote names a transport teamree means to allow, or why not.
  *
- * git's remote syntax is not only addresses. `<name>::<address>` hands the rest
- * of the string to a program called `git-remote-<name>` — `ext::<command>` is
- * the one of those that runs whatever it is given — and a URL whose scheme git
- * has no transport of its own for is sent looking for the same kind of helper
- * by the same name. Both spellings therefore name a program rather than a
- * place, which is a perfectly reasonable thing in a config file somebody wrote
- * by hand and is not a reasonable thing in a string that arrived in a message
- * or in a field. A current git refuses `ext` of its own accord unless
- * `protocol.ext.allow` says otherwise, and that default is exactly the kind of
- * thing not to be the only defence: it belongs to another program, it is
- * configurable, and nothing here can see what it is set to.
- *
- * So this is an allowlist and not a list of the dangerous names, because the
- * next helper is one nobody here has heard of.
- *
- * What it is careful about is the difference between a transport and a host.
- * git reads `host:path` — with no scheme and no slash before the colon — as ssh
- * to that host, and `gitlab.example:team/api.git` is a remote real teams have;
- * a rule that read everything before a colon as a transport name would refuse
- * it. So a transport is only named where git itself reads one: scheme
- * characters followed by `://` or by `::`. Everything else falls through to the
- * grammar in `checkOrigin`, which decides whether it is an address at all.
+ * `<name>::<address>` hands the address to `git-remote-<name>` (`ext::` runs
+ * whatever it is given) and a scheme git has no transport for is sent looking
+ * for the same kind of helper, so both spellings name a program, not a place.
+ * git's own `protocol.ext.allow` default is configurable and invisible from
+ * here, so it is not the only defence; this is an allowlist because the next
+ * helper is one nobody here has heard of. A transport is only named where git
+ * itself reads one — scheme characters then `://` or `::` — because scp-style
+ * `gitlab.example:team/api.git` is a real remote, and everything else falls
+ * through to the grammar in `checkOrigin`.
  */
 export function checkTransport(raw: string): TransportCheck {
   const named = /^([A-Za-z][A-Za-z0-9+.-]*)(::|:\/\/)/.exec(raw.trim())
@@ -177,28 +106,19 @@ export function checkTransport(raw: string): TransportCheck {
 }
 
 /**
- * Whether this remote names somewhere on a disk rather than somewhere on a
- * network.
- *
- * A shape test and not a lookup: it runs while somebody is still typing, and it
- * runs against remotes git has for repositories whose volume is not mounted
- * this minute. Everything it says yes to is answered by `normalisePath`, which
- * is where a relative path or a `~` gets its own sentence rather than being
- * lumped in with "that is not a URL".
+ * Whether this remote names somewhere on a disk rather than on a network. A shape
+ * test, not a lookup: it runs while somebody is typing, and against remotes whose
+ * volume is not mounted this minute. `normalisePath` answers all it says yes to.
  */
 function pathShaped(remote: string): boolean {
-  // `file:` in any of its spellings, including `file:/srv/app`, which has only
-  // one slash and would otherwise parse as a host called `file`.
+  // `file:` in any spelling, including `file:/srv/app`, which would otherwise
+  // parse as a host called `file`.
   if (/^file:/i.test(remote)) return true
   if (/^(?:\/|~|\.{1,2}\/)/.test(remote)) return true
-  // A drive letter is not a path on this Mac and is not a URL either, and left
-  // alone it would read as a host called `c`. It is here so that it is refused
-  // by the half of this file that talks about directories.
+  // A drive letter would otherwise read as a host called `c`; refuse it as a path.
   if (/^[A-Za-z]:[\\/]/.test(remote)) return true
-  // What git itself does with a remote that has no scheme and no scp-style
-  // host: read it as a path. Only when there is a separator in it, though — a
-  // bare word is something nobody meant as either, and calling it a filesystem
-  // path would answer a question this person did not ask.
+  // git reads a remote with no scheme and no scp-style host as a path, but only
+  // with a separator in it: a bare word was meant as neither.
   return !remote.includes(':') && remote.includes('/')
 }
 
@@ -206,34 +126,12 @@ type PathCheck = { ok: true; path: string } | { ok: false; reason: string }
 
 /**
  * A filesystem origin, folded only where folding cannot change which directory
- * is named.
- *
- * Repeated slashes, a trailing slash and a `.` segment name the same directory
- * on every filesystem there is, so they go. Nothing else does, and the things
- * that stay are the interesting half:
- *
- * **Case stays.** macOS volumes are usually case-insensitive and are not always
- * — APFS can be formatted case-sensitive, and a network volume answers to
- * whatever is serving it. Folding case would merge `/Volumes/src/Repo` and
- * `/Volumes/src/repo`, which on such a volume are two repositories, and two
- * teams quietly becoming one is the single failure this file exists to prevent.
- * So two people who spell the path with different case do not meet — and
- * because the panel prints the spelling it hashes, that is something to notice
- * beforehand rather than to discover afterwards.
- *
- * **A trailing `.git` stays.** On a hosting service `…/app` and `…/app.git` are
- * one repository by convention, which is why the URL rule drops it. On a disk
- * they are two directories, and a bare `app.git` sitting beside a working
- * checkout `app` is exactly how somebody lays this out.
- *
- * **The Unicode form of a name stays**, for the reason case does: two spellings
- * of one accent are the same file on macOS and need not be on a server. Paste
- * the path from the person who set it up rather than retyping it.
- *
- * **Symlinks are not resolved, and a `..` segment is refused rather than
- * folded.** Collapsing `a/link/../b` lexically names a different directory the
- * moment `link` is a symlink, and resolving it for real would make the identity
- * a fact about this Mac's disk instead of about the spelling both people hold.
+ * is named: repeated slashes, a trailing slash and `.` segments go. Case stays
+ * (APFS and network volumes can be case-sensitive; two teams quietly becoming
+ * one is the failure this file exists to prevent). A trailing `.git` stays: on
+ * a disk `app` and `app.git` are two directories. The Unicode form stays, for
+ * the reason case does. Symlinks are not resolved and `..` is refused, not
+ * folded: `a/link/../b` names a different directory once `link` is a symlink.
  */
 function normalisePath(remote: string): PathCheck {
   let path = remote
@@ -265,10 +163,8 @@ function normalisePath(remote: string): PathCheck {
     }
   }
 
-  // A control character is never in a path somebody means, and this string is
-  // about to be hashed, printed in a panel and pasted into a message to a
-  // teammate — three places where an invisible character is a thing that goes
-  // wrong silently rather than loudly.
+  // About to be hashed, printed and pasted to a teammate: an invisible
+  // character goes wrong silently.
   if (/[\u0000-\u001F\u007F]/.test(path)) {
     return { ok: false, reason: 'that path has a control character in it, which no directory on a Mac is named with' }
   }
@@ -289,10 +185,8 @@ function normalisePath(remote: string): PathCheck {
     }
   }
   const segments = path.split('/').filter((segment) => segment !== '' && segment !== '.')
-  // Against what was written as well as against what came back from the
-  // parser: a `file://` URL has its `..` folded out by the URL parser itself,
-  // escapes and all, before any of this could see it — and folding one is
-  // precisely what must not happen here.
+  // Against what was written too: the URL parser folds `..` out of a `file://`
+  // URL, escapes and all, before this could see it.
   if (segments.includes('..') || hasParentSegment(fromUrl ? decodeIfPossible(remote) : remote)) {
     return {
       ok: false,
@@ -320,12 +214,8 @@ function decodeIfPossible(text: string): string {
 }
 
 /**
- * Host and path, out of every spelling of a URL a clone produces.
- *
- * The case of the path is folded along with the case of the host, which is a
- * hosting service's convention rather than a filesystem's: it is how this
- * behaved before paths were allowed here, and changing it now would move every
- * existing team's project key for no gain.
+ * Host and path, out of every spelling of a URL a clone produces. Path case is
+ * folded with host case; changing that would move every existing team's key.
  */
 function normaliseUrl(remote: string): string | undefined {
   const scp = /^(?:[^@/]+@)?([^/:]+):(?!\/\/)(.+)$/.exec(remote)
@@ -351,13 +241,7 @@ function normaliseUrl(remote: string): string | undefined {
   return `${cleanHost}/${cleanPath}`
 }
 
-/**
- * What a teammate has to match, as the sentence that says it.
- *
- * A URL team needs no such sentence — theirs is the case where two spellings of
- * one repository already agree — so this is about paths, and it is deliberately
- * blunt about the one thing the design cannot do for them.
- */
+/** What a teammate has to match, as the sentence that says it; only paths need one. */
 export function pathIdentityNote(path: string): string {
   return (
     `Your teammate’s origin has to be this exact path, ${path}, character for character. Nothing on either Mac ` +

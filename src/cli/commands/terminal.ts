@@ -15,22 +15,13 @@ const TERMINAL_ARG = {
 } as const
 
 /**
- * The listing, with the worktree column reading as a name.
- *
- * A worktree id is a uuid, and a column of them is a column nobody can act on:
- * every other command takes a name, a branch or a path, so a listing that
- * answers in ids makes the reader go and look each one up. The id is still the
- * honest answer where no name is known — a pane whose worktree has gone from
- * the listing between the two calls — and it is better than an empty cell.
- *
- * Pure, and exported, so what the column says is checked without a runtime.
+ * The listing, with the worktree column reading as a name (the id when the
+ * worktree has gone between the two calls). Pure and exported so it is tested without a runtime.
  */
 export function terminalTable(terminals: readonly Terminal[], worktrees: readonly Worktree[]): string {
   const names = new Map(worktrees.map((worktree) => [worktree.id, worktree.name]))
   return formatTable(
-    // NAME before TITLE: the name is the one somebody chose, and a strip
-    // of panes all titled `claude` is exactly the listing this column
-    // exists to tell apart.
+    // NAME before TITLE: a strip of panes all titled `claude` is what this column tells apart.
     ['ID', 'WORKTREE', 'NAME', 'TITLE', 'SIZE', 'RUNNING', 'CWD'],
     terminals.map((terminal) => [
       terminal.id,
@@ -59,8 +50,7 @@ export const terminalCommands: readonly CommandSpec[] = [
     ],
     run: async (context) => {
       const selector = readString(context.flags, 'worktree')
-      // Read whether or not one was named: the rows are what turns the
-      // worktree column from a uuid into something to type back.
+      // Read whether or not one was named: the rows name the worktree column.
       const worktrees = await context.client.call('worktree.list', {})
       const worktreeId = selector === undefined ? undefined : selectWorktree(worktrees, selector).id
       const terminals = await context.client.call('terminal.list', worktreeId === undefined ? {} : { worktreeId })
@@ -152,9 +142,7 @@ export const terminalCommands: readonly CommandSpec[] = [
         terminalId,
         ...(tailBytes === undefined ? {} : { tailBytes })
       })
-      // The raw buffer stays in `data` whatever was asked for: a caller that
-      // writes bytes back into a pane needs the bytes, and losing them to a
-      // display choice would be the opposite of this flag's point.
+      // The raw buffer stays in `data` whatever was asked for: a caller writing bytes back needs the bytes.
       const stripped = readBoolean(context.flags, 'plain') ? plainText(result.data) : undefined
       return {
         data: {
@@ -339,7 +327,6 @@ export const terminalCommands: readonly CommandSpec[] = [
           ['terminal', result.terminalId],
           ['exit code', result.exitCode === undefined ? '-' : String(result.exitCode)],
           ['output bytes', String(result.output.length)],
-          // Only worth a line when it happened, and then it is worth saying plainly.
           ...(result.interrupted
             ? ([['interrupted', 'yes - this machine slept; the quiet window restarted after it woke']] as const)
             : [])
@@ -392,8 +379,7 @@ export const terminalCommands: readonly CommandSpec[] = [
             terminalId: terminal.id,
             exitCode: result.exitCode ?? null,
             output: result.output,
-            // The exit code is unaffected, but wall-clock time is: anything
-            // timing this command needs to know the machine slept through part of it.
+            // Wall-clock time is affected by sleep even though the exit code is not.
             interrupted: result.interrupted
           },
           text: result.output
@@ -407,14 +393,7 @@ export const terminalCommands: readonly CommandSpec[] = [
   }
 ]
 
-/**
- * The worktree a command was pointed at, however it was pointed.
- *
- * Every other command that names a worktree takes it as a positional, so a flag
- * here was a rule with one exception in it — and the exception was found by
- * typing the obvious thing and being told off. The flag still works, because
- * scripts were written against it.
- */
+// Positional like every other worktree command; the flag still works because scripts use it.
 function worktreeSelector(positional: string | undefined, flags: ParsedFlags): string {
   const selector = positional ?? readString(flags, 'worktree')
   if (selector === undefined || selector.length === 0) {

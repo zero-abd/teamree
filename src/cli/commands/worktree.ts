@@ -10,12 +10,8 @@ import { DEFAULT_WAIT_TIMEOUT_MS, waitForState } from '../waiting.js'
 import { CliError, ExitCode } from '../exit.js'
 
 /**
- * The task `--prompt` names, or undefined without the flag.
- *
- * Refused up front, before any checkout exists, for the two things the runtime
- * would refuse later or do nothing with: a prompt too long for the one command
- * line it goes on, and a prompt with no agent to be given to — a create that
- * accepted one would write a task nobody is ever told.
+ * The task `--prompt` names, or undefined. Refused before any checkout exists
+ * when too long for one command line or when there is no agent to give it to.
  */
 async function readPrompt(context: CommandContext, agents: number): Promise<string | undefined> {
   const flag = readString(context.flags, 'prompt')
@@ -42,12 +38,8 @@ async function readPrompt(context: CommandContext, agents: number): Promise<stri
 }
 
 /**
- * The state column of a listing.
- *
- * `missing` is not a state on the record — the record says `ready`, and it is
- * the disk that disagrees — but a listing read by eye has one column for "what
- * is this row doing", and a checkout that is not there belongs in it. Under
- * --json both facts are there as they are.
+ * The state column of a listing. `missing` is the disk disagreeing with a
+ * `ready` record, but a listing read by eye has one column for it; --json has both.
  */
 export function shownState(worktree: Pick<Worktree, 'state' | 'missing'>): string {
   return worktree.missing ? 'missing' : worktree.state
@@ -158,9 +150,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
       const timeoutMs = readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WAIT_TIMEOUT_MS
       const task = await readPrompt(context, agents.length)
 
-      // An explicit branch name is one name, so it cannot answer for several
-      // checkouts. Refusing is the only honest reading: silently creating one,
-      // or appending to what was asked for, both ignore half the request.
+      // One branch name cannot answer for several checkouts.
       if (branch !== undefined && agents.length > 1) {
         throw new CliError({
           code: 'branch_for_several',
@@ -169,12 +159,10 @@ export const worktreeCommands: readonly CommandSpec[] = [
         })
       }
 
-      // Held rather than iterated away, because each name is used twice: once to
-      // create the checkout and once to name the pane that runs in it.
+      // Each name is used twice: for the checkout and for the pane that runs in it.
       const names = taskNamesForAgents(requireString(context.flags, 'name'), agents)
 
-      // Created in order, because that is the order the names were handed out
-      // in and the runtime allocates branches as the requests arrive.
+      // In order: the runtime allocates branches as the requests arrive.
       const created: Worktree[] = []
       for (const name of names) {
         created.push(
@@ -188,19 +176,14 @@ export const worktreeCommands: readonly CommandSpec[] = [
         )
       }
 
-      // Waited for in parallel: a race that starts its second agent only after
-      // the first checkout has settled is not a race.
+      // In parallel: a race whose second agent waits for the first checkout is not a race.
       const started = await Promise.all(
         created.map(async (worktree, index) => {
           const agent = agents[index]
           if (agent === undefined) return worktree
           const ready = await waitForCheckout(context, worktree, timeoutMs)
-          // Named for the task, not the binary. Three panes racing one task all
-          // report themselves as `claude`, so a listing of them says the same
-          // thing three times and the one question being asked of it — which of
-          // these is which — is the one thing it cannot answer. The name is the
-          // worktree's own, suffix and all, so a pane and its checkout read the
-          // same in both listings.
+          // Named for the worktree, suffix and all, not the binary: three panes
+          // called `claude` cannot be told apart in a listing.
           await context.client.call('terminal.create', {
             worktreeId: ready.id,
             command: agent,
@@ -211,8 +194,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
         })
       )
 
-      // A create with no --agent is still a create, so there is always a first
-      // row: `taskNamesForAgents` hands out one name for a selection of none.
+      // `taskNamesForAgents` hands out one name for a selection of none.
       const one = started[0] as Worktree
       if (agents.length === 0) {
         return {
@@ -276,8 +258,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
         ['branch', status.branch]
       ]
       const readAt: [string, string] = ['read at', new Date(status.readAt).toISOString()]
-      // No counts for a checkout that is not there: every one of them would be
-      // a zero that means "nothing was asked", printed where "clean" is read.
+      // No counts for a missing checkout: a zero here reads as "clean".
       const counts: [string, string][] = status.missing
         ? [['checkout', 'missing']]
         : [
@@ -439,8 +420,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
       if (result.uncommitted > 0) {
         lines.push(`${result.uncommitted} uncommitted change${result.uncommitted === 1 ? '' : 's'} stayed behind.`)
       }
-      // On its own line and nothing else on it, because the next thing that
-      // happens to it is a click or a copy.
+      // On its own line: the next thing that happens to it is a click or a copy.
       if (result.reviewUrl !== undefined) lines.push(result.reviewUrl)
       return { data: result, text: lines.join('\n') }
     }
@@ -500,10 +480,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
       const text =
         preview.state === 'conflicts' ? [summary, ...preview.conflicts.map((path) => `  ${path}`)].join('\n') : summary
 
-      // Exit stays 0 for every answer, including "it would conflict": the
-      // codes mean whether the command ran, and this one ran. A script branches
-      // on `state` from --json rather than on an exit code that would have to
-      // be given a second meaning.
+      // Exit 0 even for "it would conflict": exit codes say whether the command
+      // ran; a script branches on `state` from --json.
       return { data: preview, text }
     }
   },
@@ -543,8 +521,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
         ...(maxBytes === undefined ? {} : { maxBytes })
       })
 
-      // The patch goes out as git wrote it, so it can be piped into `git apply`
-      // or read by anything that understands a unified diff.
+      // As git wrote it, so it can be piped into `git apply`.
       const text = result.patch === '' ? 'No changes.' : result.patch
       return { data: result, text: result.truncated ? `${text}\n[cut at ${result.patch.length} characters]` : text }
     }
@@ -639,8 +616,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
           option.kind,
           option.shortSha,
           [option.isBase ? 'base' : '', option.isCurrent ? 'current' : ''].filter((mark) => mark !== '').join(','),
-          // Git's %ct is seconds; Date wants milliseconds. Without the scale
-          // every ref reads 1970-01-21.
+          // Git's %ct is seconds; Date wants milliseconds.
           new Date(option.updatedAt * 1000).toISOString().slice(0, 10)
         ]),
         'No refs to branch from.'
@@ -715,15 +691,10 @@ function renderPane(node: PaneNode, indent: string, focused: string | null): str
 }
 
 /**
- * Both hunk commands, which differ only in which patch they count against and
- * which method they end in.
- *
- * The index lives here rather than in the contract on purpose. A number is what
- * a person at a shell can type and what a script can loop over; it is also the
- * thing that goes stale the instant anything else stages a hunk, so it is
- * resolved against a patch read one line earlier and turned into the hunk
- * itself before it leaves this process. The runtime is never handed a position
- * to trust — see `Hunk` in src/shared/methods.ts.
+ * Both hunk commands, differing only in which patch they count against and
+ * which method they end in. The index goes stale the instant anything else
+ * stages a hunk, so it is resolved here against a patch read one line earlier;
+ * the runtime is never handed a position to trust (see `Hunk` in src/shared/methods.ts).
  */
 async function applyHunkCommand(context: CommandContext, staged: boolean): Promise<{ data: unknown; text: string }> {
   const worktree = await resolveWorktree(context.client, context.args[0] as string)

@@ -1,18 +1,6 @@
-// CipherState, SymmetricState and HandshakeState, following the Noise
-// specification (revision 34) sections 5.1, 5.2 and 5.3.
-//
-// This is deliberately a transliteration of the spec's pseudocode rather than
-// something tidier. Each function keeps the spec's name and the spec's order of
-// operations so that an auditor can read the two side by side; where a local
-// name differs from the spec's it is only to satisfy the linter.
-//
-// It is driven by a pattern table rather than hard-coding IK. That is not
-// generality for its own sake: it is what lets `noiseVectors.test.ts` run this
-// exact code against all thirty-eight published `25519_ChaChaPoly_SHA256`
-// vectors instead of the single IK one. The library exports only IK (see
-// `session.ts`); the other patterns live in the test as data.
-//
-// Nothing here is the public API. Callers use `session.ts`.
+// CipherState, SymmetricState and HandshakeState, transliterated from Noise
+// spec revision 34 sections 5.1-5.3 so an auditor can read the two side by side.
+// Pattern-table driven so `noiseVectors.test.ts` can run every published vector; not public API.
 
 import { PeerErrorCode, peerError } from './errors'
 import {
@@ -36,10 +24,8 @@ import {
 const EMPTY = new Uint8Array(0)
 
 /**
- * Only `s` appears in the pre-messages of every pattern this library and its
- * test corpus use. Pre-message `e` exists in the spec's fallback patterns,
- * which we do not implement; leaving it out of the type means an unsupported
- * pattern fails to compile rather than silently skipping a MixHash.
+ * Only `s` appears in pre-messages here; pre-message `e` (fallback patterns) is
+ * left out of the type so an unsupported pattern fails to compile rather than skipping a MixHash.
  */
 export type PreMessageToken = 's'
 
@@ -55,11 +41,7 @@ export type HandshakePattern = {
 /** This library implements exactly one cipher suite; see `primitives.ts` for why. */
 const SUITE = '25519_ChaChaPoly_SHA256'
 
-/**
- * The protocol name is derived from the pattern rather than passed beside it,
- * so a caller cannot bind a transcript to a name that describes a different
- * handshake than the one it is actually running.
- */
+/** Derived from the pattern, not passed beside it, so a transcript cannot be bound to the wrong name. */
 export function protocolNameFor(pattern: HandshakePattern): string {
   return `Noise_${pattern.name}_${SUITE}`
 }
@@ -81,12 +63,8 @@ export function hasKey(cs: CipherState): boolean {
   return cs.k !== null
 }
 
-/**
- * The spec reserves n = 2^64 - 1 and requires that reaching it be signalled as
- * an error. Checking before use, and never incrementing past the ceiling, means
- * there is no arithmetic path on which a nonce repeats: the counter stops and
- * every later call throws the same way.
- */
+// The spec reserves n = 2^64 - 1 as an error. Checking before use and never
+// incrementing past the ceiling leaves no arithmetic path on which a nonce repeats.
 function useNonce(cs: CipherState): bigint {
   if (cs.n >= MAX_NONCE) throw peerError(PeerErrorCode.NonceExhausted)
   const nonce = cs.n
@@ -101,9 +79,8 @@ export function encryptWithAd(cs: CipherState, ad: Uint8Array, plaintext: Uint8A
 
 export function decryptWithAd(cs: CipherState, ad: Uint8Array, ciphertext: Uint8Array): Uint8Array {
   if (cs.k === null) return ciphertext
-  // The nonce is consumed whether or not the tag verifies. A failed decryption
-  // ends the session, so there is no resynchronisation to preserve, and not
-  // rewinding keeps an attacker from replaying a message to pin the counter.
+  // The nonce is consumed whether or not the tag verifies: a failed decryption ends
+  // the session, and not rewinding stops a replayed message pinning the counter.
   return aeadDecrypt(cs.k, useNonce(cs), ad, ciphertext)
 }
 
@@ -119,9 +96,8 @@ export type SymmetricState = {
 
 export function initializeSymmetric(protocolName: string): SymmetricState {
   const name = new TextEncoder().encode(protocolName)
-  // Spec 5.2: names of HASHLEN bytes or fewer are used as-is, zero-padded;
-  // longer ones are hashed. `Noise_IK_25519_ChaChaPoly_SHA256` is exactly 32
-  // bytes, so it lands on the padding branch with no padding to do.
+  // Spec 5.2: names of HASHLEN bytes or fewer are zero-padded, longer ones hashed.
+  // `Noise_IK_25519_ChaChaPoly_SHA256` is exactly 32 bytes.
   let h: Uint8Array
   if (name.length <= HASH_LEN) {
     h = new Uint8Array(HASH_LEN)
@@ -150,17 +126,12 @@ export function encryptAndHash(ss: SymmetricState, plaintext: Uint8Array): Uint8
 
 export function decryptAndHash(ss: SymmetricState, ciphertext: Uint8Array): Uint8Array {
   const plaintext = decryptWithAd(ss.cipher, ss.h, ciphertext)
-  // The spec hashes the ciphertext, not the plaintext, and only after a
-  // successful decryption — so a rejected message leaves the transcript alone.
+  // The spec hashes the ciphertext, after a successful decryption, so a rejected message leaves the transcript alone.
   mixHash(ss, ciphertext)
   return plaintext
 }
 
-/**
- * Keyed by direction rather than by the spec's `c1`/`c2`, because every caller
- * of this immediately has to work out which is which and the names are where
- * that goes wrong.
- */
+/** Keyed by direction rather than the spec's `c1`/`c2`, which every caller had to decode. */
 export type TransportKeys = {
   readonly initiatorToResponder: CipherState
   readonly responderToInitiator: CipherState
@@ -186,11 +157,8 @@ export type HandshakeConfig = {
   readonly remoteStaticPublicKey: Uint8Array | null
   readonly random: RandomSource
   /**
-   * The roster check, run on a peer static key decrypted out of a handshake
-   * message. Returning false aborts the handshake. It runs only once the whole
-   * of that message has been processed — see `readMessage` for why it is not
-   * run the moment the key comes out — and always before we have sent anything
-   * back.
+   * The roster check on a decrypted peer static key; false aborts the handshake.
+   * Runs only once the whole message is processed (see `readMessage`), before anything is sent back.
    */
   readonly acceptRemoteStatic?: (staticPublicKey: Uint8Array) => boolean
 }
@@ -226,9 +194,7 @@ export function initializeHandshake(config: HandshakeConfig): HandshakeState {
   }
 
   // Spec 5.3: hash every pre-message public key, initiator's side first,
-  // regardless of which side we are. Getting this order wrong produces two
-  // transcripts that differ only in a way the handshake will not detect until
-  // the first decryption fails.
+  // regardless of which side we are; the wrong order fails only at the first decryption.
   for (const token of config.pattern.initiatorPreMessage) {
     if (token === 's') mixHash(symmetric, requirePreMessageKey(hs, config.initiator))
   }
@@ -260,8 +226,7 @@ function currentMessage(hs: HandshakeState): readonly Token[] {
 }
 
 function mixDiffieHellman(hs: HandshakeState, token: 'ee' | 'es' | 'se' | 'ss'): void {
-  // Spec 5.3: `es` is always initiator-ephemeral with responder-static and `se`
-  // always the reverse, so which local key each side uses depends on its role.
+  // Spec 5.3: `es` is initiator-ephemeral with responder-static, `se` the reverse.
   const local = token === 'ee' || (token === 'es' && hs.initiator) || (token === 'se' && !hs.initiator) ? hs.e : hs.s
   const remote = token === 'ee' || (token === 'se' && hs.initiator) || (token === 'es' && !hs.initiator) ? hs.re : hs.rs
   if (!local || !remote) throw peerError(PeerErrorCode.InvalidKey)
@@ -325,16 +290,10 @@ export function readMessage(hs: HandshakeState, message: Uint8Array): HandshakeS
 
   const payload = decryptAndHash(hs.symmetric, message.subarray(offset))
 
-  // The roster check waits until the whole message has been processed — every
-  // DH and both AEAD openings — rather than running the instant the `s` token
-  // is decrypted. In IK that slot is sealed under `es` alone, which anybody who
-  // knows our static public key can compute from its own ephemeral, so a caller
-  // can claim any static key without holding its private half. Deciding early
-  // would make the work we do depend on whether that claimed key is on the
-  // roster, and that difference is measurable from the other end of the wire:
-  // a roster-membership oracle for anyone who can dial us. Refusing early
-  // bought nothing in exchange, because a peer that cannot complete the
-  // handshake gets nothing from the tokens we mixed on its behalf.
+  // The roster check waits until every DH and both AEAD openings are done. In IK
+  // the `s` slot is sealed under `es` alone, so anyone knowing our static key can
+  // claim any static key; deciding early would make our work depend on roster
+  // membership, a timing oracle for anyone who can dial us.
   if (carriedStatic && hs.acceptRemoteStatic && !hs.acceptRemoteStatic(carriedStatic)) {
     throw peerError(PeerErrorCode.UnknownPeer)
   }

@@ -1,13 +1,6 @@
 // What has to stay true about the one string a person copies out of one machine
-// and pastes into another.
-//
-// Two halves, and they are different kinds of promise. Formatting has to produce
-// something that survives the trip: a chat client, a commit body and a shell all
-// get to touch this string, and every one of them re-flows whitespace, so the
-// test for "one token" is the test for the feature working at all. Parsing has
-// to be generous about what people paste and blunt about what it will not guess
-// -- a link with a field missing is refused by name, because the alternative is
-// this CLI acting on half an instruction.
+// and pastes into another: formatting survives re-flowed whitespace, parsing is
+// generous about what people paste and refuses a missing field by name.
 
 import { describe, expect, it } from 'vitest'
 import { formatInvitation, parseInvitation, withoutCredentials, type Invitation } from './invitation.js'
@@ -39,9 +32,7 @@ function linkOf(fields: Record<string, string>): string {
 }
 
 describe('the invitation somebody copies', () => {
-  // The whole of the format's job. Anything that wraps, re-flows or trims the
-  // text it is pasted into would break a link with a space or a break in it, and
-  // it would break it in exactly the place the link is meant to work.
+  // The whole of the format's job.
   it('is one unbroken token that reads back as the four facts it was given', () => {
     const link = formatInvitation(ADA)
     expect(link).not.toMatch(/\s/)
@@ -49,16 +40,12 @@ describe('the invitation somebody copies', () => {
     expect(accepted(link)).toEqual(ADA)
   })
 
-  // Stated as a literal so that changing the format has to be somebody's
-  // decision rather than a side effect: every teamree already in the world reads
-  // this prefix, and the version is first so an older build can say what it is
-  // holding instead of quietly dropping a field it does not know about.
+  // A literal, so changing the format is a decision: every teamree reads this prefix.
   it('announces its version before anything else, so an older teamree can say what it holds', () => {
     expect(formatInvitation(ADA).startsWith('teamree://join?v=1&')).toBe(true)
   })
 
-  // Workspaces are named by people, and people use spaces. The encoding turns
-  // one into `+`, which is not whitespace, so the token stays a token.
+  // A space becomes `+`, which is not whitespace, so the token stays a token.
   it('keeps a project name with spaces in it inside the token, and gives the spaces back', () => {
     const link = formatInvitation({ ...ADA, project: 'design system' })
     expect(link).not.toMatch(/\s/)
@@ -66,8 +53,7 @@ describe('the invitation somebody copies', () => {
     expect(accepted(link).project).toBe('design system')
   })
 
-  // The reason the platform URL parser is used at all: `&`, `?` and `#` are how
-  // a nested URL written by hand loses everything after the first one of them.
+  // Why the platform URL parser is used at all.
   it('carries an origin with &, ? and # in it without losing the rest of the fields', () => {
     const origin = 'https://git.example.com/scm?repo=pager&fork=1#main'
     const parsed = accepted(formatInvitation({ ...ADA, origin }))
@@ -76,9 +62,6 @@ describe('the invitation somebody copies', () => {
     expect(parsed.project).toBe('pager')
   })
 
-  // A repository on a shared volume is named by its path, and a volume with a
-  // space in its name is ordinary on a Mac -- so this is the same escaping
-  // question as the URL above, asked by the other kind of origin.
   it('carries an absolute path origin, space in the volume name and all', () => {
     const origin = '/Volumes/team share/api.git'
     const link = formatInvitation({ ...ADA, origin })
@@ -88,17 +71,14 @@ describe('the invitation somebody copies', () => {
 
   it('gives back a last field that ends in a full stop, rather than losing it to the peeling', () => {
     // The one character URLSearchParams leaves unescaped that a sentence also
-    // ends with. Without the escape in `formatInvitation`, a handle of `ada.`
-    // and a link at the end of a sentence are the same string, and the reader
-    // has to guess.
+    // ends with: `ada.` and a link ending a sentence would be the same string.
     const dotted: Invitation = { ...ADA, from: 'ada.' }
     expect(accepted(formatInvitation(dotted))).toEqual(dotted)
     expect(accepted(`${formatInvitation(dotted)}.`)).toEqual(dotted)
   })
 
   it('is still found when a phone has capitalised the start of it', () => {
-    // Autocapitalisation takes the first letter of what it reads as a sentence,
-    // which is the scheme and never the parameter names.
+    // Autocapitalisation hits the first letter, which is the scheme.
     const link = formatInvitation(ADA)
     expect(accepted(`Teamree${link.slice('teamree'.length)}`)).toEqual(ADA)
   })
@@ -107,21 +87,15 @@ describe('the invitation somebody copies', () => {
 describe('finding the link inside whatever it arrived in', () => {
   const link = formatInvitation(ADA)
 
-  // What a person actually has is a message, not a selection. Refusing this
-  // would send them back to pick out exactly the right characters with a mouse.
   it('reads a link with a sentence written around it', () => {
     expect(accepted(`hey, join the pager work: ${link} -- ping me when you are in`)).toEqual(ADA)
   })
 
-  // The full stop is the author's punctuation, not the link's: the format never
-  // ends in one, so peeling it is safe and keeping it is a broken link.
+  // The format never ends in a full stop, so peeling one is safe.
   it('leaves behind the full stop somebody wrote straight after it', () => {
     expect(accepted(`Here is the invitation: ${link}.`)).toEqual(ADA)
   })
 
-  // `<...>` and backticks are how people stop a client mangling a URL, and
-  // brackets are how they tuck it into a sentence. All three are the sender
-  // being careful, and none of them should cost the receiver anything.
   it('unwraps the angle brackets, backticks and parentheses people paste links inside', () => {
     for (const message of [`see <${link}>`, `run \`${link}\``, `the invitation (${link}) is fresh`]) {
       expect(accepted(message), message).toEqual(ADA)
@@ -131,10 +105,8 @@ describe('finding the link inside whatever it arrived in', () => {
 
 describe('what an invitation is allowed to carry', () => {
   it('refuses a field with a control character in it, naming which field', () => {
-    // A percent-encoded escape is still one whitespace-free token, so the format
-    // carries these perfectly well — and every field is printed, one of them
-    // into a .git/config. A link that can move the cursor can erase the line
-    // above it.
+    // The format carries a percent-encoded escape fine, and every field is
+    // printed, one into a .git/config: a link that moves the cursor can erase a line.
     const link = formatInvitation({ ...ADA, project: 'pager\u001b[2K' })
     expect(link).not.toMatch(/\s/)
     expect(refused(link).reason).toBe(
@@ -143,8 +115,7 @@ describe('what an invitation is allowed to carry', () => {
   })
 
   it('ignores a parameter it does not know rather than refusing the whole link', () => {
-    // An added field a reader may ignore is not a dropped instruction, which is
-    // what the version is for.
+    // An added field is not a dropped instruction; the version covers those.
     expect(accepted(`${formatInvitation(ADA)}&colour=green`)).toEqual(ADA)
   })
 
@@ -167,8 +138,6 @@ describe('what an invitation is allowed to carry', () => {
 })
 
 describe('refusing a string that is not an invitation', () => {
-  // A refusal here is somebody holding the wrong string, so the remedy is always
-  // the same one sentence: ask the sender to make another link.
   it('says there is no invitation in it and names the command that writes one', () => {
     const { reason, hint } = refused('sure, I will send it over in a minute')
     expect(reason).toBe('it does not contain a teamree invitation')
@@ -176,9 +145,6 @@ describe('refusing a string that is not an invitation', () => {
     expect(hint).toContain('teamree://join?')
   })
 
-  // Two different situations that both stop at the version check, and they want
-  // two different things done about them: one is a link from a build too old to
-  // stamp one, the other is a link from a build newer than this one.
   it('tells a link with no version apart from a link from a newer teamree', () => {
     const missing = refused(linkOf({ ...ADA }))
     expect(missing.reason).toBe('it carries no version')
@@ -189,8 +155,6 @@ describe('refusing a string that is not an invitation', () => {
     expect(newer.hint).toBe('Update teamree on this machine, or ask for an invitation from a teamree that matches it.')
   })
 
-  // Not one message about a malformed link: the field that is gone is the thing
-  // the receiver has to ask for, so every refusal names it.
   it('names the field that is missing rather than guessing at it', () => {
     for (const field of ['origin', 'relay', 'project', 'from'] as const) {
       const fields: Record<string, string> = { v: '1', ...ADA }
@@ -202,9 +166,6 @@ describe('refusing a string that is not an invitation', () => {
     }
   })
 
-  // `project=` and `project=%20` are a field that was never filled in, and a
-  // receiver told "it names no project" is told the truth in both cases. Anything
-  // else would have them hunting for a project that is not there.
   it('treats a field that is present but blank exactly as it treats a missing one', () => {
     for (const field of ['origin', 'relay', 'project', 'from'] as const) {
       const missing: Record<string, string> = { v: '1', ...ADA }

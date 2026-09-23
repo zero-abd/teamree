@@ -1,12 +1,5 @@
-// `teamree team accept`, driven end to end against a real socket, a real
-// argument parser, a stub runtime and — for the one test that clones — a real
-// git repository on a real disk.
-//
-// It has a file of its own rather than a block in team.test.ts because it is the
-// only command here that writes to the machine it runs on. The world it acts on
-// is therefore built per test rather than frozen at the top: which projects
-// exist, what their origins are, whether the relay file is already there and
-// what the push did are the four things every interesting case varies.
+// `teamree team accept` end to end: a real socket, a stub runtime and, for the
+// one test that clones, a real git repository. The world is built per test.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -25,10 +18,7 @@ const RELAY_URL = 'wss://relay.example/v1/relay'
 
 const LINK = formatInvitation({ origin: ORIGIN, relay: RELAY_URL, project: 'api', from: 'ana' })
 
-/**
- * What the runtime on the other end believes, so a test can change one fact
- * about the machine and leave the other twenty alone.
- */
+/** What the runtime on the other end believes, so a test can change one fact. */
 type World = {
   /** Projects already known, with the origin each one's status reports. */
   projects: Array<{ id: string; name: string; path: string; origin: string | null }>
@@ -41,16 +31,9 @@ type World = {
   push:
     | { ok: true; upstream: string; setUpstream: boolean; alreadyUpToDate: boolean }
     | { ok: false; kind: string; error: string; advice: string }
-  /**
-   * Projects that answer `unread` the first time they are asked and `read`
-   * afterwards, which is exactly the window a real reconcile leaves open.
-   */
+  /** Projects that answer `unread` once and `read` afterwards: the window a real reconcile leaves. */
   unread: string[]
-  /**
-   * The origin a project added during the run reports. A clone sets one, so the
-   * default is the repository the invitation named; null is a checkout somebody
-   * pointed at with no remote on it.
-   */
+  /** The origin a project added during the run reports; null is a checkout with no remote. */
   addedOrigin: string | null
 }
 
@@ -369,11 +352,8 @@ describe('team accept, when it must not go on', () => {
   })
 
   it('refuses an origin that names a transport rather than an address, and starts no git', async () => {
-    // `ext::<command>` is git remote syntax that names a program rather than a
-    // place. The allowlist that refuses it is `checkTransport` in
-    // `src/shared/origin.ts`, reached from here through `checkCloneable`; what
-    // this test is about is that the refusal lands before anything is executed
-    // or written.
+    // `ext::<command>` names a program; the refusal must land before anything
+    // is executed or written.
     const cli = await harness(acceptHandler(world({ projects: [] })))
     const hostile = formatInvitation({ origin: 'ext::sh', relay: RELAY_URL, project: 'api', from: 'ana' })
     const result = await cli.run(['team', 'accept', hostile, '--into', join(cli.cwd, 'api')])
@@ -447,8 +427,7 @@ describe('what accept says about the push', () => {
         'teamwork.publish': () => ({
           projectId: 'p_api',
           files: ['.teamree/members/me.pub'],
-          // No new commit here, and a push that still carried the user's own
-          // work. The two are different facts and were being reported as one.
+          // No new commit, yet a push that carried the user's own work: two facts.
           commit: null,
           remote: 'origin',
           branch: 'main',
@@ -558,9 +537,7 @@ describe('team accept, when the repository is not on this machine', () => {
     const repository = join(source, 'api.git')
     execFileSync('git', ['init', '--bare', '--initial-branch=main', repository], { stdio: 'ignore' })
 
-    // `checkOrigin` turns a file:// URL into the path it names, and that path is
-    // what git is given. Handing git the URL instead would be refused by the
-    // transport allowlist, for a repository that is perfectly ordinary.
+    // git is given the path `checkOrigin` reads out of the file:// URL.
     const cli = await harness(acceptHandler(world({ projects: [], addedOrigin: repository })))
     const into = join(cli.cwd, 'api')
     const link = formatInvitation({ origin: `file://${repository}`, relay: RELAY_URL, project: 'api', from: 'ana' })
@@ -606,10 +583,8 @@ describe('team accept, when the repository is not on this machine', () => {
   })
 
   it('refuses to point a checkout it found at an address out of a link, and pushes nothing', async () => {
-    // The worst thing this command could do. A local-only repository — notes,
-    // dotfiles, a scratch clone with no remote — sitting under a directory name
-    // the link itself chose, given an origin the link names and then pushed,
-    // sends its whole history to whoever wrote the link.
+    // The worst thing this command could do: push a local-only repository's
+    // whole history to whoever wrote the link.
     const cli = await harness(acceptHandler(world({ projects: [], addedOrigin: null })))
     const into = join(cli.cwd, 'api')
     mkdirSync(into)
@@ -644,9 +619,8 @@ describe('team accept, when the repository is not on this machine', () => {
         }
       )
     )
-    // The checkout is here and had not been read when the origins were compared,
-    // so it was not matched; adding it comes back as a conflict, and the project
-    // it collided with is the answer rather than the failure.
+    // Unread when origins were compared, so adding it conflicts, and the
+    // project it collided with is the answer.
     const result = await cli.run(['team', 'accept', LINK, '--into', into])
     expect(result.code, result.err).toBe(ExitCode.Success)
     expect(result.out).toContain(`api already tracks ${into}.`)

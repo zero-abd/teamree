@@ -1,6 +1,5 @@
-// Hand-rolled flag parsing. Small on purpose: long flags, one-character
-// aliases, `--flag=value`, `--` to stop parsing, and nothing clever about
-// abbreviations, so what an agent writes is what it gets.
+// Hand-rolled flag parsing: long flags, one-character aliases, `--flag=value`,
+// `--` to stop parsing, no abbreviations.
 
 import { UsageError } from './exit.js'
 
@@ -17,12 +16,7 @@ export type FlagSpec = {
   /** Shown in help for value-taking flags, e.g. `<id>`. */
   placeholder?: string
   default?: string | number | boolean
-  /**
-   * May be given more than once, and every value is kept in the order typed.
-   * Reads back as a list through `readStrings`, never as a bare value: one
-   * `--agent claude` is a list of one, so a caller cannot accidentally handle
-   * the single case and drop the rest.
-   */
+  /** May be given more than once; reads back only as a list through `readStrings`, even when given once. */
   repeatable?: boolean
 }
 
@@ -73,10 +67,7 @@ function coerce(spec: FlagSpec, raw: string): FlagValue {
   return raw
 }
 
-/**
- * Splits tokens into flags and positionals against `specs`. Throws UsageError
- * (exit code 2) for anything malformed; the caller never sees a partial parse.
- */
+/** Splits tokens into flags and positionals against `specs`; UsageError (exit 2) on anything malformed. */
 export function parseArgs(tokens: readonly string[], specs: readonly FlagSpec[]): ParsedArgs {
   const flags: ParsedFlags = {}
   const positionals: string[] = []

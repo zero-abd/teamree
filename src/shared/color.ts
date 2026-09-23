@@ -1,28 +1,12 @@
-// The colour arithmetic the theme layer is built on: parse, mix, and — the
-// reason this file exists at all — measure.
-//
-// A theme people can edit is a theme people can break, and the break that
-// matters is not an ugly colour, it is a colour nobody can read. So every
-// palette this app produces is passed through `ensureContrast` before it
-// reaches the screen, and that needs the same relative-luminance maths WCAG
-// defines. It lives here, apart from the palettes, because the tests that
-// guard the built-in themes measure the shipped values with exactly the
-// function that produced them.
-//
-// sRGB throughout. The app's colours are hex tokens read back by
-// `getComputedStyle`, and CSS `color-mix` in any other space would give answers
-// this file cannot check.
+// Colour arithmetic for the theme layer: parse, mix and measure, with the WCAG
+// relative-luminance maths `ensureContrast` needs. sRGB throughout: the tokens
+// are read back by `getComputedStyle`, and `color-mix` in another space could not be checked here.
 
 export type Rgb = { r: number; g: number; b: number }
 
 /**
- * Reads `#rgb`, `#rrggbb` and `#rrggbbaa`, and nothing else.
- *
- * Returns null rather than a guess for anything it does not understand, which
- * is what lets a hand-edited colour be rejected one token at a time instead of
- * taking the whole theme down with it. Alpha is dropped: every token this
- * parses is an opaque surface or an opaque ink, and the two places the app
- * wants translucency build it with `withAlpha` from an opaque base.
+ * Reads `#rgb`, `#rrggbb` and `#rrggbbaa`, null for anything else so a bad token
+ * is rejected alone. Alpha is dropped: translucency is built with `withAlpha` from an opaque base.
  */
 export function parseColor(text: string): Rgb | null {
   const value = text.trim()
@@ -58,13 +42,7 @@ export function mix(a: Rgb, b: Rgb, amount: number): Rgb {
   }
 }
 
-/**
- * A translucent form of one colour, spelled the way the stylesheets spell it.
- *
- * Translucent rather than pre-mixed because these sit over more than one
- * surface — a hover highlight lands on the rail, on a panel and on a raised
- * card — and a pre-mixed value would be right on exactly one of them.
- */
+/** A translucent form of one colour; translucent because it sits over more than one surface. */
 export function withAlpha(color: Rgb, alpha: number): string {
   const { r, g, b } = roundColor(color)
   return `rgb(${r} ${g} ${b} / ${Math.round(Math.min(Math.max(alpha, 0), 1) * 100)}%)`
@@ -86,51 +64,28 @@ export function contrastRatio(a: Rgb, b: Rgb): number {
 }
 
 /**
- * The same colour, moved just far enough away from `background` to be read.
- *
- * This is the promise the whole theme layer rests on: whatever a preset
- * declares and whatever a person then types into the editor, the value that
- * reaches the screen clears its target against the surface it sits on. It
- * walks away from the background — towards white on a dark ground, towards
- * black on a light one — in small steps, so a colour that already passes comes
- * back untouched and one that nearly passes keeps almost all of its hue.
- *
- * Stepping rather than solving because the answer has to be a colour somebody
- * would have chosen: the closest passing point along a line to white keeps the
- * author's hue, while computing a luminance and rebuilding a colour from it
- * would not.
+ * The same colour, stepped away from `background` (towards white on a dark
+ * ground, black on a light one) until it clears `target`; stepping keeps the author's hue.
  */
 export function ensureContrast(color: Rgb, background: Rgb, target: number): Rgb {
-  // Measured on the rounded form throughout, because that is the colour that
-  // will actually be painted: a candidate that clears the target at fractional
-  // precision and falls under it once written as six hex digits is a palette
-  // that passes its own test and fails on screen.
+  // Measured on the rounded form, the colour actually painted: a candidate that
+  // passes at fractional precision and fails as six hex digits fails on screen.
   const ground = roundColor(background)
   if (contrastRatio(roundColor(color), ground) >= target) return roundColor(color)
 
   const towards: Rgb = relativeLuminance(ground) < 0.5 ? { r: 255, g: 255, b: 255 } : { r: 0, g: 0, b: 0 }
-  // Two hundred steps is a quarter of a percent each: finer than the eight bits
-  // the result is rounded to, so the first passing step is the nearest one.
+  // Two hundred steps is finer than the eight bits the result rounds to, so the first passing step is nearest.
   for (let step = 1; step <= 200; step += 1) {
     const candidate = roundColor(mix(color, towards, step / 200))
     if (contrastRatio(candidate, ground) >= target) return candidate
   }
-  // Unreachable for any target under 21, and the honest answer when a caller
-  // asks for more contrast than the extreme of the axis can give.
+  // Unreachable for any target under 21.
   return towards
 }
 
 /**
- * One palette value as an opaque hex, whatever form it is stored in.
- *
- * The hover tint, the press tint, the accent wash and the scrim are stored
- * translucent on purpose — they land on more than one surface, and a
- * pre-mixed value would be right on exactly one of them. But a swatch has to
- * be a colour, and so does an `<input type="color">`, so those are composited
- * over the surface they are usually seen on before they are shown.
- *
- * Returns null for anything that is neither a hex nor an `rgb(r g b / p%)`,
- * which is the only other form this app's palettes ever take.
+ * One palette value as an opaque hex: translucent tokens are composited over `over`
+ * for swatches and `<input type="color">`. Null for anything but hex or `rgb(r g b / p%)`.
  */
 export function opaqueHex(value: string, over: Rgb): string | null {
   const hex = parseColor(value)

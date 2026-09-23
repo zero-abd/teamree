@@ -1,9 +1,5 @@
-// The primitives, each checked against something that is not this file.
-//
-// X25519 comes from RFC 7748's own test vectors, so a mistake in how we wrap
-// raw scalars in DER cannot pass. HKDF is checked against Node's built-in
-// implementation, which is the price of having written it out by hand for
-// legibility in `primitives.ts`.
+// Each primitive checked against something outside this file: RFC 7748 vectors
+// for X25519 (so a DER-wrapping mistake cannot pass), Node's HKDF for ours.
 
 import { hkdfSync } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -67,9 +63,7 @@ describe('X25519 against RFC 7748', () => {
   })
 
   it('refuses a low-order public key rather than returning an all-zero secret', () => {
-    // The all-zero u-coordinate is the clearest of the small-order points: a
-    // relay that substituted it would otherwise fix the shared secret for both
-    // sides at zero.
+    // The all-zero u-coordinate: a relay substituting it would fix both sides' secret at zero.
     expect(throwCode(() => dh(bytes(RFC7748.alicePrivate), new Uint8Array(DH_LEN)))).toBe(PeerErrorCode.InvalidKey)
     expect(throwCode(() => dh(bytes(RFC7748.alicePrivate), new Uint8Array(DH_LEN).fill(0)))).toBe(
       PeerErrorCode.InvalidKey
@@ -86,7 +80,6 @@ describe('X25519 against RFC 7748', () => {
     const fixed = (): Uint8Array => bytes(RFC7748.alicePrivate)
     const pair = generateKeyPair(fixed)
     expect(hex(pair.publicKey)).toBe(RFC7748.alicePublic)
-    // And the real source produces keys that actually agree with each other.
     const a = generateKeyPair(systemRandom)
     const b = generateKeyPair(systemRandom)
     expect(hex(dh(a.privateKey, b.publicKey))).toBe(hex(dh(b.privateKey, a.publicKey)))

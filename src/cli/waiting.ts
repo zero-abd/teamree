@@ -1,15 +1,6 @@
-// Blocking waits for agents. A coding agent driving teamree needs to know when
-// a worktree is usable, when a command it typed has actually finished, and when
-// the app it asked to quit has gone; without these it can only sleep and hope.
-//
-// Each of them turns elapsed time into a claim about someone else's work — "that
-// terminal has gone quiet", "that worktree never settled", "that app is not
-// leaving" — so each has to know when this process was not running. A closing lid moves the wall clock by
-// the whole sleep, and read naively that jump says the terminal fell silent or
-// the deadline passed. Neither was observed. Time is therefore measured through
-// `startTimedWindow`, which reads a monotonic clock and reports the two traces a
-// suspend leaves, and an unobserved gap is never spent as evidence: the quiet
-// window restarts and the timeout budget is charged only for watched time.
+// Blocking waits for agents. Each turns elapsed time into a claim about someone
+// else's work, so a closing lid must not read as silence or a missed deadline:
+// time goes through `startTimedWindow`, and an unobserved gap is never spent as evidence.
 
 import { existsSync } from 'node:fs'
 import { startTimedWindow, type ElapsedClock } from '../main/runtime/elapsed.js'
@@ -23,12 +14,8 @@ export const DEFAULT_QUIET_MS = 1500
 export const DEFAULT_WAIT_TIMEOUT_MS = 120_000
 
 /**
- * How long `teamree quit` waits for the endpoint to go.
- *
- * The teardown kills a process tree per pane and waits for each, then writes
- * every pane's transcript, so it is a second or two on a busy workspace and not
- * instant on an idle one. Generous enough that a real quit is never called a
- * failure, short enough that a script is not held by one that hung.
+ * How long `teamree quit` waits for the endpoint to go. Teardown kills a process
+ * tree per pane and writes every transcript, so a busy workspace takes a second or two.
  */
 export const DEFAULT_QUIT_TIMEOUT_MS = 20_000
 
@@ -82,13 +69,8 @@ type Observation = {
   interrupted: boolean
 }
 
-/**
- * Idles once and reports what was actually observed.
- *
- * An interrupted idle is charged nothing at all. How much of it this process was
- * awake for is exactly what a suspend makes unknowable, and the cost of guessing
- * high is a timeout that never watched for the time it claims to have watched.
- */
+// Idles once and reports what was observed. An interrupted idle is charged
+// nothing: how much of it was awake is exactly what a suspend makes unknowable.
 async function observeIdle(
   clock: ElapsedClock,
   armedForMs: number,
@@ -106,13 +88,8 @@ async function observeIdle(
 }
 
 /**
- * Resolves once `read` returns a value `settled` accepts. Wakes on the workspace
- * change stream where the runtime offers one, and falls back to polling against
- * an older runtime that does not.
- *
- * A value that satisfies `settled` is something the runtime said, so a sleep
- * cannot fabricate it; only the timeout is an inference from elapsed time, and
- * that is what the observed-time budget protects.
+ * Resolves once `read` returns a value `settled` accepts, woken by the workspace
+ * change stream where the runtime offers one, polling otherwise.
  */
 export async function waitForState<T>(
   options: {
@@ -135,7 +112,7 @@ export async function waitForState<T>(
   try {
     subscription = await client.subscribe('workspace.subscribe', {}, () => wake?.())
   } catch {
-    // No change stream on this runtime; polling still gets the job done.
+    // No change stream on this runtime; polling still works.
   }
 
   // Still bounded by the poll interval so a missed event cannot hang us.
@@ -182,16 +159,9 @@ export type EndpointOutcome = {
 }
 
 /**
- * Waits for the runtime's endpoint to disappear, which is what proves a quit
- * finished rather than merely started.
- *
- * The socket file is removed last of all — after every pty is killed and every
- * transcript written, at the end of `Runtime.stop` — so its absence is the one
- * observation from out here that means the whole teardown ran. A reply to
- * `app.quit` means only that the app heard.
- *
- * A named pipe on Windows lives in the kernel and cannot be stat'd, so there is
- * nothing to watch and the wait says so rather than inventing an answer.
+ * Waits for the endpoint to disappear: the socket file is removed last in
+ * `Runtime.stop`, so its absence proves the whole teardown ran, where a reply to
+ * `app.quit` only proves the app heard. A Windows named pipe cannot be stat'd, so the wait says so.
  */
 export async function waitForEndpointGone(
   options: { endpoint: string; timeoutMs: number; exists?: (path: string) => boolean } & WaitTiming
@@ -204,13 +174,9 @@ export async function waitForEndpointGone(
 
   let observedMs = 0
   while (true) {
-    // Rounded because this is read by a person and printed in a payload, and
-    // the monotonic clock behind it counts in fractions of a millisecond.
+    // Rounded: the monotonic clock counts fractions of a millisecond and this is printed.
     if (!exists(endpoint)) return { gone: true, waitedMs: Math.round(observedMs) }
     if (observedMs >= timeoutMs) return { gone: false, waitedMs: Math.round(observedMs) }
-    // Charged the same way every other wait here is: a machine that slept
-    // through part of this was not watching, and an unwatched gap must not be
-    // spent as evidence that the app failed to go.
     const tick = await observeIdle(clock, QUIT_POLL_MS, () => delay(QUIT_POLL_MS))
     observedMs += tick.observedMs
   }
@@ -222,19 +188,11 @@ export type TerminalWaitResult = {
   exitCode?: number
   /** Output observed while waiting, so a caller need not read separately. */
   output: string
-  /**
-   * Whether this machine slept mid-wait. The result itself is still evidence —
-   * quiet was re-observed in full after the wake — but far more wall-clock time
-   * passed than the wait asked for, which anything timing the command needs.
-   */
+  /** Whether this machine slept mid-wait: quiet was re-observed in full, but far more wall-clock time passed. */
   interrupted: boolean
 }
 
-/**
- * Waits for a terminal to stop producing output, or to exit. Quiet is what an
- * agent actually wants: a shell that has finished a command sits idle at its
- * prompt and never exits.
- */
+/** Waits for a terminal to go quiet or exit; a shell that finished a command sits at its prompt and never exits. */
 export async function waitForTerminal(
   options: {
     client: RuntimeClient
@@ -257,8 +215,7 @@ export async function waitForTerminal(
 
   let output = ''
   let exited: { exitCode: number } | undefined
-  // Restarted on every byte, and again after any gap this process slept through,
-  // so quiet can only mean silence that was watched from one end to the other.
+  // Restarted on every byte and after any gap slept through, so quiet means watched silence.
   let quiet = startTimedWindow(clock)
 
   const subscription = await client.subscribe('terminal.subscribe', { terminalId }, (raw) => {
@@ -283,8 +240,7 @@ export async function waitForTerminal(
         quiet = startTimedWindow(clock)
       }
 
-      // An exit is an event the runtime reported; unlike quiet it is not read
-      // off the clock, so a sleep cannot invent one.
+      // An exit is reported by the runtime, not read off the clock, so a sleep cannot invent one.
       if (exited) return { reason: 'exit', terminalId, exitCode: exited.exitCode, output, interrupted }
       if (until === 'quiet' && quiet.elapsedMs() >= quietMs) {
         return { reason: 'quiet', terminalId, output, interrupted }

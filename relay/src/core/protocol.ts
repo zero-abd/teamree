@@ -1,19 +1,12 @@
-// The whole wire contract, in one file, because it is the surface a peer has to
-// trust and it should be readable end to end in under a minute.
-//
-// The split that matters: **control is text, content is binary**. The relay
-// speaks only text frames and forwards only binary frames, verbatim. That makes
-// "the relay cannot alter content" a property you can check by grepping for the
-// one place a binary frame is written, rather than a claim about the whole file.
+// The whole wire contract in one file. Control is text, content is binary: the
+// relay speaks only text frames and forwards only binary frames, verbatim.
 
 /** Bumped only for a change a v1 peer could not survive. */
 export const PROTOCOL_VERSION = 1
 
 /**
- * A rendezvous token is 32 bytes as 64 lowercase hex characters, and nothing
- * else. A fixed shape means no token can be distinguished from another by its
- * length or alphabet, so the relay operator learns nothing from the value beyond
- * "these two connections presented the same one".
+ * A rendezvous token is 32 bytes as 64 lowercase hex characters, nothing else:
+ * a fixed shape tells the relay operator nothing beyond "these two match".
  */
 const RENDEZVOUS_PATTERN = /^[0-9a-f]{64}$/
 
@@ -28,9 +21,8 @@ export type ControlFrame =
   | { t: 'waiting' }
   | { t: 'paired'; session: string; initiator: boolean }
   | { t: 'closing'; code: number; reason: string }
-  // An application-level keepalive a peer may send at any time after its hello.
-  // It exists because not every host exposes the WebSocket protocol's own ping,
-  // and because a keepalive the peer drives is one the relay need not wake for.
+  // Application-level keepalive, allowed any time after the hello: not every
+  // host exposes the WebSocket ping, and a peer-driven one need not wake the relay.
   | { t: 'ping' }
   | { t: 'pong' }
 
@@ -39,10 +31,8 @@ export const PING_FRAME = '{"t":"ping"}'
 export const PONG_FRAME = '{"t":"pong"}'
 
 /**
- * Close codes in the private 4000-4999 range. A peer needs to tell "your partner
- * left, reconnect now" apart from "you were superseded, back off first", because
- * treating the second as the first is how two reconnecting peers knock each
- * other over forever.
+ * Close codes in the private 4000-4999 range. "Partner left, reconnect now" and
+ * "superseded, back off first" must differ, or two reconnecting peers knock each other over forever.
  */
 export const CloseCode = {
   /** Absent, late, malformed or wrong-version hello. */
@@ -55,11 +45,7 @@ export const CloseCode = {
   SlowConsumer: 4003,
   /** Frame or byte rate over the per-connection budget. */
   RateLimited: 4004,
-  /**
-   * The session showed no sign of life for longer than the idle budget. Both
-   * halves get this one: neither of them left, so neither may be told the other
-   * did.
-   */
+  /** No sign of life past the idle budget. Both halves get it: neither left. */
   Idle: 4005,
   /** Waited for a partner for longer than the pairing budget. */
   PairTimeout: 4006,
@@ -75,11 +61,7 @@ export const CloseCode = {
 
 export type HelloResult = { ok: true; hello: Hello } | { ok: false; reason: string }
 
-/**
- * Unknown keys are ignored rather than rejected: the relay must never grow
- * behaviour that depends on what peers put in their frames, and being lenient
- * here is the direction of that policy, not against it.
- */
+/** Unknown keys are ignored: the relay must never grow behaviour that depends on frame contents. */
 export function parseHello(text: string): HelloResult {
   let value: unknown
   try {

@@ -1,20 +1,10 @@
-// What counts as a relay URL, as a pure grammar.
-//
-// It lives in `shared` rather than beside the file it is read out of because
-// two sides need the same answer. The runtime refuses a URL it cannot dial, and
-// the window has to say so *while somebody is typing* — a field that accepts
-// everything and reports the refusal after a round trip teaches people that the
-// app is flaky rather than that the address is wrong. One copy of the grammar
-// means the two can never disagree about which addresses are relays.
-//
-// Reading it from a file, writing it back and finding the environment override
-// are all in `src/main/teamwork/peer/relayUrl.ts`, which is where the disk is.
+// What counts as a relay URL, as a pure grammar shared by the runtime (which
+// refuses) and the window (which says so while typing). Disk access is in
+// `src/main/teamwork/peer/relayUrl.ts`.
 
 /**
- * Where the relay serves its only upgradable path, as `relay/README.md` ships
- * it. Used to *suggest* and never to dial: `RELAY_PATH` is configurable, so a
- * URL built from this is a guess to put in front of somebody, not one teamree
- * may act on by itself.
+ * The relay's only upgradable path as `relay/README.md` ships it. Used to suggest,
+ * never to dial: `RELAY_PATH` is configurable, so a URL built from this is a guess.
  */
 export const RELAY_ENDPOINT_PATH = '/v1/relay'
 
@@ -24,16 +14,8 @@ export type RelayUrlParse =
   | { ok: false; reason: string; suggestion?: string }
 
 /**
- * Refuses everything that is not a WebSocket URL, including the `https://` a
- * person will paste out of their browser. Guessing `wss://` from it would work
- * often enough to be trusted and fail on the one deployment where the relay is
- * not at the root.
- *
- * Refusing is not the same as being unhelpful, though: the address a deploy
- * prints is the one input everybody arrives with, and a refusal that names the
- * scheme and stops leaves the remedy in a README this person is not reading.
- * So the corrected URL is offered, as a thing to check and paste rather than a
- * thing this function quietly substitutes.
+ * Refuses everything that is not a WebSocket URL, including a pasted `https://`:
+ * guessing `wss://` would fail on the one deploy not at the root. The corrected URL is offered, not substituted.
  */
 export function parseRelayUrl(raw: string): RelayUrlParse {
   const trimmed = raw.trim()
@@ -52,18 +34,11 @@ export function parseRelayUrl(raw: string): RelayUrlParse {
     return { ok: false, reason: `${reason}. A deployed relay is reached at ${suggestion}`, suggestion }
   }
   if (url.search || url.hash) return { ok: false, reason: 'a relay URL carries no query or fragment' }
-  // The rendezvous id is appended to this, so a trailing slash here would make
-  // the path the relay sees have an empty segment in the middle of it.
+  // The rendezvous id is appended, so a trailing slash would leave an empty segment mid-path.
   const path = url.pathname.replace(/\/+$/, '')
-  // An origin with no path on it is the half-followed instruction: the scheme
-  // was corrected to wss and the endpoint was not added. It cannot be dialled
-  // by any relay configuration that exists — the rendezvous is appended, so
-  // the relay sees `/<rendezvous>`, and a relay serves under a path that must
-  // begin with `/`, which no single segment can match. The socket then fails
-  // to upgrade and the app reports the relay unreachable, sending two people
-  // to debug a healthy deploy. Refused rather than corrected: the path is the
-  // team's answer to where their relay is served, and this only says which
-  // answer is missing.
+  // An origin with no path (scheme corrected, endpoint not added) can be dialled by
+  // no relay configuration: the relay would see `/<rendezvous>`, fail the upgrade,
+  // and send two people to debug a healthy deploy. Refused rather than corrected.
   if (path === '') {
     const suggestion = `${url.origin}${RELAY_ENDPOINT_PATH}`
     return {
@@ -76,14 +51,8 @@ export function parseRelayUrl(raw: string): RelayUrlParse {
 }
 
 /**
- * The same address, said the way a relay is dialled — or undefined when the
- * input is nothing like one and a suggestion would be noise.
- *
- * `https://host` is what deploying prints, and the endpoint is that host with
- * the relay's path on it; `https://host/somewhere` has already been given a
- * path by somebody, so only the scheme is corrected. A query or a fragment
- * means this is not an address anybody copied out of a deploy, so it gets no
- * guess at all.
+ * The same address as a relay is dialled, or undefined when a suggestion would be
+ * noise. A bare host gets the relay path; an existing path only has its scheme corrected.
  */
 export function websocketFormOf(url: URL): string | undefined {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined
