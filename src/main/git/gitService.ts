@@ -310,6 +310,7 @@ export class GitService {
       new Set(this.#store.listWorktrees().map((worktree) => pathKey(worktree.path)))
     )
 
+    const told = params.task?.trim()
     const worktree: Worktree = {
       id: this.#createId(),
       projectId: project.id,
@@ -318,7 +319,8 @@ export class GitService {
       path: checkoutPath,
       startedFrom: params.startedFrom?.trim() || project.baseRef,
       state: 'creating',
-      createdAt: this.#now()
+      createdAt: this.#now(),
+      ...(told ? { task: told } : {})
     }
     this.#store.putWorktree(worktree)
     this.events.emit({ type: 'worktree.created', worktree })

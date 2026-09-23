@@ -1571,13 +1571,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({ dialog: null })
 
       void (async () => {
-        const started: Array<{ worktreeId: string; agentCommand?: string; label: string }> = []
+        const started: Array<{ worktreeId: string; agentCommand?: string; label: string; task: string }> = []
         for (const create of creates) {
           const name = create.name.trim()
-          const created = await runtimeClient.call(
-            'worktree.create',
-            startedFrom ? { projectId, name, startedFrom } : { projectId, name }
-          )
+          const task = create.task.trim()
+          const created = await runtimeClient.call('worktree.create', {
+            projectId,
+            name,
+            ...(startedFrom ? { startedFrom } : {}),
+            ...(task ? { task } : {})
+          })
           set((state) => ({
             worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],
             collapsedProjects: { ...state.collapsedProjects, [projectId]: false }
@@ -1585,6 +1588,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           started.push({
             worktreeId: created.id,
             label: name,
+            task,
             ...(create.agentCommand === undefined ? {} : { agentCommand: create.agentCommand })
           })
         }
@@ -1593,7 +1597,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         readOnScreen()
 
         const ready = await Promise.all(
-          started.map(async ({ worktreeId, agentCommand, label }) => {
+          started.map(async ({ worktreeId, agentCommand, label, task }) => {
             // The agent needs a checkout to run in, so the pane waits for one. A
             // failure here is already on the row, with its reason and its retry.
             const worktree = await awaitWorktreeReady({
@@ -1605,12 +1609,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
               // The pane is named after the task it was opened for, because the
               // task is what somebody would call it and the agent's binary is
               // what every other pane on this screen is also called.
+              // And the description is what it is told first. The branch and
+              // the label were all the text ever became before this, and the
+              // agent was started with nothing to do.
               const agentArgs = extraArgsFor(agentCommand)
               await runtimeClient.call('terminal.create', {
                 worktreeId: worktree.id,
                 command: agentCommand,
                 label,
-                ...(agentArgs === undefined ? {} : { agentArgs })
+                ...(agentArgs === undefined ? {} : { agentArgs }),
+                ...(task ? { prompt: task } : {})
               })
             }
             return worktree

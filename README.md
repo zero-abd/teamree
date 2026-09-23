@@ -77,7 +77,11 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
 - **Several attempts at one task.** The composer takes a count per agent — two
   models against each other, or two runs of one — and starts a worktree each from
   the same ref, named for the agent that runs in it. `--agent`, repeated, does
-  the same from a shell.
+  the same from a shell, and `--prompt` is the task it is given.
+- **The task is the first prompt.** What you type into New task is what the
+  agent is told, on its command line, the moment its checkout is ready; the
+  name and the branch are derived from its first line. It stays on the worktree
+  record, so a pane started over in that checkout is told again.
 - **A worktree you can run in.** Per project, gitignored directories every new
   checkout symlinks (`node_modules`) and gitignored files it copies (`.env`), so
   the first command in it is not an install.

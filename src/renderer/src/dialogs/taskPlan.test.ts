@@ -10,6 +10,7 @@ import {
   NO_AGENT,
   submitLabel,
   taskCreates,
+  taskName,
   taskPlanNote,
   withAgentCount
 } from './taskPlan'
@@ -52,10 +53,38 @@ describe('the plan the dialog submits', () => {
   // The whole point of the change: one description, several attempts at it.
   it('makes one create per selection, each with its own name and its agent', () => {
     expect(taskCreates('Rewrite the pager', [claude, codex, claude])).toEqual([
-      { name: 'Rewrite the pager claude', agentCommand: 'claude' },
-      { name: 'Rewrite the pager codex', agentCommand: 'codex' },
-      { name: 'Rewrite the pager claude 2', agentCommand: 'claude' }
+      { name: 'Rewrite the pager claude', agentCommand: 'claude', task: 'Rewrite the pager' },
+      { name: 'Rewrite the pager codex', agentCommand: 'codex', task: 'Rewrite the pager' },
+      { name: 'Rewrite the pager claude 2', agentCommand: 'claude', task: 'Rewrite the pager' }
     ])
+  })
+
+  // A row, a tab and the status bar have room for a few words, and a sentence
+  // there pushed the branch and the shortcuts off the end of the window.
+  it.each([
+    ['Make the pager stream', 'Make the pager stream'],
+    ['Make the pager stream progress to the sidebar', 'Make the pager stream progress'],
+    ['Fix the login form; it posts twice.', 'Fix the login form; it posts'],
+    ['Fix login.', 'Fix login'],
+    ['Why does the pager buffer everything?', 'Why does the pager buffer'],
+    ['Zeichenkette für die Übersetzung des Menüs überarbeiten', 'Zeichenkette für die Übersetzung'],
+    ['🚀 Ship the pager rewrite before the demo on Friday', '🚀 Ship the pager rewrite before'],
+    ['a'.repeat(40), 'a'.repeat(32)],
+    ['First line only\nThe second line is for the agent', 'First line only'],
+    ['  padded  ', 'padded']
+  ])('names %j %j', (task, name) => {
+    expect(taskName(task)).toBe(name)
+    expect(Array.from(taskName(task)).length).toBeLessThanOrEqual(32)
+  })
+
+  // The description is the agent's first prompt, and the name is only what the
+  // row is called. A create that carried the name alone left every agent
+  // started bare, in a checkout named after work it had never been told about.
+  it('carries the description whole, and the name derived from it', () => {
+    const task = 'Make the pager stream\n\nIt buffers the whole file today.'
+    const [create] = taskCreates(task, [claude])
+    expect(create?.task).toBe(task)
+    expect(create?.name).toBe('Make the pager stream')
   })
 })
 
@@ -88,7 +117,7 @@ describe('the agent the dialog opens with', () => {
   })
 
   it('makes one bare create when no agent was asked for', () => {
-    expect(taskCreates('  Rewrite the pager  ', [])).toEqual([{ name: 'Rewrite the pager' }])
+    expect(taskCreates('  Rewrite the pager  ', [])).toEqual([{ name: 'Rewrite the pager', task: 'Rewrite the pager' }])
   })
 })
 

@@ -208,6 +208,28 @@ describe('worktree.create', () => {
     const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
     expect(branches.split('\n')).not.toContain('never-mind')
   })
+
+  // The task is what the checkout is for, and the name is only what it is
+  // called: the record keeps both, so a pane started over in it can be told
+  // again, and a listing can say what each row was opened to do.
+  it('keeps the task on the record, and leaves it off a record made without one', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const told = await service.createWorktree({
+      projectId: project.id,
+      name: 'Make the pager stream',
+      task: 'Make the pager stream\n\nIt buffers the whole file today.'
+    })
+    expect(told.task).toBe('Make the pager stream\n\nIt buffers the whole file today.')
+    expect((await service.whenSettled(told.id)).task).toBe(told.task)
+    const listed = await service.listWorktrees({ projectId: project.id })
+    expect(listed.find((worktree) => worktree.id === told.id)?.task).toBe(told.task)
+
+    const bare = await service.createWorktree({ projectId: project.id, name: 'a checkout' })
+    expect('task' in bare).toBe(false)
+  })
 })
 
 describe('worktree.remove', () => {

@@ -78,6 +78,16 @@ export type Worktree = {
    * read back. Absent where the project named no command.
    */
   setupTerminalId?: string
+  /**
+   * What this worktree was opened to do, as the person typed it.
+   *
+   * The agent's first prompt, kept whole: `name` is the first line of it and
+   * the branch is a slug of that, and both are for telling rows apart. This is
+   * the text itself, so a pane started over in this checkout can be told
+   * again and a listing can say what each row is for. Absent on a checkout
+   * made without one.
+   */
+  task?: string
 }
 
 /** Live git state for a worktree, refreshed independently of the row itself. */

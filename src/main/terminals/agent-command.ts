@@ -47,6 +47,13 @@ type AgentSpec = {
    * a stale locator can never compete with the authoritative one.
    */
   selectors: readonly Selector[]
+  /**
+   * Argv that hands the agent its first prompt at launch. Absent for an agent
+   * whose CLI has no such form; it then starts bare and the task stays on the
+   * worktree record. Goes on last, after every selector — for the two that
+   * take it as a positional, anything after it would be more prompt.
+   */
+  prompt?: (text: string) => readonly string[]
 }
 
 const AGENTS: Readonly<Record<AgentKind, AgentSpec>> = {
@@ -64,23 +71,28 @@ const AGENTS: Readonly<Record<AgentKind, AgentSpec>> = {
       { flag: '-r', takesValue: true },
       { flag: '--continue', takesValue: false },
       { flag: '-c', takesValue: false }
-    ]
+    ],
+    prompt: (text) => [text]
   },
   codex: {
     executables: ['codex'],
     resume: (sessionId) => ['resume', sessionId],
     resumeLatest: ['resume', '--last'],
-    selectors: [{ flag: 'resume', takesValue: true }]
+    selectors: [{ flag: 'resume', takesValue: true }],
+    prompt: (text) => [text]
   },
   gemini: {
     executables: ['gemini'],
     resume: (sessionId) => ['--resume', sessionId],
-    selectors: [{ flag: '--resume', takesValue: true }]
+    selectors: [{ flag: '--resume', takesValue: true }],
+    // Not `-p`: that is the non-interactive form, and the pane is a conversation.
+    prompt: (text) => ['--prompt-interactive', text]
   },
   opencode: {
     executables: ['opencode'],
     resume: (sessionId) => ['--session', sessionId],
-    selectors: [{ flag: '--session', takesValue: true }]
+    selectors: [{ flag: '--session', takesValue: true }],
+    prompt: (text) => ['--prompt', text]
   },
   droid: {
     executables: ['droid'],
@@ -299,6 +311,22 @@ export function restartSessionCommand(
 
   const agentSessionId = newSessionId()
   return { command: spliceSelector(command, agent, spec.pin(agentSessionId)), agentSessionId }
+}
+
+/**
+ * The launched line with the agent's first prompt on the end of it.
+ *
+ * Appended rather than spliced, and only ever to the line about to run — never
+ * to the stored command. That command is what `resumeSessionCommand` rewrites,
+ * and a resume is a conversation that has already been given this prompt;
+ * putting it on the record would say it again on every launch. Quoted the way
+ * every other argument this module adds is, so a prompt with several lines,
+ * a quote, or a `$` reaches the agent as the one word it was typed as.
+ */
+export function firstPromptCommand(command: string, agent: AgentKind, prompt: string): string {
+  const rule = AGENTS[agent].prompt
+  if (rule === undefined) return command
+  return `${command} ${rule(prompt).map(quoteArgument).join(' ')}`
 }
 
 /** Whether the command already names a session for this agent. */

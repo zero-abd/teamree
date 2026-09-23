@@ -41,7 +41,9 @@ const WorktreeSchema = z.object({
   // Which pane the setup command was started in. Kept across a relaunch so the
   // record still says setup ran, though the pane itself comes back as whatever
   // `session-restore` makes of it.
-  setupTerminalId: z.string().min(1).optional()
+  setupTerminalId: z.string().min(1).optional(),
+  // Never an empty string, for the reason `setupCommand` gives above.
+  task: z.string().min(1).optional()
 })
 
 const PaneNodeSchema: z.ZodType<PaneNode> = z.lazy(() =>

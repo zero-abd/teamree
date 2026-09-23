@@ -14,6 +14,7 @@
 // progress, including its failures, belongs on the sidebar row.
 
 import { useEffect, useState } from 'react'
+import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { branchNameFromTask } from './branchNameFromTask'
 import { Modal } from './Modal'
@@ -25,6 +26,7 @@ import {
   MAX_PER_AGENT,
   submitLabel,
   taskCreates,
+  taskName,
   taskPlanNote,
   withAgentCount,
   type AgentCounts
@@ -99,9 +101,12 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   // Empty until there is something to slugify: the rule's fallback is the word
   // "worktree", and showing it before a key is pressed promises a branch name
   // that has nothing to do with the task about to be typed.
-  const branchName = task.trim() ? branchNameFromTask(task) : ''
+  const branchName = task.trim() ? branchNameFromTask(taskName(task)) : ''
   const startedFrom = startPoint.text.trim()
-  const canSubmit = task.trim().length > 0 && startedFrom.length > 0
+  // The text goes to the agent on one command line, so it is bounded where
+  // that line is; a paste past the bound is refused here rather than cut.
+  const tooLong = task.trim().length > MAX_AGENT_ARGS_CHARS
+  const canSubmit = task.trim().length > 0 && !tooLong && startedFrom.length > 0
 
   const submit = (): void => {
     if (!canSubmit) return
@@ -136,7 +141,11 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
             spellCheck={true}
           />
           <span className="field__hint">
-            {branchName ? (
+            {tooLong ? (
+              <>
+                {task.trim().length} / {MAX_AGENT_ARGS_CHARS} chars ·{' '}
+              </>
+            ) : branchName ? (
               <>
                 branch <code>{branchName}</code> ·{' '}
               </>

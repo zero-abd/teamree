@@ -117,7 +117,7 @@ const defaultHandler: StubHandler = (method) => {
 type Harness = {
   stub: StubRuntime
   dir: string
-  run: (argv: string[]) => Promise<{ code: number; out: string; err: string }>
+  run: (argv: string[], stdin?: string) => Promise<{ code: number; out: string; err: string }>
 }
 
 const cleanups: Array<() => Promise<void> | void> = []
@@ -153,11 +153,16 @@ async function harness(
   return {
     stub,
     dir,
-    run: async (argv) => {
+    run: async (argv, stdin) => {
       let out = ''
       let err = ''
       const streams: Streams = { out: (text) => (out += text), err: (text) => (err += text) }
-      const code = await runCli(argv, { streams, env: { TEAMREE_USER_DATA_DIR: dir }, cwd: '/work' })
+      const code = await runCli(argv, {
+        streams,
+        env: { TEAMREE_USER_DATA_DIR: dir },
+        cwd: '/work',
+        ...(stdin === undefined ? {} : { stdin: () => Promise.resolve(stdin) })
+      })
       return { code, out, err }
     }
   }
@@ -646,6 +651,107 @@ describe('selectors and flags reach the runtime', () => {
 
 // Several attempts at one task, from a shell: the flag is repeatable, and each
 // repeat is a whole worktree with its own agent in it.
+describe('worktree create --prompt', () => {
+  /** A runtime that makes every worktree ready at once and remembers what it was asked. */
+  function readyRuntime(): StubHandler {
+    const made: Array<Record<string, unknown>> = []
+    return (method, params) => {
+      if (method === 'project.list') return PROJECTS
+      if (method === 'worktree.create') {
+        const name = (params as { name: string }).name
+        const worktree = { ...WORKTREES[0], id: `wt_made_${made.length + 1}`, name, state: 'ready' }
+        made.push(worktree)
+        return worktree
+      }
+      if (method === 'worktree.list') return made
+      if (method === 'terminal.create') return TERMINAL
+      throw new StubError('unknown_method', `no handler for ${method}`)
+    }
+  }
+
+  // The text is the task. It is written on the checkout's record and handed to
+  // every pane as the first prompt — a create that only named the worktree
+  // started an agent that had never been told what the worktree was for.
+  it('stores the text on each worktree and hands it to each agent', async () => {
+    const cli = await harness(readyRuntime())
+    const result = await cli.run([
+      'worktree',
+      'create',
+      '--project',
+      'api',
+      '--name',
+      'fix login',
+      '--agent',
+      'claude',
+      '--agent',
+      'codex',
+      '--prompt',
+      'Fix the login page; the form posts twice.',
+      '--json'
+    ])
+    expect(result.code).toBe(ExitCode.Success)
+
+    const creates = cli.stub.received.filter((call) => call.method === 'worktree.create')
+    expect(creates.map((call) => (call.params as { task?: string }).task)).toEqual([
+      'Fix the login page; the form posts twice.',
+      'Fix the login page; the form posts twice.'
+    ])
+    const panes = cli.stub.received.filter((call) => call.method === 'terminal.create')
+    expect(panes.map((call) => (call.params as { prompt?: string }).prompt)).toEqual([
+      'Fix the login page; the form posts twice.',
+      'Fix the login page; the form posts twice.'
+    ])
+  })
+
+  it('reads the text from stdin for --prompt -', async () => {
+    const cli = await harness(readyRuntime())
+    const result = await cli.run(
+      ['worktree', 'create', '--project', 'api', '--name', 'fix login', '--agent', 'claude', '--prompt', '-'],
+      'Fix the login page.\n\nThe form posts twice.\n'
+    )
+    expect(result.code).toBe(ExitCode.Success)
+    const panes = cli.stub.received.filter((call) => call.method === 'terminal.create')
+    expect(panes.map((call) => (call.params as { prompt?: string }).prompt)).toEqual([
+      'Fix the login page.\n\nThe form posts twice.'
+    ])
+  })
+
+  it('refuses a prompt too long for one command line before creating anything', async () => {
+    const cli = await harness(readyRuntime())
+    const result = await cli.run([
+      'worktree',
+      'create',
+      '--project',
+      'api',
+      '--name',
+      'fix login',
+      '--agent',
+      'claude',
+      '--prompt',
+      'x'.repeat(5000)
+    ])
+    expect(result.code).toBe(ExitCode.Usage)
+    expect(result.err).toContain('--prompt')
+    expect(cli.stub.received.filter((call) => call.method === 'worktree.create')).toHaveLength(0)
+  })
+
+  it('needs an agent to give the prompt to', async () => {
+    const cli = await harness(readyRuntime())
+    const result = await cli.run([
+      'worktree',
+      'create',
+      '--project',
+      'api',
+      '--name',
+      'fix login',
+      '--prompt',
+      'Fix the login page.'
+    ])
+    expect(result.code).toBe(ExitCode.Usage)
+    expect(result.err).toContain('--agent')
+  })
+})
+
 describe('worktree create --agent, repeated', () => {
   it('creates one worktree per repeat, names them apart, and starts each agent', async () => {
     const made: Array<Record<string, unknown>> = []

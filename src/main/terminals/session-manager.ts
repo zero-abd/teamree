@@ -13,14 +13,15 @@ import { evidenceLine } from '../../shared/outputEvidence'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
 import {
   detectAgent,
+  firstPromptCommand,
   newSessionId,
   pinSessionCommand,
   pinsOwnSessionId,
   restartSessionCommand,
   type AgentKind
 } from './agent-command'
-import type { ConversationEvidence, ConversationQuestion } from './agent-conversations'
 import { appendPane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
+import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { CHECKPOINT_SOURCE_BYTES, ScrollbackCheckpoints } from './scrollbackCheckpoints'
 import {
@@ -95,6 +96,12 @@ export type TerminalSessionManagerOptions = {
    * checkout path, which only the worktree service knows.
    */
   resolveWorktreeCwd?: (worktreeId: string) => string | undefined
+  /**
+   * What a worktree was opened to do — `Worktree.task` — for a pane that is
+   * starting its agent over with no conversation behind it, so the agent is
+   * told again rather than started bare.
+   */
+  resolveWorktreeTask?: (worktreeId: string) => string | undefined
   layouts?: LayoutRepository
   /** Pass the workspace store and terminals come back after a restart. */
   sessions?: SessionRepository
@@ -286,6 +293,10 @@ export class TerminalSessionManager {
     const stored = this.records.listTerminals().find((record) => record.id === params.terminalId)
     const launch = relaunchCommand(stored)
     const below = launch.agent === undefined ? NEW_SHELL_BELOW : startsAgainBelow(launch.agent)
+    // Told its task again only when nobody ever told it anything: a pane that
+    // held a conversation is starting a new one by choice, and the person
+    // pressing the button is there to say what it is for.
+    const prompt = stored !== undefined && launch.agent !== undefined ? this.taskToRepeat(stored) : undefined
 
     // Read before anything is torn down: this is the only copy of what the pane
     // printed, and it is reduced on the way in for the reason `scrollbackRecord`
@@ -327,6 +338,7 @@ export class TerminalSessionManager {
         rows: size.rows,
         recordStartsBelow: below,
         ...(launch.command === undefined ? {} : { command: launch.command }),
+        ...(prompt === undefined ? {} : { prompt }),
         ...(kept === undefined ? {} : { restoredRecord: kept })
       },
       restoring
@@ -566,6 +578,9 @@ export class TerminalSessionManager {
             rows: record.rows,
             ...(launch.command === undefined ? {} : { command: launch.command }),
             ...(kept === undefined ? {} : { restoredRecord: kept }),
+            // A pane starting its agent over was never spoken to, so its task
+            // goes with it again; a resume is a conversation already told.
+            ...(launch.repinned === undefined ? {} : this.taskFor(record)),
             // Only where a conversation is being asked for. Everything else
             // here either is the fresh start already or is a plain shell, and
             // neither has anything to fall back from.
@@ -691,6 +706,13 @@ export class TerminalSessionManager {
       ? { command: params.command }
       : pinAgentSession(params.command === undefined ? undefined : agentLaunchCommand(params.command, params.agentArgs))
     const agent = restoring?.agent ?? launch.agent
+    // The prompt goes on the line that runs and nowhere else. The record below
+    // keeps `launch.command`, which is what a resume is rewritten from, and a
+    // conversation being resumed has already been given this.
+    const spawned =
+      launch.command !== undefined && agent !== undefined && params.prompt !== undefined
+        ? firstPromptCommand(launch.command, agent, params.prompt)
+        : launch.command
     const fallback = params.fallback
     // The record's name wins on a restore: it is the one the user has been
     // looking at, and the caller of a restore passes no name at all.
@@ -701,7 +723,7 @@ export class TerminalSessionManager {
       worktreeId: params.worktreeId,
       cwd,
       shell,
-      ...(launch.command === undefined ? {} : { command: launch.command }),
+      ...(spawned === undefined ? {} : { command: spawned }),
       cols: params.cols ?? DEFAULT_COLS,
       rows: params.rows ?? DEFAULT_ROWS,
       ...(restored === undefined ? {} : { restored }),
@@ -776,6 +798,30 @@ export class TerminalSessionManager {
       createdAt: restoring?.createdAt ?? Date.now()
     })
     return session
+  }
+
+  /** `{ prompt }` for a pane whose worktree has a task, else nothing. */
+  private taskFor(record: TerminalRecord): { prompt?: string } {
+    const task = this.options.resolveWorktreeTask?.(record.worktreeId)
+    return task === undefined || task.length === 0 ? {} : { prompt: task }
+  }
+
+  /**
+   * The worktree's task, for a pane that never got a conversation.
+   *
+   * The same question `restoreLaunch` asks, answered the same way: the agent's
+   * own store first, and what the window saw typed only where the store cannot
+   * be read.
+   */
+  private taskToRepeat(record: TerminalRecord): string | undefined {
+    if (record.agent === undefined) return undefined
+    const evidence = (this.options.conversationEvidence ?? conversationOnDisk)({
+      agent: record.agent,
+      cwd: record.cwd,
+      ...(record.agentSessionId === undefined ? {} : { agentSessionId: record.agentSessionId })
+    })
+    const never = evidence === 'absent' || (evidence === 'unknown' && record.typed === false)
+    return never ? this.taskFor(record).prompt : undefined
   }
 
   /**

@@ -217,7 +217,7 @@ describe('what it submits', () => {
     expect(startTask).toHaveBeenCalledWith({
       projectId: 'p1',
       startedFrom: 'origin/main',
-      creates: [{ name: 'Rewrite the pager', agentCommand: 'claude' }]
+      creates: [{ name: 'Rewrite the pager', agentCommand: 'claude', task: 'Rewrite the pager' }]
     })
   })
 
@@ -235,9 +235,9 @@ describe('what it submits', () => {
       projectId: 'p1',
       startedFrom: 'origin/main',
       creates: [
-        { name: 'Rewrite the pager claude', agentCommand: 'claude' },
-        { name: 'Rewrite the pager codex', agentCommand: 'codex' },
-        { name: 'Rewrite the pager claude 2', agentCommand: 'claude' }
+        { name: 'Rewrite the pager claude', agentCommand: 'claude', task: 'Rewrite the pager' },
+        { name: 'Rewrite the pager codex', agentCommand: 'codex', task: 'Rewrite the pager' },
+        { name: 'Rewrite the pager claude 2', agentCommand: 'claude', task: 'Rewrite the pager' }
       ]
     })
   })
@@ -266,8 +266,18 @@ describe('what it submits', () => {
     expect(startTask).toHaveBeenCalledWith({
       projectId: 'p1',
       startedFrom: 'origin/main',
-      creates: [{ name: 'Rewrite the pager' }]
+      creates: [{ name: 'Rewrite the pager', task: 'Rewrite the pager' }]
     })
+  })
+
+  // The text goes on one command line, so past that line's bound the button
+  // refuses rather than the runtime cutting or rejecting it later.
+  it('refuses a task too long for one command line, and says by how much', async () => {
+    await open()
+    fireEvent.change(task(), { target: { value: 'x'.repeat(4097) } })
+    expect((screen.getByRole('button', { name: 'Start task' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/4097 \/ 4096 chars/)).toBeTruthy()
+    expect(startTask).not.toHaveBeenCalled()
   })
 
   it('does not say the machine has no agent before it has looked', async () => {
@@ -283,7 +293,7 @@ describe('what it submits', () => {
     expect(screen.getByText('1 worktree · no agent')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Create worktree' })).toBeTruthy()
     submit().click()
-    expect(startTask.mock.calls[0]?.[0].creates).toEqual([{ name: 'Rewrite the pager' }])
+    expect(startTask.mock.calls[0]?.[0].creates).toEqual([{ name: 'Rewrite the pager', task: 'Rewrite the pager' }])
   })
 
   it('shows the branch the task will get, and only once there is a task', async () => {

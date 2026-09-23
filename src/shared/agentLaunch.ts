@@ -20,6 +20,22 @@
 // it is spliced in as one: the shell the pane runs is what interprets it, which
 // is what makes `--append-system-prompt "be terse"` mean what its author meant.
 
+/**
+ * How long the arguments a person always passes their agent may be — and, for
+ * the same reason, how long the task handed to it as a first prompt may be.
+ *
+ * A generous bound on a short thing — a model name, a permission mode, a system
+ * prompt someone pasted — rather than a considered maximum. It is here because
+ * the value ends up on a command line the runtime builds, and every other
+ * string this contract puts somewhere consequential is bounded too.
+ *
+ * Defined in this file rather than beside the schemas that use it because the
+ * composer reads it too, and this file is the one the renderer can import
+ * without pulling the schema library into the page. `methods.ts` re-exports it
+ * under the same name, so nothing that imported it from there has moved.
+ */
+export const MAX_AGENT_ARGS_CHARS = 4096
+
 /** The command a pane runs: the agent's own command, then the user's arguments. */
 export function agentLaunchCommand(command: string, extraArgs: string | undefined): string {
   const trimmed = extraArgs?.trim() ?? ''

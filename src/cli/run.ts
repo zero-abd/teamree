@@ -17,6 +17,18 @@ export type CliOptions = {
   host?: DiscoveryHost
   /** Swappable so tests can supply a client without a socket. */
   connect?: (options: ConnectOptions) => Promise<RuntimeClient>
+  /** Swappable so tests can hand a command its stdin. */
+  stdin?: () => Promise<string>
+}
+
+/** stdin, read whole; what `--prompt -` means. */
+function readStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    process.stdin.on('data', (chunk: Buffer) => chunks.push(chunk))
+    process.stdin.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    process.stdin.on('error', reject)
+  })
 }
 
 const HELP_TOKENS = new Set(['--help', '-h'])
@@ -104,6 +116,7 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
         json: useJson,
         cwd,
         endpointSource: discovered.source,
+        stdin: options.stdin ?? readStdin,
         streams
       })
       emitSuccess(commandName(spec), output, useJson, streams)

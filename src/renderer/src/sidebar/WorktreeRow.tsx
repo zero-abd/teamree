@@ -175,7 +175,10 @@ export function WorktreeRow({
               line below with the branch is what stops four badges from
               squeezing the one thing that identifies the row. */}
           <span className="worktree__title">
-            <span className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`} title={worktree.name}>
+            <span
+              className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
+              title={worktree.task ?? worktree.name}
+            >
               {worktree.name}
             </span>
             {overall ? (

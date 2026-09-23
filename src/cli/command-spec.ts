@@ -26,6 +26,8 @@ export type CommandContext = {
   cwd: string
   /** Where the endpoint came from; `status` reports it. */
   endpointSource: string
+  /** Everything on stdin, for a flag whose value is `-`. */
+  stdin: () => Promise<string>
   /**
    * For the one command that streams. `teamree team watch --follow` writes a
    * teammate's pane out as it arrives rather than at the end, and there is no

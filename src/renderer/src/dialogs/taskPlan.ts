@@ -33,6 +33,34 @@ export type TaskCreate = {
   name: string
   /** Absent means the worktree alone. */
   agentCommand?: string
+  /** The description as typed: the agent's first prompt, and the worktree's record of what it is for. */
+  task: string
+}
+
+/** The most characters a task's name keeps; see `taskName`. */
+export const MAX_TASK_NAME_CHARS = 32
+
+/**
+ * What a task is called: the start of its first line.
+ *
+ * The rest is for the agent. A row, a tab and the status bar each have a few
+ * words' room to say which task this is, and a whole sentence there pushed
+ * the branch and the shortcuts off the end of the window. So the name is the
+ * first line, cut at a word boundary to fit, with any punctuation the cut
+ * leaves dangling taken off — the branch is a slug of this, and `fix-login.`
+ * is nobody's branch. A word longer than the room is cut mid-word rather than
+ * dropped, because a name has to be something.
+ */
+export function taskName(task: string, max = MAX_TASK_NAME_CHARS): string {
+  const line = task.trim().split('\n', 1)[0]?.trim() ?? ''
+  const characters = Array.from(line)
+  let name = line
+  if (characters.length > max) {
+    const room = characters.slice(0, max + 1).join('')
+    const boundary = room.search(/\s\S*$/u)
+    name = boundary > 0 ? room.slice(0, boundary) : characters.slice(0, max).join('')
+  }
+  return name.replace(/[\s.,;:!?…\-–—]+$/u, '')
 }
 
 /**
@@ -93,9 +121,10 @@ export function fanOut(agents: readonly InstalledAgent[], counts: AgentCounts): 
  */
 export function taskCreates(task: string, selection: readonly InstalledAgent[]): TaskCreate[] {
   const commands = selection.map((agent) => agent.command)
-  return taskNamesForAgents(task.trim(), commands).map((name, index) => {
+  const text = task.trim()
+  return taskNamesForAgents(taskName(text), commands).map((name, index) => {
     const agentCommand = commands[index]
-    return agentCommand === undefined ? { name } : { name, agentCommand }
+    return agentCommand === undefined ? { name, task: text } : { name, agentCommand, task: text }
   })
 }
 

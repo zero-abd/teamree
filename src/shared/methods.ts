@@ -36,6 +36,7 @@ import type {
   WorktreePush,
   WorktreeStatus
 } from './entities'
+import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { THEME_TOKENS, type Appearance } from './theme'
 
 /**
@@ -104,15 +105,9 @@ export const MAX_TERMINAL_ID_CHARS = 256
  */
 export const MAX_PANE_LABEL_CHARS = 512
 
-/**
- * How long the arguments a person always passes their agent may be.
- *
- * A generous bound on a short thing — a model name, a permission mode, a system
- * prompt someone pasted — rather than a considered maximum. It is here because
- * the value ends up on a command line the runtime builds, and every other
- * string this contract puts somewhere consequential is bounded too.
- */
-export const MAX_AGENT_ARGS_CHARS = 4096
+// Defined in `agentLaunch.ts`, which the renderer can import without zod;
+// re-exported here so its callers are unchanged. See the note there.
+export { MAX_AGENT_ARGS_CHARS }
 
 /**
  * How long a project's setup command may be.
@@ -226,7 +221,13 @@ export const Params = {
     name: z.string().min(1),
     /** Ref or sha to branch from. Defaults to the project's baseRef. */
     startedFrom: z.string().min(1).optional(),
-    branch: z.string().min(1).optional()
+    branch: z.string().min(1).optional(),
+    /**
+     * What the worktree is for, as typed; see `Worktree.task`. Bounded like
+     * `agentArgs`, and for the same reason: it is handed to the agent on the
+     * command line the runtime builds.
+     */
+    task: z.string().min(1).max(MAX_AGENT_ARGS_CHARS).optional()
   }),
   worktreeRemove: z.object({
     worktreeId: z.string().min(1),
@@ -652,6 +653,14 @@ export const Params = {
      * rewrite and nothing else.
      */
     agentArgs: z.string().max(MAX_AGENT_ARGS_CHARS).optional(),
+    /**
+     * The agent's first prompt, given the way its CLI takes one — see the
+     * agent table in `src/main/terminals/agent-command.ts`. Only the launch
+     * carries it: the record a resume is rewritten from does not, because a
+     * conversation being resumed has already been told. Ignored for a command
+     * that runs no known agent.
+     */
+    prompt: z.string().min(1).max(MAX_AGENT_ARGS_CHARS).optional(),
     cwd: z.string().min(1).optional(),
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional()
