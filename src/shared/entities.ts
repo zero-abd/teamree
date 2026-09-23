@@ -153,6 +153,25 @@ export type WorktreeDiff = {
 }
 
 /**
+ * What staging or unstaging one hunk did.
+ *
+ * A receipt rather than a new view of the tree: the caller re-reads the diff
+ * and the changes through the same invalidation everything else rides, and what
+ * this says is which way the hunk went and how big it was. Nothing here is a
+ * count of the whole file, because a hunk is deliberately not one.
+ */
+export type WorktreeHunkStage = {
+  worktreeId: string
+  path: string
+  /** True when the hunk is in the index now; false when it was taken out. */
+  staged: boolean
+  /** Lines the hunk adds, and lines it removes, as it was applied. */
+  added: number
+  removed: number
+  appliedAt: number
+}
+
+/**
  * Whether a worktree's branch would merge into its project's base ref.
  *
  * Answered without checking anything out, so it costs nothing to ask about

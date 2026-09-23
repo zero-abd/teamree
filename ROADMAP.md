@@ -653,6 +653,34 @@ character of each line; a URL an agent printed was dead text.
       through `app.quit()`, which awaits every pty exit callback rather than
       tearing the environment down under node-pty's watcher thread
 
+## M33 — Staging by hunk
+
+The patch read as a review and staging was whole-file, so a file holding two
+unrelated edits could only be committed whole or not at all. Writing a patch
+back to git is a different operation from reading one, with its own failure
+modes; this is the refusals as much as the feature.
+
+- [x] `worktree.stageHunk` and `worktree.unstageHunk`, each carrying the hunk
+      whole rather than an index into a diff the runtime would have to re-read:
+      the hunk **is** the patch, and git checks it rather than our arithmetic
+- [x] A minimal unified patch per hunk, applied with `git apply --cached`
+      (`--reverse` to unstage). The index and only the index — the file on disk
+      is what somebody has open, and staging must never rewrite it
+- [x] The refusal that makes it trustworthy: `--cached` compares the hunk
+      against the index, which nobody has been editing, so it would happily
+      stage a patch read four saves ago. The new side is checked against the
+      working tree too, and a hunk that no longer describes it is a `conflict`
+- [x] A hunk whose lines do not add up to its own header is refused, so a patch
+      cut short at the byte ceiling cannot be staged as though it were whole
+- [x] Untracked and binary files stage whole and say so: their whole content is
+      one hunk by construction
+- [x] `Stage` / `Unstage` on each hunk header, the staged half of the patch
+      drawn beside the working one, both refreshed through the same
+      invalidation a commit already rides
+- [x] `teamree worktree stage-hunk <worktree> --path <file> --hunk <n>` and
+      `unstage-hunk`, numbering hunks the way `worktree diff` prints them — the
+      number resolved in the CLI, never sent to the runtime
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,
@@ -791,12 +819,6 @@ recorded so none of them is discovered by surprise later.
   same write clears `restored`, so the fresh-agent restart above does not fire
   for such a pane in the real app. Both are being fixed together, by telling the
   runtime which writes were a person's.
-
-- **Staging by hunk is not there.** The patch reads as a review — files and hunks
-  fold, both gutters are drawn, inline or side by side — and staging is still
-  whole-file. Staging a hunk means writing a patch back to git rather than reading
-  one, which is a different operation with its own failure modes, and it is a
-  follow-up rather than an omission.
 
 - **A setup command runs on create, and it runs where you can see it.** The
   decision this entry used to defer has been taken: a project may name one

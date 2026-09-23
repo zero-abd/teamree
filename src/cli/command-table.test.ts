@@ -36,6 +36,8 @@ const EXPECTED = [
   'worktree merges',
   'worktree log',
   'worktree commit',
+  'worktree stage-hunk',
+  'worktree unstage-hunk',
   'worktree push',
   'worktree wait',
   'terminal list',

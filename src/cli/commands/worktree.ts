@@ -1,4 +1,5 @@
 import type { PaneNode, Worktree } from '../../shared/entities.js'
+import { parsePatch, type PatchHunk } from '../../shared/patch.js'
 import { taskNamesForAgents } from '../../main/git/worktreeNaming.js'
 import type { CommandContext, CommandSpec } from '../command-spec.js'
 import { readBoolean, readNumber, readString, readStrings, requireString } from '../argv.js'
@@ -297,6 +298,51 @@ export const worktreeCommands: readonly CommandSpec[] = [
         ])
       }
     }
+  },
+  {
+    path: ['worktree', 'stage-hunk'],
+    summary: 'Put one hunk of a file into the index.',
+    details:
+      'Hunks are numbered from 1, in the order `teamree worktree diff --path <file>` prints them.\n' +
+      'Only the index is written; the file on disk is never touched. Staging one hunk renumbers the rest, ' +
+      'so read the patch again between calls rather than counting ahead.\n' +
+      'Untracked and binary files stage whole: use `worktree commit -- <path>`.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      {
+        name: 'path',
+        kind: 'string',
+        placeholder: '<path>',
+        description: 'The file the hunk is in.',
+        required: true
+      },
+      { name: 'hunk', kind: 'number', placeholder: '<n>', description: 'Which hunk of that file, from 1.' }
+    ],
+    examples: [
+      'teamree worktree stage-hunk fix-login --path src/app.ts --hunk 2',
+      'teamree worktree stage-hunk fix-login --path src/app.ts --hunk 1 --json'
+    ],
+    run: async (context) => applyHunkCommand(context, true)
+  },
+  {
+    path: ['worktree', 'unstage-hunk'],
+    summary: 'Take one hunk of a file back out of the index.',
+    details:
+      'The mirror of stage-hunk, numbered against the staged patch — what ' +
+      '`teamree worktree diff --path <file> --staged` prints.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      {
+        name: 'path',
+        kind: 'string',
+        placeholder: '<path>',
+        description: 'The file the hunk is in.',
+        required: true
+      },
+      { name: 'hunk', kind: 'number', placeholder: '<n>', description: 'Which hunk of that file, from 1.' }
+    ],
+    examples: ['teamree worktree unstage-hunk fix-login --path src/app.ts --hunk 1'],
+    run: async (context) => applyHunkCommand(context, false)
   },
   {
     path: ['worktree', 'push'],
@@ -599,4 +645,82 @@ function renderPane(node: PaneNode, indent: string, focused: string | null): str
     `${indent}${node.direction} split (${shares})`,
     ...node.children.map((child) => renderPane(child, `${indent}  `, focused))
   ].join('\n')
+}
+
+/**
+ * Both hunk commands, which differ only in which patch they count against and
+ * which method they end in.
+ *
+ * The index lives here rather than in the contract on purpose. A number is what
+ * a person at a shell can type and what a script can loop over; it is also the
+ * thing that goes stale the instant anything else stages a hunk, so it is
+ * resolved against a patch read one line earlier and turned into the hunk
+ * itself before it leaves this process. The runtime is never handed a position
+ * to trust — see `Hunk` in src/shared/methods.ts.
+ */
+async function applyHunkCommand(context: CommandContext, staged: boolean): Promise<{ data: unknown; text: string }> {
+  const worktree = await resolveWorktree(context.client, context.args[0] as string)
+  const patchPath = requireString(context.flags, 'path')
+  const wanted = readNumber(context.flags, 'hunk') ?? 1
+  if (!Number.isInteger(wanted) || wanted < 1) {
+    throw new CliError({ code: 'usage', message: '--hunk counts from 1.', exitCode: ExitCode.Usage })
+  }
+
+  // Read against the side being changed: staging counts hunks of the working
+  // tree, unstaging counts hunks of the index.
+  const diff = await context.client.call('worktree.diff', {
+    worktreeId: worktree.id,
+    path: patchPath,
+    staged: !staged
+  })
+  const hunks = parsePatch(diff.patch).flatMap((file) => file.hunks)
+  const hunk = hunks[wanted - 1]
+  if (hunk === undefined) {
+    throw new CliError({
+      code: 'not_found',
+      message:
+        hunks.length === 0
+          ? `No ${staged ? '' : 'staged '}hunks in ${patchPath}.`
+          : `${patchPath} has ${hunks.length} hunk${hunks.length === 1 ? '' : 's'}; there is no ${wanted}.`,
+      exitCode: ExitCode.Failure
+    })
+  }
+  if (diff.truncated) {
+    throw new CliError({
+      code: 'conflict',
+      message: `The patch for ${patchPath} was cut short, so its hunks cannot be numbered reliably.`,
+      exitCode: ExitCode.Failure
+    })
+  }
+
+  const result = await context.client.call(staged ? 'worktree.stageHunk' : 'worktree.unstageHunk', {
+    worktreeId: worktree.id,
+    path: patchPath,
+    hunk: wireHunk(hunk)
+  })
+
+  return {
+    data: result,
+    text: formatFields([
+      [staged ? 'staged' : 'unstaged', `hunk ${wanted} of ${patchPath}`],
+      ['lines', `+${result.added} -${result.removed}`]
+    ])
+  }
+}
+
+/** A parsed hunk with the parser's own bookkeeping left off. */
+function wireHunk(hunk: PatchHunk): {
+  oldStart: number
+  oldCount: number
+  newStart: number
+  newCount: number
+  lines: { kind: PatchHunk['lines'][number]['kind']; text: string; noNewline: boolean }[]
+} {
+  return {
+    oldStart: hunk.oldStart,
+    oldCount: hunk.oldCount,
+    newStart: hunk.newStart,
+    newCount: hunk.newCount,
+    lines: hunk.lines.map((line) => ({ kind: line.kind, text: line.text, noNewline: line.noNewline }))
+  }
 }

@@ -682,6 +682,50 @@
   color: var(--accent);
 }
 
+/* The verb on a hunk header. Pushed to the far end so the `@@` line reads as
+   itself and the control is in the same place on every hunk; dim until the
+   header is under the pointer, because a column of buttons down a patch is
+   louder than the patch. `font-family: inherit` would take the monospace of the
+   header, and a word is not code. */
+.patch__stage {
+  margin-inline-start: auto;
+  padding: 0 var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.patch__hunkHead:hover .patch__stage {
+  border-color: var(--line);
+  color: var(--fg);
+}
+
+.patch__stage:hover {
+  background: var(--bg-hover);
+}
+
+.patch__stage:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Which half of the patch is underneath. Drawn only when both halves are there;
+   see ChangesPanel. */
+.changes__half {
+  margin: 0;
+  padding: var(--s2) var(--s4);
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .patch__binary,
 .patch__cut {
   margin: 0;

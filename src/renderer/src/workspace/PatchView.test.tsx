@@ -23,9 +23,16 @@ import postcss from 'postcss'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorktreeChanges, WorktreeDiff } from '@shared/entities'
 
+// Recorded rather than inert, because half of what this file now proves is
+// which method the control calls and with which hunk. It still never resolves:
+// nothing on screen here waits on an answer.
+const { call } = vi.hoisted(() => ({
+  call: vi.fn((_method: string, _params: unknown): Promise<never> => new Promise(() => {}))
+}))
+
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
-    call: () => new Promise(() => {}),
+    call,
     watchPane: () => new Promise(() => {}),
     subscribeTerminal: () => new Promise(() => {}),
     watchWorkspace: () => ({ close: () => {} }),
@@ -74,6 +81,34 @@ const diff: WorktreeDiff = {
   readAt: 0
 }
 
+// Two edits far enough apart to be two hunks, so "the second one" is a thing
+// the test can point at. Real `git diff` output again.
+const TWO_HUNKS = `diff --git a/src/rank.ts b/src/rank.ts
+--- a/src/rank.ts
++++ b/src/rank.ts
+@@ -1,3 +1,3 @@
+ import { byScore } from './score'
+-import { Row } from './row'
++import type { Row } from './row'
+ 
+@@ -210,6 +210,7 @@ export function rank(rows: Row[]): Row[] {
+   const scored = rows.map(score)
+   const sorted = scored.sort(byScore)
+   // one comment
++  const capped = sorted.slice(0, 20)
+   return sorted
+ }
+`
+
+const stagedDiff: WorktreeDiff = {
+  worktreeId: 'wt',
+  path: 'src/rank.ts',
+  staged: true,
+  patch: PATCH,
+  truncated: false,
+  readAt: 0
+}
+
 beforeEach(() => {
   useWorkspaceStore.setState({
     ...INITIAL,
@@ -87,6 +122,7 @@ beforeEach(() => {
     diffLayout: 'inline'
   })
   window.localStorage.clear()
+  call.mockClear()
 })
 
 describe('the patch in the changes panel', () => {
@@ -113,7 +149,7 @@ describe('the patch in the changes panel', () => {
   it('shows the hunk header as its own separator, not as a line of the file', () => {
     render(<ChangesPanel />)
 
-    const header = document.querySelector('.patch__hunkHead')
+    const header = document.querySelector('.patch__hunkAt')
     expect(header?.textContent).toBe('@@ -210,6 +210,7 @@ export function rank(rows: Row[]): Row[] {')
     expect(header?.querySelector('.patch__num')).toBeNull()
   })
@@ -152,6 +188,76 @@ describe('the patch in the changes panel', () => {
     expect(document.querySelectorAll('.patch__side--gap')).toHaveLength(1)
     // And the part that outlives the window: the next launch reads this back.
     expect(readStoredDiffLayout(window.localStorage)).toBe('split')
+  })
+})
+
+describe('staging one hunk from the patch', () => {
+  it('stages the hunk that was clicked, and not the one above it', async () => {
+    useWorkspaceStore.setState({ diff: { ...diff, patch: TWO_HUNKS } })
+    render(<ChangesPanel />)
+
+    const stage = screen.getAllByRole('button', { name: 'Stage' })
+    expect(stage).toHaveLength(2)
+
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(stage[1] as HTMLElement)
+
+    expect(call).toHaveBeenCalledWith('worktree.stageHunk', {
+      worktreeId: 'wt',
+      path: 'src/rank.ts',
+      hunk: expect.objectContaining({ oldStart: 210, oldCount: 6, newStart: 210, newCount: 7 })
+    })
+    // The whole hunk goes, lines and all — that is what the runtime checks
+    // against the index and the working tree.
+    const sent = call.mock.calls[0]?.[1] as unknown as { hunk: { lines: { text: string }[] } }
+    expect(sent.hunk.lines.map((line) => line.text)).toContain('  const capped = sorted.slice(0, 20)')
+    expect(sent.hunk.lines.map((line) => line.text)).not.toContain("import { Row } from './row'")
+  })
+
+  // Folding the hunk away is the one thing a click on a `summary` does by
+  // default, and it is not what the button is for.
+  it('leaves the hunk open when its control is used', async () => {
+    render(<ChangesPanel />)
+    const hunk = document.querySelector('details.patch__hunk') as HTMLDetailsElement
+    expect(hunk.open).toBe(true)
+
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Stage' }))
+
+    expect(hunk.open).toBe(true)
+  })
+
+  it('offers Unstage on the staged half and Stage on the working one', async () => {
+    useWorkspaceStore.setState({ stagedDiff })
+    render(<ChangesPanel />)
+
+    expect(screen.getByRole('button', { name: 'Unstage' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Stage' })).toBeTruthy()
+    // Both halves are named once there are two of them.
+    expect([...document.querySelectorAll('.changes__half')].map((node) => node.textContent)).toEqual([
+      'Staged',
+      'Unstaged'
+    ])
+
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Unstage' }))
+    expect(call).toHaveBeenCalledWith('worktree.unstageHunk', expect.objectContaining({ path: 'src/rank.ts' }))
+  })
+
+  it('names neither half when nothing is staged', () => {
+    render(<ChangesPanel />)
+    expect(document.querySelectorAll('.changes__half')).toHaveLength(0)
+  })
+
+  it('stops a second click while the first is still in flight', async () => {
+    render(<ChangesPanel />)
+    const { default: userEvent } = await import('@testing-library/user-event')
+    const button = screen.getByRole('button', { name: 'Stage' })
+
+    await userEvent.click(button)
+    await userEvent.click(button)
+
+    expect(call.mock.calls.filter((one) => one[0] === 'worktree.stageHunk')).toHaveLength(1)
   })
 })
 

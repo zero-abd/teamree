@@ -47,7 +47,7 @@ export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () =>
 }
 
 /**
- * The two git calls that write, wrapped so they announce what they did.
+ * The git calls that write, wrapped so they announce what they did.
  *
  * Every other git producer rides the service's own event emitter, which fires
  * for projects and for worktree lifecycle transitions and for nothing else. A
@@ -64,6 +64,23 @@ export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () =>
 export function publishGitWrites(registry: MethodRegistry, git: GitService, bus: WorkspaceEventBus): void {
   registry.register('worktree.commit', Params.worktreeCommit, async (params) => {
     const result = await git.worktreeCommit(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
+  // Staging moves what `worktree.status` counts as staged and what either half
+  // of the patch contains, and it does it without writing a file the watcher
+  // below would notice — `.git/index` is inside the git directory, which the
+  // watch covers, but relying on that is the same luck this function exists to
+  // stop relying on.
+  registry.register('worktree.stageHunk', Params.worktreeStageHunk, async (params) => {
+    const result = await git.worktreeStageHunk(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
+  registry.register('worktree.unstageHunk', Params.worktreeUnstageHunk, async (params) => {
+    const result = await git.worktreeUnstageHunk(params)
     bus.emit({ type: 'worktrees' })
     return result
   })
