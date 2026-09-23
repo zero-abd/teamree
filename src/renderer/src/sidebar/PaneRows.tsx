@@ -28,6 +28,8 @@ type PaneRowsProps = {
   onFocusTerminal: (terminalId: string) => void
   /** Added to the list's own class, for a caller that lays the rows out differently. */
   className?: string
+  /** Drawn as the sidebar tree's third level, whose arrows reach the rows instead of Tab. */
+  tree?: boolean
 }
 
 export function PaneRows({
@@ -37,10 +39,12 @@ export function PaneRows({
   unread,
   now,
   onFocusTerminal,
-  className
+  className,
+  tree = false
 }: PaneRowsProps): React.JSX.Element {
+  const item = tree ? ({ role: 'treeitem', 'aria-level': 3, tabIndex: -1 } as const) : {}
   return (
-    <ul className={className === undefined ? 'panes' : `panes ${className}`}>
+    <ul className={className === undefined ? 'panes' : `panes ${className}`} role={tree ? 'group' : undefined}>
       {rows.map((row) => {
         const attention = watchers[row.terminalId] ?? NO_ATTENTION
         const typing = typingNow(attention.typists, now)
@@ -49,9 +53,10 @@ export function PaneRows({
         const isUnread = unread.has(row.terminalId)
         const named = row.label !== worktreeName
         return (
-          <li key={row.terminalId}>
+          <li key={row.terminalId} role={tree ? 'none' : undefined}>
             <button
               type="button"
+              {...item}
               className={`pane-row${isUnread ? ' pane-row--unread' : ''}`}
               title={paneTitle(row, attention, typing, isUnread)}
               onClick={() => onFocusTerminal(row.terminalId)}

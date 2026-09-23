@@ -75,7 +75,7 @@ function WorkspaceMain({
   isAppChord: (event: KeyboardEvent) => boolean
 }): React.JSX.Element {
   return (
-    <div className="workspace-column">
+    <div className="workspace-column" data-region="panes">
       <TerminalTabs modifier={modifier} />
       <WorkspaceView modifier={modifier} isAppChord={isAppChord} />
       <PaneDragLayer />

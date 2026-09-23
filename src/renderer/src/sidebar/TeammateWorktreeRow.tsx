@@ -16,9 +16,19 @@ type TeammateWorktreeRowProps = {
 export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateWorktreeRowProps): React.JSX.Element {
   const { tone } = row
   return (
-    <li className={`worktree worktree--teammate worktree--${row.state}${row.staleness ? ' worktree--stale' : ''}`}>
+    <li
+      className={`worktree worktree--teammate worktree--${row.state}${row.staleness ? ' worktree--stale' : ''}`}
+      role="none"
+    >
       <div className="worktree__row worktree__row--teammate" title={teammateTitle(row)}>
-        <div className="worktree__open worktree__open--teammate">
+        {/* A row of the sidebar tree, focusable so the arrows pass through it to the panes it holds. */}
+        <div
+          className="worktree__open worktree__open--teammate"
+          role="treeitem"
+          aria-level={2}
+          aria-expanded={row.panes.length > 0 ? true : undefined}
+          tabIndex={-1}
+        >
           <span className="worktree__title">
             <span className="worktree__name">{row.name}</span>
             {tone ? <span className={dotClass(tone)} title={TONE_LABEL[tone]} aria-label={TONE_LABEL[tone]} /> : null}
@@ -45,20 +55,23 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
       </div>
 
       {row.panes.length > 0 ? (
-        <ul className="panes panes--teammate">
+        <ul className="panes panes--teammate" role="group">
           {row.panes.map((pane) => {
             const watching = watchingPaneIds.includes(pane.terminalId)
             return (
-              <li key={pane.terminalId}>
+              <li key={pane.terminalId} role="none">
                 <button
                   type="button"
+                  role="treeitem"
+                  aria-level={3}
+                  tabIndex={-1}
                   className={`pane-row pane-row--teammate pane-row--watchable${watching ? ' pane-row--watching' : ''}`}
                   title={
                     watching
                       ? `Stop watching ${row.handle}’s ${pane.label}`
                       : `Watch ${row.handle}’s ${pane.label} · ${TONE_LABEL[dotTone(pane.activity, pane.agent)]} · reading only`
                   }
-                  aria-pressed={watching}
+                  aria-selected={watching}
                   onClick={() => onWatch(pane)}
                 >
                   <span className="pane-row__head">

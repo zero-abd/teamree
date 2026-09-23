@@ -81,7 +81,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   }, [focusedTerminalId, tabs.length])
 
   return (
-    <div className="tabs">
+    <div className="tabs" data-region="strip">
       {/* First in the strip, so that on macOS it is what comes right after the
           window buttons. The same command as the chord and the menu item. */}
       {sidebarVisible ? null : (

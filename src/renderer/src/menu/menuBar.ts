@@ -99,6 +99,11 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'open-dashboard': { section: 'view' },
   'toggle-sidebar': { section: 'view' },
   'toggle-right-panel': { section: 'view' },
+  'focus-sidebar': { section: 'view' },
+  'focus-panes': { section: 'view' },
+  'focus-right-panel': { section: 'view' },
+  'focus-next-region': { section: 'view' },
+  'focus-previous-region': { section: 'view' },
   // The theme editor, which used to be the thing `Settings…` opened. It is a
   // view of the window rather than a setting of the machine, and this is the
   // menu somebody looks in for how the window looks.
@@ -199,7 +204,7 @@ export const ACCELERATOR_KEY_NAMES: Readonly<Record<string, string>> = {
  * arrows are the exception, and `ACCELERATOR_KEY_NAMES` above is all of it.
  */
 export function acceleratorForChord(chord: Chord): string {
-  const parts = [chord.ctrl ? 'Control' : 'CommandOrControl']
+  const parts = chord.bare ? [] : [chord.ctrl ? 'Control' : 'CommandOrControl']
   if (chord.alt) parts.push('Alt')
   if (chord.shift) parts.push('Shift')
   parts.push(ACCELERATOR_KEY_NAMES[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key))

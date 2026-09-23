@@ -93,8 +93,8 @@ describe('the keyboard section', () => {
       render(<HelpView modifier={modifier} />)
       for (const shortcut of BOUND) {
         const chord = formatChord(shortcut.chord as Chord, modifier)
-        // ⌃Tab is Control on every platform.
-        const lead = shortcut.chord?.ctrl ? modifier.controlLabel : glyph
+        // ⌃Tab is Control on every platform; F6 is a key alone.
+        const lead = shortcut.chord?.bare ? '' : shortcut.chord?.ctrl ? modifier.controlLabel : glyph
         expect(chord.startsWith(lead), `${shortcut.command} is written ${chord}`).toBe(true)
         expect(screen.getByText(chord).tagName).toBe('KBD')
       }

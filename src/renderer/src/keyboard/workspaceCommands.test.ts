@@ -6,6 +6,7 @@ import type { PaneNode, ConsentRequest } from '@shared/entities'
 import type { CommandActions, CommandState, Workspace } from './workspaceCommands'
 import { isCommandAvailable, paneNumberTarget, runWorkspaceCommand } from './workspaceCommands'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand } from './workspaceShortcuts'
+import { onRegionRequest, type Region } from '../shell/regions'
 
 const EMPTY: CommandState = {
   consent: {},
@@ -245,6 +246,42 @@ describe('the right panel', () => {
     expect(isCommandAvailable('toggle-right-panel', EMPTY)).toBe(false)
     expect(isCommandAvailable('toggle-right-panel', { ...WORKING, layouts: {} })).toBe(true)
     expect(isCommandAvailable('toggle-right-panel', WORKING)).toBe(true)
+  })
+})
+
+describe('the focus items', () => {
+  const asked = (command: WorkspaceCommand, state: CommandState): { regions: Region[]; store: Workspace } => {
+    const regions: Region[] = []
+    const stop = onRegionRequest((region) => regions.push(region))
+    const store = workspace(state)
+    runWorkspaceCommand(command, store)
+    stop()
+    return { regions, store }
+  }
+
+  it('asks for the region each names', () => {
+    expect(asked('focus-sidebar', WORKING).regions).toEqual(['sidebar'])
+    expect(asked('focus-panes', WORKING).regions).toEqual(['panes'])
+    expect(asked('focus-right-panel', WORKING).regions).toEqual(['panel'])
+  })
+
+  // Shown first; the focus follows once it is drawn.
+  it('shows a sidebar or panel that is put away', () => {
+    const sidebar = asked('focus-sidebar', { ...WORKING, sidebarVisible: false })
+    expect(sidebar.store.toggleSidebar).toHaveBeenCalledOnce()
+    expect(sidebar.regions).toEqual(['sidebar'])
+    const panel = asked('focus-right-panel', { ...WORKING, rightPanelOpen: false })
+    expect(panel.store.toggleRightPanel).toHaveBeenCalledOnce()
+    expect(
+      asked('focus-right-panel', { ...WORKING, rightPanelOpen: true }).store.toggleRightPanel
+    ).not.toHaveBeenCalled()
+  })
+
+  it('offers the panel only with a worktree open, and the rest always', () => {
+    expect(isCommandAvailable('focus-right-panel', EMPTY)).toBe(false)
+    for (const command of ['focus-sidebar', 'focus-panes', 'focus-next-region', 'focus-previous-region'] as const) {
+      expect(isCommandAvailable(command, EMPTY), command).toBe(true)
+    }
   })
 })
 

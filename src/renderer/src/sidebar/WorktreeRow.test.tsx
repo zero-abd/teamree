@@ -121,7 +121,7 @@ function mount(
 }
 
 // Anchored: the `⋯` is named "More for Rewrite the pager".
-const openButton = (): HTMLButtonElement => screen.getByRole('button', { name: /^Rewrite the pager/ })
+const openButton = (): HTMLButtonElement => screen.getByRole('treeitem', { name: /^Rewrite the pager/ })
 const row = (): HTMLElement => document.querySelector('.worktree') as HTMLElement
 const labels = (): string[] => screen.getAllByRole('menuitem').map((item) => item.textContent ?? '')
 
@@ -136,7 +136,7 @@ describe('a worktree whose directory is gone', () => {
     mount({ worktree: worktree({ missing: true }) })
     expect(screen.getByText('missing')).toBeTruthy()
     expect(row().classList.contains('worktree--missing')).toBe(true)
-    expect(openButton().disabled).toBe(true)
+    expect(openButton().getAttribute('aria-disabled')).toBe('true')
   })
 
   it('says nothing about git, and shows no panes, for a checkout that is not there', () => {
@@ -162,7 +162,7 @@ describe('a worktree still being made', () => {
   it('says so, and cannot be opened while it is not there', () => {
     mount({ worktree: worktree({ state: 'creating' }) })
     expect(screen.getByText('creating')).toBeTruthy()
-    expect(openButton().disabled).toBe(true)
+    expect(openButton().getAttribute('aria-disabled')).toBe('true')
     openButton().click()
     expect(handlers.onOpen).not.toHaveBeenCalled()
   })
@@ -231,7 +231,7 @@ describe('a worktree that failed to be made', () => {
 
   it('cannot be opened, because there is nothing to open', () => {
     mount({ worktree: worktree({ state: 'failed', error: 'no' }) })
-    expect(openButton().disabled).toBe(true)
+    expect(openButton().getAttribute('aria-disabled')).toBe('true')
   })
 })
 
@@ -341,7 +341,7 @@ describe('one of several runs of a task', () => {
 
   it('reads agent first, then the task, and keeps the stored name on hover', () => {
     mount({ worktree: worktree({ name: 'Add a subtract function to codex' }), title })
-    expect(screen.getByRole('button', { name: 'codex, Add a subtract function to' })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: 'codex, Add a subtract function to' })).toBeTruthy()
     expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe('Add a subtract function to codex')
   })
 
@@ -356,7 +356,7 @@ describe('one of several runs of a task', () => {
       terminals: [terminal({ agent: 'claude', lastOutputAt: NOW - 90_000 })],
       status: status({ unstaged: 1 })
     })
-    const button = screen.getByRole('button', { name: 'claude, Add a subtract function to calc' })
+    const button = screen.getByRole('treeitem', { name: 'claude, Add a subtract function to calc' })
     expect(button.classList.contains('worktree__open')).toBe(true)
     expect(
       button
@@ -392,7 +392,7 @@ describe('what the panes under it are doing', () => {
       terminals: [terminal({ id: 't1', agent: 'claude', lastOutputAt: NOW - 90_000 })],
       evidence: { t1: 'running tests' }
     })
-    const row = screen.getByRole('button', { name: /Claude Code/ })
+    const row = screen.getByRole('treeitem', { name: /Claude Code/ })
     expect(within(row).getByText('running tests')).toBeTruthy()
     expect(within(row).getByText('1m')).toBeTruthy()
     row.click()
@@ -479,7 +479,7 @@ describe('what the panes under it are doing', () => {
         }
       }
     })
-    const title = screen.getByRole('button', { name: /zsh/ }).getAttribute('title') ?? ''
+    const title = screen.getByRole('treeitem', { name: /zsh/ }).getAttribute('title') ?? ''
     expect(title).toContain('bo has typed 12 keystrokes here')
     expect(title).toContain('bo tried 4 this machine refused')
     expect(title).toContain('muted')
@@ -495,7 +495,7 @@ describe('what the panes under it are doing', () => {
 
   it('says where a quoted line came from, so it never reads as a verdict', () => {
     mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], evidence: { t1: '3 tests failed' } })
-    const title = screen.getByRole('button', { name: /Claude Code/ }).getAttribute('title') ?? ''
+    const title = screen.getByRole('treeitem', { name: /Claude Code/ }).getAttribute('title') ?? ''
     expect(title).toContain('last printed: 3 tests failed')
   })
 
@@ -517,7 +517,7 @@ describe('what the panes under it are doing', () => {
 
   it('lists no panes at all for a worktree still being made', () => {
     mount({ worktree: worktree({ state: 'creating' }), terminals: [terminal({ id: 't1' })] })
-    expect(screen.queryByRole('button', { name: /zsh/ })).toBeNull()
+    expect(screen.queryByRole('treeitem', { name: /zsh/ })).toBeNull()
   })
 })
 
@@ -749,7 +749,7 @@ describe('panes that have printed since they were read', () => {
   it('marks the pane, and the worktree above it', () => {
     mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], unread: ['t1'] })
 
-    const pane = screen.getByRole('button', { name: /Claude Code/ })
+    const pane = screen.getByRole('treeitem', { name: /Claude Code/ })
     expect(pane.className).toContain('pane-row--unread')
     expect(pane.title).toContain('unread')
     expect(screen.getByText('Rewrite the pager').className).toContain('worktree__name--unread')
@@ -763,7 +763,52 @@ describe('panes that have printed since they were read', () => {
   it('says nothing about a pane nothing has arrived in since', () => {
     mount({ terminals: [terminal({ id: 't1', agent: 'claude' })] })
 
-    expect(screen.getByRole('button', { name: /Claude Code/ }).className).not.toContain('pane-row--unread')
+    expect(screen.getByRole('treeitem', { name: /Claude Code/ }).className).not.toContain('pane-row--unread')
     expect(screen.getByText('Rewrite the pager').className).not.toContain('worktree__name--unread')
+  })
+})
+
+// A row of the sidebar tree: its panes fold on ← and come back on →, and the tree's Tab stop moves by arrow.
+describe('the row in the sidebar tree', () => {
+  const paneRows = (): Element[] => [...document.querySelectorAll('.pane-row')]
+
+  it('is a second-level tree item that says whether its panes are shown', () => {
+    mount({ terminals: [terminal()] })
+    expect(openButton().getAttribute('aria-level')).toBe('2')
+    expect(openButton().getAttribute('aria-expanded')).toBe('true')
+    expect(openButton().tabIndex).toBe(-1)
+    expect(paneRows()[0]?.getAttribute('role')).toBe('treeitem')
+    expect(paneRows()[0]?.getAttribute('aria-level')).toBe('3')
+  })
+
+  it('folds its panes on ← and unfolds them on →', () => {
+    mount({ terminals: [terminal()] })
+    fireEvent.keyDown(openButton(), { key: 'ArrowLeft' })
+    expect(paneRows()).toHaveLength(0)
+    expect(openButton().getAttribute('aria-expanded')).toBe('false')
+    fireEvent.keyDown(openButton(), { key: 'ArrowRight' })
+    expect(paneRows()).toHaveLength(1)
+    expect(handlers.onOpen).not.toHaveBeenCalled()
+  })
+
+  it('claims no fold for a row with no panes', () => {
+    mount()
+    expect(openButton().hasAttribute('aria-expanded')).toBe(false)
+  })
+
+  it('leaves the ⋯ to the mouse and the menu key, off the Tab order', () => {
+    mount()
+    expect(screen.getByRole('button', { name: 'More for Rewrite the pager' }).tabIndex).toBe(-1)
+  })
+
+  // Focusable, so the arrows reach it and its menu, but pressing it does nothing.
+  it('stays in reach while it cannot be opened, and offers Retry from its menu', () => {
+    mount({ worktree: worktree({ state: 'failed', error: 'creation cancelled', retryable: true }) })
+    expect(openButton().disabled).toBe(false)
+    openButton().click()
+    fireEvent.keyDown(openButton(), { key: ' ' })
+    expect(handlers.onOpen).not.toHaveBeenCalled()
+    fireEvent.keyDown(row(), { key: 'F10', shiftKey: true })
+    expect(labels()[0]).toBe('Retry')
   })
 })

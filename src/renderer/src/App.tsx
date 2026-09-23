@@ -25,6 +25,7 @@ import { RemoteKeystrokesDialog } from './dialogs/RemoteKeystrokesDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { openInBrowser } from './shell/openInBrowser'
+import { RegionFocus } from './shell/RegionFocus'
 import { shellClassName } from './shell/shellClass'
 import { useFolderDrop } from './shell/useFolderDrop'
 import { SidebarResizer } from './shell/SidebarResizer'
@@ -96,6 +97,7 @@ export function App(): React.JSX.Element {
       ) : null}
 
       <WorkspaceArea modifier={modifier} isAppChord={isAppChord} />
+      <RegionFocus />
 
       <StatusBar />
 

@@ -48,7 +48,12 @@ export function RightPanel(): React.JSX.Element | null {
     />
   )
 
-  if (!open) return <aside className="panel panel--closed">{rail}</aside>
+  if (!open)
+    return (
+      <aside className="panel panel--closed" data-region="panel">
+        {rail}
+      </aside>
+    )
 
   return (
     <>
@@ -62,7 +67,7 @@ export function RightPanel(): React.JSX.Element | null {
         grows="leftward"
         resetTo={RIGHT_PANEL_DEFAULT_PX}
       />
-      <aside className="panel" style={{ width: `${width}px` }} aria-label="Right panel">
+      <aside className="panel" style={{ width: `${width}px` }} aria-label="Right panel" data-region="panel">
         {rail}
         <div className="panel__body" role="tabpanel">
           {tab === 'files' ? <FilesTab key={worktree.id} worktree={worktree} /> : null}

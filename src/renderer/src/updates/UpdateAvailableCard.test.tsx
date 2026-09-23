@@ -98,6 +98,12 @@ describe('the update card', () => {
     expect(downloadUpdate).toHaveBeenCalledTimes(1)
   })
 
+  // Announced once as it appears, not left for VoiceOver to stumble on.
+  it('is a status a screen reader reads as it arrives', () => {
+    render(<UpdateAvailableCard />)
+    expect(screen.getByRole('status', { name: 'A newer version of teamree is available' })).toBeTruthy()
+  })
+
   it('downloads a verifiable installer itself, shows progress, then opens it', () => {
     const available = { ...update().available!, installer: { name: 'teamree-0.2.0.dmg', size: 100 } }
     useWorkspaceStore.setState({ update: update({ available }) })

@@ -187,7 +187,7 @@ describe('a project header', () => {
   it('counts your worktrees and theirs apart, because they are not the same thing', () => {
     seed({ worktrees: [worktree()], teammates: { p1: presence({ worktrees: [theirWorktree('priya', 'priya:t7')] }) } })
     mount()
-    const toggle = screen.getByRole('button', { expanded: true })
+    const toggle = screen.getByRole('treeitem', { expanded: true, name: /^pager/ })
     expect(within(toggle).getByText('1')).toBeTruthy()
     expect(within(toggle).getByText('+1')).toBeTruthy()
   })
@@ -195,7 +195,7 @@ describe('a project header', () => {
   it('collapses, and says whether it is open', () => {
     seed({ worktrees: [worktree()], collapsedProjects: { p1: true } })
     mount()
-    const toggle = screen.getByRole('button', { expanded: false })
+    const toggle = screen.getByRole('treeitem', { expanded: false })
     expect(screen.queryByText('Rewrite the pager')).toBeNull()
     toggle.click()
     expect(toggleProject).toHaveBeenCalledExactlyOnceWith('p1')
@@ -303,18 +303,18 @@ describe('watching a teammate’s pane', () => {
   it('stops watching when the same row is pressed again', () => {
     const row = (): HTMLElement => paneOf('priya')
     act(() => row().click())
-    expect(row().getAttribute('aria-pressed')).toBe('true')
+    expect(row().getAttribute('aria-selected')).toBe('true')
     act(() => row().click())
     expect(open()).toEqual([])
-    expect(row().getAttribute('aria-pressed')).toBe('false')
+    expect(row().getAttribute('aria-selected')).toBe('false')
   })
 
   it('goes on saying which rows are open once a pane is closed from the workspace', () => {
     act(() => paneOf('priya').click())
     act(() => paneOf('ana').click())
     act(() => useWorkspaceStore.getState().closeWatchedPane(useWorkspaceStore.getState().watches[0]!.id))
-    expect(paneOf('priya').getAttribute('aria-pressed')).toBe('false')
-    expect(paneOf('ana').getAttribute('aria-pressed')).toBe('true')
+    expect(paneOf('priya').getAttribute('aria-selected')).toBe('false')
+    expect(paneOf('ana').getAttribute('aria-selected')).toBe('true')
   })
 })
 
@@ -567,7 +567,7 @@ describe('the row menu acts on the worktree it was opened on', () => {
     await act(async () => undefined)
 
     expect(call).toHaveBeenCalledWith('worktree.rename', { worktreeId: 'w1', name: 'pager, the winner' })
-    expect(screen.getByRole('button', { name: /^pager, the winner/ })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: /^pager, the winner/ })).toBeTruthy()
     expect(useWorkspaceStore.getState().worktrees.map((entry) => entry.name)).toEqual(['pager, the winner', 'other'])
   })
 
@@ -681,5 +681,83 @@ describe('several runs of one task', () => {
     ])
     // The branch line said the name again, slugified.
     expect(screen.queryByText('add-a-subtract-function-to-claude')).toBeNull()
+  })
+})
+
+// One Tab stop however many rows, and the arrows between them, as a Finder list or a source list.
+describe('the tree from the keyboard', () => {
+  const pane = { worktreeId: 'w1', cwd: '/repos/pager-wt/rewrite', shell: '/bin/zsh', cols: 80, rows: 24 }
+  const terminals = {
+    t1: { ...pane, id: 't1', title: 'zsh', running: true, busy: false, lastOutputAt: NOW },
+    t2: { ...pane, id: 't2', title: 'claude', running: true, busy: true, lastOutputAt: NOW }
+  }
+  const items = (): HTMLElement[] => screen.getAllByRole('treeitem')
+  const names = (): string[] => items().map((item) => item.textContent?.trim().split(/\s/)[0] ?? '')
+  const stops = (): HTMLElement[] => items().filter((item) => item.tabIndex === 0)
+  const press = (key: string): void => {
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key })
+  }
+
+  beforeEach(() => {
+    seed({
+      worktrees: [worktree(), worktree({ id: 'w2', name: 'Second', branch: 'second' })],
+      activeWorktreeId: 'w2',
+      terminals
+    })
+    mount()
+  })
+
+  it('is a tree of projects, worktrees and panes', () => {
+    expect(screen.getByRole('tree', { name: 'Worktrees' })).toBeTruthy()
+    const levels = items().map((item) => item.getAttribute('aria-level'))
+    expect(levels).toEqual(['1', '2', '3', '3', '2'])
+  })
+
+  it('is one Tab stop, on the open worktree until another row is focused', () => {
+    expect(stops()).toHaveLength(1)
+    expect(stops()[0]?.textContent).toContain('Second')
+    act(() => items()[0]?.focus())
+    expect(stops()).toEqual([items()[0]])
+  })
+
+  it('walks the rows with ↑ and ↓, and jumps with Home and End', () => {
+    act(() => items()[0]?.focus())
+    press('ArrowDown')
+    expect(document.activeElement).toBe(items()[1])
+    press('ArrowDown')
+    expect(document.activeElement).toBe(items()[2])
+    press('ArrowUp')
+    expect(document.activeElement).toBe(items()[1])
+    press('End')
+    expect(document.activeElement).toBe(items()[4])
+    press('Home')
+    expect(document.activeElement).toBe(items()[0])
+    expect(stops()).toEqual([items()[0]])
+  })
+
+  it('goes into a row’s children on →, and back to its parent on ←', () => {
+    act(() => items()[1]?.focus())
+    press('ArrowRight')
+    expect(document.activeElement).toBe(items()[2])
+    press('ArrowLeft')
+    expect(document.activeElement).toBe(items()[1])
+    // The worktree folds first; the next ← goes up to the project.
+    press('ArrowLeft')
+    expect(items()).toHaveLength(3)
+    press('ArrowLeft')
+    expect(document.activeElement).toBe(items()[0])
+  })
+
+  it('folds and unfolds a project on ← and →', () => {
+    act(() => items()[0]?.focus())
+    press('ArrowLeft')
+    expect(toggleProject).toHaveBeenCalledExactlyOnceWith('p1')
+  })
+
+  it('takes the other controls in it off the Tab order', () => {
+    const tree = screen.getByRole('tree')
+    const tabbable = [...tree.querySelectorAll<HTMLElement>('button, [tabindex]')].filter((node) => node.tabIndex >= 0)
+    expect(tabbable).toHaveLength(1)
+    expect(names()).toContain('Second')
   })
 })
