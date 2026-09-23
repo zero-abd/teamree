@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
+import type { Project } from '../../shared/entities.js'
 import type { CommandSpec } from '../command-spec.js'
-import { readString } from '../argv.js'
+import { readBoolean, readString } from '../argv.js'
 import { formatTable } from '../output.js'
 import { resolveProject } from '../selectors.js'
 
@@ -46,6 +47,21 @@ export const projectCommands: readonly CommandSpec[] = [
       return { data: project, text: `added project ${project.name} (${project.id}) at ${project.path}` }
     }
   },
+  pathsCommand('linked', {
+    summary: 'Show or set the gitignored directories every new worktree symlinks.',
+    details:
+      'Given no paths, prints the list. Given paths, replaces it. Each must be a gitignored, untracked ' +
+      'directory in the primary checkout; anything else is refused by name when a worktree is prepared. ' +
+      'An ignore rule ending in a slash does not match a symlink, so git lists the link as untracked.',
+    examples: ['teamree project linked api', 'teamree project linked api node_modules .venv']
+  }),
+  pathsCommand('copied', {
+    summary: 'Show or set the gitignored files every new worktree copies.',
+    details:
+      'Given no paths, prints the list. Given paths, replaces it. Copies are budgeted: a directory large ' +
+      'enough to be worth linking is refused rather than copied.',
+    examples: ['teamree project copied api', 'teamree project copied api .env .env.local']
+  }),
   {
     path: ['project', 'remove'],
     summary: 'Stop tracking a repository.',
@@ -57,3 +73,53 @@ export const projectCommands: readonly CommandSpec[] = [
     }
   }
 ]
+
+/**
+ * The two path lists, which differ only in which field they touch.
+ *
+ * One builder rather than two commands written out, because every sentence
+ * either would print — how it is shown, how it is set, how it is cleared — is
+ * the same sentence, and two copies of it is two things to keep true.
+ */
+function pathsCommand(
+  kind: 'linked' | 'copied',
+  spec: { summary: string; details: string; examples: readonly string[] }
+): CommandSpec {
+  return {
+    path: ['project', kind],
+    summary: spec.summary,
+    details: spec.details,
+    args: [
+      { name: 'project', description: 'Project id, name, or path.', required: true },
+      {
+        name: 'path',
+        description: 'Repository-relative path. Given any, they replace the whole list.',
+        required: false,
+        variadic: true
+      }
+    ],
+    flags: [{ name: 'clear', kind: 'boolean', description: 'Empty the list.' }],
+    examples: spec.examples,
+    run: async (context) => {
+      const project = await resolveProject(context.client, context.args[0] as string)
+      const paths = context.args.slice(1)
+      const clear = readBoolean(context.flags, 'clear')
+      // Naming no paths reads as a question, never as "make it empty": the
+      // command that empties a list has to be typed on purpose, because the
+      // shell that expanded a glob to nothing did not mean to.
+      const wanted = clear ? [] : paths
+      const change = kind === 'linked' ? { linkedPaths: wanted } : { copiedPaths: wanted }
+      const after =
+        clear || paths.length > 0
+          ? await context.client.call('project.setPaths', { projectId: project.id, ...change })
+          : project
+      return { data: after, text: describePaths(after, kind) }
+    }
+  }
+}
+
+function describePaths(project: Project, kind: 'linked' | 'copied'): string {
+  const paths = (kind === 'linked' ? project.linkedPaths : project.copiedPaths) ?? []
+  if (paths.length === 0) return `${project.name} ${kind === 'linked' ? 'links' : 'copies'} nothing into new worktrees`
+  return paths.join('\n')
+}

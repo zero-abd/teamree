@@ -138,6 +138,9 @@ describe('dispatcher', () => {
       'project.add',
       'project.list',
       'project.remove',
+      // Local, and not peer-reachable: what this machine's checkouts carry over
+      // from its own primary checkout is nobody else's setting to change.
+      'project.setPaths',
       'status.get',
       // Stops a push this machine started, so it is local for exactly the
       // reason the push is: a teammate has no business halting a commit on

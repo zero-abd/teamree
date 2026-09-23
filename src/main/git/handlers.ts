@@ -40,6 +40,7 @@ export const GIT_METHODS = [
   'project.list',
   'project.add',
   'project.remove',
+  'project.setPaths',
   'worktree.list',
   'worktree.get',
   'worktree.create',
@@ -65,6 +66,7 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'project.list': async () => service.listProjects(),
     'project.add': (params) => service.addProject(params),
     'project.remove': (params) => service.removeProject(params),
+    'project.setPaths': (params) => service.setProjectPaths(params),
     'worktree.list': (params) => service.listWorktrees(params),
     'worktree.get': (params) => service.getWorktree(params),
     'worktree.create': (params) => service.createWorktree(params),
@@ -86,6 +88,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('project.list', Params.projectList, handlers['project.list'])
   registry.register('project.add', Params.projectAdd, handlers['project.add'])
   registry.register('project.remove', Params.projectRemove, handlers['project.remove'])
+  registry.register('project.setPaths', Params.projectSetPaths, handlers['project.setPaths'])
   registry.register('worktree.list', Params.worktreeList, handlers['worktree.list'])
   registry.register('worktree.get', Params.worktreeGet, handlers['worktree.get'])
   registry.register('worktree.create', Params.worktreeCreate, handlers['worktree.create'])

@@ -44,9 +44,11 @@ import { commitWorktree } from './worktreeCommit'
 import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
+import { normalizePreparedPaths, prepareWorktree } from './worktreePreparation'
 
 export type GitEvent =
   | { type: 'project.added'; project: Project }
+  | { type: 'project.updated'; project: Project }
   | { type: 'project.removed'; projectId: string }
   | { type: 'worktree.created'; worktree: Worktree }
   | { type: 'worktree.updated'; worktree: Worktree }
@@ -189,6 +191,34 @@ export class GitService {
     this.#store.removeProject(project.id)
     this.events.emit({ type: 'project.removed', projectId: project.id })
     return { removed: true }
+  }
+
+  /**
+   * Sets what a new worktree of this project carries over from the primary
+   * checkout. Each list given replaces the stored one; an omitted list is left
+   * as it was, and an empty one clears it.
+   *
+   * The paths are only shape-checked here. Whether `node_modules` exists, is
+   * ignored and is untracked is a fact about the repository at the moment a
+   * worktree is made — it can be true today and false after a `.gitignore`
+   * changes — so it is asked then, by `prepareWorktree`, which is also the only
+   * place that can do anything about the answer.
+   */
+  async setProjectPaths(params: ParamsOf<'project.setPaths'>): Promise<Project> {
+    const project = this.#requireProject(params.projectId)
+    const next: Project = { ...project }
+    for (const field of ['linkedPaths', 'copiedPaths'] as const) {
+      const given = params[field]
+      if (given === undefined) continue
+      const paths = normalizePreparedPaths(given)
+      // Absent rather than empty: a project with an empty array in it reads as
+      // a decision, and `[]` and "never configured" are the same instruction.
+      if (paths.length === 0) delete next[field]
+      else next[field] = paths
+    }
+    this.#store.putProject(next)
+    this.events.emit({ type: 'project.updated', project: next })
+    return next
   }
 
   // ---------------------------------------------------------------- worktrees
@@ -634,6 +664,25 @@ export class GitService {
         timeoutMs: this.#createTimeoutMs
       })
       if (start.track) await this.#trackUpstream(project, worktree.branch, start.track)
+      // Before 'ready', deliberately. A pane opens on the transition, so a
+      // checkout that flipped first and was linked afterwards would be handed
+      // to an agent for as long as the copying took — and `npm test` in that
+      // window fails for a reason that has stopped being true by the time
+      // anybody reads it. A refusal here is a failed create like any other:
+      // the catch below discards the checkout and the row says why.
+      //
+      // Read from the store rather than from the project this create started
+      // with: an add on a large repository takes long enough for somebody to
+      // have changed the lists meanwhile, and the checkout in front of us is
+      // the one that has to match what they last said.
+      const settings = this.#store.getProject(project.id) ?? project
+      await prepareWorktree(this.#runner, {
+        repoPath: project.path,
+        worktreePath: worktree.path,
+        ...(settings.linkedPaths === undefined ? {} : { linkedPaths: settings.linkedPaths }),
+        ...(settings.copiedPaths === undefined ? {} : { copiedPaths: settings.copiedPaths }),
+        signal
+      })
       this.#startPoints.set(worktreeId, start)
       // What it branched from is now a fact, not a request: the name could move
       // or disappear, the sha cannot.

@@ -22,6 +22,8 @@ const EXPECTED = [
   'status',
   'project list',
   'project add',
+  'project linked',
+  'project copied',
   'project remove',
   'worktree list',
   'worktree create',

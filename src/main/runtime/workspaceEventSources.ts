@@ -34,6 +34,7 @@ export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () =>
   return git.events.on((event) => {
     switch (event.type) {
       case 'project.added':
+      case 'project.updated':
       case 'project.removed':
         bus.emit({ type: 'projects' })
         return

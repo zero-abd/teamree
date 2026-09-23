@@ -9,6 +9,27 @@ export type Project = {
   path: string
   /** Ref new worktrees branch from unless overridden, e.g. "origin/main". */
   baseRef: string
+  /**
+   * Gitignored directories in the primary checkout — `node_modules`, `.venv`,
+   * `.cache` — symlinked into every new worktree.
+   *
+   * Symlinked and never copied: they are large and rebuildable, and every
+   * worktree of one repository wants the same one.
+   *
+   * Optional because a project nobody has configured has not said "none"; it
+   * has said nothing, which is what an absent field means everywhere else in
+   * the records this app stores.
+   */
+  linkedPaths?: string[]
+  /**
+   * Gitignored files in the primary checkout — `.env`, `.env.local` — copied
+   * into every new worktree.
+   *
+   * Copied rather than linked for the reason the list above is linked: these
+   * are small, and a task that changes one must not change the primary
+   * checkout's copy underneath everybody else.
+   */
+  copiedPaths?: string[]
 }
 
 export type WorktreeState =
