@@ -104,4 +104,38 @@ describe('file panes in the store', () => {
     useWorkspaceStore.getState().openPaneSearch()
     expect(useWorkspaceStore.getState().paneSearch).toBeNull()
   })
+
+  it('opens a file as a split to the right of the focused pane when asked', async () => {
+    const worktreeId = await openReady()
+    useWorkspaceStore.getState().openFilePane(worktreeId, 'docs/a.md')
+    useWorkspaceStore.getState().openFilePane(worktreeId, 'docs/b.md', 'split')
+    const layout = useWorkspaceStore.getState().layouts[worktreeId]!
+    const a = fileLeavesIn(layout.root).find((leaf) => leaf.path === 'docs/a.md')
+    const b = fileLeavesIn(layout.root).find((leaf) => leaf.path === 'docs/b.md')
+    expect(layout.focusedTerminalId).toBe(b?.terminalId)
+    // Beside the file that had the focus, in a row, rather than stacked under it.
+    const parentOf = (node: typeof layout.root, id: string): typeof layout.root => {
+      if (node === null || node.kind === 'leaf') return null
+      if (node.children.some((child) => child.kind === 'leaf' && child.terminalId === id)) return node
+      for (const child of node.children) {
+        const found = parentOf(child, id)
+        if (found) return found
+      }
+      return null
+    }
+    const parent = parentOf(layout.root, b!.terminalId)
+    expect(parent?.kind === 'split' && parent.direction).toBe('row')
+    expect(
+      parent?.kind === 'split' &&
+        parent.children.some((child) => child.kind === 'leaf' && child.terminalId === a?.terminalId)
+    ).toBe(true)
+  })
+
+  it('remembers the files opened in a worktree, latest first', async () => {
+    const worktreeId = await openReady()
+    useWorkspaceStore.getState().openFilePane(worktreeId, 'one.md')
+    useWorkspaceStore.getState().openFilePane(worktreeId, 'two.md')
+    useWorkspaceStore.getState().openFilePane(worktreeId, 'one.md')
+    expect(useWorkspaceStore.getState().recentFiles[worktreeId]?.slice(0, 2)).toEqual(['one.md', 'two.md'])
+  })
 })

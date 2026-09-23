@@ -23,6 +23,7 @@ export type WorkspaceCommand =
   | 'previous-worktree'
   | 'next-worktree'
   | 'open-palette'
+  | 'go-to-file'
   | 'find-in-pane'
   | 'open-dashboard'
   | 'open-appearance'
@@ -67,6 +68,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'previous-worktree', chord: { key: 'ArrowUp', alt: true }, title: 'Previous worktree' },
   { command: 'next-worktree', chord: { key: 'ArrowDown', alt: true }, title: 'Next worktree' },
   { command: 'open-palette', chord: { key: 'k' }, title: 'Go to worktree or command' },
+  // ⌘P as in every editor; this window has nothing to print.
+  { command: 'go-to-file', chord: { key: 'p' }, title: 'Go to File…' },
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in pane' },
   // Named for the screen it opens ("All panes").
   { command: 'open-dashboard', chord: { key: 'e' }, title: 'All panes' },
@@ -74,8 +77,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'open-settings', chord: { key: ',' }, title: 'Settings' },
   // No chord: shift+comma yields `<`, so ⌘⇧, cannot be bound. Menu, palette and rail reach it.
   { command: 'open-appearance', title: 'Appearance' },
-  // No chords: ⌘P and ⌘⇧P are print and palette everywhere else. Commit opens the panel with the
-  // message box, hence the ellipsis.
+  // No chords: ⌘⇧P is a palette everywhere else. Commit opens the panel with the message box,
+  // hence the ellipsis.
   { command: 'commit-changes', title: 'Commit…' },
   { command: 'push-worktree', title: 'Push' },
   // Unshifted slash: shift+slash yields `?`, whose key name is not this one.

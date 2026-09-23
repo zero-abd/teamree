@@ -23,7 +23,7 @@ const EMPTY: CommandState = {
 const WORKING: CommandState = {
   ...EMPTY,
   projects: [{ id: 'p1' }],
-  worktrees: [{ id: 'w1', projectId: 'p1' }],
+  worktrees: [{ id: 'w1', projectId: 'p1', state: 'ready' }],
   activeWorktreeId: 'w1',
   layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } }
 }
@@ -128,14 +128,14 @@ describe('what a window can be asked to do', () => {
     for (const command of EVERY_COMMAND) expect(isCommandAvailable(command, asking), command).toBe(false)
   })
 
-  // A dialog of this window's own too, except the palette, whose command closes it.
-  it('offers nothing but closing the palette while a dialog is up', () => {
+  // A dialog of this window's own too, except the palette, whose two chords switch or close it.
+  it('offers nothing but the palette chords while a dialog is up', () => {
     const appearance = { ...WORKING, dialog: { kind: 'appearance' } as const }
     for (const command of EVERY_COMMAND) expect(isCommandAvailable(command, appearance), command).toBe(false)
 
     const palette = { ...WORKING, dialog: { kind: 'palette' } as const }
     for (const command of EVERY_COMMAND) {
-      expect(isCommandAvailable(command, palette), command).toBe(command === 'open-palette')
+      expect(isCommandAvailable(command, palette), command).toBe(command === 'open-palette' || command === 'go-to-file')
     }
   })
 
@@ -267,6 +267,7 @@ describe('running a command', () => {
       ['previous-worktree', 'stepWorktree', [-1]],
       ['next-worktree', 'stepWorktree', [1]],
       ['open-palette', 'openDialog', [{ kind: 'palette' }]],
+      ['go-to-file', 'openDialog', [{ kind: 'palette', mode: 'files' }]],
       ['find-in-pane', 'openPaneSearch', []],
       ['open-dashboard', 'toggleDashboard', []],
       ['open-appearance', 'openDialog', [{ kind: 'appearance' }]],
@@ -291,6 +292,27 @@ describe('running a command', () => {
     runWorkspaceCommand('close-pane', store)
     expect(store.closeWatchedPane).toHaveBeenCalledExactlyOnceWith('watch:p1:priya:t7')
     expect(store.closeTerminal).not.toHaveBeenCalled()
+  })
+
+  it('switches the palette between its modes, and puts it away on the chord of the mode on screen', () => {
+    const commands = workspace({ ...WORKING, dialog: { kind: 'palette' } })
+    runWorkspaceCommand('go-to-file', commands)
+    expect(commands.openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'palette', mode: 'files' })
+
+    const files = workspace({ ...WORKING, dialog: { kind: 'palette', mode: 'files' } })
+    runWorkspaceCommand('go-to-file', files)
+    expect(files.closeDialog).toHaveBeenCalledOnce()
+    runWorkspaceCommand('open-palette', files)
+    expect(files.openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'palette' })
+  })
+
+  it('offers Go to File only in a worktree whose checkout is there', () => {
+    expect(isCommandAvailable('go-to-file', WORKING)).toBe(true)
+    expect(isCommandAvailable('go-to-file', EMPTY)).toBe(false)
+    const creating = { ...WORKING, worktrees: [{ id: 'w1', projectId: 'p1', state: 'creating' }] }
+    expect(isCommandAvailable('go-to-file', creating)).toBe(false)
+    const missing = { ...WORKING, worktrees: [{ id: 'w1', projectId: 'p1', state: 'ready', missing: true as const }] }
+    expect(isCommandAvailable('go-to-file', missing)).toBe(false)
   })
 
   it('puts the palette away when its own command is run with it open', () => {

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { CliStatus, InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
 import { menuBarSpec } from '../menu/menuBar'
-import { buildPaletteItems, filterPalette, moveSelection, score, type PaletteItem } from './paletteModel'
+import {
+  buildPaletteItems,
+  fileItem,
+  filterPalette,
+  moveSelection,
+  rankFiles,
+  score,
+  type PaletteItem
+} from './paletteModel'
 
 function worktree(overrides: Partial<Worktree> & { id: string }): Worktree {
   return {
@@ -444,5 +452,47 @@ describe('every command the menu has is a row in the palette', () => {
         entry.label
       ).toBe(true)
     }
+  })
+})
+
+describe('the files ⌘P lists', () => {
+  const found = ['src/math.ts', 'src/lib/math/index.ts', 'docs/mathematics.md']
+
+  it('lists recent files, latest first, before anything is typed', () => {
+    expect(rankFiles([], ['b.ts', 'a.ts'], '', 50)).toEqual(['b.ts', 'a.ts'])
+  })
+
+  // Recency breaks ties; it never lifts a worse match over a better one.
+  it('puts an exact file name above a recent file that only starts with the query', () => {
+    const ranked = rankFiles(
+      ['src/math.ts', 'packages/pkg0/src/auth7/mathHelper6.ts'],
+      ['packages/pkg0/src/auth7/mathHelper6.ts'],
+      'math',
+      50
+    )
+    expect(ranked).toEqual(['src/math.ts', 'packages/pkg0/src/auth7/mathHelper6.ts'])
+  })
+
+  it('ranks by match quality, then recency within it, and lists each file once', () => {
+    const ranked = rankFiles([...found, 'src/mathUtils.ts'], ['README.md', 'docs/mathematics.md'], 'math', 50)
+    expect(ranked).toEqual(['src/math.ts', 'docs/mathematics.md', 'src/mathUtils.ts', 'src/lib/math/index.ts'])
+  })
+
+  it('narrows an answer to an earlier query to what is typed now', () => {
+    expect(rankFiles(found, [], 'mathin', 50)).toEqual(['src/lib/math/index.ts'])
+  })
+
+  it('stops at the limit', () => {
+    expect(rankFiles(found, ['src/math.ts'], 'ma', 2)).toHaveLength(2)
+  })
+
+  it('names a row by the file and hints its directory', () => {
+    expect(fileItem('src/lib/math.ts')).toMatchObject({
+      kind: 'file',
+      id: 'src/lib/math.ts',
+      label: 'math.ts',
+      hint: 'src/lib'
+    })
+    expect(fileItem('README.md')).toMatchObject({ label: 'README.md', hint: '' })
   })
 })

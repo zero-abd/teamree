@@ -1,15 +1,36 @@
 // Type a few letters, go somewhere. The fastest path to any worktree once
-// there are more of them than fit comfortably in a row of tabs.
+// there are more of them than fit comfortably in a row of tabs; `files` is ⌘P.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { hasCheckout } from '@shared/entities'
+import { fileLeavesIn } from '@shared/filePane'
 import { Modal } from '../dialogs/Modal'
-import type { PlatformModifier } from '../keyboard/platformModifier'
+import { holdsModifier, type PlatformModifier } from '../keyboard/platformModifier'
 import { isCommandAvailable, runWorkspaceCommand } from '../keyboard/workspaceCommands'
 import { commandNamed, shortcutHint } from '../keyboard/workspaceShortcuts'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { buildPaletteItems, filterPalette, moveSelection, type PaletteItem } from './paletteModel'
+import {
+  buildPaletteItems,
+  fileItem,
+  FILE_MODE_LIMIT,
+  FILES_IN_COMMANDS,
+  FILES_IN_COMMANDS_MIN_QUERY,
+  filterPalette,
+  moveSelection,
+  rankFiles,
+  type PaletteItem
+} from './paletteModel'
+import { useFileMatches } from './useFileMatches'
 
-export function CommandPalette({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
+const NO_PATHS: readonly string[] = []
+
+export function CommandPalette({
+  modifier,
+  mode = 'all'
+}: {
+  modifier: PlatformModifier
+  mode?: 'all' | 'files'
+}): React.JSX.Element {
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const projects = useWorkspaceStore((state) => state.projects)
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
@@ -72,14 +93,47 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
     [items, consent, projects, worktrees, activeWorktreeId, layouts, watches, focusedWatchId, statuses, pushing]
   )
 
-  const matches = useMemo(() => filterPalette(offered, query), [offered, query])
+  const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)
+  const filesOf = active !== undefined && hasCheckout(active) ? active.id : null
+  const opened = useWorkspaceStore((state) => (filesOf === null ? NO_PATHS : (state.recentFiles[filesOf] ?? NO_PATHS)))
+  const openRoot = filesOf === null ? null : (layouts[filesOf]?.root ?? null)
+  // Opened this session, then whatever file panes the layout came back with.
+  const recent = useMemo(
+    () => [...new Set([...opened, ...fileLeavesIn(openRoot).map((leaf) => leaf.path)])],
+    [opened, openRoot]
+  )
+
+  const wanted = query.trim()
+  const filesWanted = filesOf !== null && (mode === 'files' || wanted.length >= FILES_IN_COMMANDS_MIN_QUERY)
+  const fileLimit = mode === 'files' ? FILE_MODE_LIMIT : FILES_IN_COMMANDS
+  const found = useFileMatches(filesWanted ? filesOf : null, query, fileLimit)
+
+  const commands = useMemo(() => (mode === 'files' ? [] : filterPalette(offered, query)), [mode, offered, query])
+  const files = useMemo(
+    () => (filesWanted ? rankFiles(found?.paths ?? NO_PATHS, recent, query, fileLimit).map(fileItem) : []),
+    [filesWanted, found, recent, query, fileLimit]
+  )
+  const matches = useMemo(() => [...commands, ...files], [commands, files])
+  // "Nothing matches" waits for the runtime's answer to what is typed.
+  const settled = !filesWanted || wanted === '' || found?.query === wanted
   // The list can shrink under a selection that was valid a keystroke ago.
   const cursor = Math.min(selected, Math.max(matches.length - 1, 0))
 
-  const run = (item: PaletteItem | undefined): void => {
+  const list = useRef<HTMLUListElement | null>(null)
+  useEffect(() => {
+    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' })
+  }, [cursor, matches])
+
+  const run = (item: PaletteItem | undefined, split = false): void => {
     if (!item) return
     closeDialog()
     const store = useWorkspaceStore.getState()
+
+    // The tree's click, or a split beside the focused pane with the modifier held.
+    if (item.kind === 'file') {
+      if (filesOf !== null) store.openFilePane(filesOf, item.id, split ? 'split' : undefined)
+      return
+    }
 
     if (item.kind === 'worktree') {
       void store.openWorktree(item.id)
@@ -135,19 +189,19 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
     }
     if (event.key === 'Enter') {
       event.preventDefault()
-      run(matches[cursor])
+      run(matches[cursor], holdsModifier(event, modifier))
     }
   }
 
   return (
-    <Modal title="Go to" onClose={closeDialog}>
+    <Modal title={mode === 'files' ? 'Go to File' : 'Go to'} onClose={closeDialog}>
       <div className="palette">
         <input
           className="palette__input"
           type="text"
           value={query}
-          placeholder="Worktree, branch, or a command…"
-          aria-label="Search worktrees and commands"
+          placeholder={mode === 'files' ? 'File name or path…' : 'Worktree, branch, file, or a command…'}
+          aria-label={mode === 'files' ? 'Search files' : 'Search worktrees, files and commands'}
           autoComplete="off"
           spellCheck={false}
           onChange={(event) => {
@@ -158,11 +212,18 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         />
 
         {matches.length === 0 ? (
-          <p className="palette__empty">Nothing matches “{query.trim()}”</p>
+          wanted !== '' && settled ? (
+            <p className="palette__empty">Nothing matches “{wanted}”</p>
+          ) : null
         ) : (
-          <ul className="palette__list" role="listbox" aria-label="Results">
+          <ul className="palette__list" role="listbox" aria-label="Results" ref={list}>
             {matches.map((item, index) => (
               <li key={`${item.kind}:${item.id}`}>
+                {mode === 'all' && index === commands.length ? (
+                  <div className="palette__group" role="presentation">
+                    Files
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   role="option"
@@ -170,7 +231,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
                   className={`palette__row${index === cursor ? ' palette__row--selected' : ''}`}
                   // Selection follows the pointer, so a click runs the row under it.
                   onMouseMove={() => setSelected(index)}
-                  onClick={() => run(item)}
+                  onClick={(event) => run(item, holdsModifier(event, modifier))}
                 >
                   <span className="palette__label">{item.label}</span>
                   <span className="palette__hint">{item.hint}</span>

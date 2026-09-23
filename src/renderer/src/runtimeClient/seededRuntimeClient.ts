@@ -24,6 +24,7 @@ import type {
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
 import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '@shared/theme'
 import { leaf, splitPane } from '../panes/paneLayout'
+import { rankPaths } from '@shared/fuzzyPath'
 import { placePane, placePaneWithin } from '@shared/paneRoom'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
 
@@ -777,10 +778,13 @@ export function createSeededRuntimeClient(): RuntimeClient {
         readAt: Date.now()
       }
     },
-    'worktree.findFiles': ({ worktreeId, query, limit }) => {
+    'worktree.findFiles': ({ worktreeId, query, limit, fuzzy }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const wanted = query.trim().toLowerCase()
       const cap = limit ?? 200
+      if (fuzzy === true && wanted !== '') {
+        return { worktreeId: worktree.id, query, ...rankPaths(SEEDED_PATHS, wanted, cap), readAt: Date.now() }
+      }
       const paths = wanted === '' ? [] : SEEDED_PATHS.filter((entry) => entry.toLowerCase().includes(wanted)).sort()
       return {
         worktreeId: worktree.id,

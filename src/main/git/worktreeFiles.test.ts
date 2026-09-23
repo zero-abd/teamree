@@ -181,4 +181,24 @@ describe('findWorktreeFiles', () => {
     expect(found.paths).toEqual([])
     expect(found.truncated).toBe(false)
   })
+
+  it('ranks a fuzzy query best first', async () => {
+    repo = await fixture()
+
+    const found = await findWorktreeFiles(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      query: 'strs',
+      fuzzy: true
+    })
+
+    expect(found.paths).toEqual(['src/util/strings.ts'])
+    const ranked = await findWorktreeFiles(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      query: 'new',
+      fuzzy: true
+    })
+    expect(ranked.paths[0]).toBe('src/new.ts')
+  })
 })

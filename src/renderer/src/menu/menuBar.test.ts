@@ -28,7 +28,7 @@ const EMPTY: CommandState = {
 const WORKING: CommandState = {
   ...EMPTY,
   projects: [{ id: 'p1' }],
-  worktrees: [{ id: 'w1', projectId: 'p1' }],
+  worktrees: [{ id: 'w1', projectId: 'p1', state: 'ready' }],
   activeWorktreeId: 'w1',
   layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } }
 }
@@ -106,6 +106,7 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'new-worktree',
       'new-terminal',
       'new-markdown',
+      'go-to-file',
       'close-pane',
       'save-file',
       'save-all',
@@ -186,6 +187,7 @@ describe('what the menu bar says can be done', () => {
       'toggle-sidebar': true,
       'toggle-right-panel': false,
       'open-palette': true,
+      'go-to-file': false,
       'open-dashboard': true,
       'open-appearance': true,
       'open-settings': true,

@@ -5,6 +5,7 @@
 import { lstat, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import type { WorktreeFileEntry, WorktreeFileMatches, WorktreeFiles } from '../../shared/entities'
+import { rankPaths } from '../../shared/fuzzyPath'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
@@ -139,6 +140,7 @@ export type FindOptions = {
   worktreePath: string
   query: string
   limit?: number
+  fuzzy?: boolean
   signal?: AbortSignal
   now?: () => number
 }
@@ -161,6 +163,17 @@ export async function findWorktreeFiles(runner: GitRunner, options: FindOptions)
     ...(options.signal ? { signal: options.signal } : {}),
     timeoutMs: 60_000
   })
+
+  if (options.fuzzy === true) {
+    const ranked = rankPaths(stdout.split('\0'), query, limit)
+    return {
+      worktreeId: options.worktreeId,
+      query: options.query,
+      paths: ranked.paths,
+      truncated: ranked.truncated || stdoutClipped === true,
+      readAt
+    }
+  }
 
   const paths: string[] = []
   let truncated = stdoutClipped === true

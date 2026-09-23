@@ -9,14 +9,16 @@
 // worktree that already has panes. A row that looks right and runs nothing is
 // the failure this guards against.
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledAgent, Project, Worktree } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
+const call = vi.hoisted(() => vi.fn((..._args: unknown[]): Promise<unknown> => new Promise(() => {})))
+
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
-    call: () => new Promise(() => {}),
+    call,
     watchPane: () => new Promise(() => {}),
     subscribeTerminal: () => new Promise(() => {}),
     watchWorkspace: () => ({ close: () => {} }),
@@ -72,13 +74,15 @@ function seed(overrides: Record<string, unknown> = {}): void {
   )
 }
 
-const mount = (): void => {
-  render(<CommandPalette modifier={MAC} />)
+const mount = (mode: 'all' | 'files' = 'all'): void => {
+  render(<CommandPalette modifier={MAC} mode={mode} />)
 }
 
 const rows = (): HTMLElement[] => screen.getAllByRole('option')
 
 beforeEach(() => {
+  call.mockReset()
+  call.mockImplementation(() => new Promise(() => {}))
   startAgent.mockReset()
   openDialog.mockReset()
   closeDialog.mockReset()
@@ -206,5 +210,78 @@ describe('the git rows are offered exactly when they could do something', () => 
     mount()
     expect(labels()).toContain('Commit…')
     expect(labels()).not.toContain('Push')
+  })
+})
+
+describe('going to a file', () => {
+  const INDEX = Array.from({ length: 40 }, (_, index) => `src/module${index}/big${index}.ts`)
+  const openFilePane = vi.fn()
+
+  beforeEach(() => {
+    openFilePane.mockReset()
+    call.mockImplementation((method: unknown, params: unknown) => {
+      if (method !== 'worktree.findFiles') return new Promise(() => {})
+      const { query, limit } = params as { query: string; limit: number }
+      const paths = INDEX.filter((path) => path.includes(query)).slice(0, limit)
+      return Promise.resolve({ worktreeId: 'w1', query, paths, truncated: false, readAt: 0 })
+    })
+    seed({ openFilePane, recentFiles: { w1: ['docs/big-notes.md', 'README.md'] } })
+  })
+
+  const labels = (): string[] =>
+    screen.queryAllByRole('option').map((row) => row.querySelector('.palette__label')?.textContent ?? '')
+  const type = (value: string): void => {
+    fireEvent.change(screen.getByRole('textbox'), { target: { value } })
+  }
+
+  it('lists recent files and nothing else before anything is typed', () => {
+    mount('files')
+    expect(labels()).toEqual(['big-notes.md', 'README.md'])
+  })
+
+  it('asks the runtime for a fuzzy match, recent files first, and opens the chosen one like the tree', async () => {
+    mount('files')
+    type('big')
+    await waitFor(() => expect(labels()).toContain('big0.ts'))
+    expect(labels()[0]).toBe('big-notes.md')
+    expect(call).toHaveBeenCalledWith('worktree.findFiles', expect.objectContaining({ worktreeId: 'w1', fuzzy: true }))
+
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowDown' })
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+    expect(openFilePane).toHaveBeenCalledExactlyOnceWith('w1', 'src/module0/big0.ts', undefined)
+    expect(closeDialog).toHaveBeenCalledOnce()
+  })
+
+  it('opens it as a split with the modifier held', () => {
+    mount('files')
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', metaKey: true })
+    expect(openFilePane).toHaveBeenCalledExactlyOnceWith('w1', 'docs/big-notes.md', 'split')
+  })
+
+  it('offers no commands and no worktrees in file mode', async () => {
+    mount('files')
+    type('new')
+    await waitFor(() => expect(call).toHaveBeenCalled())
+    expect(labels()).not.toContain('New terminal')
+  })
+
+  it('adds up to five files under Files to the command results once two characters are typed', async () => {
+    mount()
+    type('b')
+    expect(screen.queryByText('Files')).toBeNull()
+    type('big')
+    await waitFor(() => expect(screen.getByText('Files')).toBeTruthy())
+    const files = rows().filter((row) => row.querySelector('.palette__hint')?.textContent?.startsWith('src/'))
+    expect(files.length).toBeLessThanOrEqual(5)
+    expect(rows().length).toBeGreaterThan(0)
+    // No longer "Nothing matches" for a file name.
+    expect(screen.queryByText(/Nothing matches/)).toBeNull()
+  })
+
+  it('says nothing matches only once the runtime has answered', async () => {
+    mount('files')
+    type('zzz')
+    expect(screen.queryByText(/Nothing matches/)).toBeNull()
+    await waitFor(() => expect(screen.getByText(/Nothing matches/)).toBeTruthy())
   })
 })

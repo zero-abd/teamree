@@ -182,7 +182,7 @@ export type WorktreeFiles = {
 export type WorktreeFileMatches = {
   worktreeId: string
   query: string
-  /** Relative to the worktree root, in path order. */
+  /** Relative to the worktree root, in path order, or best first for a fuzzy query. */
   paths: string[]
   /** True when more matched than `paths` carries. */
   truncated: boolean

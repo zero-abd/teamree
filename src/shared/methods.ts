@@ -273,7 +273,9 @@ export const Params = {
   worktreeFindFiles: z.object({
     worktreeId: z.string().min(1),
     query: z.string().max(512),
-    limit: z.number().int().positive().max(1000).optional()
+    limit: z.number().int().positive().max(1000).optional(),
+    /** Match the query's characters in order rather than as one run, best match first (`fuzzyPath.ts`). */
+    fuzzy: z.boolean().optional()
   }),
   /** Everything a new worktree could branch from, for the create dialog. */
   worktreeStartPoints: z.object({
