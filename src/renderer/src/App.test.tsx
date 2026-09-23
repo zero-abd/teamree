@@ -223,4 +223,24 @@ describe('the shell itself', () => {
     expect(screen.queryByTestId('sidebar')).toBeNull()
     expect(screen.getByTestId('workspace')).toBeTruthy()
   })
+
+  // There used to be a strip across the whole top of the window carrying the
+  // app's name. The sidebar and the pane strip are the top edge now, and the
+  // name is the sidebar's to draw — which is why, with the sidebar replaced by
+  // a marker here, the shell must not be printing it anywhere itself.
+  it('draws no strip of its own across the top, and leaves the name to the sidebar', () => {
+    const { container } = render(<App />)
+    expect(container.querySelector('.titlebar')).toBeNull()
+    expect(container.querySelector('header')).toBeNull()
+    expect(screen.queryByText('teamree')).toBeNull()
+  })
+
+  // The stylesheet moves the macOS window-button inset from the sidebar's
+  // header to the pane strip on this one class, so the strip is never drawn
+  // under the buttons.
+  it('says on the shell when the sidebar is away', () => {
+    seed({ sidebarVisible: false })
+    const { container } = render(<App />)
+    expect(container.firstElementChild?.classList.contains('shell--collapsed')).toBe(true)
+  })
 })

@@ -79,12 +79,13 @@ const closeTerminal = vi.fn(async () => {})
 const createTerminal = vi.fn(async () => {})
 const splitFocusedPane = vi.fn(async () => {})
 const renamePane = vi.fn(async () => {})
+const toggleSidebar = vi.fn()
 
 const MAC = resolvePlatformModifier('darwin')
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
-    { ...INITIAL, focusPane, closeTerminal, createTerminal, splitFocusedPane, renamePane, ...overrides },
+    { ...INITIAL, focusPane, closeTerminal, createTerminal, splitFocusedPane, renamePane, toggleSidebar, ...overrides },
     true
   )
 }
@@ -102,6 +103,7 @@ beforeEach(() => {
   createTerminal.mockReset()
   splitFocusedPane.mockReset()
   renamePane.mockReset()
+  toggleSidebar.mockReset()
   seed()
 })
 
@@ -413,11 +415,42 @@ describe('naming a pane', () => {
   })
 })
 
+// The strip is the top edge of the window's main column now — the row the
+// macOS window buttons sit on once the sidebar is away — so it is also the
+// only place a sidebar that has been hidden can be brought back with a pointer.
+describe('the way back to the sidebar', () => {
+  it('offers to show the sidebar from the strip’s left end while it is hidden', () => {
+    seed({ sidebarVisible: false })
+    mount()
+    const show = screen.getByRole('button', { name: 'Show sidebar' })
+    expect(show.getAttribute('title')).toBe('Show sidebar · ⌘B')
+    expect(show.parentElement?.classList.contains('tabs')).toBe(true)
+    expect(show.parentElement?.firstElementChild).toBe(show)
+    fireEvent.click(show)
+    expect(toggleSidebar).toHaveBeenCalledOnce()
+  })
+
+  it('offers nothing of the kind while the sidebar is on screen', () => {
+    seed({ sidebarVisible: true })
+    mount()
+    expect(screen.queryByRole('button', { name: 'Show sidebar' })).toBeNull()
+  })
+
+  // No worktree, no panes, and still a strip: with nothing in it, it is what
+  // the window is dragged by and what the expand control sits in.
+  it('keeps the strip with nothing to list in it', () => {
+    seed({ sidebarVisible: false })
+    mount()
+    expect(document.querySelector('.tabs')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show sidebar' })).toBeTruthy()
+  })
+})
+
 describe('when there are no panes to list', () => {
-  // An empty strip is still a strip: a `role="tablist"` labelled "Terminals in
+  // An empty strip lists nothing: a `role="tablist"` labelled "Terminals in
   // this worktree" above a worktree with nothing in it announces a region that
-  // has nothing to announce, and the border it draws is a line under a heading
-  // that is not there.
+  // has nothing to announce. The strip itself stays, because it is the window's
+  // top edge, but the list and the pane buttons in it do not.
   it('renders nothing when the worktree you are in has no layout yet', () => {
     seed({ activeWorktreeId: 'w1', terminals: byId(terminal({ id: 't1', title: 'npm test' })) })
     mount()

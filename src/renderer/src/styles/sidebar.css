@@ -119,8 +119,8 @@
   min-height: 0;
 }
 
-/* The wordmark moved to the title strip, so this row is the section label and
-   its add button; the button sits at the end of the row. */
+/* The wordmark is in the sidebar's own header, above the rail, so this row is
+   the section label and its add button; the button sits at the end of the row. */
 .sidebar__head {
   display: flex;
   align-items: center;

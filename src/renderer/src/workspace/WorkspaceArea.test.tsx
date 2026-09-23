@@ -9,12 +9,11 @@
 // dead runtime rendered as an ordinary empty state leaves somebody pressing
 // chords at a window that will never answer.
 //
-// The header is here too. It used to be two lines: a name, sixty characters of
-// filesystem path, and six buttons of which four were a second copy of the rail,
-// the strip and the chords. What is left has to stay one line of facts about
-// this worktree, so these tests name what may be in it and what may not — and
-// the one claim on it that is a promise about somebody's repository rather than
-// a label, that Push never forces.
+// The header that used to sit over the panes is here too, as an absence. It
+// was two lines once — a name, sixty characters of path, six buttons — then one
+// line of two counts, and now nothing: every fact it carried is printed by the
+// sidebar's selected row, the status bar or the row's menu, so the area over a
+// worktree is its panes and nothing else.
 //
 // And the slot a teammate's pane takes beside all of it. That pane used to
 // float over the window; the thing to prove now is that it is laid out as an
@@ -347,7 +346,11 @@ describe('a worktree with no panes in it', () => {
   })
 })
 
-describe('the toolbar over an open worktree', () => {
+// The header row that sat between the strip and the panes is gone: a name the
+// sidebar's selected row and the status bar both already print, a folder icon
+// the row menu already carries, and two counts the status bar already reads.
+// The area over a worktree is its panes and nothing else.
+describe('over an open worktree', () => {
   beforeEach(() => {
     seed({
       projects: [project],
@@ -359,157 +362,19 @@ describe('the toolbar over an open worktree', () => {
     mount()
   })
 
-  it('names the worktree and renders its panes, and prints no path at all', () => {
-    expect(screen.getByRole('heading', { name: 'Rewrite the pager' })).toBeTruthy()
+  it('renders the panes and no row above them', () => {
     expect(screen.getByTestId('panes')).toBeTruthy()
+    expect(document.querySelector('.workspace__head')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Rewrite the pager' })).toBeNull()
     expect(screen.queryByText('/repos/pager-wt/rewrite')).toBeNull()
   })
 
-  // The one claim on this bar that is a promise about somebody's repository.
-  it('says how many commits Push will send, and that it never forces', () => {
-    const push = screen.getByRole('button', { name: 'Push, 2 to push' })
-    expect(push.getAttribute('title')).toBe('Send 2 commits to the remote. Never forces.')
-    fireEvent.click(push)
-    expect(pushActiveWorktree).toHaveBeenCalledOnce()
-  })
-
-  // A count, not a sentence: the header has one line and the number is the
-  // whole of what it has to say about the branch — and the words on the button
-  // are in its name, so somebody driving this by voice can say what they see.
-  it('says how many commits are waiting, in the button rather than beside it', () => {
-    expect(screen.getByRole('button', { name: 'Push, 2 to push' }).textContent).toBe('2 to push')
-  })
-
-  it('counts what a commit would have to deal with, ahead and behind excluded', () => {
-    expect(screen.getByRole('button', { name: 'Changes, 3 changed' }).textContent).toBe('3 changed')
-  })
-
-  it('says whether the changes panel is showing', () => {
-    expect(screen.getByRole('button', { name: 'Changes, 3 changed' }).getAttribute('aria-pressed')).toBe('false')
-  })
-
-  // Nothing to report is reported as nothing. A button that said "0 changed"
-  // would be spending the header's one line on the absence of news.
-  it('says nothing at all when there is nothing to say', () => {
-    seed({
-      projects: [project],
-      worktrees: [worktree()],
-      activeWorktreeId: 'w1',
-      layouts: { w1: layout() },
-      statuses: { w1: status() }
-    })
-    mount()
-    const heads = document.querySelectorAll('.workspace__head')
-    const head = heads[heads.length - 1] as HTMLElement
-    expect(within(head).getByRole('button', { name: 'Changes' }).textContent).toBe('')
-    expect(within(head).getByRole('button', { name: 'Push' }).textContent).toBe('')
-  })
-})
-
-// The complaint this answers: a strip above the panes carrying a pane board,
-// two splits and a new terminal, each of which is a chord the status bar prints,
-// a row in the palette, and — for the last three — a button on the panes' own
-// strip. What is left is what only this worktree can say.
-describe('what the header may not carry', () => {
-  beforeEach(() => {
-    seed({
-      projects: [project],
-      worktrees: [worktree()],
-      activeWorktreeId: 'w1',
-      layouts: { w1: layout() },
-      statuses: { w1: status({ ahead: 2, unstaged: 3 }) }
-    })
-    mount()
-  })
-
-  it('is one row of two repository buttons and nothing else', () => {
-    const tools = document.querySelector('.workspace__tools') as HTMLElement
-    const labels = within(tools)
-      .getAllByRole('button')
-      .map((button) => button.getAttribute('aria-label'))
-    expect(labels).toEqual(['Changes, 3 changed', 'Push, 2 to push'])
-  })
-
-  it('offers no command that has a place of its own', () => {
-    const head = document.querySelector('.workspace__head') as HTMLElement
-    for (const name of ['All panes', 'Split right', 'Split down', 'New terminal']) {
-      expect(within(head).queryByRole('button', { name })).toBeNull()
+  it('offers none of what the row used to', () => {
+    for (const name of [/^Changes/, /^Push/, /^Show the/]) {
+      expect(screen.queryByRole('button', { name })).toBeNull()
     }
-  })
-
-  // Buttons carry the meaning here. A paragraph explaining why they are
-  // arranged the way they are belongs in the source, where this one is — and a
-  // worktree still being made is where the last paragraph of it hid, as a
-  // `<p>` holding the path of a checkout that is not there yet.
-  it('explains nothing in prose, in any state the checkout can be in', () => {
-    for (const state of ['ready', 'creating', 'failed'] as const) {
-      seed({
-        projects: [project],
-        worktrees: [worktree({ state })],
-        activeWorktreeId: 'w1',
-        layouts: { w1: layout() },
-        statuses: { w1: status({ ahead: 2, unstaged: 3 }) }
-      })
-      mount()
-      const heads = document.querySelectorAll('.workspace__head')
-      const head = heads[heads.length - 1] as HTMLElement
-      expect(head.querySelector('p')).toBeNull()
-      // A full stop followed by anything is a sentence, and there are none.
-      expect(head.textContent ?? '').not.toMatch(/\.\s/)
-      // The name is whatever somebody called the task. Everything else this row
-      // says is a count — "3 changed", "2 to push" — and a count is three words
-      // at the very most.
-      const tools = head.querySelector('.workspace__tools') as HTMLElement
-      for (const button of within(tools).getAllByRole('button')) {
-        expect((button.textContent ?? '').trim().split(/\s+/).filter(Boolean).length).toBeLessThan(4)
-      }
-    }
-  })
-})
-
-// Sixty characters of filesystem path sat under the worktree's name, read on
-// every screen by nobody. The only thing it could do that the sidebar and the
-// heading cannot is get you to the directory, so that is the only thing left.
-describe('reaching the checkout', () => {
-  const open = (state: Worktree['state']): void => {
-    seed({
-      projects: [project],
-      worktrees: [worktree({ state })],
-      activeWorktreeId: 'w1',
-      layouts: { w1: layout() }
-    })
-    mount()
-  }
-
-  const reveal = /Show the Rewrite the pager checkout/
-
-  it('opens the checkout in the file manager from an icon, not a path', () => {
-    open('ready')
-    expect(screen.queryByText('/repos/pager-wt/rewrite')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: reveal }))
-    expect(revealInFinder).toHaveBeenCalledWith('/repos/pager-wt/rewrite', 'the Rewrite the pager checkout')
-  })
-
-  // The hover is where the path belongs: asked for, rather than printed at
-  // somebody all day.
-  it('says which directory it will open, on hover', () => {
-    open('ready')
-    expect(screen.getByRole('button', { name: reveal }).getAttribute('title')).toBe(
-      'Show /repos/pager-wt/rewrite in the file manager'
-    )
-  })
-
-  // A checkout still being made has a path recorded and nothing at it yet, so
-  // the only possible outcome of pressing this would be the refusal the main
-  // process writes for a directory that is not there.
-  it('is not offered while the checkout is not there to open', () => {
-    open('creating')
-    expect(screen.queryByRole('button', { name: reveal })).toBeNull()
-  })
-
-  it('is not offered for a checkout that was never made', () => {
-    open('failed')
-    expect(screen.queryByRole('button', { name: reveal })).toBeNull()
+    expect(pushActiveWorktree).not.toHaveBeenCalled()
+    expect(revealInFinder).not.toHaveBeenCalled()
   })
 })
 
@@ -537,45 +402,6 @@ describe('settings and help', () => {
     expect(toggleHelp).toHaveBeenCalledOnce()
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(toggleSettings).toHaveBeenCalledOnce()
-  })
-})
-
-// The row used to carry one button per agent found on PATH, so its width grew
-// with somebody's tool collection and the two buttons that act on their
-// repository sat beside a list that differs from laptop to laptop. It is a
-// fixed pair of facts about this worktree now, and this says so, so a helpful
-// addition cannot quietly put the launcher back.
-describe('the header and the agents on this machine', () => {
-  const seedWithAgents = (): void => {
-    seed({
-      projects: [project],
-      worktrees: [worktree()],
-      activeWorktreeId: 'w1',
-      layouts: { w1: layout() },
-      agents: [
-        { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
-        { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex' }
-      ]
-    })
-    mount()
-  }
-
-  it('offers the same buttons whatever agents are installed', () => {
-    seedWithAgents()
-    const tools = document.querySelector('.workspace__tools') as HTMLElement
-    const labels = within(tools)
-      .getAllByRole('button')
-      .map((button) => button.getAttribute('aria-label'))
-    expect(labels).toEqual(['Changes', 'Push'])
-  })
-
-  it('does not offer a per-agent button, and cannot start one from here', () => {
-    seedWithAgents()
-    const tools = document.querySelector('.workspace__tools') as HTMLElement
-    expect(within(tools).queryByRole('button', { name: 'claude' })).toBeNull()
-    expect(within(tools).queryByRole('button', { name: 'codex' })).toBeNull()
-    for (const button of within(tools).getAllByRole('button')) fireEvent.click(button)
-    expect(startAgent).not.toHaveBeenCalled()
   })
 })
 
@@ -676,25 +502,5 @@ describe('a teammate’s pane beside your own', () => {
     mount()
     expect(screen.getByRole('heading', { name: 'Nothing open' })).toBeTruthy()
     expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
-  })
-})
-
-describe('pushing', () => {
-  it('says nothing is to be sent when the remote already has the branch', () => {
-    seed({ projects: [project], worktrees: [worktree()], activeWorktreeId: 'w1', statuses: { w1: status() } })
-    mount()
-    expect(screen.getByRole('button', { name: 'Push' }).getAttribute('title')).toBe(
-      'Nothing to send; the remote already has this branch.'
-    )
-  })
-
-  it('says it is pushing, and refuses a second press while it is', () => {
-    seed({ projects: [project], worktrees: [worktree()], activeWorktreeId: 'w1', pushing: true })
-    mount()
-    const push = screen.getByRole('button', { name: 'Pushing' }) as HTMLButtonElement
-    expect(push.disabled).toBe(true)
-    expect(push.textContent).toBe('pushing…')
-    fireEvent.click(push)
-    expect(pushActiveWorktree).not.toHaveBeenCalled()
   })
 })

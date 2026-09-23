@@ -1,9 +1,13 @@
-// Geometry of the custom title strip, shared because two processes have to agree
+// Geometry of the window's top row, shared because two processes have to agree
 // on it. The main process places the macOS traffic lights with these numbers and
 // the renderer reserves space with the same ones; a hardcoded inset on either
 // side would drift the first time the other was touched.
+//
+// There is no title strip. The row is the sidebar's own header on the left and
+// the pane strip on the right, and the buttons sit over whichever of the two is
+// at the window's left edge — so both are this tall, and both know this inset.
 
-/** Height of the strip, and so the row the shell grid reserves for it. */
+/** Height of the top row: the sidebar's header and the pane strip alike. */
 export const TITLEBAR_HEIGHT_PX = 38
 
 /** Diameter of one macOS window button. */
@@ -26,7 +30,8 @@ export const TRAFFIC_LIGHT_Y_PX = Math.round((TITLEBAR_HEIGHT_PX - TRAFFIC_LIGHT
 const TRAFFIC_LIGHT_CLUSTER_PX = TRAFFIC_LIGHT_DIAMETER_PX * 3 + TRAFFIC_LIGHT_GAP_PX * 2
 
 /**
- * Where the strip's own content may start on macOS: past the buttons, plus the
- * same left margin again so the wordmark is not crowded against them.
+ * Where a top-row strip's own content may start on macOS: past the buttons,
+ * plus the same left margin again so whatever comes first — the lockup, or the
+ * control that brings the sidebar back — is not crowded against them.
  */
 export const MAC_CONTENT_INSET_PX = TRAFFIC_LIGHT_X_PX + TRAFFIC_LIGHT_CLUSTER_PX + TRAFFIC_LIGHT_X_PX

@@ -679,11 +679,12 @@ async function checkWorktreeSurfaces(ask) {
 
   await checkPatch(ask, worktreeId)
 
-  // The reveal on the worktree header, which is all that is left of a path
-  // sixty characters long. Checked for and deliberately not pressed: pressing
-  // it would open a file manager on whoever is running the gate.
-  const reveal = await ask(`document.querySelector('.workspace__head button[aria-label^="Show the"]') !== null`)
-  if (reveal !== true) failures.push('the worktree header offers no way to reach the checkout on disk')
+  // No row between the strip and the panes. The worktree's name is in the
+  // sidebar's selected row and in the status bar, the way to its directory is
+  // in the row's menu, and its counts are the status bar's — so a header that
+  // came back would be a fourth copy of things said three times already.
+  const head = await ask(`document.querySelector('.workspace__head') !== null`)
+  if (head === true) failures.push('a worktree header row is drawn between the pane strip and the panes')
 
   // And the decision that a quiet shell closes on one press. A pane running an
   // agent, or one still producing output, is asked about first — that is
