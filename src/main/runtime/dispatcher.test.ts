@@ -217,6 +217,11 @@ describe('dispatcher', () => {
       'worktree.commit',
       'worktree.create',
       'worktree.diff',
+      // Local, and not on the peer allow-list: a directory listing of this
+      // machine's checkout is this machine's to show, and the tree it feeds
+      // is drawn beside the panes of whoever is sitting in front of it.
+      'worktree.files',
+      'worktree.findFiles',
       'worktree.get',
       'worktree.list',
       'worktree.log',

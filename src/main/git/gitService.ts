@@ -22,6 +22,8 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeDiff,
+  WorktreeFileMatches,
+  WorktreeFiles,
   WorktreeHunkStage,
   WorktreeLog,
   WorktreeMergePreview,
@@ -45,6 +47,7 @@ import { commitWorktree } from './worktreeCommit'
 import { applyHunk } from './worktreeHunk'
 import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
+import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
 import { normalizePreparedPaths, prepareWorktree, type PreparedPaths } from './worktreePreparation'
 import { normalizeSetupCommand } from './worktreeSetup'
@@ -446,6 +449,30 @@ export class GitService {
       worktreePath: worktree.path,
       ...(params.limit === undefined ? {} : { limit: params.limit }),
       prepared: this.#preparedPaths(worktree.projectId),
+      now: this.#now
+    })
+  }
+
+  /** One directory of a worktree — names and kinds, never contents. */
+  async worktreeFiles(params: ParamsOf<'worktree.files'>): Promise<WorktreeFiles> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'a file listing')
+    return readWorktreeFiles(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      ...(params.path === undefined ? {} : { path: params.path }),
+      ...(params.limit === undefined ? {} : { limit: params.limit }),
+      now: this.#now
+    })
+  }
+
+  /** The paths in a worktree whose path contains a query. */
+  async worktreeFindFiles(params: ParamsOf<'worktree.findFiles'>): Promise<WorktreeFileMatches> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'a file search')
+    return findWorktreeFiles(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      query: params.query,
+      ...(params.limit === undefined ? {} : { limit: params.limit }),
       now: this.#now
     })
   }

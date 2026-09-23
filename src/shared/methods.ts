@@ -30,6 +30,8 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeDiff,
+  WorktreeFileMatches,
+  WorktreeFiles,
   WorktreeHunkStage,
   WorktreeLog,
   WorktreeMergePreview,
@@ -278,6 +280,28 @@ export const Params = {
     contextLines: z.number().int().min(0).max(100).optional(),
     /** Ceiling on the patch returned, so one huge file cannot flood a caller. */
     maxBytes: z.number().int().positive().optional()
+  }),
+  /**
+   * One directory of a worktree: names and kinds, never contents.
+   *
+   * `path` is relative to the worktree root and may not leave it; the read
+   * refuses anything that resolves outside rather than answering for it. One
+   * directory per call and no recursion, so a tree is read as it is opened.
+   */
+  worktreeFiles: z.object({
+    worktreeId: z.string().min(1),
+    /** Defaults to the root. */
+    path: z.string().max(4096).optional(),
+    limit: z.number().int().positive().max(10_000).optional()
+  }),
+  /**
+   * Paths in a worktree whose name contains `query`, case-insensitively, over
+   * everything git tracks or would track — ignored files are left out.
+   */
+  worktreeFindFiles: z.object({
+    worktreeId: z.string().min(1),
+    query: z.string().max(512),
+    limit: z.number().int().positive().max(1000).optional()
   }),
   /** Everything a new worktree could branch from, for the create dialog. */
   worktreeStartPoints: z.object({
@@ -787,6 +811,8 @@ export type MethodContract = {
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
+  'worktree.files': { params: z.infer<typeof Params.worktreeFiles>; result: WorktreeFiles }
+  'worktree.findFiles': { params: z.infer<typeof Params.worktreeFindFiles>; result: WorktreeFileMatches }
   'worktree.commit': { params: z.infer<typeof Params.worktreeCommit>; result: WorktreeCommit }
   'worktree.stageHunk': { params: z.infer<typeof Params.worktreeStageHunk>; result: WorktreeHunkStage }
   'worktree.unstageHunk': { params: z.infer<typeof Params.worktreeUnstageHunk>; result: WorktreeHunkStage }
