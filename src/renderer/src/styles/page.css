@@ -27,15 +27,14 @@
 
 .page__head-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--s4);
 }
 
-/* The lede sits on the title's baseline, so a page with one is no taller than a page without. */
+/* The lede sits on the title's baseline, so the title row is one height on every page. */
 .page__identity {
   display: flex;
-  flex: 1 1 220px;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0 var(--s3);
@@ -53,11 +52,15 @@
   font-size: var(--text-sm);
 }
 
+/* The page's own controls get a row under the title, so the title and the × sit in the same place on
+   every page however many controls there are. */
 .page__actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  gap: var(--s4);
+  gap: var(--s3);
+  margin-top: var(--s3);
 }
 
 .page__close {
