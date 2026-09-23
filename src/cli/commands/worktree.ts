@@ -508,7 +508,9 @@ export const worktreeCommands: readonly CommandSpec[] = [
           option.kind,
           option.shortSha,
           [option.isBase ? 'base' : '', option.isCurrent ? 'current' : ''].filter((mark) => mark !== '').join(','),
-          new Date(option.updatedAt).toISOString().slice(0, 10)
+          // Git's %ct is seconds; Date wants milliseconds. Without the scale
+          // every ref reads 1970-01-21.
+          new Date(option.updatedAt * 1000).toISOString().slice(0, 10)
         ]),
         'No refs to branch from.'
       )

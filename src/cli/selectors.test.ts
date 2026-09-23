@@ -61,6 +61,19 @@ describe('selectOne', () => {
     }
   })
 
+  it('quotes the known names, so ones with spaces read apart', () => {
+    const items = [
+      { id: 'wt_1', name: 'fix login', path: '/repos/a', aliases: [] },
+      { id: 'wt_2', name: 'fix login codex', path: '/repos/b', aliases: [] }
+    ]
+    try {
+      selectOne('worktree', 'ghost', items)
+      throw new Error('expected a not-found error')
+    } catch (error) {
+      expect((error as CliError).hint).toBe('Known worktrees: "fix login", "fix login codex".')
+    }
+  })
+
   it('says so when nothing exists at all', () => {
     expect(() => selectOne('project', 'x', [])).toThrow(/No projects exist yet|No project matches/)
   })

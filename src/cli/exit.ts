@@ -18,6 +18,8 @@ export type SerializedError = {
   message: string
   hint?: string
   data?: unknown
+  /** The runtime method that refused, when the runtime did. */
+  method?: string
 }
 
 /** Every failure path funnels through this so exit code and JSON shape agree. */
@@ -58,11 +60,25 @@ export class NoRuntimeError extends CliError {
   }
 }
 
-/** A structured error the runtime sent back, keeping its protocol error code. */
+/**
+ * A structured error the runtime sent back, keeping its protocol error code.
+ *
+ * The message is the runtime's own sentence, unprefixed: a person reads
+ * `error: worktree "x" holds 1 ignored file…` next to every other error the CLI
+ * prints, none of which name an RPC method. The method still matters to a
+ * script telling failures apart, so it travels in the JSON document instead.
+ */
 export class RuntimeCallError extends CliError {
-  constructor(init: { code: string; message: string; data?: unknown; hint?: string }) {
+  readonly method: string
+
+  constructor(init: { code: string; message: string; method: string; data?: unknown; hint?: string }) {
     super({ ...init, exitCode: ExitCode.Failure })
     this.name = 'RuntimeCallError'
+    this.method = init.method
+  }
+
+  override serialize(): SerializedError {
+    return { ...super.serialize(), method: this.method }
   }
 }
 

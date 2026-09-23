@@ -273,7 +273,8 @@ function readSubscriptionId(result: unknown): string {
 function toCallError(frame: ErrorResponse, method: string): RuntimeCallError {
   return new RuntimeCallError({
     code: frame.error.code,
-    message: `${method}: ${frame.error.message}`,
+    message: frame.error.message,
+    method,
     data: frame.error.data
   })
 }
