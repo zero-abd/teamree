@@ -227,8 +227,8 @@ describe('what it submits', () => {
     seed({ agents: bothAgents })
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    fireEvent.click(more('claude'))
-    fireEvent.click(more('codex'))
+    fireEvent.click(more('Claude Code'))
+    fireEvent.click(more('Codex'))
     expect(screen.getByText('3 worktrees · claude, codex, claude')).toBeTruthy()
     submit().click()
     expect(startTask).toHaveBeenCalledWith({
@@ -289,7 +289,7 @@ describe('what it submits', () => {
   it('drops the agent when the user steps it back to none', async () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    fireEvent.click(fewer('claude'))
+    fireEvent.click(fewer('Claude Code'))
     expect(screen.getByText('1 worktree · no agent')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Create worktree' })).toBeTruthy()
     submit().click()

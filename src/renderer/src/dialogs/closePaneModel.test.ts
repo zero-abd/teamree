@@ -60,7 +60,7 @@ describe('panes worth asking about', () => {
   it('names the agent that is working', () => {
     const warning = closePaneWarning(terminal({ title: 'claude', agent: 'claude', busy: true }))
     expect(warning?.title).toBe('Stop this agent?')
-    expect(warning?.body).toContain('claude is working')
+    expect(warning?.body).toContain('Claude Code is working')
   })
 
   // The expensive one, and the case a `busy` check alone would miss entirely.
@@ -71,7 +71,7 @@ describe('panes worth asking about', () => {
     const warning = closePaneWarning(terminal({ title: 'claude', agent: 'claude', busy: false }))
     expect(warning?.title).toBe('Stop this agent?')
     expect(warning?.body).toBe(
-      'claude has gone quiet in “claude” — waiting for an answer, or finished. Closing the pane kills it.'
+      'Claude Code has gone quiet in “Claude Code” — waiting for an answer, or finished. Closing the pane kills it.'
     )
     expect(warning?.body).not.toContain('teamree watches output')
   })
@@ -97,7 +97,7 @@ describe('what the question calls the pane', () => {
   it('quotes the name the pane was given, not the program it runs', () => {
     const warning = closePaneWarning(terminal({ agent: 'claude', title: 'claude', label: 'Race two agents claude' }))
     expect(warning?.body).toContain('in “Race two agents claude”')
-    expect(warning?.body).not.toContain('in “claude”')
+    expect(warning?.body).not.toContain('in “Claude Code”')
   })
 
   it('falls back to the title for a pane nobody named', () => {

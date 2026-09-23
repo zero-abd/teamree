@@ -1,14 +1,25 @@
 // What the strip along the top says: one entry per pane of the worktree on screen. A tab owns no
 // visibility (every leaf is shown), so it is a name and a jump target; names and states are the sidebar's.
 
-import type { PaneNode, Terminal } from '@shared/entities'
+import type { AgentKind, PaneNode, Terminal } from '@shared/entities'
 import { isFileLeaf, filePaneName } from '@shared/filePane'
 import { collectLeaves } from '../panes/paneLayout'
-import { ACTIVITY_LABEL, activityOf, paneNames, type AgentActivity, type PaneNameSource } from '../sidebar/agentRows'
+import {
+  ACTIVITY_LABEL,
+  activityOf,
+  paneAgent,
+  paneNames,
+  paneText,
+  type AgentActivity,
+  type PaneNameSource
+} from '../sidebar/agentRows'
 
 export type PaneTab = {
   terminalId: string
+  agent: AgentKind | undefined
   label: string
+  /** What the tab draws beside the glyph; see `paneText`. */
+  text: string
   /** Null until the terminal's record has arrived; the leaf is on the board either way. */
   activity: AgentActivity | null
   /** A file pane is named after its file and has no activity to read. */
@@ -24,12 +35,15 @@ export function paneTabs(root: PaneNode | null, terminals: Readonly<Record<strin
   const names = paneNames(panes.map((pane) => pane ?? UNARRIVED))
   return leaves.map((node) => {
     if (isFileLeaf(node)) {
-      return { terminalId: node.terminalId, label: filePaneName(node.path), activity: null, kind: 'file' }
+      const label = filePaneName(node.path)
+      return { terminalId: node.terminalId, agent: undefined, label, text: label, activity: null, kind: 'file' }
     }
     const index = shells.indexOf(node)
-    const pane = panes[index]
+    const record = panes[index]
+    const pane = record ?? UNARRIVED
     const label = names[index] ?? 'terminal'
-    return { terminalId: node.terminalId, label, activity: pane ? activityOf(pane) : null }
+    const activity = record ? activityOf(record) : null
+    return { terminalId: node.terminalId, agent: paneAgent(pane), label, text: paneText(pane, label), activity }
   })
 }
 

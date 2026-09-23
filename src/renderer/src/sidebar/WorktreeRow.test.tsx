@@ -280,7 +280,7 @@ describe('what the panes under it are doing', () => {
       terminals: [terminal({ id: 't1', agent: 'claude', lastOutputAt: NOW - 90_000 })],
       evidence: { t1: 'running tests' }
     })
-    const row = screen.getByRole('button', { name: /claude/ })
+    const row = screen.getByRole('button', { name: /Claude Code/ })
     expect(within(row).getByText('running tests')).toBeTruthy()
     expect(within(row).getByText('1m')).toBeTruthy()
     row.click()
@@ -383,7 +383,7 @@ describe('what the panes under it are doing', () => {
 
   it('says where a quoted line came from, so it never reads as a verdict', () => {
     mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], evidence: { t1: '3 tests failed' } })
-    const title = screen.getByRole('button', { name: /claude/ }).getAttribute('title') ?? ''
+    const title = screen.getByRole('button', { name: /Claude Code/ }).getAttribute('title') ?? ''
     expect(title).toContain('last printed: 3 tests failed')
   })
 
@@ -523,7 +523,7 @@ describe('panes that have printed since they were read', () => {
   it('marks the pane, and the worktree above it', () => {
     mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], unread: ['t1'] })
 
-    const pane = screen.getByRole('button', { name: /claude/ })
+    const pane = screen.getByRole('button', { name: /Claude Code/ })
     expect(pane.className).toContain('pane-row--unread')
     expect(pane.title).toContain('unread')
     expect(screen.getByText('Rewrite the pager').className).toContain('worktree__name--unread')
@@ -532,7 +532,7 @@ describe('panes that have printed since they were read', () => {
   it('says nothing about a pane nothing has arrived in since', () => {
     mount({ terminals: [terminal({ id: 't1', agent: 'claude' })] })
 
-    expect(screen.getByRole('button', { name: /claude/ }).className).not.toContain('pane-row--unread')
+    expect(screen.getByRole('button', { name: /Claude Code/ }).className).not.toContain('pane-row--unread')
     expect(screen.getByText('Rewrite the pager').className).not.toContain('worktree__name--unread')
   })
 })

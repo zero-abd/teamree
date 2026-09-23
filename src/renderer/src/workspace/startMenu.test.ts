@@ -5,6 +5,8 @@
 // installed is a promise that choosing it does something. So the tests here
 // hand the model what `agent.list` answered and read the menu off that.
 
+import { isValidElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import type { InstalledAgent } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
@@ -27,8 +29,8 @@ describe('the rows', () => {
     expect(items.map((item) => item.label)).toEqual([
       'New terminal',
       'New markdown',
-      'claude',
-      'codex',
+      'Claude Code',
+      'Codex',
       'Agent settings…'
     ])
   })
@@ -38,10 +40,19 @@ describe('the rows', () => {
     expect(items.map((item) => item.label)).toEqual([
       'New terminal',
       'New markdown',
-      'codex',
-      'claude',
+      'Codex',
+      'Claude Code',
       'Agent settings…'
     ])
+  })
+
+  it('marks each agent row with that harness’s glyph, named for a screen reader', () => {
+    const kiro: InstalledAgent = { kind: 'kiro', command: 'kiro-cli', binary: '/bin/kiro-cli' }
+    const marks = startMenuItems([claude, kiro], mac, actions())
+      .slice(2, 4)
+      .map((item) => (isValidElement(item.icon) ? renderToStaticMarkup(item.icon) : ''))
+    expect(marks[0]).toContain('aria-label="Claude Code"')
+    expect(marks[1]).toContain('aria-label="Kiro"')
   })
 
   it('draws a rule before the agents and another before the settings', () => {
@@ -56,7 +67,7 @@ describe('the rows', () => {
 
   it('offers nothing for an agent the runtime did not find', () => {
     const items = startMenuItems([claude], mac, actions())
-    expect(items.find((item) => item.label === 'codex')).toBeUndefined()
+    expect(items.find((item) => item.label === 'Codex')).toBeUndefined()
   })
 
   it('still offers the terminal and the settings when the probe found nothing', () => {
@@ -76,7 +87,7 @@ describe('choosing a row', () => {
   it('starts the agent the row is for, and nothing else', () => {
     const chosen = actions()
     const items = startMenuItems([claude, codex], mac, chosen)
-    items.find((item) => item.label === 'codex')?.onChoose()
+    items.find((item) => item.label === 'Codex')?.onChoose()
     expect(chosen.startAgent).toHaveBeenCalledExactlyOnceWith('codex')
     expect(chosen.newTerminal).not.toHaveBeenCalled()
     expect(chosen.openAgentSettings).not.toHaveBeenCalled()

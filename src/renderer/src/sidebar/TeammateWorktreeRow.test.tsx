@@ -91,7 +91,7 @@ describe('a pane of theirs', () => {
   it('is a button that says whose it is, what it is doing, and that it is read-only', () => {
     mount()
     const button = screen.getByRole('button')
-    expect(button.getAttribute('title')).toBe('Watch priya’s claude · working · reading only')
+    expect(button.getAttribute('title')).toBe('Watch priya’s Claude Code · working · reading only')
   })
 
   it('says whether this window has it open, as a pressed state rather than a colour', () => {
@@ -99,7 +99,7 @@ describe('a pane of theirs', () => {
     const button = screen.getByRole('button')
     expect(button.getAttribute('aria-pressed')).toBe('true')
     // A toggle whose hover text still offers what it already did lies about half its presses.
-    expect(button.getAttribute('title')).toBe('Stop watching priya’s claude')
+    expect(button.getAttribute('title')).toBe('Stop watching priya’s Claude Code')
   })
 
   it('is not pressed when a different pane is the one being watched', () => {
@@ -111,7 +111,7 @@ describe('a pane of theirs', () => {
     mount()
     screen.getByRole('button').click()
     expect(onWatch).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ terminalId: 'priya:t7', handle: 'priya', cols: 120, rows: 40, label: 'claude' })
+      expect.objectContaining({ terminalId: 'priya:t7', handle: 'priya', cols: 120, rows: 40, label: 'Claude Code' })
     )
   })
 

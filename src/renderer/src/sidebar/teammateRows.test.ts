@@ -66,7 +66,7 @@ describe('a teammate’s rows', () => {
       ],
       NOW
     )
-    expect(row?.panes.map((entry) => entry.label)).toEqual(['claude', 'zsh', 'pytest'])
+    expect(row?.panes.map((entry) => entry.label)).toEqual(['Claude Code', 'zsh', 'pytest'])
   })
 
   it('adds the time since the snapshot arrived to the silence its owner measured', () => {

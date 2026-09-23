@@ -199,7 +199,7 @@ describe('one pane', () => {
     ])
     expect(screen.getAllByRole('button', { name: 'Run claude again' })).toHaveLength(1)
     // Two claude panes nobody named: called `claude 1` and `claude 2`, as the strip does.
-    const alive = screen.getByRole('region', { name: 'claude 2' })
+    const alive = screen.getByRole('region', { name: 'Claude Code 2' })
     expect(within(alive).queryByRole('button', { name: /again|New shell/ })).toBeNull()
   })
 
@@ -234,15 +234,15 @@ describe('what a pane is called', () => {
     expect(screen.getByRole('button', { name: 'Close pane zsh' })).toBeTruthy()
   })
 
-  // Two panes of the same agent are told apart along the top as `claude 1`
-  // and `claude 2`; the bar under each tab says the same thing.
+  // Two panes of the same agent are told apart along the top as `Claude Code 1`
+  // and `Claude Code 2`; the bar under each tab says the same thing.
   it('numbers unnamed twins the way the strip does', () => {
     mount(row(leaf('t1'), leaf('t2')), [
       terminal('t1', { agent: 'claude', title: 'node' }),
       terminal('t2', { agent: 'claude', title: 'node' })
     ])
-    expect(screen.getByRole('button', { name: 'Close pane claude 1' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Close pane claude 2' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close pane Claude Code 1' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close pane Claude Code 2' })).toBeTruthy()
   })
 })
 

@@ -3,6 +3,7 @@
 // Never once `running` is false or while `draining`; a shell at a prompt closes without a word.
 
 import type { Terminal } from '@shared/entities'
+import { harnessName } from '../agents/harnesses'
 import { paneName } from '../sidebar/agentRows'
 
 export type ClosePaneWarning = {
@@ -27,8 +28,8 @@ export function closePaneWarning(terminal: Terminal | undefined): ClosePaneWarni
       title: 'Stop this agent?',
       // Working loses the work in flight; quiet may be holding a question, which this cannot tell from done.
       body: terminal.busy
-        ? `${terminal.agent} is working in ${where}. Closing the pane kills it.`
-        : `${terminal.agent} has gone quiet in ${where} — waiting for an answer, or finished. Closing the pane kills it.`,
+        ? `${harnessName(terminal.agent)} is working in ${where}. Closing the pane kills it.`
+        : `${harnessName(terminal.agent)} has gone quiet in ${where} — waiting for an answer, or finished. Closing the pane kills it.`,
       confirm: 'Stop it and close'
     }
   }

@@ -3,7 +3,7 @@
 // owner's duration and the receiver adds what has elapsed since, trusting nobody's clock.
 
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
-import { activityOf, paneName, worktreeActivity, type AgentActivity, type AgentRow } from './agentRows'
+import { activityOf, paneName, paneText, worktreeActivity, type AgentActivity, type AgentRow } from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 
 export type TeammatePaneRow = AgentRow & {
@@ -61,10 +61,12 @@ export function teammateRows(
 }
 
 function paneRow(pane: PeerPane, handle: string, heardAgoMs: number, evidence: string | null): TeammatePaneRow {
+  const label = paneName(pane)
   return {
     terminalId: pane.id,
     agent: pane.agent,
-    label: paneName(pane),
+    label,
+    text: paneText(pane, label),
     activity: activityOf(pane),
     // The owner's measurement plus the time it has sat here: the only arithmetic that believes no other clock.
     quietFor: pane.quietForMs + heardAgoMs,
