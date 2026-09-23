@@ -61,7 +61,10 @@
 
 .md-editor h1,
 .md-editor h2,
-.md-editor h3 {
+.md-editor h3,
+.md-editor h4,
+.md-editor h5,
+.md-editor h6 {
   margin: var(--s5) 0 var(--s2);
   font-weight: 600;
   line-height: 1.25;
@@ -78,6 +81,12 @@
 
 .md-editor h3 {
   font-size: 16px;
+}
+
+.md-editor h4,
+.md-editor h5,
+.md-editor h6 {
+  font-size: 14px;
 }
 
 .md-editor h1:first-child {
@@ -119,23 +128,25 @@
   list-style: none;
 }
 
-.md-editor ul[data-type='taskList'] li {
+/* A task item may sit in a plain list beside bulleted ones, as GFM allows. */
+.md-editor li[data-type='taskItem'] {
   display: flex;
   align-items: flex-start;
   gap: var(--s2);
+  list-style: none;
 }
 
-.md-editor ul[data-type='taskList'] li > label {
+.md-editor li[data-type='taskItem'] > label {
   flex: none;
   margin-top: 0.3em;
 }
 
-.md-editor ul[data-type='taskList'] li > div {
+.md-editor li[data-type='taskItem'] > div {
   flex: 1;
   min-width: 0;
 }
 
-.md-editor ul[data-type='taskList'] li[data-checked='true'] > div {
+.md-editor li[data-type='taskItem'][data-checked='true'] > div {
   color: var(--fg-muted);
   text-decoration: line-through;
 }
