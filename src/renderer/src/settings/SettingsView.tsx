@@ -455,7 +455,10 @@ function AppearanceSection({ modifier }: { modifier: PlatformModifier }): React.
         <button
           type="button"
           className="button button--small"
-          title={shortcutHint('open-appearance', modifier)}
+          // No chord since ⌘, became the settings page's own, and no empty
+          // tooltip either: an attribute with nothing in it is a tooltip that
+          // flickers open over nothing.
+          title={shortcutHint('open-appearance', modifier) || undefined}
           onClick={() => openDialog({ kind: 'appearance' })}
         >
           Open the appearance panel

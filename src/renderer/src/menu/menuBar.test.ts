@@ -28,7 +28,10 @@ const EMPTY: CommandState = {
   activeWorktreeId: null,
   layouts: {},
   watches: [],
-  focusedWatchId: null
+  focusedWatchId: null,
+  statuses: {},
+  changesOpen: false,
+  pushing: false
 }
 
 /** A window with a project, an open worktree and a pane with the focus in it. */
@@ -72,7 +75,9 @@ describe('the menu bar is built from the table the keyboard reads', () => {
   // The whole reason the menu is derived rather than written: a rebind moves
   // the item's chord with it, and cannot leave the menu advertising the old one.
   it('shows the chord that fires, for every one of them', () => {
-    for (const item of menuBarSpec(WORKING)) {
+    // Bar the items with no chord at all, which draw with nothing beside them
+    // rather than with a key that does nothing.
+    for (const item of menuBarSpec(WORKING).filter((entry) => entry.accelerator !== '')) {
       expect(commandForEvent(keypressFor(item.accelerator), MAC), item.accelerator).toBe(item.command)
     }
   })
@@ -99,20 +104,13 @@ describe('the menu bar is built from the table the keyboard reads', () => {
   // window rather than one for the menu and another for the help page.
   it('calls each command what the table calls it', () => {
     const spec = menuBarSpec(WORKING)
+    // The two exceptions are the platform's wording rather than this app's, and
+    // they have their own test below.
+    const platformNames: string[] = ['open-settings', 'open-appearance']
     for (const shortcut of WORKSPACE_SHORTCUTS) {
-      if (shortcut.command === 'open-appearance') continue
+      if (platformNames.includes(shortcut.command)) continue
       expect(spec.find((item) => item.command === shortcut.command)?.label, shortcut.command).toBe(shortcut.title)
     }
-  })
-
-  // The one exception, and it is the platform's word rather than this app's:
-  // macOS keeps an app's settings in the menu named after the app and calls the
-  // item Settings…, and an item called anything else there is one Mac users do
-  // not find.
-  it('calls the appearance command Settings…, in the application menu', () => {
-    const item = menuBarSpec(WORKING).find((entry) => entry.command === 'open-appearance')
-    expect(item?.label).toBe('Settings…')
-    expect(item?.section).toBe('application')
   })
 
   // A File menu is read top to bottom and "New task, New terminal, Close pane"
@@ -124,13 +122,21 @@ describe('the menu bar is built from the table the keyboard reads', () => {
         .filter((item) => item.section === section)
         .map((item) => item.command)
 
-    expect(sectionOrder('file')).toEqual(['new-worktree', 'new-terminal', 'close-pane'])
+    expect(sectionOrder('file')).toEqual([
+      'new-worktree',
+      'new-terminal',
+      'close-pane',
+      'commit-changes',
+      'push-worktree'
+    ])
+    expect(sectionOrder('application')).toEqual(['open-settings'])
     expect(sectionOrder('view')).toEqual([
       'open-palette',
       'previous-worktree',
       'next-worktree',
       'open-dashboard',
-      'toggle-sidebar'
+      'toggle-sidebar',
+      'open-appearance'
     ])
     expect(sectionOrder('window')).toEqual([
       'split-right',
@@ -173,10 +179,15 @@ describe('what the menu bar says can be done', () => {
       'next-worktree': false,
       'new-terminal': false,
       'new-worktree': false,
+      // Nothing to commit and nothing to send, in a window with no worktree in
+      // it at all.
+      'commit-changes': false,
+      'push-worktree': false,
       'toggle-sidebar': true,
       'open-palette': true,
       'open-dashboard': true,
       'open-appearance': true,
+      'open-settings': true,
       'open-help': true
     })
   })
@@ -184,9 +195,42 @@ describe('what the menu bar says can be done', () => {
   it('lights them once there is a worktree open with a pane in it', () => {
     // All but the walks, which with one pane and one worktree have nowhere to
     // go — a chord that lands where it started is one this app does not offer.
-    const nowhere = ['focus-next-pane', 'focus-previous-pane', 'previous-worktree', 'next-worktree']
+    // And the two git ones, which need git to have said there is something to
+    // do — this window's worktree has no status read at all.
+    const nowhere = [
+      'focus-next-pane',
+      'focus-previous-pane',
+      'previous-worktree',
+      'next-worktree',
+      'commit-changes',
+      'push-worktree'
+    ]
     for (const item of menuBarSpec(WORKING)) {
       expect(item.enabled, item.command).toBe(!nowhere.includes(item.command))
     }
+  })
+})
+
+// The Mac reflex, and until now it landed on a colour picker. ⌘, and the item
+// the platform names `Settings…` have to reach the page that carries the CLI
+// link, the update preference, the terminal text size and the relay; the theme
+// editor is a different surface and gets an item of its own.
+describe('the two settings surfaces are two items', () => {
+  it('opens the settings page from Settings…, in the application menu', () => {
+    const item = menuBarSpec(WORKING).find((entry) => entry.command === 'open-settings')
+    expect(item?.label).toBe('Settings…')
+    expect(item?.section).toBe('application')
+    expect(item?.accelerator).toBe('CommandOrControl+,')
+  })
+
+  // No chord: ⌘, is the settings page's now, and ⌘⇧, is not a chord this window
+  // can bind — `matchesChord` compares `KeyboardEvent.key`, and shift and a
+  // comma produce `<`. An item with no accelerator is honest; one advertising a
+  // key that never fires is not.
+  it('gives the theme editor its own item under View, with no chord', () => {
+    const item = menuBarSpec(WORKING).find((entry) => entry.command === 'open-appearance')
+    expect(item?.label).toBe('Appearance…')
+    expect(item?.section).toBe('view')
+    expect(item?.accelerator).toBe('')
   })
 })

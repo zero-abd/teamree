@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CliStatus, InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
+import { menuBarSpec } from '../menu/menuBar'
 import { buildPaletteItems, filterPalette, moveSelection, score, type PaletteItem } from './paletteModel'
 
 function worktree(overrides: Partial<Worktree> & { id: string }): Worktree {
@@ -225,9 +226,13 @@ describe('score', () => {
     expect(score('fix login', 'login') as number).toBeGreaterThan(score('relogin fixes', 'login') as number)
   })
 
-  it('matches an initialism across word boundaries', () => {
+  // The one loose match worth keeping, and the words have to be next to each
+  // other: `nw` is the initials of "New worktree" and is not in "now here" at
+  // all — the letters are, which is exactly what the old matcher went by.
+  it('matches an initialism across consecutive words, and nothing looser', () => {
     expect(score('New worktree', 'nw')).not.toBeNull()
-    expect(score('New worktree', 'nw') as number).toBeGreaterThan(score('now here', 'nw') as number)
+    expect(score('now here', 'nw')).toBeNull()
+    expect(score('New terminal, worktree list', 'nw')).toBeNull()
   })
 
   it('is case-insensitive in both directions', () => {
@@ -345,5 +350,85 @@ describe('the CLI row is named after what is actually wrong', () => {
     const row = broken.find((item) => item.id === 'install-cli')
     expect(row?.search).toContain('path')
     expect(row?.search).toContain('symlink')
+  })
+})
+
+// ⌘K used to answer `push` with "Stop checking for updates automatically" and
+// `commit` with "Fix the broken teamree command": the matcher took any
+// subsequence of the typed letters, scattered anywhere through a row's label
+// and keywords, and kept every row it did not outright refuse. A palette that
+// answers with rows containing none of what was typed is one nobody trusts a
+// second time.
+describe('what the palette returns for what was typed', () => {
+  const full = (): PaletteItem[] =>
+    buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1', name: 'login fix' })],
+        activeWorktreeId: 'w1',
+        agents: [agent('claude'), agent('codex')],
+        update: updateState()
+      })
+    )
+
+  const labels = (query: string): string[] => filterPalette(full(), query).map((item) => item.label)
+
+  it.each([
+    ['push', ['Push']],
+    ['commit', ['Commit…']],
+    ['clau', ['Start claude in this worktree']]
+  ] as ReadonlyArray<readonly [string, string[]]>)('answers %s with only the rows that carry it', (query, expected) => {
+    expect(labels(query)).toEqual(expected)
+  })
+
+  it('refuses a row that carries none of the query, however its letters fall', () => {
+    expect(score('Stop checking for updates automatically updates automatic quiet release notify', 'push')).toBeNull()
+    expect(score('Fix the broken teamree command cli command line terminal install link symlink', 'commit')).toBeNull()
+    expect(score('Appearance… theme colour color dark black contrast accent ground', 'clau')).toBeNull()
+  })
+
+  it('still ranks a contiguous match over one that starts no word', () => {
+    expect(score('Push', 'push') as number).toBeGreaterThan(score('repushing', 'push') as number)
+  })
+})
+
+// One table of commands, read by the menu bar and by the palette alike. The
+// palette used to keep its own list, which is why it had no row for Push,
+// Commit, Close pane, Maximize pane, either pane walk or either worktree walk —
+// every one of them in the menu, none of them findable by typing its name.
+describe('every command the menu has is a row in the palette', () => {
+  const MENU_STATE = {
+    consent: {},
+    dialog: null,
+    projects: [{ id: 'p1' }],
+    worktrees: [{ id: 'w1', projectId: 'p1' }],
+    activeWorktreeId: 'w1',
+    layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf' as const, terminalId: 't1' }, focusedTerminalId: 't1' } },
+    watches: [],
+    focusedWatchId: null,
+    statuses: {},
+    changesOpen: false,
+    pushing: false
+  }
+
+  it('offers each of them once, under the label the menu uses', () => {
+    const items = buildPaletteItems(context())
+    for (const entry of menuBarSpec(MENU_STATE as never)) {
+      const rows = items.filter((item) => item.kind === 'action' && item.id === entry.command)
+      expect(
+        rows.map((row) => row.label),
+        entry.command
+      ).toEqual([entry.label])
+    }
+  })
+
+  it('is findable by the words of that label', () => {
+    const items = buildPaletteItems(context())
+    for (const entry of menuBarSpec(MENU_STATE as never)) {
+      const found = filterPalette(items, entry.label.replace('…', ''))
+      expect(
+        found.some((item) => item.id === entry.command),
+        entry.label
+      ).toBe(true)
+    }
   })
 })

@@ -16,8 +16,11 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliStatus, PaneConsent } from '@shared/entities'
-import { formatChord, resolvePlatformModifier, type PlatformModifier } from '../keyboard/platformModifier'
-import { WORKSPACE_SHORTCUTS } from '../keyboard/workspaceShortcuts'
+import { formatChord, resolvePlatformModifier, type Chord, type PlatformModifier } from '../keyboard/platformModifier'
+import { WORKSPACE_SHORTCUTS, type WorkspaceShortcut } from '../keyboard/workspaceShortcuts'
+
+/** The entries that are keys; the table also holds commands bound to none. */
+const BOUND: readonly WorkspaceShortcut[] = WORKSPACE_SHORTCUTS.filter((shortcut) => shortcut.chord !== undefined)
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -58,18 +61,15 @@ describe('the keyboard section', () => {
   // Written as a loop over the real table on purpose. A list of expected
   // commands here would be the second hand-written copy of the bindings that
   // the generated section exists to avoid.
-  it.each(WORKSPACE_SHORTCUTS.map((shortcut) => [shortcut.title, shortcut] as const))(
-    'lists %s',
-    (_title, shortcut) => {
-      render(<HelpView modifier={APPLE} />)
-      expect(screen.getByText(shortcut.title)).toBeDefined()
-      expect(screen.getByText(formatChord(shortcut.chord, APPLE)).tagName).toBe('KBD')
-    }
-  )
+  it.each(BOUND.map((shortcut) => [shortcut.title, shortcut] as const))('lists %s', (_title, shortcut) => {
+    render(<HelpView modifier={APPLE} />)
+    expect(screen.getByText(shortcut.title)).toBeDefined()
+    expect(screen.getByText(formatChord(shortcut.chord as Chord, APPLE)).tagName).toBe('KBD')
+  })
 
   it('lists no more and no fewer than the table has', () => {
     const { container } = render(<HelpView modifier={APPLE} />)
-    expect(container.querySelectorAll('.help-key')).toHaveLength(WORKSPACE_SHORTCUTS.length)
+    expect(container.querySelectorAll('.help-key')).toHaveLength(BOUND.length)
   })
 
   // The chords are read off the same table on both platforms, and the glyph is
@@ -82,8 +82,8 @@ describe('the keyboard section', () => {
     'spells them the way %s does',
     (_where, modifier, glyph) => {
       render(<HelpView modifier={modifier} />)
-      for (const shortcut of WORKSPACE_SHORTCUTS) {
-        const chord = formatChord(shortcut.chord, modifier)
+      for (const shortcut of BOUND) {
+        const chord = formatChord(shortcut.chord as Chord, modifier)
         expect(chord.startsWith(glyph), `${shortcut.command} is written ${chord}`).toBe(true)
         expect(screen.getByText(chord).tagName).toBe('KBD')
       }

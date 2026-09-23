@@ -64,12 +64,17 @@ describe('reading a published menu', () => {
       // would drop the item and say nothing.
       'CommandOrControl+Alt+Up',
       'CommandOrControl+Alt+Down',
-      'CommandOrControl+Shift+Enter'
+      'CommandOrControl+Shift+Enter',
+      // No key at all, which is what the window publishes for a command it
+      // binds to none — the theme editor, and the two git commands. An item
+      // like that claims nothing from the platform, which is the thing this
+      // rule is guarding, so it is the one string allowed through beside a
+      // chord.
+      ''
     ]) {
       expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toEqual([{ ...ITEM, accelerator }])
     }
     for (const accelerator of [
-      '',
       'Q',
       'Command+Q',
       'CommandOrControl+Shift+Alt+D',

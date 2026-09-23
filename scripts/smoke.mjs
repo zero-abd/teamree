@@ -387,6 +387,9 @@ async function checkMenuBar(ask) {
   for (const [label, accelerator] of [
     ['New task', 'CommandOrControl+N'],
     ['Close pane', 'CommandOrControl+W'],
+    // \u2318, opens the settings page — the one with the CLI link, the update
+    // preference and the relay on it. It used to open the theme editor, which
+    // now has an item of its own under View and no chord at all.
     ['Settings\u2026', 'CommandOrControl+,'],
     ['All panes', 'CommandOrControl+E'],
     // The four moves. Worth reading off a running app rather than trusting the
@@ -436,6 +439,25 @@ async function checkMenuBar(ask) {
   }
   if (named('All panes')?.enabled !== true) {
     failures.push('the menu bar greys a command that needs nothing to be open')
+  }
+
+  // The theme editor's own item, which is what stops \u2318, from landing on it.
+  // Read off the running menu rather than trusted to the unit tests, because an
+  // item with no accelerator is one Electron could drop on its way through:
+  // `appMenu.ts` has to hand it `undefined` rather than an empty string.
+  const appearance = named('Appearance\u2026')
+  if (!appearance) {
+    failures.push('the menu bar has no Appearance\u2026 item, so \u2318, is the only way to the theme editor')
+  } else if (appearance.accelerator) {
+    failures.push(`the menu bar shows ${appearance.accelerator} for Appearance\u2026, which nothing binds`)
+  }
+
+  // And the two git commands, which the menu bar could not reach at all. Grey
+  // on a first launch, with no worktree and nothing to send.
+  for (const label of ['Commit\u2026', 'Push']) {
+    const item = named(label)
+    if (!item) failures.push(`the menu bar has no ${label} item`)
+    else if (item.enabled !== false) failures.push(`${label} is live in a window with no worktree in it`)
   }
 
   // And the round trip. `click()` on the item is what the platform does when

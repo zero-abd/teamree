@@ -36,13 +36,13 @@ import { WorktreeRow } from './WorktreeRow'
 export function Sidebar({
   newWorktreeHint,
   searchHint,
-  appearanceHint,
+  settingsHint,
   helpHint,
   sidebarHint
 }: {
   newWorktreeHint: string
   searchHint: string
-  appearanceHint: string
+  settingsHint: string
   helpHint: string
   sidebarHint: string
 }): React.JSX.Element {
@@ -222,8 +222,9 @@ export function Sidebar({
                 main area. It is in the rail anyway because it belongs to the
                 same set — things about the window rather than about a worktree
                 — and because a preference nobody can find is a preference
-                nobody has. The chord beside it is the one macOS people reach
-                for without looking. */}
+                nobody has. No chord beside it: ⌘, is the settings page's, one
+                row down, and this is reached from here, from the View menu and
+                from the palette. */}
             <button
               type="button"
               className="rail__link"
@@ -237,15 +238,14 @@ export function Sidebar({
                 <circle cx="9.6" cy="6" r="0.9" />
               </svg>
               <span>Appearance</span>
-              <kbd>{appearanceHint}</kbd>
             </button>
           </li>
           <li>
             {/* Last two in the rail, and last on purpose: they are the entries
                 somebody goes looking for rather than the ones they work in.
-                Settings carries no chord — `⌘,` is Appearance's, and it says so
-                one row up — so the palette and this row are the whole of how it
-                is reached. */}
+                Settings carries ⌘,, which is where a Mac user looks for an
+                app's settings and which used to open the theme editor one row
+                up. */}
             <button
               type="button"
               className={`rail__link${settingsOpen ? ' rail__link--current' : ''}`}
@@ -258,6 +258,7 @@ export function Sidebar({
                 <path d="M7 1.5v1.7M7 10.8v1.7M12.1 7h-1.7M3.6 7H1.9M10.6 3.4 9.4 4.6M4.6 9.4l-1.2 1.2M10.6 10.6 9.4 9.4M4.6 4.6 3.4 3.4" />
               </svg>
               <span>Settings</span>
+              <kbd>{settingsHint}</kbd>
             </button>
           </li>
           <li>

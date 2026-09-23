@@ -21,7 +21,10 @@ const EMPTY: CommandState = {
   activeWorktreeId: null,
   layouts: {},
   watches: [],
-  focusedWatchId: null
+  focusedWatchId: null,
+  statuses: {},
+  changesOpen: false,
+  pushing: false
 }
 
 const WORKING: CommandState = {
@@ -100,7 +103,10 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     toggleDashboard: vi.fn(),
     toggleHelp: vi.fn(),
     openDialog: vi.fn(),
-    closeDialog: vi.fn()
+    closeDialog: vi.fn(),
+    toggleSettings: vi.fn(),
+    toggleChanges: vi.fn(),
+    pushActiveWorktree: vi.fn(async () => {})
   } as unknown as CommandActions & Record<string, ReturnType<typeof vi.fn>>
 }
 
@@ -231,12 +237,14 @@ describe('running a command', () => {
       ['find-in-pane', 'openPaneSearch', []],
       ['open-dashboard', 'toggleDashboard', []],
       ['open-appearance', 'openDialog', [{ kind: 'appearance' }]],
+      ['open-settings', 'toggleSettings', []],
       ['open-help', 'toggleHelp', []]
     ]
 
     for (const [command, method, args] of cases) {
       // Each walk needs somewhere to walk to; everything else is happy with the
-      // one pane and the one worktree.
+      // one pane and the one worktree. The two git commands need git to have
+      // said there is something to do, and have their own case below.
       const paneWalk = command === 'focus-next-pane' || command === 'focus-previous-pane'
       const worktreeWalk = command === 'previous-worktree' || command === 'next-worktree'
       const store = workspace(paneWalk ? TWO_PANES : worktreeWalk ? TWO_WORKTREES : WORKING)
@@ -270,7 +278,11 @@ describe('running a command', () => {
     for (const command of EVERY_COMMAND) {
       const store = workspace(EMPTY)
       runWorkspaceCommand(command, store)
-      if (['toggle-sidebar', 'open-palette', 'open-dashboard', 'open-appearance', 'open-help'].includes(command)) {
+      if (
+        ['toggle-sidebar', 'open-palette', 'open-dashboard', 'open-appearance', 'open-settings', 'open-help'].includes(
+          command
+        )
+      ) {
         continue
       }
       expect(callCount(store), command).toBe(0)
@@ -283,5 +295,51 @@ describe('running a command', () => {
       runWorkspaceCommand(command, store)
       expect(callCount(store), command).toBe(0)
     }
+  })
+})
+
+// The three commands the menu bar and the palette gained: the settings page,
+// which ⌘, now opens, and the two git ones, which are offered only when the
+// worktree in front of you has something for them to do.
+describe('the commands that were in no menu', () => {
+  const AHEAD: CommandState = { ...WORKING, statuses: { w1: { ahead: 1 } } } as CommandState
+  const DIRTY: CommandState = { ...WORKING, statuses: { w1: { unstaged: 2 } } } as CommandState
+
+  it('offers the settings page whatever the window holds', () => {
+    expect(isCommandAvailable('open-settings' as WorkspaceCommand, EMPTY)).toBe(true)
+  })
+
+  it('offers Push only with a commit the remote has not, and not while one is in flight', () => {
+    expect(isCommandAvailable('push-worktree' as WorkspaceCommand, WORKING)).toBe(false)
+    expect(isCommandAvailable('push-worktree' as WorkspaceCommand, AHEAD)).toBe(true)
+    expect(isCommandAvailable('push-worktree' as WorkspaceCommand, { ...AHEAD, pushing: true } as CommandState)).toBe(
+      false
+    )
+  })
+
+  it('offers Commit… only where something has changed', () => {
+    expect(isCommandAvailable('commit-changes' as WorkspaceCommand, WORKING)).toBe(false)
+    expect(isCommandAvailable('commit-changes' as WorkspaceCommand, DIRTY)).toBe(true)
+  })
+
+  it('runs each of them through the one dispatcher', () => {
+    const settings = workspace(WORKING)
+    runWorkspaceCommand('open-settings' as WorkspaceCommand, settings)
+    expect(settings.toggleSettings).toHaveBeenCalledTimes(1)
+
+    const pushing = workspace(AHEAD)
+    runWorkspaceCommand('push-worktree' as WorkspaceCommand, pushing)
+    expect(pushing.pushActiveWorktree).toHaveBeenCalledTimes(1)
+
+    // Commit needs a message, and the message box is in the changes panel — so
+    // the command opens it. Already open, it leaves it open rather than
+    // toggling the panel shut under somebody who asked to commit.
+    const changes = workspace(DIRTY)
+    runWorkspaceCommand('commit-changes' as WorkspaceCommand, changes)
+    expect(changes.toggleChanges).toHaveBeenCalledTimes(1)
+
+    const open = workspace({ ...DIRTY, changesOpen: true } as CommandState)
+    runWorkspaceCommand('commit-changes' as WorkspaceCommand, open)
+    expect(open.toggleChanges).not.toHaveBeenCalled()
   })
 })

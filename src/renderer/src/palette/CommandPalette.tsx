@@ -5,31 +5,9 @@ import { useMemo, useState } from 'react'
 import { Modal } from '../dialogs/Modal'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { isCommandAvailable, runWorkspaceCommand } from '../keyboard/workspaceCommands'
-import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
+import { commandNamed, shortcutHint } from '../keyboard/workspaceShortcuts'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { buildPaletteItems, filterPalette, moveSelection, type PaletteAction, type PaletteItem } from './paletteModel'
-
-/**
- * Palette actions that are also workspace commands — so the palette can show
- * the chord, and so that choosing the row runs the same dispatcher the chord
- * and the menu item run. The rows that are not in this table are the palette's
- * own and have no chord and no menu item.
- */
-const ACTION_SHORTCUTS: Partial<Record<PaletteAction, WorkspaceCommand>> = {
-  'new-worktree': 'new-worktree',
-  'new-terminal': 'new-terminal',
-  'split-right': 'split-right',
-  'split-down': 'split-down',
-  'toggle-sidebar': 'toggle-sidebar',
-  'open-dashboard': 'open-dashboard',
-  'open-appearance': 'open-appearance',
-  // Settings has no chord and is not given one here. `⌘,` is the appearance
-  // dialog's and is labelled as such in the rail; a second punctuation chord
-  // behind shift is one `KeyboardEvent.key` reports differently per layout,
-  // and a palette row promising a key that does nothing is worse than a row
-  // promising none.
-  'open-help': 'open-help'
-}
+import { buildPaletteItems, filterPalette, moveSelection, type PaletteItem } from './paletteModel'
 
 export function CommandPalette({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
   const worktrees = useWorkspaceStore((state) => state.worktrees)
@@ -57,8 +35,11 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         defaultAgent,
         update,
         cli,
+        // The chord, for the rows that have one. `shortcutHint` answers with an
+        // empty string for a command bound to no key, which is every row the
+        // palette is the only way to reach.
         hintFor: (action) => {
-          const command = ACTION_SHORTCUTS[action]
+          const command = commandNamed(action)
           return command ? shortcutHint(command, modifier) : ''
         }
       }),
@@ -74,11 +55,14 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
   const layouts = useWorkspaceStore((state) => state.layouts)
   const watches = useWorkspaceStore((state) => state.watches)
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
+  const statuses = useWorkspaceStore((state) => state.statuses)
+  const changesOpen = useWorkspaceStore((state) => state.changesOpen)
+  const pushing = useWorkspaceStore((state) => state.pushing)
   const offered = useMemo(
     () =>
       items.filter((item) => {
         if (item.kind !== 'action') return true
-        const command = ACTION_SHORTCUTS[item.id]
+        const command = commandNamed(item.id)
         if (!command) return true
         return isCommandAvailable(command, {
           consent,
@@ -88,10 +72,25 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
           activeWorktreeId,
           layouts,
           watches,
-          focusedWatchId
+          focusedWatchId,
+          statuses,
+          changesOpen,
+          pushing
         })
       }),
-    [items, consent, projects, worktrees, activeWorktreeId, layouts, watches, focusedWatchId]
+    [
+      items,
+      consent,
+      projects,
+      worktrees,
+      activeWorktreeId,
+      layouts,
+      watches,
+      focusedWatchId,
+      statuses,
+      changesOpen,
+      pushing
+    ]
   )
 
   const matches = useMemo(() => filterPalette(offered, query), [offered, query])
@@ -118,7 +117,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
     // A row that is also a command goes through the one dispatcher, so that
     // what the palette does and what the chord does cannot come apart. This
     // used to be a third copy of the same switch.
-    const command = ACTION_SHORTCUTS[item.id]
+    const command = commandNamed(item.id)
     if (command) {
       runWorkspaceCommand(command, store)
       return
@@ -130,9 +129,6 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
         break
       case 'add-project':
         store.openDialog({ kind: 'add-project' })
-        break
-      case 'open-settings':
-        store.toggleSettings()
         break
       case 'install-cli':
         store.openDialog({ kind: 'install-cli' })

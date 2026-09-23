@@ -62,7 +62,10 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'open-dashboard': 'around',
   'toggle-sidebar': 'around',
   'open-appearance': 'app',
-  'open-help': 'app'
+  'open-settings': 'app',
+  'open-help': 'app',
+  'commit-changes': 'around',
+  'push-worktree': 'around'
 }
 
 const GROUP_ORDER: ReadonlyArray<{ id: ShortcutGroupId; title: string; blurb: string | null }> = [
@@ -83,13 +86,21 @@ const GROUP_ORDER: ReadonlyArray<{ id: ShortcutGroupId; title: string; blurb: st
  *
  * Empty groups are dropped, so a group whose commands have all been rebound
  * away leaves a heading behind rather than an empty list.
+ *
+ * Commands with no chord are left out: this is the keyboard section, and a row
+ * in it with nothing in the key column is a reader being told about a key that
+ * does not exist. They are in the menu bar and in the palette, which is where
+ * the page's own text sends somebody looking for a command rather than a key.
  */
 export function shortcutGroups(
   shortcuts: readonly WorkspaceShortcut[] = WORKSPACE_SHORTCUTS
 ): readonly ShortcutGroup[] {
   const buckets = new Map<ShortcutGroupId, WorkspaceShortcut[]>()
   for (const entry of GROUP_ORDER) buckets.set(entry.id, [])
-  for (const shortcut of shortcuts) buckets.get(GROUP_OF[shortcut.command])?.push(shortcut)
+  for (const shortcut of shortcuts) {
+    if (shortcut.chord === undefined) continue
+    buckets.get(GROUP_OF[shortcut.command])?.push(shortcut)
+  }
 
   return GROUP_ORDER.map((entry) => ({ ...entry, shortcuts: buckets.get(entry.id) ?? [] })).filter(
     (group) => group.shortcuts.length > 0

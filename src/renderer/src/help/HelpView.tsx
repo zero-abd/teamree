@@ -122,7 +122,9 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
                 {group.shortcuts.map((shortcut) => (
                   <li className="help-key" key={shortcut.command}>
                     <span className="help-key__what">{shortcut.title}</span>
-                    <kbd className="help-key__chord">{formatChord(shortcut.chord, modifier)}</kbd>
+                    {/* Always there: `shortcutGroups` lists the bindings, and a
+                        command the table binds to nothing is not one. */}
+                    <kbd className="help-key__chord">{shortcut.chord ? formatChord(shortcut.chord, modifier) : ''}</kbd>
                   </li>
                 ))}
               </ul>

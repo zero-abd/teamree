@@ -124,11 +124,20 @@ describe('workspace shortcuts', () => {
     expect(commandForEvent(event({ key: 'd', ctrlKey: true }), mac)).toBeNull()
   })
 
+  // Over the entries that have a chord. A command in the table with none is not
+  // a binding that collides with anything — it is a command reachable from the
+  // menu bar and the palette and from no key at all.
   it('has no duplicate bindings', () => {
-    const seen = WORKSPACE_SHORTCUTS.map(
-      (shortcut) => `${shortcut.chord.key}:${Boolean(shortcut.chord.shift)}:${Boolean(shortcut.chord.alt)}`
+    const seen = WORKSPACE_SHORTCUTS.filter((shortcut) => shortcut.chord !== undefined).map(
+      (shortcut) => `${shortcut.chord?.key}:${Boolean(shortcut.chord?.shift)}:${Boolean(shortcut.chord?.alt)}`
     )
     expect(new Set(seen).size).toBe(seen.length)
+    expect(seen.length).toBeGreaterThan(5)
+  })
+
+  it('answers with no chord for a command that has none', () => {
+    expect(shortcutHint('open-appearance', mac)).toBe('')
+    expect(shortcutHint('open-settings', mac)).toBe('⌘,')
   })
 
   it('labels commands with the platform spelling', () => {
