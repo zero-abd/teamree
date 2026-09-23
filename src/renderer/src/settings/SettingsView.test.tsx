@@ -237,7 +237,7 @@ describe('updates', () => {
   it('says this build has nothing to compare against, instead of offering a check', () => {
     seed({ update: { ...release(), current: '0.0.0-dev', checkable: false } })
     render(<SettingsView modifier={modifier} />)
-    expect(screen.getByText(/not a released version/)).toBeTruthy()
+    expect(screen.getByText(/Not a released version/)).toBeTruthy()
     expect(screen.getByText('This is teamree 0.0.0-dev.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull()
     expect(screen.queryByRole('checkbox')).toBeNull()
@@ -296,7 +296,9 @@ describe('appearance', () => {
     expect(openDialog).toHaveBeenCalledWith({ kind: 'appearance' })
 
     const section = screen.getByRole('heading', { name: 'Appearance' }).parentElement as HTMLElement
-    expect(section.textContent).toContain('the same one ⌘, opens')
+    // The chord is on the button, and nothing argues for it beside it.
+    expect(screen.getByRole('button', { name: 'Open the appearance panel' }).getAttribute('title')).toBe('⌘,')
+    expect(section.textContent).not.toContain('There is no second copy')
     // No swatch, no colour field, nothing that writes an appearance from here.
     expect(section.querySelectorAll('input')).toHaveLength(0)
   })
@@ -366,7 +368,7 @@ describe('the start point a new task is offered first', () => {
 
   it('says the preference only decides what the composer offers first', () => {
     render(<SettingsView modifier={modifier} />)
-    expect(screen.getByText(/Anything typed there still wins/)).toBeTruthy()
+    expect(screen.getByText(/What the New task dialog offers first/)).toBeTruthy()
   })
 })
 
@@ -375,7 +377,7 @@ describe('the relay a project meets on', () => {
     render(<SettingsView modifier={modifier} />)
     expect(loadRelay).toHaveBeenCalledWith('p1')
     expect(screen.getByText('Teamwork dials wss://relay.example/v1/relay.')).toBeTruthy()
-    expect(screen.getByText(/comes from \.teamree\/relay, which is in the repository/)).toBeTruthy()
+    expect(screen.getByText('From .teamree/relay.')).toBeTruthy()
   })
 
   it('says in words that the environment is overriding the repository', () => {
@@ -392,10 +394,8 @@ describe('the relay a project meets on', () => {
     render(<SettingsView modifier={modifier} />)
     const block = within(relayBlock())
     expect(block.getByText(/TEAMREE_RELAY_URL is set to wss:\/\/tunnel\.example\/v1\/relay/)).toBeTruthy()
-    expect(
-      block.getByText(/It is overriding the repository, which says wss:\/\/relay\.example\/v1\/relay in \.teamree/)
-    ).toBeTruthy()
-    expect(block.getByText(/teamree cannot change a variable it was started with/)).toBeTruthy()
+    expect(block.getByText(/\.teamree\/relay says wss:\/\/relay\.example\/v1\/relay/)).toBeTruthy()
+    expect(block.getByText(/Unset it and relaunch teamree/)).toBeTruthy()
   })
 
   it('offers no field to edit the relay, and sends the reader where one is set', () => {

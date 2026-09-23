@@ -202,13 +202,10 @@ export const terminalCommands: readonly CommandSpec[] = [
     summary: 'Block until a terminal goes quiet or exits.',
     details:
       'Quiet means no output for --quiet-ms; exit means the process ended.\n\n' +
-      'Quiet can lie: a command that pauses longer than the quiet window, such as a slow test run or a sleep, ' +
-      'looks finished while it is still going. Use it only for interactive shells, and raise --quiet-ms when ' +
-      'the command is slow. To know for certain when a command finished, use `teamree terminal run`, which ' +
-      'waits on the real process exit and returns its exit code.\n\n' +
-      'If this machine sleeps mid-wait, the quiet window restarts on wake and the timeout is charged only ' +
-      'for time spent watching. The result then carries interrupted: true, because far more wall-clock time ' +
-      'passed than the wait was asked for.',
+      'Quiet can lie: a command that pauses longer than the quiet window looks finished. For a real exit ' +
+      'code use `teamree terminal run`.\n\n' +
+      'If this machine sleeps mid-wait, the quiet window restarts on wake and the result carries ' +
+      'interrupted: true.',
     args: [TERMINAL_ARG],
     flags: [
       {

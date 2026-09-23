@@ -87,24 +87,6 @@ export type StartTeamworkStep = {
   mark: StepMark
   /** One line saying what is true right now. Always set, never a bare code. */
   summary: string
-  /**
-   * Why this step is in the list at all.
-   *
-   * Fixed for a given path rather than derived from state: it is the answer to
-   * "why am I being asked for this", which does not change as the step goes
-   * from undone to done, and a reader who understands the shape of the thing
-   * stops needing the runbook.
-   */
-  why: string
-  /**
-   * What somebody on the other machine sees while this step is not done, or
-   * null where there is honestly nothing to say.
-   *
-   * The single most useful sentence in the whole panel, because the failure
-   * mode of a two-sided protocol is two people each waiting for the other and
-   * neither knowing it.
-   */
-  otherSide: string | null
 }
 
 export type StartTeamworkFlow = {
@@ -180,36 +162,7 @@ export const ADD_KEY_BUTTON = 'Add my key'
  * because allowing them is one click and after it they can run anything. Saying
  * otherwise here would be the sales pitch.
  */
-export const KEY_GRANT_WARNING = {
-  head: 'A key in .teamree/members/ can run commands on this machine, as you.',
-  body:
-    'That is the feature: a teammate who can see your agent stuck on a question can type the answer into it. ' +
-    'Anyone on this roster can ask to type into any pane here, and typing into a pane is running arbitrary ' +
-    'commands as you.',
-  mitigations: [
-    'Their keystrokes wait: you are shown who, which pane and what, and nothing runs until you allow it.',
-    'You can allow once, for this session, or from now on in that pane — and lift it again whenever you like.',
-    'A pane that is being watched says so, and by whom.',
-    'Typing is attributed live: the pane names who is typing while they type.',
-    'Every remote write is recorded on this machine, with who and when — including the ones you refused.',
-    'Mute is instant, per-pane, and yours — not a negotiation.'
-  ],
-  close:
-    'Being asked catches a mistake, not somebody you should not have added: once you allow them they can run ' +
-    'anything. Add the keys of people you would hand an unlocked laptop to.'
-} as const
-
-/**
- * Who does this at all, said once above the button.
- *
- * Everything else that used to be here — which options exist, what a Durable
- * Object costs, why `cd relay` is wrong inside an installed app — is either the
- * button's own job now or `relay/README.md`'s. The panel was several paragraphs
- * deep before a reader reached anything they could press, and that was the
- * complaint.
- */
-export const RELAY_LEAD =
-  'Only whoever is standing the relay up does this. Everybody else pulls, and the URL arrives in .teamree/relay.'
+export const KEY_GRANT_WARNING = 'Anyone on this roster can type into any pane here, as you.'
 
 /**
  * The deploy, in the fewest words that are still true.
@@ -222,26 +175,9 @@ export const RELAY_LEAD =
  */
 export const RELAY_DEPLOY = {
   button: 'Deploy a relay',
-  what: 'One command, to your team’s own Cloudflare account. teamree hosts nothing and runs nothing for you.',
-  browser: 'A browser opens once, for the Cloudflare sign-in. Nothing is deployed until you are signed in.',
-  /**
-   * What it costs, which is the question everybody asks before they press a
-   * button that makes an account do something.
-   *
-   * The numbers are somebody else's and they move, so they are not printed here
-   * as though they were teamree's: what is said is the shape of the answer — a
-   * pair that is connected and quiet costs nothing, because the relay sleeps
-   * while nobody is typing, and the daily allowances are far above what two
-   * people pass through it — plus where the current figures are. No promise
-   * that it is free forever, because that is not this project's to make.
-   */
-  free:
-    'The free plan covers a team. The relay sleeps while nobody is typing, so a connected, quiet pair costs ' +
-    'nothing, and the included daily allowance is far more than a few people talking through it use. The limits ' +
-    'are daily and per Cloudflare account, and they reset at 00:00 UTC — the current figures are at ' +
-    'https://developers.cloudflare.com/durable-objects/platform/pricing/.',
+  browser: 'Opens a browser to sign in to Cloudflare; deploys to your team’s account.',
   /** Said while it runs, because somebody watching a pane deserves to know what finishing looks like. */
-  watching: 'It prints a wss:// URL when it finishes, and teamree offers to write that into the repository.',
+  watching: 'Prints a wss:// URL when it finishes.',
   /** The label on the button that takes the URL the deploy printed. */
   use: 'Use this relay URL',
   /** Above the command itself, kept for anybody who would rather run it themselves. */
@@ -267,16 +203,9 @@ export const RELAY_DEPLOY = {
  */
 export const RELAY_SERVE = {
   button: 'Run a relay yourself',
-  what:
-    'One command, on this Mac. It writes a relay into a folder you own, builds it and runs it here. ' +
-    'teamree hosts nothing and runs nothing for you. The first run installs the one dependency it has, so it ' +
-    'needs the network once and spends about a minute on npm before it listens.',
-  limit:
-    'A relay here only serves machines that can already reach this Mac — one office network, or a VPN you are all ' +
-    'on. Two laptops behind two home routers cannot meet on it, which is the whole reason a relay exists: put a ' +
-    'tunnel in front of this one, or deploy one instead.',
+  limit: 'Only reachable from machines that can already reach this Mac — one LAN, or a VPN you are all on.',
   /** Said while it runs, because somebody watching a pane deserves to know what finishing looks like. */
-  watching: 'It prints the URL to give your team, and teamree offers to write that into the repository.',
+  watching: 'Prints the URL to give your team.',
   /** The label on the button that takes the URL the relay printed. */
   use: 'Use this relay URL',
   /**
@@ -287,9 +216,7 @@ export const RELAY_SERVE = {
    * which this is. So it is not refused — it is named, on the one screen where
    * the exact address is still in front of the person about to assert it.
    */
-  committing:
-    'A ws:// address on a private network is only reachable from that network. Commit it and anybody who is not on ' +
-    'that network will never meet the rest of you.',
+  committing: 'A private address is unreachable from outside that network.',
   /**
    * Said above the other addresses the relay printed, when it printed more than
    * one.
@@ -302,10 +229,7 @@ export const RELAY_SERVE = {
    * pane printed and lets the person who knows their own network pick, instead
    * of asserting the guess and being wrong in silence.
    */
-  choice:
-    'This Mac has more than one address and teamree cannot tell which of them your teammates can reach — a VPN, a ' +
-    'container bridge and a virtual machine all look like a network from here, and the order they are listed in is ' +
-    'not a ranking. The one above is the relay’s own guess. Take whichever is on the network you share:',
+  choice: 'This Mac has more than one address. Take the one on the network you share:',
   /** Above the command itself, kept for anybody who would rather run it themselves. */
   manual: 'Or run it yourself:'
 } as const
@@ -331,12 +255,10 @@ export const RELAY_CHECK = {
    * page where somebody reading it out has no way to say which is which.
    */
   draftButton: 'Check the URL you typed',
-  what: 'Dials it from here and says what answered — a WebSocket upgrade, some other reply, or nothing at all.',
-  proves:
-    'It runs on this Mac, so a pass proves this Mac can reach that relay and says nothing about anybody else’s ' +
-    'network. Everybody who has to meet there has to run it too.',
+  what: 'Dials it from here and says what answered.',
+  proves: 'Dialled from this Mac only.',
   /** Why the button beside the paste field is grey, which is always the same reason. */
-  nothing: 'There is no relay URL to check yet. Paste one into the field above and this wakes up.'
+  nothing: 'No relay URL to check yet.'
 } as const
 
 /**
@@ -357,10 +279,7 @@ export const MORE_RELAYS_BUTTON = 'Other ways to get a relay'
  * machine say so now. The container is still the honest answer for a server you
  * keep running, which is the one case where this is administration.
  */
-export const MORE_RELAYS_LEAD =
-  'These are for a team that already has the network, the server, or a reason not to add a Cloudflare account. ' +
-  'The two that run on a machine of your own are the button above, one command; the rest needs a clone of the ' +
-  'teamree repository, because the Dockerfile is in one.'
+export const MORE_RELAYS_LEAD = 'The container options need a clone of the teamree repository.'
 
 /**
  * Where the resulting URL belongs, which is the part of this decision that is
@@ -417,47 +336,35 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
     id: 'tunnel',
     tier: 'fallback',
     name: 'A tunnel to a relay on your own machine',
-    what:
-      'The fastest way to try this with somebody on another continent, and the answer to the limit on running one ' +
-      'here. Run the relay with the button above, then put a tunnel in front of it; no account, and a public URL in ' +
-      'seconds.',
+    what: 'Run the relay with the button above, then put a tunnel in front of it. No account.',
     commands: 'cloudflared tunnel --url http://localhost:8787',
-    effort: 'A couple of minutes, and nothing to sign up for.',
-    money: 'Free, and up only for as long as the tunnel and this machine are.',
+    effort: 'A couple of minutes.',
+    money: 'Free, while the tunnel and this machine are up.',
     keep: 'override',
-    address:
-      'The tunnel prints an ephemeral https:// URL that dies with it. Do not commit it: set TEAMREE_RELAY_URL to ' +
-      'the wss:// form on both machines instead.'
+    address: 'An ephemeral https:// URL that dies with the tunnel. Set TEAMREE_RELAY_URL to its wss:// form.'
   },
   {
     id: 'mesh',
     tier: 'more',
     name: 'A mesh VPN, or a box on the LAN',
-    what:
-      'Run the relay on any machine the others can already reach — one office network, or Tailscale or WireGuard. ' +
-      'On a machine with teamree on it that is the button above; on anything else it is the container. Nothing is ' +
-      'exposed publicly. Good if your team already has the network.',
+    what: 'Run the relay on any machine the others can already reach. Nothing is exposed publicly.',
     commands:
       'cd relay\ndocker build -t teamree-relay .\ndocker run -d -p 8787:8787 --restart unless-stopped teamree-relay',
-    effort: 'Minutes if the network already exists. If it does not, the network is the work.',
-    money: 'Whatever the box costs, which is usually nothing you are not already paying.',
+    effort: 'Minutes, if the network already exists.',
+    money: 'Whatever the box costs.',
     keep: 'commit',
-    address:
-      'ws://<that machine>:8787/v1/relay, or wss:// once something is terminating TLS in front of it. Stable enough ' +
-      'to commit for a team that is all on that network, and unreachable for anybody who is not.'
+    address: 'ws://<that machine>:8787/v1/relay, or wss:// with TLS in front of it.'
   },
   {
     id: 'vps',
     tier: 'more',
     name: 'A VPS you rent',
-    what:
-      'The container on a small server, a hostname pointed at it, and Caddy or nginx in front for TLS. Durable, ' +
-      'and the only one of these that is real administration.',
+    what: 'The container on a small server, with Caddy or nginx in front for TLS.',
     commands:
       'cd relay\ndocker build -t teamree-relay .\ndocker run -d -p 8787:8787 --restart unless-stopped teamree-relay\n' +
       '# then terminate TLS in front of it and forward the upgrade headers',
-    effort: 'An afternoon, then a server to keep patched.',
-    money: 'Whatever the server costs, every month.',
+    effort: 'An afternoon, then a server to patch.',
+    money: 'Whatever the server costs, monthly.',
     keep: 'commit',
     address: 'wss://<your hostname>/v1/relay'
   }
@@ -485,9 +392,8 @@ export const RELAY_OPTIONS: readonly RelayOption[] = [
 export function brokenRelayOverride(relay: RelaySetting): string | null {
   if (relay.override.value === null || relay.url !== null || relay.onDisk.url === null) return null
   return (
-    `${relay.override.name} is set to ${relay.override.value} in this app’s environment, and it is not a relay URL ` +
-    `teamree can dial — so this project has no relay even though ${relay.file} has one in it. Unset it and start ` +
-    `teamree again, or set it to a URL that parses.`
+    `${relay.override.name} is set to ${relay.override.value}, which is not a relay URL, so this project has no ` +
+    `relay even though ${relay.file} has one.`
   )
 }
 
@@ -663,7 +569,7 @@ export type RelayPaneState = {
 export function relayPaneBusy(kind: RelayPaneKind): string {
   const what =
     kind === 'deploy' ? 'A deploy is' : kind === 'serve' ? 'A relay you are running yourself is' : 'A relay check is'
-  return `${what} already open in a pane below. Close it before starting another — teamree runs one at a time here.`
+  return `${what} already open in a pane below. Close it first.`
 }
 
 /**
@@ -676,8 +582,7 @@ export function relayPaneBusy(kind: RelayPaneKind): string {
  * running something nobody can predict on somebody's machine.
  */
 export const RELAY_LAUNCHER_UNKNOWN =
-  'This build reports a relay command teamree does not recognise, so it will not guess at another one — stand a ' +
-  'relay up yourself and paste its URL below.'
+  'This build reports a relay command teamree does not recognise. Paste a relay URL below instead.'
 
 /** What the pane says it is, above the terminal itself. */
 export const RELAY_PANE_TITLES: Record<RelayPaneKind, string> = {
@@ -697,8 +602,7 @@ export const RELAY_PANE_TITLES: Record<RelayPaneKind, string> = {
  * every one of the three verbs, and it sends the reader to the only place the
  * reason can be — the pane itself.
  */
-export const RELAY_PANE_NO_URL =
-  'This command has finished and printed no relay URL. What went wrong is in the pane above.'
+export const RELAY_PANE_NO_URL = 'Finished, and printed no relay URL.'
 
 /**
  * What the pane says about a relay of your own that is no longer running.
@@ -712,9 +616,7 @@ export const RELAY_PANE_NO_URL =
  * that outlives the pane that made it, and the pane exiting is how a deploy
  * succeeds.
  */
-export const RELAY_SERVE_STOPPED =
-  'The relay in this pane has stopped, so the address it printed answers nothing now. There is no URL here to give ' +
-  'your team until it is running again.'
+export const RELAY_SERVE_STOPPED = 'The relay in this pane has stopped, so the address it printed answers nothing.'
 
 /** Whether the origin button is busy, and why it was last refused. */
 export type OriginState = { pending: boolean; error: string | null }
@@ -887,14 +789,14 @@ export const RETRY_PUBLISH_BUTTON = 'Try the push again'
 export function retryHint(kind: PushFailureKind): string | null {
   switch (kind) {
     case 'rejected':
-      return 'Pull with rebase first, or you will be refused for the same reason: git pull --rebase, then try again.'
+      return 'Pull with rebase first: git pull --rebase.'
     case 'auth':
     case 'host-key':
-      return 'Fix the credential first — nothing in this window changes it — then try again without leaving the page.'
+      return 'Fix the credential first; nothing in this window changes it.'
     case 'cancelled':
-      return 'Nothing was sent. The commit is still here, so this sends exactly what it would have sent.'
+      return 'Nothing was sent. The commit is still here.'
     case 'timeout':
-      return 'It never finished rather than being refused, so trying again is worth one attempt before anything else.'
+      return 'It never finished rather than being refused.'
     default:
       return null
   }
@@ -1005,11 +907,8 @@ export function checkOriginDraft(raw: string): OriginDraftCheck {
  * "what exactly has to match?" — so it is where a question is asked.
  */
 export const ORIGIN_DETAIL =
-  'Two checkouts are one project when their origins normalise to the same thing. For a URL that is forgiving: ssh ' +
-  'against https, a port and a trailing .git are all normalised away, so your URLs need not match each other ' +
-  'exactly. For a repository shared over a mounted volume it is not, because nothing on either Mac can tell that ' +
-  'one volume mounted at two paths is one repository — so the absolute path is the identity, case and .git and ' +
-  'all, and both of you have to mount it at the same one. docs/teamwork.md has the rest.'
+  'Origins are compared after normalising: scheme, port and a trailing .git are ignored. A path origin is compared ' +
+  'literally, so both Macs must mount it at the same path.'
 
 /** The label on the button that copies the invitation. Named so a test can find it. */
 export const COPY_INVITE_BUTTON = 'Copy the invitation'
@@ -1041,24 +940,14 @@ export function inviteText(input: {
 }): string | null {
   if (input.originUrl === null) return null
   const origin = checkOrigin(input.originUrl)
-  const mount =
-    origin.ok && origin.kind === 'path'
-      ? [
-          '',
-          `The repository is a directory rather than a URL, so mount it at exactly ${origin.remote} — that path is`,
-          'what both our machines hash to decide we are on the same project, and a different one means we never see',
-          'each other.'
-        ]
-      : []
+  const mount = origin.ok && origin.kind === 'path' ? ['', `Mount the repository at exactly ${origin.remote}.`] : []
   const who = input.handle === null ? 'I' : `I (${input.handle})`
   const relay =
     input.relayUrl === null
-      ? 'The relay we meet on is not in the repository yet — I will push it, and you will get it by pulling.'
-      : `The relay we meet on is already in the repository at .teamree/relay (${input.relayUrl}), so there is ` +
-        'nothing for you to configure.'
+      ? 'The relay is not in the repository yet — I will push it, and you will get it by pulling.'
+      : `The relay is in the repository at .teamree/relay (${input.relayUrl}).`
   return [
-    `${who} have set up teamwork on ${input.projectName} in teamree. Everyone who can push to the repository is on`,
-    'the team, so there is nothing to accept and no account to make.',
+    `${who} have set up teamwork on ${input.projectName} in teamree. Push access is membership — nothing to accept.`,
     '',
     // Quoted only when it has to be, which for a URL is never and for a volume
     // called "Team Share" is the difference between a command and two commands.
@@ -1070,10 +959,7 @@ export function inviteText(input: {
     '',
     relay,
     '',
-    'Worth knowing before you do it: a key in .teamree/members/ lets anyone on the roster type into any pane on',
-    'your machine, which is running commands as you. That is the feature, and none of it can be done invisibly —',
-    'a watched pane says so, typing is attributed live, every remote write is logged on your machine, and mute is',
-    'instant and yours.'
+    'Anyone on the roster can type into any pane on your machine, as you.'
   ].join('\n')
 }
 
@@ -1120,9 +1006,7 @@ export function setupOutcome(
     {
       label: 'Your key',
       state: list.enrolled ? 'yes' : 'no',
-      detail: list.enrolled
-        ? `${selfFileOf(list) ?? list.selfFile} is in this checkout.`
-        : 'Not in this checkout yet, so no teammate can address this machine.'
+      detail: list.enrolled ? `${selfFileOf(list) ?? list.selfFile} is in this checkout.` : 'Not in this checkout yet.'
     },
     {
       label: 'The relay',
@@ -1145,8 +1029,7 @@ export function setupOutcome(
       state: pushed,
       detail:
         publish === undefined
-          ? 'teamree has not pushed from here, so it cannot say whether these files are in the repository. Your ' +
-            'own git will tell you: git status.'
+          ? 'teamree has not pushed from here. Check with git status.'
           : publish.push.ok
             ? `${publish.branch} is on ${publish.remote}.`
             : // "Refused" is the remote's verdict, and two of these are not the
@@ -1168,7 +1051,7 @@ export function setupOutcome(
         connected.length > 0
           ? `${namesOf(connected)} ${connected.length === 1 ? 'is' : 'are'} connected.`
           : others.length === 0
-            ? 'Nobody but you is on this project’s roster yet.'
+            ? 'Nobody but you on the roster.'
             : `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} on the roster and not connected.`
     }
   ]
@@ -1185,9 +1068,9 @@ export function setupOutcome(
     head: done
       ? 'Teamwork is working in this repository.'
       : publish !== undefined && !publish.push.ok && publish.commit !== null
-        ? 'Half of it: the commit was made here and the push did not land.'
+        ? 'Committed here; the push did not land.'
         : stalled === undefined
-          ? 'Everything this machine can do is done. What is left is somebody else opening teamree.'
+          ? 'Done here. Waiting on a teammate.'
           : `Not finished: ${stalled.label.toLowerCase()}.`,
     next: done ? null : nextStepFor(stalled)
   }
@@ -1203,7 +1086,7 @@ function nextStepFor(stalled: SetupFact | undefined): string | null {
     case 'Pushed':
       return `Step 4 sends it: ${PUBLISH_BUTTON}.`
     default:
-      return 'Nothing here. A teammate opening teamree on a checkout of this repository is what changes it.'
+      return null
   }
 }
 
@@ -1216,23 +1099,9 @@ function nextStepFor(stalled: SetupFact | undefined): string | null {
  * leaves you unable to tell "I have not finished" from "they have not started".
  */
 export const TEAMWORK_PATHS = [
-  {
-    id: 'start',
-    title: 'Start a team here',
-    what:
-      'Nobody has set teamwork up in this repository yet. You choose the relay your team will meet on, put your ' +
-      'key in the repository, and push both — then send a teammate the repository URL.',
-    them: 'They clone it, open teamree, add their key and push. Nothing is sent to them and there is nothing to accept.'
-  },
-  {
-    id: 'join',
-    title: 'Join a team I was invited to',
-    what:
-      'Somebody has already pushed a relay and their key here. You pull, add your key beside theirs, and push — ' +
-      'there is no invitation to accept and nobody to ask, because push access is what membership means.',
-    them: 'They see you at their next pull. teamree re-reads .teamree by itself, so neither of you restarts anything.'
-  }
-] as const satisfies readonly { id: TeamworkPath; title: string; what: string; them: string }[]
+  { id: 'start', title: 'Start a team here' },
+  { id: 'join', title: 'Join a team I was invited to' }
+] as const satisfies readonly { id: TeamworkPath; title: string }[]
 
 /**
  * Which of the two this repository looks like, and the fact that says so.
@@ -1253,130 +1122,25 @@ export function suggestedPath(
   if (relay.onDisk.url !== null && others.length > 0) {
     return {
       id: 'join',
-      because: `${relay.file} and ${namesOfMembers(others)}’s key are already in this checkout, so somebody went first.`
+      because: `${relay.file} and ${namesOfMembers(others)}’s key are already in this checkout.`
     }
   }
   if (relay.onDisk.url !== null) {
-    return { id: 'join', because: `${relay.file} is already in this checkout, so somebody has stood a relay up.` }
+    return { id: 'join', because: `${relay.file} is already in this checkout.` }
   }
   if (others.length > 0) {
     return {
       id: 'join',
-      because: `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} already on this project’s roster.`
+      because: `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} already on the roster.`
     }
   }
-  return { id: 'start', because: 'There is no relay and nobody’s key in this checkout, so nothing has been set up.' }
+  return { id: 'start', because: 'No relay and nobody’s key in this checkout.' }
 }
 
-/** A step before the two sentences that say why it is there are added to it. */
-type StepCore = Omit<StartTeamworkStep, 'why' | 'otherSide'>
-
-/**
- * Why a step exists and what the far end sees while it does not, for each of
- * the two jobs.
- *
- * Written out per path rather than composed from fragments. The whole value of
- * these sentences is that they are about the reader's actual situation, and a
- * sentence assembled out of clauses that have to be true for both of two people
- * is exactly the prose that made the original flow a document to be studied.
- */
-const GUIDANCE: Record<StepId, Record<TeamworkPath, { why: string; otherSide: string | null }>> = {
-  identity: {
-    start: {
-      why:
-        'teamree made an X25519 keypair the first time it ran, and the private half never leaves this machine. ' +
-        'There is nothing to do here — it is shown so you can tell your own key from a teammate’s later.',
-      otherSide: null
-    },
-    join: {
-      why:
-        'teamree made an X25519 keypair the first time it ran, and the private half never leaves this machine. ' +
-        'Your teammate has one of their own; neither of you ever sees the other’s private half.',
-      otherSide: null
-    }
-  },
-  key: {
-    start: {
-      why:
-        'Push access is membership. Your public key under .teamree/members/ is the only thing that lets a teammate ' +
-        'address this machine — there is no account anywhere and nobody to ask.',
-      otherSide:
-        'Nobody who clones this repository can see that this machine exists until step 4 sends the file. There is ' +
-        'no announcement: your key simply appears in their next pull.'
-    },
-    join: {
-      why:
-        'Push access is membership. Adding your key beside your teammate’s is the whole of joining — there is no ' +
-        'invitation to accept, because being able to push this file is what being on the team means.',
-      otherSide:
-        'This file is exactly what your teammate is waiting for. Until it lands, teamree on their machine says ' +
-        '“No teammates”, which looks identical to you having changed your mind.'
-    }
-  },
-  relay: {
-    start: {
-      why:
-        'Two machines behind two routers cannot reach each other, so both dial out to a relay instead. Your team ' +
-        'runs it and teamree runs none — there is no default and nothing of ours to depend on.',
-      otherSide:
-        'Your teammates get this URL by pulling the repository, so choosing it is a one-time job for the team ' +
-        'rather than something each of them repeats.'
-    },
-    join: {
-      why:
-        'The relay is one line in the repository, so it arrives with a pull. You should not be choosing one: ' +
-        'everybody has to name the same relay or you never meet.',
-      otherSide:
-        'If you set a different relay from your teammate’s, you will each dial somewhere the other is not, and ' +
-        'both machines will sit at “Nobody connected” with nothing wrong on either.'
-    }
-  },
-  push: {
-    start: {
-      why:
-        'Writing those files changed nothing anybody else can see. This is the act that makes them the team’s, and ' +
-        'it is the only step here that leaves this machine.',
-      otherSide:
-        'Once it lands, a teammate needs only the repository URL: the relay is in it, and their own key is the ' +
-        'only thing they add.'
-    },
-    join: {
-      why:
-        'Adding your key wrote a file in this checkout and stopped. A key nobody pushed is not membership, so this ' +
-        'is the step that actually joins you.',
-      otherSide:
-        'Your teammate sees you at their next pull — teamree watches .teamree, so neither of you has to restart ' +
-        'anything. If you both push at once the second one is rejected: pull with rebase and push again.'
-    }
-  },
-  connected: {
-    start: {
-      why:
-        'A link is up when a Noise session has authenticated against the key in this repository and been confirmed ' +
-        'by a frame only the holder of its private half could have sent.',
-      otherSide:
-        'This one needs both machines: teamree open over there, their key pushed, and the same relay in both ' +
-        'checkouts. “Nobody connected” is the ordinary state while you wait for somebody.'
-    },
-    join: {
-      why:
-        'A link is up when a Noise session has authenticated against the key in this repository and been confirmed ' +
-        'by a frame only the holder of its private half could have sent.',
-      otherSide:
-        'Your teammate has to have pulled your key before their machine can dial you. If this sits at “not ' +
-        'connected”, asking them to pull is the first thing to try.'
-    }
-  }
-}
+type StepCore = StartTeamworkStep
 
 export function startTeamworkFlow(input: StartTeamworkInput): StartTeamworkFlow {
-  // The guidance has to say something before anybody has chosen, and the
-  // starting path is the one whose sentences are true of a repository nobody
-  // has touched — which is the state the choice is being made in.
-  const path = input.path ?? 'start'
-  const steps = [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)].map(
-    (step) => ({ ...step, ...GUIDANCE[step.id][path] })
-  )
+  const steps = [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)]
   // `unchecked` is deliberately not settled: the push step never self-completes
   // and is the one to lead with for as long as anything is written.
   const current = steps.find((step) => step.mark !== 'done' && step.mark !== 'this-run')
@@ -1433,15 +1197,12 @@ function identityStep({ list, failedReads }: StartTeamworkInput): StepCore {
   // The keypair is made on first run, so this is never a thing to do — only a
   // thing to show. A missing handle is step two's problem: it is the name on
   // the file, not the identity, and the identity is the key.
-  const named =
-    list.self.handle === null
-      ? ' It has no name here yet: git has no user.email in this checkout, so step 2 asks you for one.'
-      : ''
+  const named = list.self.handle === null ? ' No handle yet: git has no user.email in this checkout.' : ''
   return {
     id: 'identity',
     title,
     mark: 'done',
-    summary: `This machine generated an X25519 keypair on first run. The private half never leaves it.${named}`
+    summary: `X25519 keypair, made on first run. The private half never leaves this machine.${named}`
   }
 }
 
@@ -1453,7 +1214,7 @@ function keyStep({ list, failedReads }: StartTeamworkInput): StepCore {
         id: 'key',
         title,
         mark: 'blocked',
-        summary: `${readFailure('The roster', failedReads.list)} Until it can be, nothing here can say whether your key is in it.`
+        summary: readFailure('The roster', failedReads.list)
       }
     }
     return { id: 'key', title, mark: 'todo', summary: 'Waiting for the roster.' }
@@ -1464,14 +1225,14 @@ function keyStep({ list, failedReads }: StartTeamworkInput): StepCore {
       id: 'key',
       title,
       mark: 'done',
-      summary: `Your key is in this checkout${file === null ? '' : ` as ${file}`}. Step 4 is what makes it the team’s.`
+      summary: `Your key is in this checkout${file === null ? '' : ` as ${file}`}. Step 4 pushes it.`
     }
   }
   return {
     id: 'key',
     title,
     mark: 'todo',
-    summary: 'Your key is not in this repository, so no teammate can reach this machine or name what it says.'
+    summary: 'Your key is not in this checkout.'
   }
 }
 
@@ -1508,7 +1269,7 @@ function relayStep({ relay, failedReads }: StartTeamworkInput): StepCore {
       id: 'relay',
       title,
       mark: 'done',
-      summary: `${relay.file} in this checkout names ${relay.onDisk.url}. Step 4 is what makes it the team’s.`
+      summary: `${relay.file} names ${relay.onDisk.url}. Step 4 pushes it.`
     }
   }
   if (relay.source === 'environment' && relay.url !== null) {
@@ -1520,10 +1281,7 @@ function relayStep({ relay, failedReads }: StartTeamworkInput): StepCore {
       id: 'relay',
       title,
       mark: 'this-run',
-      summary:
-        `${relay.override.name} is pointing this run at ${relay.url}, and nothing is in ${relay.file}. ` +
-        'The override is per-machine and dies with this process, so a teammate reads nothing — which is right for ' +
-        'an ephemeral tunnel and wrong for anything you mean to keep.'
+      summary: `${relay.override.name} points this run at ${relay.url}; ${relay.file} is empty, so a teammate reads nothing.`
     }
   }
   return {
@@ -1547,9 +1305,7 @@ function pushStep(input: StartTeamworkInput): StepCore {
     id: 'push',
     title,
     mark: 'unchecked',
-    summary:
-      `${listOf(plan.files)} ${plan.files.length === 1 ? 'is' : 'are'} in this checkout and mean nothing to anybody ` +
-      'else until they are pushed. teamree cannot see whether you have done that, so this step never ticks itself.'
+    summary: `${listOf(plan.files)} ${plan.files.length === 1 ? 'is' : 'are'} in this checkout, unpushed.`
   }
 }
 
@@ -1580,9 +1336,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'todo',
-      summary:
-        'teamree has not read this project’s relay, roster or origin yet. This step says what it finds in a ' +
-        'moment.'
+      summary: 'teamree has not read this project’s relay, roster or origin yet.'
     }
   }
 
@@ -1593,11 +1347,9 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'done',
-      summary:
-        `${namesOf(connected)} ${connected.length === 1 ? 'is' : 'are'} connected, over a Noise session that ` +
-        `authenticated against the key in this repository.${
-          away === 0 ? '' : ` ${away} other${away === 1 ? '' : 's'} on the roster ${away === 1 ? 'is' : 'are'} not.`
-        }`
+      summary: `${namesOf(connected)} ${connected.length === 1 ? 'is' : 'are'} connected.${
+        away === 0 ? '' : ` ${away} other${away === 1 ? '' : 's'} on the roster ${away === 1 ? 'is' : 'are'} not.`
+      }`
     }
   }
   if (!status.origin.ok) {
@@ -1614,9 +1366,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'blocked',
-      summary:
-        'Your own key is not in .teamree/members in this checkout, so no teammate can reach this machine. ' +
-        'Step 2 writes the file and step 4 is what puts it where they will read it.'
+      summary: 'Your own key is not in .teamree/members in this checkout.'
     }
   }
   if (status.links.length === 0) {
@@ -1631,9 +1381,8 @@ function connectedStep(input: StartTeamworkInput): StepCore {
         title,
         mark: 'todo',
         summary:
-          `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} on this project’s roster and no link to ` +
-          `${others.length === 1 ? 'them' : 'any of them'} is open yet. If this does not change in a moment, the ` +
-          `reason it stopped is in this run’s log.${mountMismatchNote(status)}`
+          `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} on the roster; no link open yet.` +
+          mountMismatchNote(status)
       }
     }
     const ready = input.list?.enrolled === true && input.relay?.url != null
@@ -1641,10 +1390,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'todo',
-      summary: ready
-        ? 'This project’s roster has nobody in it but you. A teammate appears here once they push their key and ' +
-          'you pull it.'
-        : 'Nothing to connect to yet. Finish the steps above, then commit and push.'
+      summary: ready ? 'Nobody but you on the roster.' : 'Nothing to connect to yet.'
     }
   }
 
@@ -1654,9 +1400,7 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'todo',
-      summary:
-        `The handshake with ${namesOf(refused)} did not complete. Either roster could be the stale one, so pull, ` +
-        'and ask them to pull. The reason under that link is this machine’s own, not a report from theirs.'
+      summary: `The handshake with ${namesOf(refused)} did not complete. Pull, and ask them to pull.`
     }
   }
   const unreachable = status.links.filter((link) => link.phase === 'unreachable')
@@ -1665,14 +1409,14 @@ function connectedStep(input: StartTeamworkInput): StepCore {
       id: 'connected',
       title,
       mark: 'todo',
-      summary: `This machine cannot reach ${relayLabel(status)}. Your teammates may be fine.`
+      summary: `This machine cannot reach ${relayLabel(status)}.`
     }
   }
   return {
     id: 'connected',
     title,
     mark: 'todo',
-    summary: `${relayLabel(status)} is reachable and no teammate’s machine is on it yet.${mountMismatchNote(status)}`
+    summary: `${relayLabel(status)} is reachable; no teammate is on it yet.${mountMismatchNote(status)}`
   }
 }
 
@@ -1690,11 +1434,7 @@ function mountMismatchNote(status: TeamworkRead): string {
   if (!status.origin.ok) return ''
   const origin = checkOrigin(status.origin.url)
   if (!origin.ok || origin.kind !== 'path') return ''
-  return (
-    ` This project is matched by the path it is mounted at, ${origin.remote}. A teammate whose Mac reaches the ` +
-    'same repository at any other path is on a different project as far as teamree is concerned, and will never ' +
-    'appear here.'
-  )
+  return ` A teammate whose Mac mounts this repository anywhere but ${origin.remote} will never appear here.`
 }
 
 /**
@@ -1711,10 +1451,7 @@ function mountMismatchNote(status: TeamworkRead): string {
  * the sentence that greets them has to be the one that says so.
  */
 function originBlocker(reason: string): string {
-  return (
-    `${sentence(reason)} Add the URL you and your teammates both cloned, or — for a repository on a shared volume ` +
-    '— the absolute path it is mounted at on every Mac.'
-  )
+  return sentence(reason)
 }
 
 function relayLabel(status: TeamworkRead): string {

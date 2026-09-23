@@ -96,7 +96,7 @@ describe('what a worktree is', () => {
     render(<HelpView modifier={APPLE} />)
     expect(screen.getByRole('heading', { name: 'What a worktree is' })).toBeDefined()
     expect(screen.getByText(/second working directory/)).toBeDefined()
-    expect(screen.getByText(/takes its panes with it/)).toBeDefined()
+    expect(screen.getByText(/closes its panes/)).toBeDefined()
   })
 })
 

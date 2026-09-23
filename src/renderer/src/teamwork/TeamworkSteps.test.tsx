@@ -179,25 +179,26 @@ describe('what a key grants, and where it is said', () => {
   // place that sentence never reached the person it is about.
   it('is on screen before the button that adds one', () => {
     const markup = render()
-    const warned = markup.indexOf('can run commands on this machine')
+    const warned = markup.indexOf('type into any pane here')
     const button = markup.indexOf(JOIN_BUTTON)
     expect(warned).toBeGreaterThan(-1)
     expect(button).toBeGreaterThan(-1)
     expect(warned).toBeLessThan(button)
   })
 
-  it('says what it is in plain words, and names every mitigation beside it', () => {
+  // One sentence. It used to be a paragraph, a list of six mitigations and a
+  // closing argument, all above the button.
+  it('says what it is in one line, with nothing arguing around it', () => {
     const shown = text(render())
-    expect(shown).toContain(KEY_GRANT_WARNING.head)
-    expect(shown).toMatch(/running arbitrary commands as you/)
-    for (const mitigation of KEY_GRANT_WARNING.mitigations) expect(shown).toContain(mitigation)
-    expect(shown).toContain(KEY_GRANT_WARNING.close)
+    expect(shown).toContain(KEY_GRANT_WARNING)
+    expect(shown).not.toMatch(/None of it can be done invisibly/)
+    expect(shown).not.toMatch(/unlocked laptop/)
   })
 
   it('is gone once the key is in the repository, because there is no button left to warn about', () => {
     const markup = render({ list: enrolled() })
     expect(markup).not.toContain(JOIN_BUTTON)
-    expect(markup).not.toContain('can run commands on this machine')
+    expect(markup).not.toContain('type into any pane here')
   })
 })
 
@@ -331,7 +332,7 @@ describe('choosing a relay', () => {
     const shown = text(render())
     expect(shown).toContain('Deploy a relay')
     expect(shown).toContain('/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy')
-    expect(shown).toContain('A browser opens once, for the Cloudflare sign-in.')
+    expect(shown).toContain('Opens a browser to sign in to Cloudflare; deploys to your team’s account.')
   })
 
   it('puts no other option in front of anybody who has not asked for one', () => {
@@ -358,12 +359,10 @@ describe('choosing a relay', () => {
     expect(shown).not.toMatch(/does not inherit your shell/)
   })
 
-  it('answers what it costs, in one sentence, without becoming a price list', () => {
+  it('prints no price list under the button', () => {
     const shown = text(render())
-    expect(shown).toContain('The free plan covers a team.')
-    expect(shown).toContain('they reset at 00:00 UTC')
-    expect(shown).toContain('https://developers.cloudflare.com/durable-objects/platform/pricing/')
-    expect(shown).not.toMatch(/free forever/i)
+    expect(shown).not.toMatch(/free plan|daily allowance|pricing/i)
+    expect(shown).not.toMatch(/reset at 00:00 UTC/)
   })
 
   it('says this build carries no relay, rather than offering a button that cannot work', () => {
@@ -383,7 +382,8 @@ describe('choosing a relay', () => {
   })
 
   it('never suggests anybody but the team hosts the relay', () => {
-    expect(text(render())).toMatch(/teamree hosts nothing and runs nothing for you/)
+    expect(text(render())).toMatch(/deploys to your team’s account/)
+    expect(text(render())).not.toMatch(/our relay|teamree’s relay/i)
   })
 })
 
@@ -405,7 +405,7 @@ describe('running a relay yourself', () => {
 
   it('says who it will not work for, above the button and not after it', () => {
     const markup = render()
-    const limit = markup.indexOf('Two laptops behind two home routers cannot meet on it')
+    const limit = markup.indexOf('Only reachable from machines that can already reach this Mac')
     const button = markup.indexOf('Run a relay yourself</button>')
     expect(limit).toBeGreaterThan(-1)
     expect(button).toBeGreaterThan(-1)
@@ -608,8 +608,7 @@ describe('an override that is set and cannot be read', () => {
     const markup = render({ relay: broken() })
     const said = text(markup)
     expect(said).toContain('TEAMREE_RELAY_URL is set to wss//typo.example/v1/relay')
-    expect(said).toContain('this project has no relay even though .teamree/relay has one in it')
-    expect(said).toContain('Unset it and start teamree again')
+    expect(said).toContain('this project has no relay even though .teamree/relay has one')
     // First on the step, because every other sentence here is about a relay
     // the app is not going to dial.
     expect(markup.indexOf('TEAMREE_RELAY_URL is set to')).toBeLessThan(
@@ -625,7 +624,7 @@ describe('an override that is set and cannot be read', () => {
   })
 
   it('says none of that when the override is one teamree can dial', () => {
-    expect(text(render({ list: enrolled(), relay: relayOnDisk() }))).not.toContain('Unset it and start teamree again')
+    expect(text(render({ list: enrolled(), relay: relayOnDisk() }))).not.toContain('is not a relay URL')
   })
 })
 
@@ -646,9 +645,8 @@ describe('a checkout with no origin', () => {
     expect(shown).toMatch(/no origin remote/)
     expect(shown).toContain('Origin')
     expect(shown).toContain('Add origin')
-    // Both kinds of answer are offered, because a team whose repository is a
-    // directory on a shared volume used to be told only what they could not do.
-    expect(shown).toMatch(/the absolute path it is mounted at on every Mac/)
+    // Both kinds of answer are one disclosure away, rather than in the banner.
+    expect(shown).toContain('What has to match')
   })
 
   it('marks the connected step blocked, in a word', () => {
@@ -707,9 +705,9 @@ describe('a roster nothing is watching', () => {
   // The sweep is the floor under a lost watch: the roster catches up on a timer
   // rather than on an event. Telling somebody to reopen the dialog describes a
   // version of this app that no longer exists.
-  it('says how far behind it can be, rather than telling somebody to reopen it', () => {
+  it('says the list is only as fresh as this read, rather than telling somebody to reopen it', () => {
     const shown = text(render({ list: roster({ watched: false }), relay: relayOnDisk() }))
-    expect(shown).toContain('half a minute behind the last pull')
+    expect(shown).toContain('only as fresh as this read')
     expect(shown).not.toMatch(/Open this dialog again after a pull/)
   })
 })
@@ -747,9 +745,13 @@ describe('the question asked before the steps', () => {
     expect(shown).not.toContain('1. Your identity')
   })
 
-  it('says what the other person does, for each path, before either is chosen', () => {
+  // Two buttons, and nothing arguing for either. The paragraphs under them
+  // described both halves of a protocol to somebody who had not yet chosen.
+  it('offers the two as labels, with no prose under them', () => {
     const shown = text(render({ path: null }))
-    for (const option of TEAMWORK_PATHS) expect(shown).toContain(option.them)
+    for (const option of TEAMWORK_PATHS) expect(shown).toContain(option.title)
+    expect(shown).not.toMatch(/Teamwork has two ends/)
+    expect(shown).not.toMatch(/Nothing is sent to them/)
   })
 
   // Marked, never taken. A relay file and a colleague's key are very good
@@ -800,30 +802,36 @@ describe('the question asked before the steps', () => {
   })
 })
 
-describe('what each step says about the machine at the other end', () => {
-  it('is on screen beside the step, not in a document somewhere', () => {
+// The panel used to print, under every step, why the step was there and what
+// the far end saw while it was not done — two paragraphs per step, rewritten
+// per path. What is left is the title, the mark and one line.
+describe('what a step puts on screen', () => {
+  it('is the summary and nothing arguing around it', () => {
     const shown = text(render({ path: 'join' }))
-    expect(shown).toContain('On their machine')
-    expect(shown).toMatch(/teamree on their machine says “No teammates”/)
+    expect(shown).not.toContain('On their machine')
+    expect(shown).not.toMatch(/teamree on their machine says “No teammates”/)
+    expect(shown).not.toMatch(/everybody has to name the same relay/)
   })
 
-  it('reads differently for the two jobs, because the jobs are different', () => {
-    expect(text(render({ path: 'start' }))).toMatch(/Your team runs it and teamree runs none/)
-    expect(text(render({ path: 'join' }))).toMatch(/everybody has to name the same relay/)
+  it('reads the same whichever of the two jobs it is', () => {
+    const steps = (path: 'start' | 'join'): string[] =>
+      [...render({ path }).matchAll(/class="step__summary">([^<]*)</g)].map((found) => found[1] as string)
+    expect(steps('start')).toEqual(steps('join'))
+    expect(steps('start').length).toBe(5)
   })
 
   // Two relays is two halves of a team that never meet, and it is also the
   // mistake this page otherwise encourages by putting a deploy button in front
-  // of everybody.
+  // of everybody. It stays — as one line.
   it('warns a joiner whose team has not pushed a relay yet, before offering them one', () => {
-    const markup = render({ path: 'join' })
-    const warning = text(markup).indexOf('Only stand one up yourself if you have agreed')
+    const shown = text(render({ path: 'join' }))
+    const warning = shown.indexOf('Nobody has pushed .teamree/relay yet')
     expect(warning).toBeGreaterThan(-1)
-    expect(warning).toBeLessThan(text(markup).indexOf('Deploy a relay'))
+    expect(warning).toBeLessThan(shown.indexOf('Deploy a relay'))
   })
 
   it('says none of that to somebody who already has a relay', () => {
-    expect(text(render({ path: 'join', relay: relayOnDisk() }))).not.toContain('Only stand one up yourself')
+    expect(text(render({ path: 'join', relay: relayOnDisk() }))).not.toContain('Nobody has pushed')
   })
 })
 
@@ -994,7 +1002,7 @@ describe('a push that did not land', () => {
         )
       )
     )
-    expect(shown).toContain('took 1m 00s')
+    expect(shown).toContain('Took 1m 00s')
   })
 })
 

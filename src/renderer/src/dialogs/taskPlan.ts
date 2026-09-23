@@ -37,9 +37,6 @@ export function taskPlanNote(agents: readonly InstalledAgent[], probed: boolean,
   // is not the user's, and somebody whose `which claude` answers in a pane had
   // no way to tell that from an agent they had not installed. Now the sentence
   // is true, and it names the one place to go and look.
-  if (agents.length === 0)
-    return 'No coding agent on the PATH your login shell sets, so this creates the worktree alone.'
-  return agent
-    ? `Creates the worktree, then runs ${agent.command} in it.`
-    : 'Creates the worktree, with no agent in it.'
+  if (agents.length === 0) return 'No coding agent on your login shell’s PATH.'
+  return agent ? `Then runs ${agent.command} in it.` : 'No agent in it.'
 }

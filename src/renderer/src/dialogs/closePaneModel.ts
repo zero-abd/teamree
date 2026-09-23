@@ -74,11 +74,8 @@ export function closePaneWarning(terminal: Terminal | undefined): ClosePaneWarni
       // question, and this app cannot tell that from finished — so the sentence
       // says what silence does and does not prove rather than guessing.
       body: terminal.busy
-        ? `${terminal.agent} is working in ${where}. Closing the pane kills it, and whatever it was part-way ` +
-          'through goes with it.'
-        : `${terminal.agent} has gone quiet in ${where}. teamree watches output, not the agent, so quiet means it ` +
-          'has stopped saying things — usually that it is waiting for an answer, not that it has finished. Closing ' +
-          'the pane kills it.',
+        ? `${terminal.agent} is working in ${where}. Closing the pane kills it.`
+        : `${terminal.agent} has gone quiet in ${where} — waiting for an answer, or finished. Closing the pane kills it.`,
       confirm: 'Stop it and close'
     }
   }
@@ -86,9 +83,7 @@ export function closePaneWarning(terminal: Terminal | undefined): ClosePaneWarni
   if (terminal.busy) {
     return {
       title: 'Stop what is running here?',
-      body:
-        `Output is still arriving in ${where}. Closing the pane kills the process and anything it had not ` +
-        'finished.',
+      body: `Output is still arriving in ${where}. Closing the pane kills the process.`,
       confirm: 'Stop it and close'
     }
   }

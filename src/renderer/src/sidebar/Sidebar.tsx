@@ -164,7 +164,7 @@ export function Sidebar({
               type="button"
               className={`rail__link${dashboardOpen ? ' rail__link--current' : ''}`}
               aria-current={dashboardOpen ? 'page' : undefined}
-              title="Every pane in every worktree, by what needs you"
+              title="All panes, by what needs you"
               onClick={toggleDashboard}
             >
               <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
@@ -209,7 +209,7 @@ export function Sidebar({
               type="button"
               className={`rail__link${settingsOpen ? ' rail__link--current' : ''}`}
               aria-current={settingsOpen ? 'page' : undefined}
-              title="The CLI, updates, text size, and each repository's settings"
+              title="Settings"
               onClick={toggleSettings}
             >
               <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
@@ -224,7 +224,7 @@ export function Sidebar({
               type="button"
               className={`rail__link${helpOpen ? ' rail__link--current' : ''}`}
               aria-current={helpOpen ? 'page' : undefined}
-              title="Every shortcut, what a worktree is, and where the CLI is documented"
+              title="Shortcuts and what a worktree is"
               onClick={toggleHelp}
             >
               <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
@@ -327,7 +327,7 @@ export function Sidebar({
                     type="button"
                     className="project__members"
                     aria-label={`${TEAMWORK_BUTTON_LABEL} in ${project.name}`}
-                    title={`Set up teamwork in ${project.name}, and see who is on it`}
+                    title={`Teamwork in ${project.name}`}
                     onClick={() => openTeamwork(project.id)}
                   >
                     {TEAMWORK_BUTTON_LABEL}

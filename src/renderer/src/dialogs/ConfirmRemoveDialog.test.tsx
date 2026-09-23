@@ -95,7 +95,7 @@ describe('what it says will be lost', () => {
     seed({ statuses: { w1: status({ staged: 1, unstaged: 2, untracked: 3, conflicted: 1 }) } })
     mount()
     expect(screen.getByText(/^7 uncommitted changes will be deleted/)).toBeTruthy()
-    expect(screen.getByText(/there is no undo/)).toBeTruthy()
+    expect(screen.getByText(/There is no undo/)).toBeTruthy()
   })
 
   it('counts one change as one change', () => {
@@ -110,7 +110,6 @@ describe('what it says will be lost', () => {
     seed({ statuses: { w1: status({ ignored: 4 }) } })
     mount()
     expect(screen.getByText(/^4 ignored files or folders will go too/)).toBeTruthy()
-    expect(screen.getByText(/read the names above before you decide/)).toBeTruthy()
   })
 
   it('says nothing about counts it has no status for', () => {

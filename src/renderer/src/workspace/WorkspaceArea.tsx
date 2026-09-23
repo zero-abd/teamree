@@ -196,9 +196,7 @@ function WorkspaceMain({
         <main className="workspace workspace--empty">
           <div className="placeholder">
             <h1 className="placeholder__title">The runtime is not running</h1>
-            <p className="placeholder__body">
-              Nothing here will respond until it is back. Quit and reopen teamree to start a new one.
-            </p>
+            <p className="placeholder__body">Quit and reopen teamree.</p>
             {connection.detail ? <p className="placeholder__body">{connection.detail}</p> : null}
           </div>
         </main>
@@ -215,10 +213,6 @@ function WorkspaceMain({
         <main className="workspace workspace--empty">
           <div className="placeholder">
             <h1 className="placeholder__title">Add a repository to start</h1>
-            <p className="placeholder__body">
-              teamree works in git worktrees of a repository you already have: one checkout per task, so several agents
-              can work at once without seeing each other&rsquo;s files.
-            </p>
             <div className="placeholder__actions">
               <button
                 type="button"
@@ -244,10 +238,6 @@ function WorkspaceMain({
           <h1 className="placeholder__title">Nothing open</h1>
           {/* `target` is null when there is no worktree to pick, and pointing
               somebody at an empty list is the one thing this line must not do. */}
-          <p className="placeholder__body">
-            {target === null ? 'Nothing to open yet. Start here.' : 'Pick a worktree on the left, or start here.'}
-          </p>
-
           <div className="starters">
             <div className="starter">
               <button
@@ -266,8 +256,8 @@ function WorkspaceMain({
               </button>
               <p className="starter__note" id="starter-terminal">
                 {target === null
-                  ? 'There is no worktree to run one in yet, so this asks what the task is and makes one first.'
-                  : `A shell in ${target.name}, on ${target.branch}.`}
+                  ? 'No worktree yet — this asks for the task and makes one.'
+                  : `${target.name}, on ${target.branch}.`}
               </p>
             </div>
 
@@ -285,10 +275,10 @@ function WorkspaceMain({
               </button>
               <p className="starter__note" id="starter-teamwork">
                 {teamworkProject === undefined
-                  ? 'Teamwork is set up per repository, and there is none here yet.'
+                  ? 'No repository here yet.'
                   : teamworkRunning
-                    ? `Teamwork is already on in ${teamworkProject.name}. Open it to see who is connected, and who may read and type into these panes.`
-                    : `Put your key in ${teamworkProject.name} and pick a relay, so a teammate can see these panes and type into them.`}
+                    ? `Already on in ${teamworkProject.name}.`
+                    : `Not set up in ${teamworkProject.name}.`}
               </p>
             </div>
           </div>

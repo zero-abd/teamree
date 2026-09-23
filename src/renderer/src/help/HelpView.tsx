@@ -25,7 +25,6 @@ import {
   CLI_SETTINGS_BUTTON,
   CLI_TITLE,
   cliHelp,
-  HELP_LEDE,
   HELP_TITLE,
   README_DOCUMENT,
   shortcutGroups,
@@ -92,7 +91,6 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
       <header className="help__head">
         <div className="help__identity">
           <h1 className="help__title">{HELP_TITLE}</h1>
-          <p className="help__lede">{HELP_LEDE}</p>
         </div>
 
         <button
@@ -147,8 +145,6 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
           <h2 className="help__heading" id="help-cli">
             {CLI_TITLE}
           </h2>
-          <p className="help__prose">{cliSection.purpose}</p>
-
           {/* What is true on this machine, in the install panel's own words, so
               the two surfaces cannot come to disagree about one link. */}
           <p className="help__state">{cliSection.headline}</p>
@@ -170,16 +166,13 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
               an external link to the browser and keeps this window on the page
               it already has, so these leave without taking the app with them. */}
           <p className="help__prose">
-            The{' '}
             <a className="help__link" href={README_DOCUMENT} target="_blank" rel="noreferrer">
               README
-            </a>{' '}
-            is what teamree is and how it is installed. Working with other people on the same repository — what crosses
-            the relay, and what a teammate who can type into your pane can do — is in{' '}
+            </a>
+            {' · '}
             <a className="help__link" href={TEAMWORK_DOCUMENT} target="_blank" rel="noreferrer">
               docs/teamwork.md
             </a>
-            .
           </p>
         </section>
       </div>

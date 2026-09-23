@@ -151,9 +151,7 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
         message:
           `${project.name} at ${project.path} has origin ${status.origin.url}, and the invitation names ` +
           `${origin.remote}. Those are two different projects as far as teamree is concerned.`,
-        hint:
-          'Nothing was changed. If this is meant to be the same repository, check the address with whoever sent ' +
-          'the invitation; if it is not, run this again with --into naming somewhere else to clone into.',
+        hint: 'Nothing was changed. Run this again with --into naming somewhere else to clone into.',
         data: { projectId: project.id, here: status.origin.url, invited: origin.remote }
       })
     }
@@ -190,9 +188,8 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
         `${project.name} at ${project.path} was already on this machine and has no origin teamree can read: ` +
         `${status.origin.reason}. Nothing says it is the repository this invitation names.`,
       hint:
-        'Nothing was changed. Run this again with --into naming a path that does not exist yet and it will clone ' +
-        `a fresh checkout there; or, if that directory really is the repository, give it the remote yourself with ` +
-        `\`git -C ${project.path} remote add origin ${origin.remote}\` and run this again.`,
+        'Nothing was changed. Run this again with --into naming a path that does not exist yet, or set the ' +
+        `remote yourself: \`git -C ${project.path} remote add origin ${origin.remote}\`.`,
       data: { projectId: project.id, path: project.path, invited: origin.remote, origin: status.origin }
     })
   }
@@ -206,11 +203,10 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
     text: [
       ...journey.steps.map((step) => step.outcome),
       '',
-      `${project.name} is set up on this machine and your key is in the repository. That is what membership is.`,
-      '',
-      // The sentence this command exists to be careful about.
-      'Nothing here says a teammate is connected. That is a fact about somebody else’s machine and this command ' +
-        `has not observed it — \`teamree team status ${project.name}\` is where it is answered.`,
+      `${project.name} is set up and your key is in the repository.`,
+      // The sentence this command exists to be careful about: a key pushed is
+      // not a teammate connected, and only the status command can answer that.
+      `Nobody is known to be connected; \`teamree team status ${project.name}\` is where that is answered.`,
       ...(origin.kind === 'path' ? ['', pathIdentityNote(origin.remote)] : [])
     ].join('\n')
   }
@@ -256,7 +252,7 @@ async function findOrFetch(
     throw journey.refusal({
       code: 'ambiguous_project',
       message: `${matches.length} projects on this machine already have that origin: ${matches.map((project) => project.name).join(', ')}.`,
-      hint: 'Nothing was changed. Remove the ones you do not want, or finish the setup in the one you do.',
+      hint: 'Nothing was changed. Remove the ones you do not want.',
       data: { matches: matches.map((project) => ({ id: project.id, name: project.name, path: project.path })) }
     })
   }
@@ -432,9 +428,7 @@ async function settleRelay(context: CommandContext, journey: Journey, project: P
       throw journey.refusal({
         code: 'relay_mismatch',
         message: `${current.file} in this checkout names ${onDisk.url}, and the invitation names ${wanted}.`,
-        hint:
-          'Nothing was changed. Two relays is two halves of a team that never meet, and neither machine looks ' +
-          'broken while it happens — so settle which one it is with whoever sent the invitation, and run this again.',
+        hint: 'Nothing was changed. Settle which relay it is, then run this again.',
         data: { projectId: project.id, file: current.file, here: onDisk.url, invited: wanted }
       })
     }
@@ -515,8 +509,7 @@ async function publish(
         // The one place this has to be said plainly, because it is the place
         // somebody discovers that a link did not let them in.
         (result.push.kind === 'auth' || result.push.kind === 'host-key'
-          ? ` Being on this team is being able to push to ${origin.remote}; the invitation carried no ` +
-            'permission and could not, so this is between you and whoever controls that repository.'
+          ? ` You need push access to ${origin.remote}; the invitation grants none.`
           : ''),
       data: { projectId: project.id, publish: result }
     })
@@ -555,9 +548,7 @@ async function waitUntilRead(context: CommandContext, journey: Journey, project:
       throw journey.refusal({
         code: 'not_read_yet',
         message: `teamree has not read ${project.name}’s relay, roster or origin after ${Math.round(READ_TIMEOUT_MS / 1000)} seconds.`,
-        hint:
-          'The project was added and nothing else was changed. Run this again in a moment — every step it has ' +
-          'already done it will find done.',
+        hint: 'The project was added and nothing else was changed. Run this again in a moment.',
         data: { projectId: project.id }
       })
     }

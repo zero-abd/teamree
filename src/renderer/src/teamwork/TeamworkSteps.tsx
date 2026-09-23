@@ -51,7 +51,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import {
   teamworkFacts,
-  UNWATCHED_TEAMREE_LAG,
   type Member,
   type MemberList,
   type PeerLink,
@@ -80,7 +79,6 @@ import {
   pushPlan,
   RELAY_CHECK,
   RELAY_DEPLOY,
-  RELAY_LEAD,
   RELAY_LAUNCHER_UNKNOWN,
   RELAY_OPTIONS,
   RELAY_PANE_NO_URL,
@@ -264,17 +262,6 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
                   <span className="step__state">{MARK_WORDS[step.mark]}</span>
                 </div>
                 <p className="step__summary">{step.summary}</p>
-                {/* Why, then what is true, then what they see. The order is the
-                    argument: a step whose reason is only reachable from a
-                    runbook is a step people do without understanding, and this
-                    is a flow where not understanding it means waiting for
-                    somebody who is waiting for you. */}
-                <p className="step__why">{step.why}</p>
-                {step.otherSide === null ? null : (
-                  <p className="step__other-side">
-                    <span className="step__other-side-label">On their machine</span> {step.otherSide}
-                  </p>
-                )}
                 <StepBody step={step} {...props} />
               </li>
             ))}
@@ -310,10 +297,6 @@ function PathChoice({
   return (
     <div className="path-choice">
       <h2 className="path-choice__head">Which of these are you doing?</h2>
-      <p className="path-choice__lead">
-        Teamwork has two ends and they do different things. Saying which one you are on is what lets the rest of this
-        page be about your half of it.
-      </p>
       <ul className="path-choice__list">
         {order.map((option) => (
           <li key={option.id} className={`path-option${option.id === suggestion?.id ? ' path-option--suggested' : ''}`}>
@@ -325,10 +308,6 @@ function PathChoice({
               {option.title}
             </button>
             {option.id === suggestion?.id ? <p className="path-option__because">{suggestion.because}</p> : null}
-            <p className="path-option__what">{option.what}</p>
-            <p className="path-option__them">
-              <span className="step__other-side-label">They</span> {option.them}
-            </p>
           </li>
         ))}
       </ul>
@@ -342,8 +321,7 @@ function ChosenPath({ path, onChange }: { path: TeamworkPath; onChange: () => vo
   return (
     <div className="chosen-path">
       <p className="chosen-path__line">
-        <span className="chosen-path__label">You are</span> {chosen.title.toLowerCase()}.{' '}
-        <span className="chosen-path__them">{chosen.them}</span>
+        <span className="chosen-path__label">You are</span> {chosen.title.toLowerCase()}.
       </p>
       <button type="button" className="button button--small" onClick={onChange}>
         Not that
@@ -476,17 +454,7 @@ function JoinBody({
 
   return (
     <div className="step__body">
-      <div className="grant">
-        <p className="grant__head">{KEY_GRANT_WARNING.head}</p>
-        <p className="grant__body">{KEY_GRANT_WARNING.body}</p>
-        <p className="grant__body">None of it can be done invisibly:</p>
-        <ul className="grant__mitigations">
-          {KEY_GRANT_WARNING.mitigations.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
-        <p className="grant__close">{KEY_GRANT_WARNING.close}</p>
-      </div>
+      <p className="grant">{KEY_GRANT_WARNING}</p>
       <form className="members__self members__self--join" onSubmit={submit}>
         <label className="field">
           <span className="field__label">Handle</span>
@@ -513,7 +481,6 @@ function JoinBody({
         <button type="submit" className="button button--primary" disabled={pending || chosen === null}>
           {pending ? 'Writing…' : ADD_KEY_BUTTON}
         </button>
-        <p className="members__caveat">This writes the file and stops. Step 4 is what sends it.</p>
       </form>
     </div>
   )
@@ -521,14 +488,10 @@ function JoinBody({
 
 /** What the field says it will do, for each of the three things it can be told. */
 function hintFor(list: MemberList, typed: string, file: string | null): string {
-  if (file !== null) {
-    return list.self.handle === null
-      ? `Writes ${file}.`
-      : `Defaults to the local part of your git email. Writes ${file}.`
-  }
+  if (file !== null) return `Writes ${file}.`
   return typed.trim() === ''
-    ? 'git has no user.email here, so there is no name to use — choose one. Lowercase, and [a-z0-9._-].'
-    : 'Nothing in that name survives as a filename. Lowercase, and [a-z0-9._-].'
+    ? 'No git user.email here — choose a handle. Lowercase, [a-z0-9._-].'
+    : 'Nothing in that name survives as a filename. Lowercase, [a-z0-9._-].'
 }
 
 /**
@@ -576,8 +539,7 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
         />
       </label>
       <span className="field__hint" id={hint}>
-        Runs <code>git remote add origin</code> in this checkout. The URL you both cloned, or the path a shared volume
-        is mounted at on both Macs.
+        Runs <code>git remote add origin</code> in this checkout.
       </span>
       {refusal === null ? null : <p className="field__error">{refusal}</p>}
       {/* The condition, in front of the person who is about to accept it, on
@@ -677,11 +639,7 @@ function RelayBody({
           invited them, and the wrong answer — standing a second relay up — is
           also the one this page is otherwise encouraging. */}
       {path === 'join' && relay.onDisk.url === null ? (
-        <p className="relay-waiting">
-          Nobody has pushed {relay.file} yet, so whoever set this up has not got that far. Pull in a moment and it fills
-          in by itself. Only stand one up yourself if you have agreed that you are the one doing it — two relays means
-          two halves of a team that never meet.
-        </p>
+        <p className="relay-waiting">Nobody has pushed {relay.file} yet. Pull in a moment.</p>
       ) : null}
       {/* The override that is set, unreadable, and silently costing this
           project its relay. Said first, because every other sentence on this
@@ -709,7 +667,6 @@ function RelayBody({
       )}
       {options ? (
         <>
-          <p className="relay-options__lead">{RELAY_LEAD}</p>
           {/* Two ways, side by side and equally weighted. Neither is folded
               away, because they answer different questions — one puts the relay
               somewhere both of you can always reach, the other puts it on this
@@ -736,9 +693,8 @@ function RelayBody({
             spellCheck={false}
           />
           <span className="field__hint">
-            {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>, and stops there. Everybody
-            else gets it from the repository. Paste the whole message a teammate sent if you like — the URL is taken out
-            of it.
+            {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>. A whole message pasted here
+            works — the URL is taken out of it.
           </span>
         </label>
         {check.state === 'bad' ? <RelayRefusal check={check} onUse={setDraft} /> : null}
@@ -791,7 +747,6 @@ function RelayDeploy({
   const blocked = launcherBlocked(relay, relay.deploy.command, pane)
   return (
     <div className="relay-deploy">
-      <p className="relay-deploy__what">{RELAY_DEPLOY.what}</p>
       <button
         type="button"
         className="button button--primary"
@@ -804,11 +759,6 @@ function RelayDeploy({
           a reason nobody can read is the same as one that does nothing. */}
       {blocked === null ? null : <p className="relay-deploy__blocked">{blocked}</p>}
       <p className="relay-deploy__note">{pane?.kind === 'deploy' ? RELAY_DEPLOY.watching : RELAY_DEPLOY.browser}</p>
-      {/* What it costs, which is the question everybody asks before they press
-          a button that makes an account do something. It is somebody else's
-          price list and it moves, so this says the shape of the answer and
-          points at the page that has the numbers. */}
-      <p className="relay-deploy__note">{RELAY_DEPLOY.free}</p>
       {relay.deploy.command === null ? null : (
         <details className="relay-deploy__manual">
           <summary>{RELAY_DEPLOY.manual}</summary>
@@ -844,7 +794,6 @@ function RelayServe({
   const blocked = launcherBlocked(relay, command, pane)
   return (
     <div className="relay-deploy relay-deploy--serve">
-      <p className="relay-deploy__what">{RELAY_SERVE.what}</p>
       {/* Above the button, never beside the outcome: a limitation somebody
           meets after the relay is running is a wasted evening, and this one is
           the exact thing a relay exists to solve. */}
@@ -1123,9 +1072,7 @@ function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element
         </div>
       </dl>
       <p className={`relay-option__keep relay-option__keep--${option.keep}`}>
-        {option.keep === 'commit'
-          ? 'Stable enough to commit: paste it above and push .teamree/relay.'
-          : 'Too short-lived to commit: use TEAMREE_RELAY_URL instead, and leave .teamree/relay alone.'}
+        {option.keep === 'commit' ? 'Commit it: paste it above.' : 'Too short-lived to commit: use TEAMREE_RELAY_URL.'}
       </p>
     </li>
   )
@@ -1165,9 +1112,8 @@ function Override({ relay }: { relay: RelaySetting }): React.JSX.Element | null 
         </button>
         {open ? (
           <p className="disclosure__body">
-            There is no <code>{relay.override.name}</code> in this app’s environment. An app opened from Finder or the
-            dock does not inherit your shell’s, so that override only applies when teamree is started from a terminal
-            that has it set.
+            No <code>{relay.override.name}</code> in this app’s environment. An app opened from Finder does not inherit
+            your shell’s.
           </p>
         ) : null}
       </div>
@@ -1175,15 +1121,8 @@ function Override({ relay }: { relay: RelaySetting }): React.JSX.Element | null 
   }
   return (
     <p className="members__relay-note">
-      <code>{relay.override.name}</code> is set to <code>{relay.override.value}</code> in this app’s environment. It is
-      per-machine and lasts as long as this process: commit the real relay when you are done testing.
-      {relay.onDisk.url === null ? null : (
-        <>
-          {' '}
-          <code>{relay.file}</code> says <code>{relay.onDisk.url}</code>, and the environment is beating it for this
-          run.
-        </>
-      )}
+      <code>{relay.override.name}</code> is set to <code>{relay.override.value}</code>, and beats{' '}
+      {relay.onDisk.url === null ? <code>{relay.file}</code> : <code>{relay.onDisk.url}</code>} for this run.
     </p>
   )
 }
@@ -1339,7 +1278,7 @@ function PublishPlan({ plan, files }: { plan: TeamworkPublishPlan; files: string
       {plan.committed ? (
         <div>
           <dt>Already committed</dt>
-          <dd>Nothing new to commit; this would push what is already here.</dd>
+          <dd>Nothing new to commit.</dd>
         </div>
       ) : null}
     </dl>
@@ -1364,7 +1303,7 @@ function PublishResult({ result, took }: { result: TeamworkPublish; took: number
         {/* Reported after the fact as well as during, because how long it took
             is the answer to "was that normal?" — which is the question a person
             who has just sat through a slow one actually has. */}
-        {took === null ? '' : ` The whole thing took ${formatElapsed(took)}.`}
+        {took === null ? '' : ` Took ${formatElapsed(took)}.`}
       </p>
       {result.push.ok ? (
         <p>
@@ -1548,7 +1487,7 @@ const PHASE_WORDS: Record<PeerLink['phase'], string> = {
 
 function MemberRoster({ list }: { list: MemberList }): React.JSX.Element {
   if (list.members.length === 0) {
-    return <p className="members__empty">No keys committed yet. Whoever adds the first one starts the roster.</p>
+    return <p className="members__empty">No keys in this checkout yet.</p>
   }
   return (
     <ul className="members__list">
@@ -1609,8 +1548,6 @@ function Problems({ list }: { list: MemberList }): React.JSX.Element | null {
 function Freshness({ list }: { list: MemberList }): React.JSX.Element | null {
   if (list.watched) return null
   return (
-    <p className="members__stale">
-      teamree could not watch this project’s files, so this list is only as fresh as this read. {UNWATCHED_TEAMREE_LAG}
-    </p>
+    <p className="members__stale">Not watching this project’s files, so this list is only as fresh as this read.</p>
   )
 }

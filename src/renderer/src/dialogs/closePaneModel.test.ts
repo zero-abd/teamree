@@ -65,14 +65,15 @@ describe('panes worth asking about', () => {
 
   // The expensive one, and the case a `busy` check alone would miss entirely.
   // An agent that has gone quiet is usually holding a question, and this app
-  // cannot tell that from finished — so the sentence says what silence does and
-  // does not prove rather than asserting either.
+  // cannot tell that from finished — so the line names both possibilities
+  // rather than asserting either, and does not explain itself further.
   it('asks about a quiet agent, and does not claim to know it is waiting', () => {
     const warning = closePaneWarning(terminal({ title: 'claude', agent: 'claude', busy: false }))
     expect(warning?.title).toBe('Stop this agent?')
-    expect(warning?.body).toContain('has gone quiet')
-    expect(warning?.body).toContain('watches output, not the agent')
-    expect(warning?.body).toContain('not that it has finished')
+    expect(warning?.body).toBe(
+      'claude has gone quiet in “claude” — waiting for an answer, or finished. Closing the pane kills it.'
+    )
+    expect(warning?.body).not.toContain('teamree watches output')
   })
 
   it('does not ask about an agent pane whose agent has exited', () => {

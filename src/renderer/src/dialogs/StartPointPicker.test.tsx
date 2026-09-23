@@ -242,7 +242,7 @@ describe('a ref the listing never mentioned', () => {
   it('names how many refs the cap dropped, so the tail is reachable', () => {
     render(<Harness state={ready({ ...LIST, total: 900, limit: 4, truncated: true })} />)
     fireEvent.keyDown(box(), { key: 'ArrowDown' })
-    expect(screen.getByText(/Showing the first 4 of 900 refs/)).toBeTruthy()
+    expect(screen.getByText(/First 4 of 900 refs/)).toBeTruthy()
     expect(screen.getByText(/other\s*896/)).toBeTruthy()
   })
 })
