@@ -117,8 +117,6 @@ type WatchedPaneViewProps = {
   onFocus: () => void
   /** Chords the app owns; they must not be typed onto somebody else's machine. */
   isAppChord: (event: KeyboardEvent) => boolean
-  /** The close chord, named on the button, exactly as a local pane names it. */
-  closeHint: string
   onClose: () => void
   /** Every chunk that reaches the screen, so a row elsewhere can quote its last line. */
   onOutput?: (data: string) => void
@@ -140,7 +138,6 @@ export function WatchedPaneView({
   focused,
   onFocus,
   isAppChord,
-  closeHint,
   onClose,
   onOutput
 }: WatchedPaneViewProps): React.JSX.Element {
@@ -617,7 +614,7 @@ export function WatchedPaneView({
         <button
           type="button"
           className="pane__close"
-          title={`Stop watching ${handle}’s ${label} · ${closeHint}`}
+          title={`Stop watching ${handle}’s ${label}`}
           aria-label={`Stop watching ${handle}’s pane ${label}`}
           onClick={onClose}
         >

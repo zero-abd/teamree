@@ -103,10 +103,7 @@ export function App(): React.JSX.Element {
     >
       {sidebarVisible ? (
         <>
-          <Sidebar
-            newWorktreeHint={shortcutHint('new-worktree', modifier)}
-            searchHint={shortcutHint('open-palette', modifier)}
-          />
+          <Sidebar searchHint={shortcutHint('open-palette', modifier)} />
           <SidebarResizer />
         </>
       ) : null}

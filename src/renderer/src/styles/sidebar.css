@@ -86,6 +86,19 @@
   cursor: default;
 }
 
+/* Something about the machine wants a look, and this entry is where it is
+   dealt with. The one mark in the rail; amber, because it is a thing to fix
+   and not a fault in the work. Sized as the unread pip is, and for the same
+   reason: it says "look here", never how much. */
+.rail__badge {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  margin-left: var(--s1);
+  border-radius: 99px;
+  background: var(--warning);
+}
+
 /* Where you are. Said in `aria-current` first; this is the same fact for eyes
    that are not reading the accessibility tree. */
 .rail__link--current {
@@ -223,40 +236,55 @@
   font-size: var(--text-xs);
 }
 
-/* One line about whether teamwork is running, in the project's own header.
-   Four tones because there are four different things to say and collapsing
-   them would send somebody to check their network because a colleague shut a
-   laptop. */
-.teamwork {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding: 1px var(--s2);
+/* The one teamwork control in the project's header: its text is the state,
+   its hover is the reason, and pressing it opens the setup. Four tones because
+   there are four different things to say, and collapsing them would send
+   somebody to check their network because a colleague shut a laptop. The base
+   ref beside it is what gives way when the row is narrow, since a state is
+   the thing somebody glances here for. */
+.project__teamwork {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 var(--s1);
+  border: 0;
   border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
   font-size: var(--text-xs);
   font-weight: 500;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: help;
+  cursor: pointer;
 }
 
-.teamwork--live {
-  color: var(--success);
-  background: color-mix(in srgb, var(--success) 14%, transparent);
-}
-
-.teamwork--pending {
-  color: var(--fg-secondary);
+.project__teamwork:hover {
+  color: var(--fg);
   background: var(--bg-hover);
+}
+
+.project__teamwork:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.project__teamwork--live {
+  color: var(--success);
+}
+
+.project__teamwork--pending {
+  color: var(--fg-secondary);
 }
 
 /* Deliberately unadorned: "nothing is set up here" is a thing to do, not a
    fault, and colouring it like one would have people looking for a break. */
-.teamwork--off {
+.project__teamwork--off {
   color: var(--fg-muted);
 }
 
-.teamwork--problem {
+.project__teamwork--problem {
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 /* The count of a teammate's worktrees, beside the count of your own. Separate
@@ -267,13 +295,16 @@
   color: var(--accent);
 }
 
-/* The base ref, the teamwork line and the members button share one line, so the
-   header stays two rows tall however much any of them has to say. */
+/* The base ref and the teamwork control share one line, so the header stays
+   two rows tall however much either has to say: what the project is on the
+   left, what is happening in it on the right. */
 .project__meta {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--s2);
-  padding: 0 var(--s2) var(--s2) 28px;
+  min-width: 0;
+  padding: 0 var(--s3) var(--s2) 28px;
 }
 
 .project__worktrees {
@@ -393,14 +424,10 @@
   font-size: var(--text-xs);
 }
 
+/* `creating` and `failed`: the chip's own shape, with a colour only for the
+   one that is a fault. */
 .worktree__tag {
-  flex: none;
-  padding: 0 5px;
-  border-radius: 99px;
   background: var(--bg-raised);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0.02em;
 }
 
 .worktree__tag--failed {
@@ -600,22 +627,13 @@
 
 /* Whether this worktree can go in. Kept quiet: it sits beside the status chips
    and must not shout over them, and "unknown" is not a warning — it is the
-   absence of an answer. */
+   absence of an answer. It shares its line with the branch, not with the name,
+   so the branch is what gives way: "2 conflicts" clipped to "2…" says nothing,
+   while a shortened branch is still recognisable. */
 .worktree__merge {
-  padding: 0 var(--s1);
-  /* It shares its line with the branch now, not with the name, so the branch is
-     what gives way: "no commits" clipped to "no…" says nothing, while a
-     shortened branch is still recognisable. Clipped rather than wrapped if it
-     ever does have to shrink, with the whole sentence in the tooltip. */
-  flex: none;
   min-width: 0;
   overflow: hidden;
-  border-radius: var(--r1);
-  background: var(--bg-press);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .worktree__merge--clean {
@@ -627,11 +645,6 @@
   color: var(--warning);
 }
 
-/* Nothing to merge: not a problem and not an achievement, so it stays the
-   quietest thing on the row. */
-.worktree__merge--spent {
-  color: var(--fg-muted);
-}
 
 /* The empty project's own call to action, so the first worktree is one click
    from where the absence of one is noticed. */
@@ -776,8 +789,14 @@
 
 /* The last line the pane printed, in the terminal's own typeface: it is a
    quotation, not a status this app worked out. Indented under the label so the
-   activity dot keeps its own column. */
+   activity dot keeps its own column.
+
+   One line, ended on a word. `text-overflow: ellipsis` cuts wherever the box
+   ends — "MCP startup incomplete (fai…" — and there is no telling it to stop
+   at a space. A one-line clamp is the only thing in CSS that does: the text
+   wraps at words first and the ellipsis lands after the last one that fits. */
 .pane-row__evidence {
+  display: -webkit-box;
   overflow: hidden;
   padding-left: 15px;
   /* A step brighter than the label above it: the quoted line is what the row
@@ -786,8 +805,9 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
 }
 
 

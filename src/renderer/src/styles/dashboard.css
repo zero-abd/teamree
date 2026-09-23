@@ -174,13 +174,9 @@
   font-weight: 600;
 }
 
+/* `shell`, on a row that is not an agent's: the chip's own shape, no colour. */
 .board-row__kind {
-  flex: none;
-  padding: 0 var(--s1);
-  border-radius: var(--r1);
-  background: var(--bg-press);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
+  align-self: center;
 }
 
 .board-row__state {

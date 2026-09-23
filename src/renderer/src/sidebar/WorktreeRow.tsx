@@ -205,14 +205,14 @@ export function WorktreeRow({
             <span className="worktree__branch">{worktree.branch}</span>
             {ready ? <GitStatusChips status={status} /> : null}
             {badge ? (
-              <span className={`worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
+              <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
                 {badge.label}
               </span>
             ) : null}
-            {creating ? <span className="worktree__tag">creating</span> : null}
-            {failed ? <span className="worktree__tag worktree__tag--failed">failed</span> : null}
+            {creating ? <span className="chip worktree__tag">creating</span> : null}
+            {failed ? <span className="chip worktree__tag worktree__tag--failed">failed</span> : null}
             {missing ? (
-              <span className="worktree__tag worktree__tag--missing" title={`${worktree.path} is not on disk`}>
+              <span className="chip worktree__tag worktree__tag--missing" title={`${worktree.path} is not on disk`}>
                 missing
               </span>
             ) : null}
@@ -258,7 +258,7 @@ export function WorktreeRow({
 
       {failed ? (
         <div className="worktree__failure">
-          <p className="worktree__error">{worktree.error ?? 'Creation failed.'}</p>
+          <p className="worktree__error">{worktree.error ?? 'Creation failed'}</p>
           <button type="button" className="button button--ghost button--tiny" onClick={onRetry}>
             Retry
           </button>

@@ -24,7 +24,6 @@ import { useCallback, useMemo } from 'react'
 import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { shownRoot } from '../panes/paneLayout'
 import { PaneTree } from '../panes/PaneTree'
 import { SplitFrame } from '../panes/SplitFrame'
@@ -51,7 +50,6 @@ export function WorkspaceArea({
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeWatchedPane = useWorkspaceStore((state) => state.closeWatchedPane)
   const noteWatchedPaneOutput = useWorkspaceStore((state) => state.noteWatchedPaneOutput)
-  const closeHint = shortcutHint('close-pane', modifier)
 
   // Here rather than inside `WorkspaceMain`, because this component is the one
   // that is always mounted: the surfaces below it replace each other, and the
@@ -74,7 +72,6 @@ export function WorkspaceArea({
           focused={focusedWatchId === watch.id}
           onFocus={() => focusPane(watch.id)}
           isAppChord={isAppChord}
-          closeHint={closeHint}
           onOutput={(data) => noteWatchedPaneOutput(watch.id, data)}
           onClose={() => closeWatchedPane(watch.id)}
         />
@@ -109,7 +106,7 @@ function WorkspaceMain({
 }): React.JSX.Element {
   return (
     <div className="workspace-column">
-      <TerminalTabs modifier={modifier} />
+      <TerminalTabs />
       <WorkspaceView modifier={modifier} isAppChord={isAppChord} />
     </div>
   )
@@ -172,7 +169,7 @@ function WorkspaceView({
 
   // Before the empty state, not after it: which pane needs you is a question
   // about every worktree, and it is worth asking with none of them open.
-  if (dashboardOpen) return <Dashboard modifier={modifier} />
+  if (dashboardOpen) return <Dashboard />
 
   // Same reasoning, and the reason this stopped being a modal: setting teamwork
   // up is a question about a repository, not about the worktree that happens to
@@ -232,7 +229,6 @@ function WorkspaceView({
               onRelaunch={onRelaunch}
               onResize={onResize}
               isAppChord={isAppChord}
-              closeHint={shortcutHint('close-pane', modifier)}
               searchTerminalId={paneSearch?.terminalId ?? null}
               searchToken={paneSearch?.token ?? 0}
               onCloseSearch={closePaneSearch}
@@ -242,7 +238,7 @@ function WorkspaceView({
           )}
         </div>
 
-        <RightPanel modifier={modifier} />
+        <RightPanel />
       </div>
     </main>
   )

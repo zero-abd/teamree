@@ -28,16 +28,14 @@ import { evidenceLine } from '@shared/outputEvidence'
 import { Brand, SidebarGlyph } from '../shell/Brand'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
-import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
+import { teamworkControlLabel, teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { worktreesByProject } from './worktreeOrder'
 import { WorktreeRow } from './WorktreeRow'
 
 export function Sidebar({
-  newWorktreeHint,
   searchHint
 }: {
-  newWorktreeHint: string
   /**
    * The one chord drawn in the rail, inside the search field, because that is
    * where every app puts it. The rows under it carry none: the owner's rule is
@@ -141,8 +139,8 @@ export function Sidebar({
           the one control that puts the sidebar away. On macOS the window
           buttons sit on this row too, and it is what the window is dragged by
           — the stylesheet makes it a drag region and exempts the button. The
-          same command is a row in the palette and the menu bar; the way back
-          is the strip's left end. */}
+          same command is a row in the palette and the menu bar, which is where
+          its chord is taught; the way back is the strip's left end. */}
       <header className="sidebar__brand">
         <Brand />
         <button
@@ -181,11 +179,7 @@ export function Sidebar({
               className={`rail__link${teamworkProjectId !== null ? ' rail__link--current' : ''}`}
               aria-current={teamworkProjectId !== null ? 'page' : undefined}
               disabled={railProject === undefined}
-              title={
-                railProject === undefined
-                  ? 'Teamwork is set up per repository, and there is none here yet.'
-                  : `Set up teamwork in ${railProject.name}, and see who is on it`
-              }
+              title={railProject === undefined ? 'No projects yet' : `Teamwork in ${railProject.name}`}
               onClick={() => {
                 if (teamworkProjectId !== null) closeTeamwork()
                 else if (railProject) openTeamwork(railProject.id)
@@ -254,6 +248,16 @@ export function Sidebar({
                 <path d="M7 1.5v1.7M7 10.8v1.7M12.1 7h-1.7M3.6 7H1.9M10.6 3.4 9.4 4.6M4.6 9.4l-1.2 1.2M10.6 10.6 9.4 9.4M4.6 4.6 3.4 3.4" />
               </svg>
               <span>Settings</span>
+              {/* The one mark in the rail that is about the machine rather than
+                  the window: the CLI link is wrong, and Settings is where it is
+                  fixed. It was a red pill across the sidebar's foot for as long
+                  as the link was wrong — which from a checkout is always — and a
+                  warning that never goes away is chrome, not a warning. The
+                  mark is inside the entry, so pressing it is pressing Settings;
+                  the hover says what is wrong and what the fix will do. */}
+              {offerCliInstall(cli) ? (
+                <span className="rail__badge" role="img" aria-label={cliActionLabel(cli)} title={cliTitle(cli)} />
+              ) : null}
             </button>
           </li>
           <li>
@@ -341,7 +345,7 @@ export function Sidebar({
                   <button
                     type="button"
                     className="button button--ghost button--icon"
-                    title={`New task in ${project.name} · ${newWorktreeHint}`}
+                    title={`New task in ${project.name}`}
                     aria-label={`New task in ${project.name}`}
                     onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
                   >
@@ -352,26 +356,26 @@ export function Sidebar({
                 </div>
                 <div className="project__meta">
                   <p className="project__base">{project.baseRef}</p>
-                  {/* Honest about all four of "not set up", "cannot reach the
-                    relay", "nobody is connected" and "somebody answered and was
-                    not who they should be" — one word each, and the whole of it
-                    on hover. */}
-                  {summary ? (
-                    <span className={`teamwork teamwork--${summary.tone}`} title={summary.detail}>
-                      {summary.label}
-                    </span>
-                  ) : null}
-                  {/* Named with the project, because the rail has an entry of
-                    the same name: two buttons reading "Teamwork" are one button
-                    to anybody listening rather than looking. */}
+                  {/* One control: the state is its text and the reason is its
+                    hover. It is honest about all of "not set up", "cannot reach
+                    the relay", "nobody is connected" and "somebody answered and
+                    was not who they should be" — a word or two each — and
+                    pressing it opens the setup. It used to be a chip saying
+                    "Teamwork off" beside a button saying "Teamwork", which is
+                    the same word twice with no way to tell which one to press.
+
+                    Named with the project for the accessibility tree, because
+                    the rail has an entry called Teamwork too: two buttons with
+                    one name are one button to anybody listening rather than
+                    looking. */}
                   <button
                     type="button"
-                    className="project__members"
-                    aria-label={`${TEAMWORK_BUTTON_LABEL} in ${project.name}`}
-                    title={`Teamwork in ${project.name}`}
+                    className={`project__teamwork${summary ? ` project__teamwork--${summary.tone}` : ''}`}
+                    aria-label={`${teamworkControlLabel(summary)} in ${project.name}`}
+                    title={summary ? summary.detail : `Teamwork in ${project.name}`}
                     onClick={() => openTeamwork(project.id)}
                   >
-                    {TEAMWORK_BUTTON_LABEL}
+                    {teamworkControlLabel(summary)}
                   </button>
                 </div>
 
@@ -440,28 +444,6 @@ export function Sidebar({
           })}
         </div>
       </nav>
-
-      {/* The one piece of chrome in this app that argues for itself: it is here
-          only while the CLI is not linked to this build, and it goes as soon as
-          it is. The palette reaches the same panel at any time.
-
-          Both the label and the title are read from the model rather than
-          written here, because what is wrong is not always that there is no
-          link — see `cliActionLabel`. This said "Put teamree on my PATH" at
-          somebody whose PATH already had one, pointing into a build directory
-          that had been deleted. */}
-      {offerCliInstall(cli) ? (
-        <div className="sidebar__foot">
-          <button
-            type="button"
-            className="sidebar__cli"
-            title={cliTitle(cli)}
-            onClick={() => openDialog({ kind: 'install-cli' })}
-          >
-            {cliActionLabel(cli)}
-          </button>
-        </div>
-      ) : null}
     </div>
   )
 }

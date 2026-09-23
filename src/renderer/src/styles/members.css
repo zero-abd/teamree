@@ -1,42 +1,5 @@
-/* The Start teamwork panel, and the one line in the sidebar that opens it. */
-
-/* Base ref and the members link share a row, because both answer "what is this
-   project" rather than "what is happening in it". */
-.project__meta {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s2);
-  padding: 0 var(--s3) var(--s2) 28px;
-}
-
-.project__meta .project__base {
-  padding: 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.project__members {
-  flex: none;
-  border: 0;
-  background: none;
-  color: var(--fg-muted);
-  font: inherit;
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-
-.project__members:hover {
-  color: var(--accent-bright);
-}
-
-.project__members:focus-visible {
-  border-radius: var(--r1);
-  outline: none;
-  box-shadow: var(--ring);
-}
+/* The Start teamwork panel. The control in the project header that opens it
+   is the sidebar's — `.project__teamwork` in sidebar.css. */
 
 .members {
   display: flex;

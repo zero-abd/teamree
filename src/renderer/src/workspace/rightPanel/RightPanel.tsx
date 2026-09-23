@@ -10,8 +10,6 @@
 // The rail is drawn even while the panel is closed, down the window's right
 // edge, so the three tabs stay findable — see `RightRail.tsx`.
 
-import type { PlatformModifier } from '../../keyboard/platformModifier'
-import { shortcutHint } from '../../keyboard/workspaceShortcuts'
 import { collectTerminalIds } from '../../panes/paneLayout'
 import { EdgeResizer } from '../../shell/EdgeResizer'
 import { useWorkspaceStore } from '../../state/workspaceStore'
@@ -21,7 +19,7 @@ import { PanesTab } from './PanesTab'
 import { RightRail } from './RightRail'
 import { RIGHT_PANEL_DEFAULT_PX, RIGHT_PANEL_MAX_PX, RIGHT_PANEL_MIN_PX } from './rightPanelState'
 
-export function RightPanel({ modifier }: { modifier: PlatformModifier }): React.JSX.Element | null {
+export function RightPanel(): React.JSX.Element | null {
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
   const open = useWorkspaceStore((state) => state.rightPanelOpen)
   const tab = useWorkspaceStore((state) => state.rightPanelTab)
@@ -44,7 +42,6 @@ export function RightPanel({ modifier }: { modifier: PlatformModifier }): React.
       tab={tab}
       status={status}
       panes={paneCount}
-      toggleHint={shortcutHint('toggle-right-panel', modifier)}
       onPick={showRightPanelTab}
       onToggle={toggleRightPanel}
     />

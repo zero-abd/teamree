@@ -54,7 +54,7 @@ export function PanesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
         </button>
       </div>
       {rows.length === 0 ? (
-        <p className="panel__empty">No panes yet.</p>
+        <p className="panel__empty">No panes</p>
       ) : (
         <PaneRows
           className="panes--panel"

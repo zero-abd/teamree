@@ -19,21 +19,33 @@
 // claim with up to five minutes of slack in it, and for those five minutes a
 // shut laptop and a working one read identically. A link quiet for longer than
 // an ordinary gap between keepalives therefore carries the age of that silence,
-// and this says it — `1 connected · last heard 4m ago` — while a link that is
-// talking carries nothing and this says nothing new about it.
+// and this says it — `1 connected · silent 4m` — while a link that is talking
+// carries nothing and this says nothing new about it.
 
 import type { PeerLink, TeamworkRead, TeamworkStatus } from '@shared/entities'
 import { ADD_KEY_BUTTON } from '../teamwork/startTeamwork'
-import { agoLabel } from './agentRows'
+import { agoLabel, sinceLabel } from './agentRows'
 
 /**
- * The label on the button in the project header that opens the setup panel.
+ * The word on the control in the project header that opens the setup panel.
  *
  * Shared with the sidebar that renders it, because the tooltip below tells
  * somebody to press it by name: a name written out twice is a name that can
  * end up pointing at a button nobody can find.
  */
 export const TEAMWORK_BUTTON_LABEL = 'Teamwork'
+
+/**
+ * What that control reads, with the state folded in: `Teamwork · off`,
+ * `Teamwork · 2 connected`, or the bare word before anything has been read.
+ *
+ * One control rather than a chip and a button. The header used to show a chip
+ * reading "Teamwork off" beside a button reading "Teamwork", which is the same
+ * word twice, one of them pressable, and no way to tell which by looking.
+ */
+export function teamworkControlLabel(summary: TeamworkSummary | null): string {
+  return summary === null ? TEAMWORK_BUTTON_LABEL : `${TEAMWORK_BUTTON_LABEL} · ${summary.label}`
+}
 
 export type TeamworkTone =
   /** Everything that can be up is up. */
@@ -47,7 +59,11 @@ export type TeamworkTone =
 
 export type TeamworkSummary = {
   tone: TeamworkTone
-  /** Short enough for a sidebar header. */
+  /**
+   * The state, lower-case and short enough to follow the word "Teamwork" in a
+   * sidebar header: `off`, `no key`, `1 connected · 1 away`. Never a sentence
+   * — the sentence is `detail`, and it is read on hover.
+   */
   label: string
   /** The whole of it, for the title attribute. */
   detail: string
@@ -75,13 +91,13 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   if (status.state === 'unread') {
     return {
       tone: 'pending',
-      label: 'Reading this project',
+      label: 'reading…',
       detail: 'teamree has not read this project’s relay, roster or origin yet.'
     }
   }
 
   if (status.disabledReason !== null) {
-    return { tone: 'off', label: 'Teamwork off', detail: status.disabledReason }
+    return { tone: 'off', label: 'off', detail: status.disabledReason }
   }
   // Before any phase, because every phase below would be a sentence about
   // somebody else's machine. An unenrolled key means each link is parked on a
@@ -91,14 +107,14 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   if (!status.enrolled) {
     return {
       tone: 'off',
-      label: 'Your key is not here',
+      label: 'no key',
       detail: `Your key is not in .teamree/members here. ${TEAMWORK_BUTTON_LABEL} → “${ADD_KEY_BUTTON}”.`
     }
   }
   if (status.links.length === 0) {
     return {
       tone: 'off',
-      label: 'No teammates',
+      label: 'no teammates',
       detail: 'This project’s roster has nobody in it but you.'
     }
   }
@@ -116,7 +132,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   if (refused.length > 0) {
     return {
       tone: 'problem',
-      label: refused.length === 1 ? 'Handshake failed' : `${refused.length} handshakes failed`,
+      label: refused.length === 1 ? 'handshake failed' : `${refused.length} handshakes failed`,
       detail: [
         'Either roster could be the stale one, so pull, and ask them to pull.',
         ...refused.map((link) => `${link.handle}: ${link.detail ?? 'no reason given'}`)
@@ -133,7 +149,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   if (unreachable.length > 0 && connected === 0) {
     return {
       tone: 'problem',
-      label: 'Relay unreachable',
+      label: 'relay unreachable',
       detail: `${relayLabel(status)} could not be reached.`
     }
   }
@@ -150,7 +166,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
       .filter((quiet): quiet is number => quiet !== undefined)
     const parts = [`${connected} connected`]
     if (away > 0) parts.push(`${away} away`)
-    if (silences.length > 0) parts.push(`last heard ${agoLabel(Math.max(...silences))}`)
+    if (silences.length > 0) parts.push(`silent ${sinceLabel(Math.max(...silences))}`)
     return {
       // Still `live`, because the link is: nothing has failed and nothing has
       // been established about the teammate's machine. What was wrong was the
@@ -165,7 +181,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   if (counted('waiting') === status.links.length) {
     return {
       tone: 'pending',
-      label: 'Nobody connected',
+      label: 'nobody connected',
       // Per link underneath, because they do not all say the same thing: a link
       // that has waited across two hourly rendezvous rotations has waited
       // longer than a colleague who stepped out, and what it has to say about
@@ -178,7 +194,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   }
   return {
     tone: 'pending',
-    label: 'Connecting…',
+    label: 'connecting…',
     detail: status.links.map((link) => linkLine(link, now)).join('\n')
   }
 }

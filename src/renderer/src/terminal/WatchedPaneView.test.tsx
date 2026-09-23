@@ -212,7 +212,6 @@ function mount(overrides: Partial<Parameters<typeof WatchedPaneView>[0]> = {}): 
       focused={false}
       onFocus={onFocus}
       isAppChord={() => false}
-      closeHint="⌘W"
       onClose={onClose}
       onOutput={onOutput}
       {...overrides}

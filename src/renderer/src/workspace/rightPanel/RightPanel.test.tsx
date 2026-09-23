@@ -13,7 +13,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Layout, Project, Worktree, WorktreeChanges, WorktreeFiles, WorktreeStatus } from '@shared/entities'
-import { resolvePlatformModifier } from '../../keyboard/platformModifier'
 
 const call = vi.fn()
 
@@ -33,7 +32,6 @@ const { useWorkspaceStore } = await import('../../state/workspaceStore')
 const { RightPanel } = await import('./RightPanel')
 
 const INITIAL = useWorkspaceStore.getState()
-const MAC = resolvePlatformModifier('darwin')
 
 const project: Project = { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' }
 
@@ -137,7 +135,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
 }
 
 const mount = (): void => {
-  render(<RightPanel modifier={MAC} />)
+  render(<RightPanel />)
 }
 
 const filesCalls = (): unknown[] => call.mock.calls.filter(([method]) => method === 'worktree.files').map(([, p]) => p)

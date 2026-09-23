@@ -28,8 +28,6 @@ type RightRailProps = {
   status: { staged: number; unstaged: number; untracked: number; conflicted: number } | undefined
   /** How many panes the worktree on screen has, for the badge on Panes. */
   panes: number
-  /** The chord that toggles the panel, for the hover text. */
-  toggleHint: string
   onPick: (tab: RightPanelTab) => void
   onToggle: () => void
 }
@@ -64,15 +62,7 @@ const TABS: readonly { id: RightPanelTab; label: string; icon: React.JSX.Element
   }
 ]
 
-export function RightRail({
-  open,
-  tab,
-  status,
-  panes,
-  toggleHint,
-  onPick,
-  onToggle
-}: RightRailProps): React.JSX.Element {
+export function RightRail({ open, tab, status, panes, onPick, onToggle }: RightRailProps): React.JSX.Element {
   const counts: Record<RightPanelTab, number> = { files: 0, changes: changedCount(status), panes }
   return (
     <div className={`panel__rail${open ? '' : ' panel__rail--edge'}`}>
@@ -106,7 +96,7 @@ export function RightRail({
         type="button"
         className="panel__fold"
         aria-label={open ? 'Hide panel' : 'Show panel'}
-        title={`${open ? 'Hide panel' : 'Show panel'} · ${toggleHint}`}
+        title={open ? 'Hide panel' : 'Show panel'}
         onClick={onToggle}
       >
         <svg viewBox="0 0 12 12" aria-hidden="true">

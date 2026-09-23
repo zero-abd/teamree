@@ -52,6 +52,44 @@ describe('stylesheets', () => {
     expect(zIndexOf('.notices')).toBeGreaterThan(zIndexOf('.modal-layer'))
   })
 
+  // `text-overflow: ellipsis` cuts wherever the box ends, which on a row of
+  // monospace is mid-word: "MCP startup incomplete (fai…". A one-line clamp
+  // wraps at words first and ellipsises after the last one that fits, which is
+  // the only way CSS has of ending a line on a word.
+  it('ends a quoted line under a pane row on a word, not in the middle of one', () => {
+    const rule = ruleFor('sidebar.css', '.pane-row__evidence')
+    expect(declarationOf(rule, '-webkit-line-clamp')).toBe('1')
+    expect(declarationOf(rule, 'white-space')).not.toBe('nowrap')
+  })
+
+  // One chip, wherever a chip is: the badges on worktree rows, pane bars and
+  // board rows used to pick their own radius — 3px, 99px and 999px between
+  // them — and their own size, so the same kind of thing read three ways.
+  it('draws every chip from one rule', () => {
+    const chip = ruleFor('base.css', '.chip')
+    expect(declarationOf(chip, 'border-radius')).toBe('var(--r1)')
+    expect(declarationOf(chip, 'font-size')).toBe('var(--text-xs)')
+    for (const [sheet, selector] of [
+      ['sidebar.css', '.worktree__tag'],
+      ['sidebar.css', '.worktree__merge'],
+      ['panes.css', '.pane__exit'],
+      ['panes.css', '.pane__restored--agent'],
+      ['dashboard.css', '.board-row__kind']
+    ] as const) {
+      const rule = ruleFor(sheet, selector)
+      expect(declarationOf(rule, 'border-radius'), selector).toBeUndefined()
+      expect(declarationOf(rule, 'font-size'), selector).toBeUndefined()
+    }
+  })
+
+  // The activity dot is one mark with one reading, on the sidebar, the strip,
+  // the board and now the pane bar. A pane bar that drew its own 5px dot was
+  // a second vocabulary for the same five states.
+  it('has one activity dot, and no second dot on the pane bar', () => {
+    expect(ruleFor('sidebar.css', '.activity')).toBeTruthy()
+    expect(findRule('panes.css', '.pane__dot')).toBeUndefined()
+  })
+
   /**
    * Custom properties the shell writes onto the element itself, which no
    * stylesheet declares and none should: two of them come from
@@ -141,4 +179,28 @@ function zIndexOf(selector: string): number {
   // rather than false, and a comparison against nothing would pass quietly.
   expect(found, `${selector} should declare exactly one z-index`).toHaveLength(1)
   return found[0] ?? Number.NaN
+}
+
+/** The one rule with exactly this selector in the named sheet, or nothing. */
+function findRule(sheet: string, selector: string): postcss.Rule | undefined {
+  let found: postcss.Rule | undefined
+  postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
+    if (rule.selector === selector) found = rule
+  })
+  return found
+}
+
+/** Like `findRule`, but a missing rule is a failed test rather than a silent pass. */
+function ruleFor(sheet: string, selector: string): postcss.Rule {
+  const rule = findRule(sheet, selector)
+  expect(rule, `${sheet} should have a rule for ${selector}`).toBeTruthy()
+  return rule as postcss.Rule
+}
+
+function declarationOf(rule: postcss.Rule, prop: string): string | undefined {
+  let value: string | undefined
+  rule.walkDecls(prop, (decl) => {
+    value = decl.value
+  })
+  return value
 }

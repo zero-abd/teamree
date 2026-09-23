@@ -31,15 +31,13 @@
 // one of them said which was the auth refactor.
 
 import { useEffect, useRef, useState } from 'react'
-import type { PlatformModifier } from '../keyboard/platformModifier'
-import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { truncateName } from '../sidebar/agentRows'
 import { SidebarGlyph } from '../shell/Brand'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
-export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
+export function TerminalTabs(): React.JSX.Element {
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
   const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
@@ -80,7 +78,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
         <button
           type="button"
           className="shell__toggle"
-          title={`Show sidebar · ${shortcutHint('toggle-sidebar', modifier)}`}
+          title="Show sidebar"
           aria-label="Show sidebar"
           onClick={toggleSidebar}
         >
@@ -185,16 +183,18 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
 
       {/* Icons rather than words, and at the end of the strip rather than above
           it: three buttons wide is the most a row of panes can spare, and each
-          of them is a chord the status bar already prints and a row the palette
-          already carries. The hover says which chord, so the strip teaches them
-          rather than replacing them. Only beside tabs: with no pane to split,
-          the placeholder under the strip is already offering to open one. */}
+          of them is a row the palette already carries and the menu bar already
+          names with its chord. The hover says what the button does and nothing
+          more — the chords are taught in the menu bar, Help, the palette and
+          the front door, and a strip that named them too was a fifth place.
+          Only beside tabs: with no pane to split, the placeholder under the
+          strip is already offering to open one. */}
       {tabs.length === 0 ? null : (
         <div className="tabs__actions">
           <button
             type="button"
             className="tabs__action"
-            title={`Split right · ${shortcutHint('split-right', modifier)}`}
+            title="Split right"
             aria-label="Split right"
             onClick={() => void splitFocusedPane('row')}
           >
@@ -205,7 +205,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
           <button
             type="button"
             className="tabs__action"
-            title={`Split down · ${shortcutHint('split-down', modifier)}`}
+            title="Split down"
             aria-label="Split down"
             onClick={() => void splitFocusedPane('column')}
           >
@@ -219,7 +219,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
           <button
             type="button"
             className="tabs__action"
-            title={`New terminal · ${shortcutHint('new-terminal', modifier)}`}
+            title="New terminal"
             aria-label="New terminal"
             disabled={activeWorktreeId === null}
             onClick={() => {

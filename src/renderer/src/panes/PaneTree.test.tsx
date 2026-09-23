@@ -61,7 +61,6 @@ function mount(node: PaneNode, terminals: Terminal[], focusedTerminalId: string 
       onRelaunch={onRelaunch}
       onResize={onResize}
       isAppChord={() => false}
-      closeHint="⌘W"
       searchTerminalId={null}
       searchToken={0}
       onCloseSearch={() => {}}
@@ -129,9 +128,24 @@ describe('one pane', () => {
     expect(screen.getByText('exited 0')).toBeTruthy()
   })
 
-  it('shows the pane’s size, which is what a split changed', () => {
+  // The grid size is a fact about the PTY, not about the work, and it was the
+  // one thing on every bar that nobody acted on. It stays reachable — on the
+  // name's hover — for whoever is checking that a split did what they meant.
+  it('keeps the pane’s size off the bar and on the name’s hover', () => {
     mount(leaf('t1'), [terminal('t1', { cols: 132, rows: 43 })])
-    expect(screen.getByText('132×43')).toBeTruthy()
+    expect(screen.queryByText('132×43')).toBeNull()
+    expect(screen.getByText('t1').getAttribute('title')).toBe('t1 · 132×43')
+  })
+
+  // The same dot, with the same reading, as the sidebar row, the tab and the
+  // board: a bar that drew its own green-or-grey mark beside a strip drawing
+  // amber for the same pane was two answers to "what is this pane doing".
+  it('draws the sidebar’s activity dot, read the same way', () => {
+    mount(leaf('t1'), [terminal('t1', { busy: true })])
+    const dot = document.querySelector('.pane__bar .activity') as HTMLElement
+    expect(dot.classList.contains('activity--working')).toBe(true)
+    expect(dot.getAttribute('title')).toBe('working')
+    expect(document.querySelector('.pane__dot')).toBeNull()
   })
 
   // The scrollback under the badge says "[no conversation to resume — fresh
@@ -224,10 +238,12 @@ describe('what a pane is called', () => {
 })
 
 describe('closing the right pane', () => {
-  it('names which pane each button closes, and carries the chord that does it', () => {
+  // The chord is taught in the menu bar, in Help, in the palette and on the
+  // front door; the hover on a close button is not a fifth place.
+  it('names which pane each button closes, and no chord', () => {
     mount(leaf('t1'), [terminal('t1', { title: 'claude' })])
     const button = screen.getByRole('button', { name: 'Close pane claude' })
-    expect(button.getAttribute('title')).toBe('Close pane · ⌘W')
+    expect(button.getAttribute('title')).toBe('Close pane')
   })
 
   it('closes the pane it belongs to, out of four', () => {
