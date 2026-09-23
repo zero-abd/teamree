@@ -115,11 +115,11 @@ export function StartPointPicker({
       </label>
 
       <div className="combo">
-        <div className="combo__box">
+        <div className="picker">
           <input
             id={inputId}
             role="combobox"
-            className="field__input field__input--mono"
+            className="field__input picker__input picker__input--ref"
             value={value.text}
             onChange={(event) => retype(event.target.value)}
             onKeyDown={onKeyDown}
@@ -135,7 +135,7 @@ export function StartPointPicker({
           />
           <button
             type="button"
-            className="combo__toggle"
+            className="picker__chevron"
             tabIndex={-1}
             aria-label={open ? 'Hide refs' : 'Show refs'}
             // Pointer-down: a click lands after the input's blur has closed the list.
@@ -146,9 +146,7 @@ export function StartPointPicker({
               document.getElementById(inputId)?.focus()
             }}
           >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M3 4.5 6 7.5 9 4.5" />
-            </svg>
+            <Chevron />
           </button>
         </div>
 
@@ -203,6 +201,15 @@ export function StartPointPicker({
         ) : null}
       </div>
     </div>
+  )
+}
+
+/** The one chevron both pickers in a form draw. */
+export function Chevron(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M3 4.5 6 7.5 9 4.5" />
+    </svg>
   )
 }
 
@@ -271,13 +278,13 @@ function StartPointStatus({
 
   return (
     <>
-      {/* Before the task is typed there is no branch name to show, and an empty
-          <code> reads as a missing value rather than as one not yet decided. */}
-      {branchName ? <code>{branchName}</code> : 'The new branch'} from <code>{summaryRef}</code>
+      {/* No task yet, no name: an empty <code> reads as a missing value. */}
+      new branch {branchName ? <code>{branchName}</code> : null}
+      {branchName ? ' ' : ''}from <code>{summaryRef}</code>
       {summaryOption ? (
         <>
           {' '}
-          at <code>{summaryOption.shortSha}</code>
+          @ <code>{summaryOption.shortSha}</code>
         </>
       ) : (
         <> (resolved on create)</>

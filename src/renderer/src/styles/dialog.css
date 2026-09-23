@@ -71,6 +71,7 @@
 }
 
 .field__label {
+  padding: 0;
   color: var(--fg-secondary);
   font-size: var(--text-sm);
   font-weight: 500;
@@ -117,6 +118,61 @@ select.field__input {
   background-repeat: no-repeat;
 }
 
+/* Project and Start from: one control, one chevron. */
+.picker {
+  display: block;
+  position: relative;
+}
+
+.picker__input {
+  height: 30px;
+  font-size: var(--text-base);
+}
+
+.picker > .field__input {
+  padding-right: 30px;
+  background-image: none;
+}
+
+.picker__input--ref {
+  font-family: var(--font-mono);
+}
+
+.picker__chevron {
+  display: grid;
+  position: absolute;
+  top: 50%;
+  right: var(--s2);
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+button.picker__chevron {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+button.picker__chevron:hover {
+  color: var(--fg);
+}
+
+.picker__chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
 .field__hint {
   color: var(--fg-muted);
   font-size: var(--text-xs);
@@ -145,7 +201,14 @@ select.field__input {
 .agents__name {
   display: flex;
   flex: 1;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--fg);
   font-size: var(--text-base);
+}
+
+.agents__mark {
+  display: flex;
 }
 
 .agents__name .agent-glyph {
@@ -166,7 +229,7 @@ select.field__input {
 }
 
 .agents__step:disabled {
-  color: var(--fg-muted);
+  opacity: 0.45;
   cursor: default;
 }
 
@@ -243,40 +306,8 @@ select.field__input {
   gap: var(--s1);
 }
 
-/* The list opens below the summary line, never over it: what the highlighted
-   row resolves to has to stay readable while the list is being browsed. */
-.combo__box {
-  position: relative;
-}
-
-.combo__toggle {
-  position: absolute;
-  top: 50%;
-  right: var(--s2);
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r1);
-  background: transparent;
-  color: var(--fg-muted);
-  transform: translateY(-50%);
-  cursor: pointer;
-}
-
-.combo__toggle:hover {
-  color: var(--fg);
-}
-
-.combo__toggle svg {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-
+/* Opens below the summary line, never over it: what the highlighted row
+   resolves to stays readable while the list is browsed. */
 .combo__pop {
   position: absolute;
   z-index: 1;
