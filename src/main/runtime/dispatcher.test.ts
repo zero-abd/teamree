@@ -125,6 +125,11 @@ describe('dispatcher', () => {
       'cli.dismissPrompt',
       'cli.install',
       'cli.status',
+      // Local for the same reason, and more bluntly: this one starts a program
+      // on this machine, and the only hands that get to ask for that are the
+      // ones in front of it.
+      'editor.list',
+      'editor.open',
       'layout.get',
       'layout.set',
       'members.join',

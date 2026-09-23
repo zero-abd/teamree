@@ -1064,6 +1064,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
       return updateState()
     },
     'update.download': () => ({ opened: 'https://github.com/zero-abd/teamree/releases/latest' }),
+    // The seeded runtime has no machine under it: nothing here is on anybody's
+    // PATH and nothing may be started. The row menu keeps its Open in item and
+    // says this when it is chosen, which is what the real refusal looks like.
+    'editor.list': () => ({ editors: [] }),
+    'editor.open': () => ({ opened: false, reason: 'The demonstration workspace cannot start an editor.' }),
     'terminal.list': ({ worktreeId }) =>
       [...terminals.values()]
         .map((terminal) => terminal.record)

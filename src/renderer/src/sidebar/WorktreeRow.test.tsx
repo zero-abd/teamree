@@ -13,7 +13,7 @@
 // anyone can type is survivable because nothing can be done invisibly, and this
 // row is where a pane somebody else is reading or typing into says so.
 
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneWatcher, Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import type { PaneAttention } from '../state/paneAttention'
@@ -76,7 +76,16 @@ const status = (overrides: Partial<WorktreeStatus> = {}): WorktreeStatus => ({
 
 const watcher = (handle: string): PaneWatcher => ({ handle, publicKey: `${handle}-key`, since: NOW - 1_000 })
 
-const handlers = { onOpen: vi.fn(), onRetry: vi.fn(), onRemove: vi.fn(), onFocusTerminal: vi.fn() }
+const handlers = {
+  onOpen: vi.fn(),
+  onRetry: vi.fn(),
+  onRemove: vi.fn(),
+  onFocusTerminal: vi.fn(),
+  onReveal: vi.fn(),
+  onCopyPath: vi.fn(),
+  onCopyBranch: vi.fn(),
+  onOpenInEditor: vi.fn()
+}
 
 function mount(
   overrides: {
@@ -87,6 +96,7 @@ function mount(
     evidence?: Record<string, string | null>
     watchers?: Record<string, PaneAttention>
     active?: boolean
+    editorLabel?: string
   } = {}
 ): void {
   render(
@@ -100,14 +110,17 @@ function mount(
         watchers={overrides.watchers ?? {}}
         now={NOW}
         active={overrides.active ?? false}
+        editorLabel={overrides.editorLabel ?? 'Zed'}
         {...handlers}
       />
     </ul>
   )
 }
 
-// Anchored: the remove button is named "Remove worktree Rewrite the pager".
+// Anchored: the `⋯` is named "More for Rewrite the pager".
 const openButton = (): HTMLButtonElement => screen.getByRole('button', { name: /^Rewrite the pager/ })
+const row = (): HTMLElement => document.querySelector('.worktree') as HTMLElement
+const labels = (): string[] => screen.getAllByRole('menuitem').map((item) => item.textContent ?? '')
 
 beforeEach(() => {
   useWorkspaceStore.setState({ unreadableSince: {} })
@@ -134,10 +147,11 @@ describe('a worktree still being made', () => {
   })
 
   // The row is the only place a failed creation is ever reported, so it can
-  // still be removed.
+  // still be removed — from the menu, which a row in any state has.
   it('can always be removed, whatever state it is in', () => {
     mount({ worktree: worktree({ state: 'creating' }) })
-    screen.getByRole('button', { name: 'Remove worktree Rewrite the pager' }).click()
+    fireEvent.contextMenu(row())
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
     expect(handlers.onRemove).toHaveBeenCalledOnce()
   })
 })
@@ -352,5 +366,123 @@ describe('what the panes under it are doing', () => {
   it('lists no panes at all for a worktree still being made', () => {
     mount({ worktree: worktree({ state: 'creating' }), terminals: [terminal({ id: 't1' })] })
     expect(screen.queryByRole('button', { name: /zsh/ })).toBeNull()
+  })
+})
+
+// One menu, three ways in, and the destructive item at the bottom of it rather
+// than on the row.
+//
+// What this replaces is the whole point of it: the row's only control was a `×`
+// that removed the checkout, so the most destructive action in the app was the
+// easiest thing on the row to hit by accident — and reveal, copy and open were
+// not reachable from the sidebar at all.
+describe('the row menu', () => {
+  it('opens on a right-click, with the five things a row can do, in order', () => {
+    mount()
+    fireEvent.contextMenu(row())
+
+    expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
+    expect(labels()).toEqual(['Reveal in Finder', 'Copy path', 'Copy branch', 'Open in Zed', 'Remove'])
+  })
+
+  // The heart of the change. A one-pixel miss on a `×` used to open the
+  // question that destroys a checkout; now nothing on the row does.
+  it('leaves no remove control on the row itself', () => {
+    mount()
+    expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remove worktree Rewrite the pager' })).toBeNull()
+    expect(handlers.onRemove).not.toHaveBeenCalled()
+  })
+
+  it('names the editor this project would use', () => {
+    mount({ editorLabel: 'VS Code' })
+    fireEvent.contextMenu(row())
+    expect(labels()[3]).toBe('Open in VS Code')
+  })
+
+  it('opens the same menu from the ⋯ beside the row', () => {
+    mount()
+    const more = screen.getByRole('button', { name: 'More for Rewrite the pager' })
+    expect(more.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(more)
+    expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
+    expect(more.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('chooses the item that was pressed, and closes behind it', () => {
+    mount()
+    fireEvent.contextMenu(row())
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy path' }))
+
+    expect(handlers.onCopyPath).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('reveals and copies the branch from the same menu', () => {
+    mount()
+    fireEvent.contextMenu(row())
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in Finder' }))
+    fireEvent.contextMenu(row())
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy branch' }))
+    fireEvent.contextMenu(row())
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open in Zed' }))
+
+    expect(handlers.onReveal).toHaveBeenCalledOnce()
+    expect(handlers.onCopyBranch).toHaveBeenCalledOnce()
+    expect(handlers.onOpenInEditor).toHaveBeenCalledOnce()
+  })
+})
+
+// A menu reachable only with a mouse is a row that lost its only control to
+// anybody who does not use one, which is what taking the `×` off would have
+// meant without this.
+describe('the row menu from the keyboard', () => {
+  it('opens on the context-menu key and on Shift+F10, with the first item focused', () => {
+    mount()
+    openButton().focus()
+    fireEvent.keyDown(row(), { key: 'ContextMenu' })
+
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(document.activeElement?.textContent).toBe('Reveal in Finder')
+
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    fireEvent.keyDown(row(), { key: 'F10', shiftKey: true })
+    expect(screen.getByRole('menu')).toBeTruthy()
+  })
+
+  it('walks the items with the arrows and chooses with Enter', () => {
+    mount()
+    openButton().focus()
+    fireEvent.keyDown(row(), { key: 'ContextMenu' })
+
+    const menu = screen.getByRole('menu')
+    for (let press = 0; press < 4; press += 1) fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(document.activeElement?.textContent).toBe('Remove')
+
+    fireEvent.keyDown(menu, { key: 'Enter' })
+    expect(handlers.onRemove).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  // Wrapping, so the destructive item is one press away from the top in the
+  // direction nobody reaches it by accident.
+  it('wraps upwards from the first item', () => {
+    mount()
+    openButton().focus()
+    fireEvent.keyDown(row(), { key: 'ContextMenu' })
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowUp' })
+
+    expect(document.activeElement?.textContent).toBe('Remove')
+  })
+
+  it('closes on Escape and gives the row back the focus', () => {
+    mount()
+    openButton().focus()
+    fireEvent.keyDown(row(), { key: 'ContextMenu' })
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(openButton())
+    expect(handlers.onRemove).not.toHaveBeenCalled()
   })
 })

@@ -1,8 +1,9 @@
 // The preferences that belong to a person at a machine rather than to the work.
 //
 // Three of them live here: how big the text in a pane is, which ref a new task
-// in a given project starts from by default, and whether an agent that stops
-// while you are elsewhere is allowed to say so. All are stored the way the
+// in a given project starts from by default, whether an agent that stops
+// while you are elsewhere is allowed to say so, and which editor that
+// project's checkouts open in. All are stored the way the
 // sidebar's width already is — in this window's `localStorage`, behind a
 // clamp, with every read and write wrapped so that storage being unavailable
 // costs a default rather than a render.
@@ -17,7 +18,10 @@
 // person holding the habit and not to the repository they hold it about. The
 // repository's own answer to "where do branches start" is its base ref, and
 // that stays exactly where it is; this only decides which ref the composer
-// offers first, and anything typed over it still wins.
+// offers first, and anything typed over it still wins. An editor is the same
+// kind of fact as the font size: which program is installed on this machine and
+// which one this person likes opening a checkout in. A teammate pulling the
+// repository has their own answer and it is not this one.
 //
 // Notifications are the clearest case of the three. Whether a machine is
 // allowed to interrupt you is a fact about the machine you are sitting at and
@@ -78,6 +82,8 @@ export function writeStoredAgentNotices(
     // on the next.
   }
 }
+
+const EDITOR_COMMANDS_KEY = 'teamree.editor.commands'
 
 export function clampTerminalFontSize(size: number): number {
   if (!Number.isFinite(size)) return TERMINAL_FONT_DEFAULT_PX
@@ -158,4 +164,60 @@ export function withStartPoint(
     return rest
   }
   return { ...refs, [projectId]: trimmed }
+}
+
+/**
+ * Each project's editor command, by project id.
+ *
+ * Read exactly as defensively as the start points above, and for a sharper
+ * reason: this string names a program the main process will look for on PATH.
+ * It is never a command line — the main process resolves it as one program name
+ * and spawns it with the checkout as an argument — but a stored value that is
+ * not a string has no business getting as far as that decision.
+ */
+export function readStoredEditorCommands(storage: Pick<Storage, 'getItem'> | undefined): Record<string, string> {
+  try {
+    const raw = storage?.getItem(EDITOR_COMMANDS_KEY)
+    if (raw === null || raw === undefined) return {}
+    const parsed: unknown = JSON.parse(raw)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const commands: Record<string, string> = {}
+    for (const [projectId, command] of Object.entries(parsed)) {
+      if (typeof command === 'string' && command.trim().length > 0) commands[projectId] = command.trim()
+    }
+    return commands
+  } catch {
+    return {}
+  }
+}
+
+export function writeStoredEditorCommands(
+  storage: Pick<Storage, 'setItem'> | undefined,
+  commands: Record<string, string>
+): void {
+  try {
+    storage?.setItem(EDITOR_COMMANDS_KEY, JSON.stringify(commands))
+  } catch {
+    // As above: the choice holds for this window and is forgotten on the next.
+  }
+}
+
+/**
+ * The map with one project's editor set, or removed when the command is blank.
+ *
+ * Clearing removes the entry rather than storing an empty string, because an
+ * absent entry is the only spelling of "use whatever is on PATH" that the main
+ * process checks for.
+ */
+export function withEditorCommand(
+  commands: Record<string, string>,
+  projectId: string,
+  command: string | null
+): Record<string, string> {
+  const trimmed = command?.trim() ?? ''
+  if (trimmed.length === 0) {
+    const { [projectId]: _removed, ...rest } = commands
+    return rest
+  }
+  return { ...commands, [projectId]: trimmed }
 }

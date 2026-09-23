@@ -211,6 +211,28 @@ export const Params = {
   cliDismissPrompt: z.object({}),
 
   /**
+   * Which of the editors teamree knows how to look for are on this machine.
+   *
+   * A probe of PATH rather than a setting, for the reason `agent-discovery.ts`
+   * gives about agents: a list somebody has to fill in goes stale the first
+   * time they install something. Takes nothing, because the list of names
+   * looked for is this app's and not a caller's to aim.
+   */
+  editorList: z.object({}),
+  /**
+   * Opens a path in an editor, or says why it did not.
+   *
+   * `command` is the free-text editor a project names in Settings, and it is
+   * the name of one program rather than a command line: it is resolved on PATH
+   * and spawned with the path as an argument, never interpolated into a shell.
+   * Absent, teamree opens the first editor it can find.
+   */
+  editorOpen: z.object({
+    path: z.string().min(1),
+    command: z.string().min(1).max(512).optional()
+  }),
+
+  /**
    * What this build is, what the download page has, and whether teamree looks.
    *
    * A read out of memory: it never asks GitHub anything. The answer includes
@@ -606,6 +628,20 @@ export type MethodContract = {
   'cli.status': { params: z.infer<typeof Params.cliStatus>; result: CliStatus }
   'cli.install': { params: z.infer<typeof Params.cliInstall>; result: CliInstall }
   'cli.dismissPrompt': { params: z.infer<typeof Params.cliDismissPrompt>; result: CliStatus }
+
+  /** The editors found on PATH, in this app's own order of preference. */
+  'editor.list': {
+    params: z.infer<typeof Params.editorList>
+    result: { editors: { command: string; label: string }[] }
+  }
+  /**
+   * A refusal is a result rather than an error: the caller is a menu item, and
+   * a menu item told why nothing happened can say so.
+   */
+  'editor.open': {
+    params: z.infer<typeof Params.editorOpen>
+    result: { opened: true; editor: string } | { opened: false; reason: string }
+  }
 
   'update.state': { params: z.infer<typeof Params.updateState>; result: UpdateState }
   'update.check': { params: z.infer<typeof Params.updateCheck>; result: UpdateState }

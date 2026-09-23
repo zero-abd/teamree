@@ -17,7 +17,7 @@
 // the alternative — a second, weaker search beside the real one — is how an app
 // ends up with two answers to "where is it".
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { teammatesHeard, type PaneWatchers } from '@shared/entities'
 import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
 import type { PaneAttention } from '../state/paneAttention'
@@ -56,6 +56,12 @@ export function Sidebar({
   const openWorktree = useWorkspaceStore((state) => state.openWorktree)
   const retryWorktree = useWorkspaceStore((state) => state.retryWorktree)
   const removeWorktree = useWorkspaceStore((state) => state.removeWorktree)
+  const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
+  const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
+  const openInEditor = useWorkspaceStore((state) => state.openInEditor)
+  const editorCommands = useWorkspaceStore((state) => state.editorCommands)
+  const editors = useWorkspaceStore((state) => state.editors)
+  const loadEditors = useWorkspaceStore((state) => state.loadEditors)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const teamwork = useWorkspaceStore((state) => state.teamwork)
   const teammates = useWorkspaceStore((state) => state.teammates)
@@ -69,6 +75,13 @@ export function Sidebar({
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
   const closeTeamwork = useWorkspaceStore((state) => state.closeTeamwork)
+
+  // Which editors are on this machine, asked once and from here: the row menu
+  // names one and the sidebar is the only thing that is always mounted while a
+  // row exists. It answers with a list this window then does not ask for again.
+  useEffect(() => {
+    void loadEditors()
+  }, [loadEditors])
 
   // No box sets this any more; the palette does the finding. Kept as the one
   // place the empty-state wording asks "is this filtered or simply empty".
@@ -354,6 +367,13 @@ export function Sidebar({
                         onOpen={() => void openWorktree(worktree.id)}
                         onRetry={() => retryWorktree(worktree.id)}
                         onRemove={() => void removeWorktree(worktree.id)}
+                        onReveal={() => void revealInFinder(worktree.path, `the ${worktree.name} checkout`)}
+                        onCopyPath={() => void copyToClipboard(worktree.path, `the path to ${worktree.name}`)}
+                        onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
+                        onOpenInEditor={() =>
+                          void openInEditor(worktree.path, editorCommands[project.id], `the ${worktree.name} checkout`)
+                        }
+                        editorLabel={editorLabel(editorCommands[project.id], editors)}
                       />
                     ))}
                     {theirs.map((row) => (
@@ -432,4 +452,22 @@ function watchersByPane(watchers: PaneWatchers | undefined): Record<string, Pane
     byPane[pane.terminalId] = { watchers: pane.watchers, typists: pane.typists, muted: pane.muted }
   }
   return byPane
+}
+
+/**
+ * What the row menu's Open in item is called.
+ *
+ * The project's own command wins, named by its last path segment so that
+ * `/opt/homebrew/bin/mate` reads as "Open in mate" rather than as a path in a
+ * menu. Otherwise it is whatever teamree found first on PATH, and failing that
+ * the word: the item is offered either way, because choosing it is how somebody
+ * finds out nothing is set up, and what comes back says so in one line.
+ */
+export function editorLabel(
+  command: string | undefined,
+  found: readonly { command: string; label: string }[] | null
+): string {
+  const named = command?.trim() ?? ''
+  if (named.length > 0) return named.split('/').filter(Boolean).pop() ?? named
+  return found?.[0]?.label ?? 'editor'
 }

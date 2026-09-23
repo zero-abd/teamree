@@ -61,10 +61,13 @@ import {
 import {
   clampTerminalFontSize,
   readStoredAgentNotices,
+  readStoredEditorCommands,
   readStoredStartPoints,
   readStoredTerminalFontSize,
+  withEditorCommand,
   withStartPoint,
   writeStoredAgentNotices,
+  writeStoredEditorCommands,
   writeStoredStartPoints,
   writeStoredTerminalFontSize,
   type AgentNoticePreference
@@ -526,6 +529,18 @@ type WorkspaceState = {
    * re-renders on would only reach the other process on the next launch.
    */
   agentNotices: AgentNoticePreference
+  /** Each project's editor command, by project id. Empty means "whatever is on PATH". */
+  editorCommands: Record<string, string>
+  /**
+   * The editors the main process found on PATH, or null until it has been
+   * asked.
+   *
+   * Null and empty are different answers and the row menu reads them
+   * differently: null is "teamree has not looked yet", which is not worth
+   * naming an editor over, and empty is "teamree looked and found none", which
+   * is what the Open in item's refusal will say when it is chosen.
+   */
+  editors: { command: string; label: string }[] | null
 
   /**
    * How this window is painted, as the runtime last told it.
@@ -762,6 +777,21 @@ type WorkspaceState = {
    * storage.
    */
   setProjectPaths: (projectId: string, paths: { linkedPaths?: string[]; copiedPaths?: string[] }) => Promise<void>
+  /** Sets one project's editor command, or clears it when given null. */
+  setEditorCommand: (projectId: string, command: string | null) => void
+  /** Asks the main process which editors are on PATH, once per run. */
+  loadEditors: () => Promise<void>
+  /**
+   * Opens a path in an editor, and says why when nothing opened.
+   *
+   * `command` is the project's own editor, absent when it has none; the main
+   * process then takes the first one it finds. `what` names the thing being
+   * opened, so a refusal can say which menu item was chosen rather than only
+   * which program was missing.
+   */
+  openInEditor: (path: string, command: string | undefined, what: string) => Promise<void>
+  /** Puts text on the clipboard, and says so. `what` names it in the notice. */
+  copyToClipboard: (text: string, what: string) => Promise<void>
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
   /**
@@ -1312,6 +1342,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     terminalFontSize: readStoredTerminalFontSize(storage),
     startPointDefaults: readStoredStartPoints(storage),
     agentNotices: readStoredAgentNotices(storage),
+    editorCommands: readStoredEditorCommands(storage),
+    editors: null,
 
     // The default until the runtime answers, which is the same palette
     // `tokens.css` already painted the first frame in — so the window does not
@@ -2414,6 +2446,68 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         set((state) => ({ projects: state.projects.map((row) => (row.id === project.id ? project : row)) }))
       } catch (error) {
         failed('Could not save what new worktrees carry over')(error)
+      }
+    },
+
+    setEditorCommand(projectId, command) {
+      const editorCommands = withEditorCommand(get().editorCommands, projectId, command)
+      set({ editorCommands })
+      writeStoredEditorCommands(storage, editorCommands)
+    },
+
+    async loadEditors() {
+      // Once per run, and never again: the answer is which programs are
+      // installed, and a probe on every right-click would be a PATH walk per
+      // menu. Somebody who installs an editor while the app is open sees it
+      // after a relaunch, which is the same bargain the agent list makes.
+      if (get().editors !== null) return
+      try {
+        set({ editors: (await runtimeClient.call('editor.list', {})).editors })
+      } catch {
+        // Silent, and the empty list rather than nothing: this runs on the way
+        // into a sidebar nobody asked anything of yet, and a notice about a
+        // probe the user did not ask for would be noise. Choosing the item
+        // still asks the main process, which answers with a reason.
+        set({ editors: [] })
+      }
+    },
+
+    async openInEditor(path, command, what) {
+      // Nothing here decides whether an editor exists; the main process does,
+      // because it is the only side that can look at PATH. What this decides is
+      // what happens when the answer is no — a notice rather than a thrown
+      // error, the same shape `revealInFinder` above settles on, because
+      // choosing Open in with no editor set up is an ordinary thing to do and
+      // not a fault to report.
+      try {
+        const result = await runtimeClient.call('editor.open', {
+          path,
+          // Spread rather than passed as `undefined`: the schema's optional and
+          // an explicit undefined are the same thing to zod and not to a reader.
+          ...(command === undefined || command.trim().length === 0 ? {} : { command: command.trim() })
+        })
+        if (!result.opened) notify(`Could not open ${what}: ${result.reason}`, 'info')
+      } catch (error) {
+        failed(`Could not open ${what}`)(error)
+      }
+    },
+
+    async copyToClipboard(text, what) {
+      // The async clipboard API needs a secure context, and a renderer loaded
+      // from a file URL in a packaged build is not reliably one — so a failure
+      // is reported rather than swallowed. Unlike the teamwork panel's copy
+      // buttons, what this copies is not also on screen: a path that silently
+      // did not copy is pasted as whatever was on the clipboard before.
+      const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard
+      if (clipboard === undefined) {
+        notify(`teamree cannot reach the clipboard from this window, so ${what} was not copied.`, 'info')
+        return
+      }
+      try {
+        await clipboard.writeText(text)
+        notify(`Copied ${what}.`, 'info')
+      } catch (error) {
+        failed(`Could not copy ${what}`)(error)
       }
     },
 

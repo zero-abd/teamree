@@ -1,12 +1,23 @@
 // One worktree in the sidebar. The row carries three different shapes — ready,
 // still being created, and failed — because a worktree is a background job and
 // hiding that would make the sidebar lie.
+//
+// Everything a row can do besides being opened is in one menu, reached by
+// right-clicking the row, by the `⋯` beside it, or by the context-menu key on
+// the focused row. That is a change of shape as much as an addition: the row's
+// only control used to be a `×` that destroyed the checkout, so the most
+// destructive thing in the app was the easiest thing on the row to hit, and the
+// ordinary things — where is this on disk, what is the branch called, open it
+// in my editor — could not be reached from here at all. Remove is still here,
+// last, under a rule, and still asks the same question it always did.
 
+import { useRef, useState } from 'react'
 import type { Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
 import { ACTIVITY_LABEL, agentRows, sinceLabel, typedBy, watchedBy, worktreeActivity, type AgentRow } from './agentRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
+import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 
 type WorktreeRowProps = {
   worktree: Worktree
@@ -30,6 +41,19 @@ type WorktreeRowProps = {
   onOpen: () => void
   onRetry: () => void
   onRemove: () => void
+  onReveal: () => void
+  onCopyPath: () => void
+  onCopyBranch: () => void
+  onOpenInEditor: () => void
+  /**
+   * What the Open in item is called — the editor this project would use.
+   *
+   * A word rather than a name when teamree has not found one, because the item
+   * is offered either way: choosing it is how somebody finds out that nothing
+   * is set up, and the refusal that comes back says what to do about it. A
+   * hidden item would have been a silence.
+   */
+  editorLabel: string
 }
 
 export function WorktreeRow({
@@ -44,20 +68,83 @@ export function WorktreeRow({
   onFocusTerminal,
   onOpen,
   onRetry,
-  onRemove
+  onRemove,
+  onReveal,
+  onCopyPath,
+  onCopyBranch,
+  onOpenInEditor,
+  editorLabel
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
   const badge = worktree.state === 'ready' ? mergeBadge(mergePreview) : null
+  const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
+  const openControl = useRef<HTMLButtonElement | null>(null)
+  const opener = useRef<HTMLElement | null>(null)
+
+  const openMenu = (at: RowMenuAnchor, from: HTMLElement | null): void => {
+    opener.current = from
+    setMenuAt(at)
+  }
+
+  const closeMenu = (): void => {
+    setMenuAt(null)
+    // Back where it came from, which is the whole reason the opener is kept: a
+    // menu that leaves the focus on `document.body` costs a keyboard user their
+    // place in the sidebar every time they open one.
+    ;(opener.current ?? openControl.current)?.focus()
+  }
+
+  /** Under the row, for a menu nobody pointed at. */
+  const rowAnchor = (): RowMenuAnchor => {
+    const rect = openControl.current?.getBoundingClientRect()
+    return rect === undefined ? { x: 0, y: 0 } : { x: rect.left + 12, y: rect.bottom }
+  }
+
+  const items: RowMenuItem[] = [
+    { label: 'Reveal in Finder', onChoose: onReveal },
+    { label: 'Copy path', onChoose: onCopyPath },
+    { label: 'Copy branch', onChoose: onCopyBranch },
+    { label: `Open in ${editorLabel}`, onChoose: onOpenInEditor },
+    // Last, and behind a rule, and it still opens the question it always did —
+    // the one that names the ignored files the removal would destroy.
+    { label: 'Remove', onChoose: onRemove, separated: true, danger: true }
+  ]
   const rows = worktree.state === 'ready' ? agentRows(terminals, worktree.id, now, evidence) : []
   const overall = worktreeActivity(rows)
 
   return (
-    <li className={`worktree${active ? ' worktree--active' : ''} worktree--${worktree.state}`}>
+    <li
+      className={`worktree${active ? ' worktree--active' : ''} worktree--${worktree.state}`}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        // A right-click puts the menu where the pointer is. The context-menu key
+        // and Shift+F10 raise this same event with nothing pointing anywhere —
+        // Chromium reports a detail of 0 — and a menu placed at those
+        // coordinates would open in the corner of the window rather than on the
+        // row somebody is standing on.
+        const pointed = event.detail > 0 && (event.clientX > 0 || event.clientY > 0)
+        openMenu(
+          pointed ? { x: event.clientX, y: event.clientY } : rowAnchor(),
+          document.activeElement instanceof HTMLElement ? document.activeElement : null
+        )
+      }}
+      onKeyDown={(event) => {
+        // Said here as well as left to the browser's own default, because that
+        // default is what turns these keys into the `contextmenu` above and
+        // `preventDefault` is what stops it arriving twice. A second arrival
+        // would only reopen the menu that is already open, which is why this is
+        // written the harmless way round rather than guarded.
+        if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return
+        event.preventDefault()
+        openMenu(rowAnchor(), document.activeElement instanceof HTMLElement ? document.activeElement : null)
+      }}
+    >
       <div className="worktree__row">
         <button
           type="button"
           className="worktree__open"
+          ref={openControl}
           onClick={onOpen}
           disabled={creating || failed}
           aria-current={active ? 'true' : undefined}
@@ -90,18 +177,33 @@ export function WorktreeRow({
             {failed ? <span className="worktree__tag worktree__tag--failed">failed</span> : null}
           </span>
         </button>
+        {/* The only button on the row besides the row itself, and it opens the
+            same menu the right button does. Named for what it opens rather than
+            for what it looks like: "More" is what a `⋯` is called by anybody
+            who cannot see it. */}
         <button
           type="button"
           className="worktree__action"
-          title={`Remove ${worktree.name}`}
-          aria-label={`Remove worktree ${worktree.name}`}
-          onClick={onRemove}
+          title={`More for ${worktree.name}`}
+          aria-label={`More for ${worktree.name}`}
+          aria-haspopup="menu"
+          aria-expanded={menuAt !== null}
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect()
+            openMenu({ x: rect.right - 8, y: rect.bottom + 2 }, event.currentTarget)
+          }}
         >
           <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M3 3 L9 9 M9 3 L3 9" />
+            <circle cx="2.5" cy="6" r="1" />
+            <circle cx="6" cy="6" r="1" />
+            <circle cx="9.5" cy="6" r="1" />
           </svg>
         </button>
       </div>
+
+      {menuAt === null ? null : (
+        <RowMenu label={`Actions for ${worktree.name}`} items={items} anchor={menuAt} onClose={closeMenu} />
+      )}
 
       {rows.length > 0 ? (
         <ul className="panes">

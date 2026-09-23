@@ -290,6 +290,9 @@ describe('what a teammate can reach', () => {
     expect(PEER_METHODS).not.toHaveProperty('cli.install')
     expect(PEER_METHODS).not.toHaveProperty('cli.status')
     expect(PEER_METHODS).not.toHaveProperty('cli.dismissPrompt')
+    // Nor does a teammate get to start a program on somebody else's machine.
+    expect(PEER_METHODS).not.toHaveProperty('editor.list')
+    expect(PEER_METHODS).not.toHaveProperty('editor.open')
     // Nor does a teammate get to make this machine ask GitHub anything, change
     // a preference on it, or open a page in the browser of whoever is sitting
     // in front of it.
