@@ -1,9 +1,9 @@
 /** @vitest-environment jsdom */
 
-// The patch as somebody actually looks at it.
+// The patch as somebody actually looks at it: a file pane in Diff mode.
 //
 // The parser has its own file and proves the numbers are right. What this
-// proves is that they reach the screen — that the panel puts a gutter beside
+// proves is that they reach the screen — that the pane puts a gutter beside
 // every line rather than a column of `+` and `-`, that the `@@` header is a
 // separator of its own rather than a line in the middle of the text, and that
 // the choice between one column and two survives the window closing.
@@ -18,16 +18,16 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import postcss from 'postcss'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorktreeChanges, WorktreeDiff } from '@shared/entities'
 
-// Recorded rather than inert, because half of what this file now proves is
-// which method the control calls and with which hunk. It still never resolves:
-// nothing on screen here waits on an answer.
+// Recorded, because half of what this file proves is which method a control
+// calls and with which hunk. Only the two diffs are answered; nothing else on
+// screen here waits on one.
 const { call } = vi.hoisted(() => ({
-  call: vi.fn((_method: string, _params: unknown): Promise<never> => new Promise(() => {}))
+  call: vi.fn((_method: string, _params: unknown): Promise<unknown> => new Promise(() => {}))
 }))
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -43,7 +43,8 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { ChangesTab } = await import('./rightPanel/ChangesTab')
+const { FileView } = await import('../files/FileView')
+const { fitLayout } = await import('./PatchView')
 const { readStoredDiffLayout } = await import('../state/preferences')
 const { ConfirmDiscardDialog } = await import('../dialogs/ConfirmDiscardDialog')
 type ConfirmDiscardProps = Parameters<typeof ConfirmDiscardDialog>[0]
@@ -111,6 +112,22 @@ const stagedDiff: WorktreeDiff = {
   readAt: 0
 }
 
+const empty = (staged: boolean): WorktreeDiff => ({ ...diff, staged, patch: '' })
+
+/** The pane's width as the browser would measure it; jsdom lays nothing out. */
+let paneWidth = 1000
+
+/** A file pane on src/rank.ts in Diff mode, answering with these two halves. */
+async function mountDiff(halves: { working?: WorktreeDiff; staged?: WorktreeDiff } = {}): Promise<void> {
+  call.mockImplementation((method: string, params: unknown) => {
+    if (method !== 'worktree.diff') return new Promise(() => {})
+    const staged = (params as { staged?: boolean }).staged === true
+    return Promise.resolve(staged ? (halves.staged ?? empty(true)) : (halves.working ?? diff))
+  })
+  render(<FileView paneId="file:1" worktreeId="wt" path="src/rank.ts" focused onFocus={() => {}} onClose={() => {}} />)
+  await waitFor(() => expect(document.querySelector('.patch')).not.toBeNull())
+}
+
 beforeEach(() => {
   useWorkspaceStore.setState({
     ...INITIAL,
@@ -118,19 +135,24 @@ beforeEach(() => {
     rightPanelTab: 'changes',
     activeWorktreeId: 'wt',
     changes: { wt: changes },
-    selectedChangePath: 'src/rank.ts',
-    diff,
-    diffPending: false,
+    selectedChangePath: null,
+    diffPanes: { 'file:1': true },
     stagedPaths: [],
     diffLayout: 'inline'
   })
   window.localStorage.clear()
-  call.mockClear()
+  call.mockReset()
+  paneWidth = 1000
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => paneWidth)
 })
 
-describe('the patch in the changes panel', () => {
-  it('puts a line number beside every line, on both sides', () => {
-    render(<ChangesTab />)
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+describe('the patch in a file pane', () => {
+  it('puts a line number beside every line, on both sides', async () => {
+    await mountDiff()
 
     const numbers = [...document.querySelectorAll('.patch__num')].map((cell) => cell.textContent)
     // Old and new for each of the six lines the hunk carries, with the addition
@@ -140,8 +162,8 @@ describe('the patch in the changes panel', () => {
 
   // The sentence this whole change is for: the third line of the hunk is line
   // 212, and the screen has to be able to say so.
-  it('gives the line somebody would cite its real number', () => {
-    render(<ChangesTab />)
+  it('gives the line somebody would cite its real number', async () => {
+    await mountDiff()
 
     const row = [...document.querySelectorAll('.patch__row')].find((node) =>
       node.textContent?.includes('// one comment')
@@ -149,16 +171,16 @@ describe('the patch in the changes panel', () => {
     expect(within(row as HTMLElement).getAllByText('212')).toHaveLength(2)
   })
 
-  it('shows the hunk header as its own separator, not as a line of the file', () => {
-    render(<ChangesTab />)
+  it('shows the hunk header as its own separator, not as a line of the file', async () => {
+    await mountDiff()
 
     const header = document.querySelector('.patch__hunkAt')
     expect(header?.textContent).toBe('@@ -210,6 +210,7 @@ export function rank(rows: Row[]): Row[] {')
     expect(header?.querySelector('.patch__num')).toBeNull()
   })
 
-  it('folds a file away, and folds a hunk away inside it', () => {
-    render(<ChangesTab />)
+  it('folds a file away, and folds a hunk away inside it', async () => {
+    await mountDiff()
 
     expect(document.querySelector('details.patch__file')).not.toBeNull()
     expect(document.querySelector('details.patch__hunk')).not.toBeNull()
@@ -167,8 +189,8 @@ describe('the patch in the changes panel', () => {
   // Nothing about the colour is asserted beyond this: that the keyword came
   // back as a keyword and reached the DOM as its own span. Which shade of
   // magenta it is is the palette's business, and the smoke gate measures it.
-  it('colours the code it recognises, and leaves the rest as text', () => {
-    render(<ChangesTab />)
+  it('colours the code it recognises, and leaves the rest as text', async () => {
+    await mountDiff()
 
     const keywords = [...document.querySelectorAll('.patch__tok--keyword')].map((node) => node.textContent)
     expect(keywords).toContain('const')
@@ -179,12 +201,11 @@ describe('the patch in the changes panel', () => {
   })
 
   it('lays the patch out in two columns when asked, and remembers it', async () => {
-    const { rerender } = render(<ChangesTab />)
+    await mountDiff()
     expect(document.querySelector('.patch--inline')).not.toBeNull()
 
     const { default: userEvent } = await import('@testing-library/user-event')
     await userEvent.click(screen.getByRole('button', { name: 'Side by side' }))
-    rerender(<ChangesTab />)
 
     expect(document.querySelector('.patch--split')).not.toBeNull()
     // Every row has both sides, and the addition's old half is the gap.
@@ -194,10 +215,29 @@ describe('the patch in the changes panel', () => {
   })
 })
 
+describe('side by side', () => {
+  it('falls back to inline below the width two columns need', () => {
+    expect(fitLayout('split', 719)).toBe('inline')
+    expect(fitLayout('split', 720)).toBe('split')
+    expect(fitLayout('split', null)).toBe('split')
+    expect(fitLayout('inline', 2000)).toBe('inline')
+  })
+
+  it('is disabled in a narrow pane, which keeps the remembered choice but draws one column', async () => {
+    paneWidth = 500
+    useWorkspaceStore.setState({ diffLayout: 'split' })
+    await mountDiff()
+
+    expect((screen.getByRole('button', { name: 'Side by side' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: 'Inline' }).getAttribute('aria-pressed')).toBe('true')
+    expect(document.querySelector('.patch--inline')).not.toBeNull()
+    expect(useWorkspaceStore.getState().diffLayout).toBe('split')
+  })
+})
+
 describe('staging one hunk from the patch', () => {
   it('stages the hunk that was clicked, and not the one above it', async () => {
-    useWorkspaceStore.setState({ diff: { ...diff, patch: TWO_HUNKS } })
-    render(<ChangesTab />)
+    await mountDiff({ working: { ...diff, patch: TWO_HUNKS } })
 
     const stage = screen.getAllByRole('button', { name: 'Stage' })
     expect(stage).toHaveLength(2)
@@ -212,7 +252,9 @@ describe('staging one hunk from the patch', () => {
     })
     // The whole hunk goes, lines and all — that is what the runtime checks
     // against the index and the working tree.
-    const sent = call.mock.calls[0]?.[1] as unknown as { hunk: { lines: { text: string }[] } }
+    const sent = call.mock.calls.find(([method]) => method === 'worktree.stageHunk')?.[1] as unknown as {
+      hunk: { lines: { text: string }[] }
+    }
     expect(sent.hunk.lines.map((line) => line.text)).toContain('  const capped = sorted.slice(0, 20)')
     expect(sent.hunk.lines.map((line) => line.text)).not.toContain("import { Row } from './row'")
   })
@@ -220,7 +262,7 @@ describe('staging one hunk from the patch', () => {
   // Folding the hunk away is the one thing a click on a `summary` does by
   // default, and it is not what the button is for.
   it('leaves the hunk open when its control is used', async () => {
-    render(<ChangesTab />)
+    await mountDiff()
     const hunk = document.querySelector('details.patch__hunk') as HTMLDetailsElement
     expect(hunk.open).toBe(true)
 
@@ -231,13 +273,12 @@ describe('staging one hunk from the patch', () => {
   })
 
   it('offers Unstage on the staged half and Stage on the working one', async () => {
-    useWorkspaceStore.setState({ stagedDiff })
-    render(<ChangesTab />)
+    await mountDiff({ staged: stagedDiff })
 
     expect(screen.getByRole('button', { name: 'Unstage' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Stage' })).toBeTruthy()
     // Both halves are named once there are two of them.
-    expect([...document.querySelectorAll('.changes__half')].map((node) => node.textContent)).toEqual([
+    expect([...document.querySelectorAll('.patch__half')].map((node) => node.textContent)).toEqual([
       'Staged',
       'Unstaged'
     ])
@@ -247,13 +288,13 @@ describe('staging one hunk from the patch', () => {
     expect(call).toHaveBeenCalledWith('worktree.unstageHunk', expect.objectContaining({ path: 'src/rank.ts' }))
   })
 
-  it('names neither half when nothing is staged', () => {
-    render(<ChangesTab />)
-    expect(document.querySelectorAll('.changes__half')).toHaveLength(0)
+  it('names neither half when nothing is staged', async () => {
+    await mountDiff()
+    expect(document.querySelectorAll('.patch__half')).toHaveLength(0)
   })
 
   it('stops a second click while the first is still in flight', async () => {
-    render(<ChangesTab />)
+    await mountDiff()
     const { default: userEvent } = await import('@testing-library/user-event')
     const button = screen.getByRole('button', { name: 'Stage' })
 
@@ -265,9 +306,8 @@ describe('staging one hunk from the patch', () => {
 })
 
 describe('discarding one hunk from the patch', () => {
-  it('offers Discard beside Stage on the working half only', () => {
-    useWorkspaceStore.setState({ stagedDiff })
-    render(<ChangesTab />)
+  it('offers Discard beside Stage on the working half only', async () => {
+    await mountDiff({ staged: stagedDiff })
 
     const stage = screen.getByRole('button', { name: 'Stage' })
     const discard = screen.getByRole('button', { name: 'Discard' })
@@ -276,12 +316,11 @@ describe('discarding one hunk from the patch', () => {
   })
 
   it('asks first, then reverses the hunk that was clicked', async () => {
-    useWorkspaceStore.setState({ diff: { ...diff, patch: TWO_HUNKS } })
-    render(<ChangesTab />)
+    await mountDiff({ working: { ...diff, patch: TWO_HUNKS } })
     const { default: userEvent } = await import('@testing-library/user-event')
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Discard' })[1] as HTMLElement)
-    expect(call).not.toHaveBeenCalled()
+    expect(call.mock.calls.some(([method]) => method === 'worktree.discardHunk')).toBe(false)
     const dialog = useWorkspaceStore.getState().dialog
     expect(dialog).toMatchObject({ kind: 'confirm-discard', worktreeId: 'wt', path: 'src/rank.ts' })
 
@@ -297,22 +336,22 @@ describe('discarding one hunk from the patch', () => {
   })
 
   // An added or deleted file's patch is the whole file; that goes as a file, not a hunk.
-  it('offers no hunk discard for a file that was added', () => {
-    useWorkspaceStore.setState({
-      diff: {
+  it('offers no hunk discard for a file that was added', async () => {
+    await mountDiff({
+      working: {
         ...diff,
         patch: 'diff --git a/n.ts b/n.ts\nnew file mode 100644\n--- /dev/null\n+++ b/n.ts\n@@ -0,0 +1 @@\n+x\n'
       }
     })
-    render(<ChangesTab />)
     expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
   })
 })
 
 // The stylesheet's half of the same two claims.
 describe('the rules the patch is drawn with', () => {
+  const styles = path.join(path.dirname(fileURLToPath(import.meta.url)), '../styles')
   const css = postcss.parse(
-    readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../styles/workspace.css'), 'utf8')
+    ['workspace.css', 'files.css'].map((file) => readFileSync(path.join(styles, file), 'utf8')).join('\n')
   )
 
   const declarations = (selector: string, property: string): string[] => {
@@ -328,7 +367,19 @@ describe('the rules the patch is drawn with', () => {
 
   it('sticks the hunk header to the top of the area the patch scrolls in', () => {
     expect(declarations('.patch__hunkHead', 'position')).toContain('sticky')
-    expect(declarations('.changes__diff', 'overflow')).toContain('auto')
+    expect(declarations('.patch__hunkHead', 'top')).toContain('0')
+    expect(declarations('.file__diff', 'overflow')).toContain('auto')
+  })
+
+  // A long line widens the patch; the headers stay the scroller's width, pinned to its left edge,
+  // so Stage, Unstage and Discard never sit past its right edge.
+  it('pins the headers and their controls to the width on screen', () => {
+    for (const head of ['.patch__hunkHead', '.patch__fileHead']) {
+      expect(declarations(head, 'position')).toContain('sticky')
+      expect(declarations(head, 'left')).toContain('0')
+      expect(declarations(head, 'width')).toContain('100cqi')
+    }
+    expect(declarations('.file__diff', 'container-type')).toContain('inline-size')
   })
 
   // No literal colours: every shade on this surface has to be a palette token,

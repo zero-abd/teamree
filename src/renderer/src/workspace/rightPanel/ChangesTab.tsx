@@ -1,33 +1,18 @@
-// What this worktree has changed: the list, the commit box, the commits and the patch, as a tab of the
-// right panel. It rides the same invalidation as everything else, so pane edits move it.
+// What this worktree has changed: the list, the commit box and the commits, as a tab of the right
+// panel; a row opens its diff in the centre. It rides the same invalidation as everything else.
 
 import { useState } from 'react'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { useWorkspaceStore, type PushState } from '../../state/workspaceStore'
-import { PatchView } from '../PatchView'
-import type { PatchHunk } from '@shared/patch'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
-import type { DiffLayout } from '../../state/preferences'
 import type { WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
-
-/** The two layouts, and the two words that offer them. */
-const LAYOUTS: readonly [DiffLayout, string][] = [
-  ['inline', 'Inline'],
-  ['split', 'Side by side']
-]
 
 export function ChangesTab(): React.JSX.Element | null {
   const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const changes = useWorkspaceStore((state) => (worktreeId ? state.changes[worktreeId] : undefined))
   const selectedPath = useWorkspaceStore((state) => state.selectedChangePath)
-  const diff = useWorkspaceStore((state) => state.diff)
-  const stagedDiff = useWorkspaceStore((state) => state.stagedDiff)
-  const diffPending = useWorkspaceStore((state) => state.diffPending)
   const hunkPending = useWorkspaceStore((state) => state.hunkPending)
-  const applyHunk = useWorkspaceStore((state) => state.applyHunk)
-  const diffLayout = useWorkspaceStore((state) => state.diffLayout)
-  const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
   const selectChange = useWorkspaceStore((state) => state.selectChange)
   const stagedPaths = useWorkspaceStore((state) => state.stagedPaths)
   const toggleStaged = useWorkspaceStore((state) => state.toggleStaged)
@@ -55,8 +40,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const canCommit = ticked.size > 0 && message.trim().length > 0 && !committing
 
   const offer = pushOffer(status, push)
-  const discard = (path: string, hunk?: PatchHunk): void =>
-    openDialog({ kind: 'confirm-discard', worktreeId, path, ...(hunk === undefined ? {} : { hunk }) })
+  const discard = (path: string): void => openDialog({ kind: 'confirm-discard', worktreeId, path })
 
   const commit = (): void => {
     if (!canCommit) return
@@ -102,7 +86,10 @@ export function ChangesTab(): React.JSX.Element | null {
       ) : (
         <ul className="changes__list">
           {rows.map((change) => (
-            <li className="changes__item" key={change.path}>
+            <li
+              className={`changes__item${change.path === selectedPath ? ' changes__item--selected' : ''}`}
+              key={change.path}
+            >
               <input
                 type="checkbox"
                 className="change__tick"
@@ -112,9 +99,10 @@ export function ChangesTab(): React.JSX.Element | null {
               />
               <button
                 type="button"
-                className={`change${change.path === selectedPath ? ' change--selected' : ''}`}
+                className="change"
+                aria-current={change.path === selectedPath ? 'true' : undefined}
                 title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
-                onClick={() => selectChange(change.path === selectedPath ? null : change.path)}
+                onClick={() => selectChange(change.path)}
                 onContextMenu={(event) => {
                   if (!canDiscard(change)) return
                   event.preventDefault()
@@ -218,70 +206,6 @@ export function ChangesTab(): React.JSX.Element | null {
           </ul>
         </section>
       ) : null}
-
-      {selectedPath === null ? null : (
-        <>
-          {/* Two words and no label. The panel is narrow enough that a column
-              of explanation would cost more than the choice is worth, and the
-              two labels say what each one does. Outside the scrolling area
-              below it, so it is still there at line four hundred. */}
-          <div className="changes__layout" role="group" aria-label="How to lay the patch out">
-            {LAYOUTS.map(([value, label]) => (
-              <button
-                type="button"
-                key={value}
-                className={`changes__layoutPick${diffLayout === value ? ' changes__layoutPick--on' : ''}`}
-                aria-pressed={diffLayout === value}
-                onClick={() => setDiffLayout(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="changes__diff">
-            {diffPending ? (
-              <p className="changes__empty">Reading the patch…</p>
-            ) : (diff === null || diff.patch === '') && stagedDiff === null ? (
-              <p className="changes__empty">No changes</p>
-            ) : (
-              <>
-                {/* The staged half first, because it is what the next commit
-                    already contains and the working half is what is still being
-                    decided. Headings only appear once there is something on
-                    both sides of the line — a patch with nothing staged is the
-                    ordinary case and reads better with nothing above it. */}
-                {stagedDiff === null ? null : (
-                  <>
-                    <h3 className="changes__half">Staged</h3>
-                    <PatchView
-                      patch={stagedDiff.patch}
-                      truncated={stagedDiff.truncated}
-                      layout={diffLayout}
-                      action="Unstage"
-                      busy={hunkPending}
-                      onHunk={(file, hunk) => void applyHunk(file.path, hunk, false)}
-                    />
-                  </>
-                )}
-                {diff === null || diff.patch === '' ? null : (
-                  <>
-                    {stagedDiff === null ? null : <h3 className="changes__half">Unstaged</h3>}
-                    <PatchView
-                      patch={diff.patch}
-                      truncated={diff.truncated}
-                      layout={diffLayout}
-                      action="Stage"
-                      busy={hunkPending}
-                      onHunk={(file, hunk) => void applyHunk(file.path, hunk, true)}
-                      onDiscard={(file, hunk) => discard(file.path, hunk)}
-                    />
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        </>
-      )}
     </section>
   )
 }

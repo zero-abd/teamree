@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { collectTerminalIds } from '../panes/paneLayout'
+import { fileLeavesIn } from '@shared/filePane'
 
 vi.mock('../runtimeClient/currentRuntimeClient', async () => {
   const { createSeededRuntimeClient } = await import('../runtimeClient/seededRuntimeClient')
@@ -44,7 +45,7 @@ it('adds exactly one pane per New terminal action, including with workspace even
   }
 })
 
-it('reads the changed paths only once the panel is open, and the patch only once a path is picked', async () => {
+it('reads the changed paths only once the panel is open, and opens a picked path as a diff in the centre', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
@@ -63,25 +64,27 @@ it('reads the changed paths only once the panel is open, and the patch only once
   expect(changesCalls()).toBe(1)
   const listed = useWorkspaceStore.getState().changes[worktreeId]
   expect(listed?.changes.length).toBeGreaterThan(0)
-  expect(diffCalls()).toBe(0)
 
   const path = listed!.changes[0]!.path
+  const fileLeaves = () => fileLeavesIn(useWorkspaceStore.getState().layouts[worktreeId]!.root)
   useWorkspaceStore.getState().selectChange(path)
-  await vi.waitFor(() => expect(useWorkspaceStore.getState().diffPending).toBe(false))
-  // Exactly two: the working-tree patch and the index's. Which half a hunk
-  // came out of decides whether it can be staged or unstaged.
-  expect(diffCalls()).toBe(2)
-  const { diff, stagedDiff } = useWorkspaceStore.getState()
-  expect(`${diff?.patch ?? ''}${stagedDiff?.patch ?? ''}`).toContain('diff --git')
+  expect(useWorkspaceStore.getState().selectedChangePath).toBe(path)
+  const [pane] = fileLeaves().filter((leaf) => leaf.path === path)
+  expect(pane).toBeDefined()
+  expect(useWorkspaceStore.getState().layouts[worktreeId]!.focusedTerminalId).toBe(pane!.terminalId)
+  expect(useWorkspaceStore.getState().diffPanes[pane!.terminalId]).toBe(true)
+  // The pane reads its own diff; the panel reads none.
+  expect(diffCalls()).toBe(0)
 
-  // Picking the same row again clears it, and clearing costs no call.
-  useWorkspaceStore.getState().selectChange(null)
-  expect(useWorkspaceStore.getState().diff).toBeNull()
-  expect(diffCalls()).toBe(2)
+  // Back to the text, then the row again: the same pane, in Diff mode again.
+  useWorkspaceStore.getState().setPaneDiff(pane!.terminalId, false)
+  useWorkspaceStore.getState().selectChange(path)
+  expect(fileLeaves().filter((leaf) => leaf.path === path)).toHaveLength(1)
+  expect(useWorkspaceStore.getState().diffPanes[pane!.terminalId]).toBe(true)
   call.mockRestore()
 })
 
-it('does not carry one worktree’s patch across to another worktree', async () => {
+it('does not carry one worktree’s selected change across to another worktree', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   const ready = useWorkspaceStore.getState().worktrees.filter((entry) => entry.state === 'ready')
@@ -92,15 +95,11 @@ it('does not carry one worktree’s patch across to another worktree', async () 
   await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[first.id]).toBeDefined())
 
   const path = useWorkspaceStore.getState().changes[first.id]!.changes[0]?.path
-  if (path !== undefined) {
-    useWorkspaceStore.getState().selectChange(path)
-    await vi.waitFor(() => expect(useWorkspaceStore.getState().diff).not.toBeNull())
-  }
+  if (path !== undefined) useWorkspaceStore.getState().selectChange(path)
 
   await store.openWorktree(second.id)
 
   expect(useWorkspaceStore.getState().selectedChangePath).toBeNull()
-  expect(useWorkspaceStore.getState().diff).toBeNull()
 })
 
 it('reads mergeability for ready worktrees, a few at a time', async () => {

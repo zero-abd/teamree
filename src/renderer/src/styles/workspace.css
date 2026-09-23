@@ -430,10 +430,9 @@
   padding: var(--s2) 0;
   list-style: none;
   overflow-y: auto;
-  /* Half the panel at most: the patch below needs room, and a list that eats
-     the whole side makes the selection pointless. */
-  max-height: 50%;
-  flex: none;
+  /* Shrinks and scrolls before the commit box below it leaves the panel. */
+  flex: 0 1 auto;
+  min-height: 0;
 }
 
 .change {
@@ -452,10 +451,6 @@
 
 .change:hover {
   background: var(--bg-hover);
-}
-
-.change--selected {
-  background: var(--accent-soft);
 }
 
 .change__kind {
@@ -514,45 +509,6 @@
   font-size: var(--text-xs);
 }
 
-.changes__diff {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  border-top: 1px solid var(--line);
-  background: var(--bg-window);
-}
-
-/* The two words above the patch. A segmented pair rather than a switch,
-   because a switch has one label and this has two things to say. */
-.changes__layout {
-  display: flex;
-  gap: var(--s1);
-  padding: var(--s2) var(--s4);
-  border-top: 1px solid var(--line);
-  background: var(--bg-raised);
-}
-
-.changes__layoutPick {
-  padding: var(--s1) var(--s2);
-  border: 0;
-  border-radius: var(--r1);
-  background: none;
-  color: var(--fg-muted);
-  font-family: inherit;
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-
-.changes__layoutPick:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-
-.changes__layoutPick--on {
-  background: var(--accent-soft);
-  color: var(--fg);
-}
-
 /* A patch scrolls sideways rather than wrapping, and deliberately: its meaning
    is in the columns. A wrapped line turns one change into several rows and
    pushes the gutters out of line, which is the one edge a diff is read down.
@@ -594,6 +550,18 @@
   cursor: pointer;
   list-style: none;
   white-space: pre;
+  /* The width of the scroller, pinned to its left edge, so the controls stay in view when a long line
+     scrolls the patch sideways. */
+  position: sticky;
+  left: 0;
+  width: 100cqi;
+}
+
+.patch__fileName,
+.patch__hunkAt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .patch__fileHead::-webkit-details-marker,
@@ -626,7 +594,6 @@
    the hunk scrolls under it. Opaque, because a translucent header over
    monospace text is two lines of text in the same place. */
 .patch__hunkHead {
-  position: sticky;
   top: 0;
   z-index: 1;
   background: var(--bg-panel);
@@ -674,9 +641,8 @@
   color: var(--danger);
 }
 
-/* Which half of the patch is underneath. Drawn only when both halves are there;
-   see ChangesPanel. */
-.changes__half {
+/* Which half of the patch is underneath, drawn only when both halves are there. */
+.patch__half {
   margin: 0;
   padding: var(--s2) var(--s4);
   color: var(--fg-muted);
@@ -712,8 +678,7 @@
   background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
-/* Wide enough for four digits, which is where a file stops being one somebody
-   reads a diff of in a side panel. Right-aligned so the digits line up. */
+/* Wide enough for four digits; right-aligned so the digits line up. */
 .patch__num {
   width: 3.4em;
   flex: none;
@@ -771,9 +736,14 @@
 
 /* Side by side. Two halves of the row, each with its own gutter; a half with
    no line in it is the gap where the other side added or removed one. */
+/* Two halves of the width on screen, not of the longest line, or the new side starts off screen. */
+.patch--split {
+  width: 100%;
+}
+
 .patch--split .patch__row--split {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .patch__side {
@@ -798,6 +768,16 @@
   align-items: baseline;
   gap: var(--s2);
   padding-left: var(--s3);
+}
+
+/* The row whose diff is open in the centre: the whole row, checkbox included. */
+.changes__item--selected {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.changes__item--selected .change:hover {
+  background: none;
 }
 
 .change__tick {

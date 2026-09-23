@@ -9,7 +9,8 @@ import { PaneCloseButton } from '../panes/PaneCloseButton'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { PatchView } from '../workspace/PatchView'
+import type { DiffLayout } from '../state/preferences'
+import { fitLayout, PatchView } from '../workspace/PatchView'
 import type { CodeEditorHandle } from './CodeEditor'
 import { draftFor, dropDraft, fileSize, keepDraft, registerSaver, type FileDraft } from './fileDrafts'
 import { ImageView } from './ImageView'
@@ -38,6 +39,9 @@ export function FileView({
   const filesEpoch = useWorkspaceStore((state) => state.worktreeFilesEpoch)
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const diffLayout = useWorkspaceStore((state) => state.diffLayout)
+  const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
+  const showDiff = useWorkspaceStore((state) => state.diffPanes[paneId] === true)
+  const setPaneDiff = useWorkspaceStore((state) => state.setPaneDiff)
   const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
   const openInDefaultApp = useWorkspaceStore((state) => state.openInDefaultApp)
@@ -46,11 +50,13 @@ export function FileView({
   const [draft] = useState<FileDraft | undefined>(() => draftFor(paneId, worktreeId, path))
   const [error, setError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
-  const [showDiff, setShowDiff] = useState(false)
   const [diffs, setDiffs] = useState<Diffs | null>(null)
   const [changed, setChanged] = useState<boolean | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   const more = useRef<HTMLButtonElement | null>(null)
+  const body = useRef<HTMLDivElement | null>(null)
+  const bodyWidth = useWidth(body, showDiff)
+  const layout = fitLayout(diffLayout, bodyWidth)
   const editor = useRef<CodeEditorHandle | null>(null)
   // What this pane last knows to be on disk, for the stale-save check and the draft.
   const known = useRef<{ text: string; modifiedAt: number } | null>(null)
@@ -228,13 +234,34 @@ export function FileView({
         </span>
         {unsaved ? <span className="file__unsaved" title="Unsaved" aria-label="Unsaved" /> : null}
         <span className="file__spacer" />
+        {showDiff ? (
+          <>
+            <button
+              type="button"
+              className={`file__tool${layout === 'inline' ? ' file__tool--on' : ''}`}
+              aria-pressed={layout === 'inline'}
+              onClick={() => setDiffLayout('inline')}
+            >
+              Inline
+            </button>
+            <button
+              type="button"
+              className={`file__tool${layout === 'split' ? ' file__tool--on' : ''}`}
+              aria-pressed={layout === 'split'}
+              disabled={fitLayout('split', bodyWidth) !== 'split'}
+              onClick={() => setDiffLayout('split')}
+            >
+              Side by side
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           className={`file__tool${showDiff ? ' file__tool--on' : ''}`}
           aria-pressed={showDiff}
           // Left enabled while open, so a diff emptied by a discard can still be closed.
           disabled={changed === false && !showDiff}
-          onClick={() => setShowDiff((current) => !current)}
+          onClick={() => setPaneDiff(paneId, !showDiff)}
         >
           Diff
         </button>
@@ -270,8 +297,8 @@ export function FileView({
         </div>
       ) : null}
 
-      <div className="file__body">
-        {showDiff ? <DiffBody diffs={diffs} layout={diffLayout} /> : null}
+      <div className="file__body" ref={body}>
+        {showDiff ? <DiffBody worktreeId={worktreeId} diffs={diffs} layout={layout} /> : null}
         <div className="file__view" hidden={showDiff}>
           {content === null ? (
             error === null ? (
@@ -345,27 +372,67 @@ export function FileView({
 }
 
 function DiffBody({
+  worktreeId,
   diffs,
   layout
 }: {
+  worktreeId: string
   diffs: Diffs | null
-  layout: Parameters<typeof PatchView>[0]['layout']
+  layout: DiffLayout
 }): React.JSX.Element {
+  const busy = useWorkspaceStore((state) => state.hunkPending)
+  const applyHunk = useWorkspaceStore((state) => state.applyHunk)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
   if (diffs === null) return <p className="file__state">Reading…</p>
-  const parts = [diffs.staged, diffs.working].filter((diff) => diff.patch !== '')
-  if (parts.length === 0) return <p className="file__state">No changes</p>
+  const staged = diffs.staged.patch === '' ? null : diffs.staged
+  const working = diffs.working.patch === '' ? null : diffs.working
+  if (staged === null && working === null) return <p className="file__state">No changes</p>
+  // Halves are named only when both are there; the staged one first, as the next commit's.
   return (
     <div className="file__diff">
-      {parts.map((diff) => (
-        <PatchView
-          key={diff.staged ? 'staged' : 'working'}
-          patch={diff.patch}
-          truncated={diff.truncated}
-          layout={layout}
-        />
-      ))}
+      {staged === null ? null : (
+        <>
+          {working === null ? null : <h3 className="patch__half">Staged</h3>}
+          <PatchView
+            patch={staged.patch}
+            truncated={staged.truncated}
+            layout={layout}
+            action="Unstage"
+            busy={busy}
+            onHunk={(file, hunk) => void applyHunk(worktreeId, file.path, hunk, false)}
+          />
+        </>
+      )}
+      {working === null ? null : (
+        <>
+          {staged === null ? null : <h3 className="patch__half">Unstaged</h3>}
+          <PatchView
+            patch={working.patch}
+            truncated={working.truncated}
+            layout={layout}
+            action="Stage"
+            busy={busy}
+            onHunk={(file, hunk) => void applyHunk(worktreeId, file.path, hunk, true)}
+            onDiscard={(file, hunk) => openDialog({ kind: 'confirm-discard', worktreeId, path: file.path, hunk })}
+          />
+        </>
+      )}
     </div>
   )
+}
+
+/** The element's width while `active`, kept current as it resizes; null until measured. */
+function useWidth(ref: React.RefObject<HTMLElement | null>, active: boolean): number | null {
+  const [width, setWidth] = useState<number | null>(null)
+  useEffect(() => {
+    const element = ref.current
+    if (!active || element === null) return
+    setWidth(element.clientWidth)
+    const observer = new ResizeObserver(() => setWidth(element.clientWidth))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [ref, active])
+  return width
 }
 
 export function FileGlyph(): React.JSX.Element {

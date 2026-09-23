@@ -121,7 +121,10 @@
 
 .file__diff {
   flex: 1;
+  min-width: 0;
   overflow: auto;
+  /* The patch's headers are sized to this, the width actually on screen. */
+  container-type: inline-size;
   background: var(--bg-panel);
 }
 
