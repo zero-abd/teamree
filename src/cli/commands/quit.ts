@@ -2,7 +2,7 @@
 // discovery file and transcripts are released by `before-quit`, which only the
 // app's own quit runs.
 
-import { readNumber } from '../argv.js'
+import { readBoolean, readNumber } from '../argv.js'
 import type { CommandSpec } from '../command-spec.js'
 import { CliError, ExitCode } from '../exit.js'
 import { formatFields } from '../output.js'
@@ -17,7 +17,8 @@ export const quitCommands: readonly CommandSpec[] = [
     summary: 'Quit the running app, and wait until it has gone.',
     details:
       'The app quits the way its quit key does, so panes are killed, their transcripts written, and the ' +
-      'socket and discovery file released before this returns.\n\n' +
+      'socket and discovery file released before this returns. Refused while a file in the app has unsaved ' +
+      'edits, unless --force.\n\n' +
       'Returns once the endpoint is gone, which is the last thing the teardown does. Exit code 3 when no ' +
       'app is running, 1 when one was asked and the endpoint was still there when the wait ran out.',
     flags: [
@@ -26,16 +27,21 @@ export const quitCommands: readonly CommandSpec[] = [
         kind: 'number',
         placeholder: '<ms>',
         description: `Give up waiting after this long. Defaults to ${DEFAULT_QUIT_TIMEOUT_MS}.`
+      },
+      {
+        name: 'force',
+        kind: 'boolean',
+        description: 'Quit even with unsaved files in the app; their edits come back when it next opens.'
       }
     ],
-    examples: ['teamree quit', 'teamree quit --json'],
+    examples: ['teamree quit', 'teamree quit --json', 'teamree quit --force'],
     run: async (context) => {
       const timeoutMs = readNumber(context.flags, 'timeout-ms') ?? DEFAULT_QUIT_TIMEOUT_MS
       const endpoint = context.client.endpoint
 
       let pid: number | null = null
       try {
-        pid = (await context.client.call('app.quit', {})).pid
+        pid = (await context.client.call('app.quit', readBoolean(context.flags, 'force') ? { force: true } : {})).pid
       } catch (error) {
         // The quit takes the connection the reply was travelling on; the
         // endpoint below is the better evidence.

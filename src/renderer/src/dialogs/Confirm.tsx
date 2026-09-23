@@ -1,6 +1,6 @@
 // A question with two answers, in one shape: `Modal`'s frame, the question as title, one body line, and
 // the no-op answer before the one that acts (red when it destroys). Focus starts on the safe answer,
-// so Enter never needs a second handler.
+// so Enter never needs a second handler. A Save question adds Don't Save, alone on the left as on macOS.
 
 import { Modal } from './Modal'
 
@@ -9,7 +9,7 @@ type ConfirmProps = {
   title: string
   /** One line: what is there, and what going through with it costs. */
   body: string
-  /** The answer that changes nothing. A verb phrase, never "Cancel" alone. */
+  /** The answer that changes nothing. A verb phrase; "Cancel" only beside Save, as macOS writes it. */
   cancel: string
   /** The answer that goes through with it. Names the act, never "OK". */
   confirm: string
@@ -17,6 +17,8 @@ type ConfirmProps = {
   tone?: 'danger' | 'primary'
   onCancel: () => void
   onConfirm: () => void
+  /** A third answer that goes on without the confirm's act, e.g. Don't Save. */
+  decline?: { label: string; onChoose: () => void }
   /** Anything under the body line — a count, a path — that the question needs shown. */
   children?: React.ReactNode
 }
@@ -29,6 +31,7 @@ export function Confirm({
   tone = 'danger',
   onCancel,
   onConfirm,
+  decline,
   children
 }: ConfirmProps): React.JSX.Element {
   const destructive = tone === 'danger'
@@ -38,6 +41,11 @@ export function Confirm({
         <p className="confirm__body">{body}</p>
         {children}
         <div className="modal__actions">
+          {decline === undefined ? null : (
+            <button type="button" className="button confirm__decline" onClick={decline.onChoose}>
+              {decline.label}
+            </button>
+          )}
           <button type="button" className="button" data-default={destructive ? 'true' : undefined} onClick={onCancel}>
             {cancel}
           </button>

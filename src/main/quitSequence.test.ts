@@ -166,3 +166,31 @@ describe('quitting while the app is still starting up', () => {
     expect(onProblem).not.toHaveBeenCalled()
   })
 })
+
+describe('asking the window about unsaved files first', () => {
+  it('stops nothing and quits nothing when the window says Cancel, and asks again next time', async () => {
+    const stop = vi.fn(async () => {})
+    const quit = vi.fn()
+    const mayQuit = vi.fn(async () => false)
+    const onBeforeQuit = createQuitSequence({ stop, quit, mayQuit })
+
+    onBeforeQuit({ preventDefault: vi.fn() })
+    await vi.waitFor(() => expect(mayQuit).toHaveBeenCalledTimes(1))
+    await Promise.resolve()
+    expect(stop).not.toHaveBeenCalled()
+    expect(quit).not.toHaveBeenCalled()
+
+    const again = { preventDefault: vi.fn() }
+    onBeforeQuit(again)
+    expect(again.preventDefault).toHaveBeenCalled()
+    await vi.waitFor(() => expect(mayQuit).toHaveBeenCalledTimes(2))
+  })
+
+  it('tears down and quits once the window has saved or discarded', async () => {
+    const stop = vi.fn(async () => {})
+    const quit = vi.fn()
+    createQuitSequence({ stop, quit, mayQuit: async () => true })({ preventDefault: vi.fn() })
+    await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
+})

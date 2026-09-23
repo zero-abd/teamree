@@ -67,7 +67,8 @@ export type RegisterHandlersOptions = {
    * Ends the app: `app.quit()` and nothing else, the one ending that runs
    * `before-quit`, where the ptys are killed and awaited. Absent, the method refuses.
    */
-  requestQuit?: () => void
+  requestQuit?: (force: boolean) => void
+  unsavedFiles?: () => readonly string[]
   /** Hears each stored appearance. Absent with no window around. */
   onAppearance?: (appearance: Appearance) => void
 }
@@ -75,7 +76,10 @@ export type RegisterHandlersOptions = {
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
   registerPlaceholderHandlers(registry)
   registerStatusHandler(registry)
-  registerQuitHandler(registry, options.requestQuit === undefined ? {} : { requestQuit: options.requestQuit })
+  registerQuitHandler(registry, {
+    ...(options.requestQuit === undefined ? {} : { requestQuit: options.requestQuit }),
+    ...(options.unsavedFiles === undefined ? {} : { unsavedFiles: options.unsavedFiles })
+  })
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)
   registerAppearanceHandlers(registry, options.onAppearance)

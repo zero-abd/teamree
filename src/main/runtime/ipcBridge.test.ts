@@ -58,7 +58,9 @@ describe('the renderer transport names one set of channels', () => {
       // The agent notifications' two, the same again.
       ...(await channelsNamedIn('src/main/agentNotices.ts')),
       // Keep-awake's one, outward only.
-      ...(await channelsNamedIn('src/main/keepAwake.ts'))
+      ...(await channelsNamedIn('src/main/keepAwake.ts')),
+      // Unsaved files: the list out, the question in, its answer out.
+      ...(await channelsNamedIn('src/main/unsavedFiles.ts'))
     ])
 
     expect([...preload].filter((channel) => !served.has(channel))).toEqual([])

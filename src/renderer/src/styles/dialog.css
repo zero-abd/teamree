@@ -509,6 +509,22 @@ select.field__input {
   font-size: var(--text-xs);
 }
 
+/* Don't Save sits apart from Cancel and Save, as in a macOS sheet. */
+.confirm__decline {
+  margin-right: auto;
+}
+
+.confirm__files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
 .button--danger {
   border-color: color-mix(in srgb, var(--danger) 55%, transparent);
   background: color-mix(in srgb, var(--danger) 18%, transparent);

@@ -77,6 +77,8 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'new-terminal': { section: 'file' },
   'new-markdown': { section: 'file' },
   'close-pane': { section: 'file' },
+  'save-file': { section: 'file' },
+  'save-all': { section: 'file' },
   // What a person does with a worktree once the agent has stopped, and until
   // now the two things the menu bar could not reach at all. Under File rather
   // than in a menu of their own: File is already where this app keeps the

@@ -10,9 +10,11 @@ import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { useMenuBar } from './menu/useMenuBar'
+import { useUnsavedFiles } from './files/useUnsavedFiles'
 import { useAgentNotices } from './notices/useAgentNotices'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmCloseFileDialog } from './dialogs/ConfirmCloseFileDialog'
+import { ConfirmUnsavedDialog } from './dialogs/ConfirmUnsavedDialog'
 import { ConfirmDiscardDialog } from './dialogs/ConfirmDiscardDialog'
 import { ConfirmClosePaneDialog } from './dialogs/ConfirmClosePaneDialog'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
@@ -42,6 +44,7 @@ export function App(): React.JSX.Element {
   const isAppChord = useWorkspaceShortcuts(modifier)
   // The same commands in the menu bar, through one dispatcher over one table.
   useMenuBar()
+  useUnsavedFiles()
   // What this window tells the main process about agent notices. See src/renderer/src/notices.
   useAgentNotices()
   // A folder dropped anywhere on the window becomes a project.
@@ -142,6 +145,9 @@ export function App(): React.JSX.Element {
       ) : null}
       {dialog?.kind === 'confirm-close-pane' ? <ConfirmClosePaneDialog terminalId={dialog.terminalId} /> : null}
       {dialog?.kind === 'confirm-close-file' ? <ConfirmCloseFileDialog terminalId={dialog.terminalId} /> : null}
+      {dialog?.kind === 'confirm-unsaved' ? (
+        <ConfirmUnsavedDialog paneIds={dialog.paneIds} after={dialog.after} />
+      ) : null}
       {dialog?.kind === 'confirm-discard' ? (
         <ConfirmDiscardDialog
           worktreeId={dialog.worktreeId}

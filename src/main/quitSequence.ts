@@ -4,7 +4,8 @@
 // is held until the teardown finishes, and the only one let through is the one
 // this file asks for. A quit during startup waits for the launch (bounded by
 // the grace below), since `restoreSessions()` spawns panes before the handle
-// that can kill them exists. A teardown that throws still quits.
+// that can kill them exists. A teardown that throws still quits. A quit the
+// window declines (Cancel on its Save question) leaves everything running.
 
 /**
  * How long a quit waits for a launch still in flight. A real launch takes
@@ -13,6 +14,8 @@
 export const STARTUP_GRACE_MS = 5_000
 
 export type QuitSequenceOptions = {
+  /** Asks the window about unsaved files before anything stops; false keeps the app. */
+  mayQuit?: () => Promise<boolean>
   /** `Runtime.stop`: kills the PTYs, closes the CLI socket, flushes the workspace and scrollback. */
   stop: () => Promise<void>
   /** Asks for the quit again once `stop` has finished. `app.quit`. */
@@ -51,13 +54,16 @@ export function createQuitSequence(options: QuitSequenceOptions): (event: Quitta
         if (options.whenStarted !== undefined) {
           await waitForLaunch(options.whenStarted, options.startupGraceMs ?? STARTUP_GRACE_MS, onProblem)
         }
+        if (options.mayQuit !== undefined && !(await options.mayQuit())) {
+          phase = 'idle'
+          return
+        }
         await options.stop()
       } catch (error) {
         onProblem(error)
-      } finally {
-        phase = 'stopped'
-        options.quit()
       }
+      phase = 'stopped'
+      options.quit()
     })()
   }
 }

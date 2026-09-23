@@ -49,7 +49,9 @@ export type RuntimeOptions = {
   /** Announces an agent pane that has stopped. Passed in for the same reason `openExternal` is. */
   onAgentNotice?: (notice: AgentNotice) => void
   /** Ends the app, for `teamree quit`; `app.quit` in the main process. Absent, the method refuses. */
-  requestQuit?: () => void
+  requestQuit?: (force: boolean) => void
+  /** The window's edited files, which `teamree quit` refuses over without `--force`. */
+  unsavedFiles?: () => readonly string[]
   /** Hears each stored appearance, so the app can point macOS's own appearance at it. */
   onAppearance?: (appearance: Appearance) => void
   onError?: (error: unknown) => void
@@ -83,6 +85,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     trashItem,
     onAgentNotice,
     requestQuit,
+    unsavedFiles,
     onAppearance,
     onError
   } = options
@@ -108,6 +111,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     scrollback,
     worktreesRoot,
     ...(requestQuit === undefined ? {} : { requestQuit }),
+    ...(unsavedFiles === undefined ? {} : { unsavedFiles }),
     ...(onAppearance === undefined ? {} : { onAppearance })
   })
   const dispatch = createDispatcher(registry)

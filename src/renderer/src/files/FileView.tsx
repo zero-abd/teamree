@@ -11,8 +11,11 @@ import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { PatchView } from '../workspace/PatchView'
 import type { CodeEditorHandle } from './CodeEditor'
-import { dropDraft, fileSize, keepDraft, takeDraft, type FileDraft } from './fileDrafts'
+import { draftFor, dropDraft, fileSize, keepDraft, registerSaver, type FileDraft } from './fileDrafts'
 import { ImageView } from './ImageView'
+
+/** How long typing may run before the draft in the profile catches up. */
+const DRAFT_DELAY_MS = 400
 
 // Its own chunk, so the window does not load an editor until a file is opened.
 const CodeEditor = lazy(() => import('./CodeEditor').then((module) => ({ default: module.CodeEditor })))
@@ -31,7 +34,7 @@ export function FileView({
 }: FilePaneProps): React.JSX.Element {
   const worktreePath = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.path)
   const unsaved = useWorkspaceStore((state) => state.unsavedFiles[paneId] === true)
-  const setFileUnsaved = useWorkspaceStore((state) => state.setFileUnsaved)
+  const setFileEdited = useWorkspaceStore((state) => state.setFileEdited)
   const filesEpoch = useWorkspaceStore((state) => state.worktreeFilesEpoch)
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const diffLayout = useWorkspaceStore((state) => state.diffLayout)
@@ -40,7 +43,7 @@ export function FileView({
   const openInDefaultApp = useWorkspaceStore((state) => state.openInDefaultApp)
 
   const [content, setContent] = useState<FileContent | null>(null)
-  const [draft] = useState<FileDraft | undefined>(() => takeDraft(paneId))
+  const [draft] = useState<FileDraft | undefined>(() => draftFor(paneId, worktreeId, path))
   const [error, setError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
   const [showDiff, setShowDiff] = useState(false)
@@ -51,6 +54,8 @@ export function FileView({
   const editor = useRef<CodeEditorHandle | null>(null)
   // What this pane last knows to be on disk, for the stale-save check and the draft.
   const known = useRef<{ text: string; modifiedAt: number } | null>(null)
+  const encoding = useRef<FileDraft['encoding']>(draft?.encoding)
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const unsavedRef = useRef(unsaved)
   unsavedRef.current = unsaved
 
@@ -66,6 +71,7 @@ export function FileView({
         if (!alive) return
         setError(null)
         if (next.view === undefined) {
+          encoding.current = next.encoding
           if (known.current === null) {
             // A kept draft saves against the version it was edited from.
             known.current = draft
@@ -117,21 +123,38 @@ export function FileView({
     }
   }, [showDiff, worktreeId, path, filesEpoch])
 
-  // Edits outlive the editor: a worktree switch unmounts it.
-  useEffect(
-    () => () => {
-      const text = editor.current?.text()
-      const base = known.current
-      if (unsavedRef.current && text !== undefined && base !== null) {
-        keepDraft(paneId, { text, savedText: base.text, modifiedAt: base.modifiedAt })
-      }
-    },
-    [paneId]
-  )
+  /** Writes the edits to the profile now, while the store still calls them unsaved. */
+  const keep = useRef<() => void>(() => {})
+  keep.current = () => {
+    if (draftTimer.current !== null) clearTimeout(draftTimer.current)
+    draftTimer.current = null
+    const text = editor.current?.text()
+    const base = known.current
+    // Read live: a pane closed with Don't Save unmounts before it renders clean.
+    if (text === undefined || base === null || useWorkspaceStore.getState().editedFiles[paneId] === undefined) return
+    keepDraft(paneId, {
+      worktreeId,
+      path,
+      text,
+      savedText: base.text,
+      modifiedAt: base.modifiedAt,
+      ...(encoding.current === undefined ? {} : { encoding: encoding.current })
+    })
+  }
+
+  // Edits outlive the editor: a worktree switch unmounts it, and a reload or quit ends the page.
+  useEffect(() => {
+    const flush = (): void => keep.current()
+    window.addEventListener('beforeunload', flush)
+    return () => {
+      window.removeEventListener('beforeunload', flush)
+      flush()
+    }
+  }, [])
 
   const save = useCallback(
-    async (text: string, overwrite = false): Promise<void> => {
-      if (content === null || content.view !== undefined) return
+    async (text: string, overwrite = false): Promise<boolean> => {
+      if (content === null || content.view !== undefined) return false
       try {
         const written = await runtimeClient.call('file.write', {
           worktreeId,
@@ -142,15 +165,27 @@ export function FileView({
         })
         known.current = { text, modifiedAt: written.modifiedAt }
         editor.current?.markSaved(text)
-        dropDraft(paneId)
         setConflict(false)
         setError(null)
+        return true
       } catch (failure) {
         if ((failure as { code?: string } | null)?.code === 'conflict') setConflict(true)
         else setError(failure instanceof Error ? failure.message : String(failure))
+        return false
       }
     },
-    [content, worktreeId, path, paneId]
+    [content, worktreeId, path]
+  )
+
+  const saveEdits = useRef(save)
+  saveEdits.current = save
+  useEffect(
+    () =>
+      registerSaver(paneId, () => {
+        const text = editor.current?.text() ?? draft?.text
+        return text === undefined ? Promise.resolve(false) : saveEdits.current(text)
+      }),
+    [paneId, draft]
   )
 
   const reload = async (): Promise<void> => {
@@ -162,7 +197,18 @@ export function FileView({
     setConflict(false)
   }
 
-  const onDirtyChange = useCallback((dirty: boolean) => setFileUnsaved(paneId, dirty), [paneId, setFileUnsaved])
+  const onDirtyChange = useCallback(
+    (dirty: boolean) => {
+      setFileEdited(paneId, dirty ? { worktreeId, path } : null)
+      if (dirty) keep.current()
+      else dropDraft(paneId)
+    },
+    [paneId, worktreeId, path, setFileEdited]
+  )
+
+  const onEdit = useCallback(() => {
+    if (draftTimer.current === null) draftTimer.current = setTimeout(() => keep.current(), DRAFT_DELAY_MS)
+  }, [])
 
   const openDefault = (): void => void openInDefaultApp(absolute, name)
   const reveal = (): void => void revealInFinder(absolute, name)
@@ -243,7 +289,7 @@ export function FileView({
                 focused={focused && !showDiff}
                 searchToken={searchToken}
                 onDirtyChange={onDirtyChange}
-                onSave={(text) => void save(text)}
+                onEdit={onEdit}
               />
             </Suspense>
           ) : view.kind === 'image' ? (

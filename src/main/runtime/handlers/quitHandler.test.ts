@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErrorCode, type ErrorResponse } from '../../../shared/protocol'
 import { WorkspaceStore } from '../../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from '../dispatcher'
@@ -54,5 +54,27 @@ describe('app.quit', () => {
     expect(response.ok).toBe(false)
     expect(response.error.code).toBe(ErrorCode.NotFound)
     expect(response.error.message).toMatch(/no app to quit/)
+  })
+
+  it('refuses while the window has unsaved files, and quits with force', async () => {
+    const deferred: Array<() => void> = []
+    const requestQuit = vi.fn()
+    registerQuitHandler(registry, {
+      requestQuit,
+      unsavedFiles: () => ['src/math.ts'],
+      defer: (run) => deferred.push(run)
+    })
+    const dispatch = createDispatcher(registry)
+
+    const refused = (await dispatch({ id: 'q3', method: 'app.quit', params: {} }, call)) as ErrorResponse
+    expect(refused.ok).toBe(false)
+    expect(refused.error.code).toBe(ErrorCode.Conflict)
+    expect(refused.error.message).toContain('src/math.ts')
+    expect(deferred).toHaveLength(0)
+
+    const forced = await dispatch({ id: 'q4', method: 'app.quit', params: { force: true } }, call)
+    expect(forced).toMatchObject({ ok: true })
+    for (const run of deferred) run()
+    expect(requestQuit).toHaveBeenCalledWith(true)
   })
 })

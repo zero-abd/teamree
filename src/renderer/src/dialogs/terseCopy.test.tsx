@@ -30,6 +30,7 @@ const { FirstRunCliOffer } = await import('./FirstRunCliOffer')
 const { ConfirmRemoveDialog } = await import('./ConfirmRemoveDialog')
 const { ConfirmDiscardDialog } = await import('./ConfirmDiscardDialog')
 const { ConfirmCloseFileDialog } = await import('./ConfirmCloseFileDialog')
+const { ConfirmUnsavedDialog } = await import('./ConfirmUnsavedDialog')
 const { closePaneWarning } = await import('./closePaneModel')
 const { cliOutcome } = await import('./cliInstallModel')
 const { CommandPalette } = await import('../palette/CommandPalette')
@@ -282,7 +283,7 @@ describe('dialogs', () => {
     expect(clauses(closePaneWarning(terminal)?.body, closePaneWarning(agent)?.body)).toEqual([])
   })
 
-  it('discarding unsaved edits to a file: no sentence', () => {
+  it('saving a file before closing it: no sentence', () => {
     seed({
       activeWorktreeId: 'w1',
       layouts: {
@@ -294,8 +295,18 @@ describe('dialogs', () => {
       }
     })
     render(<ConfirmCloseFileDialog terminalId="file:1" />)
-    expect(document.body.textContent).toContain('Discard unsaved changes?')
+    expect(document.body.textContent).toContain('Save changes to')
     expect(sentenceStops(document.body)).toEqual([])
+  })
+
+  it('saving before a quit, a close or a removal: no sentence', () => {
+    seed({ editedFiles: { 'file:1': { worktreeId: 'w1', path: 'src/math.ts' } } })
+    for (const after of ['quit', 'close', { remove: 'w1' }] as const) {
+      const { unmount } = render(<ConfirmUnsavedDialog paneIds={['file:1']} after={after} />)
+      expect(document.body.textContent).toContain('src/math.ts')
+      expect(sentenceStops(document.body)).toEqual([])
+      unmount()
+    }
   })
 
   it('discarding a file or a hunk from the Changes tab: no sentence', () => {

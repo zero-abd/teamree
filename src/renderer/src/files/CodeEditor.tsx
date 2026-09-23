@@ -42,7 +42,8 @@ export type CodeEditorProps = {
   /** Bumped to open the find bar. */
   searchToken: number
   onDirtyChange: (dirty: boolean) => void
-  onSave: (text: string) => void
+  /** Every change to the document. */
+  onEdit: () => void
 }
 
 export function CodeEditor({
@@ -54,14 +55,14 @@ export function CodeEditor({
   focused,
   searchToken,
   onDirtyChange,
-  onSave
+  onEdit
 }: CodeEditorProps): React.JSX.Element {
   const host = useRef<HTMLDivElement | null>(null)
   const view = useRef<EditorView | null>(null)
   const saved = useRef<Text | null>(null)
   const dirty = useRef(false)
-  const callbacks = useRef({ onDirtyChange, onSave })
-  callbacks.current = { onDirtyChange, onSave }
+  const callbacks = useRef({ onDirtyChange, onEdit })
+  callbacks.current = { onDirtyChange, onEdit }
 
   const report = (state: EditorState): void => {
     const next = saved.current !== null && !state.doc.eq(saved.current)
@@ -95,23 +96,11 @@ export function CodeEditor({
         search({ top: true }),
         language.of([]),
         codeTheme,
-        keymap.of([
-          {
-            key: 'Mod-s',
-            preventDefault: true,
-            run: (target) => {
-              callbacks.current.onSave(target.state.sliceDoc())
-              return true
-            }
-          },
-          ...searchKeymap,
-          ...historyKeymap,
-          ...foldKeymap,
-          ...defaultKeymap,
-          indentWithTab
-        ]),
+        keymap.of([...searchKeymap, ...historyKeymap, ...foldKeymap, ...defaultKeymap, indentWithTab]),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) report(update.state)
+          if (!update.docChanged) return
+          report(update.state)
+          callbacks.current.onEdit()
         })
       ]
     })

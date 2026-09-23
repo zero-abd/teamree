@@ -158,7 +158,8 @@ export const Params = {
    * Asks the app to quit, as the quit key does. Answered with the pid before
    * teardown; a runtime with no app around it refuses.
    */
-  appQuit: z.object({}),
+  /** `force`: quit even with edited files in the window; they come back as drafts. */
+  appQuit: z.object({ force: z.boolean().optional() }),
 
   projectList: z.object({}),
   /** `init`: a folder that is not a repository gets `git init` and an empty first commit before it is added. */

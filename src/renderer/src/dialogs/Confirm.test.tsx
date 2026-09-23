@@ -75,6 +75,33 @@ describe('what it draws', () => {
   })
 })
 
+describe('a Save question', () => {
+  it('puts Don’t Save apart on the left, and gives Enter to Save', async () => {
+    const user = userEvent.setup()
+    const onConfirm = vi.fn()
+    const onDecline = vi.fn()
+    render(
+      <Confirm
+        title="Save changes to math.ts?"
+        body="Don't Save loses your edits"
+        cancel="Cancel"
+        confirm="Save"
+        tone="primary"
+        decline={{ label: "Don't Save", onChoose: onDecline }}
+        onCancel={vi.fn()}
+        onConfirm={onConfirm}
+      />
+    )
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('.modal__actions .button')]
+    expect(buttons.map((button) => button.textContent)).toEqual(["Don't Save", 'Cancel', 'Save'])
+    expect(buttons[0]?.classList.contains('confirm__decline')).toBe(true)
+    await user.keyboard('{Enter}')
+    expect(onConfirm).toHaveBeenCalledOnce()
+    await user.click(buttons[0]!)
+    expect(onDecline).toHaveBeenCalledOnce()
+  })
+})
+
 describe('what the keys do', () => {
   it('cancels on Escape', async () => {
     const user = userEvent.setup()

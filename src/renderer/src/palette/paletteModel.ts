@@ -140,6 +140,8 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'new-terminal': 'new terminal shell pane open',
   'new-markdown': 'new markdown notes page document write md file',
   'close-pane': 'close pane kill stop shut terminal',
+  'save-file': 'save file write disk edits',
+  'save-all': 'save all files write disk edits',
   'find-in-pane': 'find search pane scrollback text',
   'split-right': 'split pane right vertical column',
   'split-down': 'split pane down horizontal row',

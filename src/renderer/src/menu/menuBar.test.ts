@@ -107,6 +107,8 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'new-terminal',
       'new-markdown',
       'close-pane',
+      'save-file',
+      'save-all',
       'commit-changes',
       'push-worktree'
     ])
@@ -166,6 +168,8 @@ describe('what the menu bar says can be done', () => {
       'split-right': false,
       'split-down': false,
       'close-pane': false,
+      'save-file': false,
+      'save-all': false,
       'find-in-pane': false,
       'focus-next-pane': false,
       'focus-previous-pane': false,
@@ -193,9 +197,11 @@ describe('what the menu bar says can be done', () => {
   })
 
   it('lights them once there is a worktree open with a pane in it', () => {
-    // All but the walks (one pane, one worktree: nowhere to go), the git pair (no status read yet) and
-    // Actual Size (already there).
+    // All but the walks (one pane, one worktree: nowhere to go), the git pair (no status read yet),
+    // Actual Size (already there) and the saves (nothing edited).
     const nowhere = [
+      'save-file',
+      'save-all',
       'actual-size',
       'focus-next-pane',
       'focus-previous-pane',
