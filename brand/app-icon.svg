@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="teamree app icon">
+  <defs><linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#101114"/><stop offset="1" stop-color="#0B0C0E"/></linearGradient></defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
+  <g fill="#F3F2EE" transform="translate(256.5 237.875) scale(2.1291667)"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></g>
+</svg>

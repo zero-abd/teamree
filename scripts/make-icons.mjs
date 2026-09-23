@@ -8,10 +8,12 @@
 // that it needed nothing but Node. That bought reproducibility at the price of
 // the artwork: the icon could only ever be whatever could be expressed as a few
 // circles and quadratics in this file, and it drifted from the mark used
-// everywhere else. The artwork now lives in brand/mark.svg and
-// brand/mark-small.svg, which are the source of truth for the whole brand, and
-// this script's job is to get those vectors onto a pixel grid at exactly the
-// sizes the containers promise.
+// everywhere else. The artwork now lives in brand/: mark.svg and
+// mark-small.svg are the mark, app-icon.svg is the mark already placed on its
+// tile inside Apple's icon grid, and brand/README.md names the colours. Those
+// files are the source of truth for the whole brand, and this script's job is
+// to get those vectors onto a pixel grid at exactly the sizes the containers
+// promise.
 //
 // There is no rasteriser in the dependency tree — no ImageMagick, no sharp, no
 // resvg — so headless Chrome is the rasteriser. Chrome is *required to
@@ -23,10 +25,11 @@
 // argument:
 //
 //   1. Sizes of 32px and below use brand/mark-small.svg, the reduced form with
-//      the window contents dropped and the strokes thickened. Sizes of 48px and
-//      up use the full brand/mark.svg. Below 32px the three chrome dots and the
-//      `>_` prompt antialias into flat grey and the three windows close into one
-//      blob, which is exactly what the reduced form exists to prevent.
+//      narrower windows and heavier slab frames. Sizes of 48px and up use the
+//      full brand/mark.svg — and on macOS, brand/app-icon.svg, which is that
+//      mark already on its tile. Below 32px the full mark's window slant flattens
+//      into a plain slot and its thinner frame bars drop under a pixel, which is
+//      exactly what the reduced form exists to prevent.
 //   2. Every size is its own render at that pixel size. Nothing here is one
 //      large render scaled down. A 1024 render resampled to 16 is soft in a way
 //      that no amount of sharpening recovers, and — worse — an icns assembled
@@ -75,11 +78,15 @@ const siteDir = join(root, 'site', 'public')
 
 // ------------------------------------------------------------- the palette --
 
-// Final, and used exactly. The mark is one colour; the tile is one colour. No
-// gradient, no inner stroke, no sheen: the old icon had all three and they are
-// the first things to turn to mud at 32px and below.
-const TILE_INK = '#0A0C10'
-const MARK_ON_TILE = '#FFFFFF'
+// Final, and used exactly; the same values brand/app-icon.svg and
+// brand/README.md carry. The mark is one off-white; the tile is a restrained
+// vertical gradient between two near-blacks, drawn here for the full-bleed
+// icons the way app-icon.svg draws it for the macOS one. No inner stroke, no
+// sheen: those are the first things to turn to mud at 32px and below, and the
+// two tile tones are close enough that at 16px they are one colour anyway.
+const TILE_INK_TOP = '#101114'
+const TILE_INK_BOTTOM = '#0B0C0E'
+const MARK_ON_TILE = '#F3F2EE'
 
 // The macOS app-icon squircle ratio. A rounded rect at 22.5% of its own side is
 // what Big Sur's grid specifies, and the site header independently landed on the
@@ -105,31 +112,26 @@ const APPLE_BODY_RATIO = 0.805
 // full-bleed tile even on macOS, and almost no inset. See below, and rule 1.
 const SMALL_MARK_MAX = 32
 
-// How much of the tile the mark spans, as a fraction of the tile's side. There
-// are two numbers because there have to be, and the reason is one measurement.
+// How much of the tile the mark's 256-unit box spans, as a fraction of the
+// tile's side. There are two numbers because there have to be.
 //
-// The reduced mark's tightest feature is the 4-unit gap between the bottom of
-// the top window (y=19.5) and the top of the lower two (y=23.5). On a 16px tile
-// that gap is `4 * ratio * 16/64` device pixels — at 0.72 it is 0.72px, and a
-// feature under one pixel wide does not antialias grey, it antialiases *shut*.
-// Rendered at 0.72 / 0.86 / 0.94 / 1.00 on 16, 20 and 32px tiles and looked at:
-// at 0.72 the three windows and the trunk fuse into one grey plus sign at 16 and
-// are marginal at 20. At 0.94 the gap is ~1px and the windows separate cleanly.
-//
-// So small sizes are drawn essentially full bleed. They can afford to be: the
-// mark carries its own margin, spanning 60 of its 64 viewBox units, so even at
-// ratio 1 there is a 3% surround. 0.94 rather than a flat 1 keeps a pixel of
-// tile visible at the sizes where the grid allows one, so the outer windows and
-// the root do not sit flush against the corner radius.
+// The reduced mark's tightest features are the 24-unit channel between the two
+// slabs and the 22-unit frame bar on each window's centre side. On a 16px tile
+// a 22-unit bar is `22 * ratio * 16/256` device pixels — 1.3px at 0.94 and
+// under a pixel at 0.72 — and a feature under one pixel wide does not
+// antialias grey, it antialiases *shut*: the slab and its window fuse into one
+// grey block. So small sizes are drawn essentially full bleed. They can afford
+// to be: the artwork carries its own margin, spanning 240 of the 256 units
+// across and 200 down, so even at ratio 1 the slabs stand clear of the corner
+// radius and there is a visible band of tile above and below them.
 //
 // Large sizes get a real inset, because there the constraint is not legibility
-// but proportion — at 0.94 a 256px icon looks like a decal that overran its
-// plate. 0.86 was picked over 0.72 / 0.80 / 0.92 by rendering all four at 48 and
-// 256: 0.72 leaves the mark swimming, 0.92 pushes the outer windows into the
-// corner arc, and 0.86 also keeps the step across the 32/48 boundary small
-// enough that the family still reads as one family.
+// but proportion. 0.66 is the number brand/app-icon.svg uses — the artwork is
+// 62% of the tile's width, and 62/(240/256) is 0.66 — so the full-bleed icons
+// for Windows, Linux and the web place the mark exactly where the macOS icon
+// places it, and the family reads as one family.
 const MARK_RATIO_SMALL = 0.94
-const MARK_RATIO_LARGE = 0.86
+const MARK_RATIO_LARGE = 0.66
 
 // ------------------------------------------------------------- the browser --
 
@@ -164,13 +166,14 @@ const scratch = mkdtempSync(join(tmpdir(), 'teamree-icons-'))
 
 const markFull = readFileSync(join(brandDir, 'mark.svg'), 'utf8')
 const markSmall = readFileSync(join(brandDir, 'mark-small.svg'), 'utf8')
+const appIcon = readFileSync(join(brandDir, 'app-icon.svg'), 'utf8')
 
 /**
  * A box of `fraction` of `outer`, rounded so that it still lands on whole
  * pixels when it is centred. `(outer - side)` has to be even or the box starts
  * on a half pixel, and a mark that starts on a half pixel is smeared across two
- * columns at every edge — at 16px that is the difference between three windows
- * and one grey lump. So the side is rounded to the nearest integer of the same
+ * columns at every edge — at 16px that is the difference between two slabs
+ * with a channel between them and one grey lump. So the side is rounded to the nearest integer of the same
  * parity as `outer` rather than to the nearest integer.
  */
 function centredSide(outer, fraction) {
@@ -191,7 +194,11 @@ function centredSide(outer, fraction) {
  *
  * `apple` asks for Apple's inset body rather than the full-bleed tile that
  * Windows, Linux and the web expect. It is honoured only at 48px and up; see
- * APPLE_BODY_RATIO for why.
+ * APPLE_BODY_RATIO for why. At those sizes the page is brand/app-icon.svg
+ * itself, which already draws the 824-of-1024 body, its 185 radius and the mark
+ * at its place on the tile — so the macOS icon is that file rendered, not this
+ * script's reconstruction of it, and a change to the icon is a change to one
+ * SVG. The full-bleed tile below is drawn to the same numbers.
  *
  * This is the one place the small/large split is decided, so all three things
  * that change with it — which vector, how big a tile, how much inset — are
@@ -204,14 +211,19 @@ function rasterise(size, { apple = false } = {}) {
   const radius = Math.round(tile * CORNER_RATIO)
   const mark = centredSide(tile, small ? MARK_RATIO_SMALL : MARK_RATIO_LARGE)
 
+  const body =
+    apple && !small
+      ? `<div class="canvas icon">${appIcon}</div>`
+      : `<div class="canvas"><div class="tile"><div class="mark">${svg}</div></div></div>`
   const html = `<!doctype html><meta charset="utf-8"><style>
 *{margin:0;padding:0}
 html,body{width:${size}px;height:${size}px;overflow:hidden;background:transparent}
 .canvas{width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center}
-.tile{width:${tile}px;height:${tile}px;border-radius:${radius}px;background:${TILE_INK};display:flex;align-items:center;justify-content:center}
+.icon svg{width:100%;height:100%;display:block}
+.tile{width:${tile}px;height:${tile}px;border-radius:${radius}px;background:linear-gradient(${TILE_INK_TOP},${TILE_INK_BOTTOM});display:flex;align-items:center;justify-content:center}
 .mark{width:${mark}px;height:${mark}px;color:${MARK_ON_TILE};display:block}
 .mark svg{width:100%;height:100%;display:block}
-</style><div class="canvas"><div class="tile"><div class="mark">${svg}</div></div></div>`
+</style>${body}`
 
   const page = join(scratch, `page-${size}-${tile}-${mark}.html`)
   const shot = join(scratch, `shot-${size}-${tile}-${mark}.png`)
@@ -454,9 +466,9 @@ function pngAt(size, options) {
   return encodePng(size, rgba)
 }
 
-// macOS: the inset Apple body from 48px up, transparent surround, shadow drawn
-// by the OS; a full-bleed tile at 16 and 32, where the body inset costs more
-// than the shadow is worth. build/icon.png is the 1024 member of this set and
+// macOS: brand/app-icon.svg — the inset Apple body — from 48px up, transparent
+// surround, shadow drawn by the OS; a full-bleed tile at 16 and 32, where the
+// body inset costs more than the shadow is worth. build/icon.png is the 1024 member of this set and
 // not a separate render.
 const APPLE_SIZES = [...new Set(ICONSET_FILES.map(([, size]) => size))].sort((a, b) => a - b)
 

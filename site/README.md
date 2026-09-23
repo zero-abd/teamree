@@ -24,22 +24,15 @@ tools/
 
 ## Branding
 
-**The mark is being redesigned.** A design agent owns `public/favicon.svg`,
-`public/icon-256.png`, `public/og.png` and the header wordmark; they are
-replaced in place under the same filenames, so nothing in the page needs to
-change when they land. The mark also exists inline in two places that must be
-updated with them: the `<symbol id="mark">` at the top of `public/index.html`,
-and the same paths in `og/card.html`. What follows describes the mark as it
-stands today.
+The current brand uses one mark, its reduced small-size form, a drawn wordmark,
+three lockups, and the macOS app icon across the app and site:
 
-The mark is the application icon — the trunk with two worktrees branching off
-it, drawn by `scripts/make-icons.mjs` and reproduced here as SVG paths on the
-same 1024 grid, so the dock, the installer, the favicon and the social card are
-one mark rather than three. The palette and the spacing steps are the app's own
-tokens from `src/renderer/src/styles/tokens.css`, including the accent the
-wordmark's dot uses. Two values are tuned for the web and say so in a comment:
-the muted foreground, which needs 4.5:1 against this background at body sizes,
-and the type scale, because a page is read further away than an IDE chrome.
+- `brand/mark.svg`, `brand/mark-small.svg`, `brand/wordmark.svg`,
+  `brand/lockup.svg`, `brand/lockup-light.svg`, `brand/lockup-dark.svg`, and
+  `brand/app-icon.svg` are the source artwork.
+- `public/index.html` inlines the mark, reduced mark, wordmark, and app icon as
+  symbols; `og/card.html` inlines `brand/lockup.svg`.
+- `npm run icons:verify` checks those inline copies against the source files.
 
 Regenerating the social card after an edit to `og/card.html`:
 
