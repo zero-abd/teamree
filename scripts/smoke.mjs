@@ -357,10 +357,10 @@ async function checkMenuBar(ask) {
     ['Close pane', 'CommandOrControl+W'],
     ['Settings\u2026', 'CommandOrControl+,'],
     ['Every pane, by what needs you', 'CommandOrControl+E'],
-    // In the Help menu, which carries the `help` role so that macOS treats it
-    // as the app's Help menu rather than a menu that happens to be called one.
-    // Worth reading off a running app: a role and a submenu of one's own on the
-    // same item is the one piece of this that a template cannot prove.
+    // In the Help menu, which carries the `help` role. Reading it off a running
+    // app proves the submenu survived the role — that Electron built both onto
+    // one item — and no more than that: whether macOS adopted it as the app's
+    // Help menu is not something `Menu.getApplicationMenu()` can say.
     ['Shortcuts and what a worktree is', 'CommandOrControl+/']
   ]) {
     const item = named(label)
@@ -514,6 +514,37 @@ async function checkWorktreeSurfaces(ask) {
       ),
     `no tab for the pane the runtime opened (${title})`
   )
+
+  // The menu bar's New terminal, chosen the way the platform chooses it, opens
+  // a second pane in this worktree. `checkMenuBar` above proved a menu item
+  // reaches the window; this proves one that needs a worktree open acts on the
+  // right one, which the enablement alone cannot say.
+  const menuItem = (label) => {
+    const walk = (menu) => (menu?.items ?? []).flatMap((item) => [item, ...(item.submenu ? walk(item.submenu) : [])])
+    return walk(Menu.getApplicationMenu()).find((item) => item.label === label)
+  }
+  // Tabs, not buttons: every tab carries its own close button beside it, so a
+  // count of buttons rises by two per pane and a check written against it
+  // reported the menu as broken the first time it ran.
+  const tabCount = () => ask(`document.querySelectorAll('[role="tab"]').length`)
+  const before = await tabCount()
+  const newTerminal = menuItem('New terminal')
+  if (newTerminal?.enabled !== true) {
+    failures.push('New terminal is not live in the menu bar with a worktree open')
+  } else {
+    newTerminal.click()
+    const opened = await waitFor(
+      async () => (await tabCount()) === before + 1,
+      'choosing New terminal from the menu bar did not open a pane in the open worktree'
+    )
+    if (!opened) {
+      // Whatever the window said about it, so the failure names a cause.
+      const said = await ask(
+        `[...document.querySelectorAll('.notice, [role="status"], [role="alert"]')].map((n) => n.textContent).join(' | ')`
+      )
+      if (said) failures.push(`the window said: ${said}`)
+    }
+  }
 
   // And the decision that a quiet shell closes on one press. A pane running an
   // agent, or one still producing output, is asked about first — that is

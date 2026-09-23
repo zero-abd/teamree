@@ -35,6 +35,14 @@ export function useMenuBar(): void {
     // a moment ago — but it is checked against the table anyway, because it
     // arrives over IPC and "it can only be one of ours" is the kind of thing
     // that stays true right up until it does not.
+    //
+    // No guard against key auto-repeat here, and that is measured rather than
+    // assumed. The key handler drops `event.repeat`, and this path has no such
+    // event to read — so the question was whether holding ⌘D would arrive here
+    // once per repeat and split a pane each time. On the packaged app, with a
+    // real held key (one key-down and eight auto-repeats), ⌘D split exactly
+    // once and ⌘W closed exactly once: AppKit performs a key equivalent for
+    // the first key-down and not for the repeats that follow it.
     const stopListening = menu.onCommand((value) => {
       const command = commandNamed(value)
       if (command) runWorkspaceCommand(command, useWorkspaceStore.getState())

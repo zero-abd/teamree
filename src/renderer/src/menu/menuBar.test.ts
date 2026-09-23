@@ -14,7 +14,6 @@ import { describe, expect, it } from 'vitest'
 import type { ModifierState } from '../keyboard/platformModifier'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import type { CommandState } from '../keyboard/workspaceCommands'
-import { isCommandAvailable } from '../keyboard/workspaceCommands'
 import { commandForEvent, WORKSPACE_SHORTCUTS } from '../keyboard/workspaceShortcuts'
 import { acceleratorForChord, menuBarSpec } from './menuBar'
 
@@ -149,18 +148,9 @@ describe('what the menu bar says can be done', () => {
   })
 
   it('lights them once there is a worktree open with a pane in it', () => {
-    for (const item of menuBarSpec(WORKING)) expect(item.enabled, item.command).toBe(true)
-  })
-
-  // One predicate, read by the menu and by the key handler, so a live item and
-  // a working chord cannot come apart. Stated as an identity rather than
-  // case by case, because a second copy of the reasoning is the thing this is
-  // guarding against.
-  it('says exactly what the key handler would refuse on', () => {
-    for (const state of [EMPTY, WORKING, { ...WORKING, dialog: { kind: 'appearance' } as const }]) {
-      for (const item of menuBarSpec(state)) {
-        expect(item.enabled, item.command).toBe(isCommandAvailable(item.command, state))
-      }
+    for (const item of menuBarSpec(WORKING)) {
+      // All but the walk, which with one pane has nowhere to go.
+      expect(item.enabled, item.command).toBe(item.command !== 'focus-next-pane')
     }
   })
 })

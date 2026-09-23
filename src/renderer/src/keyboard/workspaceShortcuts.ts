@@ -36,9 +36,9 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in pane' },
   { command: 'open-dashboard', chord: { key: 'e' }, title: 'Every pane, by what needs you' },
   // Comma, because on this platform that is where settings live and nobody has
-  // to be told. It is not in the application menu — see appMenu.ts, which
-  // carries Electron's own roles and nothing invented — so the key reaches the
-  // renderer rather than being eaten by a menu equivalent.
+  // to be told. The menu bar carries it too, as Settings… in the application
+  // menu, which is the platform's name for the item and where a Mac user looks
+  // for it; `menuBar.ts` is where that label is chosen.
   { command: 'open-appearance', chord: { key: ',' }, title: 'Appearance' },
   // Slash, which is what a person presses when they want to be told how
   // something works, and the one chord in this table that is worth pressing

@@ -126,3 +126,41 @@ describe('starting an agent from the palette', () => {
     expect(startAgent).not.toHaveBeenCalled()
   })
 })
+
+describe('the rows that are also commands', () => {
+  const labels = (): string[] => rows().map((row) => row.querySelector('.palette__label')?.textContent ?? '')
+
+  // The window has no pane in it, so the pane commands are not on offer — the
+  // same answer the menu bar gives, from the same predicate. A row in black
+  // letters that runs nothing is what this used to do.
+  it('offers no command the window would refuse', () => {
+    mount()
+    expect(labels()).not.toContain('Split right')
+    expect(labels()).not.toContain('Split down')
+    expect(labels()).toContain('New terminal')
+    expect(labels()).toContain('New task')
+  })
+
+  it('offers the pane commands once there is a pane', () => {
+    seed({
+      layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } }
+    })
+    mount()
+    expect(labels()).toContain('Split right')
+  })
+
+  // Through the one dispatcher, which is the only way a row and a chord stay
+  // the same command.
+  it('runs the row through the dispatcher the chord goes through', () => {
+    const splitFocusedPane = vi.fn(() => Promise.resolve())
+    seed({
+      layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } },
+      splitFocusedPane
+    })
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'split right' } })
+    fireEvent.click(rows()[0] as HTMLElement)
+    expect(splitFocusedPane).toHaveBeenCalledExactlyOnceWith('row')
+    expect(closeDialog).toHaveBeenCalledOnce()
+  })
+})

@@ -65,7 +65,10 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   // macOS keeps an app's settings in the menu named after the app, and calls
   // the item Settings… whatever the app calls the thing it opens. This is the
   // one label not taken from the shortcut table, and it is not this app's word:
-  // an item called anything else there is an item Mac users do not find.
+  // an item called anything else there is an item Mac users do not find. Off
+  // macOS the main process folds this section into File and the word goes with
+  // it, which is where Windows keeps the same item; the platforms that would
+  // want a different word are not ones this app ships on.
   'open-appearance': { section: 'application', label: 'Settings…' },
 
   'new-worktree': { section: 'file' },

@@ -47,6 +47,22 @@ export type MenuBarItem = {
   enabled: boolean
 }
 
+/**
+ * The only spelling of an accelerator the window can produce: the platform
+ * modifier, optionally Alt and Shift in that order, and one key. Anything else
+ * is not a chord from the shortcut table — and a page that could publish any
+ * string here could publish `CommandOrControl+Q` and take the key equivalent
+ * off Quit, which sits below these items in the same menu.
+ */
+const ACCELERATOR = /^CommandOrControl(\+Alt)?(\+Shift)?\+[^+\s]$/
+
+/**
+ * More items than the window has commands, by a margin, and far fewer than
+ * would make a menu bar unusable. The table has twelve; a page publishing
+ * hundreds is not describing a menu.
+ */
+const MOST_ITEMS = 64
+
 function isMenuBarItem(value: unknown): value is MenuBarItem {
   if (typeof value !== 'object' || value === null) return false
   const item = value as Record<string, unknown>
@@ -56,6 +72,7 @@ function isMenuBarItem(value: unknown): value is MenuBarItem {
     typeof item.label === 'string' &&
     item.label.length > 0 &&
     typeof item.accelerator === 'string' &&
+    ACCELERATOR.test(item.accelerator) &&
     typeof item.section === 'string' &&
     typeof item.enabled === 'boolean'
   )
@@ -71,7 +88,7 @@ function isMenuBarItem(value: unknown): value is MenuBarItem {
  * `Menu.buildFromTemplate`.
  */
 export function readMenuBarItems(value: unknown): MenuBarItem[] | null {
-  if (!Array.isArray(value)) return null
+  if (!Array.isArray(value) || value.length > MOST_ITEMS) return null
   const items: MenuBarItem[] = []
   for (const entry of value) {
     if (!isMenuBarItem(entry)) return null
@@ -106,6 +123,15 @@ export type MenuBarHost = {
  * rather than thrown.
  */
 export function installMenuBar(ipc: IpcMain, host: MenuBarHost): () => void {
+  // Whose menu is installed. On macOS the app outlives its last window, and a
+  // menu bar left as that window described it is a row of live-looking items
+  // that do nothing when chosen and key equivalents that swallow ⌘N and ⌘W
+  // rather than letting them fall through. So the window's items go with the
+  // window: when the web contents that published them is destroyed, the bar
+  // goes back to the platform's roles alone — unless another window has
+  // published since, in which case the bar is already its.
+  let published: WebContents | null = null
+
   const onPublish = (event: IpcMainEvent, payload: unknown): void => {
     if (!host.fromMainFrame(event)) return
     const items = readMenuBarItems(payload)
@@ -115,6 +141,15 @@ export function installMenuBar(ipc: IpcMain, host: MenuBarHost): () => void {
     host.install(items, (command) => {
       if (!sender.isDestroyed()) sender.send(MENU_COMMAND_CHANNEL, command)
     })
+
+    if (published !== sender) {
+      published = sender
+      sender.once('destroyed', () => {
+        if (published !== sender) return
+        published = null
+        host.install([], () => {})
+      })
+    }
   }
 
   ipc.on(MENU_PUBLISH_CHANNEL, onPublish)

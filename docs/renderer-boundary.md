@@ -147,7 +147,14 @@ available. Outbound, the main process does not trust what it is handed either:
 drops the whole message otherwise, because the alternative is a message deciding
 what goes into `Menu.buildFromTemplate` — and it refuses a publish that did not
 come from the window's main frame, the same guard the folder picker and the
-reveal make.
+reveal make. Two of those fields are checked for more than their type: an
+accelerator must be spelled the way the shortcut table spells one (the platform
+modifier, optionally Alt and Shift, one key), because these items sit above
+Quit in the same menu and a page that could publish `CommandOrControl+Q` would
+take that key; and a list longer than sixty-four items is not a menu. The items
+also go with the window: when the web contents that published them is
+destroyed the bar returns to the platform's roles alone, so a Mac with the app
+running and no window open is not showing a row of lit items that do nothing.
 
 Against the paragraph above this adds nothing either, and for the same reason.
 It is listed because the enumeration is meant to be complete.
@@ -393,6 +400,8 @@ the code this document describes.
 | release notes are text, and markup in them stays characters      | `src/renderer/src/updates/UpdateAvailableCard.test.tsx`  |
 | release notes lose both the seven- and eight-bit controls        | `src/main/updates/latestRelease.test.ts`                 |
 | a menu publish from anything but the window's main frame is refused | `src/main/menuBar.test.ts`                            |
+| a published accelerator is one the table could have spelled             | `src/main/menuBar.test.ts`                            |
+| the menu's items go away with the window that published them            | `src/main/menuBar.test.ts`                            |
 | an item that is not the shape it should be takes the whole message down | same                                             |
 | a command arriving from the menu is one this window has                 | `src/renderer/src/keyboard/platformModifier.test.ts`  |
 | a menu command does nothing the window says it cannot do                | `src/renderer/src/keyboard/workspaceCommands.test.ts` |

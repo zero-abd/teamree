@@ -32,6 +32,26 @@ const WORKING: CommandState = {
   layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } }
 }
 
+/** The same window with the pane split in two, so there is somewhere to walk. */
+const TWO_PANES: CommandState = {
+  ...WORKING,
+  layouts: {
+    w1: {
+      worktreeId: 'w1',
+      root: {
+        kind: 'split',
+        direction: 'row',
+        sizes: [0.5, 0.5],
+        children: [
+          { kind: 'leaf', terminalId: 't1' },
+          { kind: 'leaf', terminalId: 't2' }
+        ]
+      },
+      focusedTerminalId: 't1'
+    }
+  }
+}
+
 /** One waiting question, as `teamwork.requests` hands it over. */
 const QUESTION: Record<string, { requests: ConsentRequest[] }> = {
   p1: {
@@ -129,11 +149,15 @@ describe('what a window can be asked to do', () => {
     expect(isCommandAvailable('new-terminal', WORKING)).toBe(true)
   })
 
-  it('offers the focus walk only where there is more than nothing to walk', () => {
+  it('offers the focus walk only where there is somewhere else to walk to', () => {
     expect(isCommandAvailable('focus-next-pane', EMPTY)).toBe(false)
-    expect(isCommandAvailable('focus-next-pane', WORKING)).toBe(true)
-    // A teammate's pane is in the cycle even with none of your own open.
-    expect(isCommandAvailable('focus-next-pane', { ...EMPTY, watches: [{ id: 'watch:p1:priya:t7' }] })).toBe(true)
+    // One pane: the walk would land where the focus already is.
+    expect(isCommandAvailable('focus-next-pane', WORKING)).toBe(false)
+    expect(isCommandAvailable('focus-next-pane', TWO_PANES)).toBe(true)
+    // A teammate's pane counts, so one of your own and one of theirs is a walk.
+    expect(isCommandAvailable('focus-next-pane', { ...WORKING, watches: [{ id: 'watch:p1:priya:t7' }] })).toBe(true)
+    // And one of theirs alone is not, for the same reason one of your own is not.
+    expect(isCommandAvailable('focus-next-pane', { ...EMPTY, watches: [{ id: 'watch:p1:priya:t7' }] })).toBe(false)
   })
 })
 
@@ -155,7 +179,8 @@ describe('running a command', () => {
     ]
 
     for (const [command, method, args] of cases) {
-      const store = workspace(WORKING)
+      // The walk needs somewhere to walk to; everything else is happy with one pane.
+      const store = workspace(command === 'focus-next-pane' ? TWO_PANES : WORKING)
       runWorkspaceCommand(command, store)
       expect(store[method], command).toHaveBeenCalledExactlyOnceWith(...args)
       // And nothing else moved, so a command cannot quietly do two things.

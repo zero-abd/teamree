@@ -50,6 +50,31 @@ describe('reading a published menu', () => {
     expect(readMenuBarItems([{ ...ITEM, command: '' }])).toBeNull()
   })
 
+  // The chord beside an item is a key equivalent, and a key equivalent placed
+  // above Quit in the same menu wins the key. Only the spellings the window's
+  // own table produces are accepted.
+  it('refuses an accelerator that is not shaped like one of the table’s chords', () => {
+    for (const accelerator of ['CommandOrControl+Alt+Shift+D', 'CommandOrControl+,', 'CommandOrControl+Shift+D']) {
+      expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toEqual([{ ...ITEM, accelerator }])
+    }
+    for (const accelerator of [
+      '',
+      'Q',
+      'Command+Q',
+      'CommandOrControl+Shift+Alt+D',
+      'CommandOrControl+Escape',
+      'CommandOrControl+ ',
+      'CommandOrControl+D+'
+    ]) {
+      expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toBeNull()
+    }
+  })
+
+  it('refuses a list longer than any menu bar', () => {
+    expect(readMenuBarItems(Array.from({ length: 64 }, () => ITEM))).toHaveLength(64)
+    expect(readMenuBarItems(Array.from({ length: 65 }, () => ITEM))).toBeNull()
+  })
+
   // Half a menu bar is worse than the one already installed, because nothing on
   // screen says which half is missing.
   it('drops the whole list rather than the item it could not read', () => {
@@ -95,16 +120,26 @@ function fakeIpc(): { ipc: IpcMain; publish: (event: unknown, payload: unknown) 
 function sender(options: { subframe?: boolean; destroyed?: boolean } = {}): {
   event: unknown
   sent: { channel: string; command: string }[]
+  /** What Electron does when the window goes: fires the `destroyed` listeners. */
+  destroy: () => void
 } {
   const sent: { channel: string; command: string }[] = []
+  const onDestroyed: (() => void)[] = []
   const contents = {
     isDestroyed: () => options.destroyed === true,
     send: (channel: string, command: string) => sent.push({ channel, command }),
+    once: (name: string, listener: () => void) => {
+      expect(name).toBe('destroyed')
+      onDestroyed.push(listener)
+    },
     mainFrame: { name: 'main' }
   }
   return {
     event: { sender: contents, senderFrame: options.subframe === true ? { name: 'other' } : contents.mainFrame },
-    sent
+    sent,
+    destroy: () => {
+      for (const listener of onDestroyed.splice(0)) listener()
+    }
   }
 }
 
@@ -167,6 +202,39 @@ describe('the menu bar bridge', () => {
     const choose = install.mock.calls[0]?.[1] as (command: string) => void
     expect(() => choose('close-pane')).not.toThrow()
     expect(window.sent).toEqual([])
+  })
+
+  // The app outlives its last window on macOS. What must not outlive it is a
+  // menu bar of that window's items, lit and inert.
+  it('takes the items away with the window that published them', () => {
+    const install = vi.fn()
+    const ipc = fakeIpc()
+    installMenuBar(ipc.ipc, { install, fromMainFrame })
+
+    const window = sender()
+    ipc.publish(window.event, [ITEM])
+    ipc.publish(window.event, [{ ...ITEM, enabled: false }])
+    window.destroy()
+
+    expect(install).toHaveBeenCalledTimes(3)
+    expect(install.mock.calls[2]?.[0]).toEqual([])
+  })
+
+  it('leaves a newer window’s menu alone when an older window goes', () => {
+    const install = vi.fn()
+    const ipc = fakeIpc()
+    installMenuBar(ipc.ipc, { install, fromMainFrame })
+
+    const older = sender()
+    const newer = sender()
+    ipc.publish(older.event, [ITEM])
+    ipc.publish(newer.event, [{ ...ITEM, label: 'Close this pane' }])
+    older.destroy()
+
+    expect(install).toHaveBeenCalledTimes(2)
+    newer.destroy()
+    expect(install).toHaveBeenCalledTimes(3)
+    expect(install.mock.calls[2]?.[0]).toEqual([])
   })
 
   it('stops listening once uninstalled', () => {

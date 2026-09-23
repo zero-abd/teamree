@@ -46,12 +46,13 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
       if (!command) return
 
       const store = useWorkspaceStore.getState()
-      // Not claimed, so not swallowed. A command the window cannot run leaves
-      // the key exactly where it found it — which matters most for the modals
-      // `isCommandAvailable` refuses under: a chord that fired behind the
-      // question about a teammate's keystrokes acted on a window the owner
-      // cannot see and, because that prompt will not dismiss, cannot get back
-      // to.
+      // Refused, so not acted on. The chord is still an app chord — `isAppChord`
+      // above says so without asking whether it is available, so the terminals
+      // keep declining it and nothing reaches a pty — but nothing runs, which
+      // matters most for the modals `isCommandAvailable` refuses under: a chord
+      // that fired behind the question about a teammate's keystrokes acted on a
+      // window the owner cannot see and, because that prompt will not dismiss,
+      // cannot get back to.
       if (!isCommandAvailable(command, store)) return
 
       event.preventDefault()

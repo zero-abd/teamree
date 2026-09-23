@@ -26,6 +26,7 @@
 
 import type { ConsentRequest, Layout } from '@shared/entities'
 import { firstQuestion } from '../dialogs/modalLayer'
+import { collectTerminalIds } from '../panes/paneLayout'
 import type { DialogState } from '../state/workspaceStore'
 import type { WorkspaceCommand } from './workspaceShortcuts'
 
@@ -125,10 +126,11 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
     case 'new-worktree':
       return projectForNewTask(state) !== undefined
     case 'focus-next-pane':
-      // A non-null root has at least one leaf in it, and every leaf is a pane;
-      // a teammate's pane is in the cycle too. Nothing to walk means nothing to
-      // do, which is the whole of it.
-      return (activeLayout(state)?.root ?? null) !== null || state.watches.length > 0
+      // Two or more in the cycle, counting a teammate's pane the way the walk
+      // itself does. With one pane the walk lands on the pane that already has
+      // the focus and `focusPane` returns early — nothing happens — and an item
+      // that is lit over nothing happening is exactly what this rule forbids.
+      return collectTerminalIds(activeLayout(state)?.root ?? null).length + state.watches.length >= 2
     case 'toggle-sidebar':
     case 'open-palette':
     case 'open-dashboard':
