@@ -4,7 +4,7 @@
 
 import { join } from 'node:path'
 import type { AgentNotice } from '../agentNotices'
-import type { Appearance } from '../../shared/theme'
+import type { Appearance, Tone } from '../../shared/theme'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
@@ -54,6 +54,8 @@ export type RuntimeOptions = {
   unsavedFiles?: () => readonly string[]
   /** Hears each stored appearance, so the app can point macOS's own appearance at it. */
   onAppearance?: (appearance: Appearance) => void
+  /** What macOS is showing; `nativeTheme` in the app. */
+  systemTone?: () => Tone
   onError?: (error: unknown) => void
 }
 
@@ -87,6 +89,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     requestQuit,
     unsavedFiles,
     onAppearance,
+    systemTone,
     onError
   } = options
   const report = onError ?? ((error: unknown) => console.error('[runtime]', error))
@@ -112,7 +115,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     worktreesRoot,
     ...(requestQuit === undefined ? {} : { requestQuit }),
     ...(unsavedFiles === undefined ? {} : { unsavedFiles }),
-    ...(onAppearance === undefined ? {} : { onAppearance })
+    ...(onAppearance === undefined ? {} : { onAppearance }),
+    ...(systemTone === undefined ? {} : { systemTone })
   })
   const dispatch = createDispatcher(registry)
 

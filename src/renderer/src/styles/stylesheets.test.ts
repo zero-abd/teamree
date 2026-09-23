@@ -237,6 +237,17 @@ describe('stylesheets', () => {
 
   // A `var()` naming an undeclared property silently does nothing, and is what a merge leaves behind,
   // so the whole set is checked at once.
+  // The raw accent is a fill: as an ink it measures 2.6:1 on the Light preset's panel.
+  it('prints accent-coloured text in accent-bright, never in the raw accent', () => {
+    const raw: string[] = []
+    for (const name of sheets) {
+      postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls('color', (decl) => {
+        if (/var\(\s*--accent\s*\)/.test(decl.value)) raw.push(`${name}: ${(decl.parent as postcss.Rule).selector}`)
+      })
+    }
+    expect(raw).toEqual([])
+  })
+
   it('names no custom property that nothing declares', () => {
     const declared = new Set<string>()
     for (const name of sheets) {

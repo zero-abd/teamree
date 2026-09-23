@@ -32,7 +32,7 @@ import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOpt
 import { TerminalSearchBar } from './TerminalSearchBar'
 import { showPane } from './shownPanes'
 import { TERMINAL_LINE_HEIGHT } from './paneMetrics'
-import { readSearchDecorations, readTerminalTheme } from './terminalTheme'
+import { readSearchDecorations, readTerminalColors } from './terminalTheme'
 
 type TerminalViewProps = {
   terminalId: string
@@ -105,7 +105,7 @@ export function TerminalView({
       lineHeight: TERMINAL_LINE_HEIGHT,
       letterSpacing: 0,
       ...emulatorOptions(optionsRef.current),
-      theme: readTerminalTheme(document.documentElement),
+      ...readTerminalColors(document.documentElement),
       // OSC 8 hyperlinks (`gh`, `npm`) come from xterm's own provider. Without
       // this xterm asks in a `confirm()` and calls `window.open()` with no URL,
       // which the main process denies. See PANE_LINK_HANDLER.
@@ -317,7 +317,7 @@ export function TerminalView({
   useEffect(() => {
     const term = termRef.current
     if (!term) return
-    term.options.theme = readTerminalTheme(document.documentElement)
+    Object.assign(term.options, readTerminalColors(document.documentElement))
     decorationsRef.current = readSearchDecorations(document.documentElement)
   }, [appearance, systemTone])
 

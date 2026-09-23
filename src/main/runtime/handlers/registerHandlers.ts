@@ -16,7 +16,7 @@ import { UpdateService, registerUpdateHandlers } from '../../updates'
 import type { TerminalService } from '../../terminals/method-handlers'
 import type { ScrollbackRepository } from '../../terminals/session-manager'
 import type { AgentNotice } from '../../agentNotices'
-import type { Appearance } from '../../../shared/theme'
+import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
 import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
@@ -71,6 +71,8 @@ export type RegisterHandlersOptions = {
   unsavedFiles?: () => readonly string[]
   /** Hears each stored appearance. Absent with no window around. */
   onAppearance?: (appearance: Appearance) => void
+  /** What macOS is showing, for an appearance that follows it. Absent, it is taken as dark. */
+  systemTone?: () => Tone
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
@@ -98,6 +100,8 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     resolveWorktreeTask: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.task,
     layouts: registry.context.store,
     sessions: registry.context.store,
+    colorTone: () =>
+      paletteTone(resolvePalette(registry.context.store.getAppearance(), options.systemTone?.() ?? 'dark')),
     // Beside the workspace file rather than in it; `scrollbackArchive.ts` says why.
     ...(options.scrollback === undefined ? {} : { scrollback: options.scrollback }),
     // Agent hooks report the agent's state through this app's CLI; without one

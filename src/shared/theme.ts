@@ -2,7 +2,7 @@
 // expanded into every token by one derivation, then a WCAG legibility pass.
 // `tokens.css` declares the same set so the app renders before any script runs.
 
-import { contrastRatio, ensureContrast, mix, parseColor, toHex, withAlpha, type Rgb } from './color'
+import { contrastRatio, ensureContrast, mix, opaqueHex, parseColor, toHex, withAlpha, type Rgb } from './color'
 
 /**
  * Every themeable custom property, without its `--` prefix, in `tokens.css`
@@ -504,6 +504,11 @@ function guard(palette: Palette, seed: ThemeSeed): Palette {
     if (foreground === null || background === null) continue
     next[ink] = toHex(ensureContrast(foreground, background, target))
   }
+  // A chip's tint is darker than any surface on a light ground: the accent ink's worst case.
+  const raised = parseColor(next['bg-raised'])
+  const chip = raised === null ? null : parseColor(opaqueHex(next['accent-soft'], raised) ?? '')
+  const accentInk = parseColor(next['accent-bright'])
+  if (chip !== null && accentInk !== null) next['accent-bright'] = toHex(ensureContrast(accentInk, chip, 4.5))
   return next
 }
 

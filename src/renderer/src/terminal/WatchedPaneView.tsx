@@ -11,7 +11,7 @@ import type { WatchedPaneEvent } from '@shared/methods'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere, type HandsHere } from './handsHere'
-import { readTerminalTheme } from './terminalTheme'
+import { readTerminalColors } from './terminalTheme'
 
 /** Written into the pane itself, because that is where the fact belongs. */
 const DIM = '\u001b[38;5;244m'
@@ -268,7 +268,7 @@ export function WatchedPaneView({
           fontSize: fontSizeRef.current,
           lineHeight: 1.25,
           scrollback: 5000,
-          theme: readTerminalTheme(document.documentElement),
+          ...readTerminalColors(document.documentElement),
           // The owner's, and never this window's. It moves when theirs does.
           cols: showing.cols,
           rows: showing.rows
@@ -362,7 +362,7 @@ export function WatchedPaneView({
   useEffect(() => {
     const term = termRef.current
     if (!term) return
-    term.options.theme = readTerminalTheme(document.documentElement)
+    Object.assign(term.options, readTerminalColors(document.documentElement))
   }, [appearance, systemTone])
 
   // Keeps the keyboard where the focused border says it is, as `TerminalView` does.

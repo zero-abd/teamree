@@ -2,7 +2,8 @@
 // All sixteen ANSI colours are mapped: an unmapped one silently keeps xterm's default.
 
 import type { ISearchOptions } from '@xterm/addon-search'
-import type { ITheme } from '@xterm/xterm'
+import type { ITerminalOptions, ITheme } from '@xterm/xterm'
+import { contrastRatio, parseColor } from '@shared/color'
 
 const FALLBACK: ITheme = {
   background: '#000000',
@@ -63,6 +64,18 @@ export function readTerminalTheme(root: Element | null): ITheme {
     if (value) colors[key] = value
   }
   return theme
+}
+
+/**
+ * The theme and a contrast floor, for the constructor or `Object.assign(term.options, …)`. On a light
+ * ground xterm lifts colours an agent chose for a dark one to 4.5:1; a dark ground is left as painted.
+ */
+export function readTerminalColors(root: Element | null): Pick<ITerminalOptions, 'theme' | 'minimumContrastRatio'> {
+  const theme = readTerminalTheme(root)
+  const ground = parseColor(theme.background ?? '')
+  const light =
+    ground !== null && contrastRatio(ground, { r: 0, g: 0, b: 0 }) > contrastRatio(ground, { r: 255, g: 255, b: 255 })
+  return { theme, minimumContrastRatio: light ? 4.5 : 1 }
 }
 
 type SearchDecorations = NonNullable<ISearchOptions['decorations']>

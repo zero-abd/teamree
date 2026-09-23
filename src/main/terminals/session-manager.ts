@@ -42,6 +42,7 @@ import {
 import { EXITED_RETENTION_BYTES, PtySession } from './pty-session'
 import { conflict, invalidParams, notFound } from './service-error'
 import { resolveLoginShell } from './shell-environment'
+import type { Tone } from '../../shared/theme'
 
 /** Size a pane starts at before the renderer measures itself and resizes. */
 const DEFAULT_COLS = 80
@@ -108,6 +109,8 @@ export type TerminalSessionManagerOptions = {
   agentHooks?: AgentHookOptions
   /** Whether a restored pane's conversation is on this disk; tests point it at a store they built. */
   conversationEvidence?: (question: ConversationQuestion) => ConversationEvidence
+  /** The window's tone, read as each pane starts; absent, panes are not told one. */
+  colorTone?: () => Tone
 }
 
 /**
@@ -615,6 +618,7 @@ export class TerminalSessionManager {
       ...(spawned === undefined ? {} : { command: spawned }),
       cols: params.cols ?? DEFAULT_COLS,
       rows: params.rows ?? DEFAULT_ROWS,
+      ...(this.options.colorTone === undefined ? {} : { tone: this.options.colorTone() }),
       ...(restored === undefined ? {} : { restored }),
       ...(params.restoredRecord === undefined ? {} : { restoredRecord: params.restoredRecord }),
       ...(params.recordStartsBelow === undefined ? {} : { recordStartsBelow: params.recordStartsBelow }),

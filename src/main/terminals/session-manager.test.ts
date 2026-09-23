@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -61,6 +61,38 @@ describePty('terminal handlers', () => {
         root: { kind: 'leaf', terminalId: terminal.id },
         focusedTerminalId: terminal.id
       })
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'starts each pane told the tone of the ground it prints on',
+    async () => {
+      let tone: 'light' | 'dark' = 'light'
+      const service = createTerminalService({
+        resolveWorktreeCwd: () => process.cwd(),
+        colorTone: () => tone
+      })
+      services.push(service)
+      const scratch = await mkdtemp(path.join(os.tmpdir(), 'teamree-fgbg-'))
+      scratchDirs.push(scratch)
+      const script = path.join(scratch, 'fgbg.cjs')
+      await writeFile(script, "console.log('fgbg=' + process.env.COLORFGBG)\nsetInterval(() => {}, 1000)\n", 'utf8')
+      const command = `"${process.execPath}" "${script}"`
+
+      const printed = async (terminalId: string): Promise<string> => {
+        let found = ''
+        await waitUntil(async () => {
+          const { data } = await service.handlers['terminal.read']({ terminalId })
+          found = /fgbg=([\d;]+)/.exec(data)?.[1] ?? ''
+          return found !== ''
+        }, 'the pane to print its COLORFGBG')
+        return found
+      }
+
+      expect(await printed((await newTerminal(service, command)).id)).toBe('0;15')
+      tone = 'dark'
+      expect(await printed((await newTerminal(service, command)).id)).toBe('15;0')
     },
     TEST_TIMEOUT_MS
   )

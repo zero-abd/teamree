@@ -13,7 +13,7 @@
 // colour that carries a meaning is text whether or not it is a letter.
 
 import { describe, expect, it } from 'vitest'
-import { contrastRatio, ensureContrast, parseColor, toHex, type Rgb } from './color'
+import { contrastRatio, ensureContrast, opaqueHex, parseColor, toHex, type Rgb } from './color'
 import {
   BUILT_IN_THEMES,
   DEFAULT_ACCENT,
@@ -47,6 +47,7 @@ const PAIRS: readonly { ink: ThemeToken; on: ThemeToken; least: number; why: str
   { ink: 'fg-secondary', on: 'bg-raised', least: 6, why: 'field labels, notice bodies, rail links' },
   { ink: 'fg-muted', on: 'bg-raised', least: 4.5, why: 'hints, counts, branch names, timestamps' },
   { ink: 'accent-bright', on: 'bg-raised', least: 4.5, why: 'the active combo row and the status bar branch' },
+  { ink: 'accent-bright', on: 'bg-panel', least: 4.5, why: 'a commit sha, a hunk header, whose worktree a row is' },
   { ink: 'on-accent', on: 'accent', least: 4.5, why: 'the label on a primary button' },
   { ink: 'success', on: 'bg-raised', least: 4.5, why: 'a clean merge, a pane that finished' },
   { ink: 'warning', on: 'bg-raised', least: 4.5, why: 'what a discard is about to cost' },
@@ -100,6 +101,12 @@ describe.each(BUILT_IN_THEMES.map((theme) => [theme.id, theme.name] as const))('
   // shape of, and on a pure black ground that is the easy mistake to make.
   it.each(ELEVATIONS)('%s is visibly above the window', (surface) => {
     expect(ratio(palette, surface, 'bg-window')).toBeGreaterThan(1.05)
+  })
+
+  // The chip's own tint is darker than any surface on a light ground, so it is the accent ink's worst case.
+  it('prints accent-bright readably on an accent-soft chip', () => {
+    const chip = rgb(opaqueHex(palette['accent-soft'], rgb(palette['bg-raised'])) ?? '')
+    expect(contrastRatio(rgb(palette['accent-bright']), chip)).toBeGreaterThanOrEqual(4.5)
   })
 
   it('draws a hairline that can be seen, and a strong one that can be seen more', () => {

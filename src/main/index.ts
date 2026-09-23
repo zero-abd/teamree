@@ -287,7 +287,8 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         // `teamree quit`: only `app.quit` runs `before-quit`. See quitSequence.ts.
         requestQuit: (force) => (force ? quitWithoutAsking() : app.quit()),
         unsavedFiles: () => unsaved?.paths() ?? [],
-        onAppearance: (appearance) => followAppearance?.(appearance)
+        onAppearance: (appearance) => followAppearance?.(appearance),
+        systemTone: () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
       })
     } catch (error) {
       console.error('[runtime] failed to start', error)

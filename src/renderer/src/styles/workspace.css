@@ -606,7 +606,7 @@
   z-index: 1;
   background: var(--bg-panel);
   border-top: 1px solid var(--line);
-  color: var(--accent);
+  color: var(--accent-bright);
 }
 
 /* The verb on a hunk header. Pushed to the far end so the `@@` line reads as
@@ -952,7 +952,7 @@
 
 .commit__sha {
   flex: none;
-  color: var(--accent);
+  color: var(--accent-bright);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
