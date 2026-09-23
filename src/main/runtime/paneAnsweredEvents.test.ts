@@ -1,11 +1,13 @@
 // What a keystroke retires, as every window hears about it.
 //
-// Two badges leave a pane when somebody types into it, and neither is a thing
+// Three badges leave a pane when somebody types into it, and none is a thing
 // the person who typed is the only one looking at: the `resumed` badge on a
-// restored pane, and the bell that puts "waiting on you" beside its name in
-// every sidebar. Both are cleared inside the pty session, out of sight of the
-// pane list — which answers what the pane is now, not what it was a byte ago —
-// so the manager reports the edge and this is the file that holds it to it.
+// restored pane, the bell that puts "waiting on you" beside its name in every
+// sidebar, and the agent's own word that it is waiting, when it said so
+// through a hook rather than a bell. All are cleared inside the pty session,
+// out of sight of the pane list — which answers what the pane is now, not what
+// it was a byte ago — so the manager reports the edge and this is the file
+// that holds it to it.
 //
 // Wired the way the app wires it: the service, then the handlers, then the
 // producers, with a real pty on the other end of every write.
@@ -174,6 +176,40 @@ describePty('a keystroke that retires a badge', () => {
       // the answer is a row asking for something it has already been given.
       expect(paneIn(harness, asking.id).lastBellAt).toBeUndefined()
       expect(invalidations(harness.events)).toEqual([{ type: 'terminals' }])
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'announces the agent’s own request leaving when somebody answers it, and nothing after a turn that ended',
+    async () => {
+      const harness = await startAfterRestart()
+      const asking = await harness.call<Terminal>('terminal.create', {
+        worktreeId: WORKTREE,
+        command: harness.binary
+      })
+      await waitUntil(() => paneIn(harness, asking.id).lastBellAt !== undefined, 'the pane to ring its bell')
+      // The bell answered first, so what the next keystroke retires is the
+      // agent's word alone — which is all a Claude Code pane ever shows, since
+      // it rings no bell of its own.
+      await harness.call('terminal.write', { terminalId: asking.id, data: 'y' })
+      expect(paneIn(harness, asking.id).lastBellAt).toBeUndefined()
+
+      await harness.call('terminal.agentEvent', { terminalId: asking.id, event: 'Notification', at: 1 })
+      harness.events.length = 0
+      await harness.call('terminal.write', { terminalId: asking.id, data: 'y' })
+
+      expect(paneIn(harness, asking.id).agentEvent).toBeUndefined()
+      expect(invalidations(harness.events)).toEqual([{ type: 'terminals' }])
+
+      // A turn that ended stays ended: typing the next prompt changes nothing
+      // on the record, so no window is told to redraw.
+      await harness.call('terminal.agentEvent', { terminalId: asking.id, event: 'Stop', at: 2 })
+      harness.events.length = 0
+      await harness.call('terminal.write', { terminalId: asking.id, data: 'next prompt' })
+
+      expect(paneIn(harness, asking.id).agentEvent).toEqual({ event: 'Stop', at: 2 })
+      expect(invalidations(harness.events)).toEqual([])
     },
     TEST_TIMEOUT_MS
   )

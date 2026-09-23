@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { agentLaunchCommand } from '../../shared/agentLaunch'
 import type { RestoredAs } from '../../shared/paneRestore'
-import type { Layout, PaneNode, Terminal } from '../../shared/entities'
+import type { AgentEvent, Layout, PaneNode, Terminal } from '../../shared/entities'
 import { evidenceLine } from '../../shared/outputEvidence'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
 import {
@@ -21,6 +21,14 @@ import {
   restartSessionCommand,
   type AgentKind
 } from './agent-command'
+import {
+  hookSettings,
+  hookSettingsPath,
+  hookedLaunch,
+  removeHookSettings,
+  writeHookSettings,
+  type AgentHookOptions
+} from './agent-hooks'
 import { appendPane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
@@ -138,6 +146,15 @@ export type TerminalSessionManagerOptions = {
    * prompt, which is every shell for almost all of its life.
    */
   onAgentSettled?: (settled: AgentSettled) => void
+  /**
+   * Where to put each agent pane's hook settings, and what those hooks run.
+   *
+   * Absent, no pane is asked to report and every pane is read off the pty,
+   * which is what an in-memory manager and every test that is not about
+   * hooks want. Present, an agent that takes hooks per launch is handed a
+   * file of them — see `agent-hooks.ts` — under the profile named here.
+   */
+  agentHooks?: AgentHookOptions
   /**
    * Whether the conversation a restored pane would resume is on this disk.
    *
@@ -394,7 +411,15 @@ export class TerminalSessionManager {
     // path, and the store persists on every put.
     if (byHand && wasUntouched) this.rememberTyped(terminalId)
     const after = session.snapshot()
-    if (before.restored !== after.restored || before.lastBellAt !== after.lastBellAt) {
+    // The badges a keystroke can retire: the restored one, the bell, and what
+    // the agent said when it was about a turn in progress. The last is the
+    // one a Claude Code pane actually shows -- it rings no bell -- so leaving
+    // it out here would clear the badge in one window and nowhere else.
+    if (
+      before.restored !== after.restored ||
+      before.lastBellAt !== after.lastBellAt ||
+      before.agentEvent !== after.agentEvent
+    ) {
       for (const listener of this.answeredListeners) listener(terminalId)
     }
   }
@@ -423,6 +448,17 @@ export class TerminalSessionManager {
   resize(terminalId: string, cols: number, rows: number): Terminal {
     const session = this.require(terminalId)
     session.resize(cols, rows)
+    return session.snapshot()
+  }
+
+  /**
+   * What the agent in a pane has just said about itself, as its hook reported
+   * it. Not written to the record: it is a fact about the process that is
+   * running now, and the next launch starts a new one.
+   */
+  agentEvent(terminalId: string, event: AgentEvent): Terminal {
+    const session = this.require(terminalId)
+    session.noteAgentEvent(event)
     return session.snapshot()
   }
 
@@ -740,6 +776,16 @@ export class TerminalSessionManager {
       ? { command: params.command }
       : pinAgentSession(params.command === undefined ? undefined : agentLaunchCommand(params.command, params.agentArgs))
     const agent = restoring?.agent ?? launch.agent
+    // Minted before the command is final, because the command names it: the
+    // hook file is the pane's, and its path carries the pane's id.
+    const id = restoring?.id ?? `term_${this.nextId()}`
+    // After the arguments and the session selector, so the hook flag is placed
+    // on the line as it will actually run, and before the prompt, which is not
+    // the record's. A restore arrives with its command already carrying the
+    // flag — the record keeps the launch as it ran — and only the file is
+    // written again, under the same name, so a resume, a relaunch and a pane
+    // run again all report to the same place.
+    launch.command = this.hookAgentLaunch(launch.command, agent, id)
     // The prompt goes on the line that runs and nowhere else. The record below
     // keeps `launch.command`, which is what a resume is rewritten from, and a
     // conversation being resumed has already been given this.
@@ -753,7 +799,7 @@ export class TerminalSessionManager {
     const label = restoring?.label ?? params.label
 
     const session = PtySession.start({
-      id: restoring?.id ?? `term_${this.nextId()}`,
+      id,
       worktreeId: params.worktreeId,
       cwd,
       shell,
@@ -905,6 +951,33 @@ export class TerminalSessionManager {
     this.checkpoints?.cancel(terminalId)
     this.records.removeTerminal(terminalId)
     this.scrollback?.remove(terminalId)
+    // And the hook file, for the same reason and from the same place: it is
+    // keyed to the pane, and a pane the user closed reports nothing more.
+    const hooks = this.options.agentHooks
+    if (hooks !== undefined) removeHookSettings(hookSettingsPath(hooks.userDataDir, terminalId))
+  }
+
+  /**
+   * Hands an agent its hook settings, when this manager has somewhere to put
+   * them and the agent takes them.
+   *
+   * The file is written whenever the command names it — which after the first
+   * launch is every launch of the pane, because the record keeps the flag —
+   * so a pane brought back from the last run has its file back whether or not
+   * that run left one behind. A command `hookedLaunch` left alone names no
+   * file, and none is written: the pane is read off the pty, as before.
+   */
+  private hookAgentLaunch(
+    command: string | undefined,
+    agent: AgentKind | undefined,
+    terminalId: string
+  ): string | undefined {
+    const hooks = this.options.agentHooks
+    if (hooks === undefined || command === undefined || agent === undefined) return command
+    const file = hookSettingsPath(hooks.userDataDir, terminalId)
+    const hooked = hookedLaunch(command, agent, file)
+    if (hooked.includes(file)) writeHookSettings(file, hookSettings(hooks, terminalId))
+    return hooked
   }
 
   /**

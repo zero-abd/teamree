@@ -46,6 +46,7 @@ export type TerminalMethodName =
   | 'terminal.subscribe'
   | 'terminal.split'
   | 'terminal.relaunch'
+  | 'terminal.agentEvent'
   | 'layout.get'
   | 'layout.set'
   | 'agent.list'
@@ -69,6 +70,7 @@ export const terminalMethodSchemas = {
   'terminal.subscribe': Params.terminalSubscribe,
   'terminal.split': Params.terminalSplit,
   'terminal.relaunch': Params.terminalRelaunch,
+  'terminal.agentEvent': Params.terminalAgentEvent,
   'layout.get': Params.layoutGet,
   'layout.set': Params.layoutSet,
   'agent.list': Params.agentList
@@ -149,6 +151,12 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
     },
     'terminal.split': async (params) => manager.split(params),
     'terminal.relaunch': async (params) => manager.relaunch(params),
+    'terminal.agentEvent': async (params) =>
+      manager.agentEvent(params.terminalId, {
+        event: params.event,
+        at: params.at,
+        ...(params.detail === undefined ? {} : { detail: params.detail })
+      }),
     'layout.get': async (params) => manager.layoutGet(params.worktreeId),
     'layout.set': async (params) => manager.layoutSet(params)
   }
@@ -177,6 +185,11 @@ export function registerTerminalHandlers(registry: MethodRegistry, service: Term
   registry.register('terminal.subscribe', service.schemas['terminal.subscribe'], service.handlers['terminal.subscribe'])
   registry.register('terminal.split', service.schemas['terminal.split'], service.handlers['terminal.split'])
   registry.register('terminal.relaunch', service.schemas['terminal.relaunch'], service.handlers['terminal.relaunch'])
+  registry.register(
+    'terminal.agentEvent',
+    service.schemas['terminal.agentEvent'],
+    service.handlers['terminal.agentEvent']
+  )
   registry.register('layout.get', service.schemas['layout.get'], service.handlers['layout.get'])
   registry.register('layout.set', service.schemas['layout.set'], service.handlers['layout.set'])
   registry.register('agent.list', service.schemas['agent.list'], service.handlers['agent.list'])

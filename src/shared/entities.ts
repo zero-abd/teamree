@@ -389,6 +389,23 @@ export type Terminal = {
   /** When output last arrived, for "no update for 4m". */
   lastOutputAt: number
   /**
+   * The last thing the agent in this pane said about itself, through a hook
+   * of its own -- see `src/main/terminals/agent-hooks.ts`.
+   *
+   * The one reading here that is not a reading of bytes. A bell, a title and
+   * a burst of output are all the pane seen from outside; this is the program
+   * reporting its own state, in its own words, at the moment it changed. It
+   * outranks the others for that reason, and it is additive and optional for
+   * the same reason `titleSays` is: absent means the agent has not said, which
+   * is every agent with no hooks and every pane with no agent, and absent is
+   * never a denial.
+   *
+   * Overtaken by a keystroke when what was said was about a turn in progress:
+   * a request the person has just answered is not a request any more. A turn
+   * that ended stays ended until the agent says otherwise.
+   */
+  agentEvent?: AgentEvent
+  /**
    * How this terminal came back from a previous run, when it did — see
    * `RestoredAs`. Absent for a terminal opened now.
    *
@@ -449,6 +466,31 @@ export type StartPointList = {
  * place is the one field in this file a caller cannot exhaust.
  */
 export type AgentKind = 'claude' | 'codex' | 'gemini' | 'opencode' | 'droid'
+
+/**
+ * The hook events an agent reports through this app's own CLI, under the
+ * names the agent gives them.
+ *
+ * Quotations rather than a vocabulary of this app's own, on the argument
+ * `titleOpinion.ts` makes for titles: each is the program's word for what
+ * just happened, and a reader turning it into a pane state is reading a
+ * statement, not a guess. The set is what `agent-hooks.ts` subscribes to;
+ * a hook line is generated, so nothing else ever arrives.
+ */
+export type AgentEventName = 'SessionStart' | 'UserPromptSubmit' | 'Notification' | 'Stop' | 'SessionEnd'
+
+/** One thing an agent said about itself, and when. */
+export type AgentEvent = {
+  event: AgentEventName
+  /** The reporting CLI's clock, on the same machine as the pane. */
+  at: number
+  /**
+   * The event's own qualifier, when it has one: for `Notification`, the
+   * notification type -- `permission_prompt`, `idle_prompt` -- which is what
+   * separates a request aimed at a person from a login that succeeded.
+   */
+  detail?: string
+}
 
 /** A coding agent this machine can run, found on PATH rather than configured. */
 export type InstalledAgent = {

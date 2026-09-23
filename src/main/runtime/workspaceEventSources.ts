@@ -204,6 +204,15 @@ export function publishTerminalEvents(
     return terminal
   })
 
+  // The agent's own word about the pane, reported from inside its process over
+  // the CLI socket. The window drawing the sidebar is never the caller, so
+  // this is the only way it hears: `agentEvent` changed on the record.
+  registry.register('terminal.agentEvent', schemas['terminal.agentEvent'], async (params, call) => {
+    const terminal = await handlers['terminal.agentEvent'](params, call)
+    bus.emit({ type: 'terminals' })
+    return terminal
+  })
+
   registry.register('terminal.close', schemas['terminal.close'], async (params, call) => {
     // Read before closing: afterwards the session is gone and with it the only
     // record of which worktree's layout just changed.

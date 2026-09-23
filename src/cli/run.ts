@@ -8,6 +8,7 @@ import { defaultDiscoveryHost, requireRuntime, type DiscoveryHost } from './disc
 import { asCliError, CliError, ExitCode, UsageError } from './exit.js'
 import { helpOutput } from './help.js'
 import { emitFailure, emitSuccess, processStreams, type Streams } from './output.js'
+import { readProcessStdin, readStdinToEnd } from './stdin.js'
 import { connectRuntime, DEFAULT_TIMEOUT_MS, type ConnectOptions, type RuntimeClient } from './transport.js'
 
 export type CliOptions = {
@@ -19,16 +20,6 @@ export type CliOptions = {
   connect?: (options: ConnectOptions) => Promise<RuntimeClient>
   /** Swappable so tests can hand a command its stdin. */
   stdin?: () => Promise<string>
-}
-
-/** stdin, read whole; what `--prompt -` means. */
-function readStdin(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = []
-    process.stdin.on('data', (chunk: Buffer) => chunks.push(chunk))
-    process.stdin.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
-    process.stdin.on('error', reject)
-  })
 }
 
 const HELP_TOKENS = new Set(['--help', '-h'])
@@ -103,26 +94,42 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
     const timeoutMs = readNumber(parsed.flags, 'timeout') ?? readTimeoutFromEnv(env) ?? DEFAULT_TIMEOUT_MS
 
     const override = readString(parsed.flags, 'endpoint')
-    const host: DiscoveryHost = options.host ?? { ...defaultDiscoveryHost(), env }
-    const discovered = override === undefined ? requireRuntime(host) : { endpoint: override, source: '--endpoint' }
+    // The flag names the profile over the environment, so a command line
+    // generated for one runtime can never be steered to another by whatever
+    // the process that runs it inherited.
+    const profile = readString(parsed.flags, 'userDataDir')
+    const base: DiscoveryHost = options.host ?? { ...defaultDiscoveryHost(), env }
+    const host: DiscoveryHost =
+      profile === undefined ? base : { ...base, env: { ...base.env, TEAMREE_USER_DATA_DIR: profile } }
 
-    const connect = options.connect ?? connectRuntime
-    const client = await connect({ endpoint: discovered.endpoint, timeoutMs })
     try {
-      const output = await spec.run({
-        args: parsed.positionals,
-        flags: parsed.flags,
-        client,
-        json: useJson,
-        cwd,
-        endpointSource: discovered.source,
-        stdin: options.stdin ?? readStdin,
-        streams
-      })
-      emitSuccess(commandName(spec), output, useJson, streams)
-      return ExitCode.Success
-    } finally {
-      client.close()
+      const discovered = override === undefined ? requireRuntime(host) : { endpoint: override, source: '--endpoint' }
+
+      const connect = options.connect ?? connectRuntime
+      const client = await connect({ endpoint: discovered.endpoint, timeoutMs })
+      try {
+        const output = await spec.run({
+          args: parsed.positionals,
+          flags: parsed.flags,
+          client,
+          json: useJson,
+          cwd,
+          endpointSource: discovered.source,
+          streams,
+          // A person piping `--prompt -` is read to the end; a hook's JSON is
+          // read inside the agent's turn and so is bounded: see `stdin.ts`.
+          stdin: options.stdin ?? (spec.silent ? readProcessStdin : readStdinToEnd)
+        })
+        if (!spec.silent) emitSuccess(commandName(spec), output, useJson, streams)
+        return ExitCode.Success
+      } finally {
+        client.close()
+      }
+    } catch (thrown) {
+      // Past its arguments, a silent command has nobody to tell: see
+      // `CommandSpec.silent`.
+      if (spec.silent) return ExitCode.Success
+      throw thrown
     }
   } catch (thrown) {
     const error: CliError = asCliError(thrown)
