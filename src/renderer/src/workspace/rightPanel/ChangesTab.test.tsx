@@ -125,3 +125,51 @@ describe('pushing from the changes tab', () => {
     expect(screen.queryByRole('button', { name: /push|publish|review/i })).toBeNull()
   })
 })
+
+describe('the changes header', () => {
+  it('names the branch and how far it is from its upstream, with the push button after', () => {
+    seed({ ahead: 1, behind: 2 })
+    render(<ChangesTab />)
+    const head = screen.getByRole('button', { name: 'Push' }).parentElement as HTMLElement
+    expect(head.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager · ↑1 ↓2')
+    expect(head.lastElementChild?.textContent).toBe('Push')
+  })
+
+  it('counts against the base when the branch tracks nothing, and says what each arrow measures', () => {
+    seed({ upstream: null, ahead: 2, behind: 3 })
+    render(<ChangesTab />)
+    const ref = document.querySelector('.changes__ref') as HTMLElement
+    expect(ref.textContent).toBe('rewrite-the-pager · ↑2 ↓3')
+    expect(ref.title).toBe('↑ origin/main  ↓ origin/main')
+    expect(screen.getByRole('button', { name: 'Publish branch' })).toBeTruthy()
+  })
+})
+
+describe('ticking every file', () => {
+  it('is a checkbox named All, with the count after it', () => {
+    seed()
+    useWorkspaceStore.setState({
+      changes: {
+        w1: {
+          worktreeId: 'w1',
+          changes: [
+            { path: 'README.md', kind: 'modified', staged: false, unstaged: true },
+            { path: 'src/app.ts', kind: 'untracked', staged: false, unstaged: true }
+          ],
+          total: 2,
+          limit: 500,
+          truncated: false,
+          readAt: 0
+        }
+      }
+    })
+    render(<ChangesTab />)
+
+    const all = screen.getByRole('checkbox', { name: 'All' })
+    expect(screen.getByText('0/2')).toBeTruthy()
+    fireEvent.click(all)
+    expect(all).toHaveProperty('checked', true)
+    expect(screen.getByText('2/2')).toBeTruthy()
+    expect(screen.queryByText(/selected/)).toBeNull()
+  })
+})

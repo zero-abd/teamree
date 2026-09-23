@@ -1,5 +1,5 @@
-// The icons that pick the right panel's tab and the one that closes it; drawn atop the open panel and
-// down the right edge when closed, so the panel stays findable.
+// The tabs that pick the right panel's content and the button that folds it: words atop the open
+// panel, icons down the right edge when closed, so the panel stays findable.
 
 import type { RightPanelTab } from './rightPanelState'
 
@@ -73,11 +73,11 @@ export function RightRail({ open, tab, status, panes, onPick, onToggle }: RightR
               className={`panel__tab${current ? ' panel__tab--current' : ''}`}
               aria-selected={current}
               aria-label={count > 0 ? `${entry.label}, ${count}` : entry.label}
-              title={entry.label}
+              title={open ? undefined : entry.label}
               onClick={() => onPick(entry.id)}
             >
-              {entry.icon}
-              {count > 0 ? <span className="panel__badge">{count}</span> : null}
+              {open ? <span className="panel__tabLabel">{entry.label}</span> : entry.icon}
+              {count > 0 ? <span className="panel__count">{count}</span> : null}
             </button>
           )
         })}

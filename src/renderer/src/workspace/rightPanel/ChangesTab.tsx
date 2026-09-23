@@ -62,8 +62,12 @@ export function ChangesTab(): React.JSX.Element | null {
 
   return (
     <section className="changes" aria-label="Changes in this worktree">
-      {offer === null && push?.phase !== 'failed' ? null : (
+      {status && !status.missing ? (
         <div className="changes__head">
+          <span className="changes__ref" title={`↑ ${status.upstream ?? log?.baseRef ?? ''}  ↓ ${log?.baseRef ?? ''}`}>
+            <span className="changes__branch">{status.branch}</span>
+            {` · ↑${status.ahead} ↓${status.behind}`}
+          </span>
           {push?.phase === 'failed' ? (
             <p className="changes__pushError" role="alert" title={push.error}>
               {push.error}
@@ -84,7 +88,7 @@ export function ChangesTab(): React.JSX.Element | null {
             </button>
           ) : null}
         </div>
-      )}
+      ) : null}
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
@@ -126,17 +130,15 @@ export function ChangesTab(): React.JSX.Element | null {
 
       {rows.length > 0 ? (
         <div className="changes__commit">
-          <label className="changes__all">
-            <input
-              type="checkbox"
-              checked={allTicked}
-              aria-label={allTicked ? 'Clear every file' : 'Include every file'}
-              onChange={() => setAllStaged(!allTicked)}
-            />
-            <span>
-              {ticked.size} of {rows.length} selected
+          <div className="changes__all">
+            <label>
+              <input type="checkbox" checked={allTicked} onChange={() => setAllStaged(!allTicked)} />
+              All
+            </label>
+            <span className="changes__allCount">
+              {ticked.size}/{rows.length}
             </span>
-          </label>
+          </div>
           <input
             className="changes__message"
             type="text"

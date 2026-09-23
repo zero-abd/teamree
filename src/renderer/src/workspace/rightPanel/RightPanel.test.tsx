@@ -227,6 +227,44 @@ describe('the rail', () => {
     expect(screen.getByRole('separator', { name: 'Resize right panel' })).toHaveProperty('ariaValueNow', '720')
     expect(window.localStorage.getItem('teamree.shell.rightPanelWidth')).toBe('720')
   })
+
+  it('labels its tabs in words when open, with counts as pills', () => {
+    seed({ rightPanelOpen: true, rightPanelTab: 'changes' })
+    mount()
+
+    for (const [name, label, count] of [
+      ['Files', 'Files', null],
+      ['Changes, 2', 'Changes', '2'],
+      ['Panes, 1', 'Panes', '1']
+    ] as const) {
+      const tab = screen.getByRole('tab', { name })
+      expect(tab.querySelector('.panel__tabLabel')?.textContent).toBe(label)
+      expect(tab.querySelector('.panel__count')?.textContent ?? null).toBe(count)
+      expect(tab.querySelector('svg')).toBeNull()
+    }
+  })
+
+  it('draws icons with tooltips down the edge when closed', () => {
+    mount()
+    const tab = screen.getByRole('tab', { name: 'Changes, 2' })
+    expect(tab.querySelector('svg')).not.toBeNull()
+    expect(tab.querySelector('.panel__tabLabel')).toBeNull()
+    expect(tab.title).toBe('Changes')
+    expect(tab.querySelector('.panel__count')?.textContent).toBe('2')
+  })
+
+  it('keeps its width across a change of worktree and a fold', () => {
+    seed({ rightPanelOpen: true })
+    mount()
+    act(() => useWorkspaceStore.getState().setRightPanelWidth(480))
+
+    act(() => useWorkspaceStore.setState({ activeWorktreeId: 'w2' }))
+    expect(screen.getByRole('complementary', { name: 'Right panel' }).style.width).toBe('480px')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide panel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show panel' }))
+    expect(screen.getByRole('separator', { name: 'Resize right panel' })).toHaveProperty('ariaValueNow', '480')
+  })
 })
 
 describe('the files tab', () => {
