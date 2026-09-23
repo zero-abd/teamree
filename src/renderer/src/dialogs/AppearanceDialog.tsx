@@ -5,11 +5,17 @@ import { useState } from 'react'
 import { opaqueHex, parseColor } from '@shared/color'
 import {
   ACCENT_PRESETS,
+  activeChoice,
+  APPEARANCE_MODES,
   BUILT_IN_THEMES,
   isPristine,
   resolvePalette,
+  resolveTone,
   themeById,
-  type Appearance,
+  themeTone,
+  withChoice,
+  type AppearanceMode,
+  type ThemeChoice,
   type ThemeToken
 } from '@shared/theme'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -18,35 +24,63 @@ import { Modal } from './Modal'
 
 export function AppearanceDialog(): React.JSX.Element {
   const appearance = useWorkspaceStore((state) => state.appearance)
+  const systemTone = useWorkspaceStore((state) => state.systemTone)
   const setAppearance = useWorkspaceStore((state) => state.setAppearance)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   const [editingColours, setEditingColours] = useState(false)
 
-  const palette = resolvePalette(appearance)
-  const preset = themeById(appearance.themeId)
-  const edited = !isPristine(appearance)
+  // Everything below edits the slot on screen, so the window stays the preview.
+  const tone = resolveTone(appearance, systemTone)
+  const choice = activeChoice(appearance, systemTone)
+  const palette = resolvePalette(appearance, systemTone)
+  const preset = themeById(choice.themeId)
+  const edited = !isPristine(choice)
   // Translucent tokens are shown composited over the ground, where they are mostly seen.
   const ground = parseColor(palette['bg-window']) ?? { r: 0, g: 0, b: 0 }
   const well = (value: string): string => opaqueHex(value, ground) ?? '#000000'
 
-  const change = (next: Partial<Appearance>): void => {
-    void setAppearance({ ...appearance, ...next })
+  const change = (next: Partial<ThemeChoice>): void => {
+    void setAppearance(withChoice(appearance, tone, { ...choice, ...next }))
   }
 
   // A preset is a fresh start: carried-over edits would make a theme that is neither.
   const choose = (themeId: string): void => {
-    void setAppearance({ themeId, ground: null, accent: null, overrides: {} })
+    void setAppearance(withChoice(appearance, tone, { themeId, ground: null, accent: null, overrides: {} }))
   }
+
+  const mode = appearance.mode ?? 'dark'
 
   return (
     <Modal title="Appearance" onClose={closeDialog}>
       <div className="appearance">
+        <div className="appearance__modes" role="radiogroup" aria-label="Mode">
+          {APPEARANCE_MODES.map((option) => (
+            <button
+              type="button"
+              key={option}
+              role="radio"
+              aria-checked={option === mode}
+              className={`appearance__mode${option === mode ? ' appearance__mode--current' : ''}`}
+              onClick={() => void setAppearance({ ...appearance, mode: option })}
+            >
+              {MODE_LABEL[option]}
+            </button>
+          ))}
+        </div>
+
         <fieldset className="appearance__section">
           <legend className="appearance__legend">Theme</legend>
           <div className="appearance__themes" role="radiogroup" aria-label="Theme">
-            {BUILT_IN_THEMES.map((theme) => {
-              const swatches = resolvePalette({ themeId: theme.id, ground: null, accent: null, overrides: {} })
-              const current = theme.id === appearance.themeId
+            {BUILT_IN_THEMES.filter((theme) => themeTone(theme.id) === tone).map((theme) => {
+              const swatches = resolvePalette(
+                withChoice({ ...appearance, mode: tone }, tone, {
+                  themeId: theme.id,
+                  ground: null,
+                  accent: null,
+                  overrides: {}
+                })
+              )
+              const current = theme.id === choice.themeId
               return (
                 <button
                   type="button"
@@ -81,7 +115,7 @@ export function AppearanceDialog(): React.JSX.Element {
           <legend className="appearance__legend">Accent</legend>
           <div className="appearance__accents">
             {ACCENT_PRESETS.map((accent) => {
-              const current = (appearance.accent ?? preset.seed.accent).toLowerCase() === accent.value.toLowerCase()
+              const current = (choice.accent ?? preset.seed.accent).toLowerCase() === accent.value.toLowerCase()
               return (
                 <button
                   type="button"
@@ -112,7 +146,7 @@ export function AppearanceDialog(): React.JSX.Element {
               onChange={(value) => change({ ground: value })}
             />
             <code className="appearance__hex">{palette['bg-window']}</code>
-            {appearance.ground === null ? null : (
+            {choice.ground === null ? null : (
               <button
                 type="button"
                 className="button button--ghost button--small"
@@ -136,8 +170,8 @@ export function AppearanceDialog(): React.JSX.Element {
             </svg>
             <span>Every colour</span>
             <span className="appearance__count">
-              {Object.keys(appearance.overrides).length > 0
-                ? `${Object.keys(appearance.overrides).length} changed`
+              {Object.keys(choice.overrides).length > 0
+                ? `${Object.keys(choice.overrides).length} changed`
                 : `${TOKEN_GROUPS.reduce((total, group) => total + group.tokens.length, 0)} of them`}
             </span>
           </button>
@@ -153,19 +187,19 @@ export function AppearanceDialog(): React.JSX.Element {
                         <ColourWell
                           label={label}
                           value={well(palette[token])}
-                          onChange={(value) => change({ overrides: { ...appearance.overrides, [token]: value } })}
+                          onChange={(value) => change({ overrides: { ...choice.overrides, [token]: value } })}
                         />
                         <span className="appearance__row-text">
                           <span className="appearance__row-label">{label}</span>
                           <span className="appearance__row-about">{about}</span>
                         </span>
-                        {appearance.overrides[token] === undefined ? (
+                        {choice.overrides[token] === undefined ? (
                           <code className="appearance__hex">{palette[token]}</code>
                         ) : (
                           <button
                             type="button"
                             className="button button--ghost button--tiny"
-                            onClick={() => change({ overrides: without(appearance.overrides, token) })}
+                            onClick={() => change({ overrides: without(choice.overrides, token) })}
                           >
                             Undo
                           </button>
@@ -185,7 +219,7 @@ export function AppearanceDialog(): React.JSX.Element {
             type="button"
             className="button"
             disabled={!edited}
-            onClick={() => choose(appearance.themeId)}
+            onClick={() => choose(choice.themeId)}
             title={`Put every colour back to ${preset.name}`}
           >
             Reset
@@ -198,6 +232,8 @@ export function AppearanceDialog(): React.JSX.Element {
     </Modal>
   )
 }
+
+const MODE_LABEL: Record<AppearanceMode, string> = { system: 'Match System', light: 'Light', dark: 'Dark' }
 
 /** A colour, as the platform's own picker (it has an eyedropper); the input is the swatch. */
 function ColourWell({
@@ -222,7 +258,7 @@ function ColourWell({
 }
 
 /** The same edits without one of them, so "Undo" is a removal rather than a value. */
-function without(overrides: Appearance['overrides'], token: ThemeToken): Appearance['overrides'] {
+function without(overrides: ThemeChoice['overrides'], token: ThemeToken): ThemeChoice['overrides'] {
   const rest = { ...overrides }
   delete rest[token]
   return rest

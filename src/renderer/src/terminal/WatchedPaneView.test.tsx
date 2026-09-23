@@ -691,4 +691,19 @@ describe('the palette, after it changes under a running watch', () => {
     expect(after).not.toBe(before)
     expect(after).toBe(resolvePalette(midnight)['term-bg'])
   })
+  it('repaints when the Mac switches to light under Match System', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    const term = fakeTerms.at(-1) as FakeTerm
+
+    act(() => {
+      applyPalette(document.documentElement, resolvePalette(DEFAULT_APPEARANCE, 'light'))
+      useWorkspaceStore.setState({ systemTone: 'light' })
+    })
+
+    expect((term.options.theme as { background: string }).background).toBe(
+      resolvePalette(DEFAULT_APPEARANCE, 'light')['term-bg']
+    )
+  })
 })

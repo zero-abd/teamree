@@ -120,3 +120,16 @@ describe('the palette, on its way from the appearance to an emulator', () => {
     ).toBe('useLayoutEffect')
   })
 })
+
+describe('the tone the root element declares', () => {
+  it('follows the palette, so scrollbars and form controls match the ground', () => {
+    const root = document.createElement('div')
+    applyPalette(root, resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'light' }))
+    expect(root.style.colorScheme).toBe('light')
+    expect(root.dataset.tone).toBe('light')
+
+    applyPalette(root, resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' }))
+    expect(root.style.colorScheme).toBe('dark')
+    expect(root.dataset.tone).toBe('dark')
+  })
+})

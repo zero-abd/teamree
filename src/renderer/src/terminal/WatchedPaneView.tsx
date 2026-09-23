@@ -82,6 +82,7 @@ export function WatchedPaneView({
   // The owner's dimensions come from presence: nothing on the watch stream carries a resize.
   const presence = useWorkspaceStore((store) => store.teammates[projectId])
   const appearance = useWorkspaceStore((store) => store.appearance)
+  const systemTone = useWorkspaceStore((store) => store.systemTone)
   const size = useMemo(() => watchedPaneSize(presence, paneId), [presence, paneId])
   const sizeRef = useRef(size)
   sizeRef.current = size
@@ -362,7 +363,7 @@ export function WatchedPaneView({
     const term = termRef.current
     if (!term) return
     term.options.theme = readTerminalTheme(document.documentElement)
-  }, [appearance])
+  }, [appearance, systemTone])
 
   // Keeps the keyboard where the focused border says it is, as `TerminalView` does.
   useEffect(() => {

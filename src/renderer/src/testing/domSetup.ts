@@ -29,9 +29,10 @@ if (typeof window !== 'undefined') {
   }
 
   if (typeof window.matchMedia !== 'function') {
+    // A dark system, so a test that does not ask about tone gets the palette it always has.
     window.matchMedia = (query: string): MediaQueryList =>
       ({
-        matches: false,
+        matches: query === '(prefers-color-scheme: dark)',
         media: query,
         onchange: null,
         addListener: () => {},

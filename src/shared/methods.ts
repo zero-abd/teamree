@@ -46,7 +46,7 @@ import type {
 } from './entities'
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { MAX_FILE_PANE_BYTES } from './filePane'
-import { THEME_TOKENS, type Appearance } from './theme'
+import { APPEARANCE_MODES, THEME_TOKENS, type Appearance, type AppearanceMode } from './theme'
 
 /**
  * The most one remote keystroke may carry, counted in bytes at both ends (it was
@@ -139,6 +139,18 @@ export type HunkInput = z.infer<typeof Hunk>
 
 /** Why `project.add` turned a folder away, carried as `error.data.refusal`. */
 export type ProjectAddRefusal = 'not-a-repository' | 'no-commits'
+
+/** One theme slot. Only shape and size are checked; `sanitizeAppearance` drops a value that is not a colour. */
+const THEME_CHOICE = z.object({
+  themeId: z.string().min(1).max(64),
+  ground: z.string().max(32).nullable(),
+  accent: z.string().max(32).nullable(),
+  overrides: z
+    .record(z.string().max(64), z.string().max(32))
+    .refine((overrides) => Object.keys(overrides).length <= THEME_TOKENS.length, {
+      message: 'more overrides than there are tokens to override'
+    })
+})
 
 export const Params = {
   statusGet: z.object({}),
@@ -562,15 +574,10 @@ export const Params = {
    * shape and size are checked: a value that is not a colour is dropped by
    * `sanitizeAppearance`, so one bad hex costs that colour and nothing else.
    */
-  appearanceSet: z.object({
-    themeId: z.string().min(1).max(64),
-    ground: z.string().max(32).nullable(),
-    accent: z.string().max(32).nullable(),
-    overrides: z
-      .record(z.string().max(64), z.string().max(32))
-      .refine((overrides) => Object.keys(overrides).length <= THEME_TOKENS.length, {
-        message: 'more overrides than there are tokens to override'
-      })
+  appearanceSet: THEME_CHOICE.extend({
+    mode: z.enum(APPEARANCE_MODES as [AppearanceMode, ...AppearanceMode[]]).optional(),
+    /** The slot painted while the window is light. */
+    light: THEME_CHOICE.optional()
   }),
 
   /** One text file of a worktree, for a file pane; `path` may not leave the worktree. Local only. */

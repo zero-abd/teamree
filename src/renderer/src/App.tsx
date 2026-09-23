@@ -28,6 +28,7 @@ import { useFolderDrop } from './shell/useFolderDrop'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
 import { useWorkspaceStore } from './state/workspaceStore'
+import { watchSystemTone } from './theme/systemTone'
 import { applyPalette } from './theme/applyPalette'
 import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
@@ -55,12 +56,15 @@ export function App(): React.JSX.Element {
   const notices = useWorkspaceStore((state) => state.notices)
   const dismissNotice = useWorkspaceStore((state) => state.dismissNotice)
   const appearance = useWorkspaceStore((state) => state.appearance)
+  const systemTone = useWorkspaceStore((state) => state.systemTone)
 
   // The one place a colour is applied. A layout effect because xterm reads the palette off this element
   // in each pane's effect, and passive effects run child-first: this write must come before those reads.
   useLayoutEffect(() => {
-    applyPalette(document.documentElement, resolvePalette(appearance))
-  }, [appearance])
+    applyPalette(document.documentElement, resolvePalette(appearance, systemTone))
+  }, [appearance, systemTone])
+
+  useEffect(() => watchSystemTone(useWorkspaceStore.getState().setSystemTone), [])
 
   // One subscription for the window, started before the first read so no bootstrap-time event is missed.
   useEffect(() => {

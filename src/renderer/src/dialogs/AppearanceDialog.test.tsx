@@ -8,9 +8,9 @@
 // any of these stopped writing through, the dialog would look identical and do
 // nothing — which is the failure this file exists to catch.
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
+import { DEFAULT_APPEARANCE, type Appearance, type Tone } from '@shared/theme'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -32,9 +32,9 @@ const INITIAL = useWorkspaceStore.getState()
 const closeDialog = vi.fn()
 const setAppearance = vi.fn()
 
-function seed(appearance: Appearance = DEFAULT_APPEARANCE): void {
+function seed(appearance: Appearance = DEFAULT_APPEARANCE, systemTone: Tone = 'dark'): void {
   useWorkspaceStore.setState(
-    { ...INITIAL, dialog: { kind: 'appearance' }, appearance, closeDialog, setAppearance },
+    { ...INITIAL, dialog: { kind: 'appearance' }, appearance, systemTone, closeDialog, setAppearance },
     true
   )
 }
@@ -135,3 +135,43 @@ describe('getting back', () => {
     expect(lastChange()).toEqual({ themeId: 'midnight', ground: null, accent: null, overrides: {} })
   })
 })
+
+describe('light, dark, or whatever the Mac is', () => {
+  it('offers the three, with Match System chosen on a new installation', () => {
+    render(<AppearanceDialog />)
+    expect(mode('Match System').getAttribute('aria-checked')).toBe('true')
+    expect(mode('Light').getAttribute('aria-checked')).toBe('false')
+    expect(mode('Dark').getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('writes the mode through and keeps both slots', () => {
+    seed({ ...DEFAULT_APPEARANCE, themeId: 'midnight' })
+    render(<AppearanceDialog />)
+    fireEvent.click(mode('Light'))
+    expect(lastChange()).toMatchObject({ mode: 'light', themeId: 'midnight' })
+  })
+
+  it('offers the light presets while the window is light', () => {
+    seed(DEFAULT_APPEARANCE, 'light')
+    render(<AppearanceDialog />)
+    expect(preset('Light').getAttribute('aria-checked')).toBe('true')
+    expect(screen.queryByRole('radio', { name: /Absolute Black/ })).toBeNull()
+    fireEvent.click(preset('Paper'))
+    expect(lastChange()).toMatchObject({ themeId: 'black', light: { themeId: 'paper' } })
+  })
+
+  it('edits the light slot while light, and leaves the dark one alone', () => {
+    seed({ ...DEFAULT_APPEARANCE, mode: 'light', themeId: 'graphite' })
+    render(<AppearanceDialog />)
+    fireEvent.click(screen.getByRole('button', { name: 'Amber' }))
+    expect(lastChange()).toMatchObject({ themeId: 'graphite', accent: null, light: { accent: '#e0a13e' } })
+  })
+})
+
+function mode(name: string): HTMLElement {
+  return within(screen.getByRole('radiogroup', { name: 'Mode' })).getByRole('radio', { name })
+}
+
+function preset(name: string): HTMLElement {
+  return within(screen.getByRole('radiogroup', { name: 'Theme' })).getByRole('radio', { name })
+}
