@@ -72,6 +72,8 @@ const defaultHandler: StubHandler = (method) => {
       return PROJECTS[0]
     case 'project.remove':
       return { removed: true }
+    case 'project.setPaths':
+      return { ...PROJECTS[0], linkedPaths: ['node_modules', '.venv'] }
     case 'worktree.list':
       return WORKTREES
     case 'worktree.create':
@@ -338,6 +340,33 @@ describe('selectors and flags reach the runtime', () => {
     })
   })
 
+  it('sets a path list from the positional tail, and only when one was given', async () => {
+    const cli = await harness()
+
+    await cli.run(['project', 'linked', 'api', 'node_modules', '.venv'])
+    expect(cli.stub.received.at(-1)).toMatchObject({
+      method: 'project.setPaths',
+      params: { projectId: 'p_api', linkedPaths: ['node_modules', '.venv'] }
+    })
+
+    // Naming no paths asks rather than empties: the read is answered from the
+    // project the selector already fetched, so nothing is written.
+    await cli.run(['project', 'copied', 'api'])
+    expect(cli.stub.received.at(-1)).toMatchObject({ method: 'project.list' })
+
+    await cli.run(['project', 'copied', 'api', '--clear'])
+    expect(cli.stub.received.at(-1)).toMatchObject({
+      method: 'project.setPaths',
+      params: { projectId: 'p_api', copiedPaths: [] }
+    })
+  })
+
+  it('prints a path list one per line, and says so when there is none', async () => {
+    const cli = await harness()
+    expect((await cli.run(['project', 'linked', 'api', 'node_modules', '.venv'])).out).toBe('node_modules\n.venv\n')
+    expect((await cli.run(['project', 'copied', 'api'])).out).toMatch(/copies nothing into new worktrees/)
+  })
+
   it('resolves project add paths against the cwd', async () => {
     const cli = await harness()
     await cli.run(['project', 'add', './sub'])
@@ -398,7 +427,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(47)
+    expect(data.commands.length).toBe(49)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

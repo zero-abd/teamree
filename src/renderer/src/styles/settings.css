@@ -274,6 +274,13 @@
   font-size: var(--text-sm);
 }
 
+/* The same field, told it may hold a list. Vertical resize only: the width is
+   the column's, and a box somebody widened past it would overhang the page. */
+.settings-field__input--lines {
+  resize: vertical;
+  line-height: 1.5;
+}
+
 .settings-field__input::placeholder {
   color: var(--fg-muted);
 }

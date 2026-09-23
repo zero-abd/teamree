@@ -115,6 +115,7 @@ const loadUpdate = vi.fn()
 const loadRelay = vi.fn()
 const revealInFinder = vi.fn()
 const setStartPointDefault = vi.fn()
+const setProjectPaths = vi.fn()
 const setTerminalFontSize = vi.fn()
 const setAutomaticUpdates = vi.fn()
 const checkForUpdates = vi.fn()
@@ -137,6 +138,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       loadRelay,
       revealInFinder,
       setStartPointDefault,
+      setProjectPaths,
       setTerminalFontSize,
       setAutomaticUpdates,
       checkForUpdates,
@@ -165,6 +167,7 @@ beforeEach(() => {
     loadRelay,
     revealInFinder,
     setStartPointDefault,
+    setProjectPaths,
     setTerminalFontSize,
     setAutomaticUpdates,
     checkForUpdates,
@@ -321,6 +324,42 @@ describe('projects', () => {
   it('shows the project’s base ref as the placeholder, so the box says what happens if it is left empty', () => {
     render(<SettingsView modifier={modifier} />)
     expect(screen.getByLabelText('Start new worktrees from').getAttribute('placeholder')).toBe('origin/main')
+  })
+})
+
+describe('what a new worktree carries over from the primary checkout', () => {
+  it('writes one list per line, dropping blanks, when the field is left', () => {
+    render(<SettingsView modifier={modifier} />)
+    const field = screen.getByLabelText('Symlink into every new worktree')
+    fireEvent.change(field, { target: { value: 'node_modules\n\n  .venv  \n' } })
+    expect(setProjectPaths).not.toHaveBeenCalled()
+    fireEvent.blur(field)
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { linkedPaths: ['node_modules', '.venv'] })
+  })
+
+  it('keeps the two lists apart', () => {
+    seed({ projects: [{ ...project, linkedPaths: ['node_modules'], copiedPaths: ['.env'] }] })
+    render(<SettingsView modifier={modifier} />)
+    expect((screen.getByLabelText('Symlink into every new worktree') as HTMLTextAreaElement).value).toBe('node_modules')
+
+    const copied = screen.getByLabelText('Copy into every new worktree')
+    expect((copied as HTMLTextAreaElement).value).toBe('.env')
+    fireEvent.change(copied, { target: { value: '.env\n.env.local' } })
+    fireEvent.blur(copied)
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { copiedPaths: ['.env', '.env.local'] })
+  })
+
+  // An empty field is how a list is cleared, and the store turns the empty
+  // array into an absent field. Nothing is written for a field nobody edited.
+  it('writes an empty list when the field is emptied, and nothing when it is not', () => {
+    seed({ projects: [{ ...project, linkedPaths: ['node_modules'] }] })
+    render(<SettingsView modifier={modifier} />)
+    const field = screen.getByLabelText('Symlink into every new worktree')
+    fireEvent.blur(field)
+    expect(setProjectPaths).not.toHaveBeenCalled()
+    fireEvent.change(field, { target: { value: '' } })
+    fireEvent.blur(field)
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { linkedPaths: [] })
   })
 })
 

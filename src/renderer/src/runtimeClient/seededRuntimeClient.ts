@@ -531,6 +531,21 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'projects' })
       return project
     },
+    'project.setPaths': ({ projectId, linkedPaths, copiedPaths }) => {
+      const project = required(projects.get(projectId), 'project')
+      const next: Project = { ...project }
+      if (linkedPaths !== undefined) {
+        if (linkedPaths.length === 0) delete next.linkedPaths
+        else next.linkedPaths = [...linkedPaths]
+      }
+      if (copiedPaths !== undefined) {
+        if (copiedPaths.length === 0) delete next.copiedPaths
+        else next.copiedPaths = [...copiedPaths]
+      }
+      projects.set(next.id, next)
+      announce({ type: 'projects' })
+      return next
+    },
     'project.remove': ({ projectId }) => {
       projects.delete(projectId)
       for (const worktree of worktrees.values()) {

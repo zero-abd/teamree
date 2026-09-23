@@ -710,6 +710,17 @@ type WorkspaceState = {
   setTerminalFontSize: (size: number) => void
   /** Sets one project's preferred start point, or clears it when given null. */
   setStartPointDefault: (projectId: string, ref: string | null) => void
+  /**
+   * Sets what one project's new worktrees carry over from its primary
+   * checkout. Each list given replaces the stored one; an omitted list is left
+   * alone.
+   *
+   * Unlike the start point above, this is not a preference of this window: a
+   * worktree created from the CLI has to be prepared the same way, so it lives
+   * in the workspace beside the project's base ref rather than in local
+   * storage.
+   */
+  setProjectPaths: (projectId: string, paths: { linkedPaths?: string[]; copiedPaths?: string[] }) => Promise<void>
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
   /**
@@ -2270,6 +2281,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const startPointDefaults = withStartPoint(get().startPointDefaults, projectId, ref)
       set({ startPointDefaults })
       writeStoredStartPoints(storage, startPointDefaults)
+    },
+
+    async setProjectPaths(projectId, paths) {
+      try {
+        const project = await runtimeClient.call('project.setPaths', { projectId, ...paths })
+        // Taken from the answer rather than from what was typed: the runtime
+        // trims, de-duplicates and drops an empty list, and a field that went
+        // on showing the typing would disagree with what is stored.
+        set((state) => ({ projects: state.projects.map((row) => (row.id === project.id ? project : row)) }))
+      } catch (error) {
+        failed('Could not save what new worktrees carry over')(error)
+      }
     },
 
     toggleSidebar() {

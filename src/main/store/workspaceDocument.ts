@@ -15,7 +15,12 @@ const ProjectSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   path: z.string().min(1),
-  baseRef: z.string().min(1)
+  baseRef: z.string().min(1),
+  // Additive and optional: every workspace file already on disk parses as a
+  // project with neither list, which is exactly what a project that carries
+  // nothing over into its worktrees looks like.
+  linkedPaths: z.array(z.string().min(1)).optional(),
+  copiedPaths: z.array(z.string().min(1)).optional()
 })
 
 const WorktreeSchema = z.object({

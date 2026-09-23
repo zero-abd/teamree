@@ -339,6 +339,7 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
       </div>
 
       <StartPoint project={project} />
+      <CarriedPaths project={project} />
       <RelayBlock project={project} />
     </article>
   )
@@ -411,6 +412,101 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
       <p className="settings-note">
         What the New task dialog offers first; the repository&rsquo;s base ref is unchanged.
       </p>
+    </div>
+  )
+}
+
+/**
+ * What a new worktree of this project gets that the branch does not carry.
+ *
+ * Two fields and two labels, and no paragraph under them: the reader is a
+ * developer looking at a box that says it symlinks `node_modules`, and a
+ * paragraph explaining why a worktree has no `node_modules` is a paragraph
+ * they will read once. What the lists refuse — a tracked path, a path that is
+ * not ignored, a copy too large to be a copy — is said at the moment it is
+ * refused, on the row that failed, where it is about a specific path.
+ */
+function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
+  const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
+
+  return (
+    <>
+      <PathList
+        project={project}
+        id="linked"
+        label="Symlink into every new worktree"
+        placeholder={'node_modules\n.venv'}
+        paths={project.linkedPaths}
+        save={(linkedPaths) => void setProjectPaths(project.id, { linkedPaths })}
+      />
+      <PathList
+        project={project}
+        id="copied"
+        label="Copy into every new worktree"
+        placeholder={'.env\n.env.local'}
+        paths={project.copiedPaths}
+        save={(copiedPaths) => void setProjectPaths(project.id, { copiedPaths })}
+      />
+    </>
+  )
+}
+
+/**
+ * One path per line, written on blur.
+ *
+ * A draft rather than a write per keystroke, for the reason the start-point
+ * field keeps one: half a path is a path that does not exist, and a field that
+ * wrote through as it went would spend most of its life storing one.
+ */
+function PathList({
+  project,
+  id,
+  label,
+  placeholder,
+  paths,
+  save
+}: {
+  project: Project
+  id: string
+  label: string
+  placeholder: string
+  paths: readonly string[] | undefined
+  save: (paths: string[]) => void
+}): React.JSX.Element {
+  const stored = (paths ?? []).join('\n')
+  const [draft, setDraft] = useState(stored)
+
+  useEffect(() => {
+    setDraft(stored)
+  }, [stored])
+
+  const commit = (): void => {
+    const next = draft
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    if (next.join('\n') === stored) return
+    save(next)
+  }
+
+  const fieldId = `settings-${id}-paths-${project.id}`
+
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor={fieldId}>
+        {label}
+      </label>
+      <textarea
+        id={fieldId}
+        className="settings-field__input settings-field__input--lines"
+        rows={3}
+        value={draft}
+        placeholder={placeholder}
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+      />
     </div>
   )
 }

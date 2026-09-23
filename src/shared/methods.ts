@@ -102,6 +102,25 @@ export const Params = {
   projectList: z.object({}),
   projectAdd: z.object({ path: z.string().min(1), name: z.string().min(1).optional() }),
   projectRemove: z.object({ projectId: z.string().min(1) }),
+  /**
+   * What a new worktree of this project carries over from the primary
+   * checkout: gitignored directories to symlink, gitignored files to copy.
+   *
+   * Each list replaces the stored one whole, and an omitted list is left
+   * alone — the same shape `appearance.set` uses, and for the same reason: two
+   * fields that move independently, each of which somebody edits as a whole.
+   * An empty array is how a list is cleared.
+   *
+   * Only the shape of each path is judged here and at the moment it is stored:
+   * relative, inside the repository, and not pathspec magic. Whether it exists,
+   * is ignored, and is untracked is a fact about the repository right now, so
+   * it is judged when a worktree is actually being prepared.
+   */
+  projectSetPaths: z.object({
+    projectId: z.string().min(1),
+    linkedPaths: z.array(z.string().min(1).max(512)).max(64).optional(),
+    copiedPaths: z.array(z.string().min(1).max(512)).max(64).optional()
+  }),
 
   worktreeList: z.object({ projectId: z.string().min(1).optional() }),
   worktreeGet: z.object({ worktreeId: z.string().min(1) }),
@@ -552,6 +571,8 @@ export type MethodContract = {
   'project.list': { params: z.infer<typeof Params.projectList>; result: Project[] }
   'project.add': { params: z.infer<typeof Params.projectAdd>; result: Project }
   'project.remove': { params: z.infer<typeof Params.projectRemove>; result: { removed: true } }
+  /** Answers with the project as stored, so a caller sees what was kept. */
+  'project.setPaths': { params: z.infer<typeof Params.projectSetPaths>; result: Project }
 
   'worktree.list': { params: z.infer<typeof Params.worktreeList>; result: Worktree[] }
   'worktree.get': { params: z.infer<typeof Params.worktreeGet>; result: Worktree }
