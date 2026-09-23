@@ -974,13 +974,13 @@ Two things the real runtime did that the fake could not show:
   rather than us. It now arms the next sweep only while it still holds a
   connection, and a peer that comes back arms it again on the way in. The fake
   could not have caught this: it clears the alarm itself between ticks.
-- **A close the object starts is not always flushed at once.** For a socket that
-  has never delivered a frame — the connection that opens and then says nothing,
-  which is what the greeting deadline exists for — `workerd` sends the close
-  handshake about ten seconds after the relay asks it to. The in-band
-  `{"t":"closing"}` frame arrives on time, which is exactly why the protocol
-  gives the reason in-band as well as in the close frame. Nothing is lost; the
-  peer's socket simply lingers after it has been told.
+- **A close the object starts does not always end the connection at once.** For
+  a socket that has never delivered a frame — the connection that opens and then
+  says nothing, which is what the greeting deadline exists for — `workerd` sends
+  the in-band `{"t":"closing"}` frame and the close frame on time, then holds the
+  TCP connection open for about ten seconds after the handshake. A client that
+  waits for the connection to end rather than for the close frame sees the close
+  late. Nothing is lost; the peer's socket simply lingers after it has been told.
 
 What is still not exercised is a **deployed** Worker. All of the above is
 `workerd` on localhost: the same runtime, but not the same network. The edge in

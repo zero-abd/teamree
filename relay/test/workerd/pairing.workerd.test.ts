@@ -145,10 +145,8 @@ describe.skipIf(unavailable !== null)('the durable object, run by workerd', () =
     const earliest = silent[0]
     expect(earliest?.accepted).toBe(true)
     if (earliest?.accepted === true) {
-      // Read in-band rather than waited for as a close, for the reason
-      // `deadlines.workerd.test.ts` records: for a socket that never delivered a
-      // frame to the object, workerd holds the closing handshake back for about
-      // ten seconds after the relay asks for it, and the frame goes out on time.
+      // Read in-band: workerd keeps a socket that never sent a frame connected
+      // for a while after its close (see `support/workerd.ts`).
       const told = await earliest.peer.control.until((frames) => frames.some((frame) => frame.t === 'closing'))
       expect(told.at(-1)).toMatchObject({ t: 'closing', code: CloseCode.Capacity })
     }
