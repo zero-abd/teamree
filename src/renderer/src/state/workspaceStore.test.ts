@@ -16,6 +16,7 @@ import {
   type RelayPaneState
 } from './workspaceStore'
 import type { RelaySetting, Terminal, WorktreePush } from '@shared/entities'
+import { NOTICE_LIFETIME_MS } from '../notices/noticeLifetime'
 
 it('adds exactly one pane per New terminal action, including with workspace events', async () => {
   const store = useWorkspaceStore.getState()
@@ -213,6 +214,64 @@ it('pushes the active worktree and says what actually happened', async () => {
   expect(notice?.text).toMatch(/pushed|already had/i)
   expect(useWorkspaceStore.getState().pushing).toBe(false)
   call.mockRestore()
+})
+
+// News goes stale. "Added repo" was still on screen twenty minutes and two
+// dozen interactions later, under every notice raised since; nothing but the
+// dismiss button ever retired one. An informational notice with nothing to do
+// about it leaves on its own. Errors stay, and so does anything with a button.
+describe('how long a notice stays', () => {
+  it('retires plain news after a while, and keeps errors and offers', async () => {
+    vi.useFakeTimers()
+    // The seeded runtime answers after a short sleep, which fake timers would
+    // hold forever: each call is awaited with the clock moving under it, by
+    // far less than a notice's lifetime.
+    const settle = async <T>(work: Promise<T>): Promise<T> => {
+      await vi.advanceTimersByTimeAsync(500)
+      return work
+    }
+    try {
+      const store = useWorkspaceStore.getState()
+      await settle(store.bootstrap())
+      const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+      await settle(store.openWorktree(worktreeId))
+
+      const url = 'https://github.com/o/r/compare/main...work?expand=1'
+      const original = runtimeClient.call.bind(runtimeClient)
+      let reviewUrl: string | undefined
+      const call = vi.spyOn(runtimeClient, 'call').mockImplementation(async (method, params) => {
+        if (method === 'worktree.remove') throw new Error('refused')
+        const result = await original(method, params as never)
+        return method === 'worktree.push' && reviewUrl !== undefined
+          ? { ...(result as WorktreePush), reviewUrl }
+          : result
+      })
+
+      await settle(useWorkspaceStore.getState().pushActiveWorktree())
+      const news = useWorkspaceStore.getState().notices.at(-1)!
+      expect(news.tone).toBe('info')
+      expect(news.action).toBeUndefined()
+
+      reviewUrl = url
+      await settle(useWorkspaceStore.getState().pushActiveWorktree())
+      const offer = useWorkspaceStore.getState().notices.at(-1)!
+      expect(offer.action).toBeDefined()
+
+      await settle(useWorkspaceStore.getState().removeWorktree(worktreeId))
+      const failure = useWorkspaceStore.getState().notices.at(-1)!
+      expect(failure.tone).toBe('error')
+
+      const ids = (): number[] => useWorkspaceStore.getState().notices.map((notice) => notice.id)
+      expect(ids()).toEqual([news.id, offer.id, failure.id])
+      await vi.advanceTimersByTimeAsync(NOTICE_LIFETIME_MS)
+      expect(ids()).toEqual([offer.id, failure.id])
+      await vi.advanceTimersByTimeAsync(NOTICE_LIFETIME_MS * 10)
+      expect(ids()).toEqual([offer.id, failure.id])
+      call.mockRestore()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 // The push result is the only place that knows a review became possible, so

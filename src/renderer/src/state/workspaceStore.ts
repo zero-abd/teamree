@@ -31,6 +31,7 @@ import type {
 } from '@shared/entities'
 import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
 import { closePaneWarning } from '../dialogs/closePaneModel'
+import { noticeLifetime } from '../notices/noticeLifetime'
 import type { TaskCreate } from '../dialogs/taskPlan'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
 import { worktreeAfter, worktreeOrder } from '../sidebar/worktreeOrder'
@@ -930,6 +931,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const notify = (text: string, tone: Notice['tone'] = 'error', action?: Notice['action']): void => {
     const notice: Notice = { id: ++noticeSeq, text, tone, ...(action === undefined ? {} : { action }) }
     set((state) => ({ notices: [...state.notices.slice(-2), notice] }))
+    // Plain news retires itself; see `noticeLifetime` for which notices do not.
+    const lifetime = noticeLifetime(notice)
+    if (lifetime !== null) setTimeout(() => get().dismissNotice(notice.id), lifetime)
   }
 
   const failed = (what: string) => (error: unknown) => {
