@@ -8,6 +8,8 @@ export type WorkspaceCommand =
   | 'split-right'
   | 'split-down'
   | 'close-pane'
+  | 'save-file'
+  | 'save-all'
   | 'new-terminal'
   | 'new-markdown'
   | 'new-worktree'
@@ -43,6 +45,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'split-right', chord: { key: 'd' }, title: 'Split pane right' },
   { command: 'split-down', chord: { key: 'd', shift: true }, title: 'Split pane down' },
   { command: 'close-pane', chord: { key: 'w' }, title: 'Close pane' },
+  { command: 'save-file', chord: { key: 's' }, title: 'Save' },
+  { command: 'save-all', chord: { key: 's', alt: true }, title: 'Save All' },
   { command: 'new-terminal', chord: { key: 't' }, title: 'New terminal' },
   // Shifted, because ⌘M is the platform's minimise.
   { command: 'new-markdown', chord: { key: 'm', shift: true }, title: 'New markdown' },

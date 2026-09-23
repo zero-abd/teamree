@@ -1223,6 +1223,23 @@ describe('quitting the app', () => {
     expect(document.error.code).toBe('quit_timeout')
   })
 
+  it("passes the app's refusal over unsaved files on, and asks with force when told to", async () => {
+    const asked: unknown[] = []
+    const cli = await harness((method, params, context) => {
+      if (method !== 'app.quit') return defaultHandler(method, params, context)
+      asked.push(params)
+      if ((params as { force?: boolean }).force !== true)
+        throw new StubError('conflict', 'Unsaved in the app: src/math.ts')
+      return { quitting: true, pid: 4242 }
+    })
+    const refused = await cli.run(['quit'])
+    expect(refused.code).toBe(ExitCode.Failure)
+    expect(refused.err).toContain('src/math.ts')
+
+    await cli.run(['quit', '--force', '--timeout-ms', '10'])
+    expect(asked).toEqual([{}, { force: true }])
+  })
+
   it('says nothing is running rather than pretending it quit one', async () => {
     const cli = await harness(defaultHandler, { discovery: 'none' })
     const result = await cli.run(['quit'])

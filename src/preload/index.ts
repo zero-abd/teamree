@@ -18,6 +18,10 @@ const NOTICE_PUBLISH_CHANNEL = 'teamree:notices:publish'
 const NOTICE_REVEAL_CHANNEL = 'teamree:notices:reveal'
 // src/main/keepAwake.ts; outward only.
 const KEEP_AWAKE_PUBLISH_CHANNEL = 'teamree:keep-awake:publish'
+// src/main/unsavedFiles.ts
+const UNSAVED_PUBLISH_CHANNEL = 'teamree:unsaved:publish'
+const UNSAVED_ASK_CHANNEL = 'teamree:unsaved:ask'
+const UNSAVED_ANSWER_CHANNEL = 'teamree:unsaved:answer'
 
 /** What the main process answers a reveal with, declared structurally (not imported from src/main). */
 type RevealResult = { revealed: true } | { revealed: false; reason: string }
@@ -134,6 +138,30 @@ const keepAwake = {
   }
 } as const
 
+type LeaveReason = 'quit' | 'close'
+
+let answerLeave: ((reason: LeaveReason) => Promise<boolean>) | null = null
+
+// No listener means nothing edited to ask about; a failed answer keeps the window.
+ipcRenderer.on(UNSAVED_ASK_CHANNEL, (_event, question: { id: number; reason: LeaveReason }) => {
+  const reply = (proceed: boolean): void => ipcRenderer.send(UNSAVED_ANSWER_CHANNEL, { id: question.id, proceed })
+  void (answerLeave?.(question.reason) ?? Promise.resolve(true)).then(reply, () => reply(false))
+})
+
+/** Edited file paths, outward; the main process's question before a quit or close, inward. */
+const unsaved = {
+  publish(paths: readonly string[]): void {
+    ipcRenderer.send(UNSAVED_PUBLISH_CHANNEL, paths)
+  },
+
+  onAsk(listener: (reason: LeaveReason) => Promise<boolean>): () => void {
+    answerLeave = listener
+    return () => {
+      if (answerLeave === listener) answerLeave = null
+    }
+  }
+} as const
+
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
@@ -163,7 +191,8 @@ const api = {
   runtime,
   menu,
   notices,
-  keepAwake
+  keepAwake,
+  unsaved
 } as const
 
 export type TeamreeRuntimeBridge = typeof runtime

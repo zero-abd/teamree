@@ -25,6 +25,8 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'split-right': 'panes',
   'split-down': 'panes',
   'close-pane': 'panes',
+  'save-file': 'panes',
+  'save-all': 'panes',
   'new-terminal': 'panes',
   'new-markdown': 'panes',
   'find-in-pane': 'panes',

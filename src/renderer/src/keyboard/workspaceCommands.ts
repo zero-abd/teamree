@@ -31,12 +31,15 @@ export type CommandState = {
   editingMarkdown?: boolean
   /** Absent reads as the default size. */
   terminalFontSize?: number
+  /** Code panes with edits not on disk; absent reads as none. */
+  editedFiles?: Readonly<Record<string, unknown>>
 }
 
 /** The store's own methods, named so this module does not import the store. */
 export type CommandActions = {
   splitFocusedPane: (direction: 'row' | 'column') => Promise<void>
   closeTerminal: (terminalId: string) => Promise<void>
+  saveFiles: (paneIds: readonly string[]) => Promise<boolean>
   createTerminal: (worktreeId: string) => Promise<void>
   newMarkdown: (worktreeId: string) => void
   closeWatchedPane: (id: string) => void
@@ -104,6 +107,12 @@ export function paneNumberTarget(n: number, state: CommandState): string | null 
   return numberedTab(stripTabs(state), n)
 }
 
+/** The focused pane when it is a code pane with edits to save. */
+function editedFocus(state: CommandState): string | null {
+  const focused = ownFocusedPane(state)
+  return focused !== null && state.editedFiles?.[focused] !== undefined ? focused : null
+}
+
 function fontSize(state: CommandState): number {
   return state.terminalFontSize ?? TERMINAL_FONT_DEFAULT_PX
 }
@@ -128,6 +137,10 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
     case 'close-pane':
       // Either kind: closing a teammate's pane is how a watch stops.
       return state.focusedWatchId !== null || activeLayout(state)?.focusedTerminalId != null
+    case 'save-file':
+      return editedFocus(state) !== null
+    case 'save-all':
+      return Object.keys(state.editedFiles ?? {}).length > 0
     case 'new-terminal':
     case 'new-markdown':
       // A worktree whose checkout has gone from disk would fail with a path.
@@ -201,6 +214,14 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       if (focused) void store.closeTerminal(focused)
       break
     }
+    case 'save-file': {
+      const focused = editedFocus(store)
+      if (focused) void store.saveFiles([focused])
+      break
+    }
+    case 'save-all':
+      void store.saveFiles(Object.keys(store.editedFiles ?? {}))
+      break
     case 'new-terminal':
       if (store.activeWorktreeId) void store.createTerminal(store.activeWorktreeId)
       break

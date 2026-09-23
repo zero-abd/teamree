@@ -117,6 +117,7 @@ import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
 import { readSystemTone } from '../theme/systemTone'
+import { draftFor, dropDraft, keptDrafts, saverFor } from '../files/fileDrafts'
 import {
   changesOnScreen,
   readStoredRightPanel,
@@ -138,11 +139,19 @@ export type DialogState =
   | { kind: 'confirm-remove'; worktreeId: string; reason: string; intent: RemoveIntent }
   /** Raised only when the pane is doing work a close would kill. See `closePaneModel`. */
   | { kind: 'confirm-close-pane'; terminalId: string; rest?: readonly string[] }
-  /** A file pane with edits not on disk. `rest` is what Close Others closes after either answer. */
+  /** A file pane with edits not on disk. `rest` is what Close Others closes after Save or Don't Save. */
   | { kind: 'confirm-close-file'; terminalId: string; rest?: readonly string[] }
+  /** Edited files asked about before the app quits, the window closes, or their worktree is removed. */
+  | { kind: 'confirm-unsaved'; paneIds: readonly string[]; after: 'quit' | 'close' | { remove: string } }
   /** Throwing away a path's unstaged change, or one hunk of it. */
   | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk }
   | null
+
+/** A code pane with edits not on disk, and where its file is. */
+export type EditedFile = { worktreeId: string; path: string }
+
+/** The three answers to a Save question. */
+export type SaveAnswer = 'save' | 'discard' | 'cancel'
 
 /** Why the removal was asked for: a retry removes the old checkout to build a new one, and the confirmation says so. */
 export type RemoveIntent = 'remove' | 'retry'
@@ -243,6 +252,8 @@ type WorkspaceState = {
 
   /** File panes with edits not yet on disk, by pane id; each tab draws a dot. */
   unsavedFiles: Record<string, true>
+  /** The code panes among them (markdown saves as it goes), kept drafts from the last launch included. */
+  editedFiles: Record<string, EditedFile>
   /** A markdown editor holds the keyboard, so ⌘B and ⌘E are bold and code, not the window's. */
   editingMarkdown: boolean
   /** The worktree whose strip asks for a file name, because NOTES.md is already open. */
@@ -428,6 +439,14 @@ type WorkspaceState = {
   /** Answers the strip's question with a name, or null to withdraw it. */
   nameMarkdown: (name: string | null) => void
   setFileUnsaved: (paneId: string, dirty: boolean) => void
+  /** A code pane's edits are off disk, or back on it with null; keeps `unsavedFiles` in step. */
+  setFileEdited: (paneId: string, file: EditedFile | null) => void
+  /** Writes these panes' edits; false as soon as one does not save. */
+  saveFiles: (paneIds: readonly string[]) => Promise<boolean>
+  /** Asks about every edited file before a quit or a window close; resolves whether it may go on. */
+  askBeforeLeaving: (reason: 'quit' | 'close') => Promise<boolean>
+  /** Answers the Save question on screen. */
+  answerUnsaved: (answer: SaveAnswer) => Promise<void>
   setEditingMarkdown: (editing: boolean) => void
   focusNextPane: () => void
   /** The other way round the same cycle. See `paneCycle`. */
@@ -614,6 +633,7 @@ const storage = typeof window === 'undefined' ? undefined : window.localStorage
 
 /** What the last window in this installation was showing, read once at startup. */
 const lastSession = readStoredSession(storage)
+const lastDrafts = [...keptDrafts()]
 const lastPanel = readStoredRightPanel(storage)
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
@@ -628,6 +648,34 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const failed = (what: string) => (error: unknown) => {
     notify(`${what}: ${error instanceof Error ? error.message : String(error)}`)
   }
+
+  // The main process waits on this answer, so it is always settled: answered, replaced or dismissed.
+  let leaving: ((proceed: boolean) => void) | null = null
+  const settleLeaving = (proceed: boolean): void => {
+    const settle = leaving
+    leaving = null
+    settle?.(proceed)
+  }
+
+  /** Throws these panes' edits away, drafts included. */
+  const forgetEdits = (paneIds: readonly string[]): void => {
+    for (const paneId of paneIds) dropDraft(paneId)
+    set((state) => {
+      if (!paneIds.some((id) => state.editedFiles[id] !== undefined || state.unsavedFiles[id] !== undefined)) return {}
+      const unsavedFiles = { ...state.unsavedFiles }
+      const editedFiles = { ...state.editedFiles }
+      for (const paneId of paneIds) {
+        delete unsavedFiles[paneId]
+        delete editedFiles[paneId]
+      }
+      return { unsavedFiles, editedFiles }
+    })
+  }
+
+  const editedIn = (worktreeId: string): string[] =>
+    Object.entries(get().editedFiles)
+      .filter(([, file]) => file.worktreeId === worktreeId)
+      .map(([paneId]) => paneId)
 
   /** A teamwork-panel read threw. Kept beside the notice: the panel is where the step that cannot be answered is. */
   const readFailed = (projectId: string, read: keyof TeamworkReadErrors, error: unknown): void => {
@@ -1028,6 +1076,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
   /** Drops a worktree from this window once the runtime has really removed it. */
   const forgetWorktree = (worktreeId: string): void => {
+    forgetEdits(editedIn(worktreeId))
     useWorkspaceStore.getState().closeWorktreeTab(worktreeId)
     set((state) => ({ worktrees: state.worktrees.filter((entry) => entry.id !== worktreeId) }))
   }
@@ -1040,11 +1089,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const filePathOf = (paneId: string): string | undefined =>
     fileLeavesIn(activeLayout()?.root ?? null).find((leaf) => leaf.terminalId === paneId)?.path
 
-  /** The question closing this pane needs first, or null: see `closePaneWarning`. A markdown page saves as it goes. */
+  /** The question closing this pane needs first, or null: see `closePaneWarning`. */
   const closeQuestion = (paneId: string): 'confirm-close-pane' | 'confirm-close-file' | null => {
-    if (isFilePaneId(paneId)) {
-      return get().unsavedFiles[paneId] && !isMarkdownPath(filePathOf(paneId) ?? '') ? 'confirm-close-file' : null
-    }
+    if (isFilePaneId(paneId)) return get().editedFiles[paneId] ? 'confirm-close-file' : null
     return closePaneWarning(get().terminals[paneId]) === null ? null : 'confirm-close-pane'
   }
 
@@ -1070,7 +1117,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     terminals: {},
     layouts: {},
     expandedTerminalId: null,
-    unsavedFiles: {},
+    unsavedFiles: Object.fromEntries(lastDrafts.map(([paneId]) => [paneId, true as const])),
+    editedFiles: Object.fromEntries(
+      lastDrafts.map(([paneId, draft]) => [paneId, { worktreeId: draft.worktreeId, path: draft.path }])
+    ),
     editingMarkdown: false,
     namingMarkdown: null,
     editingPaneName: null,
@@ -1337,6 +1387,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
      * refusal is the only thing between a small cross in a sidebar and somebody's afternoon.
      */
     async removeWorktree(worktreeId) {
+      const edited = editedIn(worktreeId)
+      if (edited.length > 0) {
+        set({ dialog: { kind: 'confirm-unsaved', paneIds: edited, after: { remove: worktreeId } } })
+        return
+      }
       try {
         await runtimeClient.call('worktree.remove', { worktreeId })
         forgetWorktree(worktreeId)
@@ -1527,11 +1582,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           root: closePane(layout.root, terminalId),
           focusedTerminalId: layout.focusedTerminalId === terminalId ? nextFocus : layout.focusedTerminalId
         })
-        set((state) => {
-          const unsavedFiles = { ...state.unsavedFiles }
-          delete unsavedFiles[terminalId]
-          return { unsavedFiles, ...(state.expandedTerminalId === terminalId ? { expandedTerminalId: null } : {}) }
-        })
+        forgetEdits([terminalId])
+        if (get().expandedTerminalId === terminalId) set({ expandedTerminalId: null })
         return
       }
 
@@ -1654,6 +1706,83 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         else delete unsavedFiles[paneId]
         return { unsavedFiles }
       })
+    },
+
+    setFileEdited(paneId, file) {
+      set((state) => {
+        if (file === null ? state.editedFiles[paneId] === undefined : state.editedFiles[paneId] !== undefined) return {}
+        const unsavedFiles = { ...state.unsavedFiles }
+        const editedFiles = { ...state.editedFiles }
+        if (file === null) {
+          delete unsavedFiles[paneId]
+          delete editedFiles[paneId]
+        } else {
+          unsavedFiles[paneId] = true
+          editedFiles[paneId] = file
+        }
+        return { unsavedFiles, editedFiles }
+      })
+    },
+
+    async saveFiles(paneIds) {
+      for (const paneId of paneIds) {
+        // A mounted editor saves its own text and says so on its bar when it cannot.
+        const save = saverFor(paneId)
+        if (save !== undefined) {
+          if (!(await save())) return false
+          continue
+        }
+        const file = get().editedFiles[paneId]
+        const draft = file === undefined ? undefined : draftFor(paneId, file.worktreeId, file.path)
+        if (draft === undefined) continue
+        try {
+          await runtimeClient.call('file.write', {
+            worktreeId: draft.worktreeId,
+            path: draft.path,
+            content: draft.text,
+            encoding: draft.encoding ?? 'utf-8',
+            expectedModifiedAt: draft.modifiedAt
+          })
+        } catch (error) {
+          failed(`Could not save ${draft.path}`)(error)
+          return false
+        }
+        forgetEdits([paneId])
+      }
+      return true
+    },
+
+    askBeforeLeaving(reason) {
+      const paneIds = Object.keys(get().editedFiles)
+      if (paneIds.length === 0) return Promise.resolve(true)
+      settleLeaving(false)
+      return new Promise((resolve) => {
+        leaving = resolve
+        set({ dialog: { kind: 'confirm-unsaved', paneIds, after: reason } })
+      })
+    },
+
+    async answerUnsaved(answer) {
+      const dialog = get().dialog
+      if (dialog?.kind === 'confirm-close-file') {
+        // Cancel stops a Close Others too.
+        set({ dialog: null })
+        if (answer === 'cancel') return
+        if (answer === 'save' && !(await get().saveFiles([dialog.terminalId]))) return
+        await get().forceCloseTerminal(dialog.terminalId)
+        if (dialog.rest) await get().closePanes(dialog.rest)
+        return
+      }
+      if (dialog?.kind !== 'confirm-unsaved') return
+      set({ dialog: null })
+      let proceed = answer !== 'cancel'
+      if (answer === 'save') proceed = await get().saveFiles(dialog.paneIds)
+      else if (answer === 'discard') forgetEdits(dialog.paneIds)
+      if (typeof dialog.after === 'object') {
+        if (proceed) await get().removeWorktree(dialog.after.remove)
+      } else {
+        settleLeaving(proceed)
+      }
     },
 
     setEditingMarkdown(editing) {
@@ -2548,14 +2677,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     openDialog(dialog) {
+      if (get().dialog?.kind === 'confirm-unsaved') settleLeaving(false)
       set({ dialog })
     },
 
     closeDialog() {
       const { dialog } = get()
       set({ dialog: null })
+      if (dialog?.kind === 'confirm-unsaved') settleLeaving(false)
       // Close Others asks about one pane at a time; answering, either way, asks about the next.
-      if ((dialog?.kind === 'confirm-close-pane' || dialog?.kind === 'confirm-close-file') && dialog.rest) {
+      if (dialog?.kind === 'confirm-close-pane' && dialog.rest) {
         void get().closePanes(dialog.rest)
       }
     },

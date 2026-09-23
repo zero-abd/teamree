@@ -54,7 +54,7 @@ beforeEach(() => {
     return undefined
   })
   useWorkspaceStore.setState(
-    { ...INITIAL, activeWorktreeId: 'w1', layouts: { w1: terminalOnly }, unsavedFiles: {} },
+    { ...INITIAL, activeWorktreeId: 'w1', layouts: { w1: terminalOnly }, unsavedFiles: {}, editedFiles: {} },
     true
   )
 })
@@ -104,7 +104,7 @@ describe('file tabs in the store', () => {
   it('asks before closing a tab with unsaved edits, and forgets the dot once closed', async () => {
     useWorkspaceStore.getState().openFilePane('w1', 'src/app.ts')
     const id = fileLeavesIn(layout().root)[0]!.terminalId
-    useWorkspaceStore.getState().setFileUnsaved(id, true)
+    useWorkspaceStore.getState().setFileEdited(id, { worktreeId: 'w1', path: 'src/app.ts' })
     await useWorkspaceStore.getState().closeTerminal(id)
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-close-file', terminalId: id })
     expect(fileLeavesIn(layout().root)).toHaveLength(1)
@@ -128,7 +128,7 @@ describe('the file viewer', () => {
     return EditorView.findFromDOM(content)!
   }
 
-  it('edits, marks the tab unsaved, and saves on ⌘S against the version it read', async () => {
+  it('edits, marks the tab unsaved, and saves against the version it read', async () => {
     let onDisk = text('const a = 1\n')
     call.mockImplementation(async (method: string, params: { content?: string }) => {
       if (method === 'file.read') return onDisk
@@ -145,7 +145,7 @@ describe('the file viewer', () => {
     act(() => view.dispatch({ changes: { from: 10, to: 11, insert: '2' } }))
     expect(useWorkspaceStore.getState().unsavedFiles['file:1']).toBe(true)
 
-    fireEvent.keyDown(view.contentDOM, { key: 's', ctrlKey: true })
+    expect(await useWorkspaceStore.getState().saveFiles(['file:1'])).toBe(true)
     await waitFor(() => expect(useWorkspaceStore.getState().unsavedFiles['file:1']).toBeUndefined())
     expect(call).toHaveBeenCalledWith('file.write', {
       worktreeId: 'w1',
@@ -166,7 +166,7 @@ describe('the file viewer', () => {
     mount()
     const view = await editorView()
     act(() => view.dispatch({ changes: { from: 0, insert: 'y' } }))
-    fireEvent.keyDown(view.contentDOM, { key: 's', ctrlKey: true })
+    expect(await act(() => useWorkspaceStore.getState().saveFiles(['file:1']))).toBe(false)
     expect(await screen.findByRole('button', { name: 'Overwrite' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy()
     expect(screen.getByRole('alert').textContent).not.toMatch(/\.(\s|$)/)

@@ -85,6 +85,7 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
   return {
     splitFocusedPane: vi.fn(async () => {}),
     closeTerminal: vi.fn(async () => {}),
+    saveFiles: vi.fn(async () => true),
     createTerminal: vi.fn(async () => {}),
     newMarkdown: vi.fn(),
     closeWatchedPane: vi.fn(),
@@ -459,5 +460,36 @@ describe('the commands that were in no menu', () => {
     runWorkspaceCommand('commit-changes' as WorkspaceCommand, changes)
     expect(changes.showRightPanelTab).toHaveBeenCalledExactlyOnceWith('changes')
     expect(changes.toggleRightPanel).not.toHaveBeenCalled()
+  })
+})
+
+describe('saving', () => {
+  const EDITED: CommandState = {
+    ...WORKING,
+    layouts: {
+      w1: {
+        worktreeId: 'w1',
+        root: { kind: 'leaf', terminalId: 'file:a', pane: 'file', path: 'a.ts' },
+        focusedTerminalId: 'file:a'
+      }
+    },
+    editedFiles: { 'file:a': { worktreeId: 'w1', path: 'a.ts' }, 'file:b': { worktreeId: 'w2', path: 'b.ts' } }
+  }
+
+  it('offers Save only on a focused pane with edits, and Save All while anything has them', () => {
+    expect(isCommandAvailable('save-file', WORKING)).toBe(false)
+    expect(isCommandAvailable('save-all', WORKING)).toBe(false)
+    expect(isCommandAvailable('save-file', EDITED)).toBe(true)
+    expect(isCommandAvailable('save-all', EDITED)).toBe(true)
+    expect(isCommandAvailable('save-file', { ...EDITED, editedFiles: { 'file:b': { worktreeId: 'w2' } } })).toBe(false)
+  })
+
+  it('saves the focused pane, or every edited one', () => {
+    const one = workspace(EDITED)
+    runWorkspaceCommand('save-file', one)
+    expect(one.saveFiles).toHaveBeenCalledExactlyOnceWith(['file:a'])
+    const all = workspace(EDITED)
+    runWorkspaceCommand('save-all', all)
+    expect(all.saveFiles).toHaveBeenCalledExactlyOnceWith(['file:a', 'file:b'])
   })
 })

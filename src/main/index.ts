@@ -23,6 +23,7 @@ import { installNativeAppearance, windowBackground } from './nativeAppearance'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
 import { createQuitSequence } from './quitSequence'
+import { installUnsavedFiles, type UnsavedFiles } from './unsavedFiles'
 import { registerOpenPathHandler } from './reveal/openPath'
 import { registerRevealHandler } from './reveal/revealPath'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
@@ -62,6 +63,18 @@ function createWindow(): BrowserWindow {
 
   trackWindowState(window, opened, (state) => saveWindowState(stateFile, state))
 
+  // The red button asks about edited files as ⌘Q does; a quit already asked.
+  let mayClose = false
+  window.on('close', (event) => {
+    if (mayClose || leaving || unsaved === undefined || unsaved.paths().length === 0) return
+    event.preventDefault()
+    void unsaved.ask('close').then((proceed) => {
+      if (!proceed || window.isDestroyed()) return
+      mayClose = true
+      window.close()
+    })
+  })
+
   window.on('ready-to-show', () => {
     // Both modes show a hidden window, so a background launch applies neither.
     if (isBackgroundLaunch(process.env)) return
@@ -98,6 +111,18 @@ function currentAppearance(): Appearance {
 let runtime: Runtime | undefined
 let followAppearance: ((appearance: Appearance) => void) | undefined
 let notices: AgentNoticeChannel | undefined
+let unsaved: UnsavedFiles | undefined
+/** Set once a quit is past its questions, so closing the window asks nothing more. */
+let leaving = false
+/** `teamree quit --force`: the edits stay in the profile as drafts. */
+let forced = false
+
+/** Quits past the Save question; the window's edits stay in the profile as drafts. */
+function quitWithoutAsking(): void {
+  forced = true
+  unsaved?.release()
+  app.quit()
+}
 
 /** The window, for the handful of things that act on whichever one is open. */
 function mainWindow(): BrowserWindow | undefined {
@@ -132,6 +157,9 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
   // it: between `restoreSessions()` and `startRuntime` resolving there are
   // panes running that nothing can kill yet. See `quitSequence.ts`.
   const launched = app.whenReady().then(async () => {
+    // Electron turns these into a graceful quit, which would wait on a question nobody is there to
+    // answer. After `ready`, because Electron installs its own handlers just before it.
+    for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, quitWithoutAsking)
     // Before any window, or Electron's default menu binds Cmd+W to Close
     // Window ahead of the renderer (see appMenu.ts). Installed again once the
     // window has published its commands.
@@ -194,6 +222,13 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
       fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
     })
 
+    unsaved = installUnsavedFiles(ipcMain, {
+      setEdited: (sender, edited) => {
+        if (process.platform === 'darwin') BrowserWindow.fromWebContents(sender)?.setDocumentEdited(edited)
+      },
+      fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
+    })
+
     // Whether this Mac may sleep, as the window decides it; see src/main/keepAwake.ts.
     installKeepAwake(ipcMain, {
       blocker: powerSaveBlocker,
@@ -237,7 +272,8 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         trashItem: (path) => shell.trashItem(path),
         onAgentNotice: (notice) => notices?.deliver(notice),
         // `teamree quit`: only `app.quit` runs `before-quit`. See quitSequence.ts.
-        requestQuit: () => app.quit(),
+        requestQuit: (force) => (force ? quitWithoutAsking() : app.quit()),
+        unsavedFiles: () => unsaved?.paths() ?? [],
         onAppearance: (appearance) => followAppearance?.(appearance)
       })
     } catch (error) {
@@ -262,7 +298,11 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
   // being undefined does not mean no ptys were spawned. See `quitSequence.ts`.
   const onBeforeQuit = createQuitSequence({
     whenStarted: () => launched,
-    stop: () => runtime?.stop() ?? Promise.resolve(),
+    mayQuit: () => (forced || unsaved === undefined ? Promise.resolve(true) : unsaved.ask('quit')),
+    stop: () => {
+      leaving = true
+      return runtime?.stop() ?? Promise.resolve()
+    },
     quit: () => app.quit()
   })
   app.on('before-quit', onBeforeQuit)
