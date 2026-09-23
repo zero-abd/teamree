@@ -107,10 +107,6 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
             <span className="field__hint">
               {task.trim().length} / {MAX_AGENT_ARGS_CHARS} chars
             </span>
-          ) : branchName ? (
-            <span className="field__hint">
-              branch <code>{branchName}</code>
-            </span>
           ) : null}
         </label>
 

@@ -2,7 +2,7 @@
 // failed, and ready on paper but gone from disk. Everything a row can do besides
 // being opened is in one menu: right-click, the `⋯`, or the context-menu key.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { slugifyBranchName } from '@shared/branchName'
 import {
   hasCheckout,
@@ -84,6 +84,7 @@ export function WorktreeRow({
   const opener = useRef<HTMLElement | null>(null)
   const [renaming, setRenaming] = useState(false)
   const wasRenaming = useRef(false)
+  const describedBy = useId()
 
   // A field removed while focused leaves the focus on `document.body`; after a blur it is already elsewhere.
   useEffect(() => {
@@ -127,13 +128,47 @@ export function WorktreeRow({
   const branchSaysMore = worktree.branch !== slugifyBranchName(worktree.name)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
+  const stateId = `${describedBy}-state`
+  const factsId = `${describedBy}-facts`
+
+  const facts = (
+    <>
+      {ready ? <GitStatusChips status={status} /> : null}
+      {badge?.tone === 'clean' ? (
+        <span
+          className="worktree__merge worktree__merge--clean"
+          role="img"
+          aria-label={badge.detail}
+          title={badge.detail}
+        >
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <circle cx="3.5" cy="2.5" r="1.3" />
+            <circle cx="3.5" cy="9.5" r="1.3" />
+            <circle cx="8.5" cy="5" r="1.3" />
+            <path d="M3.5 3.8v4.4M8.5 6.3c0 1.6-2 2.2-5 2.2" />
+          </svg>
+        </span>
+      ) : badge ? (
+        <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
+          {badge.label}
+        </span>
+      ) : null}
+      {creating ? <span className="chip worktree__tag">creating</span> : null}
+      {failed ? <span className="chip worktree__tag worktree__tag--failed">failed</span> : null}
+      {missing ? (
+        <span className="chip worktree__tag worktree__tag--missing" title={`${worktree.path} is not on disk`}>
+          missing
+        </span>
+      ) : null}
+    </>
+  )
 
   const body = (
     <>
-      {/* The task name gets a line of its own but for the activity dot.
-        Everything else is a small fact about the branch, and sharing the
-        line below with the branch is what stops four badges from
-        squeezing the one thing that identifies the row. */}
+      {/* The task name gets a line of its own but for the activity dot. The
+        small facts about the branch share the line below with the branch, so
+        four badges cannot squeeze the name; with no branch to show they sit
+        beside the dot instead of alone on a line. */}
       <span className="worktree__title">
         {renaming ? (
           <WorktreeNameField name={worktree.name} onRename={onRename} onDone={() => setRenaming(false)} />
@@ -155,9 +190,16 @@ export function WorktreeRow({
             </span>
           </>
         )}
+        {branchSaysMore ? null : (
+          <span className="worktree__facts" id={factsId}>
+            {facts}
+          </span>
+        )}
         {tone ? (
           <span
+            id={stateId}
             className={dotClass(tone, unreadHere)}
+            role="img"
             title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
               unreadHere ? ' · unread' : ''
             }`}
@@ -165,37 +207,12 @@ export function WorktreeRow({
           />
         ) : null}
       </span>
-      <span className="worktree__meta">
-        {/* Kept when empty: it is the slack that holds the chips to the right edge. */}
-        <span className="worktree__branch">{branchSaysMore ? worktree.branch : null}</span>
-        {ready ? <GitStatusChips status={status} /> : null}
-        {badge?.tone === 'clean' ? (
-          <span
-            className="worktree__merge worktree__merge--clean"
-            role="img"
-            aria-label={badge.detail}
-            title={badge.detail}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <circle cx="3.5" cy="2.5" r="1.3" />
-              <circle cx="3.5" cy="9.5" r="1.3" />
-              <circle cx="8.5" cy="5" r="1.3" />
-              <path d="M3.5 3.8v4.4M8.5 6.3c0 1.6-2 2.2-5 2.2" />
-            </svg>
-          </span>
-        ) : badge ? (
-          <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
-            {badge.label}
-          </span>
-        ) : null}
-        {creating ? <span className="chip worktree__tag">creating</span> : null}
-        {failed ? <span className="chip worktree__tag worktree__tag--failed">failed</span> : null}
-        {missing ? (
-          <span className="chip worktree__tag worktree__tag--missing" title={`${worktree.path} is not on disk`}>
-            missing
-          </span>
-        ) : null}
-      </span>
+      {branchSaysMore ? (
+        <span className="worktree__meta" id={factsId}>
+          <span className="worktree__branch">{worktree.branch}</span>
+          {facts}
+        </span>
+      ) : null}
     </>
   )
 
@@ -244,6 +261,9 @@ export function WorktreeRow({
             }}
             disabled={creating || failed || missing}
             aria-current={active ? 'true' : undefined}
+            // Said as words with a pause between them, not the row's text run together.
+            aria-label={title.agent ? `${title.agent.text}, ${title.text}` : title.text}
+            aria-describedby={tone ? `${stateId} ${factsId}` : factsId}
           >
             {body}
           </button>

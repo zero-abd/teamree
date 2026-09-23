@@ -259,6 +259,25 @@ describe('a worktree that is ready', () => {
     expect(within(openButton()).queryByText('rewrite-the-pager')).toBeNull()
   })
 
+  // A chip alone on a second line reads as loose; with no branch there is no second line.
+  it('keeps its chips on the first line, just left of the dot, when the branch is left out', () => {
+    mount({ status: status({ unstaged: 1 }), terminals: [terminal({ agent: 'claude' })] })
+    expect(document.querySelector('.worktree__meta')).toBeNull()
+    const head = document.querySelector('.worktree__title') as HTMLElement
+    const chips = head.querySelector('.gitchips') as HTMLElement
+    expect(chips).not.toBeNull()
+    expect(chips.closest('.worktree__facts')?.nextElementSibling).toBe(head.lastElementChild)
+    expect(head.lastElementChild?.classList.contains('activity')).toBe(true)
+  })
+
+  it('keeps its chips beside the branch when the branch says more', () => {
+    mount({ worktree: worktree({ branch: 'ada/pager' }), status: status({ unstaged: 1 }) })
+    const meta = document.querySelector('.worktree__meta') as HTMLElement
+    expect(within(meta).getByText('ada/pager')).toBeTruthy()
+    expect(meta.querySelector('.gitchips')).not.toBeNull()
+    expect(document.querySelector('.worktree__title .gitchips')).toBeNull()
+  })
+
   it('draws a clean merge as a mark, with the sentence on hover', () => {
     mount({
       mergePreview: {
@@ -322,8 +341,34 @@ describe('one of several runs of a task', () => {
 
   it('reads agent first, then the task, and keeps the stored name on hover', () => {
     mount({ worktree: worktree({ name: 'Add a subtract function to codex' }), title })
-    expect(screen.getByRole('button', { name: /^codex ?Add a subtract function to/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'codex, Add a subtract function to' })).toBeTruthy()
     expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe('Add a subtract function to codex')
+  })
+
+  // Name first, then what state it is in: glued together, "claudeAdd a subtract…stopped" is one word.
+  it('is named agent, comma, task, and described by its state and changes', () => {
+    mount({
+      worktree: worktree({
+        name: 'Add a subtract function to calc claude',
+        branch: 'add-a-subtract-function-to-calc-claude'
+      }),
+      title: { text: 'Add a subtract function to calc', agent: { kind: 'claude', text: 'claude' } },
+      terminals: [terminal({ agent: 'claude', lastOutputAt: NOW - 90_000 })],
+      status: status({ unstaged: 1 })
+    })
+    const button = screen.getByRole('button', { name: 'claude, Add a subtract function to calc' })
+    expect(button.classList.contains('worktree__open')).toBe(true)
+    expect(
+      button
+        .getAttribute('aria-describedby')
+        ?.split(' ')
+        .map((id) => document.getElementById(id))
+    ).toEqual([screen.getByRole('img', { name: 'stopped' }), document.querySelector('.worktree__facts')])
+    expect(
+      within(document.querySelector('.worktree__facts') as HTMLElement)
+        .getByRole('img')
+        .getAttribute('aria-label')
+    ).toBe('git status: 1 uncommitted')
   })
 
   // The task pane is named after the worktree; saying it again under the row is noise.

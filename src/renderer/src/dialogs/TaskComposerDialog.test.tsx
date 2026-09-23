@@ -332,9 +332,10 @@ describe('what it submits', () => {
     await open()
     expect(screen.queryByText(/^branch/)).toBeNull()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager so it streams' } })
-    // Beside the field, and again in the line that says what will be branched
-    // from where — the two places somebody checks before pressing the button.
-    expect(screen.getAllByText('rewrite-the-pager-so-it-streams')).toHaveLength(2)
+    // Once, in the line that says what will be branched from where.
+    const name = screen.getByText('rewrite-the-pager-so-it-streams')
+    expect(name.closest('.field--task')).toBeNull()
+    expect(document.getElementById(startPoint().getAttribute('aria-describedby') ?? '')?.contains(name)).toBe(true)
   })
 })
 
