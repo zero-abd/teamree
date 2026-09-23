@@ -54,6 +54,9 @@ describe('reading a published menu', () => {
       // The tab walk is Control on every platform.
       'Control+Tab',
       'Control+Shift+Tab',
+      // And the file column's tabs, paged.
+      'Control+PageDown',
+      'Control+PageUp',
       // No key at all claims nothing from the platform.
       ''
     ]) {
@@ -74,7 +77,8 @@ describe('reading a published menu', () => {
       // Tab is Control's alone, and Control takes nothing else.
       'Control+D',
       'Control+Q',
-      'Control+Alt+Tab'
+      'Control+Alt+Tab',
+      'Control+Shift+PageDown'
     ]) {
       expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toBeNull()
     }
