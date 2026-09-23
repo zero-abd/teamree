@@ -158,6 +158,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
   const statuses = new Map<string, WorktreeStatus>()
   const terminals = new Map<string, FakeTerminal>()
   const layouts = new Map<string, Layout>()
+  const files = new Map<string, { content: string; modifiedAt: number }>()
   /** Rosters by project id, so joining one in the demo really does add a row. */
   const rosters = new Map<string, Member[]>()
   /** The relay each project meets on, so setting one in the demo takes effect. */
@@ -731,6 +732,26 @@ export function createSeededRuntimeClient(): RuntimeClient {
           : [],
         readAt: Date.now()
       }
+    },
+    // Held for the life of the page: a file pane here starts empty and keeps what it writes.
+    'file.read': ({ worktreeId, path }) => {
+      required(worktrees.get(worktreeId), 'worktree')
+      const file = files.get(`${worktreeId}:${path}`)
+      return {
+        worktreeId,
+        path,
+        content: file?.content ?? '',
+        exists: file !== undefined,
+        modifiedAt: file?.modifiedAt ?? 0,
+        size: file?.content.length ?? 0
+      }
+    },
+    'file.write': ({ worktreeId, path, content }) => {
+      required(worktrees.get(worktreeId), 'worktree')
+      const modifiedAt = Date.now()
+      files.set(`${worktreeId}:${path}`, { content, modifiedAt })
+      announce({ type: 'worktrees' })
+      return { worktreeId, path, modifiedAt, size: content.length }
     },
     'worktree.files': ({ worktreeId, path, limit }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')

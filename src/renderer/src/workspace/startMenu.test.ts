@@ -16,6 +16,7 @@ const codex: InstalledAgent = { kind: 'codex', command: 'codex', binary: '/opt/b
 
 const actions = (): StartMenuActions => ({
   newTerminal: vi.fn(),
+  newMarkdown: vi.fn(),
   startAgent: vi.fn(),
   openAgentSettings: vi.fn()
 })
@@ -23,22 +24,34 @@ const actions = (): StartMenuActions => ({
 describe('the rows', () => {
   it('lists a terminal, then every agent the runtime found, then the agent settings', () => {
     const items = startMenuItems([claude, codex], mac, actions())
-    expect(items.map((item) => item.label)).toEqual(['New terminal', 'claude', 'codex', 'Agent settings…'])
+    expect(items.map((item) => item.label)).toEqual([
+      'New terminal',
+      'New markdown',
+      'claude',
+      'codex',
+      'Agent settings…'
+    ])
   })
 
   it('keeps the agents in the order the runtime returned them', () => {
     const items = startMenuItems([codex, claude], mac, actions())
-    expect(items.map((item) => item.label)).toEqual(['New terminal', 'codex', 'claude', 'Agent settings…'])
+    expect(items.map((item) => item.label)).toEqual([
+      'New terminal',
+      'New markdown',
+      'codex',
+      'claude',
+      'Agent settings…'
+    ])
   })
 
   it('draws a rule before the agents and another before the settings', () => {
     const items = startMenuItems([claude, codex], mac, actions())
-    expect(items.map((item) => item.separated === true)).toEqual([false, true, false, true])
+    expect(items.map((item) => item.separated === true)).toEqual([false, false, true, false, true])
   })
 
   it('names the terminal chord on its row, and no other', () => {
     const items = startMenuItems([claude], mac, actions())
-    expect(items.map((item) => item.hint ?? '')).toEqual(['⌘T', '', ''])
+    expect(items.map((item) => item.hint ?? '')).toEqual(['⌘T', '⌘⇧M', '', ''])
   })
 
   it('offers nothing for an agent the runtime did not find', () => {
@@ -48,8 +61,8 @@ describe('the rows', () => {
 
   it('still offers the terminal and the settings when the probe found nothing', () => {
     const items = startMenuItems([], mac, actions())
-    expect(items.map((item) => item.label)).toEqual(['New terminal', 'Agent settings…'])
-    expect(items[1]?.separated).toBe(true)
+    expect(items.map((item) => item.label)).toEqual(['New terminal', 'New markdown', 'Agent settings…'])
+    expect(items[2]?.separated).toBe(true)
   })
 
   // The insertion point another pane kind is added at: a fixed row before the

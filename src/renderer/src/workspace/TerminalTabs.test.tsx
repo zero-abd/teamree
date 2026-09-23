@@ -3,7 +3,7 @@
 // The strip belongs to the open worktree only; its selected tab is the focused pane (none while a
 // watched pane has focus); and its end buttons are the only pointer way to split or open a pane.
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledAgent, Layout, PaneNode, Terminal } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
@@ -336,9 +336,9 @@ describe('the menu the + opens', () => {
       .getAllByRole('menuitem')
       .map((item) => item.querySelector('.row-menu__label')?.textContent ?? '')
 
-  it('lists a terminal, the agents the runtime found, and the agent settings', () => {
+  it('lists a terminal, a markdown page, the agents the runtime found, and the agent settings', () => {
     onePane()
-    expect(rows(open())).toEqual(['New terminal', 'claude', 'codex', 'Agent settings…'])
+    expect(rows(open())).toEqual(['New terminal', 'New markdown', 'claude', 'codex', 'Agent settings…'])
   })
 
   it('names the terminal chord on its row', () => {
@@ -349,7 +349,15 @@ describe('the menu the + opens', () => {
 
   it('lists no agent the runtime did not find', () => {
     onePane({ agents: [claude] })
-    expect(rows(open())).toEqual(['New terminal', 'claude', 'Agent settings…'])
+    expect(rows(open())).toEqual(['New terminal', 'New markdown', 'claude', 'Agent settings…'])
+  })
+
+  it('opens a markdown page in the worktree the strip belongs to', () => {
+    const newMarkdown = vi.fn()
+    onePane({ newMarkdown })
+    fireEvent.click(within(open()).getByRole('menuitem', { name: /New markdown/ }))
+    expect(newMarkdown).toHaveBeenCalledExactlyOnceWith('w1')
+    expect(createTerminal).not.toHaveBeenCalled()
   })
 
   it('opens a terminal in the worktree the strip belongs to', () => {
@@ -380,7 +388,8 @@ describe('the menu the + opens', () => {
     const menu = open()
     expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'New terminal' }))
     fireEvent.keyDown(menu, { key: 'ArrowDown' })
-    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'claude' }))
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: /New markdown/ }))
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
     fireEvent.keyDown(menu, { key: 'ArrowDown' })
     fireEvent.keyDown(menu, { key: 'Enter' })
     expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
@@ -598,5 +607,60 @@ describe('panes that have printed since they were read', () => {
     mount()
 
     expect(screen.getByRole('tab', { name: /claude/ }).closest('.tab')?.className).not.toContain('tab--unread')
+  })
+})
+
+describe('a markdown tab', () => {
+  const nameMarkdown = vi.fn()
+  const withPage = (overrides: Record<string, unknown> = {}): void => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: {
+        w1: layout(
+          'w1',
+          {
+            kind: 'split',
+            direction: 'row',
+            sizes: [0.5, 0.5],
+            children: [leaf('t1'), { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'docs/NOTES.md' }]
+          },
+          'file:1'
+        )
+      },
+      terminals: byId(terminal({ id: 't1', title: 'npm test' })),
+      nameMarkdown,
+      ...overrides
+    })
+    mount()
+  }
+
+  it('is named after its file, beside the terminals, and is the selected one when its pane has the focus', () => {
+    withPage()
+    expect(tabNames()).toEqual(['npm test', 'NOTES.md'])
+    expect(screen.getByRole('tab', { name: /NOTES\.md/ }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByRole('button', { name: 'Rename pane NOTES.md' })).toBeNull()
+  })
+
+  it('shows a dot while the page is ahead of the file, and a hollow one once it is saved', () => {
+    withPage({ unsavedFiles: { 'file:1': true } })
+    expect(screen.getByTestId('unsaved')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /NOTES\.md/ }).getAttribute('title')).toBe('NOTES.md · unsaved')
+    act(() => useWorkspaceStore.setState({ unsavedFiles: {} }))
+    expect(screen.queryByTestId('unsaved')).toBeNull()
+    expect(screen.getByTestId('saved')).toBeTruthy()
+  })
+
+  it('asks for the next file’s name in the strip, and hands it to the store', () => {
+    withPage({ namingMarkdown: 'w1' })
+    const field = screen.getByRole('textbox', { name: 'File name' })
+    fireEvent.change(field, { target: { value: 'plan' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(nameMarkdown).toHaveBeenCalledWith('plan')
+  })
+
+  it('closes through the same close the terminals use', () => {
+    withPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Close pane NOTES.md' }))
+    expect(closeTerminal).toHaveBeenCalledWith('file:1')
   })
 })

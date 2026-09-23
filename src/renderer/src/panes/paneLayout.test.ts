@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { PaneNode } from '@shared/entities'
 import {
+  appendPane,
   applyGutterDrag,
+  splitPaneWith,
   closePane,
   collectTerminalIds,
   leaf,
@@ -235,5 +237,31 @@ describe('the tree as it is drawn', () => {
   it('gives the whole tree back for a pane that is not in it', () => {
     expect(shownRoot(tree, 'gone')).toBe(tree)
     expect(shownRoot(null, 't1')).toBeNull()
+  })
+})
+
+describe('file leaves in the tree', () => {
+  const file: PaneNode = { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'NOTES.md' }
+
+  it('splits beside a pane with a leaf the caller built', () => {
+    const root = splitPaneWith(leaf('a'), 'a', 'row', file)
+    expect(root).toEqual({ kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leaf('a'), file] })
+    expect(collectTerminalIds(root)).toEqual(['a', 'file:1'])
+  })
+
+  it('fills the workspace with the file leaf itself, path and all', () => {
+    const root = splitPaneWith(leaf('a'), 'a', 'row', file)
+    expect(shownRoot(root, 'file:1')).toEqual(file)
+  })
+
+  it('appends at the top level, widening a same-direction row', () => {
+    expect(appendPane(null, file)).toEqual(file)
+    const row = appendPane(appendPane(leaf('a'), leaf('b')), file)
+    expect(row.kind).toBe('split')
+    if (row.kind !== 'split') return
+    expect(row.children).toEqual([leaf('a'), leaf('b'), file])
+    expect(row.sizes.reduce((sum, size) => sum + size, 0)).toBeCloseTo(1, 10)
+    const column = appendPane(row, leaf('c'), 'column')
+    expect(column.kind === 'split' && column.direction).toBe('column')
   })
 })

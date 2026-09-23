@@ -3,14 +3,18 @@
 // only ever touches the two panes either side of the handle it grabbed.
 
 import type { PaneNode, Terminal } from '@shared/entities'
+import { isFileLeaf } from '@shared/filePane'
 import { freshAgentLabel } from '@shared/paneRestore'
 import { ACTIVITY_LABEL, activityOf, paneNames } from '../sidebar/agentRows'
 import { TerminalView } from '../terminal/TerminalView'
-import { collectTerminalIds } from './paneLayout'
+import { FilePane } from './FilePane'
+import { collectLeaves } from './paneLayout'
 import { SplitFrame } from './SplitFrame'
 
 export type PaneCallbacks = {
   terminals: Record<string, Terminal>
+  /** The worktree a file pane's file is read from. */
+  worktreeId: string
   /** Each pane's name by id, the tab strip's names, worked out once at the root; callers leave it out. */
   names?: Readonly<Record<string, string>>
   focusedTerminalId: string | null
@@ -32,6 +36,18 @@ export function PaneTree({
   ...callbacks
 }: PaneCallbacks & { node: PaneNode; path: number[] }): React.JSX.Element {
   const names = callbacks.names ?? namesById(node, callbacks.terminals)
+  if (isFileLeaf(node)) {
+    return (
+      <FilePane
+        paneId={node.terminalId}
+        worktreeId={callbacks.worktreeId}
+        path={node.path}
+        focused={callbacks.focusedTerminalId === node.terminalId}
+        onFocus={() => callbacks.onFocus(node.terminalId)}
+        onClose={() => callbacks.onClose(node.terminalId)}
+      />
+    )
+  }
   if (node.kind === 'leaf') {
     return <PaneLeaf terminalId={node.terminalId} {...callbacks} names={names} />
   }
@@ -40,7 +56,10 @@ export function PaneTree({
 
 /** The tree's panes named together as `paneTabs` names them: label, agent, program, twins numbered. */
 function namesById(root: PaneNode, terminals: Readonly<Record<string, Terminal>>): Record<string, string> {
-  const ids = collectTerminalIds(root)
+  // Terminals only: a file pane is named after its file.
+  const ids = collectLeaves(root)
+    .filter((leaf) => !isFileLeaf(leaf))
+    .map((leaf) => leaf.terminalId)
   const names = paneNames(ids.map((id) => terminals[id] ?? { title: 'terminal', shell: '' }))
   return Object.fromEntries(ids.map((id, index) => [id, names[index] ?? 'terminal']))
 }

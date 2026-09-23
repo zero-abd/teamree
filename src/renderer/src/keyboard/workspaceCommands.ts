@@ -4,6 +4,7 @@
 
 import type { ConsentRequest, Layout, WorktreeStatus } from '@shared/entities'
 import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
+import { isFilePaneId } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { collectTerminalIds } from '../panes/paneLayout'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
@@ -24,6 +25,8 @@ export type CommandState = {
   statuses: Readonly<Record<string, Partial<WorktreeStatus>>>
   /** A push already in flight, which is the one thing that makes Push inert. */
   pushing: boolean
+  /** A markdown editor holds the keyboard; ⌘B and ⌘E are bold and code there. */
+  editingMarkdown?: boolean
 }
 
 /** The store's own methods, named so this module does not import the store. */
@@ -31,6 +34,7 @@ export type CommandActions = {
   splitFocusedPane: (direction: 'row' | 'column') => Promise<void>
   closeTerminal: (terminalId: string) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
+  newMarkdown: (worktreeId: string) => void
   closeWatchedPane: (id: string) => void
   focusNextPane: () => void
   focusPreviousPane: () => void
@@ -89,12 +93,17 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
   switch (command) {
     case 'split-right':
     case 'split-down':
-    case 'find-in-pane':
       return ownFocusedPane(state) !== null
+    case 'find-in-pane': {
+      // A file pane has no scrollback to search.
+      const focused = ownFocusedPane(state)
+      return focused !== null && !isFilePaneId(focused)
+    }
     case 'close-pane':
       // Either kind: closing a teammate's pane is how a watch stops.
       return state.focusedWatchId !== null || activeLayout(state)?.focusedTerminalId != null
     case 'new-terminal':
+    case 'new-markdown':
       // A worktree whose checkout has gone from disk would fail with a path.
       return (
         state.activeWorktreeId !== null &&
@@ -124,12 +133,14 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
       // Nothing already in flight: `pushActiveWorktree` returns early while one is.
       return !state.pushing && (activeStatus(state)?.ahead ?? 0) > 0
     case 'toggle-sidebar':
-    case 'open-palette':
     case 'open-dashboard':
+      // Greyed while the editor types: on macOS only a disabled item lets ⌘B and ⌘E reach the page.
+      return state.editingMarkdown !== true
+    case 'open-palette':
     case 'open-appearance':
     case 'open-settings':
     case 'open-help':
-      // Five views and a sidebar, none of which needs anything to be open.
+      // Four views, none of which needs anything to be open.
       return true
   }
 }
@@ -157,6 +168,9 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     }
     case 'new-terminal':
       if (store.activeWorktreeId) void store.createTerminal(store.activeWorktreeId)
+      break
+    case 'new-markdown':
+      if (store.activeWorktreeId) store.newMarkdown(store.activeWorktreeId)
       break
     case 'new-worktree': {
       const projectId = projectForNewTask(store)

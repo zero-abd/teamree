@@ -86,6 +86,7 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     splitFocusedPane: vi.fn(async () => {}),
     closeTerminal: vi.fn(async () => {}),
     createTerminal: vi.fn(async () => {}),
+    newMarkdown: vi.fn(),
     closeWatchedPane: vi.fn(),
     focusNextPane: vi.fn(),
     focusPreviousPane: vi.fn(),
@@ -157,6 +158,31 @@ describe('what a window can be asked to do', () => {
     expect(isCommandAvailable('new-terminal', WORKING)).toBe(true)
   })
 
+  it('offers a new markdown pane on the same terms as a terminal', () => {
+    expect(isCommandAvailable('new-markdown', EMPTY)).toBe(false)
+    expect(isCommandAvailable('new-markdown', WORKING)).toBe(true)
+    const gone = { ...WORKING, worktrees: [{ id: 'w1', projectId: 'p1', missing: true as const }] }
+    expect(isCommandAvailable('new-markdown', gone)).toBe(false)
+  })
+
+  // On macOS a lit menu item takes its chord before the page sees it.
+  it('lends the sidebar and board chords to a markdown editor while it is being typed in', () => {
+    const editing = { ...WORKING, editingMarkdown: true }
+    expect(isCommandAvailable('toggle-sidebar', editing)).toBe(false)
+    expect(isCommandAvailable('open-dashboard', editing)).toBe(false)
+    expect(isCommandAvailable('open-palette', editing)).toBe(true)
+    expect(isCommandAvailable('close-pane', editing)).toBe(true)
+    expect(isCommandAvailable('toggle-sidebar', WORKING)).toBe(true)
+  })
+
+  it('withholds find from a file pane, which has no scrollback', () => {
+    const layouts = {
+      w1: { worktreeId: 'w1', root: { kind: 'leaf' as const, terminalId: 'file:1' }, focusedTerminalId: 'file:1' }
+    }
+    expect(isCommandAvailable('find-in-pane', { ...WORKING, layouts })).toBe(false)
+    expect(isCommandAvailable('split-right', { ...WORKING, layouts })).toBe(true)
+  })
+
   // Open but the directory is gone: the shell would have nowhere to start.
   it('withholds a new terminal from a worktree whose checkout is not on disk', () => {
     const gone = { ...WORKING, worktrees: [{ id: 'w1', projectId: 'p1', missing: true as const }] }
@@ -224,6 +250,7 @@ describe('running a command', () => {
       ['split-down', 'splitFocusedPane', ['column']],
       ['close-pane', 'closeTerminal', ['t1']],
       ['new-terminal', 'createTerminal', ['w1']],
+      ['new-markdown', 'newMarkdown', ['w1']],
       ['new-worktree', 'openDialog', [{ kind: 'new-task', projectId: 'p1' }]],
       ['toggle-sidebar', 'toggleSidebar', []],
       ['toggle-right-panel', 'toggleRightPanel', []],

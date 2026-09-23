@@ -764,11 +764,13 @@ it('offers the + menu the agents agent.list reported, in its order', async () =>
   expect(reported.length).toBeGreaterThan(0)
   const items = startMenuItems(useWorkspaceStore.getState().agents, resolvePlatformModifier('darwin'), {
     newTerminal: () => {},
+    newMarkdown: () => {},
     startAgent: () => {},
     openAgentSettings: () => {}
   })
   expect(items.map((item) => item.label)).toEqual([
     'New terminal',
+    'New markdown',
     ...reported.map((agent) => agent.command),
     'Agent settings…'
   ])

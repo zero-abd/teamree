@@ -1,0 +1,442 @@
+/* Markdown pane: the frame and bar every pane wears, prose held to a reading width. */
+
+.pane--markdown {
+  background: var(--bg-window);
+}
+
+/* The bar's dot: the file is on disk, or the page is ahead of it. */
+.md-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 99px;
+  border: 1px solid var(--fg-muted);
+  background: transparent;
+}
+
+.md-dot--unsaved {
+  border-color: var(--warning);
+  background: var(--warning);
+}
+
+.md-artifact-button {
+  margin-left: auto;
+}
+
+.md-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.md-content {
+  min-height: 100%;
+}
+
+.md-editor {
+  max-width: 72ch;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: var(--s6) var(--s5) 40vh;
+  outline: none;
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.6;
+  caret-color: var(--accent-bright);
+}
+
+.md-editor > * + * {
+  margin-top: var(--s2);
+}
+
+.md-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--fg-muted);
+  pointer-events: none;
+}
+
+.md-editor h1,
+.md-editor h2,
+.md-editor h3 {
+  margin: var(--s5) 0 var(--s2);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.md-editor h1 {
+  font-size: 26px;
+}
+
+.md-editor h2 {
+  font-size: 20px;
+}
+
+.md-editor h3 {
+  font-size: 16px;
+}
+
+.md-editor h1:first-child {
+  margin-top: 0;
+}
+
+.md-editor p {
+  margin: 0;
+}
+
+.md-editor a {
+  color: var(--accent-bright);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  cursor: pointer;
+}
+
+.md-editor ul,
+.md-editor ol {
+  margin: 0;
+  padding-left: 1.6em;
+  list-style: disc;
+}
+
+.md-editor ol {
+  list-style: decimal;
+}
+
+.md-editor li + li {
+  margin-top: 2px;
+}
+
+.md-editor li p {
+  margin: 0;
+}
+
+.md-editor ul[data-type='taskList'] {
+  padding-left: 0.2em;
+  list-style: none;
+}
+
+.md-editor ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+}
+
+.md-editor ul[data-type='taskList'] li > label {
+  flex: none;
+  margin-top: 0.3em;
+}
+
+.md-editor ul[data-type='taskList'] li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.md-editor ul[data-type='taskList'] li[data-checked='true'] > div {
+  color: var(--fg-muted);
+  text-decoration: line-through;
+}
+
+.md-editor input[type='checkbox'] {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.md-editor blockquote {
+  margin: 0;
+  padding: var(--s1) var(--s4);
+  border-left: 3px solid var(--line-strong);
+  color: var(--fg-secondary);
+}
+
+.md-editor code {
+  padding: 1px 4px;
+  border-radius: var(--r1);
+  background: var(--bg-raised);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.md-code {
+  /* The patch's syntax palette, the terminal's bright half. */
+  --syntax-keyword: var(--term-bright-magenta);
+  --syntax-string: var(--term-bright-green);
+  --syntax-number: var(--term-bright-yellow);
+  --syntax-comment: var(--fg-muted);
+  position: relative;
+  margin: var(--s2) 0;
+}
+
+.md-code pre {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.md-code pre code {
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.md-code .hljs-keyword,
+.md-code .hljs-built_in,
+.md-code .hljs-selector-tag,
+.md-code .hljs-literal,
+.md-code .hljs-type {
+  color: var(--syntax-keyword);
+}
+
+.md-code .hljs-string,
+.md-code .hljs-regexp,
+.md-code .hljs-addition,
+.md-code .hljs-attr,
+.md-code .hljs-symbol {
+  color: var(--syntax-string);
+}
+
+.md-code .hljs-number,
+.md-code .hljs-title,
+.md-code .hljs-variable,
+.md-code .hljs-template-variable,
+.md-code .hljs-selector-class {
+  color: var(--syntax-number);
+}
+
+.md-code .hljs-comment,
+.md-code .hljs-quote,
+.md-code .hljs-meta,
+.md-code .hljs-deletion {
+  color: var(--syntax-comment);
+}
+
+.md-code__language {
+  position: absolute;
+  top: var(--s1);
+  right: var(--s1);
+  width: 8ch;
+  padding: 1px var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+
+.md-code__language:hover,
+.md-code__language:focus {
+  border-color: var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--fg);
+  outline: none;
+}
+
+.md-editor hr {
+  margin: var(--s4) 0;
+  border: 0;
+  border-top: 1px solid var(--line-strong);
+}
+
+.md-editor table {
+  border-collapse: collapse;
+  margin: var(--s2) 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.md-editor th,
+.md-editor td {
+  position: relative;
+  min-width: 4ch;
+  padding: var(--s1) var(--s2);
+  border: 1px solid var(--line-strong);
+  vertical-align: top;
+  text-align: left;
+}
+
+.md-editor th {
+  background: var(--bg-raised);
+  font-weight: 600;
+}
+
+.md-editor .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent-soft);
+  pointer-events: none;
+}
+
+.md-image {
+  display: block;
+  max-width: 100%;
+  margin: var(--s2) 0;
+  border-radius: var(--r2);
+}
+
+.md-html {
+  margin: var(--s2) 0;
+  padding: var(--s2) var(--s3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r2);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.md-html-inline {
+  color: var(--fg-muted);
+}
+
+/* The artifact card: one line, the title as the button, the address beside. */
+.md-artifact {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin: var(--s2) 0;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+}
+
+.md-artifact__open {
+  flex: none;
+  padding: 2px var(--s3);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r1);
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.md-artifact__open:hover {
+  background: var(--accent-line);
+  color: var(--fg);
+}
+
+.md-artifact__url {
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ProseMirror-selectednode.md-artifact,
+.md-editor .ProseMirror-selectednode {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 1px;
+}
+
+/* The `/` menu, at the caret. */
+.md-menu {
+  position: absolute;
+  z-index: 4;
+  width: 240px;
+  max-height: 280px;
+  margin: 0;
+  padding: var(--s1);
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  list-style: none;
+}
+
+.md-menu__row {
+  display: flex;
+  flex-direction: column;
+  padding: var(--s1) var(--s2);
+  border-radius: var(--r1);
+  cursor: pointer;
+}
+
+.md-menu__row--current {
+  background: var(--bg-press);
+}
+
+.md-menu__label {
+  color: var(--fg);
+  font-size: var(--text-base);
+}
+
+.md-menu__detail {
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The toolbar over a selection. */
+.md-toolbar {
+  display: flex;
+  position: absolute;
+  z-index: 4;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+}
+
+.md-toolbar__button {
+  min-width: 24px;
+  height: 22px;
+  padding: 0 var(--s2);
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.md-toolbar__button:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.md-toolbar__button--on {
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+.md-toolbar__turn,
+.md-toolbar__href {
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.md-toolbar__href {
+  width: 200px;
+  padding: 0 var(--s2);
+}

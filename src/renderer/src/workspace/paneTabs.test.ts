@@ -124,3 +124,18 @@ describe('paneTabTitle', () => {
     expect(failed).toBe(`npm test · ${ACTIVITY_LABEL.failed}`)
   })
 })
+
+describe('file tabs', () => {
+  it('names a file leaf after its file, with no activity and its kind said', () => {
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leaf('a'), { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'docs/NOTES.md' }]
+    }
+    const tabs = paneTabs(root, { a: terminal({ id: 'a', title: 'zsh' }) })
+    expect(tabs[1]).toEqual({ terminalId: 'file:1', label: 'NOTES.md', activity: null, kind: 'file' })
+    expect(tabs[0]?.kind).toBeUndefined()
+    expect(paneTabTitle(tabs[1]!)).toBe('NOTES.md')
+  })
+})

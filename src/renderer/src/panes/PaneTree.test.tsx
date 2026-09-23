@@ -27,6 +27,14 @@ vi.mock('../terminal/TerminalView', () => ({
   )
 }))
 
+// And the page, which owns an editor and a file: the tree's job is to put it
+// in the leaf and hand it the path.
+vi.mock('../markdown/MarkdownPane', () => ({
+  MarkdownPane: ({ paneId, path, focused }: { paneId: string; path: string; focused: boolean }) => (
+    <div data-testid={`page-${paneId}`} data-path={path} data-focused={String(focused)} />
+  )
+}))
+
 const { PaneTree } = await import('./PaneTree')
 const { shownRoot } = await import('./paneLayout')
 
@@ -54,6 +62,7 @@ function mount(node: PaneNode, terminals: Terminal[], focusedTerminalId: string 
     <PaneTree
       node={node}
       path={[]}
+      worktreeId="w1"
       terminals={Object.fromEntries(terminals.map((entry) => [entry.id, entry]))}
       focusedTerminalId={focusedTerminalId}
       onFocus={onFocus}
@@ -371,5 +380,24 @@ describe('one pane filling the workspace', () => {
     mount(shownRoot(tree, null)!, panes, 't2')
     expect(screen.getByRole('region', { name: 'claude' })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'zsh' })).toBeTruthy()
+  })
+})
+
+describe('a file leaf', () => {
+  it('is drawn as the page for its file, beside the terminals, and focused when the layout says so', () => {
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [
+        { kind: 'leaf', terminalId: 't1' },
+        { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'docs/NOTES.md' }
+      ]
+    }
+    mount(root, [terminal('t1')], 'file:1')
+    expect(screen.getByTestId('surface-t1').dataset.focused).toBe('false')
+    const page = screen.getByTestId('page-file:1')
+    expect(page.dataset.path).toBe('docs/NOTES.md')
+    expect(page.dataset.focused).toBe('true')
   })
 })

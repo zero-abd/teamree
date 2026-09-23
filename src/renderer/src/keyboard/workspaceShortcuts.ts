@@ -9,6 +9,7 @@ export type WorkspaceCommand =
   | 'split-down'
   | 'close-pane'
   | 'new-terminal'
+  | 'new-markdown'
   | 'new-worktree'
   | 'toggle-sidebar'
   | 'toggle-right-panel'
@@ -38,6 +39,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'split-down', chord: { key: 'd', shift: true }, title: 'Split pane down' },
   { command: 'close-pane', chord: { key: 'w' }, title: 'Close pane' },
   { command: 'new-terminal', chord: { key: 't' }, title: 'New terminal' },
+  // Shifted, because ⌘M is the platform's minimise.
+  { command: 'new-markdown', chord: { key: 'm', shift: true }, title: 'New markdown' },
   { command: 'new-worktree', chord: { key: 'n' }, title: 'New task' },
   { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Toggle sidebar' },
   // J: the side-panel key in the editors people run in these panes.
