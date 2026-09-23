@@ -158,7 +158,10 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'open-appearance': 'appearance theme colour color dark black contrast accent ground swatch',
   'commit-changes': 'commit changes diff git stage staged message files review',
   'push-worktree': 'push send remote origin upload publish branch ahead',
-  'open-help': 'help shortcuts keys keyboard worktree cli docs how what'
+  'open-help': 'help shortcuts keys keyboard worktree cli docs how what',
+  'bigger-text': 'bigger text font size zoom in larger increase terminal',
+  'smaller-text': 'smaller text font size zoom out decrease terminal',
+  'actual-size': 'actual size reset text font default zoom terminal'
 }
 
 /** The rows that are the palette's own, with no command and no menu item. */

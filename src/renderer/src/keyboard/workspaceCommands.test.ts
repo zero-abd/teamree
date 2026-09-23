@@ -101,7 +101,8 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     closeDialog: vi.fn(),
     toggleSettings: vi.fn(),
     showRightPanelTab: vi.fn(),
-    pushActiveWorktree: vi.fn(async () => {})
+    pushActiveWorktree: vi.fn(async () => {}),
+    setTerminalFontSize: vi.fn()
   } as unknown as CommandActions & Record<string, ReturnType<typeof vi.fn>>
 }
 
@@ -300,9 +301,16 @@ describe('running a command', () => {
       const store = workspace(EMPTY)
       runWorkspaceCommand(command, store)
       if (
-        ['toggle-sidebar', 'open-palette', 'open-dashboard', 'open-appearance', 'open-settings', 'open-help'].includes(
-          command
-        )
+        [
+          'toggle-sidebar',
+          'open-palette',
+          'open-dashboard',
+          'open-appearance',
+          'open-settings',
+          'open-help',
+          'bigger-text',
+          'smaller-text'
+        ].includes(command)
       ) {
         continue
       }
@@ -316,6 +324,30 @@ describe('running a command', () => {
       runWorkspaceCommand(command, store)
       expect(callCount(store), command).toBe(0)
     }
+  })
+})
+
+describe('the text size', () => {
+  it('steps the terminal text by a pixel and resets it to 12', () => {
+    const cases: Array<[WorkspaceCommand, number, number]> = [
+      ['bigger-text', 12, 13],
+      ['smaller-text', 12, 11],
+      ['actual-size', 18, 12]
+    ]
+    for (const [command, from, to] of cases) {
+      const store = workspace({ ...EMPTY, terminalFontSize: from })
+      runWorkspaceCommand(command, store)
+      expect(store.setTerminalFontSize, command).toHaveBeenCalledExactlyOnceWith(to)
+    }
+  })
+
+  it('greys each item at the size where it would do nothing', () => {
+    expect(isCommandAvailable('bigger-text', { ...EMPTY, terminalFontSize: 24 })).toBe(false)
+    expect(isCommandAvailable('bigger-text', { ...EMPTY, terminalFontSize: 23 })).toBe(true)
+    expect(isCommandAvailable('smaller-text', { ...EMPTY, terminalFontSize: 9 })).toBe(false)
+    expect(isCommandAvailable('smaller-text', { ...EMPTY, terminalFontSize: 10 })).toBe(true)
+    expect(isCommandAvailable('actual-size', { ...EMPTY, terminalFontSize: 12 })).toBe(false)
+    expect(isCommandAvailable('actual-size', { ...EMPTY, terminalFontSize: 13 })).toBe(true)
   })
 })
 

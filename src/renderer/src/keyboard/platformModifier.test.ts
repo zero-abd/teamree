@@ -119,6 +119,17 @@ describe('workspace shortcuts', () => {
     expect(commandForEvent(event({ key: 'ArrowUp', metaKey: true }), mac)).toBeNull()
   })
 
+  // ⌘+ is shift and = on a US keyboard and its own key elsewhere; both arrive as `+`.
+  it('reads ⌘=, ⌘+, ⌘− and ⌘0 as the text size', () => {
+    expect(commandForEvent(event({ key: '=', metaKey: true }), mac)).toBe('bigger-text')
+    expect(commandForEvent(event({ key: '+', metaKey: true, shiftKey: true }), mac)).toBe('bigger-text')
+    expect(commandForEvent(event({ key: '+', metaKey: true }), mac)).toBe('bigger-text')
+    expect(commandForEvent(event({ key: '-', metaKey: true }), mac)).toBe('smaller-text')
+    expect(commandForEvent(event({ key: '0', metaKey: true }), mac)).toBe('actual-size')
+    expect(commandForEvent(event({ key: '=', ctrlKey: true }), pc)).toBe('bigger-text')
+    expect(commandForEvent(event({ key: '+', metaKey: true, altKey: true }), mac)).toBeNull()
+  })
+
   it('claims nothing without the modifier', () => {
     expect(commandForEvent(event({ key: 'd' }), mac)).toBeNull()
     expect(commandForEvent(event({ key: 'd', ctrlKey: true }), mac)).toBeNull()

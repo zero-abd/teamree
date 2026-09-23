@@ -216,6 +216,29 @@ describe('the window’s own commands in the menu bar', () => {
     expect(labelsOf(template, 'Help')).toEqual([shipped('open-help')])
   })
 
+  // ⌘+ sizes the text in the panes, as in every terminal; the window itself keeps its size.
+  it('puts the text size where the zoom roles were, and no zoom role anywhere', () => {
+    const template = applicationMenuTemplate({
+      platform: 'darwin',
+      commands: { items: menuBarSpec(EMPTY), choose: () => {} }
+    })
+    for (const role of ['resetZoom', 'zoomIn', 'zoomOut'] as const) expect(roles(template)).not.toContain(role)
+    expect(labelsOf(template, 'View').slice(-8)).toEqual([
+      '—',
+      'Actual Size',
+      'Bigger Text',
+      'Smaller Text',
+      '—',
+      'togglefullscreen',
+      '—',
+      'toggleDevTools'
+    ])
+    const accelerators = Object.fromEntries(items(template).map((item) => [item.label, item.accelerator]))
+    expect(accelerators['Bigger Text']).toBe('CommandOrControl+=')
+    expect(accelerators['Smaller Text']).toBe('CommandOrControl+-')
+    expect(accelerators['Actual Size']).toBe('CommandOrControl+0')
+  })
+
   // The `help` role is what attaches the system's own search field on macOS.
   it('gives the Help menu the role that makes it the platform’s Help menu', () => {
     const template = applicationMenuTemplate({ platform: 'darwin', commands: published() })

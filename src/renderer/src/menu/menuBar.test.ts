@@ -76,6 +76,9 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     expect(acceleratorForChord({ key: 'ArrowUp', alt: true })).toBe('CommandOrControl+Alt+Up')
     expect(acceleratorForChord({ key: 'ArrowDown', alt: true })).toBe('CommandOrControl+Alt+Down')
     expect(acceleratorForChord({ key: 'Enter', shift: true })).toBe('CommandOrControl+Shift+Enter')
+    expect(acceleratorForChord({ key: '=' })).toBe('CommandOrControl+=')
+    expect(acceleratorForChord({ key: '-' })).toBe('CommandOrControl+-')
+    expect(acceleratorForChord({ key: '0' })).toBe('CommandOrControl+0')
   })
 
   // Labels come from the table too: one wording per command.
@@ -121,13 +124,14 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'focus-next-pane',
       'expand-pane'
     ])
+    expect(sectionOrder('text')).toEqual(['actual-size', 'bigger-text', 'smaller-text'])
     expect(sectionOrder('edit')).toEqual(['find-in-pane'])
     expect(sectionOrder('help')).toEqual(['open-help'])
   })
 
   // Every section name must be one main actually builds, or the item is never seen.
   it('reads every item under one of the menus that exist', () => {
-    const menus = ['application', 'file', 'edit', 'view', 'window', 'help']
+    const menus = ['application', 'file', 'edit', 'view', 'text', 'window', 'help']
     for (const item of menuBarSpec(WORKING)) expect(menus, item.command).toContain(item.section)
   })
 })
@@ -157,13 +161,18 @@ describe('what the menu bar says can be done', () => {
       'open-dashboard': true,
       'open-appearance': true,
       'open-settings': true,
-      'open-help': true
+      'open-help': true,
+      'bigger-text': true,
+      'smaller-text': true,
+      'actual-size': false
     })
   })
 
   it('lights them once there is a worktree open with a pane in it', () => {
-    // All but the walks (one pane, one worktree: nowhere to go) and the git pair (no status read yet).
+    // All but the walks (one pane, one worktree: nowhere to go), the git pair (no status read yet) and
+    // Actual Size (already there).
     const nowhere = [
+      'actual-size',
       'focus-next-pane',
       'focus-previous-pane',
       'previous-worktree',

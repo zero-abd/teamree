@@ -26,6 +26,9 @@ export type WorkspaceCommand =
   | 'commit-changes'
   | 'push-worktree'
   | 'open-help'
+  | 'bigger-text'
+  | 'smaller-text'
+  | 'actual-size'
 
 export type WorkspaceShortcut = {
   command: WorkspaceCommand
@@ -67,15 +70,21 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'commit-changes', title: 'Commit…' },
   { command: 'push-worktree', title: 'Push' },
   // Unshifted slash: shift+slash yields `?`, whose key name is not this one.
-  { command: 'open-help', chord: { key: '/' }, title: 'Shortcuts' }
+  { command: 'open-help', chord: { key: '/' }, title: 'Shortcuts' },
+  // Terminal text, not the window: `commandForEvent` also reads `+` as `=`.
+  { command: 'bigger-text', chord: { key: '=' }, title: 'Bigger Text' },
+  { command: 'smaller-text', chord: { key: '-' }, title: 'Smaller Text' },
+  { command: 'actual-size', chord: { key: '0' }, title: 'Actual Size' }
 ]
 
 export function commandForEvent(
   event: ModifierState & { key: string },
   modifier: PlatformModifier
 ): WorkspaceCommand | null {
+  // ⌘+ is shift+= on a US layout and an unshifted key on others; either way it is ⌘=.
+  const pressed = event.key === '+' ? { ...event, key: '=', shiftKey: false } : event
   for (const shortcut of WORKSPACE_SHORTCUTS) {
-    if (shortcut.chord && matchesChord(event, shortcut.chord, modifier)) return shortcut.command
+    if (shortcut.chord && matchesChord(pressed, shortcut.chord, modifier)) return shortcut.command
   }
   return null
 }
