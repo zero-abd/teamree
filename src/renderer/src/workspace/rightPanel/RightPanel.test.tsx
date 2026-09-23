@@ -328,7 +328,8 @@ describe('the files tab', () => {
     mount()
     const tree = await screen.findByRole('tree', { name: 'Files' })
     fireEvent.contextMenu(await within(tree).findByRole('button', { name: /^README\.md/ }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: /^Open in/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Open in' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'mate' }))
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite/README.md', command: 'mate' })
     )

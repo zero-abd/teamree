@@ -30,6 +30,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere } from './handsHere'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
+import { showPane } from './shownPanes'
 import { TERMINAL_LINE_HEIGHT } from './paneMetrics'
 import { readSearchDecorations, readTerminalTheme } from './terminalTheme'
 
@@ -129,6 +130,7 @@ export function TerminalView({
     })
 
     term.open(host)
+    const unshow = showPane(terminalId, term)
     copyOnSelect(term, () => optionsRef.current.copyOnSelect, copyText)
 
     // WebGL is the fast path; a machine without a working context simply keeps
@@ -268,6 +270,7 @@ export function TerminalView({
       subscription?.close()
       hands.stop()
       webgl?.dispose()
+      unshow()
       term.dispose()
       termRef.current = null
       searchRef.current = null

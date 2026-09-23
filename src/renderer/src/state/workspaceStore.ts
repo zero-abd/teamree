@@ -71,6 +71,8 @@ import {
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { newPaneSize } from '../terminal/paneMetrics'
+import { shownText } from '../terminal/shownPanes'
+import { replayLines } from '@shared/outputEvidence'
 import {
   clampSidebarWidth,
   readStoredSidebarWidth,
@@ -130,9 +132,9 @@ export type DialogState =
   /** Raised only when the runtime has already refused: there is something here to lose. */
   | { kind: 'confirm-remove'; worktreeId: string; reason: string; intent: RemoveIntent }
   /** Raised only when the pane is doing work a close would kill. See `closePaneModel`. */
-  | { kind: 'confirm-close-pane'; terminalId: string }
-  /** A file pane with edits not on disk. */
-  | { kind: 'confirm-close-file'; terminalId: string }
+  | { kind: 'confirm-close-pane'; terminalId: string; rest?: readonly string[] }
+  /** A file pane with edits not on disk. `rest` is what Close Others closes after either answer. */
+  | { kind: 'confirm-close-file'; terminalId: string; rest?: readonly string[] }
   /** Throwing away a path's unstaged change, or one hunk of it. */
   | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk }
   | null
@@ -240,6 +242,8 @@ type WorkspaceState = {
   editingMarkdown: boolean
   /** The worktree whose strip asks for a file name, because NOTES.md is already open. */
   namingMarkdown: string | null
+  /** The pane whose tab shows the name field, or null. */
+  editingPaneName: string | null
   /** Bumped when the runtime says a worktree's files moved; a file pane re-reads on it. */
   worktreeFilesEpoch: number
 
@@ -397,6 +401,12 @@ type WorkspaceState = {
   closeTerminal: (terminalId: string) => Promise<void>
   /** Names a pane, or clears the name when given nothing. */
   renamePane: (terminalId: string, label: string) => Promise<void>
+  /** Opens the tab's name field on a pane, or shuts it with null. */
+  editPaneName: (terminalId: string | null) => void
+  /** Closes panes in order, stopping at each that `closeTerminal` would ask about; either answer moves on. */
+  closePanes: (terminalIds: readonly string[]) => Promise<void>
+  /** Every pane of the open worktree but this one, which takes the focus. */
+  closeOtherPanes: (terminalId: string) => Promise<void>
   /** Goes through with it, once the question this app asked has been answered. */
   forceCloseTerminal: (terminalId: string) => Promise<void>
   /** Runs an exited pane's program again, in the same pane. */
@@ -415,6 +425,8 @@ type WorkspaceState = {
   focusPreviousPane: () => void
   /** Fills the workspace with the focused pane, or gives the tree back. */
   toggleExpandedPane: () => void
+  /** Fills the workspace with this pane, or gives the tree back when it already does. */
+  expandPane: (terminalId: string) => void
   /** Opens the worktree one row along the sidebar, wrapping at both ends. */
   stepWorktree: (step: 1 | -1) => void
   applySplitSizes: (worktreeId: string, path: number[], sizes: number[]) => void
@@ -565,6 +577,8 @@ type WorkspaceState = {
   openInEditor: (path: string, command: string | undefined, what: string) => Promise<void>
   /** Puts text on the clipboard, and says so. `what` names it in the notice. */
   copyToClipboard: (text: string, what: string) => Promise<void>
+  /** Copies the text a pane shows, or its retained output replayed when it is not on screen. */
+  copyPaneOutput: (terminalId: string, name: string) => Promise<void>
   setSidebarWidth: (width: number) => void
   toggleSidebar: () => void
   /**
@@ -986,6 +1000,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const filePathOf = (paneId: string): string | undefined =>
     fileLeavesIn(activeLayout()?.root ?? null).find((leaf) => leaf.terminalId === paneId)?.path
 
+  /** The question closing this pane needs first, or null: see `closePaneWarning`. A markdown page saves as it goes. */
+  const closeQuestion = (paneId: string): 'confirm-close-pane' | 'confirm-close-file' | null => {
+    if (isFilePaneId(paneId)) {
+      return get().unsavedFiles[paneId] && !isMarkdownPath(filePathOf(paneId) ?? '') ? 'confirm-close-file' : null
+    }
+    return closePaneWarning(get().terminals[paneId]) === null ? null : 'confirm-close-pane'
+  }
+
   /**
    * Moves the focus `step` places around the pane cycle, wrapping. One walk for both directions, so
    * the two chords undo each other; teammates' panes are in the cycle as they are in the tree.
@@ -1016,6 +1038,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     unsavedFiles: {},
     editingMarkdown: false,
     namingMarkdown: null,
+    editingPaneName: null,
     worktreeFilesEpoch: 0,
 
     mergePreviews: {},
@@ -1414,19 +1437,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
      * The question lives here and not on the buttons, so a fourth button is not written without it.
      */
     async closeTerminal(terminalId) {
-      if (isFilePaneId(terminalId)) {
-        // A markdown page saves as it goes; any other file with unsaved edits asks first.
-        if (get().unsavedFiles[terminalId] && !isMarkdownPath(filePathOf(terminalId) ?? '')) {
-          set({ dialog: { kind: 'confirm-close-file', terminalId } })
-        } else await get().forceCloseTerminal(terminalId)
-        return
+      await get().closePanes([terminalId])
+    },
+
+    async closePanes(terminalIds) {
+      for (const [index, terminalId] of terminalIds.entries()) {
+        const kind = closeQuestion(terminalId)
+        if (kind !== null) {
+          const rest = terminalIds.slice(index + 1)
+          set({ dialog: { kind, terminalId, ...(rest.length > 0 ? { rest } : {}) } })
+          return
+        }
+        await get().forceCloseTerminal(terminalId)
       }
-      const warning = closePaneWarning(get().terminals[terminalId])
-      if (warning !== null) {
-        set({ dialog: { kind: 'confirm-close-pane', terminalId } })
-        return
-      }
-      await get().forceCloseTerminal(terminalId)
+    },
+
+    async closeOtherPanes(terminalId) {
+      const others = collectTerminalIds(activeLayout()?.root ?? null).filter((id) => id !== terminalId)
+      get().focusPane(terminalId)
+      await get().closePanes(others)
     },
 
     /**
@@ -1515,6 +1544,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         set((state) => ({ terminals: { ...state.terminals, [terminalId]: previous } }))
         failed('Could not rename the pane')(error)
       }
+    },
+
+    editPaneName(terminalId) {
+      set({ editingPaneName: terminalId })
     },
 
     openFilePane(worktreeId, path) {
@@ -1606,6 +1639,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (get().focusedWatchId !== null) return
       const focused = activeLayout()?.focusedTerminalId
       if (focused) set({ expandedTerminalId: focused })
+    },
+
+    expandPane(terminalId) {
+      if (get().expandedTerminalId === terminalId) {
+        set({ expandedTerminalId: null })
+        return
+      }
+      get().focusPane(terminalId)
+      set({ expandedTerminalId: terminalId })
     },
 
     stepWorktree(step) {
@@ -2396,6 +2438,23 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    async copyPaneOutput(terminalId, name) {
+      let text = shownText(terminalId)
+      if (text === null) {
+        try {
+          const { data } = await runtimeClient.call('terminal.read', { terminalId })
+          text = replayLines(data)
+            .map((line) => line.trimEnd())
+            .join('\n')
+            .trimEnd()
+        } catch (error) {
+          failed(`Could not read ${name}`)(error)
+          return
+        }
+      }
+      await get().copyToClipboard(text, `the output of ${name}`)
+    },
+
     toggleSidebar() {
       set((state) => ({ sidebarVisible: !state.sidebarVisible }))
       // Bringing the sidebar back brings every expanded row with it.
@@ -2426,7 +2485,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     closeDialog() {
+      const { dialog } = get()
       set({ dialog: null })
+      // Close Others asks about one pane at a time; answering, either way, asks about the next.
+      if ((dialog?.kind === 'confirm-close-pane' || dialog?.kind === 'confirm-close-file') && dialog.rest) {
+        void get().closePanes(dialog.rest)
+      }
     },
 
     dismissNotice(id) {

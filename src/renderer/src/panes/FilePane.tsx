@@ -11,6 +11,8 @@ export type FilePaneProps = {
   focused: boolean
   onFocus: () => void
   onClose: () => void
+  /** A right-click on the header: the pane's menu. */
+  onHeaderMenu?: (event: React.MouseEvent<HTMLElement>) => void
   /** Bumped to open the find bar. */
   searchToken?: number
 }

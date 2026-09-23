@@ -3,10 +3,12 @@
 // only ever touches the two panes either side of the handle it grabbed.
 
 import type { PaneNode, Terminal } from '@shared/entities'
-import { isFileLeaf } from '@shared/filePane'
+import { filePaneName, isFileLeaf } from '@shared/filePane'
 import { freshAgentLabel } from '@shared/paneRestore'
+import type { PlatformModifier } from '../keyboard/platformModifier'
 import { ACTIVITY_LABEL, activityOf, dotClass, dotTone, paneAgent, paneNames } from '../sidebar/agentRows'
 import { TerminalView } from '../terminal/TerminalView'
+import { usePaneMenu } from '../workspace/paneMenu'
 import { FilePane } from './FilePane'
 import { collectLeaves } from './paneLayout'
 import { SplitFrame } from './SplitFrame'
@@ -24,6 +26,8 @@ export type PaneCallbacks = {
   onRelaunch: (terminalId: string) => void
   onResize: (path: number[], sizes: number[]) => void
   isAppChord: (event: KeyboardEvent) => boolean
+  /** Spells the chords in the header's right-click menu. */
+  modifier: PlatformModifier
   /** The one pane showing the find bar, if any. */
   searchTerminalId: string | null
   searchToken: number
@@ -37,22 +41,41 @@ export function PaneTree({
 }: PaneCallbacks & { node: PaneNode; path: number[] }): React.JSX.Element {
   const names = callbacks.names ?? namesById(node, callbacks.terminals)
   if (isFileLeaf(node)) {
-    return (
-      <FilePane
-        paneId={node.terminalId}
-        worktreeId={callbacks.worktreeId}
-        path={node.path}
-        focused={callbacks.focusedTerminalId === node.terminalId}
-        onFocus={() => callbacks.onFocus(node.terminalId)}
-        onClose={() => callbacks.onClose(node.terminalId)}
-        searchToken={callbacks.searchTerminalId === node.terminalId ? callbacks.searchToken : 0}
-      />
-    )
+    return <FileLeaf paneId={node.terminalId} path={node.path} {...callbacks} />
   }
   if (node.kind === 'leaf') {
     return <PaneLeaf terminalId={node.terminalId} {...callbacks} names={names} />
   }
   return <PaneSplit node={node} path={path} {...callbacks} names={names} />
+}
+
+function FileLeaf({
+  paneId,
+  path,
+  worktreeId,
+  focusedTerminalId,
+  onFocus,
+  onClose,
+  searchTerminalId,
+  searchToken,
+  modifier
+}: PaneCallbacks & { paneId: string; path: string }): React.JSX.Element {
+  const menu = usePaneMenu(modifier)
+  return (
+    <>
+      <FilePane
+        paneId={paneId}
+        worktreeId={worktreeId}
+        path={path}
+        focused={focusedTerminalId === paneId}
+        onFocus={() => onFocus(paneId)}
+        onClose={() => onClose(paneId)}
+        onHeaderMenu={(event) => menu.onContextMenu(paneId, filePaneName(path), event)}
+        searchToken={searchTerminalId === paneId ? searchToken : 0}
+      />
+      {menu.menu}
+    </>
+  )
 }
 
 /** The tree's panes named together as `paneTabs` names them: label, agent, program, twins numbered. */
@@ -76,8 +99,10 @@ function PaneLeaf({
   isAppChord,
   searchTerminalId,
   searchToken,
-  onCloseSearch
+  onCloseSearch,
+  modifier
 }: PaneCallbacks & { terminalId: string }): React.JSX.Element {
+  const menu = usePaneMenu(modifier)
   const terminal = terminals[terminalId]
   const focused = focusedTerminalId === terminalId
   // A dead shell keeps its scrollback, so without this it looks like one at a prompt.
@@ -91,7 +116,7 @@ function PaneLeaf({
 
   return (
     <section className={`pane${focused ? ' pane--focused' : ''}${exited ? ' pane--exited' : ''}`} aria-label={name}>
-      <header className="pane__bar">
+      <header className="pane__bar" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
         <span
           className={dotClass(
             activity === null || terminal === undefined ? null : dotTone(activity, paneAgent(terminal))
@@ -141,6 +166,7 @@ function PaneLeaf({
         searchToken={searchToken}
         onCloseSearch={onCloseSearch}
       />
+      {menu.menu}
     </section>
   )
 }

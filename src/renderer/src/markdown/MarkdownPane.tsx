@@ -20,7 +20,8 @@ export function MarkdownPane({
   path,
   focused,
   onFocus,
-  onClose
+  onClose,
+  onHeaderMenu
 }: FilePaneProps): React.JSX.Element {
   const worktreePath = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.path)
   const dirty = useWorkspaceStore((state) => state.unsavedFiles[paneId] === true)
@@ -146,7 +147,7 @@ export function MarkdownPane({
       aria-label={name}
       onMouseDownCapture={onFocus}
     >
-      <header className="pane__bar">
+      <header className="pane__bar" onContextMenu={onHeaderMenu}>
         <span
           className={`md-dot${dirty ? ' md-dot--unsaved' : ''}`}
           title={dirty ? 'Unsaved' : 'Saved'}
