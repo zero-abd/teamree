@@ -1,7 +1,12 @@
 // Adding a repository. The runtime validates the path; this only insists that
 // something was typed and offers to infer the display name from it.
+//
+// The folder picker opens from its button and from nothing else. It used to
+// open from a mount effect, which put an OS sheet over the dialog before the
+// dialog had been read — and over a path field somebody may have meant to type
+// into.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { Modal } from './Modal'
 
@@ -14,7 +19,6 @@ export function AddProjectDialog(): React.JSX.Element {
   const [browsing, setBrowsing] = useState(false)
   const [browseError, setBrowseError] = useState('')
   const pickerOpen = useRef(false)
-  const initiallyOpened = useRef(false)
 
   const inferred = path.split(/[/\\]/).filter(Boolean).pop() ?? ''
   const browse = useCallback(async (): Promise<void> => {
@@ -32,11 +36,6 @@ export function AddProjectDialog(): React.JSX.Element {
       setBrowsing(false)
     }
   }, [])
-  useEffect(() => {
-    if (initiallyOpened.current) return
-    initiallyOpened.current = true
-    void browse()
-  }, [browse])
   const canSubmit = path.trim().length > 0
 
   const submit = (event: React.FormEvent): void => {
@@ -49,7 +48,7 @@ export function AddProjectDialog(): React.JSX.Element {
     <Modal title="Add project" description="Point teamree at an existing git checkout." onClose={closeDialog}>
       <form className="form" onSubmit={submit}>
         <button type="button" className="button" onClick={() => void browse()} disabled={browsing}>
-          {browsing ? 'Choosing folder…' : 'Browse folders…'}
+          {browsing ? 'Choosing folder…' : 'Choose folder…'}
         </button>
         {browseError ? <p role="alert">{browseError}</p> : null}
         <label className="field">
