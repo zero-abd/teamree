@@ -111,6 +111,32 @@ describe('what it refuses to believe', () => {
     }
   })
 
+  it('keeps the image’s size and SHA-256 so a download can be checked against them', async () => {
+    const sha = 'ab'.repeat(32)
+    const url = `https://github.com/${REPOSITORY}/releases/download/v0.2.0/teamree-0.2.0.dmg`
+    const { found } = await read(
+      release({
+        assets: [{ name: 'teamree-0.2.0.dmg', browser_download_url: url, size: 2048, digest: `sha256:${sha}` }]
+      })
+    )
+    expect(found?.installer).toEqual({ url, name: 'teamree-0.2.0.dmg', size: 2048, sha256: sha })
+  })
+
+  it('offers no installer it could not verify, or whose name is not a plain file name', async () => {
+    const url = `https://github.com/${REPOSITORY}/releases/download/v0.2.0/x.dmg`
+    const sha = `sha256:${'ab'.repeat(32)}`
+    for (const asset of [
+      { name: 'x.dmg', browser_download_url: url, size: 2048 },
+      { name: 'x.dmg', browser_download_url: url, digest: sha },
+      { name: 'x.dmg', browser_download_url: url, size: 2048, digest: 'md5:abc' },
+      { name: '../x.dmg', browser_download_url: url, size: 2048, digest: sha },
+      { name: '.x.dmg', browser_download_url: url, size: 2048, digest: sha }
+    ]) {
+      const { found } = await read(release({ assets: [asset] }))
+      expect(found?.installer, JSON.stringify(asset)).toBeNull()
+    }
+  })
+
   it('survives a body that is not the shape the API documents', async () => {
     expect((await read({ nothing: 'useful' })).found).toBeNull()
     expect((await read([{ tag_name: 42 }], 'prerelease')).found).toBeNull()

@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { UpdateState } from '@shared/entities'
-import { automaticUpdatesLabel, updateNotice } from './updateNotice'
+import { automaticUpdatesLabel, installerStep, updateNotice } from './updateNotice'
 
 function state(overrides: Partial<UpdateState> = {}): UpdateState {
   return {
@@ -81,5 +81,41 @@ describe('the preference row', () => {
     expect(automaticUpdatesLabel(state({ automatic: false }))).toBe('Check for updates automatically')
     // Before the runtime has answered, the default is what it will say.
     expect(automaticUpdatesLabel(null)).toBe('Stop checking for updates automatically')
+  })
+})
+
+describe('the installer button', () => {
+  const installer = { name: 'teamree-0.2.0.dmg', size: 1000 }
+  const verifiable = (overrides: Partial<UpdateState> = {}): UpdateState =>
+    state({ available: { ...state().available!, installer }, ...overrides })
+
+  it('downloads in the app when the release gives a checksum, and in the browser when not', () => {
+    expect(installerStep(verifiable())).toMatchObject({ kind: 'fetch', label: 'Download', problem: null })
+    expect(installerStep(state())).toMatchObject({ kind: 'browser', label: 'Download 0.2.0' })
+    expect(installerStep(state({ available: null }))).toBeNull()
+  })
+
+  it('goes Download, then progress, then Open Installer', () => {
+    const downloading = { state: 'downloading' as const, version: '0.2.0', received: 420, total: 1000 }
+    expect(installerStep(verifiable({ download: downloading }))).toMatchObject({
+      kind: 'progress',
+      label: 'Downloading 42%'
+    })
+    const ready = { state: 'ready' as const, version: '0.2.0', path: '/Users/me/Downloads/teamree-0.2.0.dmg' }
+    expect(installerStep(verifiable({ download: ready }))).toMatchObject({ kind: 'open', label: 'Open Installer' })
+  })
+
+  it('offers Download again beside the one-line reason a download failed', () => {
+    const failed = { state: 'failed' as const, version: '0.2.0', problem: 'Checksum mismatch; the file was deleted.' }
+    expect(installerStep(verifiable({ download: failed }))).toMatchObject({
+      kind: 'fetch',
+      label: 'Download',
+      problem: 'Checksum mismatch; the file was deleted.'
+    })
+  })
+
+  it('ignores a download that was for an older release', () => {
+    const ready = { state: 'ready' as const, version: '0.1.5', path: '/Users/me/Downloads/teamree-0.1.5.dmg' }
+    expect(installerStep(verifiable({ download: ready }))).toMatchObject({ kind: 'fetch' })
   })
 })

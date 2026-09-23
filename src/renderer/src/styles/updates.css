@@ -53,6 +53,11 @@
   overflow-wrap: anywhere;
 }
 
+.update-card__problem {
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
 .update-card__install {
   color: var(--fg-muted);
   font-size: var(--text-xs);

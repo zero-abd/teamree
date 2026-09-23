@@ -108,6 +108,8 @@ const setDefaultAgent = vi.fn()
 const setAgentArgs = vi.fn()
 const setAutomaticUpdates = vi.fn()
 const checkForUpdates = vi.fn()
+const fetchInstaller = vi.fn()
+const openInstaller = vi.fn()
 const openTeamwork = vi.fn()
 const openDialog = vi.fn()
 const installCli = vi.fn()
@@ -134,6 +136,8 @@ function seed(overrides: Record<string, unknown> = {}): void {
       setAgentArgs,
       setAutomaticUpdates,
       checkForUpdates,
+      fetchInstaller,
+      openInstaller,
       openTeamwork,
       openDialog,
       installCli,
@@ -166,6 +170,8 @@ beforeEach(() => {
     setAgentArgs,
     setAutomaticUpdates,
     checkForUpdates,
+    fetchInstaller,
+    openInstaller,
     openTeamwork,
     openDialog,
     installCli
@@ -385,6 +391,48 @@ describe('updates', () => {
     expect((check as HTMLInputElement).checked).toBe(true)
     fireEvent.click(check)
     expect(setAutomaticUpdates).toHaveBeenCalledWith(false)
+  })
+
+  describe('a newer release', () => {
+    const available = {
+      version: '1.5.0',
+      tag: 'v1.5.0',
+      notes: null,
+      downloadUrl: 'https://github.com/zero-abd/teamree/releases/download/v1.5.0/teamree-1.5.0.dmg',
+      releaseUrl: 'https://github.com/zero-abd/teamree/releases/tag/v1.5.0',
+      publishedAt: null,
+      installer: { name: 'teamree-1.5.0.dmg', size: 100 }
+    }
+
+    it('downloads it from the page', () => {
+      seed({ update: { ...release(), available } })
+      render(<SettingsView modifier={modifier} />)
+      expect(screen.getByText('teamree 1.5.0 available')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+      expect(fetchInstaller).toHaveBeenCalled()
+    })
+
+    it('shows progress, then opens the installer', () => {
+      const downloading = { state: 'downloading' as const, version: '1.5.0', received: 30, total: 100 }
+      seed({ update: { ...release(), available, download: downloading } })
+      const { unmount } = render(<SettingsView modifier={modifier} />)
+      expect(screen.getByRole('button', { name: 'Downloading 30%' }).hasAttribute('disabled')).toBe(true)
+      unmount()
+
+      const ready = { state: 'ready' as const, version: '1.5.0', path: '/Users/me/Downloads/teamree-1.5.0.dmg' }
+      seed({ update: { ...release(), available, download: ready } })
+      render(<SettingsView modifier={modifier} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Open Installer' }))
+      expect(openInstaller).toHaveBeenCalled()
+    })
+
+    it('says in one line why a download failed', () => {
+      const failed = { state: 'failed' as const, version: '1.5.0', problem: 'Checksum mismatch; the file was deleted.' }
+      seed({ update: { ...release(), available, download: failed } })
+      render(<SettingsView modifier={modifier} />)
+      expect(screen.getByText('Checksum mismatch; the file was deleted.')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Download' })).toBeTruthy()
+    })
   })
 
   it('shows why the last check answered nothing, rather than swallowing it', () => {

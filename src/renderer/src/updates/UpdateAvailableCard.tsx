@@ -6,7 +6,8 @@ import { useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { cliOffer } from '../dialogs/cliInstallModel'
 import { modalOnScreen } from '../dialogs/modalLayer'
-import { INSTALL_DOCUMENT, updateNotice } from './updateNotice'
+import { InstallerButton } from './InstallerButton'
+import { INSTALL_DOCUMENT, installerStep, updateNotice } from './updateNotice'
 
 export function UpdateAvailableCard(): React.JSX.Element | null {
   const update = useWorkspaceStore((state) => state.update)
@@ -14,15 +15,15 @@ export function UpdateAvailableCard(): React.JSX.Element | null {
   const dialog = useWorkspaceStore((state) => state.dialog)
   // A remote-keystrokes question is not in `dialog` but has a scrim, so the card waits under it.
   const consent = useWorkspaceStore((state) => state.consent)
-  const downloadUpdate = useWorkspaceStore((state) => state.downloadUpdate)
   const setAutomaticUpdates = useWorkspaceStore((state) => state.setAutomaticUpdates)
 
   // Dismissal is keyed by the check it saw; a later check is a new answer and shows again.
   const [dismissed, setDismissed] = useState<number | null>(null)
 
   const notice = updateNotice(update)
+  const step = installerStep(update)
   // Nothing to say, something modal on top, or the first-run question (same corner, asked first).
-  if (notice === null || modalOnScreen({ dialog, consent }) || cliOffer(cli) !== null) return null
+  if (notice === null || step === null || modalOnScreen({ dialog, consent }) || cliOffer(cli) !== null) return null
   if (dismissed !== null && dismissed === update?.checkedAt) return null
 
   return (
@@ -34,6 +35,8 @@ export function UpdateAvailableCard(): React.JSX.Element | null {
         // `pre-wrap` in the stylesheet keeps the breaks without sideways scrolling.
         <p className="update-card__notes">{notice.notes}</p>
       )}
+
+      {step.problem === null ? null : <p className="update-card__problem">{step.problem}</p>}
 
       <p className="update-card__install">
         {notice.install}{' '}
@@ -54,9 +57,7 @@ export function UpdateAvailableCard(): React.JSX.Element | null {
         >
           {notice.silence}
         </button>
-        <button type="button" className="button button--primary" onClick={() => void downloadUpdate()}>
-          {notice.action}
-        </button>
+        <InstallerButton step={step} className="button button--primary" />
       </div>
     </aside>
   )

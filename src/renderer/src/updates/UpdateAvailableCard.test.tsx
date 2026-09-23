@@ -29,6 +29,8 @@ const { UpdateAvailableCard } = await import('./UpdateAvailableCard')
 const INITIAL = useWorkspaceStore.getState()
 
 const downloadUpdate = vi.fn()
+const fetchInstaller = vi.fn()
+const openInstaller = vi.fn()
 const setAutomaticUpdates = vi.fn()
 
 function update(overrides: Partial<UpdateState> = {}): UpdateState {
@@ -74,6 +76,8 @@ function settledCli(): CliStatus {
 
 beforeEach(() => {
   downloadUpdate.mockClear()
+  fetchInstaller.mockClear()
+  openInstaller.mockClear()
   setAutomaticUpdates.mockClear()
   useWorkspaceStore.setState({
     ...INITIAL,
@@ -81,6 +85,8 @@ beforeEach(() => {
     dialog: null,
     update: update(),
     downloadUpdate,
+    fetchInstaller,
+    openInstaller,
     setAutomaticUpdates
   })
 })
@@ -92,6 +98,36 @@ describe('the update card', () => {
     expect(screen.getByText(/teamree 0\.2\.0 is available/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Download 0\.2\.0/ }))
     expect(downloadUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('downloads a verifiable installer itself, shows progress, then opens it', () => {
+    const available = { ...update().available!, installer: { name: 'teamree-0.2.0.dmg', size: 100 } }
+    useWorkspaceStore.setState({ update: update({ available }) })
+    const { rerender } = render(<UpdateAvailableCard />)
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    expect(fetchInstaller).toHaveBeenCalledTimes(1)
+    expect(downloadUpdate).not.toHaveBeenCalled()
+
+    useWorkspaceStore.setState({
+      update: update({ available, download: { state: 'downloading', version: '0.2.0', received: 55, total: 100 } })
+    })
+    rerender(<UpdateAvailableCard />)
+    expect(screen.getByRole('button', { name: 'Downloading 55%' }).hasAttribute('disabled')).toBe(true)
+
+    useWorkspaceStore.setState({
+      update: update({ available, download: { state: 'ready', version: '0.2.0', path: '/Users/me/Downloads/x.dmg' } })
+    })
+    rerender(<UpdateAvailableCard />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open Installer' }))
+    expect(openInstaller).toHaveBeenCalledTimes(1)
+  })
+
+  it('says in one line when the checksum did not match', () => {
+    const available = { ...update().available!, installer: { name: 'teamree-0.2.0.dmg', size: 100 } }
+    const download = { state: 'failed' as const, version: '0.2.0', problem: 'Checksum mismatch; the file was deleted.' }
+    useWorkspaceStore.setState({ update: update({ available, download }) })
+    render(<UpdateAvailableCard />)
+    expect(screen.getByText('Checksum mismatch; the file was deleted.')).toBeTruthy()
   })
 
   // The one that matters. A release body is attacker-influenceable text in the

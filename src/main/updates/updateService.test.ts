@@ -1,11 +1,15 @@
 // Told once when there is something to tell, and never bothered otherwise.
 // The "does not happen" cases would rot invisibly.
 
-import { mkdtemp } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { createServer } from 'node:http'
+import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { WorkspaceStore } from '../store/workspaceStore'
+import type { HostPolicy } from './downloadInstaller'
 import type { LatestRelease } from './latestRelease'
 import { AUTOMATIC_CHECK_INTERVAL_MS, UpdateService, type UpdateSettingsRecord } from './updateService'
 
@@ -21,6 +25,7 @@ function found(overrides: Partial<LatestRelease> = {}): LatestRelease {
     downloadUrl: `https://github.com/${REPOSITORY}/releases/download/v0.2.0/teamree-mac-universal.dmg`,
     releaseUrl: `https://github.com/${REPOSITORY}/releases/tag/v0.2.0`,
     publishedAt: NOW,
+    installer: null,
     ...overrides
   }
 }
@@ -54,6 +59,9 @@ type ServiceOptions = {
   now?: () => number
   record?: UpdateSettingsRecord
   openExternal?: (url: string) => Promise<void>
+  downloadsDirectory?: string
+  openPath?: (path: string) => Promise<string>
+  allowDownload?: HostPolicy
 }
 
 function service(options: ServiceOptions = {}) {
@@ -66,6 +74,9 @@ function service(options: ServiceOptions = {}) {
     settings: record,
     readRelease: options.readRelease ?? (async () => found()),
     openExternal: options.openExternal,
+    downloadsDirectory: options.downloadsDirectory,
+    openPath: options.openPath,
+    allowDownload: options.allowDownload,
     now: options.now ?? (() => NOW),
     onChange: () => changes.push(changes.length),
     onProblem: (message) => problems.push(message)
@@ -385,5 +396,89 @@ describe('opening a download', () => {
     const { update } = service({ version: '0.2.0', openExternal: async () => {} })
     await update.check({ force: true })
     await expect(update.openDownload()).rejects.toThrow(/no newer release/)
+  })
+})
+
+describe('fetching the installer', () => {
+  const BYTES = Buffer.alloc(200_000, 3)
+  const SHA = createHash('sha256').update(BYTES).digest('hex')
+
+  /** A local stand-in for GitHub's storage, and a policy that allows only it. */
+  async function fixture(): Promise<{ url: string; allowed: HostPolicy; close: () => Promise<void> }> {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { 'content-length': BYTES.length }).end(BYTES)
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    return {
+      url: `${origin}/teamree-0.2.0.dmg`,
+      allowed: (url) => new URL(url).origin === origin,
+      close: () => new Promise((resolve) => server.close(() => resolve()))
+    }
+  }
+
+  async function prepared(sha256: string = SHA) {
+    const local = await fixture()
+    const directory = await mkdtemp(join(tmpdir(), 'teamree-downloads-'))
+    onTestFinished(() => rm(directory, { recursive: true, force: true }))
+    const opened: string[] = []
+    const installer = { url: local.url, name: 'teamree-0.2.0.dmg', size: BYTES.length, sha256 }
+    const made = service({
+      readRelease: async () => found({ installer }),
+      downloadsDirectory: directory,
+      openPath: async (path) => {
+        opened.push(path)
+        return ''
+      },
+      allowDownload: local.allowed
+    })
+    await made.update.check({ force: true })
+    return { ...made, directory, opened, close: local.close }
+  }
+
+  it('offers it with its size, downloads it into Downloads, and opens only that file', async () => {
+    const { update, directory, opened, close } = await prepared()
+    expect(update.state().available?.installer).toEqual({ name: 'teamree-0.2.0.dmg', size: BYTES.length })
+
+    const started = await update.fetchInstaller()
+    expect(started.download).toMatchObject({ state: 'downloading', version: '0.2.0', total: BYTES.length })
+    await vi.waitFor(() => expect(update.state().download?.state).toBe('ready'))
+    const path = join(directory, 'teamree-0.2.0.dmg')
+    expect(update.state().download).toEqual({ state: 'ready', version: '0.2.0', path })
+
+    await expect(update.openInstaller()).resolves.toEqual({ opened: path })
+    expect(opened).toEqual([path])
+    await close()
+  })
+
+  it('deletes the file and says so when the checksum does not match', async () => {
+    const { update, directory, opened, close } = await prepared('0'.repeat(64))
+    await update.fetchInstaller()
+    await vi.waitFor(() => expect(update.state().download?.state).toBe('failed'))
+
+    expect(update.state().download).toMatchObject({ problem: 'Checksum mismatch; the file was deleted.' })
+    expect(await readdir(directory)).toEqual([])
+    await expect(update.openInstaller()).rejects.toThrow(/no installer/)
+    expect(opened).toEqual([])
+    await close()
+  })
+
+  it('refuses a link outside the release host, with the real policy, before asking anyone', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'teamree-downloads-'))
+    onTestFinished(() => rm(directory, { recursive: true, force: true }))
+    const installer = { url: 'https://example.invalid/x.dmg', name: 'x.dmg', size: 1, sha256: SHA }
+    const { update } = service({ readRelease: async () => found({ installer }), downloadsDirectory: directory })
+    await update.check({ force: true })
+    await update.fetchInstaller()
+
+    await vi.waitFor(() => expect(update.state().download?.state).toBe('failed'))
+    expect(update.state().download).toMatchObject({ problem: 'Download failed: refused example.invalid' })
+    expect(await readdir(directory)).toEqual([])
+  })
+
+  it('refuses when the release has no installer it can verify', async () => {
+    const { update } = service({ downloadsDirectory: '/nowhere' })
+    await update.check({ force: true })
+    await expect(update.fetchInstaller()).rejects.toThrow(/no installer/)
   })
 })

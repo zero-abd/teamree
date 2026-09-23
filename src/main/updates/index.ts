@@ -10,6 +10,7 @@ export {
   isReleaseDownload,
   plainText,
   readLatestRelease,
+  type DiskImage,
   type LatestRelease,
   type ReleaseChannel
 } from './latestRelease'
@@ -20,6 +21,7 @@ export {
   type UpdateHandlers,
   type UpdateMethodName
 } from './handlers'
+export { ChecksumMismatch, downloadDiskImage, releaseHostPolicy, type HostPolicy } from './downloadInstaller'
 export { compareVersions, isNewerRelease, isPrereleaseVersion, parseVersion, type Version } from './semver'
 export {
   AUTOMATIC_CHECK_INTERVAL_MS,
