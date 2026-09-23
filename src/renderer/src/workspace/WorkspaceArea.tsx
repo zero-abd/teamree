@@ -106,7 +106,7 @@ function WorkspaceMain({
 }): React.JSX.Element {
   return (
     <div className="workspace-column">
-      <TerminalTabs />
+      <TerminalTabs modifier={modifier} />
       <WorkspaceView modifier={modifier} isAppChord={isAppChord} />
     </div>
   )

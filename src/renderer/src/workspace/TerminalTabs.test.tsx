@@ -21,9 +21,10 @@
 // tests below say where they are now and what they act on, so a tidy-up cannot
 // leave the window with no clickable way to split a pane at all.
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Layout, PaneNode, Terminal } from '@shared/entities'
+import type { InstalledAgent, Layout, PaneNode, Terminal } from '@shared/entities'
+import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import { leaf } from '../panes/paneLayout'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -42,6 +43,11 @@ const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { TerminalTabs } = await import('./TerminalTabs')
 
 const INITIAL = useWorkspaceStore.getState()
+const MAC = resolvePlatformModifier('darwin')
+
+/** What `agent.list` answered at startup, as the store keeps it. */
+const claude: InstalledAgent = { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }
+const codex: InstalledAgent = { kind: 'codex', command: 'codex', binary: '/opt/bin/codex' }
 
 const terminal = (overrides: Partial<Terminal> & { id: string }): Terminal => ({
   worktreeId: 'w1',
@@ -79,16 +85,29 @@ const createTerminal = vi.fn(async () => {})
 const splitFocusedPane = vi.fn(async () => {})
 const renamePane = vi.fn(async () => {})
 const toggleSidebar = vi.fn()
+const startAgent = vi.fn(async () => {})
+const openSettings = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
-    { ...INITIAL, focusPane, closeTerminal, createTerminal, splitFocusedPane, renamePane, toggleSidebar, ...overrides },
+    {
+      ...INITIAL,
+      focusPane,
+      closeTerminal,
+      createTerminal,
+      splitFocusedPane,
+      renamePane,
+      toggleSidebar,
+      startAgent,
+      openSettings,
+      ...overrides
+    },
     true
   )
 }
 
 const mount = (): void => {
-  render(<TerminalTabs />)
+  render(<TerminalTabs modifier={MAC} />)
 }
 
 /** The names on the strip, in the order it puts them. */
@@ -101,6 +120,8 @@ beforeEach(() => {
   splitFocusedPane.mockReset()
   renamePane.mockReset()
   toggleSidebar.mockReset()
+  startAgent.mockReset()
+  openSettings.mockReset()
   seed()
 })
 
@@ -306,10 +327,13 @@ describe('the pane buttons at the end of the strip', () => {
     expect(splitFocusedPane).toHaveBeenCalledExactlyOnceWith('column')
   })
 
-  it('opens a pane in the worktree the strip belongs to', () => {
+  // The `+` is a menu now, so a plain press opens nothing on its own: the
+  // chord is still the one-press way to a terminal.
+  it('opens the menu rather than a pane when pressed', () => {
     onePane()
-    fireEvent.click(screen.getByRole('button', { name: 'New terminal' }))
-    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
+    fireEvent.click(screen.getByRole('button', { name: 'New pane' }))
+    expect(screen.getByRole('menu', { name: 'New pane' })).toBeTruthy()
+    expect(createTerminal).not.toHaveBeenCalled()
   })
 
   // They are icons, so the hover names what they do — and only that. The
@@ -319,7 +343,7 @@ describe('the pane buttons at the end of the strip', () => {
     onePane()
     expect(screen.getByRole('button', { name: 'Split right' }).getAttribute('title')).toBe('Split right')
     expect(screen.getByRole('button', { name: 'Split down' }).getAttribute('title')).toBe('Split down')
-    expect(screen.getByRole('button', { name: 'New terminal' }).getAttribute('title')).toBe('New terminal')
+    expect(screen.getByRole('button', { name: 'New pane' }).getAttribute('title')).toBe('New pane')
   })
 
   it('carries no words of its own besides the tab names', () => {
@@ -333,9 +357,120 @@ describe('the pane buttons at the end of the strip', () => {
   // reader would read three of them as "button, button, button".
   it('says what each one does, for anything that cannot see the icon', () => {
     onePane()
-    for (const name of ['Split right', 'Split down', 'New terminal']) {
+    for (const name of ['Split right', 'Split down', 'New pane']) {
       expect(screen.getByRole('button', { name })).toBeTruthy()
     }
+    expect(screen.getByRole('button', { name: 'New pane' }).getAttribute('aria-haspopup')).toBe('menu')
+  })
+})
+
+// The `+` opens a menu of what can be started in this worktree: a terminal,
+// then one row per agent the runtime found on this machine, then the way to
+// the agent settings. The agents are whatever `agent.list` answered — the
+// store's `agents` — and nothing else, so a machine without codex gets no
+// codex row rather than a row that fails.
+describe('the menu the + opens', () => {
+  const onePane = (overrides: Record<string, unknown> = {}): void => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1'), 't1') },
+      terminals: byId(terminal({ id: 't1', title: 'npm test' })),
+      agents: [claude, codex],
+      ...overrides
+    })
+    mount()
+  }
+
+  const open = (): HTMLElement => {
+    fireEvent.click(screen.getByRole('button', { name: 'New pane' }))
+    return screen.getByRole('menu', { name: 'New pane' })
+  }
+
+  /** The rows, top to bottom, by what a screen reader would call them. */
+  const rows = (menu: HTMLElement): string[] =>
+    within(menu)
+      .getAllByRole('menuitem')
+      .map((item) => item.querySelector('.row-menu__label')?.textContent ?? '')
+
+  it('lists a terminal, the agents the runtime found, and the agent settings', () => {
+    onePane()
+    expect(rows(open())).toEqual(['New terminal', 'claude', 'codex', 'Agent settings…'])
+  })
+
+  it('names the terminal chord on its row', () => {
+    onePane()
+    const terminalRow = within(open()).getByRole('menuitem', { name: 'New terminal' })
+    expect(terminalRow.querySelector('kbd')?.textContent).toBe('⌘T')
+  })
+
+  it('lists no agent the runtime did not find', () => {
+    onePane({ agents: [claude] })
+    expect(rows(open())).toEqual(['New terminal', 'claude', 'Agent settings…'])
+  })
+
+  it('opens a terminal in the worktree the strip belongs to', () => {
+    onePane()
+    fireEvent.click(within(open()).getByRole('menuitem', { name: 'New terminal' }))
+    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
+    expect(startAgent).not.toHaveBeenCalled()
+  })
+
+  // The same store action the palette's "Start codex here" row calls, with
+  // the same argument: one way to start an agent in the worktree in front of
+  // you, however it was asked for.
+  it('starts the chosen agent through the store, and closes', () => {
+    onePane()
+    fireEvent.click(within(open()).getByRole('menuitem', { name: 'codex' }))
+    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
+    expect(createTerminal).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('opens the settings at the agents section', () => {
+    onePane()
+    fireEvent.click(within(open()).getByRole('menuitem', { name: 'Agent settings…' }))
+    expect(openSettings).toHaveBeenCalledExactlyOnceWith('agents')
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('lands the keyboard on the first row, and arrows and Enter choose', () => {
+    onePane()
+    const menu = open()
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'New terminal' }))
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'claude' }))
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    fireEvent.keyDown(menu, { key: 'Enter' })
+    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('closes on Escape and hands the focus back to the +', () => {
+    onePane()
+    const menu = open()
+    fireEvent.keyDown(menu, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New pane' }))
+    expect(startAgent).not.toHaveBeenCalled()
+    expect(createTerminal).not.toHaveBeenCalled()
+  })
+
+  it('closes when the + is pressed again', () => {
+    onePane()
+    open()
+    const plus = screen.getByRole('button', { name: 'New pane' })
+    expect(plus.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.pointerDown(plus)
+    fireEvent.click(plus)
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(plus.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('leaves the split buttons as they were', () => {
+    onePane()
+    fireEvent.click(screen.getByRole('button', { name: 'Split right' }))
+    expect(splitFocusedPane).toHaveBeenCalledExactlyOnceWith('row')
+    expect(screen.queryByRole('menu')).toBeNull()
   })
 })
 

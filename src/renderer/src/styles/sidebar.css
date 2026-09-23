@@ -487,6 +487,9 @@
 }
 
 .row-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
   padding: 5px var(--s2);
   border-radius: var(--r1);
   color: var(--fg);
@@ -494,6 +497,36 @@
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
+}
+
+.row-menu__icon {
+  display: flex;
+  flex: none;
+  color: var(--fg-muted);
+}
+
+.row-menu__icon svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.row-menu__label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The chord, at the far end and quieter than the row, the way a menu bar
+   writes its own. */
+.row-menu__hint {
+  margin-left: var(--s4);
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: var(--text-xs);
 }
 
 .row-menu__item:hover,

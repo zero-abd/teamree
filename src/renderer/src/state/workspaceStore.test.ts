@@ -795,3 +795,39 @@ describe('the relay pane, against the runtime’s own list of terminals', () => 
     }
   })
 })
+
+// The strip's `+` menu is built from the store's `agents`, which is whatever
+// `agent.list` answered at startup — so the menu offers exactly the agents the
+// runtime found, and a machine without one gets no row for it.
+it('offers the + menu the agents agent.list reported, in its order', async () => {
+  const { startMenuItems } = await import('../workspace/startMenu')
+  const { resolvePlatformModifier } = await import('../keyboard/platformModifier')
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const reported = await runtimeClient.call('agent.list', {})
+  expect(reported.length).toBeGreaterThan(0)
+  const items = startMenuItems(useWorkspaceStore.getState().agents, resolvePlatformModifier('darwin'), {
+    newTerminal: () => {},
+    startAgent: () => {},
+    openAgentSettings: () => {}
+  })
+  expect(items.map((item) => item.label)).toEqual([
+    'New terminal',
+    ...reported.map((agent) => agent.command),
+    'Agent settings…'
+  ])
+})
+
+describe('opening the settings at a section', () => {
+  it('opens the page and names the section, and the toggle forgets it on the way out', () => {
+    const store = useWorkspaceStore.getState()
+    useWorkspaceStore.setState({ settingsOpen: false, dashboardOpen: true, settingsSection: null })
+    store.openSettings('agents')
+    expect(useWorkspaceStore.getState().settingsOpen).toBe(true)
+    expect(useWorkspaceStore.getState().dashboardOpen).toBe(false)
+    expect(useWorkspaceStore.getState().settingsSection).toBe('agents')
+    store.toggleSettings()
+    expect(useWorkspaceStore.getState().settingsOpen).toBe(false)
+    expect(useWorkspaceStore.getState().settingsSection).toBeNull()
+  })
+})
