@@ -30,19 +30,26 @@ import { registerRevealHandler } from './reveal/revealPath'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
 import { optOutOfStateRestoration } from './stateRestoration'
 import { mayOpenExternally, navigationVerdict, windowOpenAnswer } from './windowNavigation'
-import { loadWindowState, placeWindow, saveWindowState, trackWindowState, WINDOW_STATE_FILE } from './windowState'
+import {
+  loadWindowState,
+  minimumSize,
+  placeWindow,
+  saveWindowState,
+  trackWindowState,
+  WINDOW_STATE_FILE
+} from './windowState'
 
 function createWindow(): BrowserWindow {
   const stateFile = join(app.getPath('userData'), WINDOW_STATE_FILE)
+  const primary = screen.getPrimaryDisplay().workArea
   const opened = placeWindow(
     loadWindowState(stateFile),
     screen.getAllDisplays().map((display) => display.workArea),
-    screen.getPrimaryDisplay().workArea
+    primary
   )
   const window = new BrowserWindow({
     ...opened.bounds,
-    minWidth: 800,
-    minHeight: 560,
+    ...minimumSize(primary),
     show: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     // Setting this overrides hiddenInset's default x as well as y, so both

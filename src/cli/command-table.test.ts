@@ -157,7 +157,6 @@ describe('parseCommand', () => {
 
   it('rejects a missing required flag', () => {
     expect(() => parseCommand(spec('worktree create'), ['--name', 'fix'])).toThrow(/--project is required/)
-    expect(() => parseCommand(spec('terminal send'), ['t_1'])).toThrow(/--text is required/)
   })
 
   it('rejects a missing positional', () => {

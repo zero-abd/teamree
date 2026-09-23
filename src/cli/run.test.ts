@@ -696,6 +696,20 @@ describe('selectors and flags reach the runtime', () => {
     expect(cli.stub.received.at(-1)).toMatchObject({ params: { data: 'npm test\r' } })
   })
 
+  it('presses Return with --enter alone, and wants --text without it', async () => {
+    const cli = await harness()
+    await cli.run(['terminal', 'send', 't_1', '--enter'])
+    expect(cli.stub.received.at(-1)).toMatchObject({ params: { data: '\r' } })
+    await cli.run(['terminal', 'send', 't_1', '--text', '', '--enter'])
+    expect(cli.stub.received.at(-1)).toMatchObject({ params: { data: '\r' } })
+    const sent = cli.stub.received.length
+    const bare = await cli.run(['terminal', 'send', 't_1'])
+    expect(bare.code).toBe(ExitCode.Usage)
+    expect(bare.err).toMatch(/--text is required/)
+    expect((await cli.run(['terminal', 'send', 't_1', '--text', ''])).code).toBe(ExitCode.Usage)
+    expect(cli.stub.received.length).toBe(sent)
+  })
+
   it('passes --tail-bytes through as a number', async () => {
     const cli = await harness()
     await cli.run(['terminal', 'read', 't_1', '--tail-bytes', '2048'])

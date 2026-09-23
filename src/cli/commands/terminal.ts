@@ -161,17 +161,24 @@ export const terminalCommands: readonly CommandSpec[] = [
     details: 'The text is sent verbatim; --enter is the only thing that appends a carriage return.',
     args: [TERMINAL_ARG],
     flags: [
-      { name: 'text', kind: 'string', placeholder: '<text>', description: 'Exact bytes to write.', required: true },
+      {
+        name: 'text',
+        kind: 'string',
+        placeholder: '<text>',
+        description: 'Exact bytes to write; required without --enter.'
+      },
       { name: 'enter', kind: 'boolean', description: 'Append a carriage return, submitting the line.' }
     ],
-    examples: ['teamree terminal send t_12 --text "npm test" --enter'],
+    examples: ['teamree terminal send t_12 --text "npm test" --enter', 'teamree terminal send t_12 --enter'],
     run: async (context) => {
       const terminalId = context.args[0] as string
-      const data = requireString(context.flags, 'text') + (readBoolean(context.flags, 'enter') ? '\r' : '')
+      const enter = readBoolean(context.flags, 'enter')
+      const text = enter ? (readString(context.flags, 'text') ?? '') : requireString(context.flags, 'text')
+      const data = text + (enter ? '\r' : '')
       await context.client.call('terminal.write', { terminalId, data })
       const bytes = Buffer.byteLength(data)
       return {
-        data: { terminalId, bytes, enter: readBoolean(context.flags, 'enter') },
+        data: { terminalId, bytes, enter },
         text: `sent ${bytes} bytes to ${terminalId}`
       }
     }

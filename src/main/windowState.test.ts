@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_WINDOW_SIZE,
   loadWindowState,
+  minimumSize,
   placeWindow,
   readWindowState,
   saveWindowState,
@@ -55,6 +56,26 @@ describe('placing the window at launch', () => {
   it('fits the default into a primary display smaller than it', () => {
     const small: Rect = { x: 0, y: 25, width: 1280, height: 775 }
     expect(placeWindow(null, [small], small).bounds).toEqual({ x: 0, y: 25, width: 1280, height: 775 })
+  })
+
+  it.each<Rect>([
+    { x: 0, y: 38, width: 1512, height: 868 },
+    { x: 0, y: 25, width: 1440, height: 812 },
+    { x: 0, y: 0, width: 1024, height: 700 },
+    { x: 0, y: 25, width: 720, height: 480 }
+  ])('never opens a first window larger than the work area %j', (area) => {
+    const { bounds } = placeWindow(null, [area], area)
+    const { minWidth, minHeight } = minimumSize(area)
+    expect(Math.max(bounds.width, minWidth)).toBeLessThanOrEqual(area.width)
+    expect(Math.max(bounds.height, minHeight)).toBeLessThanOrEqual(area.height)
+    expect(bounds.x).toBeGreaterThanOrEqual(area.x)
+    expect(bounds.y).toBeGreaterThanOrEqual(area.y)
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(area.x + area.width)
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(area.y + area.height)
+  })
+
+  it('keeps the usual minimum size where it fits', () => {
+    expect(minimumSize(LAPTOP)).toEqual({ minWidth: 800, minHeight: 560 })
   })
 })
 

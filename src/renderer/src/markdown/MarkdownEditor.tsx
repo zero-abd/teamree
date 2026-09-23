@@ -9,6 +9,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffec
 import { artifactTitle } from './artifactUrl'
 import { markdownExtensions } from './markdownExtensions'
 import { readMarkdownFile, writeMarkdownFile, type MarkdownFile } from './markdownFile'
+import type { ImageResolver } from './markdownNodes'
 import { slashItems, type SlashItem } from './slashCommands'
 
 export type MarkdownEditorHandle = {
@@ -23,7 +24,7 @@ export type MarkdownEditorProps = {
   onChange: (markdown: string) => void
   onFocusChange: (focused: boolean) => void
   onOpenUrl: (url: string) => void
-  resolveImage: (src: string) => string
+  resolveImage: ImageResolver
 }
 
 type SlashMenuState = {
