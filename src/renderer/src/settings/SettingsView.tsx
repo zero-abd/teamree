@@ -17,10 +17,10 @@ import {
   type TerminalCursorStyle
 } from '../state/preferences'
 import { useNow } from '../state/useNow'
-import { modalOnScreen } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { InstallerButton } from '../updates/InstallerButton'
 import { installerStep } from '../updates/updateNotice'
+import { PageFrame } from '../workspace/PageFrame'
 import { cliLine, relayPanel, updatePanel } from './settingsModel'
 
 const SECTIONS = [
@@ -51,27 +51,6 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
     void loadCli()
     void loadUpdate()
   }, [loadCli, loadUpdate])
-
-  // Capture phase, so a focused pane cannot eat Escape first.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      // Anything modal on top owns Escape. `modalOnScreen`, not `dialog`: a remote-keystrokes
-      // question is not in `dialog` and would otherwise have the page close under its scrim.
-      if (modalOnScreen(useWorkspaceStore.getState())) return
-      event.preventDefault()
-      toggleSettings()
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [toggleSettings])
-
-  // Opened from a button elsewhere, so focus has to follow; the region, so Tab starts at the top
-  // of the page and the page's name is read out.
-  const region = useRef<HTMLElement>(null)
-  useEffect(() => {
-    region.current?.focus()
-  }, [])
 
   const body = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState<SectionId>('cli')
@@ -110,41 +89,20 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
   }, [section])
 
   return (
-    <main className="workspace settings" aria-label="Settings" tabIndex={-1} ref={region}>
-      <header className="settings__head">
-        <div className="settings__column settings__head-row">
-          <div className="settings__identity">
-            <h1 className="settings__title">Settings</h1>
-          </div>
-          <button
-            type="button"
-            className="settings__close"
-            title="Back to the panes"
-            aria-label="Back to the panes"
-            onClick={toggleSettings}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M3 3 L9 9 M9 3 L3 9" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      <div className="settings__body" ref={body} data-testid="settings-body">
-        <div className="settings__layout">
-          <SectionList sections={sections} active={active} goTo={goTo} />
-          <div className="settings__content">
-            <CliSection />
-            <UpdatesSection />
-            <NoticesSection />
-            <PanesSection />
-            <AgentsSection />
-            <AppearanceSection modifier={modifier} />
-            <ProjectsSection projects={projects} />
-          </div>
+    <PageFrame label="Settings" title="Settings" onClose={toggleSettings} bodyRef={body} bodyTestId="settings-body">
+      <div className="settings__layout">
+        <SectionList sections={sections} active={active} goTo={goTo} />
+        <div className="settings__content">
+          <CliSection />
+          <UpdatesSection />
+          <NoticesSection />
+          <PanesSection />
+          <AgentsSection />
+          <AppearanceSection modifier={modifier} />
+          <ProjectsSection projects={projects} />
         </div>
       </div>
-    </main>
+    </PageFrame>
   )
 }
 

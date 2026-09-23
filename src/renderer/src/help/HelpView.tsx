@@ -1,11 +1,11 @@
 // What the keys do, what a worktree is, and where the rest is written. It takes the main area because
 // help is read beside the thing it describes, which a modal's scrim would cover.
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { formatChord, type PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
-import { modalOnScreen } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { PageFrame } from '../workspace/PageFrame'
 import {
   CLI_SETTINGS_BUTTON,
   CLI_TITLE,
@@ -30,49 +30,16 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
     void loadCli()
   }, [loadCli])
 
-  // Capture phase, so a focused pane cannot eat Escape first.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      // Anything modal on top owns Escape. `modalOnScreen`, not `dialog`: a remote-keystrokes question is
-      // not in `dialog` and would otherwise have the page close under its scrim.
-      if (modalOnScreen(useWorkspaceStore.getState())) return
-      event.preventDefault()
-      toggleHelp()
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [toggleHelp])
-
-  // Focus the region, not a control: it is read from the top, and the old focus is off screen.
-  const region = useRef<HTMLElement>(null)
-  useEffect(() => {
-    region.current?.focus()
-  }, [])
-
   const groups = shortcutGroups()
   const cliSection = cliHelp(cli)
 
   return (
-    <main className="workspace help" aria-label="Help" tabIndex={-1} ref={region}>
-      <header className="help__head">
-        <div className="help__identity">
-          <h1 className="help__title">{HELP_TITLE}</h1>
-        </div>
-
-        <button
-          type="button"
-          className="help__close"
-          title={`Back to the panes · ${shortcutHint('open-help', modifier)}`}
-          aria-label="Back to the panes"
-          onClick={toggleHelp}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M3 3 L9 9 M9 3 L3 9" />
-          </svg>
-        </button>
-      </header>
-
+    <PageFrame
+      label="Help"
+      title={HELP_TITLE}
+      onClose={toggleHelp}
+      closeTitle={`Back to the panes · ${shortcutHint('open-help', modifier)}`}
+    >
       <div className="help__body">
         {/* The chords, and every one of them comes from the table the key
             handler reads. There is no list of keys in this file to go stale. */}
@@ -153,6 +120,6 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
           </p>
         </section>
       </div>
-    </main>
+    </PageFrame>
   )
 }

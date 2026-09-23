@@ -1,0 +1,105 @@
+/* The frame of every full-page view (Settings, Help, Teamwork, All panes): a fixed head, then a body
+   that scrolls under it, both laid over one centred column so titles and content share a left edge. */
+
+.page {
+  overflow: hidden;
+}
+
+.page:focus-visible {
+  outline: none;
+}
+
+.page__column {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+/* Head and body both keep a scrollbar's gutter, so the column sits on the same edge whether or not
+   the page scrolls. */
+.page__head {
+  flex: none;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  padding: var(--s4) var(--s5) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.page__head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4);
+}
+
+/* The lede sits on the title's baseline, so a page with one is no taller than a page without. */
+.page__identity {
+  display: flex;
+  flex: 1 1 220px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--s3);
+  min-width: 0;
+}
+
+.page__title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.page__lede {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s4);
+}
+
+.page__close {
+  padding: var(--s1);
+  display: grid;
+  place-items: center;
+  flex: none;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.page__close:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.page__close svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.page__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: var(--s5) var(--s5) var(--s6);
+  container-type: inline-size;
+}
+
+/* Grows so an empty state can centre in the whole body. */
+.page__body > .page__column {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}

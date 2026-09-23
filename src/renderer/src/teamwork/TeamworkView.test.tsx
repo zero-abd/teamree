@@ -204,9 +204,16 @@ describe('the setup as a place in the window', () => {
     expect(loadPublishPlan).toHaveBeenCalledWith('p1')
   })
 
+  it('sits in the shared page frame, closed by the same × as the other pages', () => {
+    mount()
+    const main = screen.getByRole('main', { name: 'Set up teamwork in pager' })
+    expect(main.querySelector('.page__head h1')?.textContent).toBe('Start teamwork')
+    expect(within(main).queryByRole('button', { name: 'Close' })).toBeNull()
+  })
+
   it('has a way out that is a control, and one that is the key everybody tries', () => {
     mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back to the panes' }))
     expect(closeTeamwork).toHaveBeenCalledOnce()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(closeTeamwork).toHaveBeenCalledTimes(2)
@@ -215,6 +222,37 @@ describe('the setup as a place in the window', () => {
   // A dialog opened on top owns Escape.
   it('leaves Escape to a dialog opened over it', () => {
     seed({ dialog: { kind: 'new-task', projectId: 'p1' } })
+    mount()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(closeTeamwork).not.toHaveBeenCalled()
+  })
+
+  it('leaves Escape to a teammate’s question on top of it', () => {
+    seed({
+      consent: {
+        p1: {
+          projectId: 'p1',
+          requests: [
+            {
+              id: 'c1',
+              projectId: 'p1',
+              terminalId: 't1',
+              handle: 'sam',
+              publicKey: 'k',
+              since: 1,
+              at: 2,
+              expiresAt: Number.MAX_SAFE_INTEGER,
+              writes: 1,
+              bytes: 1,
+              preview: 'x',
+              clipped: false
+            }
+          ],
+          standing: [],
+          readAt: 2
+        }
+      }
+    })
     mount()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(closeTeamwork).not.toHaveBeenCalled()

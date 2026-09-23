@@ -3,7 +3,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { modalOnScreen } from '../dialogs/modalLayer'
 import {
   agoLabel,
   dotClass,
@@ -16,6 +15,7 @@ import {
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { PageFrame } from '../workspace/PageFrame'
 import { dashboardRows, toneCounts } from './dashboardRows'
 
 export function Dashboard(): React.JSX.Element {
@@ -41,20 +41,6 @@ export function Dashboard(): React.JSX.Element {
     [rows, unread, unreadOnly]
   )
 
-  // Capture phase, so a focused pane cannot eat Escape first.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      // Anything modal on top owns Escape. `modalOnScreen`, not `dialog`: a remote-keystrokes question is
-      // not in `dialog` and would otherwise have the board close under its scrim (see `modalLayer.ts`).
-      if (modalOnScreen(useWorkspaceStore.getState())) return
-      event.preventDefault()
-      toggleDashboard()
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [toggleDashboard])
-
   // Focus the first row once there is one: the board opens before `bootstrap` answers, and the ref keeps
   // it to once, since `rows` rebuilds every second for the "quiet for" column.
   const list = useRef<HTMLUListElement>(null)
@@ -68,52 +54,42 @@ export function Dashboard(): React.JSX.Element {
   }, [shown.length])
 
   return (
-    <main className="workspace board" aria-label="Every pane">
-      <header className="board__head">
-        <div className="board__identity">
-          <h1 className="board__title">All panes</h1>
-          <p className="board__lede">
-            {shown.length === 0
-              ? 'No panes'
-              : `${shown.length} pane${shown.length === 1 ? '' : 's'} across ${worktreeCount(shown)} worktree${
-                  worktreeCount(shown) === 1 ? '' : 's'
-                }`}
-          </p>
-        </div>
+    <PageFrame
+      label="Every pane"
+      title="All panes"
+      lede={
+        shown.length === 0
+          ? 'No panes'
+          : `${shown.length} pane${shown.length === 1 ? '' : 's'} across ${worktreeCount(shown)} worktree${
+              worktreeCount(shown) === 1 ? '' : 's'
+            }`
+      }
+      actions={
+        <>
+          <ul className="board__counts" aria-label="Panes by state">
+            {TONES_BY_ATTENTION.map((tone) => (
+              <li key={tone} className={`board-count${counts[tone] === 0 ? ' board-count--zero' : ''}`}>
+                <span className={dotClass(tone)} aria-hidden="true" />
+                <span className="board-count__number">{counts[tone]}</span>
+                <span className="board-count__label">{TONE_LABEL[tone]}</span>
+              </li>
+            ))}
+          </ul>
 
-        <ul className="board__counts" aria-label="Panes by state">
-          {TONES_BY_ATTENTION.map((tone) => (
-            <li key={tone} className={`board-count${counts[tone] === 0 ? ' board-count--zero' : ''}`}>
-              <span className={dotClass(tone)} aria-hidden="true" />
-              <span className="board-count__number">{counts[tone]}</span>
-              <span className="board-count__label">{TONE_LABEL[tone]}</span>
-            </li>
-          ))}
-        </ul>
-
-        <button
-          type="button"
-          className={`button button--ghost button--small${unreadOnly ? ' button--on' : ''}`}
-          aria-pressed={unreadOnly}
-          title="Only panes that have printed since you last read them"
-          onClick={() => setUnreadOnly((on) => !on)}
-        >
-          Unread only
-        </button>
-
-        <button
-          type="button"
-          className="board__close"
-          title="Back to the panes"
-          aria-label="Back to the panes"
-          onClick={toggleDashboard}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M3 3 L9 9 M9 3 L3 9" />
-          </svg>
-        </button>
-      </header>
-
+          <button
+            type="button"
+            className={`button button--ghost button--small${unreadOnly ? ' button--on' : ''}`}
+            aria-pressed={unreadOnly}
+            title="Only panes that have printed since you last read them"
+            onClick={() => setUnreadOnly((on) => !on)}
+          >
+            Unread only
+          </button>
+        </>
+      }
+      onClose={toggleDashboard}
+      focusKey={false}
+    >
       {shown.length === 0 ? (
         <div className="placeholder">
           <h2 className="placeholder__title">{unreadOnly && rows.length > 0 ? 'Nothing unread' : 'Nothing running'}</h2>
@@ -153,7 +129,7 @@ export function Dashboard(): React.JSX.Element {
           })}
         </ul>
       )}
-    </main>
+    </PageFrame>
   )
 }
 

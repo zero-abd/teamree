@@ -2,36 +2,6 @@
    borrows `.activity` from the sidebar, because it is the same reading of the
    same terminal and a second dot would be a second vocabulary. */
 
-.board {
-  overflow-y: auto;
-}
-
-.board__head {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s4);
-  padding: var(--s4) var(--s4) var(--s3);
-  border-bottom: 1px solid var(--line);
-}
-
-.board__identity {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.board__title {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.board__lede {
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-}
-
 .board__counts {
   display: flex;
   flex-wrap: wrap;
@@ -83,35 +53,9 @@
   font-weight: 400;
 }
 
-.board__close {
-  padding: var(--s1);
-  display: grid;
-  place-items: center;
-  flex: none;
-  border: 0;
-  border-radius: var(--r1);
-  background: none;
-  color: var(--fg-muted);
-  cursor: pointer;
-}
-
-.board__close:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-
-.board__close svg {
-  width: 11px;
-  height: 11px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-
 .board__list {
   margin: 0;
-  padding: var(--s2) 0 var(--s5);
+  padding: 0;
   list-style: none;
 }
 

@@ -146,6 +146,15 @@ describe('the legend', () => {
 })
 
 describe('leaving the board', () => {
+  it('sits in the shared page frame, the counts and the filter in its head', () => {
+    render(<Dashboard />)
+    const main = screen.getByRole('main', { name: 'Every pane' })
+    const head = main.querySelector('.page__head') as HTMLElement
+    expect(head.querySelector('h1')?.textContent).toBe('All panes')
+    expect(head.contains(screen.getByRole('button', { name: 'Unread only' }))).toBe(true)
+    expect(main.querySelector('.page__body .page__column .board__list')).not.toBeNull()
+  })
+
   it('closes on Escape, which is what a reader tries first', () => {
     render(<Dashboard />)
     fireEvent.keyDown(window, { key: 'Escape' })

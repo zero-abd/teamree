@@ -396,7 +396,10 @@ async function checkWorktreeSurfaces(ask) {
 
   // Opening a worktree must release Help, which the previous check left on screen.
   await waitFor(
-    () => ask(`document.querySelector('.workspace') !== null && document.querySelector('.help') === null`),
+    () =>
+      ask(
+        `document.querySelector('.workspace') !== null && document.querySelector('main[aria-label="Help"]') === null`
+      ),
     'pressing the worktree did not give the main area back to the workspace'
   )
 
