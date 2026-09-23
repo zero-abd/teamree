@@ -2265,7 +2265,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     async openInDefaultApp(path, what) {
       const open = typeof window === 'undefined' ? undefined : window.teamree?.openPath
       if (open === undefined) {
-        notify(`teamree cannot open ${what} from this window.`, 'info')
+        notify(`Cannot open ${what} from this window`, 'info')
         return
       }
       try {

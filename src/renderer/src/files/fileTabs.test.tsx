@@ -169,6 +169,7 @@ describe('the file viewer', () => {
     fireEvent.keyDown(view.contentDOM, { key: 's', ctrlKey: true })
     expect(await screen.findByRole('button', { name: 'Overwrite' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).not.toMatch(/\.(\s|$)/)
   })
 
   it('draws an image, a PDF, media and a binary file by what the runtime answered', async () => {
