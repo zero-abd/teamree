@@ -238,4 +238,56 @@ describe('the file viewer', () => {
     await waitFor(() => expect(document.querySelector('.patch')).not.toBeNull())
     expect(screen.getByRole('button', { name: 'Diff' }).getAttribute('aria-pressed')).toBe('true')
   })
+
+  const changes = (total: number) => ({ worktreeId: 'w1', changes: [], total, limit: 1, truncated: false, readAt: 1 })
+  const patchOf = (patch: string, staged = false) => ({
+    worktreeId: 'w1',
+    path: 'src/app.ts',
+    staged,
+    patch,
+    truncated: false,
+    readAt: 1
+  })
+
+  it('disables Diff for a file with nothing to show, and enables it once it changes', async () => {
+    let total = 0
+    call.mockImplementation(async (method: string) => {
+      if (method === 'file.read') return text('a\n')
+      if (method === 'worktree.changes') return changes(total)
+      return undefined
+    })
+    mount()
+    await editorView()
+    const diff = screen.getByRole('button', { name: 'Diff' }) as HTMLButtonElement
+    await waitFor(() => expect(diff.disabled).toBe(true))
+    expect(call).toHaveBeenCalledWith('worktree.changes', { worktreeId: 'w1', path: 'src/app.ts', limit: 1 })
+
+    total = 1
+    act(() => useWorkspaceStore.setState((state) => ({ worktreeFilesEpoch: state.worktreeFilesEpoch + 1 })))
+    await waitFor(() => expect(diff.disabled).toBe(false))
+  })
+
+  it('says No changes in an open diff once its change is discarded', async () => {
+    let working = 'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-b\n+a\n'
+    call.mockImplementation(async (method: string, params: { staged?: boolean }) => {
+      if (method === 'file.read') return text('a\n')
+      if (method === 'worktree.changes') return changes(working === '' ? 0 : 1)
+      if (method === 'worktree.diff') return patchOf(params.staged ? '' : working, params.staged)
+      return undefined
+    })
+    mount()
+    await editorView()
+    const diff = screen.getByRole('button', { name: 'Diff' }) as HTMLButtonElement
+    await waitFor(() => expect(diff.disabled).toBe(false))
+    fireEvent.click(diff)
+    await waitFor(() => expect(document.querySelector('.patch')).not.toBeNull())
+
+    working = ''
+    act(() => useWorkspaceStore.setState((state) => ({ worktreeFilesEpoch: state.worktreeFilesEpoch + 1 })))
+    expect(await screen.findByText('No changes')).toBeTruthy()
+    expect(document.querySelector('.patch')).toBeNull()
+    expect(diff.disabled).toBe(false)
+    fireEvent.click(diff)
+    await waitFor(() => expect(diff.disabled).toBe(true))
+  })
 })

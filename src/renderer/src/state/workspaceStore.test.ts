@@ -71,7 +71,8 @@ it('reads the changed paths only once the panel is open, and the patch only once
   // Exactly two: the working-tree patch and the index's. Which half a hunk
   // came out of decides whether it can be staged or unstaged.
   expect(diffCalls()).toBe(2)
-  expect(useWorkspaceStore.getState().diff?.patch).toContain('diff --git')
+  const { diff, stagedDiff } = useWorkspaceStore.getState()
+  expect(`${diff?.patch ?? ''}${stagedDiff?.patch ?? ''}`).toContain('diff --git')
 
   // Picking the same row again clears it, and clearing costs no call.
   useWorkspaceStore.getState().selectChange(null)

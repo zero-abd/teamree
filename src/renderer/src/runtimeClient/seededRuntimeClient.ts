@@ -633,10 +633,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
       statuses.set(worktreeId, status)
       return status
     },
-    'worktree.changes': ({ worktreeId, limit }) => {
+    'worktree.changes': ({ worktreeId, path, limit }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)
-      const all = status ? seededChanges(status) : []
+      const all = (status ? seededChanges(status) : []).filter((change) => path === undefined || change.path === path)
       const cap = limit ?? 500
       return {
         worktreeId: worktree.id,
@@ -791,7 +791,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)
       const changes = status ? seededChanges(status) : []
-      const wanted = path === undefined ? changes.filter((change) => change.staged === (staged ?? false)) : [{ path }]
+      const wanted = changes.filter(
+        (change) => change.staged === (staged ?? false) && (path === undefined || change.path === path)
+      )
       return {
         worktreeId: worktree.id,
         ...(path === undefined ? {} : { path }),
