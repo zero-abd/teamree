@@ -9,7 +9,7 @@ import { APP_VERSION } from './appVersion'
 import { createQuitSequence } from './quitSequence'
 import { registerRevealHandler } from './reveal/revealPath'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
-import { mayOpenExternally, navigationVerdict } from './windowNavigation'
+import { navigationVerdict, windowOpenAnswer } from './windowNavigation'
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -59,12 +59,12 @@ function createWindow(): BrowserWindow {
   })
 
   // Keep external links in the user's browser, never in an app window — and
-  // never hand macOS anything that is not a web address. See windowNavigation.ts
-  // for what that is worth today, which is honestly not much.
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (mayOpenExternally(url)) void shell.openExternal(url)
-    return { action: 'deny' }
-  })
+  // never hand macOS anything that is not a web address. This is where a link
+  // in a pane ends up: the emulator's addons activate one with `window.open`,
+  // and windowNavigation.ts is where the decision about it is written down.
+  window.webContents.setWindowOpenHandler(({ url }) =>
+    windowOpenAnswer(url, (target) => void shell.openExternal(target))
+  )
 
   // And the same answer for a navigation, which `setWindowOpenHandler` never
   // sees. The window carries the preload bridge onto whatever it lands on, so

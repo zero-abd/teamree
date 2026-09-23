@@ -11,12 +11,16 @@
 //
 // What the steps say is still entirely `TeamworkSteps`'s business, and what
 // they mean is still `startTeamwork.ts`'s. This owns the chrome, the reads, and
-// the way out — plus the three things that are genuinely about *this* window
+// the way out — plus the two things that are genuinely about *this* window
 // rather than about the flow: which of the two jobs this visit is (state of a
-// visit, not of a project), the clock the push's elapsed time is measured
-// against, and the clipboard.
+// visit, not of a project), and the clock the push's elapsed time is measured
+// against. Putting the invitation on the clipboard used to be a third; a pane
+// needs the same thing for a URL an agent printed, so it is one module now and
+// `src/renderer/src/clipboard` is where the secure-context caveat is written
+// down.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { copyText } from '../clipboard/clipboard'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalView } from '../terminal/TerminalView'
@@ -46,42 +50,6 @@ const RELAY_PANE_TAIL_BYTES = 32_768
  * runs only while a push is in flight.
  */
 const PUBLISH_POLL_MS = 500
-
-/**
- * Puts text on the clipboard, by whichever of the two ways is available.
- *
- * The async clipboard API needs a secure context, and a renderer loaded from a
- * file URL in a packaged build is not reliably one — so the old selection-based
- * copy is kept as the fallback rather than as a relic. There is nothing to
- * report back: a copy that fails both ways leaves the text on screen, which is
- * where it already was, and the invitation is rendered in full for exactly that
- * reason.
- */
-function copyToClipboard(text: string): void {
-  const async = navigator.clipboard?.writeText(text)
-  if (async !== undefined) {
-    void async.catch(() => selectAndCopy(text))
-    return
-  }
-  selectAndCopy(text)
-}
-
-function selectAndCopy(text: string): void {
-  const field = document.createElement('textarea')
-  field.value = text
-  // Off-screen rather than hidden: a `display: none` element cannot be selected,
-  // which is the whole mechanism this depends on.
-  field.style.position = 'fixed'
-  field.style.left = '-9999px'
-  document.body.append(field)
-  field.select()
-  try {
-    document.execCommand('copy')
-  } catch {
-    // Nothing to do and nothing to say. The text is on screen either way.
-  }
-  field.remove()
-}
 
 export function TeamworkView({ projectId }: { projectId: string }): React.JSX.Element {
   const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === projectId))
@@ -308,7 +276,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
             path={path}
             onChoosePath={setPath}
             projectName={name}
-            onCopy={copyToClipboard}
+            onCopy={copyText}
           />
         </div>
       </div>

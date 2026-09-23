@@ -11,7 +11,7 @@
 // watches a real window refuse a real navigation.
 
 import { describe, expect, it } from 'vitest'
-import { mayOpenExternally, navigationVerdict } from './windowNavigation'
+import { mayOpenExternally, navigationVerdict, windowOpenAnswer } from './windowNavigation'
 
 const PACKAGED = 'file:///Applications/teamree.app/Contents/Resources/app.asar/out/renderer/index.html'
 const DEV = 'http://localhost:5173/'
@@ -62,6 +62,37 @@ describe('what may be handed to macOS', () => {
     expect(mayOpenExternally('http://localhost:5173/')).toBe(true)
     for (const url of ['about:blank', 'file:///etc/hosts', 'javascript:alert(1)', 'x-apple-script://run', '']) {
       expect(mayOpenExternally(url), url).toBe(false)
+    }
+  })
+})
+
+describe('what a window.open from the page means', () => {
+  // The handler cannot see who called it, so the URL is the whole of what tells
+  // a link somebody clicked from a page somebody is trying to put in front of
+  // them. A pane's links arrive here: the web-links addon and xterm's own OSC 8
+  // handler both end in `window.open`, which is deliberate — this is the one
+  // decision about what gets handed to the OS, and there is no second one in
+  // the renderer.
+  it('sends a link to the browser, and still opens no window', () => {
+    const opened: string[] = []
+    const answer = windowOpenAnswer('https://github.com/zero-abd/teamree/pull/7', (url) => opened.push(url))
+
+    expect(opened).toEqual(['https://github.com/zero-abd/teamree/pull/7'])
+    // Never `allow`. A second window would carry this one's preload bridge onto
+    // whatever landed in it, which is the whole argument of the rule above.
+    expect(answer).toEqual({ action: 'deny' })
+  })
+
+  it('hands the OS nothing else, whatever asked for it', () => {
+    for (const url of [
+      'file:///etc/hosts',
+      'javascript:alert(1)',
+      'about:blank',
+      'data:text/html,<script>1</script>'
+    ]) {
+      const opened: string[] = []
+      expect(windowOpenAnswer(url, (target) => opened.push(target))).toEqual({ action: 'deny' })
+      expect(opened, url).toEqual([])
     }
   })
 })
