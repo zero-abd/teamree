@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Terminal } from '@shared/entities'
-import { EVIDENCE_INTERVAL_MS, forgetClosed, terminalsToRead, type EvidenceRead } from './evidenceReads'
+import {
+  EVIDENCE_INTERVAL_MS,
+  forgetClosed,
+  readsTrueScreen,
+  terminalsToRead,
+  type EvidenceRead
+} from './evidenceReads'
 
 function terminal(id: string, partial: Partial<Terminal> = {}): Terminal {
   return {
@@ -18,7 +24,13 @@ function terminal(id: string, partial: Partial<Terminal> = {}): Terminal {
   }
 }
 
-const read = (readAt: number, wasRunning = true): EvidenceRead => ({ readAt, wasRunning })
+const read = (readAt: number, wasRunning = true, partial: Partial<EvidenceRead> = {}): EvidenceRead => ({
+  readAt,
+  wasRunning,
+  wasBusy: false,
+  outputAt: 0,
+  ...partial
+})
 
 describe('terminalsToRead', () => {
   it('reads a pane it has never read', () => {
@@ -33,12 +45,27 @@ describe('terminalsToRead', () => {
 
   it('never re-reads a quiet pane that has printed nothing since', () => {
     const quiet = terminal('t1', { busy: false, lastOutputAt: 900 })
-    expect(terminalsToRead({ visible: [quiet], reads: { t1: read(1000) }, now: 1_000_000 })).toEqual([])
+    expect(
+      terminalsToRead({ visible: [quiet], reads: { t1: read(1000, true, { outputAt: 900 }) }, now: 1_000_000 })
+    ).toEqual([])
   })
 
   it('reads a quiet pane again once it has printed something new', () => {
     const spoke = terminal('t1', { busy: false, lastOutputAt: 2000 })
-    expect(terminalsToRead({ visible: [spoke], reads: { t1: read(1000) }, now: 5000 })).toEqual(['t1'])
+    expect(
+      terminalsToRead({ visible: [spoke], reads: { t1: read(1000, true, { outputAt: 900 }) }, now: 5000 })
+    ).toEqual(['t1'])
+  })
+
+  it('reads a pane once more after its burst ends, even when its last output predates the read', () => {
+    // Read mid-burst at 1000; the burst ends at 1100, but the runtime's own clock stamps it 950.
+    const quiet = terminal('t1', { busy: false, lastOutputAt: 950 })
+    const midBurst = read(1000, true, { wasBusy: true, outputAt: 400 })
+    expect(terminalsToRead({ visible: [quiet], reads: { t1: midBurst }, now: 1100 })).toEqual([])
+    expect(terminalsToRead({ visible: [quiet], reads: { t1: midBurst }, now: 5100 })).toEqual(['t1'])
+
+    const settled = read(5100, true, { wasBusy: false, outputAt: 950 })
+    expect(terminalsToRead({ visible: [quiet], reads: { t1: settled }, now: 1_000_000 })).toEqual([])
   })
 
   it('reads an exited pane once more, so the row settles on its last output', () => {
@@ -74,6 +101,17 @@ describe('terminalsToRead', () => {
     expect(terminalsToRead({ visible, reads, now: 1001, limit: 2 })).toEqual(
       visible.map((entry) => entry.id).filter((id) => !first.includes(id))
     )
+  })
+})
+
+describe('readsTrueScreen', () => {
+  it('trusts a mounted emulator while the pane is busy', () => {
+    expect(readsTrueScreen(terminal('t1', { busy: true }))).toBe(false)
+  })
+
+  it('asks the runtime once the pane is quiet or has exited, since a flooded emulator lags it', () => {
+    expect(readsTrueScreen(terminal('t1', { busy: false }))).toBe(true)
+    expect(readsTrueScreen(terminal('t1', { busy: true, running: false }))).toBe(true)
   })
 })
 
