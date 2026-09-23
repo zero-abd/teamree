@@ -108,16 +108,25 @@ export const FAILED_RESUME_BELOW = 'the attempt to resume this conversation begi
  * recorded on whichever machine held them, so a worktree synced to a second
  * laptop has none of them. Somebody reading a bare "not found" from a CLI they
  * did not run has no way to tell that apart from this app losing their work.
+ *
+ * It ends by saying what happens next, which is one of two sentences depending
+ * on whether a fresh agent is starting underneath this line or the pane has
+ * stopped. Only the pane knows which, so it is told rather than guessed at: a
+ * mark promising an agent that never came would be the same lie in the other
+ * direction.
  */
-export function failedResumeMark(exitCode: number, hasRecord: boolean): string {
+export function failedResumeMark(exitCode: number, hasRecord: boolean, restarted: boolean): string {
   const kept = hasRecord
     ? ' What the pane printed before the restart is above, under a line of its own, and is all still here.'
     : ''
+  const next = restarted
+    ? 'A fresh agent is starting below, in this same directory.'
+    : 'Open a new pane in this directory to start a fresh one.'
   return (
     `${RESET}\r\n${DIM}[nothing was resumed — this pane came back to pick a conversation up and the agent ` +
     `exited with code ${exitCode} before anything could be typed into it; whatever it said about why is ` +
     `directly above.${kept} A conversation can be gone for ordinary reasons: deleted, expired, or recorded ` +
-    `on another machine. Open a new pane in this directory to start a fresh one.]${RESET}\r\n`
+    `on another machine. ${next}]${RESET}\r\n`
   )
 }
 

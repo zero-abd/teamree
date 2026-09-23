@@ -44,6 +44,43 @@ const STRIPPED_ENV_VARS = new Set([
 
 const STRIPPED_ENV_PREFIXES = ['ELECTRON_', 'npm_', 'VITE_']
 
+/**
+ * Variables that say which coding-agent session this process is a child of.
+ *
+ * teamree is very often started from inside one: `npm run dev` typed into an
+ * agent's own pane, or the app launched from a terminal that agent owns. Those
+ * sessions mark their children so that an agent started underneath one knows it
+ * is nested, and the mark is inherited by everything below — including, without
+ * this, every pane teamree opens.
+ *
+ * A pane's child is not nested. It is a session of the user's own, in a checkout
+ * of their own, and wearing somebody else's marker makes it behave as part of a
+ * conversation it has nothing to do with. What Claude Code does about the marker
+ * is stop writing its transcript at all, which is invisible for as long as the
+ * app is running and fatal the moment it is not: nothing was ever written under
+ * the id this app pinned, so the next launch's `--resume` is refused with "No
+ * conversation found with session ID", and the pane comes back holding an error
+ * where its conversation should be. The socket and token are the host session's
+ * own control channel, which is nobody else's to hold.
+ *
+ * Named one at a time rather than stripped by prefix, deliberately.
+ * `CLAUDE_CODE_` also spells settings a user means to have — which model
+ * gateway to use, and the like — and a pane that dropped those would not reach
+ * a model at all.
+ */
+const STRIPPED_AGENT_SESSION_VARS = [
+  'CLAUDECODE',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_CHILD_SESSION',
+  'CLAUDE_CODE_HOST_SESSION_ID',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_PID'
+]
+
+for (const name of STRIPPED_AGENT_SESSION_VARS) STRIPPED_ENV_VARS.add(name)
+
 /** Used only when the inherited environment has no PATH at all, which happens to
  *  GUI apps launched by the desktop rather than by a shell. */
 const FALLBACK_PATH: Record<string, string> = {

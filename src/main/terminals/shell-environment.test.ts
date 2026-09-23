@@ -119,6 +119,39 @@ describe('buildTerminalEnv', () => {
     expect(env.KEEP_ME).toBe('yes')
   })
 
+  // The app is very often started from inside a coding agent's own session, and
+  // those sessions mark their children. A pane is not one of those children:
+  // wearing the mark, Claude Code stops writing its transcript, and a pane that
+  // worked all day comes back on the next launch saying "No conversation found
+  // with session ID" — the id having named nothing all along.
+  it('strips the markers of whichever agent session started the app', () => {
+    const env = buildTerminalEnv({
+      PATH: '/usr/bin',
+      CLAUDECODE: '1',
+      CLAUDE_CODE_CHILD_SESSION: '1',
+      CLAUDE_CODE_SESSION_ID: '00000000-0000-4000-8000-000000000000',
+      CLAUDE_CODE_HOST_SESSION_ID: '00000000-0000-4000-8000-000000000001',
+      CLAUDE_CODE_ENTRYPOINT: 'cli',
+      CLAUDE_CODE_MESSAGING_SOCKET: '/tmp/somebody-elses.sock',
+      CLAUDE_CODE_MESSAGING_TOKEN: 'secret',
+      CLAUDE_PID: '4242',
+      // Not a marker but a setting the user means to have, which is why these
+      // are named one at a time rather than stripped by prefix: a pane without
+      // it would not reach a model at all.
+      CLAUDE_CODE_USE_BEDROCK: '1'
+    })
+
+    expect(env).not.toHaveProperty('CLAUDECODE')
+    expect(env).not.toHaveProperty('CLAUDE_CODE_CHILD_SESSION')
+    expect(env).not.toHaveProperty('CLAUDE_CODE_SESSION_ID')
+    expect(env).not.toHaveProperty('CLAUDE_CODE_HOST_SESSION_ID')
+    expect(env).not.toHaveProperty('CLAUDE_CODE_ENTRYPOINT')
+    expect(env).not.toHaveProperty('CLAUDE_CODE_MESSAGING_SOCKET')
+    expect(env).not.toHaveProperty('CLAUDE_CODE_MESSAGING_TOKEN')
+    expect(env).not.toHaveProperty('CLAUDE_PID')
+    expect(env.CLAUDE_CODE_USE_BEDROCK).toBe('1')
+  })
+
   it('drops undefined values rather than passing them through', () => {
     const env = buildTerminalEnv({ PATH: '/usr/bin', UNSET: undefined })
     expect(Object.keys(env)).not.toContain('UNSET')
