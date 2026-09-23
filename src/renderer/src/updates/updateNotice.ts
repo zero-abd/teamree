@@ -12,9 +12,7 @@ export type UpdateNotice = {
   notes: string | null
   /** The button that opens the browser. */
   action: string
-  /** The quieter one, which stops teamree looking. */
-  silence: string
-  /** Where the install steps are, beside the link that opens them. */
+  /** The link to `INSTALL_DOCUMENT`. */
   install: string
 }
 
@@ -32,8 +30,7 @@ export function updateNotice(state: UpdateState | null): UpdateNotice | null {
     detail: `Running ${state.current} · disk image, install by hand`,
     notes: release.notes,
     action: release.downloadUrl === null ? 'Open the release page' : `Download ${release.version}`,
-    silence: 'Stop checking',
-    install: 'Install steps: docs/install.md'
+    install: 'Install steps'
   }
 }
 
