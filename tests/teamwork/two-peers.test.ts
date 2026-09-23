@@ -34,7 +34,7 @@ const RELAY_BUILT = relayIsBuilt()
 type RosterMember = { handle: string; publicKey: string }
 
 type HarnessPeer = {
-  discovery: { endpoint: string }
+  discovery: { endpoint: string; pid: number }
   discoveryPath: string
   child: { exitCode: number | null; signalCode: NodeJS.Signals | null }
 }
@@ -173,6 +173,33 @@ describe('two peers on one machine', () => {
       expect(relay.url).toBe(peers.relay.url)
     },
     90_000
+  )
+
+  // A frozen runtime stands in for one whose event loop is starved under load: however late it
+  // answers SIGTERM, nothing above it may escalate to a kill that skips its cleanup.
+  it.skipIf(process.platform === 'win32')(
+    'lets a runtime too busy to answer at once still clean up',
+    async () => {
+      const leader = peers.leader as HarnessPeer
+      const signal = (name: NodeJS.Signals): void => {
+        try {
+          process.kill(leader.discovery.pid, name)
+        } catch {
+          // Already gone.
+        }
+      }
+      signal('SIGSTOP')
+      const thaw = setTimeout(() => signal('SIGCONT'), 500)
+      try {
+        await peers.leader.stop()
+      } finally {
+        clearTimeout(thaw)
+        signal('SIGCONT')
+      }
+      expect(existsSync(leader.discoveryPath)).toBe(false)
+      expect(existsSync(leader.discovery.endpoint)).toBe(false)
+    },
+    60_000
   )
 
   // Last on purpose: teardown can only be checked by doing it. Every assertion
