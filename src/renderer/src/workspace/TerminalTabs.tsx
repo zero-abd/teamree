@@ -8,7 +8,7 @@ import { paneTabs, paneTabTitle } from './paneTabs'
 import { startMenuItems } from './startMenu'
 import { PaneGlyph } from '../agents/glyphs'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { truncateName } from '../sidebar/agentRows'
+import { dotClass, dotTone, truncateName } from '../sidebar/agentRows'
 import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { SidebarGlyph } from '../shell/Brand'
 import { useUnreadPanes } from '../state/usePaneSeen'
@@ -131,13 +131,12 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                       />
                     ) : (
                       <span
-                        className={tab.activity === null ? 'activity' : `activity activity--${tab.activity}`}
+                        className={dotClass(tab.activity === null ? null : dotTone(tab.activity, tab.agent), isUnread)}
                         aria-hidden="true"
                       />
                     )}
-                    {/* Shortened here only; the tooltip and the record keep all of it. */}
-                    {isUnread ? <span className="pip" aria-hidden="true" /> : null}
                     {isFile ? null : <PaneGlyph agent={tab.agent} />}
+                    {/* Shortened here only; the tooltip and the record keep all of it. */}
                     {tab.text === '' ? null : <span className="tab__name">{truncateName(tab.text)}</span>}
                   </button>
                 )}

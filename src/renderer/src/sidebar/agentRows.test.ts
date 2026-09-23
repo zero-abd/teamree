@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { Terminal } from '@shared/entities'
 import {
   ACTIVITY_LABEL,
+  ACTIVITY_NOUN,
   activityOf,
+  dotClass,
+  dotTone,
   agentRows,
   agoLabel,
   paneLabel,
@@ -13,6 +16,7 @@ import {
   truncateName,
   watchedBy,
   worktreeActivity,
+  worktreeTone,
   type AgentRow
 } from './agentRows'
 
@@ -44,53 +48,113 @@ const row = (overrides: Partial<AgentRow> = {}): AgentRow => ({
 
 describe('activityOf', () => {
   it('is working while output is still arriving', () => {
-    expect(activityOf(terminal({ id: 't', busy: true }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: true }))).toBe('working')
   })
 
   // A pane that stopped saying things and said nothing about why is one this
   // app knows nothing more about; "waiting on you" would be a guess.
   it('is quiet — not "waiting for input" — when output stops with no bell and no title', () => {
-    expect(activityOf(terminal({ id: 't', busy: false }))).toBe('quiet')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false }))).toBe('quiet')
   })
 
   // A bell is the one byte a program sends for no reason except to be noticed.
   it('is waiting when a bell rang and the pane then went quiet', () => {
-    expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 1_000 }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, lastBellAt: 1_000 }))).toBe('waiting')
   })
 
   // The session clears the bell when a new burst starts, so a bell set
   // alongside `busy` rang inside the burst still running.
   it('is working while output is still arriving, bell or no bell', () => {
-    expect(activityOf(terminal({ id: 't', busy: true, lastBellAt: 1_000 }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: true, lastBellAt: 1_000 }))).toBe('working')
   })
 
   it('is waiting when the pane’s own title says so, even mid-output', () => {
-    expect(activityOf(terminal({ id: 't', busy: true, titleSays: 'waiting' }))).toBe('waiting')
-    expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'waiting' }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: true, titleSays: 'waiting' }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, titleSays: 'waiting' }))).toBe('waiting')
   })
 
   // A long tool call prints nothing for minutes; the title is the pane's own account.
   it('is working when output stopped but the title still says it is working', () => {
-    expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'working' }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, titleSays: 'working' }))).toBe('working')
   })
 
   // A title is a status the program repaints; a bell is something it did on purpose, at a person.
   it('lets an unanswered bell outrank a title left saying "working"', () => {
-    expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'working', lastBellAt: 1_000 }))).toBe('waiting')
+    expect(
+      activityOf(terminal({ id: 't', agent: 'claude', busy: false, titleSays: 'working', lastBellAt: 1_000 }))
+    ).toBe('waiting')
   })
 
   it('says nothing about a pane that has exited, whatever it rang on the way out', () => {
-    expect(activityOf(terminal({ id: 't', running: false, exitCode: 0, lastBellAt: 1_000 }))).toBe('done')
-    expect(activityOf(terminal({ id: 't', running: false, exitCode: 1, titleSays: 'waiting' }))).toBe('failed')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 0, lastBellAt: 1_000 }))).toBe(
+      'done'
+    )
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 1, titleSays: 'waiting' }))).toBe(
+      'failed'
+    )
   })
 
   it('separates a clean finish from a failure', () => {
-    expect(activityOf(terminal({ id: 't', running: false, exitCode: 0 }))).toBe('done')
-    expect(activityOf(terminal({ id: 't', running: false, exitCode: 1 }))).toBe('failed')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 0 }))).toBe('done')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 1 }))).toBe('failed')
   })
 
   it('treats a death with no code at all as a failure', () => {
-    expect(activityOf(terminal({ id: 't', running: false }))).toBe('failed')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false }))).toBe('failed')
+  })
+})
+
+describe('activityOf, in a pane with no agent', () => {
+  // A shell rings for a failed tab completion; nothing in it is asking.
+  it('never reads a bell or a title as a shell asking', () => {
+    expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 1_000 }))).toBe('quiet')
+    expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'waiting' }))).toBe('quiet')
+    expect(activityOf(terminal({ id: 't', busy: true }))).toBe('working')
+  })
+
+  it('reads an agent seen in the foreground as an agent', () => {
+    expect(activityOf(terminal({ id: 't', foregroundAgent: 'codex', lastBellAt: 1_000 }))).toBe('waiting')
+  })
+})
+
+describe('dotTone', () => {
+  it('draws a quiet shell as idle and a quiet agent as quiet', () => {
+    expect(dotTone('quiet', undefined)).toBe('idle')
+    expect(dotTone('quiet', 'claude')).toBe('quiet')
+  })
+
+  it('leaves every other state as it is', () => {
+    for (const activity of ['waiting', 'working', 'done', 'failed'] as const) {
+      expect(dotTone(activity, undefined)).toBe(activity)
+    }
+  })
+})
+
+describe('dotClass', () => {
+  // One dot per row: unread is a ring on it, never a second mark beside it.
+  it('rings the dot when unread', () => {
+    expect(dotClass('idle')).toBe('activity activity--idle')
+    expect(dotClass('working', true)).toBe('activity activity--working activity--unread')
+  })
+
+  it('draws a bare dot when the state is not known yet', () => {
+    expect(dotClass(null)).toBe('activity')
+    expect(dotClass(null, true)).toBe('activity activity--unread')
+  })
+})
+
+describe('worktreeTone', () => {
+  it('is idle when every quiet pane is a shell', () => {
+    expect(worktreeTone([row({ activity: 'quiet' }), row({ activity: 'done' })])).toBe('idle')
+  })
+
+  it('is quiet when a quiet pane runs an agent', () => {
+    expect(worktreeTone([row({ activity: 'quiet' }), row({ activity: 'quiet', agent: 'claude' })])).toBe('quiet')
+  })
+
+  it('follows worktreeActivity otherwise', () => {
+    expect(worktreeTone([])).toBeNull()
+    expect(worktreeTone([row({ activity: 'quiet' }), row({ activity: 'working' })])).toBe('working')
   })
 })
 
@@ -99,20 +163,24 @@ describe('activityOf, when the agent has said something', () => {
   // permission prompt; a hook reporting the prompt is the agent saying so.
   it('is waiting when the agent reported a notification, whatever the bytes say', () => {
     const said = { event: 'Notification' as const, at: 1_000, detail: 'permission_prompt' }
-    expect(activityOf(terminal({ id: 't', busy: true, titleSays: 'working', agentEvent: said }))).toBe('waiting')
-    expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: true, titleSays: 'working', agentEvent: said }))).toBe(
+      'waiting'
+    )
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, agentEvent: said }))).toBe('waiting')
   })
 
   it('is waiting when the agent has been idle at its prompt long enough to say so', () => {
     const said = { event: 'Notification' as const, at: 1_000, detail: 'idle_prompt' }
-    expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, agentEvent: said }))).toBe('waiting')
   })
 
   // A model call prints nothing; the turn is running because the agent said it started.
   it('is working after a prompt was submitted, even with no output arriving', () => {
     const said = { event: 'UserPromptSubmit' as const, at: 1_000 }
-    expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('working')
-    expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 900, agentEvent: said }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, agentEvent: said }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, lastBellAt: 900, agentEvent: said }))).toBe(
+      'working'
+    )
   })
 
   // A title still saying otherwise is one nobody has repainted; a bell in the
@@ -120,27 +188,35 @@ describe('activityOf, when the agent has said something', () => {
   it('is quiet once the agent reported the turn ended, even mid-output', () => {
     for (const event of ['Stop', 'SessionStart', 'SessionEnd'] as const) {
       const said = { event, at: 1_000 }
-      expect(activityOf(terminal({ id: 't', busy: true, titleSays: 'working', agentEvent: said }))).toBe('quiet')
-      expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 900, agentEvent: said }))).toBe('quiet')
+      expect(
+        activityOf(terminal({ id: 't', agent: 'claude', busy: true, titleSays: 'working', agentEvent: said }))
+      ).toBe('quiet')
+      expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, lastBellAt: 900, agentEvent: said }))).toBe(
+        'quiet'
+      )
     }
   })
 
   // A login that succeeded or a quota timer says nothing about whether you are needed.
   it('falls back to the bytes for a notification that is not a request', () => {
     const said = { event: 'Notification' as const, at: 1_000, detail: 'auth_success' }
-    expect(activityOf(terminal({ id: 't', busy: true, agentEvent: said }))).toBe('working')
-    expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('quiet')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: true, agentEvent: said }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, agentEvent: said }))).toBe('quiet')
   })
 
   it('reads the bytes when the agent has said nothing', () => {
-    expect(activityOf(terminal({ id: 't', busy: true }))).toBe('working')
-    expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 1 }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: true }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, lastBellAt: 1 }))).toBe('waiting')
   })
 
   it('reports an exit over anything the agent said before it', () => {
     const said = { event: 'UserPromptSubmit' as const, at: 1_000 }
-    expect(activityOf(terminal({ id: 't', running: false, exitCode: 0, agentEvent: said }))).toBe('done')
-    expect(activityOf(terminal({ id: 't', running: false, exitCode: 1, agentEvent: said }))).toBe('failed')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 0, agentEvent: said }))).toBe(
+      'done'
+    )
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 1, agentEvent: said }))).toBe(
+      'failed'
+    )
   })
 })
 
@@ -422,6 +498,11 @@ describe('ACTIVITY_LABEL', () => {
     const [waiting] = ACTIVITY_LABEL.waiting.split(/\s/)
     const [quiet] = ACTIVITY_LABEL.quiet.split(/\s/)
     expect(waiting).not.toBe(quiet)
-    expect(ACTIVITY_LABEL.quiet).toBe('quiet — no output')
+    expect(ACTIVITY_LABEL.quiet).toBe('idle')
+  })
+
+  // "2 waiting" beside "0 asking" spent the attention word on shells at a prompt.
+  it('names the quiet column idle', () => {
+    expect(ACTIVITY_NOUN.quiet).toBe('idle')
   })
 })

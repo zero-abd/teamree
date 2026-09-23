@@ -2,7 +2,7 @@
 // handle is on the row and the row is a `<div>`, not a disabled button: it will
 // not act. Panes can be watched; an away teammate's row stays put and says how old it is.
 
-import { ACTIVITY_LABEL, sinceLabel, truncateName } from './agentRows'
+import { ACTIVITY_LABEL, dotClass, dotTone, sinceLabel, truncateName, worktreeTone } from './agentRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 import { PaneGlyph } from '../agents/glyphs'
 
@@ -22,7 +22,7 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
             <span className="worktree__name">{row.name}</span>
             {row.activity ? (
               <span
-                className={`activity activity--${row.activity}`}
+                className={dotClass(worktreeTone(row.panes))}
                 title={ACTIVITY_LABEL[row.activity]}
                 aria-label={ACTIVITY_LABEL[row.activity]}
               />
@@ -67,7 +67,7 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
                   onClick={() => onWatch(pane)}
                 >
                   <span className="pane-row__head">
-                    <span className={`activity activity--${pane.activity}`} aria-hidden="true" />
+                    <span className={dotClass(dotTone(pane.activity, pane.agent))} aria-hidden="true" />
                     <PaneGlyph agent={pane.agent} />
                     <span className="pane-row__label">{truncateName(pane.text)}</span>
                     <span className="pane-row__since">{sinceLabel(pane.quietFor)}</span>

@@ -170,10 +170,13 @@ function tidy(line: string): string {
   return line.replace(LEADING_SPINNER, '').replace(/\s+/g, ' ').trim()
 }
 
-/** A line with nothing to act on: a bare prompt, a rule, a spinner frame on its own. */
+/** The asides the app writes around a restored pane's record (see `scrollbackRecord.ts`); not the program's output. */
+const OWN_MARK = /^\[(?:record — up to |end of record — |resume refused — |no conversation to resume — )/
+
+/** A line with nothing to act on: a bare prompt, a rule, a spinner frame on its own, the app's own mark. */
 function isUninformative(line: string): boolean {
   if (!/[\p{L}\p{N}]/u.test(line)) return true
-  return isBarePrompt(line)
+  return OWN_MARK.test(line) || isBarePrompt(line)
 }
 
 function isBarePrompt(line: string): boolean {

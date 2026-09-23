@@ -4,7 +4,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { modalOnScreen } from '../dialogs/modalLayer'
-import { ACTIVITY_LABEL, ACTIVITY_NOUN, agoLabel, sinceLabel, truncateName } from '../sidebar/agentRows'
+import {
+  ACTIVITY_LABEL,
+  ACTIVITY_NOUN,
+  agoLabel,
+  dotClass,
+  dotTone,
+  sinceLabel,
+  truncateName
+} from '../sidebar/agentRows'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -80,7 +88,8 @@ export function Dashboard(): React.JSX.Element {
               className={`board-count${counts[activity] === 0 ? ' board-count--zero' : ''}`}
               title={ACTIVITY_LABEL[activity]}
             >
-              <span className={`activity activity--${activity}`} aria-hidden="true" />
+              {/* The idle column is mostly shells, so its dot is theirs. */}
+              <span className={dotClass(activity === 'quiet' ? 'idle' : activity)} aria-hidden="true" />
               <span className="board-count__number">{counts[activity]}</span>
               <span className="board-count__label">{ACTIVITY_NOUN[activity]}</span>
             </li>
@@ -128,9 +137,11 @@ export function Dashboard(): React.JSX.Element {
                 } · last output ${agoLabel(row.quietFor)}`}
                 onClick={() => void revealPane(row.worktreeId, row.terminalId)}
               >
-                <span className={`activity activity--${row.activity}`} aria-hidden="true" />
+                <span
+                  className={dotClass(dotTone(row.activity, row.agent), unread.has(row.terminalId))}
+                  aria-hidden="true"
+                />
                 <span className="board-row__what">
-                  {unread.has(row.terminalId) ? <span className="pip" aria-hidden="true" /> : null}
                   <span className="board-row__label">{truncateName(row.label)}</span>
                   {/* An agent pane is named by its agent, so only a shell needs saying. */}
                   {row.agent ? null : <span className="chip board-row__kind">shell</span>}

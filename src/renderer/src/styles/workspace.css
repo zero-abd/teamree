@@ -169,8 +169,7 @@
   white-space: nowrap;
 }
 
-/* The same mark the sidebar draws, on the same pane. See `.pip` in sidebar.css
-   for why it is a weight and a dot rather than a number. */
+/* The same mark the sidebar draws, on the same pane: see `.activity--unread` in sidebar.css. */
 .tab--unread .tab__name {
   color: var(--fg);
   font-weight: 600;

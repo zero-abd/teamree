@@ -37,11 +37,21 @@ export type AgentRow = {
 export const ACTIVITY_LABEL: Record<AgentActivity, string> = {
   waiting: 'waiting on you',
   working: 'working',
-  // Not "waiting — no output": beside `waiting on you` the two opposite
-  // states began with the same word.
-  quiet: 'quiet — no output',
+  quiet: 'idle',
   done: 'finished',
   failed: 'exited with an error'
+}
+
+/** What a dot is coloured: `idle` is a quiet pane with no agent, so only an agent is ever amber. */
+export type DotTone = AgentActivity | 'idle'
+
+export function dotTone(activity: AgentActivity, agent: AgentKind | undefined): DotTone {
+  return activity === 'quiet' && agent === undefined ? 'idle' : activity
+}
+
+/** The one dot's classes; unread is a ring on it, never a second dot. */
+export function dotClass(tone: DotTone | null, unread: boolean = false): string {
+  return `activity${tone === null ? '' : ` activity--${tone}`}${unread ? ' activity--unread' : ''}`
 }
 
 /** Whose eyes are on a pane, by name: "2 watching" leaves out the half that matters. */
@@ -67,14 +77,11 @@ function listOf(handles: readonly string[]): string {
   return `${handles.slice(0, -1).join(', ')} and ${last} are `
 }
 
-/**
- * The one-word form, for counts and column headings. `waiting` is nouned
- * "asking" because `quiet` already has "waiting".
- */
+/** The one-word form, for counts and column headings. */
 export const ACTIVITY_NOUN: Record<AgentActivity, string> = {
   waiting: 'asking',
   working: 'working',
-  quiet: 'waiting',
+  quiet: 'idle',
   done: 'finished',
   failed: 'failed'
 }
@@ -84,6 +91,8 @@ export const ACTIVITY_NOUN: Record<AgentActivity, string> = {
  * pane, which crosses the wire as metadata, is read by the same function.
  */
 export type PaneActivitySource = {
+  agent?: AgentKind
+  foregroundAgent?: AgentKind
   running: boolean
   exitCode?: number
   busy: boolean
@@ -134,9 +143,11 @@ export function activityOf(terminal: PaneActivitySource): AgentActivity {
   if (!terminal.running) return terminal.exitCode === 0 ? 'done' : 'failed'
   const said = agentSays(terminal.agentEvent)
   if (said !== null) return said
-  if (terminal.titleSays === 'waiting') return 'waiting'
+  // A shell rings for a failed tab completion: only an agent can be asking.
+  const agent = terminal.agent ?? terminal.foregroundAgent
+  if (agent !== undefined && terminal.titleSays === 'waiting') return 'waiting'
   if (terminal.busy) return 'working'
-  if (terminal.lastBellAt !== undefined) return 'waiting'
+  if (agent !== undefined && terminal.lastBellAt !== undefined) return 'waiting'
   return terminal.titleSays === 'working' ? 'working' : 'quiet'
 }
 
@@ -275,6 +286,13 @@ export function worktreeActivity(rows: readonly AgentRow[]): AgentActivity | nul
   if (rows.some((row) => row.activity === 'working')) return 'working'
   if (rows.some((row) => row.activity === 'quiet')) return 'quiet'
   return 'done'
+}
+
+/** The collapsed row's dot: idle unless one of its quiet panes runs an agent. */
+export function worktreeTone(rows: readonly AgentRow[]): DotTone | null {
+  const overall = worktreeActivity(rows)
+  if (overall !== 'quiet') return overall
+  return rows.some((row) => row.activity === 'quiet' && row.agent !== undefined) ? 'quiet' : 'idle'
 }
 
 /**

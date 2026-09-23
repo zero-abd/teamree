@@ -21,9 +21,17 @@ const terminal = (overrides: Partial<Terminal> & { id: string }): Terminal => ({
   ...overrides
 })
 
-const mount = (...panes: Terminal[]): HTMLElement[] => {
+const mount = (...panes: Terminal[]): HTMLElement[] => mountUnread([], ...panes)
+
+const mountUnread = (unread: string[], ...panes: Terminal[]): HTMLElement[] => {
   render(
-    <PaneRows rows={agentRows(panes, 'w1', 0)} watchers={{}} unread={new Set()} now={0} onFocusTerminal={() => {}} />
+    <PaneRows
+      rows={agentRows(panes, 'w1', 0)}
+      watchers={{}}
+      unread={new Set(unread)}
+      now={0}
+      onFocusTerminal={() => {}}
+    />
   )
   return screen.getAllByRole('button')
 }
@@ -59,5 +67,23 @@ describe('PaneRows', () => {
     const head = row?.querySelector('.pane-row__head')
     expect(head?.children[0]?.className).toBe('activity activity--working')
     expect(head?.children[1]?.getAttribute('class')).toContain('agent-glyph')
+  })
+
+  it('draws a shell at its prompt as an idle grey dot, not amber', () => {
+    const [row] = mount(terminal({ id: 't1', lastBellAt: 1 }))
+    expect(row?.querySelector('.activity')?.className).toBe('activity activity--idle')
+    expect(row?.title).toContain('zsh · idle')
+  })
+
+  it('keeps a quiet agent amber', () => {
+    const [row] = mount(terminal({ id: 't1', agent: 'claude' }))
+    expect(row?.querySelector('.activity')?.className).toBe('activity activity--quiet')
+  })
+
+  // Unread is a ring on the one dot; a second dot beside it read as a second status.
+  it('draws one dot per row, ringed when unread', () => {
+    const [row] = mountUnread(['t1'], terminal({ id: 't1', agent: 'claude' }))
+    expect(row?.querySelectorAll('.activity, .pip')).toHaveLength(1)
+    expect(row?.querySelector('.activity')?.classList.contains('activity--unread')).toBe(true)
   })
 })

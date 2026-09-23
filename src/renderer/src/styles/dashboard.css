@@ -168,7 +168,7 @@
 }
 
 /* And on the board, which is where the filter above it acts. Same mark, same
-   reading: see `.pip` in sidebar.css. */
+   reading: see `.activity--unread` in sidebar.css. */
 .board-row--unread .board-row__label {
   color: var(--fg);
   font-weight: 600;

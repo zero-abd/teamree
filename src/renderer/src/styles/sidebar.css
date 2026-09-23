@@ -88,8 +88,7 @@
 
 /* Something about the machine wants a look, and this entry is where it is
    dealt with. The one mark in the rail; amber, because it is a thing to fix
-   and not a fault in the work. Sized as the unread pip is, and for the same
-   reason: it says "look here", never how much. */
+   and not a fault in the work. Small for a reason: it says "look here", never how much. */
 .rail__badge {
   width: 5px;
   height: 5px;
@@ -715,9 +714,8 @@
   text-decoration: underline;
 }
 
-/* What each pane in this worktree is doing. The dot is the whole vocabulary:
-   asking, working, waiting, finished, failed — five things, because five things
-   are all this app can honestly tell from watching a PTY. */
+/* What each pane in this worktree is doing: asking, working, idle, finished,
+   failed. Only an agent is ever amber; a shell at rest is grey. */
 .activity {
   width: 7px;
   height: 7px;
@@ -732,9 +730,8 @@
   animation: activity-pulse 1.6s ease-in-out infinite;
 }
 
-/* The pane has said it wants something. Amber like a quiet pane, because the
-   two are the same colour of unfinished, and pulsing because this is the one
-   the sidebar exists to find. */
+/* The agent has said it wants something; pulsing because this is the one the
+   sidebar exists to find. */
 .activity--waiting {
   background: var(--warning);
   animation: activity-pulse 1.6s ease-in-out infinite;
@@ -742,6 +739,10 @@
 
 .activity--quiet {
   background: var(--warning);
+}
+
+.activity--idle {
+  background: var(--fg-muted);
 }
 
 .activity--done {
@@ -765,33 +766,14 @@
   }
 }
 
-/* A pane has printed since this person last had it in front of them.
-
-   Weight and one dot, never a count. How many lines an agent wrote while you
-   were at lunch is not a thing anybody acts on, and a number invites being read
-   as progress; what a reader does with this is decide whether to open the pane,
-   which is a yes or a no.
-
-   Beside the activity dot rather than in place of it, because they are two
-   different facts about one pane: a pane can be finished and unread, or working
-   and already read. Nothing here moves — the dot next to it pulses while output
-   arrives and is stilled under `prefers-reduced-motion`, and a second animated
-   thing in the same 7px of row would be noise in either setting.
-
-   The accent at full strength rather than as a tint: this mark sits on the
-   sidebar, on the strip above the panes and on the board, and it has to hold up
-   against the lightest of those grounds. */
-.pip {
-  width: 5px;
-  height: 5px;
-  flex: none;
-  border-radius: 99px;
-  background: var(--accent-bright);
+/* Printed since this person last looked: a ring on the one dot, and the name
+   in weight. Never a count and never a second dot. `outline` leaves the working
+   halo's box-shadow alone. */
+.activity--unread {
+  outline: 1.5px solid var(--accent-bright);
+  outline-offset: 1.5px;
 }
 
-/* The name carries it too, because the pip is 5px and the name is what the eye
-   is already reading down the list. Full-strength ink as well as weight: a row
-   worth going to should not be the dimmest thing on its line. */
 .worktree__name--unread,
 .pane-row--unread .pane-row__label {
   color: var(--fg);

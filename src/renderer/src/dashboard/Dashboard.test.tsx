@@ -178,6 +178,22 @@ describe('the unread filter', () => {
     expect(screen.queryByText('beta')).toBeNull()
   })
 
+  it('rings the unread pane’s dot rather than drawing a second one', () => {
+    seedTwo()
+    render(<Dashboard />)
+    const alpha = screen.getByText('alpha').closest('.board-row')
+    expect(alpha?.querySelectorAll('.activity, .pip')).toHaveLength(1)
+    expect(alpha?.querySelector('.activity')?.className).toBe('activity activity--idle activity--unread')
+  })
+
+  it('heads the quiet column idle', () => {
+    seedTwo()
+    render(<Dashboard />)
+    const labels = [...document.querySelectorAll('.board-count__label')].map((label) => label.textContent)
+    expect(labels).toContain('idle')
+    expect(labels).not.toContain('waiting')
+  })
+
   it('goes back to every pane when it is pressed again', () => {
     seedTwo()
     render(<Dashboard />)
