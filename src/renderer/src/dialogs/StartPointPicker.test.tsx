@@ -316,6 +316,6 @@ describe('when the refs cannot be listed', () => {
   it('asks for nothing to be picked when the box is empty', () => {
     render(<Harness />)
     const description = document.getElementById(box().getAttribute('aria-describedby') ?? '')
-    expect(description?.textContent).toBe('Pick a branch, tag or commit to start the work from.')
+    expect(description?.textContent).toBe('Branch, tag or commit')
   })
 })

@@ -242,7 +242,7 @@ export function Sidebar({
               type="button"
               className={`rail__link${helpOpen ? ' rail__link--current' : ''}`}
               aria-current={helpOpen ? 'page' : undefined}
-              title="Shortcuts and what a worktree is"
+              title="Shortcuts"
               onClick={toggleHelp}
             >
               <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
@@ -274,7 +274,10 @@ export function Sidebar({
         </div>
 
         <div className="sidebar__scroll">
-          {projects.length === 0 ? <p className="sidebar__empty">No projects yet. Add a repository.</p> : null}
+          {/* The instruction that used to follow this — "Add a repository." —
+              named the button directly above it, which is the plus in this
+              section's own header, labelled "Add project". */}
+          {projects.length === 0 ? <p className="sidebar__empty">No projects yet</p> : null}
 
           {/* Grouped by the same function the next-worktree chord walks, so
               the chord moves down this list rather than through whatever order

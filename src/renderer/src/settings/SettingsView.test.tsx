@@ -249,17 +249,16 @@ describe('updates', () => {
   it('says this build has nothing to compare against, instead of offering a check', () => {
     seed({ update: { ...release(), current: '0.0.0-dev', checkable: false } })
     render(<SettingsView modifier={modifier} />)
-    expect(screen.getByText(/Not a released version/)).toBeTruthy()
-    expect(screen.getByText('This is teamree 0.0.0-dev.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Check now' })).toBeNull()
+    expect(screen.getByText('teamree 0.0.0-dev (not a release)')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Check for updates' })).toBeNull()
     expect(screen.queryByRole('checkbox')).toBeNull()
   })
 
   it('checks on request, and says when the last one was', () => {
     seed({ update: { ...release(), checkedAt: Date.now() - 4 * 60_000 } })
     render(<SettingsView modifier={modifier} />)
-    expect(screen.getByText('Last checked 4m ago.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Check now' }))
+    expect(screen.getByText('Checked 4m ago')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }))
     expect(checkForUpdates).toHaveBeenCalled()
   })
 
@@ -271,7 +270,7 @@ describe('updates', () => {
 
   it('turns the automatic check off through the store', () => {
     render(<SettingsView modifier={modifier} />)
-    const check = screen.getByRole('checkbox')
+    const check = screen.getByLabelText('Check automatically')
     expect((check as HTMLInputElement).checked).toBe(true)
     fireEvent.click(check)
     expect(setAutomaticUpdates).toHaveBeenCalledWith(false)
@@ -285,11 +284,12 @@ describe('updates', () => {
 })
 
 describe('panes', () => {
-  it('writes a new terminal text size through, and says it is remembered here only', () => {
+  it('writes a new terminal text size through, under a label and no caption', () => {
     render(<SettingsView modifier={modifier} />)
     fireEvent.change(screen.getByLabelText('Terminal text size'), { target: { value: '17' } })
     expect(setTerminalFontSize).toHaveBeenCalledWith(17)
-    expect(screen.getByText(/Remembered on this machine only/)).toBeTruthy()
+    // Every preference on this page is per-machine and none of them says so.
+    expect(screen.queryByText(/Remembered on this machine only/)).toBeNull()
   })
 
   it('shows the size it is at, which a slider alone cannot say', () => {
@@ -414,9 +414,13 @@ describe('the start point a new task is offered first', () => {
     expect(screen.getByRole('button', { name: 'Use origin/main' }).hasAttribute('disabled')).toBe(true)
   })
 
-  it('says the preference only decides what the composer offers first', () => {
+  // The buttons above it name the ref they would use, which is the whole of
+  // what this preference does; the paragraph that used to sit under them said
+  // it again and then reassured the reader that the repository's own base ref
+  // was untouched.
+  it('captions the start point with nothing at all', () => {
     render(<SettingsView modifier={modifier} />)
-    expect(screen.getByText(/What the New task dialog offers first/)).toBeTruthy()
+    expect(screen.queryByText(/What the New task dialog offers first/)).toBeNull()
   })
 })
 

@@ -444,10 +444,13 @@ describePty('PtySession', () => {
       // Said in words, and in the pane's own output rather than to whoever
       // happens to be subscribed: a restored pane can die before there is a
       // window, and the window paints from what it reads.
-      expect(shown).toContain('nothing was resumed')
-      expect(shown).toContain('exited with code 1')
-      expect(shown).toContain('deleted, expired, or recorded on another machine')
-      expect(outputOf(events)).toContain('nothing was resumed')
+      // One line, and the two facts the pane is the only thing that knows:
+      // which of the two resume failures this was, and what the agent exited
+      // with. Why a conversation can be gone is in the comment on
+      // `failedResumeMark`, not in the pane.
+      expect(shown).toContain('[resume refused — agent exited 1')
+      expect(shown).not.toContain('deleted, expired, or recorded on another machine')
+      expect(outputOf(events)).toContain('resume refused')
       // A subscriber that was already attached is sent the held record too. It
       // only ever reads once, when its view mounts, so un-holding the record
       // without also sending it would tell this one that the old output is
@@ -455,15 +458,15 @@ describePty('PtySession', () => {
       // this whole mechanism exists to stop, moved somewhere harder to see.
       expect(outputOf(events)).toContain('what this pane printed last time')
       expect(outputOf(events).indexOf('what this pane printed last time')).toBeLessThan(
-        outputOf(events).indexOf('nothing was resumed')
+        outputOf(events).indexOf('resume refused')
       )
 
       // The held record is let go of in the same moment, above the attempt that
       // failed, and under a line that does not promise a shell that is not
       // coming.
       expect(shown).toContain('what this pane printed last time')
-      expect(shown).toContain('the attempt to resume this conversation begins below')
-      expect(shown).not.toContain('a new shell starts below')
+      expect(shown).toContain('resume attempt below')
+      expect(shown).not.toContain('new shell below')
 
       // And the pane stops claiming it resumed anything.
       expect(session.snapshot().restored).toBeUndefined()
@@ -481,7 +484,7 @@ describePty('PtySession', () => {
 
       await waitUntil(() => !session.isRunning, 'the one-shot to finish')
 
-      expect(session.read()).not.toContain('nothing was resumed')
+      expect(session.read()).not.toContain('resume refused')
       // The badge stands, because it is true: that pane did resume.
       expect(session.snapshot().restored).toBe('agent')
       expect(session.resumeDidNotTake).toBe(false)
@@ -507,7 +510,7 @@ describePty('PtySession', () => {
 
       await waitUntil(() => !session.isRunning, 'the agent to exit')
 
-      expect(session.read()).not.toContain('nothing was resumed')
+      expect(session.read()).not.toContain('resume refused')
       // And the record stays held, because nothing has happened to say the
       // conversation did not come back.
       expect(session.read()).not.toContain('what this pane printed last time')
@@ -525,10 +528,10 @@ describePty('PtySession', () => {
 
       await waitUntil(() => !session.isRunning, 'the command to finish')
 
-      expect(session.read()).not.toContain('nothing was resumed')
+      expect(session.read()).not.toContain('resume refused')
       // A restored shell was always shown its record; that is unchanged.
       expect(session.read()).toContain('what this pane printed last time')
-      expect(session.read()).toContain('a new shell starts below')
+      expect(session.read()).toContain('new shell below')
     },
     TEST_TIMEOUT_MS
   )

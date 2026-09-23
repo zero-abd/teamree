@@ -1164,7 +1164,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       const terminal = required(terminals.get(terminalId), 'terminal')
       terminal.record = { ...terminal.record, running: true, busy: false, lastOutputAt: Date.now() }
       delete terminal.record.exitCode
-      const again = `\r\n${dim('[end of record — a new shell starts below]')}\r\n${prompt(terminal)}`
+      const again = `\r\n${dim('[end of record — new shell below]')}\r\n${prompt(terminal)}`
       terminal.buffer += again
       emit(terminal, { type: 'data', data: again })
       announce({ type: 'terminals' })

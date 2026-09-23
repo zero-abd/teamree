@@ -47,7 +47,13 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // half the things people run inside these panes. Pressed again it restores —
   // one chord for both halves, so there is nothing to remember about getting
   // back.
-  { command: 'expand-pane', chord: { key: 'Enter', shift: true }, title: 'Maximise pane' },
+  //
+  // Spelled the American way, against the prose of this repository, because the
+  // menu bar is where this label is read and it sits two rows above Electron's
+  // own `minimize` and `zoom` roles. Those are the platform's words and cannot
+  // be changed; one menu with both spellings of the same sound in it reads as a
+  // typo, and the app's item is the half that can move.
+  { command: 'expand-pane', chord: { key: 'Enter', shift: true }, title: 'Maximize pane' },
   // The arrows, because the list these walk is drawn vertically and up and down
   // are what a person reaches for against a vertical list. With alt, because ⌘↑
   // and ⌘↓ alone are document-movement keys inside a pane — an agent's prompt
@@ -57,7 +63,10 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'next-worktree', chord: { key: 'ArrowDown', alt: true }, title: 'Next worktree' },
   { command: 'open-palette', chord: { key: 'k' }, title: 'Go to worktree or command' },
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in pane' },
-  { command: 'open-dashboard', chord: { key: 'e' }, title: 'Every pane, by what needs you' },
+  // Named after the screen it opens rather than after what the screen does: the
+  // board's own heading is "All panes", and a menu command is a noun or a verb
+  // phrase, never a description of an ordering.
+  { command: 'open-dashboard', chord: { key: 'e' }, title: 'All panes' },
   // Comma, because on this platform that is where settings live and nobody has
   // to be told. The menu bar carries it too, as Settings… in the application
   // menu, which is the platform's name for the item and where a Mac user looks
@@ -70,7 +79,10 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // shift and a punctuation key produce a different character entirely — the
   // comma becomes `<` — so a binding written as "shift plus slash" would never
   // fire for the question mark it was meant to be.
-  { command: 'open-help', chord: { key: '/' }, title: 'Shortcuts and what a worktree is' }
+  // What the Help menu's one item is called. The topics behind it cover more
+  // than the chords, but a menu item is a label and the chords are what people
+  // press this for.
+  { command: 'open-help', chord: { key: '/' }, title: 'Shortcuts' }
 ]
 
 export function commandForEvent(

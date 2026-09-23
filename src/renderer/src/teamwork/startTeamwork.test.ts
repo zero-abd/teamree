@@ -1004,10 +1004,9 @@ describe('which of the two jobs this is', () => {
   // decision quietly and then describe the result as though it were the
   // reader's.
   it('reads the repository and says which it looks like, with the fact behind it', () => {
-    expect(suggestedPath(list(), relay())).toEqual({
-      id: 'start',
-      because: 'No relay and nobody’s key in this checkout.'
-    })
+    // Nothing found is nothing to cite: the suggestion still stands, and the
+    // button under it is called "Start a team here", which is the whole of it.
+    expect(suggestedPath(list(), relay())).toEqual({ id: 'start', because: null })
     expect(suggestedPath(list(), relayOnDisk())?.id).toBe('join')
     expect(suggestedPath(list(), relayOnDisk())?.because).toContain('.teamree/relay')
   })

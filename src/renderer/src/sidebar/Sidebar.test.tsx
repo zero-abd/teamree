@@ -137,7 +137,7 @@ describe('having nothing to show', () => {
   it('asks for a repository when there are no projects at all', () => {
     seed({ projects: [] })
     mount()
-    expect(screen.getByText('No projects yet. Add a repository.')).toBeTruthy()
+    expect(screen.getByText('No projects yet')).toBeTruthy()
   })
 
   it('offers to start one when a project has no worktrees', () => {

@@ -489,8 +489,8 @@ describePty('running an exited pane again', () => {
       expect(records.get(terminal.id)?.command).toBeUndefined()
 
       const after = (await service.handlers['terminal.read']({ terminalId: terminal.id })).data
-      expect(after).toContain('a new shell starts below')
-      expect(after.indexOf('one-shot')).toBeLessThan(after.indexOf('a new shell starts below'))
+      expect(after).toContain('new shell below')
+      expect(after.indexOf('one-shot')).toBeLessThan(after.indexOf('new shell below'))
     },
     TEST_TIMEOUT_MS
   )

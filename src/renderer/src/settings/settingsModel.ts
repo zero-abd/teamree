@@ -15,10 +15,18 @@ import type { RelaySetting, UpdateState } from '@shared/entities'
 import { sinceLabel } from '../sidebar/agentRows'
 
 export type UpdatePanel = {
-  /** Which version this is, in one line. */
+  /**
+   * Which version this is, as a label rather than as a sentence.
+   *
+   * It used to be "This is teamree 0.2.0." with a paragraph under it saying
+   * what pressing Check would do and that teamree installs nothing by itself.
+   * Both are true and neither is something a developer looking at a version
+   * number and a button needs told; the second lives in the comment on
+   * `offersCheck` below and in `docs/`, where this repository keeps its
+   * explanations. Where the build is not a release the fact is folded into the
+   * label, because there is no button beside it to carry the meaning.
+   */
   headline: string
-  /** What a check does, or why there is nothing for one to do. */
-  detail: string
   /**
    * Whether to put a check button on screen at all.
    *
@@ -40,8 +48,7 @@ export function updatePanel(update: UpdateState | null, now: number): UpdatePane
   // release" of it would be inventing an answer out of a silence.
   if (update === null) {
     return {
-      headline: 'teamree has not said which version this is yet.',
-      detail: 'Waiting on the runtime.',
+      headline: 'teamree (version unknown)',
       offersCheck: false,
       lastChecked: null,
       problem: null
@@ -50,22 +57,25 @@ export function updatePanel(update: UpdateState | null, now: number): UpdatePane
 
   const lastChecked = update.checkedAt === null ? null : checkedLabel(update.checkedAt, now)
 
+  // A build that is not a release has nothing published to compare itself
+  // against, so there is no button; the label says which build it is and why
+  // there is nothing to press.
   if (!update.checkable) {
     return {
-      headline: `This is teamree ${update.current}.`,
-      detail: 'Not a released version, so there is nothing published to compare it against.',
+      headline: `teamree ${update.current} (not a release)`,
       offersCheck: false,
       lastChecked,
       problem: update.problem
     }
   }
 
+  // What a check does, for anybody reading this rather than the screen: it asks
+  // GitHub for the newest release and opens a browser at the disk image if
+  // there is one. teamree installs nothing by itself and never replaces the
+  // running app. None of that is on the page — the button says Check for
+  // updates, and a developer knows what a check is.
   return {
-    headline: `This is teamree ${update.current}.`,
-    // What the button does and, just as much, what it does not: teamree opens
-    // a browser at a disk image. Nothing here replaces the running app, and a
-    // sentence that left that out would be promising an installer.
-    detail: 'A check asks GitHub for the newest release. teamree installs nothing by itself.',
+    headline: `teamree ${update.current}`,
     offersCheck: true,
     lastChecked,
     problem: update.problem
@@ -76,12 +86,13 @@ export function updatePanel(update: UpdateState | null, now: number): UpdatePane
  * How long ago the last check was.
  *
  * `sinceLabel` answers "now" for anything under ten seconds, which reads as a
- * duration everywhere else in this app and as nonsense in the phrase "last
- * checked … ago" — so that one case gets its own sentence rather than a number.
+ * duration everywhere else in this app and as nonsense in the phrase "checked
+ * … ago" — so that one case gets its own wording rather than a number. A label
+ * rather than a sentence: it sits beside the button that did the checking.
  */
 function checkedLabel(checkedAt: number, now: number): string {
   const ago = sinceLabel(Math.max(0, now - checkedAt))
-  return ago === 'now' ? 'Checked just now.' : `Last checked ${ago} ago.`
+  return ago === 'now' ? 'Checked just now' : `Checked ${ago} ago`
 }
 
 export type RelayPanel = {

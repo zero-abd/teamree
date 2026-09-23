@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MenuItemConstructorOptions } from 'electron'
 import { applicationMenuTemplate, type ApplicationMenuOptions } from './appMenu'
 import type { MenuBarItem } from './menuBar'
+import { menuBarSpec } from '../renderer/src/menu/menuBar'
+import type { CommandState } from '../renderer/src/keyboard/workspaceCommands'
+import type { WorkspaceCommand } from '../renderer/src/keyboard/workspaceShortcuts'
 
 /**
  * Every item in the template, at any depth. Roles are asserted rather than
@@ -32,62 +35,76 @@ function labelsOf(template: MenuItemConstructorOptions[], menu: string): string[
 }
 
 /**
+ * What a top-level menu is called on one platform.
+ *
+ * The `&` is a Windows and Linux mnemonic marker — Alt-F opens `&File` there,
+ * and the character is not drawn — and macOS has nothing of the kind, so a menu
+ * named `&File` on a Mac is a menu with an ampersand in its title. Written once
+ * here so every assertion below reads the name and the platform together
+ * instead of hard-coding the marker on the platform that does not want it.
+ */
+function menuName(platform: NodeJS.Platform, name: string): string {
+  return platform === 'darwin' ? name : `&${name}`
+}
+
+/**
  * A window's published menus, of the shape `menuBar.ts` parses.
  *
- * Written out here rather than imported from the renderer, and that is the
- * point of the arrangement: this process is handed a description and has no
- * opinion about what is in it. Which menus the real commands are read under is
- * the window's decision and is asserted where it is made,
- * `src/renderer/src/menu/menuBar.test.ts`. What is asserted here is only the
- * weaving — that a published item lands in the menu it asked for, above or
- * below the platform's own items, with its chord shown and its click wired.
+ * Taken from the renderer's own `menuBarSpec` rather than written out here, and
+ * that is the repair: a hand-copied fixture said the ⌘K item was called "Go to
+ * anything" long after the window had started publishing "Go to worktree or
+ * command", and every assertion in this file passed against the wording nobody
+ * ships. Labels, chords and sections now arrive by the path the product uses,
+ * so a label that changes in the table changes here.
+ *
+ * Which menus the real commands are read under is still the window's decision
+ * and is asserted where it is made, `src/renderer/src/menu/menuBar.test.ts`.
+ * What is asserted here is only the weaving — that a published item lands in
+ * the menu it asked for, above or below the platform's own items, with its
+ * chord shown and its click wired — so this takes a slice of the real menu
+ * rather than all sixteen commands, one per section and two more in File.
  */
-const SPEC: readonly MenuBarItem[] = [
-  {
-    command: 'open-appearance',
-    label: 'Settings…',
-    accelerator: 'CommandOrControl+,',
-    section: 'application',
-    enabled: true
-  },
-  { command: 'new-worktree', label: 'New task', accelerator: 'CommandOrControl+N', section: 'file', enabled: true },
-  {
-    command: 'new-terminal',
-    label: 'New terminal',
-    accelerator: 'CommandOrControl+T',
-    section: 'file',
-    enabled: false
-  },
-  { command: 'close-pane', label: 'Close pane', accelerator: 'CommandOrControl+W', section: 'file', enabled: false },
-  {
-    command: 'find-in-pane',
-    label: 'Find in pane',
-    accelerator: 'CommandOrControl+F',
-    section: 'edit',
-    enabled: false
-  },
-  {
-    command: 'open-palette',
-    label: 'Go to anything',
-    accelerator: 'CommandOrControl+K',
-    section: 'view',
-    enabled: true
-  },
-  {
-    command: 'split-right',
-    label: 'Split pane right',
-    accelerator: 'CommandOrControl+D',
-    section: 'window',
-    enabled: false
-  },
-  {
-    command: 'open-help',
-    label: 'Shortcuts and what a worktree is',
-    accelerator: 'CommandOrControl+/',
-    section: 'help',
-    enabled: true
-  }
+const SHOWN: readonly WorkspaceCommand[] = [
+  'open-appearance',
+  'new-worktree',
+  'new-terminal',
+  'close-pane',
+  'find-in-pane',
+  'open-palette',
+  'split-right',
+  'open-help'
 ]
+
+/**
+ * Which of them this fixture calls dead, so the greying assertions have both
+ * answers to check. Enablement is the window's own predicate over its own
+ * state, tested there; what matters to this process is that it is carried
+ * through untouched, which needs a mix rather than a real state.
+ */
+const DEAD: readonly WorkspaceCommand[] = ['new-terminal', 'close-pane', 'find-in-pane', 'split-right']
+
+/** A window with nothing open in it, which is what a first launch looks like. */
+const EMPTY: CommandState = {
+  consent: {},
+  dialog: null,
+  projects: [],
+  worktrees: [],
+  activeWorktreeId: null,
+  layouts: {},
+  watches: [],
+  focusedWatchId: null
+}
+
+const SPEC: readonly MenuBarItem[] = menuBarSpec(EMPTY)
+  .filter((item) => SHOWN.includes(item.command))
+  .map((item) => ({ ...item, enabled: !DEAD.includes(item.command) }))
+
+/** The label the window publishes for one command, for an assertion to name. */
+function shipped(command: WorkspaceCommand): string {
+  const item = SPEC.find((entry) => entry.command === command)
+  if (item === undefined) throw new Error(`no published item for ${command}`)
+  return item.label
+}
 
 function published(choose: (command: string) => void = () => {}): ApplicationMenuOptions['commands'] {
   return { items: SPEC, choose }
@@ -118,8 +135,31 @@ describe('the application menu', () => {
   // xterm has no clipboard of its own: copy and paste inside a pane are these
   // menu items. A menu that dropped them would break selecting text in a pane.
   it('keeps the edit roles a terminal needs', () => {
-    const edit = roles(submenuOf(applicationMenuTemplate({ platform: 'darwin' }), '&Edit'))
+    const edit = roles(submenuOf(applicationMenuTemplate({ platform: 'darwin' }), 'Edit'))
     expect(edit).toEqual(['undo', 'redo', 'cut', 'copy', 'paste', 'pasteAndMatchStyle', 'delete', 'selectAll'])
+  })
+
+  // The mnemonic marker is a Windows and Linux convention and macOS neither
+  // strips it nor acts on it, so every top-level menu was drawn with an
+  // ampersand in front of its name on the platform this app is used on.
+  it('marks a mnemonic only where the platform has them', () => {
+    const mac = applicationMenuTemplate({ platform: 'darwin', commands: published() })
+    for (const item of mac) expect(item.label ?? '').not.toContain('&')
+    expect(mac.map((item) => item.label).filter((label) => label !== undefined)).toEqual([
+      'File',
+      'Edit',
+      'View',
+      'Window',
+      'Help'
+    ])
+
+    for (const platform of ['win32', 'linux'] as const) {
+      const template = applicationMenuTemplate({ platform, commands: published() })
+      expect(
+        template.map((item) => item.label),
+        platform
+      ).toEqual(['&File', '&Edit', '&View', '&Window', '&Help'])
+    }
   })
 
   it('gives macOS the menus a macOS app is expected to have', () => {
@@ -133,14 +173,14 @@ describe('the application menu', () => {
       'unhide',
       'quit'
     ])
-    expect(roles(submenuOf(template, '&Window'))).toEqual(['minimize', 'zoom', 'front'])
+    expect(roles(submenuOf(template, 'Window'))).toEqual(['minimize', 'zoom', 'front'])
   })
 
   it('puts Quit in the File menu where there is no app menu to hold it', () => {
     const template = applicationMenuTemplate({ platform: 'win32' })
-    expect(template[0]?.label).toBe('&File')
-    expect(roles(submenuOf(template, '&File'))).toEqual(['quit'])
-    expect(roles(submenuOf(template, '&Window'))).toEqual(['minimize', 'zoom'])
+    expect(template[0]?.label).toBe(menuName('win32', 'File'))
+    expect(roles(submenuOf(template, menuName('win32', 'File')))).toEqual(['quit'])
+    expect(roles(submenuOf(template, menuName('win32', 'Window')))).toEqual(['minimize', 'zoom'])
   })
 
   // Where a Mac user looks for it, which is the only reason it is in a menu at
@@ -205,11 +245,14 @@ describe('the window’s own commands in the menu bar', () => {
 
     // In the order the window published them, which is the order a File menu is
     // read in rather than the order the shortcut table happens to be written.
-    expect(labelsOf(template, '&File')).toEqual(['New task', 'New terminal', 'Close pane'])
-    expect(labelsOf(template, '&Edit').slice(-2)).toEqual(['—', 'Find in pane'])
-    expect(labelsOf(template, '&View').slice(0, 2)).toEqual(['Go to anything', '—'])
-    expect(labelsOf(template, '&Window')).toEqual(['Split pane right', '—', 'minimize', 'zoom', '—', 'front'])
-    expect(labelsOf(template, '&Help')).toEqual(['Shortcuts and what a worktree is'])
+    expect(labelsOf(template, 'File')).toEqual(['New task', 'New terminal', 'Close pane'])
+    expect(labelsOf(template, 'Edit').slice(-2)).toEqual(['—', 'Find in pane'])
+    // The window's own word for ⌘K, read out of the published menu rather than
+    // written down again here.
+    expect(labelsOf(template, 'View').slice(0, 2)).toEqual([shipped('open-palette'), '—'])
+    expect(shipped('open-palette')).toBe('Go to worktree or command')
+    expect(labelsOf(template, 'Window')).toEqual(['Split pane right', '—', 'minimize', 'zoom', '—', 'front'])
+    expect(labelsOf(template, 'Help')).toEqual([shipped('open-help')])
   })
 
   // The `help` role is what makes a menu called Help *be* the Help menu on
@@ -217,7 +260,7 @@ describe('the window’s own commands in the menu bar', () => {
   // merely carried the word would look right and search nothing.
   it('gives the Help menu the role that makes it the platform’s Help menu', () => {
     const template = applicationMenuTemplate({ platform: 'darwin', commands: published() })
-    expect(template.find((item) => item.label === '&Help')?.role).toBe('help')
+    expect(template.find((item) => item.label === 'Help')?.role).toBe('help')
   })
 
   // This is the one that keeps one keypress from doing one thing. An
@@ -274,8 +317,8 @@ describe('the window’s own commands in the menu bar', () => {
   // alone — which is what this menu was until these items existed.
   it('offers no command menu at all until the window has published one', () => {
     const template = applicationMenuTemplate({ platform: 'darwin' })
-    expect(template.map((item) => item.label)).not.toContain('&File')
-    expect(template.map((item) => item.label)).not.toContain('&Help')
+    expect(template.map((item) => item.label)).not.toContain('File')
+    expect(template.map((item) => item.label)).not.toContain('Help')
     expect(items(template).every((item) => item.accelerator === undefined)).toBe(true)
   })
 
@@ -301,6 +344,13 @@ describe('the window’s own commands in the menu bar', () => {
   // where that platform keeps the same things: the File menu, above Quit.
   it('folds the application items into File where there is no app menu', () => {
     const template = applicationMenuTemplate({ platform: 'win32', commands: published() })
-    expect(labelsOf(template, '&File')).toEqual(['New task', 'New terminal', 'Close pane', 'Settings…', '—', 'quit'])
+    expect(labelsOf(template, menuName('win32', 'File'))).toEqual([
+      'New task',
+      'New terminal',
+      'Close pane',
+      'Settings…',
+      '—',
+      'quit'
+    ])
   })
 })

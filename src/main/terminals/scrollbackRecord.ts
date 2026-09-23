@@ -65,7 +65,7 @@ export const INERT_RECORD = /^(?:[^\u0000-\u001f\u007f-\u009f]|[\n\r\t\u0008]|\u
  * Both marks are said in words rather than left to be inferred from a colour,
  * because the one thing a reader must never do here is take a record for a
  * running process. The first line says the output is finished and how far it
- * goes; the last says where this run begins. A record long enough to scroll
+ * goes; the last says what begins below it. A record long enough to scroll
  * past its own opening line still has the closing one immediately above the
  * first thing the new shell printed, which is the boundary that actually gets
  * read.
@@ -83,15 +83,21 @@ export function replayableRecord(record: RecordedScrollback, startsBelow?: strin
 /**
  * What follows a record in the ordinary case: the pane was brought back, its
  * command was deliberately not re-issued, and a shell is what starts.
+ *
+ * Four words rather than a clause. Every mark in this file is a caption on a
+ * terminal, read by somebody who writes terminals for a living, and the reading
+ * it has to survive is the fast one on the way down the pane.
  */
-export const NEW_SHELL_BELOW = 'a new shell starts below'
+export const NEW_SHELL_BELOW = 'new shell below'
 
 /**
  * What follows it when the pane was brought back to resume a conversation and
- * the resume did not take. The record is shown at all only in that case — see
- * `pty-session.ts`, which withholds it while a resume may still be working.
+ * the resume did not take: what begins under this line is the attempt at that
+ * resume, not a shell and not the conversation. The record is shown at all only
+ * in that case — see `pty-session.ts`, which withholds it while a resume may
+ * still be working.
  */
-export const FAILED_RESUME_BELOW = 'the attempt to resume this conversation begins below'
+export const FAILED_RESUME_BELOW = 'resume attempt below'
 
 /**
  * What follows it when a pane that had exited was asked to run its program
@@ -110,38 +116,28 @@ export function startsAgainBelow(program: string): string {
 /**
  * Said into a pane whose resume did not take, in place of the conversation.
  *
- * Every clause is something this app actually knows. It knows the pane was
- * brought back to resume rather than opened fresh; it knows the agent ended
- * before anybody could type into it; it knows the exit code. It does *not*
+ * One line, and every word of it something this app actually knows: that the
+ * resume was refused, what the agent exited with, whether the pane's earlier
+ * output is above, and whether a fresh agent came up underneath. It does *not*
  * know why the agent refused — only the agent knows that, and the agent has
- * just printed it immediately above this line, so the mark points at that
- * rather than guessing over the top of it.
+ * just printed it immediately above this line, so the mark points at that by
+ * sitting under it rather than guessing over the top of it.
  *
- * The last clause is the one that earns this whole mechanism. A conversation
- * being gone is not a malfunction: they are deleted, they expire, and they are
- * recorded on whichever machine held them, so a worktree synced to a second
- * laptop has none of them. Somebody reading a bare "not found" from a CLI they
- * did not run has no way to tell that apart from this app losing their work.
+ * This was four sentences, and the middle two were the reassurance: that a
+ * conversation being gone is not a malfunction — they are deleted, they expire,
+ * and they are recorded on whichever machine held them, so a worktree synced to
+ * a second laptop has none of them. That is worth knowing once and is written
+ * here; it is not worth eighty words in a terminal pane every time, in front of
+ * a reader who runs agents for a living.
  *
- * It ends by saying what happens next, which is one of two sentences depending
- * on whether a fresh agent is starting underneath this line or the pane has
- * stopped. Only the pane knows which, so it is told rather than guessed at: a
- * mark promising an agent that never came would be the same lie in the other
- * direction.
+ * `restarted` is told rather than guessed at, because only the pane knows
+ * whether the fresh agent came up: a mark promising an agent that never came
+ * would be a lie in the other direction.
  */
 export function failedResumeMark(exitCode: number, hasRecord: boolean, restarted: boolean): string {
-  const kept = hasRecord
-    ? ' What the pane printed before the restart is above, under a line of its own, and is all still here.'
-    : ''
-  const next = restarted
-    ? 'A fresh agent is starting below, in this same directory.'
-    : 'Open a new pane in this directory to start a fresh one.'
-  return (
-    `${RESET}\r\n${DIM}[nothing was resumed — this pane came back to pick a conversation up and the agent ` +
-    `exited with code ${exitCode} before anything could be typed into it; whatever it said about why is ` +
-    `directly above.${kept} A conversation can be gone for ordinary reasons: deleted, expired, or recorded ` +
-    `on another machine. ${next}]${RESET}\r\n`
-  )
+  const kept = hasRecord ? ', record above' : ''
+  const next = restarted ? 'fresh agent below' : 'open a new pane for a fresh one'
+  return `${RESET}\r\n${DIM}[resume refused — agent exited ${exitCode}${kept}; ${next}]${RESET}\r\n`
 }
 
 /**
@@ -151,42 +147,36 @@ export function failedResumeMark(exitCode: number, hasRecord: boolean, restarted
  * Printed above the fresh agent rather than under a refusal, which is the whole
  * difference between this mark and the one above: nothing has failed here and
  * nothing was asked of the CLI at all. The pane looked where that agent keeps
- * its conversations, found none, and started over — and a pane that comes back
- * without the conversation somebody left in it owes them a sentence either way.
- * "We looked" is a different sentence from "it refused", so it is a different
- * mark.
+ * its conversations, found none under the session id it was given, and started
+ * over — and a pane that comes back without the conversation somebody left in
+ * it owes them a line either way. "We looked" is a different line from "it
+ * refused", so it is a different mark, and the two are told apart by their
+ * first four words.
  *
- * The reason is offered without being insisted on. A conversation can be absent
- * because it was deleted, expired, or recorded on another machine, and it can be
- * absent because the agent never wrote one — the pane was opened, a key was
- * pressed at a prompt that was not a conversation, and nothing was ever said.
- * Nothing here can tell those apart from outside, so this names what it can
- * demonstrate and leaves the rest as the ordinary reasons they are.
+ * Why the conversation is absent is deliberately not in the line. It can have
+ * been deleted, or expired, or recorded on another machine, and it can be that
+ * the agent never wrote one — the pane was opened, a key was pressed at a
+ * prompt that was not a conversation, and nothing was ever said. Nothing here
+ * can tell those apart from outside, so the mark names what it can demonstrate
+ * and leaves the rest to the reader, who knows all four.
  */
 export function noConversationMark(agent: string): string {
-  return (
-    `${RESET}\r\n${DIM}[nothing to resume — this pane came back to pick a conversation up and ${agent} has ` +
-    `nothing written down for it: the session id this pane was given names no conversation in that agent's ` +
-    `own store on this machine. A conversation can be missing for ordinary reasons — deleted, expired, ` +
-    `recorded on another machine — and one nobody ever spoke to was never written at all. Nothing was asked ` +
-    `of the agent and nothing refused; a fresh agent is starting below, in this same directory.]${RESET}\r\n`
-  )
+  return `${RESET}\r\n${DIM}[no conversation to resume — fresh ${agent} below]${RESET}\r\n`
 }
 
 /**
  * Said before the record, so it is described before it is read.
  *
- * The time is the one thing here a reader can act on, so it is the moment this
- * was written down rather than the moment the pane stopped — the two are the
- * same only when the pane exited, and a machine that lost power mid-build wrote
- * its last checkpoint some seconds before it printed its last line. Saying "up
- * to 14:32" is a claim this can keep; saying the pane ended then is not.
+ * Three facts and no sentence: that this is a record, how far it goes, and that
+ * nothing in it is live. The time is the one thing here a reader can act on, so
+ * it is the moment this was written down rather than the moment the pane
+ * stopped — the two are the same only when the pane exited, and a machine that
+ * lost power mid-build wrote its last checkpoint some seconds before it printed
+ * its last line. "Up to 14:32" is a claim this can keep; saying the pane ended
+ * then is not, which is why the word is "up to" and not "until".
  */
 export function openingMark(recordedAt: number): string {
-  return (
-    `${RESET}${DIM}[record — what this pane printed, up to ` +
-    `${clockLabel(recordedAt)} when it was last written down; nothing in it is running]${RESET}\r\n`
-  )
+  return `${RESET}${DIM}[record — up to ${clockLabel(recordedAt)}, nothing running]${RESET}\r\n`
 }
 
 /** Said after it, which is the line somebody reads on the way down. */

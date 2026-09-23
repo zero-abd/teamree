@@ -1106,6 +1106,10 @@ export const TEAMWORK_PATHS = [
 /**
  * Which of the two this repository looks like, and the fact that says so.
  *
+ * `because` is what was found, and is null where what was found is nothing:
+ * the suggestion is still made and still marked, it simply has no evidence to
+ * cite for it.
+ *
  * Offered rather than applied. Reading the repository is a far better guess
  * than asking somebody who has not used this before — a relay file and a
  * colleague's key are unambiguous evidence that somebody went first — but it is
@@ -1116,7 +1120,7 @@ export const TEAMWORK_PATHS = [
 export function suggestedPath(
   list: MemberList | undefined,
   relay: RelaySetting | undefined
-): { id: TeamworkPath; because: string } | null {
+): { id: TeamworkPath; because: string | null } | null {
   if (list === undefined || relay === undefined) return null
   const others = list.members.filter((member) => !member.isSelf)
   if (relay.onDisk.url !== null && others.length > 0) {
@@ -1134,7 +1138,12 @@ export function suggestedPath(
       because: `${namesOfMembers(others)} ${others.length === 1 ? 'is' : 'are'} already on the roster.`
     }
   }
-  return { id: 'start', because: 'No relay and nobody’s key in this checkout.' }
+  // Nothing to name. The other three answers point at something a reader can go
+  // and look at — a file, a person on the roster — which is why they are worth
+  // a line under the button; "no relay and nobody's key in this checkout" is
+  // the absence of both of those said back, under a button that already says
+  // "Start a team here".
+  return { id: 'start', because: null }
 }
 
 type StepCore = StartTeamworkStep
