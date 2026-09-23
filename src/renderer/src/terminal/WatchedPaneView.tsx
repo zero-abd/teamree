@@ -378,6 +378,7 @@ export function WatchedPaneView({
     /* The chrome every pane has; what keeps it unmistakable is on the bar and in the accent. */
     <section
       className={`pane pane--watched${focused ? ' pane--focused' : ''}`}
+      data-region="panes"
       aria-label={`${handle}’s pane ${label}, which you can type into`}
       onFocus={onFocus}
       onMouseDown={onFocus}

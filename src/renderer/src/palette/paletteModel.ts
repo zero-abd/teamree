@@ -167,6 +167,11 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'open-dashboard': 'all panes agents dashboard overview attention waiting failed working everywhere',
   'toggle-sidebar': 'toggle sidebar hide show projects',
   'toggle-right-panel': 'toggle right panel hide show files changes panes',
+  'focus-sidebar': 'focus sidebar keyboard projects worktrees move',
+  'focus-panes': 'focus panes terminal keyboard move back',
+  'focus-right-panel': 'focus right panel keyboard files changes move',
+  'focus-next-region': 'focus next region area part keyboard f6 cycle',
+  'focus-previous-region': 'focus previous region area part keyboard f6 cycle back',
   // What people call the things on that page, not "settings".
   'open-settings': 'settings preferences options config cli path relay start point font size updates editor',
   // Both spellings; not "settings", which is the other page.

@@ -8,6 +8,7 @@ import { fileColumnIn, fileLeavesIn, isFilePaneId } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { collectTerminalIds, paneStops } from '../panes/paneLayout'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
+import { focusedRegion, regionAfter, requestRegionFocus } from '../shell/regions'
 import { numberedTab, tabAfter } from '../workspace/paneTabs'
 import { TERMINAL_FONT_DEFAULT_PX, TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
 import type { DialogState } from '../state/workspaceStore'
@@ -35,6 +36,9 @@ export type CommandState = {
   editedFiles?: Readonly<Record<string, unknown>>
   /** File panes showing their diff; absent reads as none. */
   diffPanes?: Readonly<Record<string, unknown>>
+  /** Absent reads as shown, for both. */
+  sidebarVisible?: boolean
+  rightPanelOpen?: boolean
 }
 
 /** The store's own methods, named so this module does not import the store. */
@@ -164,6 +168,7 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
         (worktree) => worktree.id === state.activeWorktreeId && worktree.state === 'ready' && worktree.missing !== true
       )
     case 'toggle-right-panel':
+    case 'focus-right-panel':
       // The panel shows one worktree's files, changes and panes; with none
       // open it has nothing to show and the item says so.
       return state.activeWorktreeId !== null
@@ -207,6 +212,11 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
     case 'open-settings':
     case 'open-help':
       // Four views, none of which needs anything to be open.
+      return true
+    case 'focus-sidebar':
+    case 'focus-panes':
+    case 'focus-next-region':
+    case 'focus-previous-region':
       return true
   }
 }
@@ -257,6 +267,23 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'toggle-right-panel':
       store.toggleRightPanel()
       break
+    case 'focus-sidebar':
+      if (store.sidebarVisible === false) store.toggleSidebar()
+      requestRegionFocus('sidebar')
+      break
+    case 'focus-panes':
+      requestRegionFocus('panes')
+      break
+    case 'focus-right-panel':
+      if (store.rightPanelOpen === false) store.toggleRightPanel()
+      requestRegionFocus('panel')
+      break
+    case 'focus-next-region':
+    case 'focus-previous-region': {
+      const next = regionAfter(focusedRegion(), command === 'focus-next-region' ? 1 : -1)
+      if (next) requestRegionFocus(next)
+      break
+    }
     case 'focus-next-pane':
       store.focusNextPane()
       break

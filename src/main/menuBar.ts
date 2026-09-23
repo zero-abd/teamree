@@ -22,9 +22,10 @@ export type MenuBarItem = {
 /**
  * The only spellings of an accelerator the window can produce. Named keys are listed one by one:
  * `Escape` and `F4` are keys a menu item can take off the platform; Tab and the page keys only with Control.
+ * F6 alone walks the regions.
  */
 const ACCELERATOR =
-  /^(CommandOrControl(\+Alt)?(\+Shift)?\+([^+\s]|Up|Down|Left|Right|Enter)|Control(\+Shift)?\+Tab|Control\+Page(Up|Down))$/
+  /^(CommandOrControl(\+Alt)?(\+Shift)?\+([^+\s]|Up|Down|Left|Right|Enter)|Control(\+Shift)?\+Tab|Control\+Page(Up|Down)|(Shift\+)?F6)$/
 
 /** Quit, Hide and Minimize: an item of ours above the platform's would take the key. */
 const PLATFORM_KEYS = /^CommandOrControl\+[QHM]$/i

@@ -82,6 +82,9 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     // Control itself, not ⌘, on a Mac.
     expect(acceleratorForChord({ key: 'Tab', ctrl: true })).toBe('Control+Tab')
     expect(acceleratorForChord({ key: 'Tab', ctrl: true, shift: true })).toBe('Control+Shift+Tab')
+    // No modifier at all.
+    expect(acceleratorForChord({ key: 'F6', bare: true })).toBe('F6')
+    expect(acceleratorForChord({ key: 'F6', bare: true, shift: true })).toBe('Shift+F6')
   })
 
   // Labels come from the table too: one wording per command.
@@ -121,6 +124,11 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'open-dashboard',
       'toggle-sidebar',
       'toggle-right-panel',
+      'focus-sidebar',
+      'focus-panes',
+      'focus-right-panel',
+      'focus-next-region',
+      'focus-previous-region',
       'open-appearance'
     ])
     expect(sectionOrder('window')).toEqual([
@@ -190,6 +198,11 @@ describe('what the menu bar says can be done', () => {
       'push-worktree': false,
       'toggle-sidebar': true,
       'toggle-right-panel': false,
+      'focus-sidebar': true,
+      'focus-panes': true,
+      'focus-right-panel': false,
+      'focus-next-region': true,
+      'focus-previous-region': true,
       'open-palette': true,
       'go-to-file': false,
       'open-dashboard': true,

@@ -385,7 +385,7 @@
   cursor: pointer;
 }
 
-.worktree__open:disabled {
+.worktree__open[aria-disabled='true'] {
   cursor: default;
 }
 

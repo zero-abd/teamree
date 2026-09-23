@@ -15,6 +15,11 @@ export type WorkspaceCommand =
   | 'new-worktree'
   | 'toggle-sidebar'
   | 'toggle-right-panel'
+  | 'focus-sidebar'
+  | 'focus-panes'
+  | 'focus-right-panel'
+  | 'focus-next-region'
+  | 'focus-previous-region'
   | 'focus-next-pane'
   | 'focus-previous-pane'
   | 'select-next-pane'
@@ -57,6 +62,12 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Toggle sidebar' },
   // J: the side-panel key in the editors people run in these panes.
   { command: 'toggle-right-panel', chord: { key: 'j' }, title: 'Toggle right panel' },
+  { command: 'focus-sidebar', title: 'Focus Sidebar' },
+  { command: 'focus-panes', title: 'Focus Panes' },
+  { command: 'focus-right-panel', title: 'Focus Right Panel' },
+  // Bare F6, as Mac apps and editors walk their regions; the only way out of a terminal, which eats Tab.
+  { command: 'focus-next-region', chord: { key: 'F6', bare: true }, title: 'Focus Next Region' },
+  { command: 'focus-previous-region', chord: { key: 'F6', bare: true, shift: true }, title: 'Focus Previous Region' },
   // Unshifted: `matchesChord` compares `KeyboardEvent.key`, and shift+bracket yields a brace.
   { command: 'focus-previous-pane', chord: { key: '[' }, title: 'Focus previous pane' },
   { command: 'focus-next-pane', chord: { key: ']' }, title: 'Focus next pane' },

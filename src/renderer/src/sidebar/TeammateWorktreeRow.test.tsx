@@ -49,6 +49,8 @@ function mount(worktree: TeammateWorktree = theirs(), watchingPaneIds: string[] 
   )
 }
 
+const watchButton = (): HTMLElement => document.querySelector('button.pane-row') as HTMLElement
+
 beforeEach(() => {
   onWatch.mockReset()
 })
@@ -56,7 +58,7 @@ beforeEach(() => {
 describe('whose worktree this is', () => {
   it('carries the handle on the row itself, not only on hover', () => {
     mount()
-    const item = screen.getAllByRole('listitem')[0] as HTMLElement
+    const item = document.querySelector('.worktree') as HTMLElement
     expect(within(item).getByText('priya')).toBeTruthy()
     expect(within(item).getByText('Fix the relay budget')).toBeTruthy()
     expect(within(item).getByText('fix-the-relay-budget')).toBeTruthy()
@@ -81,7 +83,7 @@ describe('what cannot be done to it', () => {
 
   it('offers exactly one control, and it only reads', () => {
     mount()
-    const buttons = screen.getAllByRole('button')
+    const buttons = document.querySelectorAll('button')
     expect(buttons).toHaveLength(1)
     expect(buttons[0]?.getAttribute('title')).toContain('reading only')
   })
@@ -90,26 +92,26 @@ describe('what cannot be done to it', () => {
 describe('a pane of theirs', () => {
   it('is a button that says whose it is, what it is doing, and that it is read-only', () => {
     mount()
-    const button = screen.getByRole('button')
+    const button = watchButton()
     expect(button.getAttribute('title')).toBe('Watch priya’s Claude Code · working · reading only')
   })
 
-  it('says whether this window has it open, as a pressed state rather than a colour', () => {
+  it('says whether this window has it open, as a selected row rather than a colour', () => {
     mount(theirs(), ['priya:t7'])
-    const button = screen.getByRole('button')
-    expect(button.getAttribute('aria-pressed')).toBe('true')
+    const button = watchButton()
+    expect(button.getAttribute('aria-selected')).toBe('true')
     // A toggle whose hover text still offers what it already did lies about half its presses.
     expect(button.getAttribute('title')).toBe('Stop watching priya’s Claude Code')
   })
 
-  it('is not pressed when a different pane is the one being watched', () => {
+  it('is not selected when a different pane is the one being watched', () => {
     mount(theirs(), ['priya:t9'])
-    expect(screen.getByRole('button').getAttribute('aria-pressed')).toBe('false')
+    expect(watchButton().getAttribute('aria-selected')).toBe('false')
   })
 
   it('hands the whole pane back, with the size a watcher must letterbox to', () => {
     mount()
-    screen.getByRole('button').click()
+    watchButton().click()
     expect(onWatch).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ terminalId: 'priya:t7', handle: 'priya', cols: 120, rows: 40, label: 'Claude Code' })
     )
@@ -133,7 +135,7 @@ describe('a pane of theirs', () => {
 
   it('shows no pane list at all for a worktree with no panes open', () => {
     mount(theirs({ panes: [] }))
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(document.querySelector('button')).toBeNull()
   })
 })
 
@@ -168,6 +170,6 @@ describe('a teammate who has gone away', () => {
   // The owner's measured silence plus the time it has sat here: the only arithmetic that trusts no other clock.
   it('adds the time since the snapshot arrived to the silence its owner measured', () => {
     mount(theirs({ live: false, heardAt: NOW - 120_000, panes: [pane({ quietForMs: 180_000 })] }))
-    expect(within(screen.getByRole('button')).getByText('5m')).toBeTruthy()
+    expect(within(watchButton()).getByText('5m')).toBeTruthy()
   })
 })

@@ -2,7 +2,7 @@
 // worktree's panes underneath. The rail's search is a button wearing a field's
 // clothes: it opens the palette rather than being a second, weaker search.
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { teammatesHeard } from '@shared/entities'
 import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
 import { attentionByPane } from '../state/paneAttention'
@@ -17,6 +17,7 @@ import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { agentWords, worktreeTitles } from './agentRows'
 import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
+import { useTreeKeys } from './treeKeys'
 import { worktreesByProject } from './worktreeOrder'
 import { WorktreeRow } from './WorktreeRow'
 
@@ -61,6 +62,8 @@ export function Sidebar({
   const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar)
   const agents = useWorkspaceStore((state) => state.agents)
   const kindOf = useMemo(() => agentWords(agents), [agents])
+  const tree = useRef<HTMLDivElement | null>(null)
+  const treeKeys = useTreeKeys(tree)
 
   // Which editors are on this machine, asked once from the one thing always
   // mounted while a row exists.
@@ -110,7 +113,7 @@ export function Sidebar({
   const railProject = projects.find((project) => project.id === active?.projectId) ?? projects[0]
 
   return (
-    <div className="sidebar">
+    <div className="sidebar" data-region="sidebar">
       {/* The top edge of the window, on this side of the seam: the lockup, and
           the one control that puts the sidebar away. On macOS the window
           buttons sit on this row too, and it is what the window is dragged by
@@ -271,7 +274,16 @@ export function Sidebar({
           </button>
         </div>
 
-        <div className="sidebar__scroll">
+        {/* One Tab stop; the arrows walk the rows. The other controls in it are the mouse's, each
+            reachable by key elsewhere: the row menu, ⌘N, the rail. */}
+        <div
+          className="sidebar__scroll"
+          role="tree"
+          aria-label="Worktrees"
+          ref={tree}
+          onKeyDown={treeKeys.onKeyDown}
+          onFocus={treeKeys.onFocus}
+        >
           {/* The instruction that used to follow this — "Add a repository." —
               named the button directly above it, which is the plus in this
               section's own header, labelled "Add project". */}
@@ -295,8 +307,18 @@ export function Sidebar({
                   <button
                     type="button"
                     className="project__toggle"
+                    role="treeitem"
+                    aria-level={1}
                     aria-expanded={!isCollapsed}
+                    tabIndex={-1}
                     onClick={() => toggleProject(project.id)}
+                    onKeyDown={(event) => {
+                      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+                      if (event.key === (isCollapsed ? 'ArrowRight' : 'ArrowLeft')) {
+                        event.preventDefault()
+                        toggleProject(project.id)
+                      }
+                    }}
                   >
                     <svg
                       className={`chevron${isCollapsed ? '' : ' chevron--open'}`}
@@ -319,6 +341,7 @@ export function Sidebar({
                   <button
                     type="button"
                     className="button button--ghost button--icon"
+                    tabIndex={-1}
                     title={`New task in ${project.name}`}
                     aria-label={`New task in ${project.name}`}
                     onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
@@ -336,6 +359,7 @@ export function Sidebar({
                     <button
                       type="button"
                       className={`project__teamwork${summary ? ` project__teamwork--${summary.tone}` : ''}`}
+                      tabIndex={-1}
                       aria-label={`${teamworkControlLabel(summary)} in ${project.name}`}
                       title={summary ? summary.detail : `Teamwork in ${project.name}`}
                       onClick={() => openTeamwork(project.id)}
@@ -346,7 +370,7 @@ export function Sidebar({
                 </div>
 
                 {isCollapsed ? null : (
-                  <ul className="project__worktrees">
+                  <ul className="project__worktrees" role="group">
                     {rows.map((worktree) => (
                       <WorktreeRow
                         key={worktree.id}
@@ -380,12 +404,12 @@ export function Sidebar({
                       />
                     ))}
                     {unheard.length > 0 ? (
-                      <li className="project__unheard" title={unheardTitle(unheard)}>
+                      <li className="project__unheard" role="none" title={unheardTitle(unheard)}>
                         {`Nothing heard yet from ${unheard.join(', ')}`}
                       </li>
                     ) : null}
                     {rows.length === 0 && theirs.length === 0 ? (
-                      <li className="project__none">
+                      <li className="project__none" role="none">
                         {filter.trim().length > 0 ? (
                           'No matches'
                         ) : (
@@ -394,6 +418,7 @@ export function Sidebar({
                             <button
                               type="button"
                               className="button button--ghost button--tiny"
+                              tabIndex={-1}
                               onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
                             >
                               Start one

@@ -78,11 +78,14 @@ export function WorktreeRow({
   // that touches the checkout, and its own shape for what the row says.
   const missing = worktree.missing === true
   const ready = hasCheckout(worktree)
+  // Still focusable when it cannot open, so the tree's arrows reach its menu.
+  const openable = !creating && !failed && !missing
   const badge = ready ? mergeBadge(mergePreview) : null
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   const openControl = useRef<HTMLButtonElement | null>(null)
   const opener = useRef<HTMLElement | null>(null)
   const [renaming, setRenaming] = useState(false)
+  const [panesShown, setPanesShown] = useState(true)
   const wasRenaming = useRef(false)
   const describedBy = useId()
 
@@ -115,6 +118,7 @@ export function WorktreeRow({
   const items: RowMenuItem[] = missing
     ? [remove]
     : [
+        ...(failed && worktree.retryable ? [{ label: 'Retry', onChoose: onRetry }] : []),
         { label: 'Rename…', onChoose: () => setRenaming(true) },
         { label: 'Reveal in Finder', onChoose: onReveal },
         { label: 'Copy path', onChoose: onCopyPath },
@@ -219,6 +223,7 @@ export function WorktreeRow({
   return (
     <li
       className={`worktree${active ? ' worktree--active' : ''} worktree--${missing ? 'missing' : worktree.state}`}
+      role="none"
       onContextMenu={(event) => {
         event.preventDefault()
         // The context-menu key and Shift+F10 raise this same event with
@@ -247,10 +252,19 @@ export function WorktreeRow({
             type="button"
             className="worktree__open"
             ref={openControl}
-            onClick={onOpen}
+            role="treeitem"
+            aria-level={2}
+            aria-expanded={rows.length > 0 ? panesShown : undefined}
+            tabIndex={-1}
+            onClick={openable ? onOpen : undefined}
             // As in Finder: Return renames, ⌘↓ opens. Space still opens, being the button's own key.
             onKeyDown={(event) => {
               const bare = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
+              if (bare && rows.length > 0 && event.key === (panesShown ? 'ArrowLeft' : 'ArrowRight')) {
+                event.preventDefault()
+                setPanesShown(!panesShown)
+              }
+              if (!openable) return
               if (event.key === 'Enter' && bare) {
                 event.preventDefault()
                 setRenaming(true)
@@ -259,7 +273,7 @@ export function WorktreeRow({
                 onOpen()
               }
             }}
-            disabled={creating || failed || missing}
+            aria-disabled={openable ? undefined : true}
             aria-current={active ? 'true' : undefined}
             // Said as words with a pause between them, not the row's text run together.
             aria-label={title.agent ? `${title.agent.text}, ${title.text}` : title.text}
@@ -275,6 +289,7 @@ export function WorktreeRow({
         <button
           type="button"
           className="worktree__action"
+          tabIndex={-1}
           title={`More for ${worktree.name}`}
           aria-label={`More for ${worktree.name}`}
           aria-haspopup="menu"
@@ -296,8 +311,9 @@ export function WorktreeRow({
         <RowMenu label={`Actions for ${worktree.name}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}
 
-      {rows.length > 0 ? (
+      {rows.length > 0 && panesShown ? (
         <PaneRows
+          tree
           rows={rows}
           worktreeName={worktree.name}
           watchers={watchers}
@@ -319,11 +335,11 @@ export function WorktreeRow({
             {failureLine(worktree.error)}
           </p>
           {worktree.retryable ? (
-            <button type="button" className="button button--ghost button--tiny" onClick={onRetry}>
+            <button type="button" className="button button--ghost button--tiny" tabIndex={-1} onClick={onRetry}>
               Retry
             </button>
           ) : null}
-          <button type="button" className="button button--ghost button--tiny" onClick={onRemove}>
+          <button type="button" className="button button--ghost button--tiny" tabIndex={-1} onClick={onRemove}>
             Remove
           </button>
         </div>

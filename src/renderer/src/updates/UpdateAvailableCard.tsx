@@ -58,7 +58,13 @@ export function UpdateAvailableCard(): React.JSX.Element | null {
   if (later === version) return null
 
   return (
-    <aside className="update-card" aria-label="A newer version of teamree is available" onClick={openLink}>
+    // A status, so a screen reader says it once as it arrives rather than leaving it to be found.
+    <aside
+      className="update-card"
+      role="status"
+      aria-label="A newer version of teamree is available"
+      onClick={openLink}
+    >
       <p className="update-card__headline">{notice.headline}</p>
       <p className="update-card__detail">{notice.detail}</p>
 

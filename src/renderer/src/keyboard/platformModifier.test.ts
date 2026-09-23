@@ -90,6 +90,16 @@ describe('matchesChord', () => {
     expect(matchesChord(event({ key: 'Tab', ctrlKey: true, metaKey: true }), chord, mac)).toBe(false)
     expect(matchesChord(event({ key: 'Tab', ctrlKey: true }), chord, pc)).toBe(true)
   })
+
+  it('reads a bare chord as the key with no modifier but shift', () => {
+    const chord = { key: 'F6', bare: true }
+    expect(matchesChord(event({ key: 'F6' }), chord, mac)).toBe(true)
+    expect(matchesChord(event({ key: 'F6' }), chord, pc)).toBe(true)
+    expect(matchesChord(event({ key: 'F6', metaKey: true }), chord, mac)).toBe(false)
+    expect(matchesChord(event({ key: 'F6', ctrlKey: true }), chord, pc)).toBe(false)
+    expect(matchesChord(event({ key: 'F6', shiftKey: true }), chord, mac)).toBe(false)
+    expect(matchesChord(event({ key: 'F6', shiftKey: true }), { ...chord, shift: true }, mac)).toBe(true)
+  })
 })
 
 describe('formatChord', () => {
@@ -107,6 +117,12 @@ describe('formatChord', () => {
     expect(formatChord({ key: 'Tab', ctrl: true }, mac)).toBe('⌃Tab')
     expect(formatChord({ key: 'Tab', ctrl: true, shift: true }, mac)).toBe('⌃⇧Tab')
     expect(formatChord({ key: 'Tab', ctrl: true, shift: true }, pc)).toBe('Ctrl+Shift+Tab')
+  })
+
+  it('draws a bare chord as its key', () => {
+    expect(formatChord({ key: 'F6', bare: true }, mac)).toBe('F6')
+    expect(formatChord({ key: 'F6', bare: true, shift: true }, mac)).toBe('⇧F6')
+    expect(formatChord({ key: 'F6', bare: true, shift: true }, pc)).toBe('Shift+F6')
   })
 
   // A key whose name is a word is drawn as the glyph on the keycap. `ArrowUp`
@@ -160,6 +176,16 @@ describe('workspace shortcuts', () => {
     expect(commandForEvent(event({ key: 'Tab' }), mac)).toBeNull()
   })
 
+  // As in every Mac app with panes, and the editors run in them.
+  it('reads F6 and ⇧F6 as the region walk, alone', () => {
+    expect(commandForEvent(event({ key: 'F6' }), mac)).toBe('focus-next-region')
+    expect(commandForEvent(event({ key: 'F6', shiftKey: true }), mac)).toBe('focus-previous-region')
+    expect(commandForEvent(event({ key: 'F6' }), pc)).toBe('focus-next-region')
+    expect(commandForEvent(event({ key: 'F6', metaKey: true }), mac)).toBeNull()
+    expect(shortcutHint('focus-next-region', mac)).toBe('F6')
+    expect(shortcutHint('focus-previous-region', mac)).toBe('⇧F6')
+  })
+
   it('reads ⌘1–⌘9 as a tab number, and nothing else as one', () => {
     for (const digit of [1, 2, 8, 9]) {
       expect(paneNumberForEvent(event({ key: String(digit), metaKey: true }), mac)).toBe(digit)
@@ -190,7 +216,7 @@ describe('workspace shortcuts', () => {
   it('has no duplicate bindings', () => {
     const seen = WORKSPACE_SHORTCUTS.filter((shortcut) => shortcut.chord !== undefined).map(
       (shortcut) =>
-        `${shortcut.chord?.key}:${Boolean(shortcut.chord?.ctrl)}:${Boolean(shortcut.chord?.shift)}:${Boolean(shortcut.chord?.alt)}`
+        `${shortcut.chord?.key}:${Boolean(shortcut.chord?.bare)}:${Boolean(shortcut.chord?.ctrl)}:${Boolean(shortcut.chord?.shift)}:${Boolean(shortcut.chord?.alt)}`
     )
     expect(new Set(seen).size).toBe(seen.length)
     expect(seen.length).toBeGreaterThan(5)

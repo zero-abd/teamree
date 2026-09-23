@@ -57,6 +57,9 @@ describe('reading a published menu', () => {
       // And the file column's tabs, paged.
       'Control+PageDown',
       'Control+PageUp',
+      // The region walk, on F6 alone.
+      'F6',
+      'Shift+F6',
       // No key at all claims nothing from the platform.
       ''
     ]) {
@@ -78,7 +81,12 @@ describe('reading a published menu', () => {
       'Control+D',
       'Control+Q',
       'Control+Alt+Tab',
-      'Control+Shift+PageDown'
+      'Control+Shift+PageDown',
+      // F6 is the one bare key, and takes only shift.
+      'F5',
+      'Alt+F6',
+      'Control+F6',
+      'Shift+F4'
     ]) {
       expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toBeNull()
     }
