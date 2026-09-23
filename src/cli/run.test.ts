@@ -721,3 +721,41 @@ describe('the CLI on the subject of itself', () => {
     expect(result.err).toContain('regular file')
   })
 })
+
+describe('reading a pane as text', () => {
+  // The snapshot QA pasted: a zsh prompt's SGR runs, the OSC title, the
+  // bracketed-paste brackets and a backspaced typo. Raw, none of it can be
+  // grepped; that is the whole of the defect.
+  const RAW =
+    `\x1b[1m\x1b[7m%\x1b[27m\x1b[1m\x1b[0m${' '.repeat(40)}\r \r` +
+    `\x1b]0;abd@mac: ~/repos/teamree\x07` +
+    `~/repos/teamree % \x1b[?2004he\bexit\x1b[?2004l\r\r\n`
+
+  const handler: StubHandler = (method, params, context) =>
+    method === 'terminal.read' ? { data: RAW } : defaultHandler(method, params, context)
+
+  it('prints the raw buffer by default and the plain text with --plain', async () => {
+    const cli = await harness(handler)
+
+    const raw = await cli.run(['terminal', 'read', 't_1'])
+    expect(raw.code).toBe(ExitCode.Success)
+    expect(raw.out).toBe(RAW)
+
+    const plain = await cli.run(['terminal', 'read', 't_1', '--plain'])
+    expect(plain.code).toBe(ExitCode.Success)
+    expect(plain.out).toBe('~/repos/teamree % exit\n')
+  })
+
+  it('keeps the raw bytes in --json and carries the stripped text beside them', async () => {
+    const cli = await harness(handler)
+
+    const asIs = soleJsonDocument((await cli.run(['terminal', 'read', 't_1', '--json'])).out)
+    expect((asIs['data'] as Record<string, unknown>)['data']).toBe(RAW)
+    expect(asIs['data']).not.toHaveProperty('plain')
+
+    const stripped = soleJsonDocument((await cli.run(['terminal', 'read', 't_1', '--plain', '--json'])).out)
+    const data = stripped['data'] as Record<string, unknown>
+    expect(data['data']).toBe(RAW)
+    expect(data['plain']).toBe('~/repos/teamree % exit\n')
+  })
+})
