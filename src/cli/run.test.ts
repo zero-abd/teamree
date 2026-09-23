@@ -514,7 +514,7 @@ describe('worktree create --agent, repeated', () => {
     expect(result.code).toBe(ExitCode.Success)
     const records = soleJsonDocument(result.out)['data'] as Array<{ id: string; name: string }>
     expect(records).toHaveLength(3)
-    expect(records.map((record) => record.name)).toEqual(['fix login', 'fix login claude 2', 'fix login codex'])
+    expect(records.map((record) => record.name)).toEqual(['fix login claude', 'fix login claude 2', 'fix login codex'])
 
     // All three branch from the same place, which is what makes them comparable.
     const creates = cli.stub.received.filter((call) => call.method === 'worktree.create')

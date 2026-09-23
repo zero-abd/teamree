@@ -38,25 +38,26 @@ export function slugifyBranchName(name: string): string {
  *
  * Racing agents is what the product is for, so one description can become
  * several checkouts and each needs its own name before the runtime ever sees
- * one. The first attempt keeps the task's own name — a single agent is the
- * common case, and it should read exactly as it did when there was no other
- * option — and every later one is suffixed with the agent that runs in it, plus
- * a counter once that agent comes round again: two runs of claude race each
- * other as often as claude races codex, and `task-claude` twice is no answer.
+ * one. A lone agent keeps the task's own name — that is the common case, and it
+ * should read exactly as it did when there was no other option. From two up,
+ * every run is suffixed with the agent that runs in it, plus a counter once
+ * that agent comes round again: two runs of claude race each other as often as
+ * claude races codex, and `task claude` twice is no answer.
  *
- * The counter is that agent's own occurrence, so the run paired with a bare
- * `task` is `task-claude-2` rather than restarting at 1 beside it.
+ * Every run carrying its agent is what keeps the set honest. Naming only the
+ * runs after the first left the counter counting a run the rule had skipped, so
+ * three agents came out as `task`, `task codex`, `task claude 2` — a second
+ * attempt with no first anywhere on screen.
  *
  * A task with no agent is still one worktree, which is why an empty selection
  * is one name rather than none.
  */
 export function taskNamesForAgents(task: string, agents: readonly string[]): string[] {
-  if (agents.length === 0) return [task]
+  if (agents.length <= 1) return [task]
   const seen = new Map<string, number>()
-  return agents.map((agent, index) => {
+  return agents.map((agent) => {
     const nth = (seen.get(agent) ?? 0) + 1
     seen.set(agent, nth)
-    if (index === 0) return task
     return nth === 1 ? `${task} ${agent}` : `${task} ${agent} ${nth}`
   })
 }

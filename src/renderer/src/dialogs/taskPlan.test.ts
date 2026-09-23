@@ -52,7 +52,7 @@ describe('the plan the dialog submits', () => {
   // The whole point of the change: one description, several attempts at it.
   it('makes one create per selection, each with its own name and its agent', () => {
     expect(taskCreates('Rewrite the pager', [claude, codex, claude])).toEqual([
-      { name: 'Rewrite the pager', agentCommand: 'claude' },
+      { name: 'Rewrite the pager claude', agentCommand: 'claude' },
       { name: 'Rewrite the pager codex', agentCommand: 'codex' },
       { name: 'Rewrite the pager claude 2', agentCommand: 'claude' }
     ])
