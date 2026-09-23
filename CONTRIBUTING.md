@@ -12,6 +12,8 @@ npm run dev
 Development is on macOS. The app builds on Linux too, but the released artifact
 is macOS only and that is where everything gets exercised.
 
+`TEAMREE_USER_DATA_DIR=<dir>` runs a copy on its own profile beside the installed app, and `TEAMREE_BACKGROUND_LAUNCH=1` keeps its window hidden and unfocused; the CLI reads the same variable.
+
 ## The gate
 
 Run these before you open a pull request. Together they are what a release runs,

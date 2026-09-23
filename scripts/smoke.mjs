@@ -29,7 +29,8 @@ if (!userDataDir) {
   console.error('smoke: no user data directory was passed; run this through scripts/run-smoke.mjs')
   process.exit(1)
 }
-app.setPath('userData', userDataDir)
+// Via the variable, not `app.setPath`, so the gate runs the app's own override.
+process.env.TEAMREE_USER_DATA_DIR = userDataDir
 // A gate must not take focus from whoever runs it; set here rather than by the
 // launcher so it holds however this script was started.
 process.env.TEAMREE_BACKGROUND_LAUNCH = '1'
@@ -748,18 +749,14 @@ async function checkFilesTab(ask) {
 }
 
 /**
- * Runs the built CLI against this launch's runtime. `ELECTRON_RUN_AS_NODE` since
- * `process.execPath` is Electron; `TEAMREE_RUNTIME_FILE` so it does not dial the
- * developer's app. Spawned, not `spawnSync`: the runtime it dials is this process.
+ * Runs the built CLI against this launch's runtime, found through the inherited
+ * `TEAMREE_USER_DATA_DIR`. `ELECTRON_RUN_AS_NODE` since `process.execPath` is
+ * Electron. Spawned, not `spawnSync`: the runtime it dials is this process.
  */
 function runCli(args) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [join(root, 'out/cli/index.js'), ...args], {
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: '1',
-        TEAMREE_RUNTIME_FILE: join(userDataDir, 'runtime.json')
-      },
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let said = ''
