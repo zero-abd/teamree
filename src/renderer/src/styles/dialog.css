@@ -229,7 +229,9 @@ button.picker__chevron:hover {
 }
 
 .agents__step:disabled {
-  opacity: 0.45;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--fg-muted);
   cursor: default;
 }
 
@@ -575,7 +577,7 @@ button.picker__chevron:hover {
   color: var(--danger);
 }
 
-.button--danger:hover {
+.button--danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 28%, transparent);
 }
 

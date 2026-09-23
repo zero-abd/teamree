@@ -422,14 +422,14 @@
 
 /* Changes ----------------------------------------------------------------- */
 
+/* One height whether or not a button or an error is in it, so the list below never jumps. */
 .changes__head {
   flex: none;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--s2);
-  min-height: 24px;
-  padding: var(--s2) var(--s4);
+  height: 38px;
+  padding: 0 var(--s4);
   border-bottom: 1px solid var(--line);
 }
 
@@ -451,15 +451,22 @@
   font-family: var(--font-mono);
 }
 
-/* Its own row under the branch, so a long git message does not squeeze the name. */
 .changes__pushError {
-  order: 1;
-  flex-basis: 100%;
+  display: flex;
   min-width: 0;
-  margin: 0;
+}
+
+/* git's own words are the tooltip; a click copies them. */
+.changes__pushError button {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--danger);
+  font: inherit;
   font-size: var(--text-xs);
+  cursor: pointer;
 }

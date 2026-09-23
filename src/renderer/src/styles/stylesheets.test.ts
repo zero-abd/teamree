@@ -207,10 +207,28 @@ describe('stylesheets', () => {
       expect(declarationOf(ref, 'font-size')).toBeUndefined()
     })
 
-    it('fades a stepper that cannot step, like every other disabled button', () => {
-      expect(declarationOf(ruleFor('dialog.css', '.agents__step:disabled'), 'opacity')).toBe(
-        declarationOf(ruleFor('base.css', '.button:disabled'), 'opacity')
-      )
+    it('draws a stepper that cannot step like every other disabled button', () => {
+      for (const property of ['border-color', 'background', 'color']) {
+        expect(declarationOf(ruleFor('dialog.css', '.agents__step:disabled'), property)).toBe(
+          declarationOf(ruleFor('base.css', '.button:disabled'), property)
+        )
+      }
+    })
+
+    // A dimmed accent reads as a pressable primary; disabled is one neutral look whatever the variant.
+    it('greys a disabled button out rather than dimming its colour', () => {
+      const disabled = ruleFor('base.css', '.button:disabled')
+      expect(declarationOf(disabled, 'opacity')).toBeUndefined()
+      expect(declarationOf(disabled, 'color')).toBe('var(--fg-muted)')
+      expect(declarationOf(disabled, 'background')).toBe('transparent')
+    })
+
+    it('keeps the Changes header one height in every state', () => {
+      const head = ruleFor('rightPanel.css', '.changes__head')
+      expect(declarationOf(head, 'height')).toBe('38px')
+      expect(declarationOf(head, 'flex-wrap')).toBeUndefined()
+      expect(findRule('rightPanel.css', '.changes__pushError')).toBeDefined()
+      expect(declarationOf(ruleFor('rightPanel.css', '.changes__pushError'), 'flex-basis')).toBeUndefined()
     })
   })
 

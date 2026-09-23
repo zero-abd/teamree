@@ -2,7 +2,7 @@
 // it did rather than what it attempted, and leaves the branch tracking the
 // branch it just wrote (see `tracksSomethingElse`).
 
-import type { PushFailureKind, WorktreePush } from '../../shared/entities'
+import type { PushFailureData, PushFailureKind, WorktreePush } from '../../shared/entities'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
 import { ErrorCode } from '../../shared/protocol'
@@ -40,8 +40,9 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
     .map((line) => line.trim())
     .filter(Boolean)
   if (!known.includes(remote)) {
-    throw new GitServiceError(
+    throw refused(
       ErrorCode.NotFound,
+      known.length === 0 ? 'No remote' : 'Remote not found',
       known.length === 0
         ? `this repository has no remotes; add one before pushing`
         : `no remote called "${remote}"; this repository has ${known.join(', ')}`
@@ -67,7 +68,15 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
   const reported = parsePushStatus(pushed.stdout, refspec)
 
   if (pushed.exitCode !== 0) {
-    throw new GitServiceError(ErrorCode.GitFailed, pushRefusal(pushed.stderr, remote, options.branch, reported))
+    // With `--porcelain` the ref's own refusal is on stdout; the detail keeps it beside stderr.
+    const said = [reported?.flag === '!' ? `${options.branch}: ${reported.summary}` : '', pushed.stderr.trim()]
+      .filter(Boolean)
+      .join('\n')
+    throw refused(
+      ErrorCode.GitFailed,
+      pushFailureLabel(pushed.stderr, reported),
+      said || `could not push ${options.branch}`
+    )
   }
 
   const review = await reviewPage(runner, options, remote)
@@ -184,6 +193,29 @@ export function pushFailureKind(stderr: string, reported?: PushRefStatus | null)
     return 'auth'
   }
   return 'other'
+}
+
+const OFFLINE =
+  /could not resolve host|network is unreachable|no route to host|connection (timed out|refused)|operation timed out|failed to connect to|name resolution/i
+
+/** The one clause the Changes tab says about a failed push. A missing remote also fails git's read, so it goes first. */
+export function pushFailureLabel(stderr: string, reported?: PushRefStatus | null): string {
+  const behind = /non-fast-forward|fetch first|stale info/i
+  if (behind.test(stderr) || (reported?.flag === '!' && behind.test(reported.summary)))
+    return 'Rejected: remote is ahead'
+  const kind = pushFailureKind(stderr, reported)
+  if (kind === 'rejected') return 'Rejected by remote'
+  if (/does not appear to be a git repository|repository not found|no such remote/i.test(stderr))
+    return 'Remote not found'
+  if (OFFLINE.test(stderr)) return 'Offline'
+  if (kind === 'auth') return 'Sign-in failed'
+  if (kind === 'host-key') return 'Unknown host key'
+  return 'Push failed'
+}
+
+function refused(code: ErrorCode, label: string, detail: string): GitServiceError {
+  const data: PushFailureData = { detail }
+  return new GitServiceError(code, label, data)
 }
 
 /**
