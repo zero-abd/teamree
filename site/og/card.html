@@ -1,57 +1,28 @@
 <!doctype html>
-<!-- Source for /og.png, the Open Graph / Twitter card image. Regenerate with
-     site/og/render.sh, which rasterises this at exactly 1200x630. -->
 <html lang="en"><head><meta charset="utf-8"><style>
-  *{box-sizing:border-box;margin:0}
-  html,body{width:1200px;height:630px;overflow:hidden}
-  /* The card is read as a thumbnail far more often than at full size, so the
-     type and the mark are scaled for 600x315 rather than for 1200x630, and the
-     text block runs most of the width instead of leaving the right third of
-     the canvas empty. */
-  /* The ground, the ink, and nothing painted on top: the same three tones as
-     the page, which the card is a thumbnail of. */
-  body{
-    background:#0B0C0E;
-    color:#F3F2EE;
-    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
-    padding:76px 84px;
-    display:flex; flex-direction:column; justify-content:space-between;
-    position:relative;
-  }
-  .top{display:flex; align-items:center; gap:8px; position:relative; z-index:1}
-  /* The source lockup is wide enough here to put its mark at about 120px tall;
-     currentColor carries the off-white ink through both exact source paths. */
-  .lockup{width:880px;height:auto;display:block;color:#F3F2EE;flex:none}
-  .top .dot{width:14px;height:14px;border-radius:50%;background:#8b8cf7;display:block;align-self:flex-end;margin-bottom:44px}
-  h1{position:relative;z-index:1;font-size:60px;line-height:1.12;font-weight:640;letter-spacing:-.028em;max-width:25ch}
-  h1 em{font-style:normal}
-  p{position:relative;z-index:1;margin-top:20px;font-size:28px;line-height:1.45;color:#C8C7C2;max-width:48ch}
-  .foot{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;
-        font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:22px;color:#A09F9B;
-        border-top:1px solid #25262B;padding-top:26px}
-  .foot .chips{display:flex;gap:26px}
-  .foot .chips span{display:flex;align-items:center;gap:10px}
-  .foot .chips i{width:9px;height:9px;border-radius:50%;display:block}
-  .foot .host{color:#F3F2EE}
-</style></head><body>
-  <!-- The lockup is brand/lockup.svg inline. The accent dot stays separate
-       because the source lockup is deliberately one flat colour. -->
-  <div class="top">
-    <svg class="lockup" viewBox="0 10 582 82" fill="currentColor" role="img" aria-label="teamree">
-  <g transform="translate(0 1.08) scale(.39)"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></g>
-  <g transform="translate(142)"><path fill-rule="evenodd" d="M8 12H20V27H38V39H20V69Q20 78 30 78H39V90H28Q8 90 8 70V39H2V27H8ZM54 56Q54 25 78 25Q101 25 101 51V60H67Q69 78 84 78Q94 78 101 71V85Q93 90 81 90Q54 90 54 61ZM67 49H88Q88 37 78 37Q68 37 67 49ZM114 48Q114 25 138 25Q160 25 160 47V88H148V81Q140 90 129 90Q111 90 111 73Q111 55 134 55H148V48Q148 37 138 37Q128 37 128 48ZM148 66H135Q123 66 123 73Q123 79 132 79Q148 79 148 66ZM178 27H190V35Q197 25 209 25Q222 25 228 37Q235 25 248 25Q268 25 268 48V88H256V50Q256 38 247 38Q234 38 234 54V88H222V50Q222 38 213 38Q190 38 190 59V88H178ZM286 27H298V37Q305 25 319 25H324V38H318Q298 38 298 60V88H286ZM336 56Q336 25 360 25Q383 25 383 51V60H349Q351 78 366 78Q376 78 383 71V85Q375 90 363 90Q336 90 336 61ZM349 49H370Q370 37 360 37Q350 37 349 49ZM390 56Q390 25 414 25Q437 25 437 51V60H403Q405 78 420 78Q430 78 437 71V85Q429 90 417 90Q390 90 390 61ZM403 49H424Q424 37 414 37Q404 37 403 49Z"/></g>
-</svg>
-    <i class="dot"></i>
-  </div>
-  <div>
-    <h1>Five agents. Five worktrees. <em>One&nbsp;window.</em></h1>
-    <p>An ADE built for teamwork: coding agents in parallel git worktrees, split terminals, and a CLI they can drive.</p>
-  </div>
-  <div class="foot">
-    <span class="chips">
-      <span><i style="background:#F3F2EE"></i>macOS, universal</span>
-      <span><i style="background:#8b8cf7"></i>source on GitHub</span>
-    </span>
-    <span class="host">teamree.us</span>
-  </div>
-</body></html>
+/* Tokens */
+:root{--ground:#0B0C0E;--tile:#101114;--tile-2:#171718;--ink:#F3F2EE;--ink-2:#C8C7C2;--muted:#A09F9B;--line:rgb(243 242 238 / 9%);--accent:#8b8cf7;}
+
+/* Base */
+*{box-sizing:border-box;}
+html,body{width:1200px;height:630px;margin:0;overflow:hidden;}
+body{position:relative;padding:70px 78px 62px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:radial-gradient(ellipse 70% 50% at 50% 0,#15161A,#0B0C0E 70%);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;}
+body:before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgb(243 242 238 / 3%) 1px,transparent 1px),linear-gradient(90deg,rgb(243 242 238 / 3%) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(#000 0,transparent 630px);}
+.defs{position:absolute;width:0;height:0;}
+
+/* Lockup */
+.lockup{position:relative;display:flex;align-items:center;gap:24px;}
+.tile{width:84px;height:84px;display:grid;place-items:center;border-radius:21px;background:var(--tile-2);}
+.tile svg{width:62%;height:62%;}
+.name{display:flex;align-items:flex-end;gap:12px;}
+.word{width:310px;height:66px;overflow:visible;}
+.dot{width:12px;height:12px;margin-bottom:10px;border-radius:50%;background:var(--accent);}
+
+/* Copy */
+.copy{position:relative;align-self:end;margin-bottom:44px;}
+h1{margin:0;font-size:72px;line-height:1.05;letter-spacing:-.03em;font-weight:600;}
+p{margin:22px 0 0;max-width:900px;color:var(--ink-2);font-size:28px;line-height:1.45;}
+
+/* Footer */
+.foot{position:relative;padding-top:24px;border-top:1px solid var(--line);color:var(--muted);font:22px ui-monospace,"SF Mono",Menlo,monospace;}
+</style></head><body><svg class="defs" aria-hidden="true"><defs><symbol id="mark" viewBox="0 0 256 256" fill="currentColor"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></symbol><symbol id="wordmark" viewBox="0 10 440 82" overflow="visible" fill="currentColor"><path fill-rule="evenodd" d="M8 12H20V27H38V39H20V69Q20 78 30 78H39V90H28Q8 90 8 70V39H2V27H8ZM54 56Q54 25 78 25Q101 25 101 51V60H67Q69 78 84 78Q94 78 101 71V85Q93 90 81 90Q54 90 54 61ZM67 49H88Q88 37 78 37Q68 37 67 49ZM114 48Q114 25 138 25Q160 25 160 47V88H148V81Q140 90 129 90Q111 90 111 73Q111 55 134 55H148V48Q148 37 138 37Q128 37 128 48ZM148 66H135Q123 66 123 73Q123 79 132 79Q148 79 148 66ZM178 27H190V35Q197 25 209 25Q222 25 228 37Q235 25 248 25Q268 25 268 48V88H256V50Q256 38 247 38Q234 38 234 54V88H222V50Q222 38 213 38Q190 38 190 59V88H178ZM286 27H298V37Q305 25 319 25H324V38H318Q298 38 298 60V88H286ZM336 56Q336 25 360 25Q383 25 383 51V60H349Q351 78 366 78Q376 78 383 71V85Q375 90 363 90Q336 90 336 61ZM349 49H370Q370 37 360 37Q350 37 349 49ZM390 56Q390 25 414 25Q437 25 437 51V60H403Q405 78 420 78Q430 78 437 71V85Q429 90 417 90Q390 90 390 61ZM403 49H424Q424 37 414 37Q404 37 403 49Z"/></symbol></defs></svg><div class="lockup"><span class="tile"><svg aria-hidden="true"><use href="#mark"/></svg></span><span class="name"><svg class="word" viewBox="0 10 440 82" overflow="visible" aria-hidden="true"><use href="#wordmark"/></svg><i class="dot"></i></span></div><div class="copy"><h1>Run your agents like a team.</h1><p>Each agent in its own git worktree. One window says which one needs you.</p></div><div class="foot">teamree.us</div></body></html>

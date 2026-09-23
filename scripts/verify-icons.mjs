@@ -468,7 +468,9 @@ function checkIco(relativePath) {
 const INLINED = [
   { source: 'brand/mark.svg', host: 'site/public/index.html', open: '<symbol id="mark"', close: '</symbol>' },
   { source: 'brand/mark-small.svg', host: 'site/public/index.html', open: '<symbol id="mark-sm"', close: '</symbol>' },
-  { source: 'brand/lockup.svg', host: 'site/og/card.html', open: '<svg class="lockup"', close: '</svg>' }
+  { source: 'brand/wordmark.svg', host: 'site/public/index.html', open: '<symbol id="wordmark"', close: '</symbol>' },
+  { source: 'brand/mark.svg', host: 'site/og/card.html', open: '<symbol id="mark"', close: '</symbol>' },
+  { source: 'brand/wordmark.svg', host: 'site/og/card.html', open: '<symbol id="wordmark"', close: '</symbol>' }
 ]
 
 /**
