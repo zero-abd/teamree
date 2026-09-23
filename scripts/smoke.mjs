@@ -596,6 +596,8 @@ async function checkWorktreeSurfaces(ask) {
     `no tab for the pane the runtime opened (${title})`
   )
 
+  await checkPaneLinks(ask, call, terminal.result.id)
+
   // The menu bar's New terminal, chosen the way the platform chooses it, opens
   // a second pane in this worktree. `checkMenuBar` above proved a menu item
   // reaches the window; this proves one that needs a worktree open acts on the
@@ -904,6 +906,65 @@ function runCli(args) {
     child.on('error', (error) => resolve({ ok: false, said: error.message }))
     child.on('close', (code) => resolve({ ok: code === 0, said }))
   })
+}
+
+/**
+ * That a URL an agent printed is a link, in a window that was really built.
+ *
+ * The unit tests state that the addon offers a link and that activating one
+ * ends in `window.open`. Neither says the pane loaded the addon: a `loadAddon`
+ * deleted from `TerminalView` takes nothing red with it, because every one of
+ * those tests builds its own emulator. That is the gap this closes, and it can
+ * only be closed here — the thing to observe is a decoration on an emulator
+ * that a real pane created.
+ *
+ * Observed through the cursor, which is the one piece of xterm's link handling
+ * that reaches the DOM whatever is drawing the cells: a link under the pointer
+ * puts `xterm-cursor-pointer` on the screen element and takes it off again on
+ * the way out. The underline is drawn by the renderer — into a canvas under
+ * WebGL — and is not a thing a selector can find.
+ *
+ * So the pointer is swept along the row the URL landed on. Coarsely, in steps
+ * of a few pixels, because the cell width is a function of the font this
+ * machine resolved and guessing it would be a check that passes on the machine
+ * it was written on. A sweep that finds nothing is retried by `waitFor`, which
+ * is also what gives the shell time to print.
+ */
+async function checkPaneLinks(ask, call, terminalId) {
+  const url = 'https://example.com/x'
+  // Printed rather than typed as a bare word, so the pane is not left with a
+  // command in its history that somebody's shell might later try to run.
+  const printed = await call('terminal.write', { terminalId, data: `printf '%s\\n' ${url}\r` })
+  if (printed.ok !== true) {
+    failures.push(`could not print a URL into the pane: ${JSON.stringify(printed.error ?? printed)}`)
+    return
+  }
+
+  const hovered = await waitFor(
+    () =>
+      ask(
+        `(() => {
+           const screen = document.querySelector('.terminal-surface .xterm-screen')
+           if (!screen) return false
+           const box = screen.getBoundingClientRect()
+           if (box.width === 0 || box.height === 0) return false
+           const at = (x, y) => {
+             for (const type of ['mousemove', 'mouseover']) {
+               screen.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }))
+             }
+           }
+           for (let y = box.top + 2; y < box.bottom; y += 4) {
+             for (let x = box.left + 2; x < box.right; x += 4) {
+               at(x, y)
+               if (screen.classList.contains('xterm-cursor-pointer')) return true
+             }
+           }
+           return false
+         })()`
+      ),
+    `no cell in the pane offered a link after it printed ${url}`
+  )
+  if (hovered) console.log('smoke: a URL printed in a pane is a link')
 }
 
 /**

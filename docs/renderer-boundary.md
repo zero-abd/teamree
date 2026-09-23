@@ -226,8 +226,9 @@ hoped: every `<form>` in the tree calls `preventDefault` in its submit handler
 (there are five), every `<a href>` is a module-level constant carrying
 `target="_blank"` — the update card's install document, and the two repository
 documents the help page links — and therefore goes through the window-open
-handler, and xterm's OSC 8 hyperlinks cannot either — see below. So the handler added here defends against nothing
-that can currently be triggered, and saying otherwise would be dressing it up.
+handler, and a link in a pane goes through the same one — see below. So the
+handler added here defends against nothing that can currently be triggered, and
+saying otherwise would be dressing it up.
 
 It is here anyway, because the cost of the gap is not proportional to how hard
 it is to reach. One anchor without a `target`, one form that forgets its
@@ -251,12 +252,22 @@ Compared field by field rather than by origin, because a `file:` URL's origin is
 the string `"null"` and an equality test on it calls every file on the disk the
 app's own page. That trap has a test of its own.
 
-`setWindowOpenHandler` now also refuses to hand macOS anything that is not
-`http:` or `https:`. Today the only thing that reaches it with anything else is
-xterm opening `about:blank` before it discovers it has been denied, so this too
-defends against nothing yet. `shell.openExternal` asks the OS to open whatever
-it is given, and the day something else calls `window.open` is the day that
-matters.
+**A link in a pane arrives here too.** A URL an agent printed is clickable now,
+and that is the whole of where a click goes: `TerminalView` hands the emulator
+one activation handler — for the web-links addon's bare URLs and for xterm's own
+OSC 8 hyperlinks alike — and all it does is call `window.open`. So the answer is
+`windowOpenAnswer`'s, in this process: a web address is opened beside the app,
+everything else is refused, and no window is opened here either way. There is
+deliberately **no second scheme check in the renderer**; one free to disagree
+with the real one is worse than none. This is also why there is no new preload
+channel for it — see the end of this document.
+
+`setWindowOpenHandler` refuses to hand macOS anything that is not `http:` or
+`https:`. `shell.openExternal` asks the OS to open whatever it is given, and it
+will open a great deal more than a web page. The pane links above are the first
+thing to reach this gate with a URL that arrived as *output* rather than as a
+constant in this app's own source, which is what turned it from a precaution
+into the rule it states.
 
 ## What a crafted teammate stream can do
 
@@ -320,13 +331,15 @@ Measured against xterm 6.0.0, driven for real rather than read about:
   nothing in this renderer subscribes, and `document.title` does not move. (The
   main process *does* scan OSC 0 and 2 out of a **local** pty to name a pane —
   `title-sequence.ts` — which is a different stream in a different process.)
-- **No link that goes anywhere.** xterm's OSC 8 provider refuses to offer a link
-  at all unless its URL parses as `http:` or `https:`, so a `file:` or
-  `javascript:` hyperlink is not clickable. An `https:` one is, and its default
-  activation calls `window.open()` — which this window denies, so the link does
-  nothing but print a warning to the console. That last step is read off the
-  build rather than watched; what *is* watched is the denial it runs into, which
-  is `setWindowOpenHandler` and the navigation rule above.
+- **No link at all.** A teammate's pane is the one place this is still true, and
+  now deliberately rather than incidentally. `WatchedPaneView` loads no link
+  addon and hands the emulator no link handler, so a URL in somebody else's
+  output is characters on a screen: nothing to click, and nothing that could
+  open an address chosen by a stream from another machine. A pane of your own is
+  the other case and is described under the navigation rule above — the programs
+  writing into it are yours, and a URL they print is clickable. xterm's own OSC 8
+  provider narrows it either way, refusing to offer a link unless the URL in the
+  sequence parses as `http:` or `https:`.
 - **No escape from the pane.** Everything else a stream can do — alternate
   screen, mouse tracking, the colour palette, a screen reset — happens inside
   the emulator. It can make the pane unreadable. It cannot make it something
@@ -431,6 +444,14 @@ the code this document describes.
 | which navigations are allowed, sent to the browser, or refused   | `src/main/windowNavigation.test.ts`                      |
 | only a web address is handed to macOS                            | same                                                     |
 | a stream makes the real emulator send bytes                      | `src/renderer/src/terminal/emulatorReplies.test.ts`      |
+| a `window.open` of a web address is opened, and opens no window  | `src/main/windowNavigation.test.ts`                      |
+| a `file:` or `javascript:` `window.open` reaches the OS with nothing | same                                                 |
+| a URL in a pane is offered as a link, and activating one calls `window.open` | `src/renderer/src/terminal/paneLinks.test.ts` |
+| an OSC 8 activation reaches the same opener and no other         | same                                                     |
+| a URL printed in a real pane is a link, in a window that was built | `scripts/smoke.mjs` · `checkPaneLinks`                  |
+| the copy chord copies a selection and sends the pty nothing      | `src/renderer/src/terminal/paneKeys.test.ts`             |
+| the same chord with nothing selected sends the interrupt instead | same                                                     |
+| a paste goes in through the emulator, brackets and all           | same                                                     |
 | a path that is not there is refused rather than silently ignored | `src/main/reveal/revealPath.test.ts`                     |
 | a reveal from a subframe is refused                              | same                                                     |
 | no OSC 52, no title change                                       | same                                                     |
@@ -448,5 +469,13 @@ the code this document describes.
 | the menu bar really carries this app's commands, in a running app       | `scripts/smoke.mjs` · `checkMenuBar`                  |
 
 One thing is read off the build rather than watched, and is marked as such above:
-that xterm's OSC 8 provider only offers `http:` and `https:` links and activates
-them through `window.open()`. Everything it runs into afterwards is tested.
+that xterm's OSC 8 provider only offers `http:` and `https:` links. Everything it
+runs into afterwards is tested.
+
+And one thing the links did **not** need, which is worth writing down because
+the obvious way to build it would have added to the enumeration above: **no new
+preload channel.** Opening a link is `window.open` from the page, which the
+window-open handler already answers, so the decision stayed where it was and the
+bridge is exactly what it was. A channel would have been a second
+copy of "is this a thing we hand the OS" in a second file, free to drift from
+the first.

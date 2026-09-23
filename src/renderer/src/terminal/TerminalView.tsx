@@ -21,11 +21,21 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
+import type { ILinkHandler } from '@xterm/xterm'
 import { Terminal as XTerm } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { PaneTypist } from '@shared/entities'
 import type { TerminalEvent } from '@shared/methods'
+import { copyText, pasteText } from '../clipboard/clipboard'
+import {
+  detectPlatform,
+  holdsModifier,
+  resolvePlatformModifier,
+  type ModifierState,
+  type PlatformModifier
+} from '../keyboard/platformModifier'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { sinceLabel, typedBy, watchedBy } from '../sidebar/agentRows'
 import { hasBeenTyped, paneAttention, typingNow, type PaneAttention } from '../state/paneAttention'
@@ -67,6 +77,15 @@ export function TerminalView({
   const decorationsRef = useRef(readSearchDecorations(null))
   const chordRef = useRef(isAppChord)
   chordRef.current = isAppChord
+  // Which key means "the app modifier" here, off the same two functions `App`
+  // reads it with. Derived rather than passed down because this is the only
+  // pane prop that would have had to be threaded through the whole split tree
+  // to reach one key handler, and the derivation is a lookup on a constant.
+  const modifierRef = useRef<PlatformModifier>(
+    resolvePlatformModifier(
+      detectPlatform(window.teamree?.platform, typeof navigator === 'undefined' ? undefined : navigator.userAgent)
+    )
+  )
   const focusedRef = useRef(focused)
   focusedRef.current = focused
   // The size the next emulator is built at. Seeded from the store so a pane
@@ -111,6 +130,14 @@ export function TerminalView({
       letterSpacing: 0,
       scrollback: 5000,
       theme: readTerminalTheme(document.documentElement),
+      // An OSC 8 hyperlink — the kind `gh` and `npm` print, where the URL is in
+      // the escape sequence and the text on screen is a label — is offered by
+      // xterm's own provider and activated through this. Without it xterm asks
+      // "Do you want to navigate to …?" in a `confirm()` and then calls
+      // `window.open()` with no URL at all, so the answer is a blank window
+      // request the main process denies and a warning in a console nobody is
+      // reading. See PANE_LINK_HANDLER.
+      linkHandler: PANE_LINK_HANDLER,
       // The app's chords reach the window handler instead of the emulator.
       macOptionIsMeta: false
     })
@@ -119,6 +146,12 @@ export function TerminalView({
     const fit = new FitAddon()
     term.loadAddon(fit)
     fitRef.current = fit
+
+    // A bare URL in the output — the one an agent prints when it opens a pull
+    // request, the one CI prints when it fails — is a run of characters and
+    // nothing else until this addon looks at it. It only ever matches `http:`
+    // and `https:`, which is the same set the main process will hand the OS.
+    term.loadAddon(paneLinkAddon())
 
     // The limit is shared with the counter, so "1000+" means exactly the point
     // at which the addon stopped looking rather than a number of its own.
@@ -147,19 +180,31 @@ export function TerminalView({
       webgl = null
     }
 
-    term.attachCustomKeyEventHandler((event) => !chordRef.current(event))
     // Said once. A pane that has exited does not un-exit, no further output can
     // push the line out of sight, and a sentence per keystroke would bury the
     // scrollback somebody is still reading.
     let saidExited = false
-    term.onData((data) => {
+
+    /** Bytes on their way to the pty, and the one door they leave by. */
+    const send = (data: string): void => {
       void runtimeClient.call('terminal.write', { terminalId, data }).catch((error: unknown) => {
         const notice = refusedWriteNotice(error)
         if (notice === null || saidExited || !alive) return
         saidExited = true
         term.write(notice)
       })
-    })
+    }
+
+    term.attachCustomKeyEventHandler(
+      paneKeyHandler({
+        isAppChord: (event) => chordRef.current(event),
+        term,
+        modifier: modifierRef.current,
+        send
+      })
+    )
+
+    term.onData(send)
     term.onResize(({ cols, rows }) => {
       void runtimeClient
         .call('terminal.resize', { terminalId, cols, rows })
@@ -419,4 +464,152 @@ export function refusedWriteNotice(error: unknown): string | null {
   const code = (error as { code?: unknown } | null | undefined)?.code
   if (code !== 'conflict') return null
   return '\r\n\u001b[38;5;244m[this pane has exited]\u001b[0m\r\n'
+}
+
+/** The byte a terminal sends for "stop what you are doing". */
+const INTERRUPT = '\u0003'
+
+/**
+ * Opens a link a pane printed, in the browser and never in this window.
+ *
+ * `window.open` and deliberately not a preload channel of its own. Whether a
+ * URL is something this machine hands to the OS is already decided, once, in
+ * `src/main/windowNavigation.ts`, and that decision is reached through the
+ * window-open handler — which sees this call, opens the address beside the app,
+ * and denies the window. A channel would have been a second answer to the same
+ * question in a second file, and the bridge is an enumeration worth keeping
+ * short (`docs/renderer-boundary.md`).
+ *
+ * So there is no scheme check here. Not an omission: a check on this side would
+ * be that second answer, quietly disagreeing with the real one the first time
+ * either moved.
+ */
+export function openPaneLink(url: string): void {
+  window.open(url, '_blank', 'noopener')
+}
+
+/**
+ * What a click on an OSC 8 hyperlink does.
+ *
+ * The same thing a click on a bare URL does, which is the point of it being one
+ * object. xterm offers these links only when the URL in the sequence parses as
+ * `http:` or `https:`, so nothing else reaches here from that direction.
+ */
+export const PANE_LINK_HANDLER: ILinkHandler = {
+  activate: (_event, text) => openPaneLink(text)
+}
+
+/** The addon that turns a bare URL in the scrollback into something clickable. */
+export function paneLinkAddon(): WebLinksAddon {
+  return new WebLinksAddon((_event, uri) => openPaneLink(uri))
+}
+
+/** Everything the key handler below is allowed to touch. */
+export type PaneKeys = {
+  /** Chords the app owns. Refused here, and answered by the window handler. */
+  isAppChord: (event: KeyboardEvent) => boolean
+  /** The emulator: what is selected, and where a paste goes in. */
+  term: Pick<XTerm, 'hasSelection' | 'getSelection' | 'paste'>
+  modifier: PlatformModifier
+  /** Bytes to the pty. */
+  send: (data: string) => void
+  /**
+   * The system clipboard. Injected because a test that could not watch it
+   * would be asserting the intent again rather than the thing that happens.
+   */
+  clipboard?: { copy: (text: string) => void; read: () => Promise<string> }
+}
+
+/**
+ * The pane's answer to one keypress, as xterm's custom key handler wants it:
+ * `true` to let the emulator have it, `false` to keep it.
+ *
+ * Three layers want the press and exactly one of them may have it. The app's
+ * own chords go first and are answered by the window, as they always were. Then
+ * the clipboard pair, which the emulator has no answer for and which would
+ * otherwise be nobody's. Everything else is the emulator's, which is to say the
+ * program's.
+ *
+ * There is a fourth layer above all of them on macOS and it is not in this
+ * file: the Edit menu's Copy and Paste carry these accelerators, and a menu key
+ * equivalent is performed before the keystroke reaches the page. So on a Mac
+ * this rule is reached where the menu does not claim the chord, and the one
+ * branch that is the menu's loss rather than its gain — a copy with nothing
+ * selected, which a terminal has always read as the interrupt — is spelled out
+ * in `src/main/appMenu.ts`, next to what it would cost to change.
+ */
+export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolean {
+  const clipboard = keys.clipboard ?? { copy: copyText, read: pasteText }
+  return (event) => {
+    if (keys.isAppChord(event)) return false
+    const intent = paneKeyIntent(event, keys.modifier, keys.term.hasSelection())
+    if (intent === 'emulator') return true
+    // One press raises a keydown, a keypress and a keyup, and all three land
+    // here. Acting on the keydown alone is what makes one press one copy; the
+    // other two are still kept from the emulator, because half a chord typed
+    // into a program is worse than none of it.
+    if (event.type !== 'keydown') return false
+    if (intent === 'copy') clipboard.copy(keys.term.getSelection())
+    else if (intent === 'interrupt') keys.send(INTERRUPT)
+    else {
+      void clipboard.read().then((text) => {
+        if (text === '') return
+        try {
+          // Through the emulator rather than straight to the pty: `paste` is
+          // what puts the bracketed-paste markers around the text when the
+          // program asked for them, and what stops a pasted newline running a
+          // command nobody has finished reading.
+          keys.term.paste(text)
+        } catch {
+          // Reading the clipboard is the one thing here that takes a turn of
+          // the loop, which is long enough for the pane to have been closed
+          // underneath it. Nothing to paste into and nothing to say.
+        }
+      })
+    }
+    return false
+  }
+}
+
+/**
+ * Who a keypress in a pane belongs to, once the app's own chords have had it.
+ *
+ * - `copy` — there is a selection, and the chord means take it.
+ * - `interrupt` — the same chord with nothing selected, which in a terminal
+ *   means the other thing it has always meant.
+ * - `paste` — put the clipboard in, through the emulator so the program gets
+ *   the brackets it asked for.
+ * - `emulator` — everything else, which is nearly everything.
+ *
+ * **The copy/interrupt fork is the whole reason this is a function.** The copy
+ * chord in a pane is genuinely two commands wearing one chord, and which one it
+ * is cannot be decided by the key: it is decided by whether anything is
+ * selected, which is the emulator's state and not the keyboard's. Getting it
+ * the wrong way round loses work in both directions — a copy that kills the
+ * agent that just printed the thing you were copying, or an interrupt that
+ * quietly does nothing while a runaway process keeps going.
+ *
+ * Nothing is copied by selecting. Copy-on-selection is what makes a stray
+ * double-click overwrite the clipboard you were about to paste from, and the
+ * chord costs one keypress.
+ *
+ * **Only where the app modifier is the command key**, which is to say macOS.
+ * Everywhere else the platform modifier *is* the control key, Ctrl+C is the
+ * interrupt itself, and a rule that turned it into a copy whenever an old
+ * selection happened to be lying around would be taking the one keystroke a
+ * terminal must never lose.
+ */
+export type PaneKeyIntent = 'copy' | 'interrupt' | 'paste' | 'emulator'
+
+export function paneKeyIntent(
+  event: ModifierState & { key: string },
+  modifier: PlatformModifier,
+  hasSelection: boolean
+): PaneKeyIntent {
+  if (modifier.eventFlag !== 'metaKey') return 'emulator'
+  if (!holdsModifier(event, modifier) || event.shiftKey || event.altKey) return 'emulator'
+  const key = event.key.toLowerCase()
+  if (key === 'c') return hasSelection ? 'copy' : 'interrupt'
+  if (key === 'v') return 'paste'
+  return 'emulator'
 }

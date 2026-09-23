@@ -429,6 +429,15 @@ export function WatchedPaneView({
         // The app's chords reach the window handler rather than the far end. A
         // pane on somebody else's machine is the last place a stray Cmd-W
         // should land, and this is the same refusal a local pane makes.
+        //
+        // And it stays that refusal and nothing more. A local pane arbitrates
+        // the clipboard chords here (`paneKeyHandler`) and makes the URLs in
+        // its scrollback clickable; neither is carried over, because both
+        // assume the output is yours. The interrupt half of the copy chord
+        // would be a keystroke on somebody else's machine, raised by a chord
+        // they cannot see being pressed, and a clickable link would be an
+        // address a stream from another machine chose. `docs/renderer-boundary.md`
+        // is where that is written down.
         term.attachCustomKeyEventHandler((event) => !chordRef.current(event))
         // Only bytes a person in this window produced. An emulator answers
         // questions of its own accord, and on a pane that is somebody else's

@@ -50,7 +50,36 @@
 //
 // The rest is unchanged and still not invented. The Edit roles are not
 // decoration: xterm has no clipboard of its own, and Cmd+C and Cmd+V inside a
-// pane are those menu items doing the work. Reload is the same trap one key
+// pane are those menu items doing the work.
+//
+// That last sentence is now half of an arrangement rather than the whole of it,
+// and the other half has a caveat on this platform that is worth writing down
+// where somebody would come looking for it. A pane arbitrates the same two
+// chords itself — `paneKeyHandler` in `TerminalView.tsx`, where a copy with
+// nothing selected is the interrupt it has always been in a terminal. **These
+// two items go first.** It is the rule stated at the top of this file, the one
+// the whole Close Window omission exists for: a menu item's accelerator is its
+// key equivalent, AppKit performs a key equivalent before the keystroke reaches
+// the page, and so the pane's own rule is reached only where the menu does not
+// claim the chord.
+//
+// What that costs is one branch and not the feature. A copy with a selection is
+// this item's, and lands in the same clipboard by way of xterm's own copy
+// handler; a paste is this item's, and goes in through xterm's paste handler
+// with the brackets the program asked for. The branch nothing here answers is
+// the copy chord with nothing selected, which stays a no-op instead of becoming
+// the interrupt — and Ctrl+C, which is what that interrupt has always been
+// spelled with, is untouched and reaches the program as it always did.
+//
+// Giving the pane the whole of the chord means taking the accelerator off these
+// two items, and that costs the app Cmd+C and Cmd+V in every text field it has:
+// on macOS the menu is what binds those keys at all, which is why an Electron
+// app without an Edit menu cannot copy out of an input. That is a decision with
+// its own afternoon in it, and not one to make as a side effect of making the
+// URLs in a pane clickable. Reasoned from the rule above rather than watched:
+// a key equivalent needs a focused window, and the harness never brings one up.
+//
+// Reload is the same trap one key
 // over — Cmd+R throws away every pane view, the sidebar, the palette and the
 // dashboard, silently, for a keystroke people press out of habit — so it is
 // offered only when a dev server is what is being rendered.

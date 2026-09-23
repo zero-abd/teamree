@@ -13,13 +13,21 @@
 // tag in the app's own HTML and nothing else.
 //
 // Nothing in today's renderer can start a navigation, and that is not an
-// accident anybody arranged: every form calls `preventDefault`, the one anchor
-// is a constant with `target="_blank"`, and xterm's OSC 8 hyperlinks activate
-// through `window.open()`, which the window-open handler denies. So this is
-// not a defence against a reachable attack today. It is here because the cost
-// of the gap is not proportional to how hard it is to reach — one anchor
-// without a `target`, one form that forgets its `preventDefault`, one dropped
-// file — and because the shape of the failure is total.
+// accident anybody arranged: every form calls `preventDefault`, and every
+// anchor is a constant carrying `target="_blank"`, which makes it a
+// `window.open` rather than a navigation. So this is not a defence against a
+// reachable attack today. It is here because the cost of the gap is not
+// proportional to how hard it is to reach — one anchor without a `target`, one
+// form that forgets its `preventDefault`, one dropped file — and because the
+// shape of the failure is total.
+//
+// A pane's links arrive the same way. A URL an agent printed is clickable now
+// (`src/renderer/src/terminal/TerminalView.tsx`), and the renderer opens it with
+// `window.open` for one reason: **that is this decision, and there must not be a
+// second one.** The alternative was a preload channel of its own, which would
+// have meant a second answer to "is this a thing we hand the OS" living in a
+// second file — and `docs/renderer-boundary.md` is an enumeration of what the
+// bridge grants, which is worth keeping short.
 //
 // Reloading has to keep working. `location.reload()` raises `will-navigate`
 // with the URL the window is already on (measured, same harness), which is what
@@ -56,16 +64,35 @@ export function navigationVerdict(from: string, to: string): NavigationVerdict {
  * Whether a URL is one this app will hand to the user's browser.
  *
  * `shell.openExternal` asks macOS to open whatever it is given, and macOS will
- * open a great deal more than a web page. Today nothing can reach it with
- * anything but `https:` and the `about:blank` xterm's link handler opens before
- * it discovers it has been denied — so, like the navigation rule above, this
- * defends against nothing that can currently be triggered. It is here so that
- * the answer stays "a web address" when something else eventually calls
- * `window.open`.
+ * open a great deal more than a web page. This is the one gate in front of it.
  */
 export function mayOpenExternally(url: string): boolean {
   const parsed = parse(url)
   return parsed !== null && (parsed.protocol === 'https:' || parsed.protocol === 'http:')
+}
+
+/**
+ * What a `window.open` from the page means, and the answer the window gives it.
+ *
+ * Two different things arrive here and they are told apart by the URL alone,
+ * which is all Chromium hands over: **a link somebody activated**, which is a
+ * web address and belongs in the user's browser, and **an attempt to put some
+ * other document in front of a person**, which is everything else and is
+ * refused. A pane's links are the first kind — the web-links addon and xterm's
+ * own OSC 8 handler both end in `window.open` — and so is the help page's
+ * anchor and the update card's.
+ *
+ * No window is ever opened, in either case. A second `BrowserWindow` would
+ * carry this one's preload bridge onto whatever landed in it, which is the
+ * whole argument of the navigation rule above; the link is opened *beside* the
+ * app rather than inside it.
+ *
+ * The opener is passed in rather than imported so that this can be stated as a
+ * test. `index.ts` supplies `shell.openExternal`.
+ */
+export function windowOpenAnswer(url: string, openExternally: (url: string) => void): { action: 'deny' } {
+  if (mayOpenExternally(url)) openExternally(url)
+  return { action: 'deny' }
 }
 
 function parse(url: string): URL | null {
