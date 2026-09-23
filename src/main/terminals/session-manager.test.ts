@@ -104,6 +104,37 @@ describePty('terminal handlers', () => {
   )
 
   it(
+    'names a pane, lets a rename beat the name it was created with, and clears it on request',
+    async () => {
+      const service = newService()
+      // The composer's name, as `startTask` sends it: what the user typed about
+      // the job, on the pane running the agent that was given the job.
+      const terminal = await service.handlers['terminal.create']({
+        worktreeId: WORKTREE,
+        label: 'auth refactor'
+      })
+      expect(terminal.label).toBe('auth refactor')
+
+      // And a rename over the top of it, which is the same user saying it
+      // again, later, having seen the pane.
+      const renamed = await service.handlers['terminal.rename']({
+        terminalId: terminal.id,
+        label: 'auth refactor · take two'
+      })
+      expect(renamed.label).toBe('auth refactor · take two')
+      expect((await service.handlers['terminal.list']({})).map((one) => one.label)).toEqual([
+        'auth refactor · take two'
+      ])
+
+      // Null is how somebody says the pane should go back to being called
+      // whatever it is running, rather than being called nothing.
+      const cleared = await service.handlers['terminal.rename']({ terminalId: terminal.id, label: null })
+      expect(cleared.label).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'resizes and reports the new size',
     async () => {
       const service = newService()
@@ -627,6 +658,7 @@ describe('registerTerminalHandlers', () => {
       'terminal.list',
       'terminal.read',
       'terminal.relaunch',
+      'terminal.rename',
       'terminal.resize',
       'terminal.split',
       'terminal.subscribe',

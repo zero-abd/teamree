@@ -185,6 +185,7 @@ describe('dispatcher', () => {
       // Local by nature: running somebody else's pane again starts a process on
       // their machine, which no peer allow-list admits.
       'terminal.relaunch',
+      'terminal.rename',
       'terminal.resize',
       'terminal.split',
       'terminal.subscribe',

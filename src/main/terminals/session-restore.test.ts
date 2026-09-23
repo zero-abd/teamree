@@ -461,6 +461,34 @@ describePty('restoring terminals across a restart', () => {
     }
   }, 20_000)
 
+  // A name nobody can see after a restart is a name nobody typed. Everything
+  // else on the record describes a process that has died; this is the only
+  // thing on it the user put there, and it is the one they would miss.
+  it('brings a pane back under the name it was given, rename included', async () => {
+    const { checkout, launch } = await fakeAgent('claude')
+    const repositories = createRepositories()
+
+    const first = manager(repositories, checkout)
+    // One pane named as the composer names it — what was typed about the task,
+    // on the pane running the agent that was given it — and never touched
+    // again. The other renamed afterwards, which is the same person saying it
+    // a second time having seen the pane. Both have to come back.
+    const fromComposer = first.create({ worktreeId: 'wt_1', command: launch, label: 'auth refactor' })
+    const renamed = first.create({ worktreeId: 'wt_1', command: launch })
+    expect(fromComposer.label).toBe('auth refactor')
+    expect(first.rename(renamed.id, 'pager streaming').label).toBe('pager streaming')
+    first.write(fromComposer.id, 'hello\r')
+    first.write(renamed.id, 'hello\r')
+
+    await first.shutdown()
+
+    const second = manager(repositories, checkout)
+    expect(second.restoreSessions().restored).toBe(2)
+
+    const restored = second.list('wt_1')
+    expect(restored.map((pane) => pane.label)).toEqual(['auth refactor', 'pager streaming'])
+  }, 20_000)
+
   it('brings an ordinary pane back as a shell rather than running its command again', async () => {
     const { checkout } = await fakeAgent('unused')
     const marker = path.join(checkout, 'ran.txt')

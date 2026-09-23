@@ -64,12 +64,20 @@ it('creates the worktree, then runs the chosen agent in it', { timeout: 20_000 }
     // nowhere to run.
     const agentPanes = call.mock.calls.filter(([method]) => method === 'terminal.create')
     expect(agentPanes).toHaveLength(1)
-    expect(agentPanes[0]![1]).toEqual({ worktreeId: created.id, command: agent.command })
+    // The pane is named after what was typed in the composer. Three agents on
+    // three approaches are three panes called `claude` without this, and the
+    // description is the only thing on record that says which is which.
+    expect(agentPanes[0]![1]).toEqual({
+      worktreeId: created.id,
+      command: agent.command,
+      label: 'Rewrite the pager'
+    })
 
     const layout = state.layouts[created.id]!
     const terminals = await runtimeClient.call('terminal.list', { worktreeId: created.id })
     expect(collectTerminalIds(layout.root)).toEqual(expect.arrayContaining(terminals.map((one) => one.id)))
     expect(terminals.some((one) => one.title === agent.command)).toBe(true)
+    expect(terminals.map((one) => one.label)).toContain('Rewrite the pager')
 
     call.mockRestore()
   } finally {

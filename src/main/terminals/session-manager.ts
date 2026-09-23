@@ -348,6 +348,27 @@ export class TerminalSessionManager {
     return wasRestored
   }
 
+  /**
+   * Renames a pane, or clears the name when given null.
+   *
+   * Written to the record in the same call, not on the next checkpoint: a name
+   * is typed once and is the kind of thing whose loss to a crash would be
+   * noticed, and there is no other moment at which anything knows it changed.
+   */
+  rename(terminalId: string, label: string | null): Terminal {
+    const session = this.require(terminalId)
+    session.rename(label)
+    const snapshot = session.snapshot()
+    const stored = this.records.listTerminals().find((record) => record.id === terminalId)
+    if (stored !== undefined) {
+      const next: TerminalRecord = { ...stored }
+      if (snapshot.label === undefined) delete next.label
+      else next.label = snapshot.label
+      this.records.putTerminal(next)
+    }
+    return snapshot
+  }
+
   resize(terminalId: string, cols: number, rows: number): Terminal {
     const session = this.require(terminalId)
     session.resize(cols, rows)
@@ -638,6 +659,9 @@ export class TerminalSessionManager {
     const launch = restoring ? { command: params.command } : pinAgentSession(params.command)
     const agent = restoring?.agent ?? launch.agent
     const fallback = params.fallback
+    // The record's name wins on a restore: it is the one the user has been
+    // looking at, and the caller of a restore passes no name at all.
+    const label = restoring?.label ?? params.label
 
     const session = PtySession.start({
       id: restoring?.id ?? `term_${this.nextId()}`,
@@ -663,6 +687,7 @@ export class TerminalSessionManager {
             // been refused would ask for it again, and be refused again.
             onRestart: (started: PtySession) => this.rememberRestart(started.id, fallback)
           }),
+      ...(label === undefined ? {} : { label }),
       ...(this.options.onActivityChange === undefined && this.options.onAgentSettled === undefined
         ? {}
         : {
@@ -695,6 +720,7 @@ export class TerminalSessionManager {
           : { command: launch.command }
         : { command: restoring.command }),
       ...((restoring?.agent ?? launch.agent) ? { agent: restoring?.agent ?? launch.agent } : {}),
+      ...(label === undefined ? {} : { label }),
       ...((restoring?.agentSessionId ?? launch.agentSessionId)
         ? { agentSessionId: restoring?.agentSessionId ?? launch.agentSessionId }
         : {}),

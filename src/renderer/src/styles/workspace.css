@@ -139,6 +139,22 @@
   white-space: nowrap;
 }
 
+/* The name being typed, sized to the slot it replaces so the strip does not
+   jump as a tab turns into a field and back. */
+.tab__rename-field {
+  width: 160px;
+  min-width: 0;
+  margin: 3px var(--s2) 3px var(--s3);
+  padding: 1px var(--s2);
+  border: 1px solid var(--accent);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.tab__rename,
 .tab__close {
   width: 16px;
   height: 16px;
@@ -151,6 +167,7 @@
   opacity: 0;
 }
 
+.tab__rename svg,
 .tab__close svg {
   width: 9px;
   height: 9px;
@@ -160,11 +177,14 @@
   stroke-linecap: round;
 }
 
+.tab:hover .tab__rename,
 .tab:hover .tab__close,
+.tab__rename:focus-visible,
 .tab__close:focus-visible {
   opacity: 1;
 }
 
+.tab__rename:hover,
 .tab__close:hover {
   background: var(--bg-press);
   color: var(--fg);

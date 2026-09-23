@@ -14,7 +14,16 @@
 import { useRef, useState } from 'react'
 import type { Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
-import { ACTIVITY_LABEL, agentRows, sinceLabel, typedBy, watchedBy, worktreeActivity, type AgentRow } from './agentRows'
+import {
+  ACTIVITY_LABEL,
+  agentRows,
+  sinceLabel,
+  truncateName,
+  typedBy,
+  watchedBy,
+  worktreeActivity,
+  type AgentRow
+} from './agentRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
@@ -224,7 +233,9 @@ export function WorktreeRow({
                 >
                   <span className="pane-row__head">
                     <span className={`activity activity--${row.activity}`} aria-hidden="true" />
-                    <span className="pane-row__label">{row.label}</span>
+                    {/* Shortened for the row and only for the row: the hover text above
+                        carries the whole of it, and so does the record. */}
+                    <span className="pane-row__label">{truncateName(row.label)}</span>
                     {/* Named, never counted. "2 watching" tells the owner
                       something is happening and not who is doing it, which is
                       the half that matters. */}

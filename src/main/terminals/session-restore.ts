@@ -28,6 +28,16 @@ export type TerminalRecord = {
   command?: string
   /** Which agent that command runs, when it runs one we know how to resume. */
   agent?: AgentKind
+  /**
+   * What the pane is called, when somebody has said — a rename, or the task it
+   * was started for.
+   *
+   * Written down for the same reason the worktree is: a name nobody can see
+   * after a restart is a name nobody typed. Everything else on this record is
+   * a fact about the process; this is the only one that is a fact about the
+   * person, and it is the one they would notice going missing.
+   */
+  label?: string
   /** The session id we pinned at launch, when the agent let us choose one. */
   agentSessionId?: string
   /**

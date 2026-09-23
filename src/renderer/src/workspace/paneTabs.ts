@@ -19,7 +19,7 @@
 
 import type { PaneNode, Terminal } from '@shared/entities'
 import { collectTerminalIds } from '../panes/paneLayout'
-import { ACTIVITY_LABEL, activityOf, paneLabel, type AgentActivity } from '../sidebar/agentRows'
+import { ACTIVITY_LABEL, activityOf, paneNames, type AgentActivity, type PaneNameSource } from '../sidebar/agentRows'
 
 export type PaneTab = {
   terminalId: string
@@ -42,12 +42,22 @@ export type PaneTab = {
  * describes teaches the reader to stop trusting it.
  */
 export function paneTabs(root: PaneNode | null, terminals: Readonly<Record<string, Terminal>>): PaneTab[] {
-  return collectTerminalIds(root).map((terminalId) => {
-    const terminal = terminals[terminalId]
-    if (!terminal) return { terminalId, label: 'terminal', activity: null }
-    return { terminalId, label: terminal.agent ?? paneLabel(terminal), activity: activityOf(terminal) }
+  const ids = collectTerminalIds(root)
+  const panes = ids.map((terminalId) => terminals[terminalId])
+  // Named together rather than one at a time, because the thing that makes two
+  // tabs tellable apart is the other tab. A leaf still waiting for its record
+  // is named from what the pane bar paints meanwhile, so it takes its place in
+  // that reckoning instead of standing outside it.
+  const names = paneNames(panes.map((pane) => pane ?? UNARRIVED))
+  return ids.map((terminalId, index) => {
+    const pane = panes[index]
+    const label = names[index] ?? 'terminal'
+    return { terminalId, label, activity: pane ? activityOf(pane) : null }
   })
 }
+
+/** A leaf whose record has not arrived, as a name is read from it. */
+const UNARRIVED: PaneNameSource = { title: 'terminal', shell: '' }
 
 /**
  * The tooltip on a tab: what the pane is called, and what it is doing whenever

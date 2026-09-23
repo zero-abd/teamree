@@ -42,6 +42,7 @@ const EXPECTED = [
   'terminal send',
   'terminal split',
   'terminal relaunch',
+  'terminal rename',
   'terminal close',
   'terminal wait',
   'terminal run',

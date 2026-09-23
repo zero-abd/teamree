@@ -1075,12 +1075,17 @@ export function createSeededRuntimeClient(): RuntimeClient {
         .filter((record) => !worktreeId || record.worktreeId === worktreeId),
     // A pane started with a command shows that command, not the shell it would
     // have been: the demo's job is to look like what the runtime actually does.
-    'terminal.create': ({ worktreeId, cols, rows, command }) => {
+    'terminal.create': ({ worktreeId, cols, rows, command, label }) => {
       const record = command
         ? spawn(worktreeId, command, [accent(`▌ ${command}`), dim('reading the worktree …')])
         : spawn(worktreeId, 'zsh', [dim('teamree · new session')])
       const terminal = required(terminals.get(record.id), 'terminal')
-      terminal.record = { ...record, cols: cols ?? record.cols, rows: rows ?? record.rows }
+      terminal.record = {
+        ...record,
+        cols: cols ?? record.cols,
+        rows: rows ?? record.rows,
+        ...(label === undefined ? {} : { label })
+      }
       const layout = layouts.get(worktreeId)
       if (!layout?.root) {
         layouts.set(worktreeId, {
@@ -1135,6 +1140,15 @@ export function createSeededRuntimeClient(): RuntimeClient {
         )
       }
       return { closed: true }
+    },
+    'terminal.rename': ({ terminalId, label }) => {
+      const terminal = required(terminals.get(terminalId), 'terminal')
+      const named = label?.trim() ?? ''
+      const next = { ...terminal.record }
+      delete next.label
+      terminal.record = named.length === 0 ? next : { ...next, label: named }
+      announce({ type: 'terminals' })
+      return terminal.record
     },
     'terminal.read': ({ terminalId, tailBytes }) => {
       const terminal = required(terminals.get(terminalId), 'terminal')

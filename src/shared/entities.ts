@@ -249,6 +249,17 @@ export type Terminal = {
   /** Which coding agent this pane runs, when it runs one. */
   agent?: AgentKind
   /**
+   * What this pane is called, when somebody has said.
+   *
+   * Three agents on three approaches all introduce themselves as `claude`, so
+   * a name taken from the program answers "which of these is the auth
+   * refactor" with the one fact the three panes have in common. This is the
+   * other name: the task the pane was started for, or whatever it was renamed
+   * to. Nothing derives it, which is why it outranks everything that is
+   * derived.
+   */
+  label?: string
+  /**
    * True while output is still arriving. It is the only honest signal this app
    * has about whether an agent is working: without a hook into the agent's own
    * protocol, a quiet terminal is a terminal that has stopped saying things,

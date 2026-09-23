@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { modalOnScreen } from '../dialogs/modalLayer'
-import { ACTIVITY_LABEL, ACTIVITY_NOUN, sinceLabel } from '../sidebar/agentRows'
+import { ACTIVITY_LABEL, ACTIVITY_NOUN, sinceLabel, truncateName } from '../sidebar/agentRows'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { ACTIVITIES_BY_ATTENTION, activityCounts, dashboardRows } from './dashboardRows'
@@ -144,7 +144,7 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
               >
                 <span className={`activity activity--${row.activity}`} aria-hidden="true" />
                 <span className="board-row__what">
-                  <span className="board-row__label">{row.label}</span>
+                  <span className="board-row__label">{truncateName(row.label)}</span>
                   {/* An agent pane is named by its agent, so only a shell needs saying. */}
                   {row.agent ? null : <span className="board-row__kind">shell</span>}
                 </span>

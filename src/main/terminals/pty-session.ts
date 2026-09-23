@@ -148,6 +148,8 @@ export type PtySessionInit = {
   restartCommand?: string
   /** Called after that restart, so the pane's record can say what is running. */
   onRestart?: (session: PtySession) => void
+  /** What the pane is called, when somebody has said; see `Terminal.label`. */
+  label?: string
   /** Called when the pane starts or stops producing output. */
   onActivityChange?: (session: PtySession) => void
   now?: () => number
@@ -185,6 +187,8 @@ export class PtySession {
   private readonly exitWaiters = new Set<() => void>()
 
   private title: string
+  /** Mutable: a rename is the user changing it, not the program. */
+  private label: string | undefined
   private cols: number
   private rows: number
   private running = true
@@ -234,6 +238,7 @@ export class PtySession {
     this.record = init.restoredRecord
     this.recordHeld = init.restored === 'agent' && init.restoredRecord !== undefined
     this.title = initialTitle(init, platform)
+    this.label = init.label
     this.restored = init.restored
     this.lastOutputAt = (init.now ?? Date.now)()
     this.startedAt = this.lastOutputAt
@@ -273,6 +278,7 @@ export class PtySession {
       ...(this.exitCode === undefined ? {} : { exitCode: this.exitCode }),
       ...(this.restored === undefined ? {} : { restored: this.restored }),
       ...(this.agent === undefined ? {} : { agent: this.agent }),
+      ...(this.label === undefined ? {} : { label: this.label }),
       busy: this.busy,
       lastOutputAt: this.lastOutputAt
     }
@@ -285,6 +291,18 @@ export class PtySession {
   /** Whether output is still arriving; see `noteActivity` for what that means. */
   get isBusy(): boolean {
     return this.busy
+  }
+
+  /**
+   * Renames the pane, or takes the name away when given nothing.
+   *
+   * A blank is cleared rather than kept, because a pane called "   " is a pane
+   * with no name at all drawn as though it had one. What is left then is the
+   * program's own name, which is where every unnamed pane starts.
+   */
+  rename(label: string | null): void {
+    const trimmed = label?.trim() ?? ''
+    this.label = trimmed.length === 0 ? undefined : trimmed
   }
 
   /** Subscribes to data, exit and title events. Returns an unsubscribe function. */

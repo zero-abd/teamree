@@ -25,7 +25,7 @@
 // deleted — and says how old it is, in the same words and the same rounding
 // every other age in this sidebar uses.
 
-import { ACTIVITY_LABEL, sinceLabel } from './agentRows'
+import { ACTIVITY_LABEL, sinceLabel, truncateName } from './agentRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 
 type TeammateWorktreeRowProps = {
@@ -93,7 +93,7 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
                 >
                   <span className="pane-row__head">
                     <span className={`activity activity--${pane.activity}`} aria-hidden="true" />
-                    <span className="pane-row__label">{pane.label}</span>
+                    <span className="pane-row__label">{truncateName(pane.label)}</span>
                     <span className="pane-row__since">{sinceLabel(pane.quietFor)}</span>
                   </span>
                   {/* Only ever a line the pane actually printed while somebody had
