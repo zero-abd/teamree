@@ -1,9 +1,30 @@
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { IDENTITY_FILE_NAME, loadIdentity, PRIVATE_KEY_MODE } from './identity'
 import { isPublicKey } from './memberFile'
+
+// Holds the next key write until `release`, so a second runtime can start mid-write.
+const stall = vi.hoisted(() => ({ next: undefined as { opened: () => void; release: Promise<void> } | undefined }))
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  const open: typeof actual.open = async (...args) => {
+    const handle = await actual.open(...args)
+    const held = stall.next
+    if (held !== undefined) {
+      stall.next = undefined
+      const write = handle.writeFile.bind(handle)
+      handle.writeFile = async (...writeArgs) => {
+        held.opened()
+        await held.release
+        return write(...writeArgs)
+      }
+    }
+    return handle
+  }
+  return { ...actual, open }
+})
 
 const dirs: string[] = []
 
@@ -39,6 +60,20 @@ describe('the keypair for this installation', () => {
     const identities = await Promise.all(Array.from({ length: 8 }, () => loadIdentity(dir)))
 
     expect(new Set(identities.map((identity) => identity.publicKey)).size).toBe(1)
+  })
+
+  it('gives a runtime that starts while another is still writing the key that same key', async () => {
+    const dir = await dataDir()
+    let opened!: () => void
+    let release!: () => void
+    const writing = new Promise<void>((resolve) => (opened = resolve))
+    stall.next = { opened, release: new Promise<void>((resolve) => (release = resolve)) }
+
+    const first = loadIdentity(dir)
+    await writing
+    const second = await loadIdentity(dir).finally(release)
+
+    expect(second.publicKey).toBe((await first).publicKey)
   })
 
   it('keeps the private half readable by nobody but its owner', async () => {

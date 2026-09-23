@@ -2,16 +2,16 @@
 // restores panes before it hands back the handle whose `stop` can kill them.
 // Real workspace file, real pty, real archive; asserted is what the user finds after.
 
-import { existsSync } from 'node:fs'
+import { existsSync, watch } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { dirname, join } from 'node:path'
+import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { createQuitSequence } from './quitSequence'
 import { startRuntime, WORKSPACE_FILE_NAME, type Runtime } from './runtime/startRuntime'
 import { SCROLLBACK_DIR_NAME } from './store/scrollbackArchive'
 import { WorkspaceStore } from './store/workspaceStore'
-import { canSpawnPty, testShell, waitUntil } from './terminals/pty-test-support'
+import { canSpawnPty, testShell } from './terminals/pty-test-support'
 
 // The renderer bridge is the last step of a launch and the one that can throw
 // (`ipcMain.handle` refuses a taken channel); the gate lands the failure after
@@ -64,7 +64,12 @@ async function lastSession(): Promise<LastSession> {
   const pidFile = join(base, 'pane.pid')
   // Named for the agent: that is how the restore decides this pane resumes.
   const binary = join(bin, 'claude')
-  await writeFile(binary, `#!/bin/sh\necho $$ > ${pidFile}\necho READY\nwhile true; do sleep 0.2; done\n`, 'utf8')
+  // READY first and the pid moved into place whole: once the file exists, both are out.
+  await writeFile(
+    binary,
+    `#!/bin/sh\necho READY\necho $$ > ${pidFile}.part && mv ${pidFile}.part ${pidFile}\nwhile true; do sleep 0.2; done\n`,
+    'utf8'
+  )
   await chmod(binary, 0o755)
 
   const store = await WorkspaceStore.open(join(userDataDir, WORKSPACE_FILE_NAME))
@@ -118,6 +123,26 @@ function alive(pid: number): boolean {
   }
 }
 
+/** Resolves once `file` exists. No deadline of its own: under load, only the test's timeout is fair. */
+function whenPresent(file: string): Promise<void> {
+  return new Promise((resolve) => {
+    const settle = (): void => {
+      if (!existsSync(file)) return
+      watcher.close()
+      resolve()
+    }
+    const watcher = watch(dirname(file), settle)
+    settle()
+  })
+}
+
+/** `app.quit`, and the moment it is asked for. */
+function quitSpy(): { quit: Mock<() => void>; asked: Promise<void> } {
+  let ask!: () => void
+  const asked = new Promise<void>((resolve) => (ask = resolve))
+  return { quit: vi.fn(() => ask()), asked }
+}
+
 async function pidOfRestoredPane(pidFile: string): Promise<number> {
   const pid = Number((await readFile(pidFile, 'utf8')).trim())
   expect(Number.isInteger(pid), `${pidFile} should name the restored pane's process`).toBe(true)
@@ -130,7 +155,7 @@ describePty('quitting before the app has finished starting', () => {
     async () => {
       const session = await lastSession()
       let runtime: Runtime | undefined
-      const quit = vi.fn()
+      const { quit, asked } = quitSpy()
       const preventDefault = vi.fn()
 
       // The launch as index.ts holds it; the wait for the pane to report itself
@@ -138,18 +163,23 @@ describePty('quitting before the app has finished starting', () => {
       const launched = (async () => {
         runtime = await launch(session.userDataDir, { serveRenderer: false })
         runtimes.push(runtime)
-        await waitUntil(() => existsSync(session.pidFile), 'the restored pane to report its pid')
+        await whenPresent(session.pidFile)
       })()
 
       // ⌘Q now, before there is a handle to stop anything with.
       expect(runtime).toBeUndefined()
-      createQuitSequence({ whenStarted: () => launched, stop: () => runtime?.stop() ?? Promise.resolve(), quit })({
-        preventDefault
-      })
+      createQuitSequence({
+        whenStarted: () => launched,
+        stop: () => runtime?.stop() ?? Promise.resolve(),
+        quit,
+        // This launch includes the pane's shell starting, which under load outlasts the real grace.
+        startupGraceMs: TEST_TIMEOUT_MS
+      })({ preventDefault })
       expect(preventDefault).toHaveBeenCalledTimes(1)
       expect(quit).not.toHaveBeenCalled()
 
-      await waitUntil(() => quit.mock.calls.length === 1, 'the quit to be asked for once the teardown is done', 20_000)
+      await asked
+      expect(quit).toHaveBeenCalledTimes(1)
       // The launch finishes either way; awaiting it makes the pane below the same whichever way the quit went.
       await launched
 
@@ -168,12 +198,11 @@ describePty('quitting before the app has finished starting', () => {
     'kills them too when the launch fails outright, and quits anyway',
     async () => {
       const session = await lastSession()
-      bridge.beforeInstalling = () =>
-        waitUntil(() => existsSync(session.pidFile), 'the restored pane to report its pid')
+      bridge.beforeInstalling = () => whenPresent(session.pidFile)
 
       let runtime: Runtime | undefined
       const failures: unknown[] = []
-      const quit = vi.fn()
+      const { quit, asked } = quitSpy()
 
       // index.ts survives a failed launch, so the promise the quit waits on resolves either way.
       const launched = launch(session.userDataDir, { serveRenderer: true }).then(
@@ -188,7 +217,8 @@ describePty('quitting before the app has finished starting', () => {
         preventDefault: vi.fn()
       })
 
-      await waitUntil(() => quit.mock.calls.length === 1, 'the quit to be asked for', 20_000)
+      await asked
+      expect(quit).toHaveBeenCalledTimes(1)
       await launched
       expect(failures).toHaveLength(1)
       expect(runtime).toBeUndefined()
