@@ -184,6 +184,17 @@ export function cliPanel(status: CliStatus | null): CliPanel {
  * real problem goes unnamed on the one surface that knew it.
  */
 export function cliActionLabel(status: CliStatus | null): string {
+  // Running from a mounted image, or from the copy macOS translocates an app
+  // to, the panel has no control at all — a link into either stops leading
+  // anywhere the moment the image is ejected or the copy is replaced, so the
+  // only honest answer is a sentence about dragging the app to Applications.
+  // The rail still carries a way in, deliberately: the panel is where that
+  // sentence lives and this is how somebody finds it. What it must not do is
+  // get them there by naming an action. Every other label here is a promise,
+  // and this is the one state where the promise cannot be kept — which is also
+  // the state every macOS user is in the first time they open this app, before
+  // they have dragged it anywhere.
+  if (status !== null && status.impermanent !== null) return 'Why teamree is not on your PATH'
   if (status?.state !== 'elsewhere') return 'Put teamree on my PATH'
   // Two different failures under one state, and they need different words: a
   // link into thin air is broken, a link into another copy works and drives the
