@@ -214,6 +214,13 @@ export type WorktreePush = {
    * ordinary, but it means what landed is not what is on screen.
    */
   uncommitted: number
+  /**
+   * Where to open a review for this branch, derived from the remote's URL and
+   * absent whenever that URL does not say which forge it is. Nothing asked the
+   * forge anything: whether a review already exists is not knowable without its
+   * API, so this is the page that starts one. See `src/main/git/reviewUrl.ts`.
+   */
+  reviewUrl?: string
   pushedAt: number
 }
 

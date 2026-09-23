@@ -14,7 +14,7 @@ import {
   useWorkspaceStore,
   type RelayPaneState
 } from './workspaceStore'
-import type { RelaySetting, Terminal } from '@shared/entities'
+import type { RelaySetting, Terminal, WorktreePush } from '@shared/entities'
 
 it('adds exactly one pane per New terminal action, including with workspace events', async () => {
   const store = useWorkspaceStore.getState()
@@ -209,6 +209,40 @@ it('pushes the active worktree and says what actually happened', async () => {
   expect(notice?.text).toMatch(/pushed|already had/i)
   expect(useWorkspaceStore.getState().pushing).toBe(false)
   call.mockRestore()
+})
+
+// The push result is the only place that knows a review became possible, so
+// the notice it raises is the only place that can offer to open one.
+it('offers the review page the push came back with', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+  await store.openWorktree(worktreeId)
+
+  const url = 'https://github.com/o/r/compare/main...work?expand=1'
+  const original = runtimeClient.call.bind(runtimeClient)
+  const call = vi.spyOn(runtimeClient, 'call').mockImplementation(async (method, params) => {
+    const result = await original(method, params as never)
+    return method === 'worktree.push' ? { ...(result as WorktreePush), reviewUrl: url } : result
+  })
+
+  await useWorkspaceStore.getState().pushActiveWorktree()
+
+  expect(useWorkspaceStore.getState().notices.at(-1)?.action).toEqual({ label: 'Open review', url })
+  call.mockRestore()
+})
+
+// A remote that is not a forge teamree can name is an ordinary push, and the
+// notice says exactly as much as it did before.
+it('offers nothing to open when the push named no review page', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+  await store.openWorktree(worktreeId)
+
+  await useWorkspaceStore.getState().pushActiveWorktree()
+
+  expect(useWorkspaceStore.getState().notices.at(-1)?.action).toBeUndefined()
 })
 
 it('never fires two pushes at once', async () => {

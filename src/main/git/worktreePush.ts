@@ -13,12 +13,17 @@
 // It reports uncommitted work rather than blocking on it. Pushing commits while
 // still editing is ordinary, and refusing would be wrong — but what lands is
 // then not what the user is looking at, and that is worth saying out loud.
+//
+// And it says where the work can now be read. A push is the moment a review
+// becomes possible, and the page that starts one is derivable from the remote's
+// URL — see `reviewUrl.ts`, which guesses at nothing and asks the forge nothing.
 
 import type { PushFailureKind, WorktreePush } from '../../shared/entities'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
 import { ErrorCode } from '../../shared/protocol'
 import { assertRefShape } from './repository'
+import { reviewUrl } from './reviewUrl'
 import { parseChangeRecords } from './worktreeChanges'
 
 /** A push crosses a network, so it gets far longer than a local command. */
@@ -30,6 +35,12 @@ export type PushOptions = {
   branch: string
   /** Defaults to `origin`, the only remote most repositories have. */
   remote?: string
+  /**
+   * The project's base ref, for the review page this push makes available.
+   * Absent — a worktree whose project has gone — and no review URL is offered,
+   * because there is nothing to say what the branch would be reviewed against.
+   */
+  baseRef?: string
   signal?: AbortSignal
   now?: () => number
 }
@@ -84,6 +95,8 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
     throw new GitServiceError(ErrorCode.GitFailed, pushRefusal(pushed.stderr, remote, options.branch, reported))
   }
 
+  const review = await reviewPage(runner, options, remote)
+
   return {
     worktreeId: options.worktreeId,
     remote,
@@ -96,8 +109,36 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
       (await upstreamOf(runner, options.worktreePath, options.branch, options.signal)) ?? `${remote}/${options.branch}`,
     setUpstream: before === null,
     uncommitted,
+    ...(review === undefined ? {} : { reviewUrl: review }),
     pushedAt: (options.now ?? Date.now)()
   }
+}
+
+/**
+ * The page a reviewer would read this branch on, when there is one.
+ *
+ * Read from the remote's fetch URL rather than its push URL: the push URL is
+ * the address this machine writes through, which a mirror or a proxy can make
+ * something nobody browses, while the fetch URL is the address the remote is
+ * known by. Nothing here fails a push — a remote whose URL cannot be read, or
+ * whose host means nothing to this app, simply leaves the field off.
+ */
+async function reviewPage(runner: GitRunner, options: PushOptions, remote: string): Promise<string | undefined> {
+  if (options.baseRef === undefined) return undefined
+  const url = await runner.tryRun({
+    args: ['remote', 'get-url', remote],
+    cwd: options.worktreePath,
+    readOnly: true,
+    timeoutMs: 30_000,
+    ...(options.signal ? { signal: options.signal } : {})
+  })
+  if (url.exitCode !== 0) return undefined
+  return reviewUrl({
+    remoteUrl: url.stdout.trim(),
+    branch: options.branch,
+    baseRef: options.baseRef,
+    remote
+  })
 }
 
 /** What the branch already tracks, or null when it tracks nothing. */

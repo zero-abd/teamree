@@ -238,7 +238,10 @@ The only call in the git layer that leaves the machine.
 - [x] `teamree worktree push`
 - [x] A push button in the GUI, showing what it would send and saying what it
       did — including what stayed behind uncommitted
-- [ ] Opening a review on the forge after a push
+- [x] Opening a review on the forge after a push
+- [x] GitHub, GitLab and Bitbucket cloud are recognised from the remote's URL
+      alone; every other host gets no link rather than a wrong one, and no
+      forge API is called
 
 ## M14 — Starting an agent
 

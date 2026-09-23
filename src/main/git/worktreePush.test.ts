@@ -225,6 +225,65 @@ describe('pushing to a real remote', () => {
     expect((failure as GitServiceError).message).toContain('has commits that feature does not')
   })
 
+  // The remote is a local bare repository, so nothing leaves this machine, and
+  // its `url` is the address the repository is known by — which is exactly the
+  // arrangement a mirror or a proxy produces, and the one the review link has
+  // to read. `pushurl` keeps the commits local.
+  it('names the review page from the URL the remote is known by', async () => {
+    const repo = await repository({ withRemote: true })
+    const bare = await repo.git(['remote', 'get-url', 'origin'])
+    await repo.git(['config', 'remote.origin.pushurl', bare])
+    await repo.git(['config', 'remote.origin.url', 'git@github.com:o/r.git'])
+    await repo.git(['checkout', '-q', '-b', 'feature/login'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('some work')
+
+    const result = await pushWorktree(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      branch: 'feature/login',
+      baseRef: 'origin/main',
+      now: () => 777
+    })
+
+    expect(result.reviewUrl).toBe('https://github.com/o/r/compare/main...feature%2Flogin?expand=1')
+    // Still a real push, and it went to the bare repository beside this one —
+    // asked of that path rather than of `origin`, whose fetch URL now names a
+    // host no test may go anywhere near.
+    expect(await repo.git(['ls-remote', '--heads', bare, 'feature/login'])).toContain('refs/heads/feature/login')
+  })
+
+  // A path is not a forge, and a push to one is still a push.
+  it('offers no review page for a remote that is a directory', async () => {
+    const repo = await repository({ withRemote: true })
+    await repo.git(['checkout', '-q', '-b', 'feature'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('some work')
+
+    const result = await pushWorktree(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      branch: 'feature',
+      baseRef: 'origin/main',
+      now: () => 777
+    })
+
+    expect(result.reviewUrl).toBeUndefined()
+    expect(result.alreadyUpToDate).toBe(false)
+  })
+
+  // Nothing said which branch a review would be against, so nothing is offered.
+  it('offers no review page when no base ref was given', async () => {
+    const repo = await repository({ withRemote: true })
+    await repo.git(['config', 'remote.origin.pushurl', await repo.git(['remote', 'get-url', 'origin'])])
+    await repo.git(['config', 'remote.origin.url', 'git@github.com:o/r.git'])
+    await repo.git(['checkout', '-q', '-b', 'feature'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('some work')
+
+    expect((await push(repo, 'feature')).reviewUrl).toBeUndefined()
+  })
+
   it('says which remotes exist rather than failing obscurely', async () => {
     const repo = await repository({ withRemote: true })
     await repo.git(['checkout', '-q', '-b', 'feature'])

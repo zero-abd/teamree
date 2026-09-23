@@ -501,10 +501,15 @@ export class GitService {
    */
   async worktreePush(params: ParamsOf<'worktree.push'>): Promise<WorktreePush> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'pushing')
+    // The base ref is what a review would be opened against, and it belongs to
+    // the project rather than to the worktree. A worktree whose project is gone
+    // still pushes; it is only the review link that cannot be named.
+    const project = this.#store.getProject(worktree.projectId)
     return pushWorktree(this.#runner, {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
       branch: worktree.branch,
+      ...(project === undefined ? {} : { baseRef: project.baseRef }),
       ...(params.remote === undefined ? {} : { remote: params.remote }),
       now: this.#now
     })

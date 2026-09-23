@@ -200,6 +200,26 @@
   color: var(--fg-secondary);
 }
 
+/* The one thing a notice can offer to do. Beside the text rather than under
+   it: a notice is a line, and a line with a block under it is a card. */
+.notice__action {
+  flex: none;
+  align-self: center;
+  padding: 2px var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.notice__action:hover {
+  background: var(--bg-hover);
+}
+
 .notice__close {
   flex: none;
   width: 18px;

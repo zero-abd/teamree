@@ -116,7 +116,18 @@ export type TaskDraft = {
   creates: readonly TaskCreate[]
 }
 
-export type Notice = { id: number; text: string; tone: 'error' | 'info' }
+export type Notice = {
+  id: number
+  text: string
+  tone: 'error' | 'info'
+  /**
+   * One thing to do about what the notice says, when the notice is the only
+   * place that knows it can be done — a review page a push just made available.
+   * A URL and a verb, not a callback: a notice is data the layer renders, and
+   * where a URL goes is settled in one place (`shell/openInBrowser.ts`).
+   */
+  action?: { label: string; url: string }
+}
 
 /**
  * The find bar belongs to one pane at a time — the focused one — so a second
@@ -867,8 +878,8 @@ const storage = typeof window === 'undefined' ? undefined : window.localStorage
 const lastSession = readStoredSession(storage)
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
-  const notify = (text: string, tone: Notice['tone'] = 'error'): void => {
-    const notice: Notice = { id: ++noticeSeq, text, tone }
+  const notify = (text: string, tone: Notice['tone'] = 'error', action?: Notice['action']): void => {
+    const notice: Notice = { id: ++noticeSeq, text, tone, ...(action === undefined ? {} : { action }) }
     set((state) => ({ notices: [...state.notices.slice(-2), notice] }))
   }
 
@@ -2414,7 +2425,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         if (result.uncommitted > 0) {
           parts.push(`${result.uncommitted} uncommitted change${result.uncommitted === 1 ? '' : 's'} stayed behind`)
         }
-        notify(`${parts.join(' · ')}.`, 'info')
+        // The one moment a review is worth offering, and the only place that
+        // knows where it would be: the push result carries the page, derived
+        // from the remote's URL and absent for a host teamree cannot name.
+        notify(
+          `${parts.join(' · ')}.`,
+          'info',
+          result.reviewUrl === undefined ? undefined : { label: 'Open review', url: result.reviewUrl }
+        )
       } catch (error) {
         failed('Could not push')(error)
       } finally {
