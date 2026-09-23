@@ -72,6 +72,13 @@ export type RuntimeOptions = {
    * is handed no way to try.
    */
   onAgentNotice?: (notice: AgentNotice) => void
+  /**
+   * Ends the app, for the CLI's `teamree quit`. `app.quit` in the main process,
+   * handed over for the reason `openExternal` is: only the code given the means
+   * can end this process, and a runtime with no app around it is given none and
+   * refuses the method.
+   */
+  requestQuit?: () => void
   onError?: (error: unknown) => void
 }
 
@@ -102,6 +109,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     checkForUpdates = true,
     openExternal,
     onAgentNotice,
+    requestQuit,
     onError
   } = options
   const report = onError ?? ((error: unknown) => console.error('[runtime]', error))
@@ -120,7 +128,13 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const subscriptions = new SubscriptionHub()
   const context = createRuntimeContext({ version, store, subscriptions })
   const registry = new MethodRegistry(context)
-  const areas = registerHandlers(registry, { openExternal, onAgentNotice, scrollback, worktreesRoot })
+  const areas = registerHandlers(registry, {
+    openExternal,
+    onAgentNotice,
+    scrollback,
+    worktreesRoot,
+    ...(requestQuit === undefined ? {} : { requestQuit })
+  })
   const dispatch = createDispatcher(registry)
 
   let socketServer: RuntimeSocketServer | undefined

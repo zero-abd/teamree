@@ -35,6 +35,7 @@ import type { ScrollbackRepository } from '../../terminals/session-manager'
 import type { AgentNotice } from '../../agentNotices'
 import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
+import { registerQuitHandler } from './quitHandler'
 import { registerStatusHandler } from './statusHandler'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
 import { registerWorkspaceSubscribeHandler } from './workspaceSubscribeHandler'
@@ -96,11 +97,22 @@ export type RegisterHandlersOptions = {
    * acceptance host, a vitest worker — where nothing has anywhere to raise one.
    */
   onAgentNotice?: (notice: AgentNotice) => void
+  /**
+   * Ends the app, for `app.quit`. `app.quit()` in the main process and nothing
+   * else: it is the one ending that runs `before-quit`, and `before-quit` is
+   * where the ptys are killed and awaited.
+   *
+   * Absent in every runtime with no app around it — the acceptance host, a
+   * vitest worker — where the method refuses rather than half-quitting a
+   * process that has no quit.
+   */
+  requestQuit?: () => void
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
   registerPlaceholderHandlers(registry)
   registerStatusHandler(registry)
+  registerQuitHandler(registry, options.requestQuit === undefined ? {} : { requestQuit: options.requestQuit })
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)
   // Two reads and a write against the store, with no resource behind them.

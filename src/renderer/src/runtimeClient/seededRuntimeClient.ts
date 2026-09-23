@@ -518,6 +518,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
       platform: 'darwin',
       startedAt: Date.now() - 90000
     }),
+    // There is no app behind a seeded runtime, so there is nothing to quit and
+    // nothing worth pretending about it.
+    'app.quit': () => {
+      throw new Error('the seeded runtime has no app to quit')
+    },
 
     'project.list': () => [...projects.values()],
     'project.add': ({ path, name }) => {

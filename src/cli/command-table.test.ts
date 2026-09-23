@@ -20,6 +20,7 @@ function spec(name: string): CommandSpec {
 
 const EXPECTED = [
   'status',
+  'quit',
   'project list',
   'project add',
   'project linked',

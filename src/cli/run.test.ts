@@ -1,11 +1,11 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ExitCode } from './exit.js'
 import type { Streams } from './output.js'
 import { runCli } from './run.js'
-import { StubError, startStubRuntime, type StubHandler, type StubRuntime } from './stub-runtime.js'
+import { NO_REPLY, StubError, startStubRuntime, type StubHandler, type StubRuntime } from './stub-runtime.js'
 
 const PROJECTS = [
   { id: 'p_api', name: 'api', path: '/repos/api', baseRef: 'origin/main' },
@@ -660,7 +660,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(51)
+    expect(data.commands.length).toBe(52)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })
@@ -816,5 +816,60 @@ describe('a project’s path lists in --json', () => {
     const data = dataOf((await cli.run(['project', 'linked', 'api', 'node_modules', '--json'])).out)
     expect(data['linkedPaths']).toEqual(['node_modules'])
     expect(data['copiedPaths']).toEqual([])
+  })
+})
+
+describe('quitting the app', () => {
+  /** A stub that answers `app.quit` and then goes, socket and all, as the app does. */
+  async function quittingHarness(options: { reply?: boolean; leave?: boolean } = {}): Promise<Harness> {
+    const { reply = true, leave = true } = options
+    let stub: StubRuntime | undefined
+    const cli = await harness((method, params, context) => {
+      if (method !== 'app.quit') return defaultHandler(method, params, context)
+      if (leave) setTimeout(() => void stub?.close(), 10)
+      return reply ? { quitting: true, pid: 4242 } : NO_REPLY
+    })
+    stub = cli.stub
+    return cli
+  }
+
+  it('asks the app to quit and returns once the endpoint has gone', async () => {
+    const cli = await quittingHarness()
+    const result = await cli.run(['quit'])
+
+    expect(result.code).toBe(ExitCode.Success)
+    expect(cli.stub.received.map((entry) => entry.method)).toContain('app.quit')
+    expect(result.out).toContain('pid')
+    expect(result.out).toContain('4242')
+    expect(existsSync(cli.stub.endpoint)).toBe(false)
+  })
+
+  // The quit takes the connection the reply was travelling on, so losing it is
+  // not evidence of failure. The endpoint is.
+  it('counts a connection that died mid-quit as a quit, once the endpoint is gone', async () => {
+    const cli = await quittingHarness({ reply: false })
+    const result = await cli.run(['quit', '--json'])
+
+    expect(result.code).toBe(ExitCode.Success)
+    const data = soleJsonDocument(result.out)['data'] as Record<string, unknown>
+    expect(data['quit']).toBe(true)
+    expect(data['pid']).toBe(null)
+  })
+
+  it('fails when the app was asked and the endpoint is still there', async () => {
+    const cli = await quittingHarness({ leave: false })
+    const result = await cli.run(['quit', '--timeout-ms', '50', '--json'])
+
+    expect(result.code).toBe(ExitCode.Failure)
+    const document = JSON.parse(result.err) as { error: { code: string } }
+    expect(document.error.code).toBe('quit_timeout')
+  })
+
+  it('says nothing is running rather than pretending it quit one', async () => {
+    const cli = await harness(defaultHandler, { discovery: 'none' })
+    const result = await cli.run(['quit'])
+
+    expect(result.code).toBe(ExitCode.NoRuntime)
+    expect(result.err).toMatch(/not running/)
   })
 })

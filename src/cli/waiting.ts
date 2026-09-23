@@ -1,24 +1,39 @@
 // Blocking waits for agents. A coding agent driving teamree needs to know when
-// a worktree is usable and when a command it typed has actually finished;
-// without these it can only sleep and hope.
+// a worktree is usable, when a command it typed has actually finished, and when
+// the app it asked to quit has gone; without these it can only sleep and hope.
 //
-// Both waits turn elapsed time into a claim about someone else's work — "that
-// terminal has gone quiet", "that worktree never settled" — so both have to
-// know when this process was not running. A closing lid moves the wall clock by
+// Each of them turns elapsed time into a claim about someone else's work — "that
+// terminal has gone quiet", "that worktree never settled", "that app is not
+// leaving" — so each has to know when this process was not running. A closing lid moves the wall clock by
 // the whole sleep, and read naively that jump says the terminal fell silent or
 // the deadline passed. Neither was observed. Time is therefore measured through
 // `startTimedWindow`, which reads a monotonic clock and reports the two traces a
 // suspend leaves, and an unobserved gap is never spent as evidence: the quiet
 // window restarts and the timeout budget is charged only for watched time.
 
+import { existsSync } from 'node:fs'
 import { startTimedWindow, type ElapsedClock } from '../main/runtime/elapsed.js'
 import type { TerminalEvent } from '../shared/methods.js'
+import { isPipe } from './discovery.js'
 import { CliError, ExitCode } from './exit.js'
 import type { RuntimeClient } from './transport.js'
 
 /** How long a terminal must produce nothing before it counts as quiet. */
 export const DEFAULT_QUIET_MS = 1500
 export const DEFAULT_WAIT_TIMEOUT_MS = 120_000
+
+/**
+ * How long `teamree quit` waits for the endpoint to go.
+ *
+ * The teardown kills a process tree per pane and waits for each, then writes
+ * every pane's transcript, so it is a second or two on a busy workspace and not
+ * instant on an idle one. Generous enough that a real quit is never called a
+ * failure, short enough that a script is not held by one that hung.
+ */
+export const DEFAULT_QUIT_TIMEOUT_MS = 20_000
+
+/** How often the endpoint is looked for while quitting. */
+const QUIT_POLL_MS = 25
 
 /** Fallback cadence when the runtime has no change stream to listen to. */
 const POLL_INTERVAL_MS = 250
@@ -157,6 +172,48 @@ export async function waitForState<T>(
   }
 
   throw new WaitTimeout(what, timeoutMs, interrupted)
+}
+
+export type EndpointOutcome = {
+  /** False when the wait ran out with the endpoint still there. */
+  gone: boolean
+  /** Null when the endpoint is a named pipe, which cannot be watched from here. */
+  waitedMs: number | null
+}
+
+/**
+ * Waits for the runtime's endpoint to disappear, which is what proves a quit
+ * finished rather than merely started.
+ *
+ * The socket file is removed last of all — after every pty is killed and every
+ * transcript written, at the end of `Runtime.stop` — so its absence is the one
+ * observation from out here that means the whole teardown ran. A reply to
+ * `app.quit` means only that the app heard.
+ *
+ * A named pipe on Windows lives in the kernel and cannot be stat'd, so there is
+ * nothing to watch and the wait says so rather than inventing an answer.
+ */
+export async function waitForEndpointGone(
+  options: { endpoint: string; timeoutMs: number; exists?: (path: string) => boolean } & WaitTiming
+): Promise<EndpointOutcome> {
+  const { endpoint, timeoutMs } = options
+  if (isPipe(endpoint)) return { gone: true, waitedMs: null }
+  const exists = options.exists ?? existsSync
+  const clock = options.clock ?? systemClock
+  const delay = options.delay ?? realDelay
+
+  let observedMs = 0
+  while (true) {
+    // Rounded because this is read by a person and printed in a payload, and
+    // the monotonic clock behind it counts in fractions of a millisecond.
+    if (!exists(endpoint)) return { gone: true, waitedMs: Math.round(observedMs) }
+    if (observedMs >= timeoutMs) return { gone: false, waitedMs: Math.round(observedMs) }
+    // Charged the same way every other wait here is: a machine that slept
+    // through part of this was not watching, and an unwatched gap must not be
+    // spent as evidence that the app failed to go.
+    const tick = await observeIdle(clock, QUIT_POLL_MS, () => delay(QUIT_POLL_MS))
+    observedMs += tick.observedMs
+  }
 }
 
 export type TerminalWaitResult = {

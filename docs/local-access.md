@@ -17,7 +17,7 @@ is an allow-list. A teammate gets six methods (`PEER_METHODS` in
 `src/main/runtime/peerTransport.ts`, asserted whole in
 `src/main/runtime/peerTransport.test.ts`). A client on the socket gets all of
 them: create a worktree, remove one, spawn a terminal, read any pane's
-scrollback, type into it. Even the one method both may call is not the same
+scrollback, type into it, quit the app. Even the one method both may call is not the same
 call — a teammate's `terminal.write` is held for the owner's consent, and a CLI
 client's goes straight to the pty, because nobody is asked to consent to
 themselves. That asymmetry is the point of the CLI and it is not a defect, but
