@@ -22,12 +22,12 @@ import type {
 } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
 import { ErrorCode } from '../../shared/protocol'
-import { describeError, GitCommandError, GitServiceError } from './errors'
+import { describeError, GitCommandError, GitServiceError, isTransient } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
 import { createVersionProbe } from './gitVersion'
 import { isInside, pathKey, samePath } from './pathIdentity'
 import { createMemoryRecordStore, type GitRecordStore } from './recordStore'
-import { detectBaseRef, inspectRepository, listBranchNames } from './repository'
+import { detectBaseRef, initializeRepository, inspectRepository, listBranchNames } from './repository'
 import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type StartPointList } from './startPoint'
 import { readWorktreeInventory } from './worktreeInventory'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
@@ -154,6 +154,7 @@ export class GitService {
 
   async addProject(params: ParamsOf<'project.add'>): Promise<Project> {
     await this.#ensureVersion(process.cwd())
+    if (params.init) await initializeRepository(this.#runner, params.path)
     const info = await inspectRepository(this.#runner, params.path)
 
     const key = pathKey(info.root)
@@ -596,7 +597,7 @@ export class GitService {
   reviveRestoredRecords(): void {
     for (const worktree of this.#store.listWorktrees()) {
       if (worktree.state === 'creating') {
-        this.#store.putWorktree({ ...worktree, state: 'failed', error: 'interrupted by a restart' })
+        this.#store.putWorktree({ ...worktree, state: 'failed', error: 'interrupted by a restart', retryable: true })
       } else if (worktree.state === 'removing') {
         this.#store.putWorktree({ ...worktree, state: 'ready' })
       }
@@ -630,7 +631,10 @@ export class GitService {
     if (!current) return null
     const { clearError, clearMissing, ...fields } = patch
     const next: Worktree = { ...current, ...fields }
-    if (clearError) delete next.error
+    if (clearError) {
+      delete next.error
+      delete next.retryable
+    }
     if (clearMissing) delete next.missing
     this.#store.putWorktree(next)
     this.events.emit({ type: 'worktree.updated', worktree: next })
@@ -724,7 +728,8 @@ export class GitService {
       return (
         this.#patch(worktreeId, {
           state: 'failed',
-          error: cancelled ? 'creation cancelled' : describeError(error)
+          error: cancelled ? 'creation cancelled' : describeError(error),
+          ...(isTransient(error) ? { retryable: true } : {})
         }) ?? worktree
       )
     } finally {

@@ -88,6 +88,7 @@ import {
 } from './preferences'
 import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen } from './paneSeen'
 import type { PatchHunk } from '@shared/patch'
+import type { ProjectAddRefusal } from '@shared/methods'
 import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
@@ -336,7 +337,8 @@ type WorkspaceState = {
   /** Opens the change stream. Returns the stop function an effect cleans up with. */
   startWatching: () => () => void
 
-  addProject: (path: string, name?: string) => Promise<void>
+  /** Answers the refusal when the folder cannot be a project, for the dialog to show; null otherwise. */
+  addProject: (path: string, name?: string, init?: boolean) => Promise<ProjectAddRefusal | null>
   /** Creates the worktree, waits for it, then starts the agent in it. */
   startTask: (draft: TaskDraft) => void
   retryWorktree: (worktreeId: string) => void
@@ -1098,14 +1100,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async addProject(path, name) {
+    async addProject(path, name, init) {
       try {
-        const project = await runtimeClient.call('project.add', name ? { path, name } : { path })
+        const project = await runtimeClient.call('project.add', {
+          path,
+          ...(name ? { name } : {}),
+          ...(init ? { init } : {})
+        })
         set((state) => ({ projects: [...state.projects, project], dialog: null }))
         notify(`Added ${project.name}`, 'info')
       } catch (error) {
+        const refusal = (error as { data?: { refusal?: ProjectAddRefusal } } | null)?.data?.refusal
+        if (refusal) return refusal
         failed('Could not add the project')(error)
       }
+      return null
     },
 
     /**

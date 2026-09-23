@@ -7,6 +7,7 @@
 // into.
 
 import { useCallback, useRef, useState } from 'react'
+import type { ProjectAddRefusal } from '@shared/methods'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { Modal } from './Modal'
 
@@ -18,6 +19,8 @@ export function AddProjectDialog(): React.JSX.Element {
   const [name, setName] = useState('')
   const [browsing, setBrowsing] = useState(false)
   const [browseError, setBrowseError] = useState('')
+  const [refused, setRefused] = useState<{ path: string; refusal: ProjectAddRefusal } | null>(null)
+  const [adding, setAdding] = useState(false)
   const pickerOpen = useRef(false)
 
   const inferred = path.split(/[/\\]/).filter(Boolean).pop() ?? ''
@@ -36,12 +39,25 @@ export function AddProjectDialog(): React.JSX.Element {
       setBrowsing(false)
     }
   }, [])
-  const canSubmit = path.trim().length > 0
+  const canSubmit = path.trim().length > 0 && !adding
+  // Keyed by path so an edit to the field retires the refusal without an effect.
+  const refusal = refused?.path === path.trim() ? refused.refusal : null
+
+  const add = async (init: boolean): Promise<void> => {
+    const target = path.trim()
+    setAdding(true)
+    try {
+      const answer = await addProject(target, name.trim() || undefined, init)
+      setRefused(answer ? { path: target, refusal: answer } : null)
+    } finally {
+      setAdding(false)
+    }
+  }
 
   const submit = (event: React.FormEvent): void => {
     event.preventDefault()
     if (!canSubmit) return
-    void addProject(path.trim(), name.trim() || undefined)
+    void add(false)
   }
 
   return (
@@ -62,6 +78,18 @@ export function AddProjectDialog(): React.JSX.Element {
             spellCheck={false}
           />
         </label>
+        {refusal ? (
+          <div className="field__refusal">
+            <span className="field__error" role="alert">
+              {refusal === 'not-a-repository' ? 'Not a git repository' : 'No commits yet'}
+            </span>
+            {refusal === 'not-a-repository' ? (
+              <button type="button" className="button button--small" onClick={() => void add(true)} disabled={adding}>
+                Initialize git
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         <label className="field">
           <span className="field__label">Display name</span>

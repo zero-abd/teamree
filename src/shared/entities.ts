@@ -35,7 +35,7 @@ export type WorktreeState =
   | 'creating'
   | 'ready'
   | 'removing'
-  /** Creation failed; `error` carries the reason and the row offers a retry. */
+  /** Creation failed; `error` carries the reason. */
   | 'failed'
 
 /** One task's isolated checkout. */
@@ -51,6 +51,8 @@ export type Worktree = {
   startedFrom: string
   state: WorktreeState
   error?: string
+  /** On a failed create whose cause may pass (a timeout, a lock, a cancel); only then is a retry offered. */
+  retryable?: true
   createdAt: number
   /**
    * The pane the project's setup command was started in. Set once when the

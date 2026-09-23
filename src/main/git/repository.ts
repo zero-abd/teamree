@@ -2,7 +2,9 @@
 // should new work branch from by default. Interpreting a start point a caller
 // chose instead of that default is startPoint.ts's job.
 
+import { stat } from 'node:fs/promises'
 import path from 'node:path'
+import type { ProjectAddRefusal } from '../../shared/methods'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
@@ -23,16 +25,16 @@ export function assertRefShape(ref: string, label: string): void {
 }
 
 export async function inspectRepository(runner: GitRunner, directory: string): Promise<RepositoryInfo> {
-  if (!path.isAbsolute(directory)) {
-    throw new GitServiceError(ErrorCode.InvalidParams, `project path must be absolute, got "${directory}"`)
-  }
+  await assertFolder(directory)
 
   const probe = await runner.tryRun({ args: ['rev-parse', '--is-bare-repository'], cwd: directory, readOnly: true })
   if (probe.exitCode !== 0) {
     const reason = probe.stderr.trim()
+    // Only git's own "not a repository" earns the offer to init; dubious ownership and the like do not.
     throw new GitServiceError(
       ErrorCode.InvalidParams,
-      `"${directory}" is not a git repository${reason ? `: ${reason}` : ''}`
+      `"${directory}" is not a git repository${reason ? `: ${reason}` : ''}`,
+      /not a git repository/i.test(reason) ? refusal('not-a-repository') : undefined
     )
   }
 
@@ -46,8 +48,33 @@ export async function inspectRepository(runner: GitRunner, directory: string): P
   if (!root) {
     throw new GitServiceError(ErrorCode.InvalidParams, `could not locate the repository root for "${directory}"`)
   }
+  // Every worktree branches from a commit; without one each create would fail.
+  if (!(await refExists(runner, root, 'HEAD'))) {
+    throw new GitServiceError(ErrorCode.InvalidParams, `"${root}" has no commits yet`, refusal('no-commits'))
+  }
 
   return { root, bare, defaultName: repositoryName(root) }
+}
+
+/** `git init` and an empty first commit, for a folder that is not yet in any repository. */
+export async function initializeRepository(runner: GitRunner, directory: string): Promise<void> {
+  await assertFolder(directory)
+  const probe = await runner.tryRun({ args: ['rev-parse', '--git-dir'], cwd: directory, readOnly: true })
+  if (probe.exitCode === 0) return
+  await runner.run({ args: ['init', '--quiet'], cwd: directory })
+  await runner.run({ args: ['commit', '--allow-empty', '--no-verify', '-m', 'Initial commit'], cwd: directory })
+}
+
+async function assertFolder(directory: string): Promise<void> {
+  if (!path.isAbsolute(directory)) {
+    throw new GitServiceError(ErrorCode.InvalidParams, `project path must be absolute, got "${directory}"`)
+  }
+  const found = await stat(directory).catch(() => null)
+  if (!found?.isDirectory()) throw new GitServiceError(ErrorCode.InvalidParams, `"${directory}" is not a folder`)
+}
+
+function refusal(kind: ProjectAddRefusal): { refusal: ProjectAddRefusal } {
+  return { refusal: kind }
 }
 
 function repositoryName(root: string): string {

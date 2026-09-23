@@ -33,6 +33,7 @@ const WorktreeSchema = z.object({
   startedFrom: z.string().min(1),
   state: z.enum(['creating', 'ready', 'removing', 'failed']),
   error: z.string().optional(),
+  retryable: z.literal(true).optional(),
   createdAt: z.number(),
   // Which pane the setup command was started in; kept so the record still says setup ran.
   setupTerminalId: z.string().min(1).optional(),

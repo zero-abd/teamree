@@ -176,13 +176,40 @@ describe('a worktree still being made', () => {
 })
 
 describe('a worktree that failed to be made', () => {
-  it('gives the runtime’s own reason, on the row, with the way out beside it', () => {
-    const reason = 'fatal: invalid reference: origin/nope'
+  const failure = (): HTMLElement => document.querySelector('.worktree__error') as HTMLElement
+
+  it('says why in one short line, with git’s whole message on hover', () => {
+    const reason =
+      'git worktree add --no-track -b doomed /repos/pager-wt/doomed 1a2b3c exited with code 128: fatal: invalid reference: origin/nope\nhint: six more lines\nhint: of advice'
     mount({ worktree: worktree({ state: 'failed', error: reason }) })
-    expect(screen.getByText(reason)).toBeTruthy()
+    expect(failure().textContent).toBe('Invalid reference: origin/nope')
+    expect(failure().title).toBe(reason)
     expect(screen.getByText('failed')).toBeTruthy()
+  })
+
+  it('cuts a long reason to about sixty characters', () => {
+    const reason = `start point "${'x'.repeat(80)}" is not a ref in this repository`
+    mount({ worktree: worktree({ state: 'failed', error: reason }) })
+    expect(failure().textContent?.length).toBeLessThanOrEqual(60)
+    expect(failure().textContent?.endsWith('…')).toBe(true)
+    expect(failure().title).toBe(reason)
+  })
+
+  it('offers Retry only when trying again could work', () => {
+    mount({ worktree: worktree({ state: 'failed', error: 'creation cancelled', retryable: true }) })
     screen.getByRole('button', { name: 'Retry' }).click()
     expect(handlers.onRetry).toHaveBeenCalledOnce()
+  })
+
+  it('offers no Retry for a cause that will not pass', () => {
+    mount({ worktree: worktree({ state: 'failed', error: 'fatal: invalid reference: origin/nope' }) })
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+
+  it('always offers Remove beside the reason', () => {
+    mount({ worktree: worktree({ state: 'failed', error: 'no' }) })
+    screen.getByRole('button', { name: 'Remove' }).click()
+    expect(handlers.onRemove).toHaveBeenCalledOnce()
   })
 
   // A blank row would read as a rendering fault rather than a job that did not finish.
