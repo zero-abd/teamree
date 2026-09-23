@@ -759,3 +759,62 @@ describe('reading a pane as text', () => {
     expect(data['plain']).toBe('~/repos/teamree % exit\n')
   })
 })
+
+describe('a project’s path lists in --json', () => {
+  // A script cannot tell a list that is empty from a field this build does not
+  // have, so the arrays are always there.
+  const BARE = { id: 'p_api', name: 'api', path: '/repos/api', baseRef: 'main' }
+
+  const handler: StubHandler = (method, params, context) => {
+    if (method === 'project.list') return [BARE]
+    if (method === 'project.setPaths') return BARE
+    return defaultHandler(method, params, context)
+  }
+
+  function dataOf(out: string): Record<string, unknown> {
+    return soleJsonDocument(out)['data'] as Record<string, unknown>
+  }
+
+  it('emits both arrays for a project that has configured neither', async () => {
+    const cli = await harness(handler)
+
+    for (const argv of [
+      ['project', 'linked', 'api'],
+      ['project', 'copied', 'api']
+    ]) {
+      const data = dataOf((await cli.run([...argv, '--json'])).out)
+      expect(data['linkedPaths']).toEqual([])
+      expect(data['copiedPaths']).toEqual([])
+    }
+  })
+
+  it('emits them after a list is cleared, which is the same JSON as never having set one', async () => {
+    const cli = await harness(handler)
+    const data = dataOf((await cli.run(['project', 'linked', 'api', '--clear', '--json'])).out)
+    expect(data['linkedPaths']).toEqual([])
+    expect(data['copiedPaths']).toEqual([])
+  })
+
+  it('emits them in the listing, the add and the remove as well', async () => {
+    const cli = await harness(handler)
+
+    const listed = soleJsonDocument((await cli.run(['project', 'list', '--json'])).out)
+    expect(listed['data']).toEqual([{ ...BARE, linkedPaths: [], copiedPaths: [] }])
+
+    const added = dataOf((await cli.run(['project', 'add', './api', '--json'])).out)
+    expect(added['linkedPaths']).toEqual([])
+    expect(added['copiedPaths']).toEqual([])
+
+    const removed = dataOf((await cli.run(['project', 'remove', 'api', '--json'])).out)
+    expect(removed['project']).toMatchObject({ linkedPaths: [], copiedPaths: [] })
+  })
+
+  it('still carries the paths a project does have', async () => {
+    const cli = await harness((method, params, context) =>
+      method === 'project.setPaths' ? { ...BARE, linkedPaths: ['node_modules'] } : handler(method, params, context)
+    )
+    const data = dataOf((await cli.run(['project', 'linked', 'api', 'node_modules', '--json'])).out)
+    expect(data['linkedPaths']).toEqual(['node_modules'])
+    expect(data['copiedPaths']).toEqual([])
+  })
+})

@@ -12,7 +12,7 @@ export const projectCommands: readonly CommandSpec[] = [
     run: async (context) => {
       const projects = await context.client.call('project.list', {})
       return {
-        data: projects,
+        data: projects.map(withPathLists),
         text: formatTable(
           ['ID', 'NAME', 'BASE REF', 'PATH'],
           projects.map((project) => [project.id, project.name, project.baseRef, project.path]),
@@ -44,7 +44,7 @@ export const projectCommands: readonly CommandSpec[] = [
       const path = resolve(context.cwd, context.args[0] as string)
       const name = readString(context.flags, 'name')
       const project = await context.client.call('project.add', name === undefined ? { path } : { path, name })
-      return { data: project, text: `added project ${project.name} (${project.id}) at ${project.path}` }
+      return { data: withPathLists(project), text: `added project ${project.name} (${project.id}) at ${project.path}` }
     }
   },
   pathsCommand('linked', {
@@ -69,7 +69,10 @@ export const projectCommands: readonly CommandSpec[] = [
     run: async (context) => {
       const project = await resolveProject(context.client, context.args[0] as string)
       await context.client.call('project.remove', { projectId: project.id })
-      return { data: { removed: true, project }, text: `removed project ${project.name} (${project.id})` }
+      return {
+        data: { removed: true, project: withPathLists(project) },
+        text: `removed project ${project.name} (${project.id})`
+      }
     }
   }
 ]
@@ -113,9 +116,25 @@ function pathsCommand(
         clear || paths.length > 0
           ? await context.client.call('project.setPaths', { projectId: project.id, ...change })
           : project
-      return { data: after, text: describePaths(after, kind) }
+      return { data: withPathLists(after), text: describePaths(after, kind) }
     }
   }
+}
+
+/**
+ * A project with both path lists present, empty when they are empty.
+ *
+ * The store drops an empty list rather than keeping `[]`, because a record that
+ * has never been configured has said nothing rather than "none" — see
+ * `GitService.setProjectPaths`. That is the right shape for a file somebody
+ * edits and the wrong one for a script: `teamree project linked api --json`
+ * answered `{"id":...,"baseRef":"main"}`, from which no caller can tell an empty
+ * list from a field this build does not have. So the absence is resolved here,
+ * at the edge that promises a JSON shape, and the stored record keeps its own
+ * meaning.
+ */
+function withPathLists(project: Project): Project & { linkedPaths: string[]; copiedPaths: string[] } {
+  return { ...project, linkedPaths: project.linkedPaths ?? [], copiedPaths: project.copiedPaths ?? [] }
 }
 
 function describePaths(project: Project, kind: 'linked' | 'copied'): string {
