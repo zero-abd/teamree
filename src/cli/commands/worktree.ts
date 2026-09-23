@@ -40,9 +40,10 @@ export const worktreeCommands: readonly CommandSpec[] = [
     details:
       'Returns as soon as the runtime accepts the requests; the rows may still be in the "creating" state.\n' +
       'Repeat --agent to race one task in several checkouts: each gets its own worktree from the same ' +
-      'start point, named for the agent that runs in it, and the agent is started once the checkout is ' +
-      'ready. With --agent, --json carries every created record as a list; without it, the one record as ' +
-      'before.',
+      'start point, and its agent is started once the checkout is ready.\n' +
+      'One agent keeps --name; several name each worktree "<name> <agent>", numbering a repeated agent ' +
+      'from its second run.\n' +
+      'With --agent, --json carries every created record as a list; without it, the one record as before.',
     flags: [
       {
         name: 'project',

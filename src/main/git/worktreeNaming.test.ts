@@ -44,28 +44,81 @@ describe('checkoutDirName', () => {
 })
 
 describe('taskNamesForAgents', () => {
-  it('leaves one agent with the task name it would have had alone', () => {
-    expect(taskNamesForAgents('task', ['claude'])).toEqual(['task'])
-    expect(taskNamesForAgents('task', [])).toEqual(['task'])
+  // Every shape a fan-out comes in, and what each run is called. Read the
+  // second column as the sidebar: these are the rows somebody sees.
+  const cases: ReadonlyArray<{ what: string; agents: readonly string[]; names: readonly string[] }> = [
+    { what: 'no agent at all is still one worktree', agents: [], names: ['task'] },
+    { what: 'one agent keeps the task name it would have had alone', agents: ['claude'], names: ['task'] },
+    {
+      what: 'two agents each carry the agent that runs in them',
+      agents: ['claude', 'codex'],
+      names: ['task claude', 'task codex']
+    },
+    {
+      what: 'one agent run twice numbers from the second',
+      agents: ['claude', 'claude'],
+      names: ['task claude', 'task claude 2']
+    },
+    {
+      what: 'three different agents',
+      agents: ['claude', 'codex', 'cursor'],
+      names: ['task claude', 'task codex', 'task cursor']
+    },
+    {
+      what: 'a repeat among three',
+      agents: ['claude', 'codex', 'claude'],
+      names: ['task claude', 'task codex', 'task claude 2']
+    },
+    {
+      what: 'three runs of one agent',
+      agents: ['claude', 'claude', 'claude'],
+      names: ['task claude', 'task claude 2', 'task claude 3']
+    },
+    {
+      what: 'two of each, in the order the fan-out hands them over',
+      agents: ['claude', 'codex', 'claude', 'codex'],
+      names: ['task claude', 'task codex', 'task claude 2', 'task codex 2']
+    }
+  ]
+
+  for (const { what, agents, names } of cases) {
+    it(what, () => {
+      expect(taskNamesForAgents('task', agents)).toEqual(names)
+    })
+  }
+
+  // The two properties the table above is only a sample of. A `task claude 2`
+  // with no `task claude` beside it was the bug: the counter counted a run the
+  // naming rule had skipped, so the sidebar numbered from two and the first
+  // racer was called nothing in particular.
+  it('never repeats a name, and never numbers a run without its unnumbered first', () => {
+    for (const { agents } of cases) {
+      const names = taskNamesForAgents('task', agents)
+      expect(names).toHaveLength(Math.max(1, agents.length))
+      expect(new Set(names).size).toBe(names.length)
+      for (const name of names) {
+        // Safe to read a trailing number as the counter here because the task
+        // itself is `task`; only the rule under test can put a digit on the end.
+        const unnumbered = name.replace(/ \d+$/, '')
+        if (unnumbered !== name) expect(names).toContain(unnumbered)
+      }
+    }
   })
 
-  it('names the later attempts after the agent that runs them', () => {
-    expect(taskNamesForAgents('task', ['claude', 'codex', 'claude'])).toEqual(['task', 'task codex', 'task claude 2'])
-  })
-
-  // Racing two runs of one model is as ordinary as racing two models, so the
-  // repeat has to get a number rather than the same suffix twice.
-  it('counts an agent that comes round again', () => {
-    expect(taskNamesForAgents('task', ['claude', 'claude', 'claude'])).toEqual([
-      'task',
-      'task claude 2',
-      'task claude 3'
+  it('slugifies into branch names with the same two properties', () => {
+    expect(taskNamesForAgents('task', ['claude', 'codex', 'claude']).map(slugify)).toEqual([
+      'task-claude',
+      'task-codex',
+      'task-claude-2'
     ])
-  })
-
-  it('slugifies into the branch names the suffix promises', () => {
-    const branches = taskNamesForAgents('task', ['claude', 'codex', 'claude']).map(slugify)
-    expect(branches).toEqual(['task', 'task-codex', 'task-claude-2'])
+    for (const { agents } of cases) {
+      const branches = taskNamesForAgents('task', agents).map(slugify)
+      expect(new Set(branches).size).toBe(branches.length)
+      for (const branch of branches) {
+        const unnumbered = branch.replace(/-\d+$/, '')
+        if (unnumbered !== branch) expect(branches).toContain(unnumbered)
+      }
+    }
   })
 
   // The suffix distinguishes the runs from each other; it says nothing about
@@ -75,14 +128,14 @@ describe('taskNamesForAgents', () => {
     for (const name of taskNamesForAgents('task', ['claude', 'codex', 'claude'])) {
       taken.push(allocateBranchName(name, taken))
     }
-    expect(taken).toEqual(['task', 'task-codex', 'task-claude-2'])
+    expect(taken).toEqual(['task-claude', 'task-codex', 'task-claude-2'])
 
-    const second: string[] = ['task', 'task-codex', 'task-claude-2']
+    const second: string[] = [...taken]
     const names = taskNamesForAgents('task', ['claude', 'codex']).map((name) => {
       const branch = allocateBranchName(name, second)
       second.push(branch)
       return branch
     })
-    expect(names).toEqual(['task-2', 'task-codex-2'])
+    expect(names).toEqual(['task-claude-3', 'task-codex-2'])
   })
 })

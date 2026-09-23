@@ -135,7 +135,7 @@ it('creates one worktree per selected agent, each running its own', { timeout: 3
       creates: taskCreates('Race the pager', [claude, codex, claude])
     })
 
-    const names = ['Race the pager', 'Race the pager codex', 'Race the pager claude 2']
+    const names = ['Race the pager claude', 'Race the pager codex', 'Race the pager claude 2']
     await until(
       () => names.every((name) => useWorkspaceStore.getState().worktrees.some((one) => one.name === name)),
       'all three worktrees to be created'

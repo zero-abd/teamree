@@ -235,7 +235,7 @@ describe('what it submits', () => {
       projectId: 'p1',
       startedFrom: 'origin/main',
       creates: [
-        { name: 'Rewrite the pager', agentCommand: 'claude' },
+        { name: 'Rewrite the pager claude', agentCommand: 'claude' },
         { name: 'Rewrite the pager codex', agentCommand: 'codex' },
         { name: 'Rewrite the pager claude 2', agentCommand: 'claude' }
       ]
