@@ -9,14 +9,22 @@
 // worktree appearing here is the exact complaint the change answers, and it
 // must fail loudly rather than quietly re-arrive.
 //
-// The rest is about there being one answer to where the next keystroke goes.
-// The selected tab is read from the same `focusedTerminalId` the focused pane
-// border is read from, and a teammate's watched pane holding the focus means no
-// tab of yours is selected. Two selected things would be two answers.
+// Then there being one answer to where the next keystroke goes. The selected
+// tab is read from the same `focusedTerminalId` the focused pane border is read
+// from, and a teammate's watched pane holding the focus means no tab of yours is
+// selected. Two selected things would be two answers.
+//
+// And the three buttons at the end of it, which are the only place in the
+// window a pane can be split or opened with a pointer. They were in the
+// worktree header, above this strip, beside a filesystem path and the pane
+// board — four commands in a row, every one of them with a home elsewhere. The
+// tests below say where they are now and what they act on, so a tidy-up cannot
+// leave the window with no clickable way to split a pane at all.
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Layout, PaneNode, Terminal } from '@shared/entities'
+import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import { leaf } from '../panes/paneLayout'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -68,13 +76,20 @@ const layout = (worktreeId: string, root: PaneNode | null, focusedTerminalId: st
 
 const focusPane = vi.fn()
 const closeTerminal = vi.fn(async () => {})
+const createTerminal = vi.fn(async () => {})
+const splitFocusedPane = vi.fn(async () => {})
+
+const MAC = resolvePlatformModifier('darwin')
 
 function seed(overrides: Record<string, unknown> = {}): void {
-  useWorkspaceStore.setState({ ...INITIAL, focusPane, closeTerminal, ...overrides }, true)
+  useWorkspaceStore.setState(
+    { ...INITIAL, focusPane, closeTerminal, createTerminal, splitFocusedPane, ...overrides },
+    true
+  )
 }
 
 const mount = (): void => {
-  render(<TerminalTabs />)
+  render(<TerminalTabs modifier={MAC} />)
 }
 
 /** The names on the strip, in the order it puts them. */
@@ -83,6 +98,8 @@ const tabNames = (): (string | null)[] => screen.getAllByRole('tab').map((tab) =
 beforeEach(() => {
   focusPane.mockReset()
   closeTerminal.mockReset()
+  createTerminal.mockReset()
+  splitFocusedPane.mockReset()
   seed()
 })
 
@@ -259,6 +276,58 @@ describe('what a tab does when it is pressed', () => {
     twoPanes()
     expect(screen.getByRole('button', { name: 'Close pane npm test' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close pane claude' })).toBeTruthy()
+  })
+})
+
+// Four buttons used to sit in the header above this strip: a pane board, two
+// splits and a new terminal. The board belongs to the rail, and these three
+// belong here — on the strip that already draws which pane is current, which is
+// the pane every one of them acts on.
+describe('the pane buttons at the end of the strip', () => {
+  const onePane = (): void => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1'), 't1') },
+      terminals: byId(terminal({ id: 't1', title: 'npm test' }))
+    })
+    mount()
+  }
+
+  it('splits the focused pane sideways', () => {
+    onePane()
+    fireEvent.click(screen.getByRole('button', { name: 'Split right' }))
+    expect(splitFocusedPane).toHaveBeenCalledExactlyOnceWith('row')
+  })
+
+  it('splits the focused pane downwards', () => {
+    onePane()
+    fireEvent.click(screen.getByRole('button', { name: 'Split down' }))
+    expect(splitFocusedPane).toHaveBeenCalledExactlyOnceWith('column')
+  })
+
+  it('opens a pane in the worktree the strip belongs to', () => {
+    onePane()
+    fireEvent.click(screen.getByRole('button', { name: 'New terminal' }))
+    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
+  })
+
+  // They are icons, so the hover is the only thing that can name the chord that
+  // does the same job. Teaching it is the point: the buttons are for the first
+  // hour and the chord is for every hour after.
+  it('names the chord each one stands in for', () => {
+    onePane()
+    expect(screen.getByRole('button', { name: 'Split right' }).getAttribute('title')).toBe('Split right · ⌘D')
+    expect(screen.getByRole('button', { name: 'Split down' }).getAttribute('title')).toBe('Split down · ⌘⇧D')
+    expect(screen.getByRole('button', { name: 'New terminal' }).getAttribute('title')).toBe('New terminal · ⌘T')
+  })
+
+  // An icon with no label is a button nothing on screen names, and a screen
+  // reader would read three of them as "button, button, button".
+  it('says what each one does, for anything that cannot see the icon', () => {
+    onePane()
+    for (const name of ['Split right', 'Split down', 'New terminal']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy()
+    }
   })
 })
 

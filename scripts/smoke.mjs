@@ -106,11 +106,20 @@ function finish() {
   clearTimeout(bail)
   if (failures.length) {
     for (const failure of failures) console.error(`smoke: ${failure}`)
-    app.exit(1)
+    process.exitCode = 1
   } else {
     console.log('smoke: renderer mounted, preload bridge reachable, runtime answering')
-    app.exit(0)
+    process.exitCode = 0
   }
+  // `app.quit()` rather than `app.exit()`, and the difference is the whole of
+  // the fix. `exit` tears the process down under the ptys this check opened,
+  // and a pty whose child is still being reaped when its native handle goes
+  // throws from inside node-pty with nothing left to catch it — the process
+  // died with SIGABRT after printing its success line, once there were three
+  // panes open rather than one. `quit` goes through the app's own `before-quit`,
+  // which stops the runtime and every pane first; that is the sequence a person
+  // pressing ⌘Q gets and it is the one that ends cleanly.
+  app.quit()
 }
 
 /** Polls `probe` until it is true, and records `failure` if it never is. */
@@ -545,6 +554,39 @@ async function checkWorktreeSurfaces(ask) {
       if (said) failures.push(`the window said: ${said}`)
     }
   }
+
+  // And that the panes' own strip carries the same command, which is the gap
+  // this function exists for. Splitting and opening a pane used to be words in
+  // the header above the strip; they are icons at the end of it now, and an
+  // icon that calls nothing looks exactly like one that works. Pressed by its
+  // accessible name, because an icon has no text to match on.
+  const pressLabel = (label) =>
+    ask(
+      `(() => {
+         const found = [...document.querySelectorAll('button')].find(
+           (button) => button.getAttribute('aria-label') === ${JSON.stringify(label)}
+         )
+         if (!found || found.disabled) return false
+         found.click()
+         return true
+       })()`
+    )
+
+  const beforeStrip = await tabCount()
+  if (!(await pressLabel('New terminal'))) {
+    failures.push('the pane strip has no New terminal control, so no pointer can open a pane')
+    return
+  }
+  await waitFor(
+    async () => (await tabCount()) > beforeStrip,
+    'pressing New terminal on the pane strip did not open a pane'
+  )
+
+  // The reveal on the worktree header, which is all that is left of a path
+  // sixty characters long. Checked for and deliberately not pressed: pressing
+  // it would open a file manager on whoever is running the gate.
+  const reveal = await ask(`document.querySelector('.workspace__head button[aria-label^="Show the"]') !== null`)
+  if (reveal !== true) failures.push('the worktree header offers no way to reach the checkout on disk')
 
   // And the decision that a quiet shell closes on one press. A pane running an
   // agent, or one still producing output, is asked about first — that is
