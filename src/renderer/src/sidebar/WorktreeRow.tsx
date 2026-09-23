@@ -42,13 +42,9 @@ type WorktreeRowProps = {
   onReveal: () => void
   onCopyPath: () => void
   onCopyBranch: () => void
-  onOpenInEditor: () => void
   onRename: (name: string) => void
-  /**
-   * What the Open in item is called. A bare word when no editor was found: the
-   * item is offered either way, and the refusal says what to do.
-   */
-  editorLabel: string
+  /** The Open in submenu, the project's editor first. */
+  openIn: readonly { label: string; onChoose: () => void }[]
 }
 
 export function WorktreeRow({
@@ -68,9 +64,8 @@ export function WorktreeRow({
   onReveal,
   onCopyPath,
   onCopyBranch,
-  onOpenInEditor,
   onRename,
-  editorLabel
+  openIn
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
@@ -118,7 +113,7 @@ export function WorktreeRow({
         { label: 'Reveal in Finder', onChoose: onReveal },
         { label: 'Copy path', onChoose: onCopyPath },
         { label: 'Copy branch', onChoose: onCopyBranch },
-        { label: `Open in ${editorLabel}`, onChoose: onOpenInEditor },
+        { label: 'Open in', onChoose: () => {}, items: openIn },
         remove
       ]
   const rows = ready ? agentRows(terminals, worktree.id, now, evidence) : []

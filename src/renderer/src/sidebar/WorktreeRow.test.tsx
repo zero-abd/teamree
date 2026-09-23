@@ -74,9 +74,11 @@ const handlers = {
   onReveal: vi.fn(),
   onCopyPath: vi.fn(),
   onCopyBranch: vi.fn(),
-  onOpenInEditor: vi.fn(),
   onRename: vi.fn()
 }
+
+const openInZed = vi.fn()
+const openInFinder = vi.fn()
 
 function mount(
   overrides: {
@@ -88,7 +90,7 @@ function mount(
     watchers?: Record<string, PaneAttention>
     unread?: Iterable<string>
     active?: boolean
-    editorLabel?: string
+    openIn?: { label: string; onChoose: () => void }[]
   } = {}
 ): void {
   render(
@@ -103,7 +105,12 @@ function mount(
         unread={new Set(overrides.unread ?? [])}
         now={NOW}
         active={overrides.active ?? false}
-        editorLabel={overrides.editorLabel ?? 'Zed'}
+        openIn={
+          overrides.openIn ?? [
+            { label: 'Zed', onChoose: openInZed },
+            { label: 'Finder', onChoose: openInFinder }
+          ]
+        }
         {...handlers}
       />
     </ul>
@@ -117,7 +124,7 @@ const labels = (): string[] => screen.getAllByRole('menuitem').map((item) => ite
 
 beforeEach(() => {
   useWorkspaceStore.setState({ unreadableSince: {} })
-  for (const handler of Object.values(handlers)) handler.mockReset()
+  for (const handler of [...Object.values(handlers), openInZed, openInFinder]) handler.mockReset()
 })
 
 // The fourth shape: the checkout deleted from disk with git none the wiser, and the row saying `ready`.
@@ -418,7 +425,7 @@ describe('the row menu', () => {
     fireEvent.contextMenu(row())
 
     expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
-    expect(labels()).toEqual(['Rename…', 'Reveal in Finder', 'Copy path', 'Copy branch', 'Open in Zed', 'Remove'])
+    expect(labels()).toEqual(['Rename…', 'Reveal in Finder', 'Copy path', 'Copy branch', 'Open in', 'Remove'])
   })
 
   // A one-pixel miss on the row must not open the question that destroys a checkout.
@@ -429,10 +436,22 @@ describe('the row menu', () => {
     expect(handlers.onRemove).not.toHaveBeenCalled()
   })
 
-  it('names the editor this project would use', () => {
-    mount({ editorLabel: 'VS Code' })
+  it('offers the apps it was given under Open in, in the order given', () => {
+    mount()
     fireEvent.contextMenu(row())
-    expect(labels()[4]).toBe('Open in VS Code')
+    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Open in' }))
+
+    const apps = screen.getByRole('menu', { name: 'Open in' })
+    expect(
+      within(apps)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual(['Zed', 'Finder'])
+    fireEvent.click(within(apps).getByRole('menuitem', { name: 'Finder' }))
+
+    expect(openInFinder).toHaveBeenCalledOnce()
+    expect(openInZed).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menu')).toBeNull()
   })
 
   it('opens the same menu from the ⋯ beside the row', () => {
@@ -459,12 +478,9 @@ describe('the row menu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in Finder' }))
     fireEvent.contextMenu(row())
     fireEvent.click(screen.getByRole('menuitem', { name: 'Copy branch' }))
-    fireEvent.contextMenu(row())
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Open in Zed' }))
 
     expect(handlers.onReveal).toHaveBeenCalledOnce()
     expect(handlers.onCopyBranch).toHaveBeenCalledOnce()
-    expect(handlers.onOpenInEditor).toHaveBeenCalledOnce()
   })
 })
 
@@ -494,6 +510,28 @@ describe('the row menu from the keyboard', () => {
 
     fireEvent.keyDown(menu, { key: 'Enter' })
     expect(handlers.onRemove).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('goes into Open in with the right arrow and back out with the left', () => {
+    mount()
+    openButton().focus()
+    fireEvent.keyDown(row(), { key: 'ContextMenu' })
+    const menu = screen.getAllByRole('menu')[0] as HTMLElement
+    for (let press = 0; press < 4; press += 1) fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(document.activeElement?.textContent).toBe('Open in')
+    expect(screen.getByRole('menuitem', { name: 'Open in' }).getAttribute('aria-haspopup')).toBe('menu')
+
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowRight' })
+    expect(document.activeElement?.textContent).toBe('Zed')
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowLeft' })
+    expect(document.activeElement?.textContent).toBe('Open in')
+    expect(screen.queryByRole('menu', { name: 'Open in' })).toBeNull()
+
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' })
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+    expect(openInFinder).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu')).toBeNull()
   })
 

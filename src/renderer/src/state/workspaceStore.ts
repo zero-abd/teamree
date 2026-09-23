@@ -107,7 +107,7 @@ import {
 } from './preferences'
 import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen } from './paneSeen'
 import type { PatchHunk } from '@shared/patch'
-import type { ProjectAddRefusal } from '@shared/methods'
+import type { ProjectAddRefusal, ResultOf } from '@shared/methods'
 import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
@@ -351,10 +351,10 @@ type WorkspaceState = {
   agentNotices: AgentNoticePreference
   /** Whether this Mac may sleep. Held here for the reason `agentNotices` is; `useKeepAwake` publishes it. */
   keepAwake: KeepAwakeMode
-  /** Each project's editor command, by project id. Empty means "whatever is on PATH". */
+  /** Each project's editor: a bundle id from `editors` or a program name. Absent means the first editor found. */
   editorCommands: Record<string, string>
-  /** Editors found on PATH, or null until asked: null is "not looked yet", empty is "found none". */
-  editors: { command: string; label: string }[] | null
+  /** What Open in offers, or null until asked: null is "not looked yet", empty is "found none". */
+  editors: ResultOf<'editor.list'>['editors'] | null
   /** Whether the patch in the changes panel is laid out inline or side by side. */
   diffLayout: DiffLayout
   /** The agent kind the composer offers first, and what each kind is launched with. See `preferences.ts`. */
@@ -555,9 +555,9 @@ type WorkspaceState = {
   ) => Promise<void>
   /** Sets one project's editor command, or clears it when given null. */
   setEditorCommand: (projectId: string, command: string | null) => void
-  /** Asks the main process which editors are on PATH, once per run. */
+  /** Asks the main process which editors, terminals and Finder are installed, once per run. */
   loadEditors: () => Promise<void>
-  /** Opens a path in an editor. `command` is the project's own, absent when none; `what` names the thing opened for the refusal. */
+  /** Opens a path. `command` is a listed app's or the project's own, absent for the first editor; `what` names it for the refusal. */
   openInEditor: (path: string, command: string | undefined, what: string) => Promise<void>
   /** Puts text on the clipboard, and says so. `what` names it in the notice. */
   copyToClipboard: (text: string, what: string) => Promise<void>
@@ -2338,7 +2338,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async loadEditors() {
-      // Once per run: a probe on every right-click would be a PATH walk per menu.
+      // Once per run: a probe on every right-click would be a Spotlight query per menu.
       if (get().editors !== null) return
       try {
         set({ editors: (await runtimeClient.call('editor.list', {})).editors })

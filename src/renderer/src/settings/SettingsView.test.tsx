@@ -101,6 +101,7 @@ const loadUpdate = vi.fn()
 const loadRelay = vi.fn()
 const revealInFinder = vi.fn()
 const setStartPointDefault = vi.fn()
+const setEditorCommand = vi.fn()
 const setProjectPaths = vi.fn()
 const setTerminalFontSize = vi.fn()
 const setTerminalOptions = vi.fn()
@@ -129,6 +130,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       loadRelay,
       revealInFinder,
       setStartPointDefault,
+      setEditorCommand,
       setProjectPaths,
       setTerminalFontSize,
       setTerminalOptions,
@@ -163,6 +165,7 @@ beforeEach(() => {
     loadRelay,
     revealInFinder,
     setStartPointDefault,
+    setEditorCommand,
     setProjectPaths,
     setTerminalFontSize,
     setTerminalOptions,
@@ -638,6 +641,67 @@ describe('the start point a new task is offered first', () => {
   it('captions the start point with nothing at all', () => {
     render(<SettingsView modifier={modifier} />)
     expect(screen.queryByText(/What the New task dialog offers first/)).toBeNull()
+  })
+})
+
+describe('the app a project opens in', () => {
+  const INSTALLED = [
+    { command: 'com.microsoft.VSCode', label: 'VS Code', kind: 'editor' as const },
+    { command: 'dev.zed.Zed', label: 'Zed', kind: 'editor' as const },
+    { command: 'com.googlecode.iterm2', label: 'iTerm', kind: 'terminal' as const },
+    { command: 'com.apple.finder', label: 'Finder', kind: 'finder' as const }
+  ]
+  const picker = (): HTMLSelectElement => screen.getByLabelText('Open checkouts in')
+
+  it('offers the editors found, and saves the one picked', () => {
+    seed({ editors: INSTALLED })
+    render(<SettingsView modifier={modifier} />)
+
+    expect([...picker().options].map((option) => option.text)).toEqual([
+      'First found (VS Code)',
+      'VS Code',
+      'Zed',
+      'Other…'
+    ])
+    fireEvent.change(picker(), { target: { value: 'dev.zed.Zed' } })
+    expect(setEditorCommand).toHaveBeenCalledWith('p1', 'dev.zed.Zed')
+  })
+
+  it('clears the pick with First found', () => {
+    seed({ editors: INSTALLED, editorCommands: { p1: 'dev.zed.Zed' } })
+    render(<SettingsView modifier={modifier} />)
+
+    expect(picker().value).toBe('dev.zed.Zed')
+    fireEvent.change(picker(), { target: { value: '' } })
+    expect(setEditorCommand).toHaveBeenCalledWith('p1', null)
+  })
+
+  it('takes any program by name under Other', () => {
+    seed({ editors: INSTALLED })
+    render(<SettingsView modifier={modifier} />)
+
+    expect(screen.queryByLabelText('Editor command')).toBeNull()
+    fireEvent.change(picker(), { target: { value: 'other' } })
+    const field = screen.getByLabelText('Editor command')
+    fireEvent.change(field, { target: { value: ' mate ' } })
+    fireEvent.blur(field)
+    expect(setEditorCommand).toHaveBeenCalledWith('p1', 'mate')
+  })
+
+  it('shows a program this project names in the field', () => {
+    seed({ editors: INSTALLED, editorCommands: { p1: 'mate' } })
+    render(<SettingsView modifier={modifier} />)
+
+    expect(picker().value).toBe('other')
+    expect((screen.getByLabelText('Editor command') as HTMLInputElement).value).toBe('mate')
+  })
+
+  it('says nothing about PATH', () => {
+    seed({ editors: [] })
+    render(<SettingsView modifier={modifier} />)
+
+    expect([...picker().options].map((option) => option.text)).toEqual(['First found', 'Other…'])
+    expect(screen.queryByText(/PATH/)).toBeNull()
   })
 })
 

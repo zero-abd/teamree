@@ -575,28 +575,79 @@ describe('the row menu acts on the worktree it was opened on', () => {
     expect(useWorkspaceStore.getState().worktrees).toHaveLength(1)
   })
 
+  const INSTALLED = [
+    { command: 'com.microsoft.VSCode', label: 'VS Code', kind: 'editor' as const },
+    { command: 'dev.zed.Zed', label: 'Zed', kind: 'editor' as const },
+    { command: 'com.googlecode.iterm2', label: 'iTerm', kind: 'terminal' as const },
+    { command: 'com.apple.finder', label: 'Finder', kind: 'finder' as const }
+  ]
+  const openIn = (): string[] => {
+    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Open in' }))
+    return within(screen.getByRole('menu', { name: 'Open in' }))
+      .getAllByRole('menuitem')
+      .map((item) => item.textContent ?? '')
+  }
+
   // Nothing else in the window pairs the project's editor with the worktree's path.
-  it('opens the checkout in the editor this project names', async () => {
-    call.mockResolvedValue({ opened: true, editor: 'mate' })
-    seed({ worktrees: [worktree()], editorCommands: { p1: 'mate' } })
+  it('offers what is installed, this project’s editor first', () => {
+    seed({ worktrees: [worktree()], editors: INSTALLED, editorCommands: { p1: 'dev.zed.Zed' } })
     openMenu()
 
-    expect(screen.getByRole('menuitem', { name: 'Open in mate' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Open in mate' }))
+    expect(openIn()).toEqual(['Zed', 'VS Code', 'iTerm', 'Finder'])
+  })
+
+  it('opens the checkout in the app picked, and remembers an editor as this project’s', async () => {
+    call.mockResolvedValue({ opened: true, editor: 'VS Code' })
+    seed({ worktrees: [worktree()], editors: INSTALLED })
+    openMenu()
+    openIn()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'VS Code' }))
     await act(async () => undefined)
 
+    expect(call).toHaveBeenCalledWith('editor.open', {
+      path: '/repos/pager-wt/rewrite',
+      command: 'com.microsoft.VSCode'
+    })
+    expect(useWorkspaceStore.getState().editorCommands).toEqual({ p1: 'com.microsoft.VSCode' })
+  })
+
+  it('does not make a terminal the project’s editor', async () => {
+    call.mockResolvedValue({ opened: true, editor: 'iTerm' })
+    seed({ worktrees: [worktree()], editors: INSTALLED, editorCommands: { p1: 'dev.zed.Zed' } })
+    openMenu()
+    openIn()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'iTerm' }))
+    await act(async () => undefined)
+
+    expect(call).toHaveBeenCalledWith('editor.open', {
+      path: '/repos/pager-wt/rewrite',
+      command: 'com.googlecode.iterm2'
+    })
+    expect(useWorkspaceStore.getState().editorCommands).toEqual({ p1: 'dev.zed.Zed' })
+  })
+
+  it('offers a program this project names itself, first', async () => {
+    call.mockResolvedValue({ opened: true, editor: 'mate' })
+    seed({ worktrees: [worktree()], editors: INSTALLED, editorCommands: { p1: 'mate' } })
+    openMenu()
+
+    expect(openIn()[0]).toBe('mate')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'mate' }))
+    await act(async () => undefined)
     expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite', command: 'mate' })
   })
 
   // A refusal is the ordinary answer on a machine with no editor set up, and it has to reach the screen.
   it('says why nothing opened', async () => {
-    call.mockResolvedValue({ opened: false, reason: 'teamree found no editor on PATH.' })
-    seed({ worktrees: [worktree()] })
+    call.mockResolvedValue({ opened: false, reason: 'no editor found' })
+    seed({ worktrees: [worktree()], editors: [] })
     openMenu()
 
-    fireEvent.click(screen.getByRole('menuitem', { name: /^Open in/ }))
+    expect(openIn()).toEqual(['Editor'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Editor' }))
     await act(async () => undefined)
 
-    expect(useWorkspaceStore.getState().notices.at(-1)?.text).toContain('found no editor on PATH')
+    expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite' })
+    expect(useWorkspaceStore.getState().notices.at(-1)?.text).toContain('no editor found')
   })
 })

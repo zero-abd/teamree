@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo } from 'react'
 import { teammatesHeard } from '@shared/entities'
+import type { ResultOf } from '@shared/methods'
 import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
 import { attentionByPane } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
@@ -42,6 +43,7 @@ export function Sidebar({
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
   const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
   const openInEditor = useWorkspaceStore((state) => state.openInEditor)
+  const setEditorCommand = useWorkspaceStore((state) => state.setEditorCommand)
   const editorCommands = useWorkspaceStore((state) => state.editorCommands)
   const editors = useWorkspaceStore((state) => state.editors)
   const loadEditors = useWorkspaceStore((state) => state.loadEditors)
@@ -372,10 +374,16 @@ export function Sidebar({
                         onReveal={() => void revealInFinder(worktree.path, `the ${worktree.name} checkout`)}
                         onCopyPath={() => void copyToClipboard(worktree.path, `the path to ${worktree.name}`)}
                         onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
-                        onOpenInEditor={() =>
-                          void openInEditor(worktree.path, editorCommands[project.id], `the ${worktree.name} checkout`)
-                        }
-                        editorLabel={editorLabel(editorCommands[project.id], editors)}
+                        openIn={openInTargets(editorCommands[project.id], editors).map((target) => ({
+                          label: target.label,
+                          onChoose: () => {
+                            // Picking an editor makes it this project's; a terminal cannot open a file.
+                            if (target.kind === 'editor' && target.command !== undefined) {
+                              setEditorCommand(project.id, target.command)
+                            }
+                            void openInEditor(worktree.path, target.command, `the ${worktree.name} checkout`)
+                          }
+                        }))}
                       />
                     ))}
                     {theirs.map((row) => (
@@ -425,15 +433,37 @@ function watchingIn(watches: readonly { projectId: string; paneId: string }[], p
   return watches.filter((watch) => watch.projectId === projectId).map((watch) => watch.paneId)
 }
 
+type OpenTarget = ResultOf<'editor.list'>['editors'][number]
+
 /**
- * What the row menu's Open in item is called: the project's own command by its
- * last path segment, else the first found on PATH, else the bare word.
+ * What an editor is called: the project's own pick by its listed label or last path
+ * segment, else the first editor found, else the bare word.
  */
-export function editorLabel(
-  command: string | undefined,
-  found: readonly { command: string; label: string }[] | null
-): string {
+export function editorLabel(command: string | undefined, found: readonly OpenTarget[] | null): string {
   const named = command?.trim() ?? ''
-  if (named.length > 0) return named.split('/').filter(Boolean).pop() ?? named
-  return found?.[0]?.label ?? 'editor'
+  if (named.length > 0) {
+    return found?.find((target) => target.command === named)?.label ?? named.split('/').filter(Boolean).pop() ?? named
+  }
+  return found?.find((target) => (target.kind ?? 'editor') === 'editor')?.label ?? 'editor'
+}
+
+/**
+ * The Open in submenu: the project's pick first, then everything found. With
+ * nothing found, one entry that asks anyway, so the refusal reaches the screen.
+ */
+export function openInTargets(
+  command: string | undefined,
+  found: readonly OpenTarget[] | null
+): { command?: string; label: string; kind: 'editor' | 'terminal' | 'finder' }[] {
+  const named = command?.trim() ?? ''
+  const targets = (found ?? []).map((target) => ({ ...target, kind: target.kind ?? ('editor' as const) }))
+  if (named.length > 0) {
+    const picked = targets.find((target) => target.command === named) ?? {
+      command: named,
+      label: editorLabel(named, null),
+      kind: 'editor' as const
+    }
+    return [picked, ...targets.filter((target) => target !== picked)]
+  }
+  return targets.length > 0 ? targets : [{ label: 'Editor', kind: 'editor' }]
 }

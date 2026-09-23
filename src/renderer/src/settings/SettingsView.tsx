@@ -859,19 +859,27 @@ function PathList({
   )
 }
 
+/** The picker's value for a program typed in rather than picked. */
+const OTHER_EDITOR = 'other'
+
 /**
- * Which editor this project's checkouts open in, when teamree's own PATH search misses it.
+ * Which editor this project's checkouts open in: one found, or a program named in the field.
  * A program name, not a command line: it is spawned without a shell, the checkout as one argument.
  */
 function EditorCommand({ project }: { project: Project }): React.JSX.Element {
   const stored = useWorkspaceStore((state) => state.editorCommands[project.id] ?? '')
-  const editors = useWorkspaceStore((state) => state.editors)
+  const found = useWorkspaceStore((state) => state.editors)
   const setEditorCommand = useWorkspaceStore((state) => state.setEditorCommand)
   const [draft, setDraft] = useState(stored)
+  const [typing, setTyping] = useState(false)
 
   useEffect(() => {
     setDraft(stored)
   }, [stored])
+
+  const editors = (found ?? []).filter((editor) => (editor.kind ?? 'editor') === 'editor')
+  const named = stored.length > 0 && !editors.some((editor) => editor.command === stored)
+  const other = typing || named
 
   const commit = (): void => {
     const next = draft.trim()
@@ -880,7 +888,6 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
   }
 
   const id = `settings-editor-${project.id}`
-  const found = editors?.map((editor) => editor.command).join(', ') ?? ''
 
   return (
     <div className="settings-field">
@@ -888,39 +895,45 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
         Open checkouts in
       </label>
       <div className="settings-field__row">
-        <input
+        <select
           id={id}
-          className="settings-field__input"
-          type="text"
-          value={draft}
-          placeholder={editors?.[0]?.command ?? 'code'}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              commit()
-            }
+          className="settings-select"
+          value={other ? OTHER_EDITOR : stored}
+          onChange={(event) => {
+            const value = event.target.value
+            setTyping(value === OTHER_EDITOR)
+            if (value === OTHER_EDITOR) setDraft(named ? stored : '')
+            else setEditorCommand(project.id, value.length === 0 ? null : value)
           }}
-        />
-        <button
-          type="button"
-          className="button button--small"
-          disabled={stored.length === 0}
-          onClick={() => setEditorCommand(project.id, null)}
         >
-          Use what is on PATH
-        </button>
+          <option value="">{editors[0] === undefined ? 'First found' : `First found (${editors[0].label})`}</option>
+          {editors.map((editor) => (
+            <option key={editor.command} value={editor.command}>
+              {editor.label}
+            </option>
+          ))}
+          <option value={OTHER_EDITOR}>Other…</option>
+        </select>
+        {other ? (
+          <input
+            className="settings-field__input"
+            type="text"
+            aria-label="Editor command"
+            value={draft}
+            placeholder="subl"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                commit()
+              }
+            }}
+          />
+        ) : null}
       </div>
-      <p className="settings-note">
-        {editors === null
-          ? 'Looking…'
-          : found.length === 0
-            ? 'None of code, cursor, zed, idea or subl on PATH'
-            : `On PATH: ${found}`}
-      </p>
     </div>
   )
 }
