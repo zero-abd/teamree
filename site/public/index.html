@@ -71,7 +71,7 @@ pre{max-width:100%;overflow-x:auto;}
 /* Hero */
 .hero{padding:156px 0 96px;}
 .hero-title{display:flex;align-items:flex-start;gap:.35em;font-size:clamp(40px,2.2rem + 2.4vw,64px);}
-.hero-mark{width:2.2em;height:2.2em;margin-top:-.08em;flex:none;color:var(--ink);}
+.hero-mark{width:2.2em;height:2.2em;margin-top:-.08em;flex:none;color:var(--ink);overflow:visible;}
 .hero h1{font-size:1em;}
 .lede{margin-top:24px;max-width:62ch;font-size:20px;line-height:1.5;color:var(--ink-2);}
 .cta{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:32px;}
@@ -185,7 +185,7 @@ p code{font-size:.9em;color:var(--ink);background:var(--tile-2);padding:2px 5px;
  <div class="header-row"><a class="lockup" href="/" aria-label="teamree home"><span class="lockup-tile"><svg aria-hidden="true"><use href="#mark-sm"/></svg></span><span class="lockup-name"><svg class="lockup-word" viewBox="0 10 440 82" overflow="visible" aria-hidden="true"><use href="#wordmark"/></svg><i class="lockup-dot" aria-hidden="true"></i></span></a><a class="nav-toggle" href="#site-nav" role="button" aria-expanded="false" aria-controls="site-nav">Menu</a><nav class="nav" id="site-nav" aria-label="Main"><a href="#worktrees">Worktrees</a><a href="#panes">Panes</a><a href="#teamwork">Teamwork</a><a href="#install">Install</a><a class="github" href="https://github.com/zero-abd/teamree">GitHub</a></nav></div>
 </header>
 <main id="main">
-<section class="hero"><div class="wrap"><div class="hero-title"><svg class="hero-mark" viewBox="0 0 256 256" aria-hidden="true"><use href="#mark"/></svg><h1>Your whole team<br>ships in parallel.</h1></div><p class="lede">Every agent in its own git worktree. Every teammate in the same window.</p><div class="cta"><a class="button" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">Download for macOS</a><a class="button secondary" href="https://github.com/zero-abd/teamree">Source on GitHub</a></div><p class="hero-note">Free. macOS 12 or later. Universal build.</p><figure class="shot"><div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i></div><div class="shot-frame" data-demo="new-task"><video width="1728" height="1080" muted playsinline preload="metadata" controls poster="/demos/new-task.jpg" aria-label="Screen capture: the New task dialog in teamree — the task typed once, claude and codex picked, Start task — then two worktrees in the sidebar and two panes starting with the task as their first prompt."><source src="/demos/new-task.mp4" type="video/mp4"><img src="/screenshot.png" width="1440" height="900" alt="The teamree window: five worktrees in the sidebar, each with its panes and a status dot, beside two split terminals — one running claude, one showing the test suite passing."></video></div></figure></div></section>
+<section class="hero"><div class="wrap"><div class="hero-title"><svg class="hero-mark" id="hero-mark" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path data-slab="l" fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190Z"/><path data-slab="r" fill-rule="evenodd" d="M140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></svg><h1>Your whole team<br>ships in parallel.</h1></div><p class="lede">Every agent in its own git worktree. Every teammate in the same window.</p><div class="cta"><a class="button" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">Download for macOS</a><a class="button secondary" href="https://github.com/zero-abd/teamree">Source on GitHub</a></div><p class="hero-note">Free. macOS 12 or later. Universal build.</p><figure class="shot"><div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i></div><div class="shot-frame" data-demo="new-task"><video width="1728" height="1080" muted playsinline preload="metadata" controls poster="/demos/new-task.jpg" aria-label="Screen capture: the New task dialog in teamree — the task typed once, claude and codex picked, Start task — then two worktrees in the sidebar and two panes starting with the task as their first prompt."><source src="/demos/new-task.mp4" type="video/mp4"><img src="/screenshot.png" width="1440" height="900" alt="The teamree window: five worktrees in the sidebar, each with its panes and a status dot, beside two split terminals — one running claude, one showing the test suite passing."></video></div></figure></div></section>
 
 <section class="section" id="worktrees"><div class="wrap section-row"><div class="section-copy"><h2>A worktree per task</h2><p>Start from any ref. Attempts never see each other's files; abandoning one is deleting a directory.</p></div><figure class="demo-figure"><div class="demo-frame" data-demo="every-pane"><div class="demo-pending" aria-hidden="true"><img src="/screenshot.png" alt="" decoding="async"></div><video width="1728" height="1080" muted playsinline preload="none" controls poster="/demos/every-pane.jpg" aria-label="Screen capture: five worktrees in the teamree sidebar with a status dot each, the All panes board ordered by what needs you, and ⌘K jumping between worktrees.">
 <source src="/demos/every-pane.mp4" type="video/mp4">
@@ -263,6 +263,50 @@ demo:video:parked --></div><figcaption class="demo-cap">Connecting two people an
 
   window.addEventListener('scroll', check, { passive: true });
   check();
+})();
+
+/* The mark parts as the page scrolls: scroll sets a target from 0 (the mark at
+   rest) to 1 (two straight panes, slabs apart) and a spring follows it. */
+(function () {
+  var svg = document.getElementById('hero-mark');
+  if (!svg || !window.requestAnimationFrame) return;
+  var left = svg.querySelector('[data-slab="l"]');
+  var right = svg.querySelector('[data-slab="r"]');
+  var calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var x = 0, v = 0, target = 0, raf = 0, last = 0;
+  var STIFFNESS = 170, DAMPING = 24, PART = 16;
+
+  function draw(p) {
+    var s = -PART * p, t = PART * p;
+    left.setAttribute('d',
+      'M' + (16 + s) + ' 28H' + (116 + s) + 'V228H' + (16 + s) + 'Q' + (8 + s) + ' 228 ' + (8 + s) + ' 220V36Q' + (8 + s) + ' 28 ' + (16 + s) + ' 28Z' +
+      'M' + (32 + s) + ' ' + (66 - 16 * p) + 'L' + (96 + s) + ' 50V206L' + (32 + s) + ' ' + (190 + 16 * p) + 'Z');
+    right.setAttribute('d',
+      'M' + (140 + t) + ' 28H' + (240 + t) + 'Q' + (248 + t) + ' 28 ' + (248 + t) + ' 36V220Q' + (248 + t) + ' 228 ' + (240 + t) + ' 228H' + (140 + t) + 'Z' +
+      'M' + (160 + t) + ' 48L' + (224 + t) + ' ' + (68 - 20 * p) + 'V' + (188 + 20 * p) + 'L' + (160 + t) + ' 208Z');
+  }
+  function step(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    var a = -STIFFNESS * (x - target) - DAMPING * v;
+    v += a * dt;
+    x += v * dt;
+    draw(x);
+    if (Math.abs(v) > 0.002 || Math.abs(x - target) > 0.001) {
+      raf = window.requestAnimationFrame(step);
+    } else {
+      raf = 0; x = target; v = 0; draw(x);
+    }
+  }
+  function want() {
+    var span = Math.max(240, window.innerHeight * 0.5);
+    target = Math.max(0, Math.min(1, window.scrollY / span));
+    if (calm && calm.matches) { x = target; v = 0; draw(x); return; }
+    if (!raf) { last = performance.now(); raf = window.requestAnimationFrame(step); }
+  }
+  window.addEventListener('scroll', want, { passive: true });
+  window.addEventListener('resize', want);
+  want();
 })();
 
 document.querySelectorAll('.cmd-copy').forEach(function (button) {
