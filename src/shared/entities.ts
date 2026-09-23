@@ -1,6 +1,8 @@
 // Core domain entities. Every process agrees on these shapes: the runtime owns
 // them, the renderer and the CLI only ever read or request changes to them.
 
+import type { TitleOpinion } from './titleOpinion'
+
 /** A tracked git repository. One project owns many worktrees. */
 export type Project = {
   id: string
@@ -266,6 +268,27 @@ export type Terminal = {
    * which is what "waiting for you" looks like from the outside.
    */
   busy: boolean
+  /**
+   * What this pane's own window title says it is doing, when it says anything.
+   *
+   * Additive and optional: absent means the title was not one `titleOpinion`
+   * has a row for, which is the answer for every plain shell and for most
+   * titles every agent writes. Absent is never a denial -- see
+   * `src/shared/titleOpinion.ts`.
+   */
+  titleSays?: TitleOpinion
+  /**
+   * When this pane last rang the terminal bell, within the burst of output it
+   * is still in.
+   *
+   * Cleared when a new burst starts and when anybody types, because a bell is a
+   * request and both of those are the request being overtaken: more output is
+   * the pane getting on with something, and a keystroke is the person answering
+   * it. So "set, and the pane has since gone quiet" is positive evidence that
+   * the pane is asking for something -- which is the one thing `busy` alone
+   * could never tell apart from a pane that finished and said nothing more.
+   */
+  lastBellAt?: number
   /** When output last arrived, for "no update for 4m". */
   lastOutputAt: number
   /**

@@ -24,14 +24,16 @@ export type DashboardRow = AgentRow & {
 /**
  * The order attention is owed in.
  *
- * A failure is finished and wrong, so it outranks work that is merely
- * unfinished; a pane still producing output is further along than one that has
- * stopped; a finished pane is the only one asking for nothing. It is the same
- * precedence `worktreeActivity` collapses a worktree by, deliberately: a
- * dashboard that ranked the four states differently from the sidebar would be
- * teaching a second reading of the same evidence.
+ * A failure is finished and wrong, so it outranks a question that is merely
+ * unanswered; a pane that has asked for something outranks one still working,
+ * because yours is the only hand that can move it; a pane still producing
+ * output is further along than one that has stopped and said nothing about why;
+ * a finished pane is the only one asking for nothing. It is the same precedence
+ * `worktreeActivity` collapses a worktree by, deliberately: a dashboard that
+ * ranked the five states differently from the sidebar would be teaching a
+ * second reading of the same evidence.
  */
-export const ACTIVITIES_BY_ATTENTION: readonly AgentActivity[] = ['failed', 'working', 'quiet', 'done']
+export const ACTIVITIES_BY_ATTENTION: readonly AgentActivity[] = ['failed', 'waiting', 'working', 'quiet', 'done']
 
 export type DashboardInput = {
   terminals: readonly Terminal[]
@@ -80,7 +82,7 @@ export type ActivityCounts = Record<AgentActivity, number>
  * about while somebody is reading it.
  */
 export function activityCounts(rows: readonly DashboardRow[]): ActivityCounts {
-  const counts: ActivityCounts = { failed: 0, working: 0, quiet: 0, done: 0 }
+  const counts: ActivityCounts = { failed: 0, waiting: 0, working: 0, quiet: 0, done: 0 }
   for (const row of rows) counts[row.activity] += 1
   return counts
 }

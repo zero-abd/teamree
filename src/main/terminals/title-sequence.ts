@@ -1,4 +1,4 @@
-// Extracts window titles from a PTY output stream.
+// Extracts window titles, and bells, from a PTY output stream.
 //
 // A title arrives as OSC 0 (icon + window) or OSC 2 (window): ESC ] Ps ; text
 // terminated by BEL or by ST (ESC \, or the single-byte C1 form). The stream is
@@ -6,6 +6,13 @@
 // straddle any number of reads -- including the two bytes of ESC \ landing in
 // different chunks. The scanner therefore keeps state between calls and never
 // treats a chunk as a self-contained string.
+//
+// Bells are counted here for the same reason titles are parsed here: this is
+// the only thing in the app that knows which BEL bytes are bells. Most of them
+// are not -- a BEL that closes an OSC is punctuation, and a title-setting
+// program emits one per title. Counted anywhere else, a pane that updates a
+// spinner in its title would look like a pane ringing the bell ten times a
+// second.
 
 const ESC = '\x1b'
 const BEL = '\x07'
@@ -24,18 +31,25 @@ type ScannerState =
   /** Saw ESC inside a payload: one more character decides ST or garbage. */
   | 'payload-escape'
 
+/** What one chunk contained: the titles it completed, and the bells it rang. */
+export type ScannedSequences = { titles: string[]; bells: number }
+
 export class TitleSequenceScanner {
   private state: ScannerState = 'text'
   private payload = ''
 
-  /** Feeds one chunk of output; returns every title completed by it, in order. */
-  scan(chunk: string): string[] {
+  /** Feeds one chunk of output; returns what it completed, titles in order. */
+  scan(chunk: string): ScannedSequences {
     const titles: string[] = []
+    let bells = 0
 
     for (const char of chunk) {
       switch (this.state) {
         case 'text':
           if (char === ESC) this.state = 'escape'
+          // Outside a sequence a BEL is what it says it is: a program asking to
+          // be noticed. Inside one it is punctuation, handled below.
+          else if (char === BEL) bells++
           break
 
         case 'escape':
@@ -45,6 +59,7 @@ export class TitleSequenceScanner {
           } else if (char !== ESC) {
             // Some other escape sequence (CSI, charset select, ...): ignore it.
             this.state = 'text'
+            if (char === BEL) bells++
           }
           break
 
@@ -74,7 +89,7 @@ export class TitleSequenceScanner {
       }
     }
 
-    return titles
+    return { titles, bells }
   }
 
   reset(): void {

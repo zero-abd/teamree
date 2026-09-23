@@ -642,8 +642,8 @@
 }
 
 /* What each pane in this worktree is doing. The dot is the whole vocabulary:
-   working, waiting, finished, failed — four things, because four things are
-   all this app can honestly tell from watching a PTY. */
+   asking, working, waiting, finished, failed — five things, because five things
+   are all this app can honestly tell from watching a PTY. */
 .activity {
   width: 7px;
   height: 7px;
@@ -655,6 +655,14 @@
 .activity--working {
   background: var(--accent-bright);
   box-shadow: 0 0 0 3px var(--accent-soft);
+  animation: activity-pulse 1.6s ease-in-out infinite;
+}
+
+/* The pane has said it wants something. Amber like a quiet pane, because the
+   two are the same colour of unfinished, and pulsing because this is the one
+   the sidebar exists to find. */
+.activity--waiting {
+  background: var(--warning);
   animation: activity-pulse 1.6s ease-in-out infinite;
 }
 
@@ -677,7 +685,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .activity--working {
+  .activity--working,
+  .activity--waiting {
     animation: none;
   }
 }
