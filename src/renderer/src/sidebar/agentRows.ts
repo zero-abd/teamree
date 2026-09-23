@@ -4,6 +4,7 @@
 
 import type { AgentEvent, AgentKind, PaneWatcher, Terminal } from '@shared/entities'
 import type { TitleOpinion } from '@shared/titleOpinion'
+import { harnessName } from '../agents/harnesses'
 
 export type AgentActivity =
   /** The pane has said it wants something: it rang the bell, or its title says so. */
@@ -23,6 +24,8 @@ export type AgentRow = {
   agent: AgentKind | undefined
   /** What to call it: the agent's name, or the terminal's own title. */
   label: string
+  /** What the row draws beside the glyph; see `paneText`. */
+  text: string
   activity: AgentActivity
   /** Milliseconds since output last arrived. */
   quietFor: number
@@ -149,18 +152,44 @@ export function agentRows(
 ): AgentRow[] {
   const mine = terminals.filter((terminal) => terminal.worktreeId === worktreeId)
   const names = paneNames(mine)
-  return mine.map((terminal, index) => ({
-    terminalId: terminal.id,
-    agent: terminal.agent,
-    label: names[index] ?? paneName(terminal),
-    activity: activityOf(terminal),
-    quietFor: Math.max(0, now - terminal.lastOutputAt),
-    evidence: evidence[terminal.id] ?? null
-  }))
+  return mine.map((terminal, index) => {
+    const label = names[index] ?? paneName(terminal)
+    return {
+      terminalId: terminal.id,
+      agent: paneAgent(terminal),
+      label,
+      text: paneText(terminal, label),
+      activity: activityOf(terminal),
+      quietFor: Math.max(0, now - terminal.lastOutputAt),
+      evidence: evidence[terminal.id] ?? null
+    }
+  })
 }
 
 /** Everything a pane's name can be read from; a teammate's pane is these fields minus the first. */
-export type PaneNameSource = { label?: string; agent?: AgentKind; title: string; shell: string }
+export type PaneNameSource = {
+  label?: string
+  agent?: AgentKind
+  foregroundAgent?: AgentKind
+  title: string
+  shell: string
+}
+
+/** The agent a pane runs: the one it was started as, else one seen in its foreground. */
+export function paneAgent(pane: PaneNameSource): AgentKind | undefined {
+  return pane.agent ?? pane.foregroundAgent
+}
+
+/** What a row draws beside the glyph: a given name in full, of an agent's own name only a twin's number. */
+export function paneText(pane: PaneNameSource, name: string): string {
+  const agent = paneAgent(pane)
+  if (agent === undefined || isNamed(pane)) return name
+  return name.slice(harnessName(agent).length).trim()
+}
+
+function isNamed(pane: PaneNameSource): boolean {
+  return (pane.label?.trim() ?? '').length > 0
+}
 
 /**
  * What one pane is called, in order of who said it: a typed name beats the
@@ -169,7 +198,8 @@ export type PaneNameSource = { label?: string; agent?: AgentKind; title: string;
 export function paneName(pane: PaneNameSource): string {
   const label = pane.label?.trim()
   if (label !== undefined && label.length > 0) return label
-  return pane.agent ?? paneLabel(pane)
+  const agent = paneAgent(pane)
+  return agent === undefined ? paneLabel(pane) : harnessName(agent)
 }
 
 /**
@@ -178,7 +208,7 @@ export function paneName(pane: PaneNameSource): string {
  */
 export function paneNames(panes: readonly PaneNameSource[]): string[] {
   const names = panes.map(paneName)
-  const chosen = panes.map((pane) => (pane.label?.trim() ?? '').length > 0)
+  const chosen = panes.map(isNamed)
   const totals = new Map<string, number>()
   for (const [index, name] of names.entries()) {
     if (chosen[index]) continue

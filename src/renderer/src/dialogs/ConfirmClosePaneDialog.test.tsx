@@ -74,7 +74,7 @@ describe('answering it', () => {
     seed(terminal())
     mount()
     expect(screen.getByRole('dialog').getAttribute('aria-label')).toBe('Stop this agent?')
-    expect(screen.getByText(/claude is working/)).toBeTruthy()
+    expect(screen.getByText(/Claude Code is working/)).toBeTruthy()
 
     // The order is the argument: the button that changes nothing is the one a
     // hand lands on first, and the one that kills a process is the one that has
@@ -90,7 +90,9 @@ describe('answering it', () => {
     seed(terminal())
     mount()
     const dialog = screen.getByRole('dialog')
-    expect(dialog.querySelector('.modal__body > .confirm > .confirm__body')?.textContent).toMatch(/claude is working/)
+    expect(dialog.querySelector('.modal__body > .confirm > .confirm__body')?.textContent).toMatch(
+      /Claude Code is working/
+    )
     const actions = [...dialog.querySelectorAll('.modal__actions > .button')]
     expect(actions.map((button) => button.textContent)).toEqual(['Leave it open', 'Stop it and close'])
     expect(actions[1]?.classList.contains('button--danger')).toBe(true)

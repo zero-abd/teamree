@@ -2,6 +2,7 @@
 // panel draws the same rows: two readings of the same PTY would one day disagree about
 // which pane is waiting.
 
+import { PaneGlyph } from '../agents/glyphs'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
 import { ACTIVITY_LABEL, agoLabel, sinceLabel, truncateName, typedBy, watchedBy, type AgentRow } from './agentRows'
 
@@ -45,7 +46,8 @@ export function PaneRows({
                 <span className={`activity activity--${row.activity}`} aria-hidden="true" />
                 {isUnread ? <span className="pip" aria-hidden="true" /> : null}
                 {/* Shortened for the row only: the hover text carries the whole of it. */}
-                <span className="pane-row__label">{truncateName(row.label)}</span>
+                <PaneGlyph agent={row.agent} />
+                <span className="pane-row__label">{truncateName(row.text)}</span>
                 {/* Named, never counted: "2 watching" says nothing about who. */}
                 {typing.length > 0 || attention.watchers.length > 0 ? (
                   <span

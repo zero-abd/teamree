@@ -266,7 +266,7 @@ describe('resources', () => {
     const popover = screen.getByRole('dialog', { name: 'Resources' })
     expect(popover.textContent).toContain('105.2%')
     expect(popover.textContent).toContain('Rewrite the pager')
-    expect(popover.textContent).toContain('claude')
+    expect(popover.textContent).toContain('Claude Code')
     expect(popover.textContent).toContain('63 MB')
     // The app's own row, last.
     expect(popover.textContent).toMatch(/teamree.*497 MB/)

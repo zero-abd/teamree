@@ -8,6 +8,7 @@ import {
   paneLabel,
   paneName,
   paneNames,
+  paneText,
   sinceLabel,
   truncateName,
   watchedBy,
@@ -34,6 +35,7 @@ const row = (overrides: Partial<AgentRow> = {}): AgentRow => ({
   terminalId: 't',
   agent: undefined,
   label: 'bash',
+  text: 'bash',
   activity: 'quiet',
   quietFor: 0,
   evidence: null,
@@ -160,7 +162,7 @@ describe('agentRows', () => {
       0
     )
 
-    expect(rows.map((entry) => entry.label)).toEqual(['claude', 'npm test'])
+    expect(rows.map((entry) => entry.label)).toEqual(['Claude Code', 'npm test'])
   })
 
   // Hiding a plain shell would make the row disagree with what is actually open.
@@ -194,13 +196,13 @@ describe('paneName', () => {
   })
 
   it('falls back to the agent, and then to what the pane is running', () => {
-    expect(paneName(terminal({ id: 't', agent: 'claude', title: 'node' }))).toBe('claude')
+    expect(paneName(terminal({ id: 't', agent: 'claude', title: 'node' }))).toBe('Claude Code')
     expect(paneName(terminal({ id: 't', title: 'npm test' }))).toBe('npm test')
   })
 
   // A pane called "   " is a pane with no name drawn as though it had one.
   it('ignores a name that is only whitespace', () => {
-    expect(paneName(terminal({ id: 't', agent: 'claude', label: '   ' }))).toBe('claude')
+    expect(paneName(terminal({ id: 't', agent: 'claude', label: '   ' }))).toBe('Claude Code')
   })
 })
 
@@ -212,7 +214,7 @@ describe('paneNames', () => {
       terminal({ id: 'c', agent: 'claude', title: 'node' })
     ])
 
-    expect(names).toEqual(['claude 1', 'claude 2', 'claude 3'])
+    expect(names).toEqual(['Claude Code 1', 'Claude Code 2', 'Claude Code 3'])
   })
 
   it('leaves a name alone when nothing else in the worktree reads like it', () => {
@@ -221,7 +223,7 @@ describe('paneNames', () => {
       terminal({ id: 'b', title: 'npm test' })
     ])
 
-    expect(names).toEqual(['claude', 'npm test'])
+    expect(names).toEqual(['Claude Code', 'npm test'])
   })
 
   // Numbering somebody's own words back at them would be overruling the one thing the app did not make up.
@@ -232,7 +234,33 @@ describe('paneNames', () => {
       terminal({ id: 'c', agent: 'claude', title: 'node' })
     ])
 
-    expect(names).toEqual(['auth refactor', 'auth refactor', 'claude'])
+    expect(names).toEqual(['auth refactor', 'auth refactor', 'Claude Code'])
+  })
+})
+
+describe('paneText', () => {
+  // The glyph already says which agent; the word beside it would say it again.
+  it('draws nothing beside an agent that nobody named', () => {
+    const pane = terminal({ id: 't', agent: 'claude', title: 'node' })
+    expect(paneText(pane, paneName(pane))).toBe('')
+  })
+
+  it('keeps only the number that tells two unnamed twins apart', () => {
+    const panes = [terminal({ id: 'a', agent: 'codex' }), terminal({ id: 'b', agent: 'codex' })]
+    const names = paneNames(panes)
+    expect(panes.map((pane, index) => paneText(pane, names[index] ?? ''))).toEqual(['1', '2'])
+  })
+
+  it('draws a task name and a shell’s name in full', () => {
+    const task = terminal({ id: 't', agent: 'claude', label: 'auth refactor' })
+    expect(paneText(task, paneName(task))).toBe('auth refactor')
+    expect(paneText(terminal({ id: 's', title: 'npm test' }), 'npm test')).toBe('npm test')
+  })
+
+  // Typed into a plain shell: the runtime saw the harness in the foreground.
+  it('reads an agent found in the foreground the way it reads one the pane was started as', () => {
+    const [entry] = agentRows([terminal({ id: 't', title: '✳ Claude Code', foregroundAgent: 'claude' })], 'wt1', 0)
+    expect(entry).toMatchObject({ agent: 'claude', label: 'Claude Code', text: '' })
   })
 })
 
@@ -256,7 +284,7 @@ describe('agentRows naming', () => {
       0
     )
 
-    expect(rows.map((entry) => entry.label)).toEqual(['claude 1', 'claude 2'])
+    expect(rows.map((entry) => entry.label)).toEqual(['Claude Code 1', 'Claude Code 2'])
   })
 
   // A pane in another worktree is not on this row and cannot be confused with it.
@@ -270,7 +298,7 @@ describe('agentRows naming', () => {
       0
     )
 
-    expect(rows.map((entry) => entry.label)).toEqual(['claude'])
+    expect(rows.map((entry) => entry.label)).toEqual(['Claude Code'])
   })
 
   it('calls a named pane what it was named, whole', () => {

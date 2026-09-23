@@ -4,6 +4,7 @@
 
 import { ACTIVITY_LABEL, sinceLabel, truncateName } from './agentRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
+import { PaneGlyph } from '../agents/glyphs'
 
 type TeammateWorktreeRowProps = {
   row: TeammateWorktreeRowModel
@@ -67,7 +68,8 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
                 >
                   <span className="pane-row__head">
                     <span className={`activity activity--${pane.activity}`} aria-hidden="true" />
-                    <span className="pane-row__label">{truncateName(pane.label)}</span>
+                    <PaneGlyph agent={pane.agent} />
+                    <span className="pane-row__label">{truncateName(pane.text)}</span>
                     <span className="pane-row__since">{sinceLabel(pane.quietFor)}</span>
                   </span>
                   {/* Only ever a line the pane actually printed while somebody had

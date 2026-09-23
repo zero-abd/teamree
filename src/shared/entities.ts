@@ -305,6 +305,8 @@ export type Terminal = {
   exitCode?: number
   /** Which coding agent this pane runs, when it runs one. */
   agent?: AgentKind
+  /** A harness seen in the foreground of a pane not started as one: typed into its shell. */
+  foregroundAgent?: AgentKind
   /**
    * What this pane is called, when somebody has said: the task it was started
    * for, or a rename. Three agents all introduce themselves as `claude`, so
@@ -469,7 +471,28 @@ export type StartPointList = {
  * The coding agents this app knows how to start and resume. Here because it
  * crosses the wire: the CLI prints it and the GUI keys buttons off it.
  */
-export type AgentKind = 'claude' | 'codex' | 'gemini' | 'opencode' | 'droid'
+export type AgentKind =
+  | 'claude'
+  | 'codex'
+  | 'gemini'
+  | 'opencode'
+  | 'droid'
+  | 'grok'
+  | 'cursor'
+  | 'copilot'
+  | 'amp'
+  | 'pi'
+  | 'goose'
+  | 'auggie'
+  | 'crush'
+  | 'cline'
+  | 'codebuff'
+  | 'continue'
+  | 'kilo'
+  | 'kimi'
+  | 'kiro'
+  | 'vibe'
+  | 'qwen'
 
 /**
  * The hook events an agent reports through this app's own CLI, under the agent's

@@ -1,6 +1,8 @@
 // What the strip's `+` offers: fixed rows, then the agents the runtime's probe found, in its order.
 
 import type { InstalledAgent } from '@shared/entities'
+import { AgentGlyph } from '../agents/glyphs'
+import { harnessName } from '../agents/harnesses'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import type { RowMenuItem } from '../sidebar/RowMenu'
@@ -60,8 +62,8 @@ export function startMenuItems(
     const rows: RowMenuItem[] =
       group === 'agents'
         ? agents.map((agent) => ({
-            label: agent.command,
-            icon: <AgentGlyph />,
+            label: harnessName(agent.kind),
+            icon: <AgentGlyph kind={agent.kind} />,
             onChoose: () => actions.startAgent(agent.command)
           }))
         : group.map((row) => ({
@@ -89,15 +91,6 @@ function PageGlyph(): React.JSX.Element {
   return (
     <svg viewBox="0 0 12 12" aria-hidden="true">
       <path d="M3 1.5 H7.5 L10 4 V10.5 H3 Z M7.5 1.5 V4 H10 M4.5 6.5 H8.5 M4.5 8.5 H8.5" />
-    </svg>
-  )
-}
-
-/** Neutral on purpose: the app draws no agent by a mark of its own yet. */
-function AgentGlyph(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M6 1.5 L7.1 4.9 L10.5 6 L7.1 7.1 L6 10.5 L4.9 7.1 L1.5 6 L4.9 4.9 Z" />
     </svg>
   )
 }

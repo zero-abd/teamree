@@ -16,6 +16,7 @@ import {
   type RelayPaneState
 } from './workspaceStore'
 import type { RelaySetting, Terminal, WorktreePush } from '@shared/entities'
+import { harnessName } from '../agents/harnesses'
 import { NOTICE_LIFETIME_MS } from '../notices/noticeLifetime'
 
 it('adds exactly one pane per New terminal action, including with workspace events', async () => {
@@ -771,7 +772,7 @@ it('offers the + menu the agents agent.list reported, in its order', async () =>
   expect(items.map((item) => item.label)).toEqual([
     'New terminal',
     'New markdown',
-    ...reported.map((agent) => agent.command),
+    ...reported.map((agent) => harnessName(agent.kind)),
     'Agent settings…'
   ])
 })

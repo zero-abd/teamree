@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { startMenuItems } from './startMenu'
+import { PaneGlyph } from '../agents/glyphs'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { truncateName } from '../sidebar/agentRows'
 import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
@@ -104,6 +105,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                     type="button"
                     role="tab"
                     aria-selected={active}
+                    aria-label={tab.label}
                     className="tab__main"
                     title={
                       unsaved
@@ -135,7 +137,8 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                     )}
                     {/* Shortened here only; the tooltip and the record keep all of it. */}
                     {isUnread ? <span className="pip" aria-hidden="true" /> : null}
-                    <span className="tab__name">{truncateName(tab.label)}</span>
+                    {isFile ? null : <PaneGlyph agent={tab.agent} />}
+                    {tab.text === '' ? null : <span className="tab__name">{truncateName(tab.text)}</span>}
                   </button>
                 )}
                 {/* A button besides double-click: F2 is a brightness key on a Mac keyboard. */}

@@ -140,7 +140,7 @@ describe('dashboardRows', () => {
       [worktree({ id: 'wt1' })]
     )
 
-    expect(rows.map((row) => row.label).sort()).toEqual(['claude', 'npm test'])
+    expect(rows.map((row) => row.label).sort()).toEqual(['Claude Code', 'npm test'])
     expect(rows.find((row) => row.terminalId === 'b')?.agent).toBeUndefined()
   })
 })

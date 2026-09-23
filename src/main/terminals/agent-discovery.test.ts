@@ -72,6 +72,19 @@ describe('findInstalledAgents', () => {
     expect(found.map((agent) => agent.kind)).toEqual(['claude', 'gemini', 'droid'])
   })
 
+  it('runs a harness by the executable it was found under', () => {
+    const found = findInstalledAgents({
+      pathValue: '/bin',
+      platform: 'linux',
+      isExecutable: only('/bin/kiro-cli', '/bin/kilocode')
+    })
+
+    expect(found).toEqual([
+      { kind: 'kilo', command: 'kilocode', binary: '/bin/kilocode' },
+      { kind: 'kiro', command: 'kiro-cli', binary: '/bin/kiro-cli' }
+    ])
+  })
+
   it('reads the real PATH when it is not given one', () => {
     expect(() => findInstalledAgents()).not.toThrow()
   })

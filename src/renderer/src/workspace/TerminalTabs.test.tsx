@@ -93,7 +93,7 @@ const mount = (): void => {
 }
 
 /** The names on the strip, in the order it puts them. */
-const tabNames = (): (string | null)[] => screen.getAllByRole('tab').map((tab) => tab.textContent)
+const tabNames = (): (string | null)[] => screen.getAllByRole('tab').map((tab) => tab.getAttribute('aria-label'))
 
 beforeEach(() => {
   focusPane.mockReset()
@@ -128,15 +128,15 @@ describe('the worktree the strip belongs to', () => {
 
   it('lists the panes of the worktree you are in', () => {
     twoWorktrees()
-    expect(tabNames()).toEqual(['npm test', 'claude'])
+    expect(tabNames()).toEqual(['npm test', 'Claude Code'])
   })
 
   it('lists nothing from any other worktree, however many are open', () => {
     twoWorktrees()
     expect(screen.queryByRole('tab', { name: 'deploy.sh' })).toBeNull()
-    expect(screen.queryByRole('tab', { name: 'codex' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Codex' })).toBeNull()
     expect(screen.queryByText('deploy.sh')).toBeNull()
-    expect(screen.queryByText('codex')).toBeNull()
+    expect(screen.queryByText('Codex')).toBeNull()
   })
 
   // Tree order, not record order; built here to disagree.
@@ -187,7 +187,7 @@ describe('the worktree the strip belongs to', () => {
       terminals: byId(terminal({ id: 't1', title: 'ada@laptop: ~/repos', agent: 'claude' }))
     })
     mount()
-    expect(screen.getByRole('tab', { name: 'claude' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Claude Code' })).toBeTruthy()
   })
 })
 
@@ -196,7 +196,7 @@ describe('which tab is the selected one', () => {
     screen
       .getAllByRole('tab')
       .filter((tab) => tab.getAttribute('aria-selected') === 'true')
-      .map((tab) => tab.textContent)
+      .map((tab) => tab.getAttribute('aria-label'))
 
   // Both the selected tab and the focused border read `layout.focusedTerminalId`.
   it('selects the tab of the pane holding the focus', () => {
@@ -206,7 +206,7 @@ describe('which tab is the selected one', () => {
       terminals: byId(terminal({ id: 't1', title: 'npm test' }), terminal({ id: 't2', agent: 'claude' }))
     })
     mount()
-    expect(selectedNames()).toEqual(['claude'])
+    expect(selectedNames()).toEqual(['Claude Code'])
   })
 
   // A watched pane holding focus selects no tab, as `WorkspaceArea` draws no focused border.
@@ -220,7 +220,7 @@ describe('which tab is the selected one', () => {
     mount()
     expect(selectedNames()).toEqual([])
     // The panes are still listed; it is only the selection that moved away.
-    expect(tabNames()).toEqual(['npm test', 'claude'])
+    expect(tabNames()).toEqual(['npm test', 'Claude Code'])
   })
 })
 
@@ -237,14 +237,14 @@ describe('what a tab does when it is pressed', () => {
   // A tab moves focus through the same action the chords and the pane click use.
   it('focuses that pane', () => {
     twoPanes()
-    fireEvent.click(screen.getByRole('tab', { name: 'claude' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Claude Code' }))
     expect(focusPane).toHaveBeenCalledExactlyOnceWith('t2')
   })
 
   // `closeTerminal`, not a hide: a hidden-but-running pane has no leaf and no record.
   it('closes that pane, and the process in it, from the close button', () => {
     twoPanes()
-    fireEvent.click(screen.getByRole('button', { name: 'Close pane claude' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close pane Claude Code' }))
     expect(closeTerminal).toHaveBeenCalledExactlyOnceWith('t2')
     expect(focusPane).not.toHaveBeenCalled()
   })
@@ -253,7 +253,7 @@ describe('what a tab does when it is pressed', () => {
   it('says which pane the close button closes, and that closing is what it does', () => {
     twoPanes()
     expect(screen.getByRole('button', { name: 'Close pane npm test' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Close pane claude' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close pane Claude Code' })).toBeTruthy()
   })
 })
 
@@ -338,7 +338,7 @@ describe('the menu the + opens', () => {
 
   it('lists a terminal, a markdown page, the agents the runtime found, and the agent settings', () => {
     onePane()
-    expect(rows(open())).toEqual(['New terminal', 'New markdown', 'claude', 'codex', 'Agent settings…'])
+    expect(rows(open())).toEqual(['New terminal', 'New markdown', 'Claude Code', 'Codex', 'Agent settings…'])
   })
 
   it('names the terminal chord on its row', () => {
@@ -349,7 +349,7 @@ describe('the menu the + opens', () => {
 
   it('lists no agent the runtime did not find', () => {
     onePane({ agents: [claude] })
-    expect(rows(open())).toEqual(['New terminal', 'New markdown', 'claude', 'Agent settings…'])
+    expect(rows(open())).toEqual(['New terminal', 'New markdown', 'Claude Code', 'Agent settings…'])
   })
 
   it('opens a markdown page in the worktree the strip belongs to', () => {
@@ -370,7 +370,7 @@ describe('the menu the + opens', () => {
   // The same store action the palette's "Start codex here" row calls.
   it('starts the chosen agent through the store, and closes', () => {
     onePane()
-    fireEvent.click(within(open()).getByRole('menuitem', { name: 'codex' }))
+    fireEvent.click(within(open()).getByRole('menuitem', { name: 'Codex' }))
     expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
     expect(createTerminal).not.toHaveBeenCalled()
     expect(screen.queryByRole('menu')).toBeNull()
@@ -442,30 +442,30 @@ describe('naming a pane', () => {
 
   it('tells two panes of the same agent apart, and calls the named one what it was named', () => {
     threeAgents()
-    expect(tabNames()).toEqual(['claude 1', 'claude 2', 'auth refactor'])
+    expect(tabNames()).toEqual(['Claude Code 1', 'Claude Code 2', 'auth refactor'])
   })
 
   // A button as well as double-click, so a name can be set without a mouse.
   it('opens the field from a button that says which pane it renames', () => {
     threeAgents()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code 2' }))
     expect(screen.getByRole('textbox', { name: 'Pane name' })).toBeTruthy()
   })
 
   // App-named panes have an empty stored label; the field used to open blank for them.
   it('opens the field holding the name the tab shows, selected', () => {
     threeAgents()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code 1' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' }) as HTMLInputElement
-    expect(field.value).toBe('claude 1')
+    expect(field.value).toBe('Claude Code 1')
     expect(field.selectionStart).toBe(0)
-    expect(field.selectionEnd).toBe('claude 1'.length)
+    expect(field.selectionEnd).toBe('Claude Code 1'.length)
   })
 
   // Storing `claude 1` would freeze the number the strip made up.
   it('does not store the app’s own name back as a label', () => {
     threeAgents()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code 1' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(renamePane).not.toHaveBeenCalled()
@@ -474,7 +474,7 @@ describe('naming a pane', () => {
 
   it('renames from a double-click on the tab', () => {
     threeAgents()
-    fireEvent.doubleClick(screen.getByRole('tab', { name: 'claude 1' }))
+    fireEvent.doubleClick(screen.getByRole('tab', { name: 'Claude Code 1' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' })
     fireEvent.change(field, { target: { value: 'pager streaming' } })
     fireEvent.keyDown(field, { key: 'Enter' })
@@ -483,7 +483,7 @@ describe('naming a pane', () => {
 
   it('throws the typing away on Escape', () => {
     threeAgents()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code 1' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' })
     fireEvent.change(field, { target: { value: 'never mind' } })
     fireEvent.keyDown(field, { key: 'Escape' })
@@ -495,7 +495,7 @@ describe('naming a pane', () => {
   // Blur commits: every other control in the strip takes focus away.
   it('keeps what was typed when the focus leaves the field', () => {
     threeAgents()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code 1' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' })
     fireEvent.change(field, { target: { value: 'pager streaming' } })
     fireEvent.blur(field)

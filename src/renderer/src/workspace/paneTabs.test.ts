@@ -54,7 +54,13 @@ describe('paneTabs', () => {
     const tabs = paneTabs(row('a', 'pending'), byId(terminal({ id: 'a', title: 'npm test' })))
 
     expect(tabs).toHaveLength(2)
-    expect(tabs[1]).toEqual({ terminalId: 'pending', label: 'terminal', activity: null })
+    expect(tabs[1]).toEqual({
+      terminalId: 'pending',
+      agent: undefined,
+      label: 'terminal',
+      text: 'terminal',
+      activity: null
+    })
   })
 
   it('calls a pane by its agent, and one without an agent whatever the sidebar calls it', () => {
@@ -70,7 +76,7 @@ describe('paneTabs', () => {
       )
     )
 
-    expect(tabs.map((tab) => tab.label)).toEqual(['claude', 'npm test', 'zsh'])
+    expect(tabs.map((tab) => tab.label)).toEqual(['Claude Code', 'npm test', 'zsh'])
   })
 
   // The same two facts `activityOf` reads, and nothing else: whether the
@@ -101,7 +107,27 @@ describe('paneTabs', () => {
       )
     )
 
-    expect(tabs.map((tab) => tab.label)).toEqual(['claude 1', 'claude 2', 'auth refactor'])
+    expect(tabs.map((tab) => tab.label)).toEqual(['Claude Code 1', 'Claude Code 2', 'auth refactor'])
+  })
+
+  // The glyph names the agent, so the text beside it carries only what the glyph cannot.
+  it('draws an agent by its glyph, keeping a task name and a twin’s number as text', () => {
+    const tabs = paneTabs(
+      row('one', 'two', 'named', 'shell'),
+      byId(
+        terminal({ id: 'one', agent: 'codex' }),
+        terminal({ id: 'two', agent: 'codex' }),
+        terminal({ id: 'named', agent: 'claude', label: 'auth refactor' }),
+        terminal({ id: 'shell', title: 'npm test', foregroundAgent: 'grok' })
+      )
+    )
+
+    expect(tabs.map((tab) => [tab.agent, tab.text])).toEqual([
+      ['codex', '1'],
+      ['codex', '2'],
+      ['claude', 'auth refactor'],
+      ['grok', '']
+    ])
   })
 
   it('has nothing to show for a worktree with no panes in it', () => {
@@ -111,14 +137,22 @@ describe('paneTabs', () => {
 
 describe('paneTabTitle', () => {
   it('says the name alone while nothing is known about the pane', () => {
-    expect(paneTabTitle({ terminalId: 'a', label: 'terminal', activity: null })).toBe('terminal')
+    expect(
+      paneTabTitle({ terminalId: 'a', agent: undefined, label: 'terminal', text: 'terminal', activity: null })
+    ).toBe('terminal')
   })
 
   // Read from ACTIVITY_LABEL rather than written out again, because the hover
   // and the sidebar are describing the same dot and must use the same words.
   it('adds the sentence the sidebar uses for the state', () => {
-    const waiting = paneTabTitle({ terminalId: 'a', label: 'claude', activity: 'quiet' })
-    const failed = paneTabTitle({ terminalId: 'b', label: 'npm test', activity: 'failed' })
+    const waiting = paneTabTitle({ terminalId: 'a', agent: 'claude', label: 'claude', text: '', activity: 'quiet' })
+    const failed = paneTabTitle({
+      terminalId: 'b',
+      agent: undefined,
+      label: 'npm test',
+      text: 'npm test',
+      activity: 'failed'
+    })
 
     expect(waiting).toBe(`claude · ${ACTIVITY_LABEL.quiet}`)
     expect(failed).toBe(`npm test · ${ACTIVITY_LABEL.failed}`)
@@ -134,7 +168,14 @@ describe('file tabs', () => {
       children: [leaf('a'), { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'docs/NOTES.md' }]
     }
     const tabs = paneTabs(root, { a: terminal({ id: 'a', title: 'zsh' }) })
-    expect(tabs[1]).toEqual({ terminalId: 'file:1', label: 'NOTES.md', activity: null, kind: 'file' })
+    expect(tabs[1]).toEqual({
+      terminalId: 'file:1',
+      agent: undefined,
+      label: 'NOTES.md',
+      text: 'NOTES.md',
+      activity: null,
+      kind: 'file'
+    })
     expect(tabs[0]?.kind).toBeUndefined()
     expect(paneTabTitle(tabs[1]!)).toBe('NOTES.md')
   })

@@ -3,6 +3,8 @@
 
 import { useEffect, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
+import { AgentGlyph } from '../agents/glyphs'
+import { harnessName } from '../agents/harnesses'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { branchNameFromTask } from './branchNameFromTask'
 import { Modal } from './Modal'
@@ -123,13 +125,13 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
               const step = (to: number): void => setAgentCounts(withAgentCount(counts, entry.kind, to))
               return (
                 <div className="agents__row" key={entry.kind}>
-                  <span className="agents__name" title={entry.binary}>
-                    {entry.command}
+                  <span className="agents__name">
+                    <AgentGlyph kind={entry.kind} />
                   </span>
                   <button
                     type="button"
                     className="agents__step"
-                    aria-label={`One fewer ${entry.command}`}
+                    aria-label={`One fewer ${harnessName(entry.kind)}`}
                     disabled={count === 0}
                     onClick={() => step(count - 1)}
                   >
@@ -139,7 +141,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
                   <button
                     type="button"
                     className="agents__step"
-                    aria-label={`One more ${entry.command}`}
+                    aria-label={`One more ${harnessName(entry.kind)}`}
                     disabled={count === MAX_PER_AGENT}
                     onClick={() => step(count + 1)}
                   >

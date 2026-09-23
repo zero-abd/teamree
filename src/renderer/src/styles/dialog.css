@@ -148,8 +148,14 @@ select.field__input {
 }
 
 .agents__name {
+  display: flex;
   flex: 1;
   font-size: var(--text-base);
+}
+
+.agents__name .agent-glyph {
+  width: 16px;
+  height: 16px;
 }
 
 .agents__step {

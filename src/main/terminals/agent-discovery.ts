@@ -3,7 +3,7 @@
 
 import { accessSync, constants, statSync } from 'node:fs'
 import path from 'node:path'
-import { AGENT_KINDS, type AgentKind } from './agent-command'
+import { AGENT_KINDS, agentExecutables, type AgentKind } from './agent-command'
 import { loginShellPath } from './shell-environment'
 
 export type InstalledAgent = {
@@ -56,8 +56,12 @@ export function findInstalledAgents(options: DiscoveryOptions = {}): InstalledAg
 
   const found: InstalledAgent[] = []
   for (const kind of AGENT_KINDS) {
-    const binary = locate(kind, directories, extensions, isExecutable, join)
-    if (binary !== null) found.push({ kind, command: kind, binary })
+    for (const command of agentExecutables(kind)) {
+      const binary = locate(command, directories, extensions, isExecutable, join)
+      if (binary === null) continue
+      found.push({ kind, command, binary })
+      break
+    }
   }
   return found
 }

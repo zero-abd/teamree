@@ -27,7 +27,7 @@ import {
 } from './shell-environment'
 import { terminalFailed, TerminalServiceError } from './service-error'
 import { ErrorCode } from '../../shared/protocol'
-import type { AgentKind } from './agent-command'
+import { agentForProcess, type AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
 import { titleOpinion, type TitleOpinion } from '../../shared/titleOpinion'
 
@@ -214,7 +214,8 @@ export class PtySession {
   }
 
   snapshot(): Terminal {
-    const titleSays: TitleOpinion | null = titleOpinion(this.agent, this.title)
+    const foregroundAgent = this.foregroundAgent()
+    const titleSays: TitleOpinion | null = titleOpinion(this.agent ?? foregroundAgent, this.title)
     return {
       id: this.id,
       worktreeId: this.worktreeId,
@@ -229,6 +230,7 @@ export class PtySession {
       ...(this.exitCode === undefined ? {} : { exitCode: this.exitCode }),
       ...(this.restored === undefined ? {} : { restored: this.restored }),
       ...(this.agent === undefined ? {} : { agent: this.agent }),
+      ...(foregroundAgent === undefined ? {} : { foregroundAgent }),
       ...(this.label === undefined ? {} : { label: this.label }),
       busy: this.busy,
       // Derived, not stored, so it cannot drift from the title.
@@ -236,6 +238,17 @@ export class PtySession {
       ...(this.lastBellAt === undefined ? {} : { lastBellAt: this.lastBellAt }),
       ...(this.agentEvent === undefined ? {} : { agentEvent: this.agentEvent }),
       lastOutputAt: this.lastOutputAt
+    }
+  }
+
+  /** A harness in the foreground of a pane not started as one; read afresh, since the user can quit it. */
+  private foregroundAgent(): AgentKind | undefined {
+    if (this.agent !== undefined || !this.running) return undefined
+    try {
+      const name: unknown = this.pty.process
+      return typeof name === 'string' ? (agentForProcess(name) ?? undefined) : undefined
+    } catch {
+      return undefined
     }
   }
 
