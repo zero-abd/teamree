@@ -53,14 +53,11 @@ export function updateNotice(state: UpdateState | null): UpdateNotice | null {
     // The second sentence is the honest one, and it is why this card exists in
     // this shape at all: an unsigned build cannot be replaced in place, so the
     // download is a `.dmg` the reader installs the way they installed this one.
-    detail:
-      `You are running ${state.current}. teamree cannot install this for you — the build is unsigned, ` +
-      'so macOS will not let anything swap it out from underneath you. The download is a disk image, ' +
-      'installed the same way this copy was.',
+    detail: `You are running ${state.current}. The download is a disk image; teamree does not install it for you.`,
     notes: release.notes,
     action: release.downloadUrl === null ? 'Open the release page' : `Download ${release.version}`,
     silence: 'Stop checking',
-    install: 'The install steps, including the warning macOS shows an unsigned download, are in docs/install.md.'
+    install: 'Install steps are in docs/install.md.'
   }
 }
 

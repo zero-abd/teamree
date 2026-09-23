@@ -34,8 +34,7 @@ export type CliPanel = {
  * opens — and they had already drifted into two wordings of the same claim,
  * which is how a reader comes to wonder whether they are two different claims.
  */
-export const CLI_PURPOSE =
-  'teamree ships its own CLI, and everything this window can do it can do — it is how a coding agent drives teamree.'
+export const CLI_PURPOSE = 'teamree ships a CLI that does everything this window can.'
 
 /** Shown while the first read is in flight, so the panel is never blank. */
 export const CLI_PANEL_READING: CliPanel = {
@@ -82,9 +81,9 @@ export function cliPanel(status: CliStatus | null): CliPanel {
           : 'macOS is running teamree from a temporary copy of itself.',
       detail:
         (status.impermanent === 'volume'
-          ? `It is at ${status.source}. A link there would stop leading anywhere the moment you ejected. `
-          : `The copy is at ${status.source}, and it is gone by the next launch, taking any link into it with it. `) +
-        'Drag teamree to your Applications folder, open it from there, and this can link the copy that stays.'
+          ? `It is at ${status.source}, so a link there dies when you eject. `
+          : `The copy is at ${status.source}, and is gone by the next launch. `) +
+        'Move teamree to Applications and open it from there.'
     }
   }
 
@@ -96,9 +95,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     return {
       ...CLI_PANEL_READING,
       headline: 'The teamree CLI has not been built yet.',
-      detail:
-        `${status.source} is the launcher; the bundle it runs is not there. Linking it would put a teamree on ` +
-        'your PATH that cannot start.',
+      detail: `${status.source} is the launcher; the bundle it runs is not there.`,
       manual: 'npm run build:cli'
     }
   }
@@ -117,14 +114,13 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     return {
       ...CLI_PANEL_READING,
       headline: `There is ${what} at ${status.destination}.`,
-      detail: 'teamree will not delete it; it is somebody’s program. Move it aside and open this again.',
+      detail: 'Move it aside and open this again.',
       pathWarning: pathWarning(status)
     }
   }
 
   const password = status.needsAdministrator
-    ? `macOS will ask for your administrator password, because ${status.directory} cannot be written without one. ` +
-      'The dialog is the system’s own and the password never reaches teamree.'
+    ? `macOS will ask for your administrator password; ${status.directory} needs one.`
     : `No password: ${status.directory} is writable as you.`
 
   if (status.state === 'elsewhere') {
@@ -137,9 +133,8 @@ export function cliPanel(status: CliStatus | null): CliPanel {
       // other is a link whose app has been deleted or ejected, where the shell
       // does not run anything at all and says so.
       detail: status.dangling
-        ? `It leads to ${status.resolved}, and nothing is there. Typing teamree in a terminal runs nothing.`
-        : `It leads to ${status.resolved}. Typing teamree in a terminal drives that copy — which is why work ` +
-          'done there never shows up here.',
+        ? `It leads to ${status.resolved}, and nothing is there.`
+        : `It leads to ${status.resolved}, so typing teamree drives that copy.`,
       promise: `Points ${status.destination} at this app’s CLI instead: ${status.source}.`,
       password,
       action: 'Point it at this app',
@@ -156,8 +151,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     // sentence that makes the panel's other sentences worth less.
     detail: status.packaged
       ? `It ships inside this app, at ${status.source}.`
-      : `It is in the checkout you are running from, at ${status.source}. The link is to that path, so it breaks ` +
-        'if you move the checkout.',
+      : `It is at ${status.source}, in the checkout you are running from, so the link breaks if you move it.`,
     promise: `Links ${status.destination} to it.`,
     password,
     action: 'Put teamree on my PATH',
@@ -298,8 +292,8 @@ export function cliOutcome(install: CliInstall): string {
   }
   if (install.outcome === 'replaced') {
     return (
-      `${status.destination} now points at ${status.source}. It used to point at ${install.replaced}, ` +
-      `and that copy is untouched.${password}${basis}`
+      `${status.destination} now points at ${status.source}, and no longer at ${install.replaced}.` +
+      `${password}${basis}`
     )
   }
   return `${status.destination} now points at ${status.source}.${password}${basis}`
@@ -317,11 +311,7 @@ export function cliOutcome(install: CliInstall): string {
  */
 function pathBasis(status: CliStatus): string {
   if (status.onPath === 'environment') {
-    return (
-      `Checked against this app’s own PATH, which has ${status.directory} on it. That is this process, not your ` +
-      'terminal: an app opened from the Finder inherits no shell environment, so it proves the directory is on a ' +
-      'PATH rather than on yours.'
-    )
+    return `${status.directory} is on this app’s PATH, which is not necessarily your terminal’s.`
   }
   // The strong one, and the reason this function was rewritten. teamree starts
   // the login shell, lets it read the profile, and reads back the PATH it ended
@@ -330,17 +320,10 @@ function pathBasis(status: CliStatus): string {
   // profile", appended to every answer, while the probe had been running for
   // every terminal in the app all along.
   if (status.onPath === 'shell') {
-    return (
-      `Checked against the PATH your login shell reports after reading your profile, which is the PATH a terminal ` +
-      `you open will have, and ${status.directory} is on it.`
-    )
+    return `${status.directory} is on the PATH your login shell reports.`
   }
   if (status.onPath === 'login') {
-    return (
-      `Your login shell could not be asked, so this is checked against /etc/paths, and ${status.directory} is in ` +
-      'it. That is the PATH a shell *starts* with: a profile that sets PATH rather than adding to it replaces it, ' +
-      'and then the command will not be found in a terminal even though the link is fine.'
-    )
+    return `${status.directory} is in /etc/paths; your login shell could not be asked.`
   }
   return `Nothing teamree can read puts ${status.directory} on a PATH.`
 }
@@ -355,8 +338,5 @@ function pathBasis(status: CliStatus): string {
  */
 function pathWarning(status: CliStatus): string | null {
   if (status.onPath !== null) return null
-  return (
-    `Nothing teamree can read puts ${status.directory} on a PATH — not this app’s environment, and not ` +
-    '/etc/paths. The link will be made, but your shell may still not find the command until that directory is on it.'
-  )
+  return `Nothing teamree can read puts ${status.directory} on a PATH, so your shell may not find the command.`
 }

@@ -64,7 +64,7 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
   return (
     <Modal
       title={`${request.handle} wants to type in ${request.terminalId}`}
-      description={'This runs on your machine, as you. Nothing below has happened yet — read it, then decide.'}
+      description={'This would run on your machine, as you.'}
       // Deliberately nothing. A question about somebody else's keystrokes is
       // not one a stray Escape gets to answer; the buttons and the clock are
       // the only ways this closes.
@@ -85,10 +85,7 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
             dialog choosing what the question says. */}
         <pre className="consent__preview">{request.preview}</pre>
         {request.clipped ? (
-          <p className="consent__clipped">
-            More is being held than fits here. Allowing it allows all of it — if that is not what you want, refuse and
-            ask them what they sent.
-          </p>
+          <p className="consent__clipped">More is held than fits here. Allowing it allows all of it.</p>
         ) : null}
 
         <p className="consent__who">
@@ -118,11 +115,7 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
           </button>
         </div>
 
-        <p className="consent__note">
-          “This session” lasts until teamree quits or the link to {request.handle} drops. “Always” lasts until you lift
-          it or the pane closes — muting the pane lifts every permission on it. Whatever you choose, every keystroke
-          that lands is recorded on this machine.
-        </p>
+        <p className="consent__note">Every keystroke that lands is recorded on this machine.</p>
       </div>
     </Modal>
   )

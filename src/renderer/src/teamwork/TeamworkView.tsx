@@ -262,7 +262,6 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
         <div className="teamwork-view__column teamwork-view__head-row">
           <div className="teamwork-view__identity">
             <h1 className="teamwork-view__title">Start teamwork</h1>
-            <p className="teamwork-view__lede">Everyone who can push to {name} is on the team. Their keys are in it.</p>
           </div>
           <button type="button" className="button button--ghost button--small" onClick={closeTeamwork}>
             Close

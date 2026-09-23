@@ -42,12 +42,6 @@
   letter-spacing: -0.02em;
 }
 
-.settings__lede {
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-
 .settings__close {
   padding: var(--s1);
   display: grid;
@@ -97,15 +91,6 @@
   font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: -0.01em;
-}
-
-/* The sentence under every heading that says what the section actually
-   changes. It is the reason the page is worth reading, so it is set as prose
-   rather than as a caption: full width of the column, generous leading. */
-.settings-section__lede {
-  color: var(--fg-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.55;
 }
 
 /* The one line that is true right now — the version, the link, the URL being

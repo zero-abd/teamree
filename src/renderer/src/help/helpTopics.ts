@@ -20,11 +20,10 @@
 // in it because it sounds like how worktrees ought to work.
 
 import type { CliStatus } from '@shared/entities'
-import { CLI_PURPOSE, cliPanel } from '../dialogs/cliInstallModel'
+import { cliPanel } from '../dialogs/cliInstallModel'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand, type WorkspaceShortcut } from '../keyboard/workspaceShortcuts'
 
 export const HELP_TITLE = 'Help'
-export const HELP_LEDE = 'The keys this window answers to, what a worktree is, and where the rest is written down.'
 
 /* The keyboard ------------------------------------------------------------ */
 
@@ -63,8 +62,8 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
 }
 
 const GROUP_ORDER: ReadonlyArray<{ id: ShortcutGroupId; title: string; blurb: string | null }> = [
-  { id: 'panes', title: 'Panes', blurb: 'The terminals in the worktree that is open.' },
-  { id: 'around', title: 'Getting around', blurb: 'Starting work, and finding the pane you meant.' },
+  { id: 'panes', title: 'Panes', blurb: null },
+  { id: 'around', title: 'Getting around', blurb: null },
   { id: 'app', title: 'The window', blurb: null }
 ]
 
@@ -119,20 +118,12 @@ export const WORKTREE_TITLE = 'What a worktree is'
  * believed.
  */
 export const WORKTREE_PARAGRAPHS: readonly string[] = [
-  'A worktree is a second working directory for a repository you already have, with its own branch checked out. ' +
-    'It is not a clone: git keeps one repository and one history, and hands out as many working directories as you ' +
-    'ask it for, each one on a different branch.',
-  'teamree makes one per task, and that is the reason it exists. Several coding agents turned loose on a single ' +
-    'checkout overwrite each other’s files and leave one branch holding all of it. In a worktree each has its own ' +
-    'copy of every file and its own branch, so nothing one of them writes appears in another’s files.',
-  'The branch is made from the task you describe. The description is reduced to lowercase words joined by dashes ' +
-    '— the name shown under the box in the new-task dialog is the name you get — and a number is added if a ' +
-    'branch by that name already exists. It starts from the start point that dialog offers, which is the ' +
-    'repository’s own trunk unless you change it, and teamree records the commit that resolved to rather than the ' +
-    'name, because a name can move afterwards and a commit cannot.',
-  'Every pane you open in a worktree starts in that directory, so an agent running in one is looking at that ' +
-    'branch’s files and no others. Removing a worktree takes its panes with it and stops what was running in them; ' +
-    'a checkout with uncommitted work in it is refused rather than deleted, until you say to discard it.'
+  'A worktree is a second working directory on its own branch, from one repository and one history. teamree makes ' +
+    'one per task so agents do not overwrite each other.',
+  'The branch name is slugified from the task description, numbered if it is taken, and started from the start ' +
+    'point the new-task dialog offers; teamree records the commit it resolved to, not the name.',
+  'Panes in a worktree start in its directory. Removing one closes its panes; a checkout with uncommitted work is ' +
+    'refused until you say to discard it.'
 ]
 
 /* The CLI ----------------------------------------------------------------- */
@@ -155,8 +146,6 @@ export const TEAMWORK_DOCUMENT = 'https://github.com/zero-abd/teamree/blob/main/
 export const CLI_HELP_COMMAND = 'teamree help'
 
 export type CliHelp = {
-  /** What the CLI is for. One sentence, and the same one the dialog uses. */
-  purpose: string
   /** Where the command is now, in the words the install panel uses. */
   headline: string
   /**
@@ -192,7 +181,6 @@ export function cliHelp(status: CliStatus | null): CliHelp {
   // command exists.
   if (status === null) {
     return {
-      purpose: CLI_PURPOSE,
       headline: panel.headline,
       command: null,
       settings: null,
@@ -202,11 +190,8 @@ export function cliHelp(status: CliStatus | null): CliHelp {
 
   if (status.state === 'linked') {
     return {
-      purpose: CLI_PURPOSE,
       headline: panel.headline,
-      command:
-        `Type ${CLI_HELP_COMMAND} in any terminal for the commands this build has. That listing is generated from ` +
-        'the CLI’s own command table, so it describes the teamree you have installed and cannot fall behind it.',
+      command: `Type ${CLI_HELP_COMMAND} in any terminal for the commands this build has.`,
       settings: null,
       // Non-null only when nothing teamree can read puts the link's directory
       // on a PATH, which is the one case where the sentence above is a
@@ -216,16 +201,13 @@ export function cliHelp(status: CliStatus | null): CliHelp {
   }
 
   return {
-    purpose: CLI_PURPOSE,
     headline: panel.headline,
     command: null,
     // Deliberately says nothing about *why* — the headline above has already
     // said which of the six ways this is, and they are not the same errand. All
     // this has to carry is that the command will not describe this app until
     // something is done, and where the doing is.
-    settings:
-      `So ${CLI_HELP_COMMAND} will not tell you about this build until that is settled. Settings says where the ` +
-      'command goes and what it takes to put it there.',
+    settings: `So ${CLI_HELP_COMMAND} will not describe this build until that is settled.`,
     caveat: null
   }
 }

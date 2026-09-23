@@ -30,7 +30,6 @@ import {
   RELAY_CHECK,
   RELAY_DEPLOY,
   RELAY_LAUNCHER_UNKNOWN,
-  RELAY_LEAD,
   RELAY_OPTIONS,
   RELAY_PANE_URL_SCHEMES,
   RELAY_SERVE,
@@ -161,7 +160,7 @@ describe('step 2, your key is in the repository', () => {
   it('is not done, and says what that costs, before the key is written', () => {
     const pending = step(fresh, 'key')
     expect(pending.mark).toBe('todo')
-    expect(pending.summary).toMatch(/no teammate can reach this machine/)
+    expect(pending.summary).toBe('Your key is not in this checkout.')
   })
 
   it('is done once the key is in the checkout, and names the file it is in', () => {
@@ -188,7 +187,7 @@ describe('step 3, the team’s relay', () => {
     const done = step(written, 'relay')
     expect(done.mark).toBe('done')
     expect(done.summary).toContain('wss://relay.example/v1/relay')
-    expect(done.summary).toMatch(/Step 4 is what makes it the team’s/)
+    expect(done.summary).toMatch(/Step 4 pushes it/)
   })
 
   // The override is for the ephemeral tunnel URL, which is per-machine and dies
@@ -209,7 +208,7 @@ describe('step 3, the team’s relay', () => {
       'relay'
     )
     expect(overridden.mark).toBe('this-run')
-    expect(overridden.summary).toMatch(/per-machine and dies with this process/)
+    expect(overridden.summary).toMatch(/a teammate reads nothing/)
   })
 
   // The recommendation stopped being one of four equals the moment it became a
@@ -246,8 +245,7 @@ describe('step 3, the team’s relay', () => {
       if (option.commands.includes('docker')) expect(option.commands.startsWith('cd relay')).toBe(true)
     }
     expect(RELAY_OPTIONS.find((option) => option.id === 'tunnel')?.commands).not.toMatch(/docker|cd relay/)
-    expect(MORE_RELAYS_LEAD).toMatch(/run on a machine of your own are the button above/)
-    expect(MORE_RELAYS_LEAD).toMatch(/clone of the\s+teamree repository/)
+    expect(MORE_RELAYS_LEAD).toMatch(/clone of the teamree repository/)
   })
 
   // A LAN address is a fact about a team that is all on that LAN and a dead end
@@ -255,34 +253,25 @@ describe('step 3, the team’s relay', () => {
   it('says what committing a LAN address costs the person who is not on that network', () => {
     const mesh = RELAY_OPTIONS.find((option) => option.id === 'mesh')
     expect(mesh?.keep).toBe('commit')
-    expect(mesh?.address).toMatch(/all on that network, and unreachable for anybody who is not/)
+    expect(mesh?.address).toMatch(/ws:\/\/<that machine>:8787/)
+    expect(RELAY_SERVE.committing).toMatch(/unreachable from outside that network/)
   })
 
   // The command is the runtime's answer now, because it is different in a
   // checkout and in an installed app; what stays here is only that the deploy
   // is described as going to the team's own account and hosting nothing.
   it('never suggests teamree hosts a relay for anybody', () => {
-    expect(RELAY_DEPLOY.what).toMatch(/own Cloudflare account/)
-    expect(RELAY_DEPLOY.what).toMatch(/teamree hosts nothing/)
-    expect(RELAY_DEPLOY.browser).toMatch(/A browser opens once/)
+    expect(RELAY_DEPLOY.browser).toMatch(/your team’s account/)
+    expect(RELAY_DEPLOY.browser).toMatch(/Opens a browser to sign in to Cloudflare/)
   })
 
-  // "What does it cost" is the question everybody asks before pressing a button
-  // that makes an account do something, and refusing to answer it sent people
-  // to a pricing page to work out whether they dared. So it is answered — with
-  // the shape of the answer and a pointer to the figures, which are somebody
-  // else's and move, and without the promise this project cannot make.
-  it('says the free plan covers a team, and why, without promising free forever', () => {
+  // What a deploy costs is Cloudflare's price list, it moves, and a paragraph
+  // of it under a button is the wall this panel was cut back from. It lives in
+  // the README, where the link beside it is the thing that stays true.
+  it('keeps the price list in relay/README.md rather than under the button', () => {
     const readme = readFileSync(new URL('../../../../relay/README.md', import.meta.url), 'utf8')
-    expect(RELAY_DEPLOY.free).toMatch(/The free plan covers a team/)
-    expect(RELAY_DEPLOY.free).toMatch(/sleeps while nobody is typing/)
-    expect(RELAY_DEPLOY.free).toMatch(/daily and per Cloudflare account/)
-    expect(RELAY_DEPLOY.free).toMatch(/reset at 00:00 UTC/)
-    expect(RELAY_DEPLOY.free).toMatch(/developers\.cloudflare\.com/)
-    expect(RELAY_DEPLOY.free).not.toMatch(/free forever|always free/i)
-    // The numbers themselves are Cloudflare's and they move, so they live in
-    // the README beside the link rather than in a panel nobody updates.
-    expect(RELAY_DEPLOY.free).not.toMatch(/\d{3,}/)
+    expect(Object.keys(RELAY_DEPLOY)).not.toContain('free')
+    expect(JSON.stringify(RELAY_DEPLOY)).not.toMatch(/free|pricing/i)
     expect(readme).toMatch(/pricing/i)
   })
 })
@@ -388,56 +377,43 @@ describe('running the shipped launcher with a different verb', () => {
 
   it('says so in one sentence, with the fix, when it will not guess', () => {
     expect(RELAY_LAUNCHER_UNKNOWN).toMatch(/does not recognise/)
-    expect(RELAY_LAUNCHER_UNKNOWN).toMatch(/stand a relay up yourself and paste its URL below/)
+    expect(RELAY_LAUNCHER_UNKNOWN).toMatch(/Paste a relay URL below/)
   })
 })
 
 // The two things the self-hosted block has to say, and the one it must not.
 describe('running a relay on your own machine', () => {
-  it('says who it will not work for, in the same breath as what it is', () => {
-    expect(RELAY_SERVE.limit).toMatch(/only serves machines that can already reach this Mac/)
-    expect(RELAY_SERVE.limit).toMatch(/Two laptops behind two home routers cannot meet on it/)
-    expect(RELAY_SERVE.limit).toMatch(/put a\s+tunnel in front of this one, or deploy one instead/)
+  it('says who it will not work for, in one line above the button', () => {
+    expect(RELAY_SERVE.limit).toBe(
+      'Only reachable from machines that can already reach this Mac — one LAN, or a VPN you are all on.'
+    )
   })
 
   it('says what committing a private address means, and does not refuse it', () => {
-    expect(RELAY_SERVE.committing).toMatch(/only reachable from that network/)
-    expect(RELAY_SERVE.committing).toMatch(/will never meet the rest of you/)
+    expect(RELAY_SERVE.committing).toMatch(/unreachable from outside that network/)
+    expect(RELAY_SERVE.committing).not.toMatch(/refus/i)
   })
 
   // The rule the whole panel is built on, and the one this option is most
   // tempting to break: it runs on somebody's Mac, not on ours.
   it('never suggests teamree hosts or runs one for anybody', () => {
-    expect(RELAY_SERVE.what).toMatch(/teamree hosts nothing and runs nothing for you/)
-    expect(`${RELAY_LEAD} ${RELAY_SERVE.what} ${RELAY_SERVE.limit}`).not.toMatch(/our relay|teamree’s relay/i)
-  })
-
-  // The command says "this needs the network, once" while it is doing it, and
-  // somebody reading the panel deserves the same warning before they press the
-  // button — not a minute of apparently nothing happening, on a laptop that may
-  // well be the one place they cannot get to npm.
-  it('says it needs the network once, and that the first minute is an install', () => {
-    expect(RELAY_SERVE.what).toMatch(/needs the network once/)
-    expect(RELAY_SERVE.what).toMatch(/about a minute on npm before it listens/)
+    expect(`${RELAY_SERVE.limit} ${RELAY_DEPLOY.browser}`).not.toMatch(/our relay|teamree’s relay/i)
   })
 
   // What a pane says when there is nothing to offer. Both are about a command
   // that is over: one produced no URL at all, the other produced one that has
   // stopped being true.
   it('has something true to say about a pane that ended with nothing to give', () => {
-    expect(RELAY_PANE_NO_URL).toMatch(/finished and printed no relay URL/)
-    expect(RELAY_PANE_NO_URL).toMatch(/in the pane above/)
-    expect(RELAY_SERVE_STOPPED).toMatch(/has stopped, so the address it printed answers nothing now/)
-    expect(RELAY_SERVE_STOPPED).toMatch(/no URL here to give your team/)
+    expect(RELAY_PANE_NO_URL).toBe('Finished, and printed no relay URL.')
+    expect(RELAY_SERVE_STOPPED).toMatch(/has stopped, so the address it printed answers nothing/)
   })
 
   // The relay prints every address this Mac has because it cannot tell which of
   // them anybody else can reach, and its pick is the first one the OS listed.
   // The panel says that rather than repeating the guess as a fact.
-  it('says the address it leads with is a guess, and does not pretend to rank them', () => {
-    expect(RELAY_SERVE.choice).toMatch(/teamree cannot tell which of them your teammates can reach/)
-    expect(RELAY_SERVE.choice).toMatch(/the order they are listed in is\s+not a ranking/)
-    expect(RELAY_SERVE.choice).toMatch(/Take whichever is on the network you share/)
+  it('does not pretend to rank the addresses it offers', () => {
+    expect(RELAY_SERVE.choice).toMatch(/more than one address/)
+    expect(RELAY_SERVE.choice).toMatch(/the one on the network you share/)
   })
 })
 
@@ -481,13 +457,12 @@ describe('every address a relay printed, not only the one it picked', () => {
 describe('checking a relay', () => {
   // The check runs here. A pass read as "the team can meet" would end the
   // investigation at the wrong machine.
-  it('says what a pass proves and what it does not', () => {
-    expect(RELAY_CHECK.proves).toMatch(/runs on this Mac/)
-    expect(RELAY_CHECK.proves).toMatch(/says nothing about anybody else’s\s+network/)
+  it('says whose network a pass is about, in three words', () => {
+    expect(RELAY_CHECK.proves).toBe('Dialled from this Mac only.')
   })
 
-  it('names the fix when there is no URL to check', () => {
-    expect(RELAY_CHECK.nothing).toMatch(/Paste one into the field above/)
+  it('says why the button is grey when there is no URL to check', () => {
+    expect(RELAY_CHECK.nothing).toBe('No relay URL to check yet.')
   })
 
   // Both can be on screen at once and they dial different addresses, so they
@@ -506,7 +481,7 @@ describe('the one pane, when something is already in it', () => {
     expect(relayPaneBusy('serve')).toMatch(/^A relay you are running yourself is already open in a pane below/)
     expect(relayPaneBusy('check')).toMatch(/^A relay check is already open in a pane below/)
     for (const kind of ['deploy', 'serve', 'check'] as const) {
-      expect(relayPaneBusy(kind)).toMatch(/Close it before starting another/)
+      expect(relayPaneBusy(kind)).toMatch(/Close it first/)
     }
   })
 })
@@ -546,7 +521,7 @@ describe('an override that is set and cannot be read', () => {
     const blocked = step({ ...fresh, relay: broken() }, 'relay')
     expect(blocked.mark).toBe('blocked')
     expect(blocked.summary).toBe(`${BROKEN_REASON}.`)
-    expect(blocked.summary).not.toMatch(/Step 4 is what makes it the team’s/)
+    expect(blocked.summary).not.toMatch(/Step 4 pushes it/)
   })
 
   // The same fact, in the panel that summarises the lot — and this one also
@@ -572,9 +547,8 @@ describe('an override that is set and cannot be read', () => {
   it('names the variable, what is wrong with it, and the fix', () => {
     const said = brokenRelayOverride(broken())
     expect(said).toMatch(/TEAMREE_RELAY_URL is set to wss\/\/typo\.example\/v1\/relay/)
-    expect(said).toMatch(/not a relay URL teamree can dial/)
-    expect(said).toMatch(/this project has no relay even though \.teamree\/relay has one in it/)
-    expect(said).toMatch(/Unset it and start teamree again/)
+    expect(said).toMatch(/which is not a relay URL/)
+    expect(said).toMatch(/this project has no relay even though \.teamree\/relay has one/)
   })
 
   // Every other state is silent, including the two that look like this one: an
@@ -707,7 +681,7 @@ describe('step 4, commit and push', () => {
   it('is never marked done, because teamree cannot see a commit', () => {
     const owed = step(written, 'push')
     expect(owed.mark).toBe('unchecked')
-    expect(owed.summary).toMatch(/cannot see whether you have done that/)
+    expect(owed.summary).toMatch(/in this checkout, unpushed/)
   })
 
   it('names both files and one commit that carries them', () => {
@@ -783,13 +757,12 @@ describe('step 5, connected', () => {
   })
 
   it('says a roster of one is a roster of one, once everything else is done', () => {
-    expect(step(written, 'connected').summary).toMatch(/nobody in it but you/)
+    expect(step(written, 'connected').summary).toBe('Nobody but you on the roster.')
   })
 
   it('separates a relay this machine cannot reach from a teammate who is away', () => {
     const unreachable = step({ ...written, status: status({ links: [link({ phase: 'unreachable' })] }) }, 'connected')
-    expect(unreachable.summary).toMatch(/cannot reach wss:\/\/relay\.example\/v1\/relay/)
-    expect(unreachable.summary).toMatch(/teammates may be fine/)
+    expect(unreachable.summary).toBe('This machine cannot reach wss://relay.example/v1/relay (from .teamree/relay).')
   })
 
   // Two Macs that mounted the volume at different paths do not fail to
@@ -799,14 +772,14 @@ describe('step 5, connected', () => {
   it('names the mount path while a path-shared project is waiting for somebody', () => {
     const onAVolume = status({ origin: { ok: true, url: '/Volumes/team/pager.git' }, links: [link()] })
     const waiting = step({ ...written, status: onAVolume }, 'connected')
-    expect(waiting.summary).toMatch(/matched by the path it is mounted at, \/Volumes\/team\/pager\.git/)
-    expect(waiting.summary).toMatch(/any other path is on a different project/)
+    expect(waiting.summary).toMatch(/mounts this repository anywhere but \/Volumes\/team\/pager\.git/)
+    expect(waiting.summary).toMatch(/will never appear here/)
   })
 
   it('says nothing about mount paths for a repository with a URL, or once somebody is here', () => {
-    expect(step({ ...written, status: status({ links: [link()] }) }, 'connected').summary).not.toMatch(/mounted at/)
+    expect(step({ ...written, status: status({ links: [link()] }) }, 'connected').summary).not.toMatch(/mounts this/)
     const met = status({ origin: { ok: true, url: '/Volumes/team/pager.git' }, links: [link({ phase: 'connected' })] })
-    expect(step({ ...written, status: met }, 'connected').summary).not.toMatch(/mounted at/)
+    expect(step({ ...written, status: met }, 'connected').summary).not.toMatch(/mounts this/)
   })
 
   it('leads with a failed handshake, without saying whose end failed', () => {
@@ -815,9 +788,8 @@ describe('step 5, connected', () => {
     // This end raising an error before a byte is sent reaches the same phase,
     // so the panel must not accuse the teammate of answering wrongly.
     expect(refused.summary).not.toMatch(/did not authenticate/)
-    expect(refused.summary).toMatch(/Either roster could be the stale one/)
     // And it still says what to do about it, on both ends.
-    expect(refused.summary).toMatch(/pull, and ask them to pull/)
+    expect(refused.summary).toMatch(/Pull, and ask them to pull/)
   })
 })
 
@@ -837,24 +809,25 @@ describe('a checkout with no origin', () => {
     expect(flow.blocker).toMatch(/no origin remote/)
   })
 
-  // One sentence, because the fix is a field and a button under it now rather
-  // than a command to go and type somewhere else. The paragraph that explained
-  // normalised origin hashes is behind a disclosure beside that field.
-  it('says what to add in one sentence, and keeps the explanation for whoever asks', () => {
+  // The runtime's own reason and nothing after it: the fix is a field and a
+  // button under the banner, and what has to match is behind a disclosure
+  // beside that field rather than in front of everybody who opens the panel.
+  it('says only the reason, and keeps what has to match for whoever asks', () => {
     const flow = startTeamworkFlow({ ...fresh, status: noOrigin })
-    expect(flow.blocker).toMatch(/Add the URL you and your teammates both cloned/)
-    // Both kinds of answer, because the sentence a team on a shared volume used
-    // to get here told them only that their own answer was not allowed.
-    expect(flow.blocker).toMatch(/the absolute path it is mounted at on every Mac/)
-    expect(flow.blocker).not.toMatch(/normalised/)
-    expect(ORIGIN_DETAIL).toMatch(/normalise/)
-    expect(ORIGIN_DETAIL).toMatch(/one volume mounted at two paths/)
+    expect(flow.blocker).toBe(
+      'This project has no origin remote, so teamree cannot tell it is the same repository your teammates have.'
+    )
+    expect(flow.blocker).not.toMatch(/Add the URL/)
+    // Both kinds of answer live in the disclosure, because the sentence a team
+    // on a shared volume used to get told them only that theirs was not allowed.
+    expect(ORIGIN_DETAIL).toMatch(/normalis/)
+    expect(ORIGIN_DETAIL).toMatch(/both Macs must mount it at the same path/)
   })
 
   it('blocks the connected step rather than showing it as merely not done', () => {
     const blocked = step({ ...written, status: noOrigin }, 'connected')
     expect(blocked.mark).toBe('blocked')
-    expect(blocked.summary).toMatch(/Add the URL you and your teammates both cloned/)
+    expect(blocked.summary).toMatch(/no origin remote/)
   })
 
   it('carries the runtime’s other origin refusal too, for a remote that is not comparable', () => {
@@ -914,8 +887,7 @@ describe('step 5 when this machine’s own key is not on the roster', () => {
   it('blames this checkout rather than the teammate, and names the two steps that fix it', () => {
     const mine = step({ ...written, status: status({ enrolled: false, links: [link()] }) }, 'connected')
     expect(mine.mark).toBe('blocked')
-    expect(mine.summary).toMatch(/step 2/i)
-    expect(mine.summary).toMatch(/step 4/i)
+    expect(mine.summary).toBe('Your own key is not in .teamree/members in this checkout.')
     expect(mine.summary).not.toMatch(/no teammate’s machine is on it yet/)
   })
 
@@ -951,12 +923,12 @@ describe('step 5 while the links are still being opened', () => {
   // not, and the roster this panel renders three lines below says so.
   it('does not call a roster of several a roster of one', () => {
     const coming = step({ ...written, list: withTeammate(), status: status({ links: [] }) }, 'connected')
-    expect(coming.summary).not.toMatch(/nobody in it but you/)
+    expect(coming.summary).not.toMatch(/Nobody but you/)
     expect(coming.summary).toMatch(/priya/)
   })
 
   it('still says a roster of one is a roster of one', () => {
-    expect(step(written, 'connected').summary).toMatch(/nobody in it but you/)
+    expect(step(written, 'connected').summary).toBe('Nobody but you on the roster.')
   })
 })
 
@@ -1034,7 +1006,7 @@ describe('which of the two jobs this is', () => {
   it('reads the repository and says which it looks like, with the fact behind it', () => {
     expect(suggestedPath(list(), relay())).toEqual({
       id: 'start',
-      because: 'There is no relay and nobody’s key in this checkout, so nothing has been set up.'
+      because: 'No relay and nobody’s key in this checkout.'
     })
     expect(suggestedPath(list(), relayOnDisk())?.id).toBe('join')
     expect(suggestedPath(list(), relayOnDisk())?.because).toContain('.teamree/relay')
@@ -1054,7 +1026,7 @@ describe('which of the two jobs this is', () => {
     })
     expect(suggestedPath(withPriya, relay())).toEqual({
       id: 'join',
-      because: 'priya is already on this project’s roster.'
+      because: 'priya is already on the roster.'
     })
   })
 
@@ -1063,52 +1035,34 @@ describe('which of the two jobs this is', () => {
     expect(suggestedPath(list(), undefined)).toBeNull()
   })
 
-  // The two ends do different things, and half of what anybody needs to know is
-  // what the other one is waiting for. Both options say both halves.
-  it('describes what the other person does, in both options', () => {
+  // Two buttons and nothing else. The paragraph under each used to describe
+  // both halves of a protocol to somebody who had not yet chosen a side.
+  it('offers the two jobs as labels, with no prose under either', () => {
     expect(TEAMWORK_PATHS.map((option) => option.id)).toEqual(['start', 'join'])
-    for (const option of TEAMWORK_PATHS) {
-      expect(option.what).not.toBe('')
-      expect(option.them).not.toBe('')
-    }
-    expect(TEAMWORK_PATHS[1]?.what).toMatch(/push access is what membership means/)
+    expect(TEAMWORK_PATHS.map((option) => option.title)).toEqual(['Start a team here', 'Join a team I was invited to'])
+    for (const option of TEAMWORK_PATHS) expect(Object.keys(option)).toEqual(['id', 'title'])
   })
 })
 
-describe('what each step says about the other machine', () => {
-  // The sentence that stops two people each waiting for the other, which is the
-  // way this goes wrong when it goes wrong.
-  it('tells a joiner that their teammate is waiting for exactly this file', () => {
-    const joining = step({ ...fresh, path: 'join' }, 'key')
-    expect(joining.otherSide).toMatch(/waiting for/)
-    expect(joining.otherSide).toMatch(/No teammates/)
-  })
-
-  it('tells somebody starting a team that nothing announces them either', () => {
-    const starting = step({ ...fresh, path: 'start' }, 'key')
-    expect(starting.otherSide).toMatch(/no announcement/i)
-  })
-
-  // A joiner who chooses a relay of their own is the failure that looks like
-  // nothing being wrong on either machine.
-  it('warns a joiner off choosing a relay, and tells a starter theirs is the team’s', () => {
-    expect(step({ ...fresh, path: 'join' }, 'relay').why).toMatch(/everybody has to name the same relay/)
-    expect(step({ ...fresh, path: 'join' }, 'relay').otherSide).toMatch(/Nobody connected/)
-    expect(step({ ...fresh, path: 'start' }, 'relay').why).toMatch(/Your team runs it and teamree runs none/)
-  })
-
-  it('says why every step is there, whichever job it is', () => {
+// The panel used to carry two paragraphs under every step — why the step is
+// there, and what the far end sees while it is not done — written out twice,
+// once per path. A step is a title, a mark and one line saying what is true.
+describe('what a step carries', () => {
+  it('is one line, and no argument for itself', () => {
     for (const path of ['start', 'join'] as const) {
       for (const entry of startTeamworkFlow({ ...fresh, path }).steps) {
-        expect(entry.why, `${entry.id} on the ${path} path`).not.toBe('')
+        expect(Object.keys(entry).sort(), `${entry.id} on the ${path} path`).toEqual(['id', 'mark', 'summary', 'title'])
+        expect(entry.summary, `${entry.id} on the ${path} path`).not.toBe('')
       }
     }
   })
 
-  // Both people hit this at the same moment on the same base, and the instinct
-  // it provokes — forcing — is the wrong one.
-  it('warns a joiner about the rejection two people pushing at once get', () => {
-    expect(step({ ...fresh, path: 'join' }, 'push').otherSide).toMatch(/pull with rebase/i)
+  // The steps used to be rewritten per path. They are facts about this checkout
+  // now, and a fact does not change with who is reading it.
+  it('says the same thing whichever of the two jobs this is', () => {
+    const starting = startTeamworkFlow({ ...fresh, path: 'start' }).steps
+    const joining = startTeamworkFlow({ ...fresh, path: 'join' }).steps
+    expect(starting).toEqual(joining)
   })
 })
 
@@ -1268,11 +1222,10 @@ describe('the message to send a teammate', () => {
 
   // The person being invited is the one taking on the grant, so the invitation
   // is where they find out about it — not the app, afterwards.
-  it('says what a key in the roster grants, and what stops it being invisible', () => {
+  it('says what a key in the roster grants, in one sentence', () => {
     const text = invite() ?? ''
-    expect(text).toMatch(/running commands as you/)
-    expect(text).toMatch(/attributed live/)
-    expect(text).toMatch(/mute is/)
+    expect(text).toMatch(/Anyone on the roster can type into any pane on your machine, as you\./)
+    expect(text).not.toMatch(/attributed live/)
   })
 
   it('says the relay is still coming when it is not in the repository yet', () => {
@@ -1299,8 +1252,7 @@ describe('the message to send a teammate', () => {
         handle: 'ada'
       }) ?? ''
     expect(text).toContain('git clone /Volumes/team/pager.git')
-    expect(text).toMatch(/mount it at exactly \/Volumes\/team\/pager\.git/)
-    expect(text).toMatch(/we never see/)
+    expect(text).toMatch(/Mount the repository at exactly \/Volumes\/team\/pager\.git\./)
   })
 
   it('says nothing about mounting anything when the origin is a URL', () => {
@@ -1342,7 +1294,7 @@ describe('where this ended up', () => {
         advice: 'origin has commits that main does not. Pull or rebase onto origin/main and push again.'
       })
     })
-    expect(result?.head).toMatch(/the commit was made here and the push did not land/)
+    expect(result?.head).toBe('Committed here; the push did not land.')
     const push = result?.facts.find((fact) => fact.label === 'Pushed')
     expect(push?.state).toBe('no')
     expect(push?.detail).toMatch(/Pull or rebase onto origin\/main/)
@@ -1357,7 +1309,7 @@ describe('where this ended up', () => {
   })
 
   it('says what is left, and that waiting for somebody is not a fault', () => {
-    expect(outcome({ publish: pushed() })?.head).toMatch(/What is left is somebody else opening teamree/)
+    expect(outcome({ publish: pushed() })?.head).toBe('Done here. Waiting on a teammate.')
     expect(outcome({ list: list() })?.next).toContain('Add my key')
     expect(outcome({ relay: relay() })?.next).toMatch(/Step 3/)
   })

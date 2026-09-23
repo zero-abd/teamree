@@ -27,15 +27,12 @@ export function ConfirmRemoveDialog({ worktreeId, reason }: { worktreeId: string
         <p className="confirm__body">{reason}</p>
         {pending > 0 ? (
           <p className="confirm__detail">
-            {pending} uncommitted change{pending === 1 ? '' : 's'} will be deleted with the checkout. Nothing here is on
-            any branch, so there is no undo.
+            {pending} uncommitted change{pending === 1 ? '' : 's'} will be deleted. There is no undo.
           </p>
         ) : null}
         {ignored > 0 ? (
           <p className="confirm__detail">
-            {ignored} ignored file{ignored === 1 ? '' : 's'} or folder{ignored === 1 ? '' : 's'} will go too. teamree
-            cannot tell a node_modules it could rebuild from the only copy of a .env — read the names above before you
-            decide.
+            {ignored} ignored file{ignored === 1 ? '' : 's'} or folder{ignored === 1 ? '' : 's'} will go too.
           </p>
         ) : null}
         {worktree ? <p className="confirm__path">{worktree.path}</p> : null}

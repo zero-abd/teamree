@@ -548,7 +548,7 @@ describe('team publish', () => {
     expect(result.out).toContain('.teamree/members/me.pub, .teamree/relay')
     expect(result.out).toContain('Set up teamwork')
     expect(result.out).toContain('none - this push would set origin/main')
-    expect(result.out).toContain('Nothing was committed and nothing was pushed.')
+    expect(result.out).toContain('Nothing was committed or pushed.')
     // The assertion that matters: a dry run that published would be the worst
     // possible bug in this command.
     expect(cli.stub.received.map((call) => call.method)).not.toContain('teamwork.publish')
@@ -668,8 +668,7 @@ describe('team invite', () => {
   it('says out loud that the link is not a key', async () => {
     const cli = await harness()
     const result = await cli.run(['team', 'invite', 'api'])
-    expect(result.out).toContain('It is not a key and it opens nothing')
-    expect(result.out).toContain('push their own key to this repository')
+    expect(result.out).toContain('Whoever accepts it still has to push their own key to be on the team.')
   })
 
   it('refuses to write one that cannot name the repository', async () => {
@@ -762,7 +761,7 @@ describe('team invite', () => {
     expect(result.out).not.toContain('ghp_secret')
     expect(result.out).toContain('https://github.com/acme/api.git')
     // Said rather than done quietly: the line is not what `git remote -v` prints.
-    expect(result.out).toContain('a credential embedded in its origin')
+    expect(result.out).toContain('The origin carries a credential')
   })
 
   it('refuses to hand out an origin that names a transport rather than an address', async () => {

@@ -65,15 +65,18 @@ describe('what a worktree is', () => {
     // The two facts nobody works out unaided, and the two this app is most
     // likely to be blamed for: where a pane's shell is, and what a removal
     // takes with it.
-    expect(prose).toContain('starts in that directory')
-    expect(prose).toContain('takes its panes with it')
+    expect(prose).toContain('start in its directory')
+    expect(prose).toContain('closes its panes')
   })
 })
 
 describe('the CLI section', () => {
-  it('says what the CLI is for in the words the dialog uses', () => {
-    expect(cliHelp(status({ state: 'linked' })).purpose).toBe(CLI_PURPOSE)
-    expect(cliHelp(null).purpose).toBe(CLI_PURPOSE)
+  // The heading says what the command is; the section says where it is. It used
+  // to open with a sentence selling the CLI to somebody already reading about it.
+  it('says where the command is, without restating what the CLI is for', () => {
+    const help = cliHelp(status({ state: 'linked' }))
+    expect(help.headline).toContain('teamree is on your PATH')
+    expect(JSON.stringify(help)).not.toContain(CLI_PURPOSE)
   })
 
   it('sends you to the command once the command exists', () => {
@@ -89,7 +92,7 @@ describe('the CLI section', () => {
     for (const state of ['absent', 'elsewhere', 'file', 'directory'] as const) {
       const help = cliHelp(status({ state }))
       expect(help.command, state).toBeNull()
-      expect(help.settings, state).toContain('Settings')
+      expect(help.settings, state).toContain(CLI_HELP_COMMAND)
     }
   })
 
@@ -103,7 +106,7 @@ describe('the CLI section', () => {
   // "type teamree help" is both the right advice and possibly useless, so the
   // sentence that says so has to survive into this page.
   it('carries the warning that the directory is on no PATH it can read', () => {
-    expect(cliHelp(status({ state: 'linked', onPath: null })).caveat).toContain('/etc/paths')
+    expect(cliHelp(status({ state: 'linked', onPath: null })).caveat).toContain('on a PATH')
     expect(cliHelp(status({ state: 'linked', onPath: 'login' })).caveat).toBeNull()
   })
 })

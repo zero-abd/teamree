@@ -36,10 +36,10 @@ describe('what the card says', () => {
     expect(notice?.detail).toContain('0.1.0')
   })
 
-  it('says teamree cannot install it, and why, before either button is pressed', () => {
+  it('says teamree does not install it, in one line and without an argument for it', () => {
     const notice = updateNotice(state())
-    expect(notice?.detail).toContain('cannot install this for you')
-    expect(notice?.detail).toContain('unsigned')
+    expect(notice?.detail).toContain('does not install it for you')
+    expect(notice?.detail).not.toContain('unsigned')
   })
 
   it('sends the reader to the install steps rather than reciting them', () => {

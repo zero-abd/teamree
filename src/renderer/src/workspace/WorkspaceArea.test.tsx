@@ -198,20 +198,21 @@ describe('when there is nothing open', () => {
   })
 
   // Caught by reading this state in the running app: with a project added and
-  // no worktree in it, the sidebar beside this said "No worktrees yet" while
-  // this line told somebody to pick one from it. The button under it already
-  // knew better.
+  // no worktree in it, the sidebar beside this said "No worktrees yet" while a
+  // line here told somebody to pick one from it. The button is the whole of the
+  // answer now — it says which of the two things pressing it will do.
   it('does not send somebody to the sidebar when there is no worktree in it', () => {
     seed({ projects: [project] })
     mount()
-    expect(screen.queryByText('Pick a worktree on the left, or start here.')).toBeNull()
-    expect(screen.getByText('Nothing to open yet. Start here.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open a terminal in a new worktree' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Open a terminal' })).toBeNull()
+    expect(screen.getByText('No worktree yet — this asks for the task and makes one.')).toBeTruthy()
   })
 
-  it('sends somebody to the sidebar once there is a worktree to pick', () => {
+  it('offers the plain terminal once there is a worktree to pick', () => {
     seed({ projects: [project], worktrees: [worktree()] })
     mount()
-    expect(screen.getByText('Pick a worktree on the left, or start here.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open a terminal' })).toBeTruthy()
   })
 
   it('names the chords once there is a project for them to act on', () => {
@@ -249,9 +250,7 @@ describe('when there is nothing open', () => {
     mount()
     const button = screen.getByRole('button', { name: 'Teamwork' })
     const described = document.getElementById(button.getAttribute('aria-describedby') ?? '')
-    expect(described?.textContent).toBe(
-      'Teamwork is already on in pager. Open it to see who is connected, and who may read and type into these panes.'
-    )
+    expect(described?.textContent).toBe('Already on in pager.')
     fireEvent.click(button)
     expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p1')
   })
@@ -265,9 +264,7 @@ describe('when there is nothing open', () => {
     mount()
     const button = screen.getByRole('button', { name: 'Start teamwork' })
     const described = document.getElementById(button.getAttribute('aria-describedby') ?? '')
-    expect(described?.textContent).toBe(
-      'Put your key in pager and pick a relay, so a teammate can see these panes and type into them.'
-    )
+    expect(described?.textContent).toBe('Not set up in pager.')
   })
 
   // An answer nobody has yet is not an answer. Until teamwork has been read for
@@ -284,7 +281,7 @@ describe('when there is nothing open', () => {
     mount()
     const button = screen.getByRole('button', { name: 'Open a terminal' })
     const described = document.getElementById(button.getAttribute('aria-describedby') ?? '')
-    expect(described?.textContent).toBe('A shell in Rewrite the pager, on rewrite-the-pager.')
+    expect(described?.textContent).toBe('Rewrite the pager, on rewrite-the-pager.')
   })
 
   // There is no terminal outside a worktree — that is the shape of the app —

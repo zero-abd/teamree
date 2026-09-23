@@ -100,9 +100,6 @@ export function AppearanceDialog(): React.JSX.Element {
 
         <fieldset className="appearance__section">
           <legend className="appearance__legend">Accent</legend>
-          <p className="appearance__note">
-            One colour, marking one thing: where you are, and what is selected. Everything else in the window is grey.
-          </p>
           <div className="appearance__accents">
             {ACCENT_PRESETS.map((accent) => {
               const current = (appearance.accent ?? preset.seed.accent).toLowerCase() === accent.value.toLowerCase()
@@ -129,10 +126,6 @@ export function AppearanceDialog(): React.JSX.Element {
 
         <fieldset className="appearance__section">
           <legend className="appearance__legend">Ground</legend>
-          <p className="appearance__note">
-            The colour the window sits on. Every surface above it — the rail, the panels, the dialogs, the hairlines —
-            is rebuilt from whatever this becomes.
-          </p>
           <div className="appearance__ground">
             <ColourWell
               label="Ground"

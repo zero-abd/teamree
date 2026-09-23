@@ -25,7 +25,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { Project } from '@shared/entities'
-import { cliOutcome, cliPanel, CLI_PURPOSE } from '../dialogs/cliInstallModel'
+import { cliOutcome, cliPanel } from '../dialogs/cliInstallModel'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
@@ -90,10 +90,6 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
         <div className="settings__column settings__head-row">
           <div className="settings__identity">
             <h1 className="settings__title">Settings</h1>
-            <p className="settings__lede">
-              What this copy of teamree does on this machine. Everything here takes effect as you change it; there is
-              nothing to save.
-            </p>
           </div>
           <button
             type="button"
@@ -145,8 +141,6 @@ function CliSection(): React.JSX.Element {
       <h2 className="settings-section__title" id="settings-cli">
         teamree on your PATH
       </h2>
-      <p className="settings-section__lede">{CLI_PURPOSE}</p>
-
       <p className="settings-fact">{panel.headline}</p>
       {panel.detail ? <p className="settings-note">{panel.detail}</p> : null}
 
@@ -200,9 +194,8 @@ function UpdatesSection(): React.JSX.Element {
       <h2 className="settings-section__title" id="settings-updates">
         Updates
       </h2>
-      <p className="settings-section__lede">{panel.detail}</p>
-
       <p className="settings-fact">{panel.headline}</p>
+      <p className="settings-note">{panel.detail}</p>
 
       {panel.offersCheck ? (
         <>
@@ -217,7 +210,7 @@ function UpdatesSection(): React.JSX.Element {
                 after startup and one every six hours after that, and a label
                 that said "on launch" would be describing a check that has not
                 happened yet at the moment somebody reads it. */}
-            <span>Check for a newer release shortly after launch, and every few hours while teamree is open</span>
+            <span>Check shortly after launch, and every few hours while teamree is open</span>
           </label>
 
           <div className="settings-actions">
@@ -252,11 +245,6 @@ function PanesSection(): React.JSX.Element {
       <h2 className="settings-section__title" id="settings-panes">
         Panes
       </h2>
-      <p className="settings-section__lede">
-        The size of the text in every terminal in this window. Panes resize as you move it, including the ones already
-        running.
-      </p>
-
       <div className="settings-size">
         <label className="settings-size__label" htmlFor="settings-font-size">
           Terminal text size
@@ -279,10 +267,7 @@ function PanesSection(): React.JSX.Element {
         </output>
       </div>
 
-      <p className="settings-note">
-        Remembered on this machine only. It is kept in this window&rsquo;s own storage rather than in the workspace, so
-        it does not follow you to another computer and a teammate never sees it.
-      </p>
+      <p className="settings-note">Remembered on this machine only.</p>
     </section>
   )
 }
@@ -304,21 +289,15 @@ function AppearanceSection({ modifier }: { modifier: PlatformModifier }): React.
       <h2 className="settings-section__title" id="settings-appearance">
         Appearance
       </h2>
-      <p className="settings-section__lede">
-        Themes and colours — the window&rsquo;s ground, its accent, and every colour built on them, terminal palette
-        included — are edited in their own panel.
-      </p>
-
-      <div className="settings-row">
-        <p className="settings-note">
-          This opens that panel — the same one {shortcutHint('open-appearance', modifier)} opens, and the same one
-          behind the sidebar&rsquo;s Appearance link. There is no second copy of it here.
-        </p>
-        <div className="settings-actions">
-          <button type="button" className="button button--small" onClick={() => openDialog({ kind: 'appearance' })}>
-            Open the appearance panel
-          </button>
-        </div>
+      <div className="settings-actions">
+        <button
+          type="button"
+          className="button button--small"
+          title={shortcutHint('open-appearance', modifier)}
+          onClick={() => openDialog({ kind: 'appearance' })}
+        >
+          Open the appearance panel
+        </button>
       </div>
     </section>
   )
@@ -330,15 +309,8 @@ function ProjectsSection({ projects }: { projects: readonly Project[] }): React.
       <h2 className="settings-section__title" id="settings-projects">
         Projects
       </h2>
-      <p className="settings-section__lede">
-        One repository each: where its checkout is, which ref a new task starts from by default, and which relay its
-        teammates meet on.
-      </p>
-
       {projects.length === 0 ? (
-        <p className="settings-note">
-          No repositories yet. Add one and it gets a block here, with its path, its start point and its relay.
-        </p>
+        <p className="settings-note">No repositories yet.</p>
       ) : (
         projects.map((project) => <ProjectBlock key={project.id} project={project} />)
       )}
@@ -437,8 +409,7 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
         </button>
       </div>
       <p className="settings-note">
-        This only decides which ref the New task dialog puts in its start-point box first. Anything typed there still
-        wins, and the repository&rsquo;s own base ref, {project.baseRef}, is unchanged either way.
+        What the New task dialog offers first; the repository&rsquo;s base ref is unchanged.
       </p>
     </div>
   )
@@ -476,7 +447,6 @@ function RelayBlock({ project }: { project: Project }): React.JSX.Element {
         <button type="button" className="button button--small" onClick={() => openTeamwork(project.id)}>
           Open teamwork for {project.name}
         </button>
-        <span className="settings-aside">Where a relay is set, and where the file that names it gets pushed.</span>
       </div>
     </div>
   )

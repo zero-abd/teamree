@@ -76,9 +76,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     return {
       tone: 'pending',
       label: 'Reading this project',
-      detail:
-        'teamree has not read this project’s relay, roster or origin yet. Whatever it finds is here in a ' +
-        'moment; nothing below has been established until then.'
+      detail: 'teamree has not read this project’s relay, roster or origin yet.'
     }
   }
 
@@ -94,10 +92,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     return {
       tone: 'off',
       label: 'Your key is not here',
-      detail:
-        'Your own key is not in .teamree/members in this checkout, so no teammate can reach you. Open ' +
-        `${TEAMWORK_BUTTON_LABEL} in this project’s header and press “${ADD_KEY_BUTTON}”, then commit and push ` +
-        'the file it writes.'
+      detail: `Your key is not in .teamree/members here. ${TEAMWORK_BUTTON_LABEL} → “${ADD_KEY_BUTTON}”.`
     }
   }
   if (status.links.length === 0) {
@@ -139,7 +134,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     return {
       tone: 'problem',
       label: 'Relay unreachable',
-      detail: `${relayLabel(status)} could not be reached. Your teammates may be fine.`
+      detail: `${relayLabel(status)} could not be reached.`
     }
   }
   if (connected > 0) {

@@ -32,20 +32,18 @@ describe('what the dialog promises', () => {
   })
 
   it('names the command it is going to run', () => {
-    expect(taskPlanNote(found, true, claude)).toBe('Creates the worktree, then runs claude in it.')
+    expect(taskPlanNote(found, true, claude)).toBe('Then runs claude in it.')
   })
 
   it('says the worktree comes alone when the user asked for that', () => {
-    expect(taskPlanNote(found, true, null)).toBe('Creates the worktree, with no agent in it.')
+    expect(taskPlanNote(found, true, null)).toBe('No agent in it.')
   })
 
   // Two states that are both an empty list, and only one of which should tell
   // someone their machine has no agent on it.
   it('separates "not asked yet" from "none installed"', () => {
     expect(taskPlanNote([], false, null)).toBe('Looking for coding agents…')
-    expect(taskPlanNote([], true, null)).toBe(
-      'No coding agent on the PATH your login shell sets, so this creates the worktree alone.'
-    )
+    expect(taskPlanNote([], true, null)).toBe('No coding agent on your login shell’s PATH.')
   })
 
   // The probe having answered says nothing about the answer being non-empty.

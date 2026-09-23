@@ -205,8 +205,7 @@ export function StartPointPicker({
 
             {model.truncated ? (
               <p className="combo__footer">
-                Showing the first {list.limit} of {list.total} refs. Type a ref in full to use one of the other{' '}
-                {model.droppedCount}.
+                First {list.limit} of {list.total} refs. Type one in full to reach the other {model.droppedCount}.
               </p>
             ) : null}
           </div>

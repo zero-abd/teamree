@@ -41,7 +41,7 @@ export function updatePanel(update: UpdateState | null, now: number): UpdatePane
   if (update === null) {
     return {
       headline: 'teamree has not said which version this is yet.',
-      detail: 'The version is read from the runtime when the window connects, and nothing has come back.',
+      detail: 'Waiting on the runtime.',
       offersCheck: false,
       lastChecked: null,
       problem: null
@@ -53,9 +53,7 @@ export function updatePanel(update: UpdateState | null, now: number): UpdatePane
   if (!update.checkable) {
     return {
       headline: `This is teamree ${update.current}.`,
-      detail:
-        'That is not a released version, so there is nothing published to compare it against: a check would have ' +
-        'nothing to answer with, and teamree does not run one.',
+      detail: 'Not a released version, so there is nothing published to compare it against.',
       offersCheck: false,
       lastChecked,
       problem: update.problem
@@ -67,10 +65,7 @@ export function updatePanel(update: UpdateState | null, now: number): UpdatePane
     // What the button does and, just as much, what it does not: teamree opens
     // a browser at a disk image. Nothing here replaces the running app, and a
     // sentence that left that out would be promising an installer.
-    detail:
-      'A check asks GitHub for the newest release and compares it with this build. teamree never installs ' +
-      'anything by itself — a newer release appears as a card in the corner of the window, with a link to the ' +
-      'download.',
+    detail: 'A check asks GitHub for the newest release. teamree installs nothing by itself.',
     offersCheck: true,
     lastChecked,
     problem: update.problem
@@ -126,9 +121,7 @@ export function relayPanel(relay: RelaySetting | undefined): RelayPanel {
   return {
     headline: `Teamwork dials ${relay.url}.`,
     detail:
-      relay.source === 'environment'
-        ? `That URL comes from ${relay.override.name} in this app’s environment, not from the repository.`
-        : `That URL comes from ${relay.file}, which is in the repository, so everyone who pulls it meets there.`,
+      relay.source === 'environment' ? `From ${relay.override.name} in this app’s environment.` : `From ${relay.file}.`,
     override
   }
 }
@@ -143,12 +136,6 @@ export function relayPanel(relay: RelaySetting | undefined): RelayPanel {
  */
 function overrideSentence(relay: RelaySetting, value: string): string {
   const { name } = relay.override
-  const beaten =
-    relay.onDisk.url === null
-      ? `${relay.file} names no relay, so there is nothing in the repository for it to beat.`
-      : `It is overriding the repository, which says ${relay.onDisk.url} in ${relay.file}.`
-  return (
-    `${name} is set to ${value} in this app’s environment. ${beaten} teamree cannot change a variable it was ` +
-    `started with: unset ${name} in the terminal teamree is launched from and open it again.`
-  )
+  const beaten = relay.onDisk.url === null ? `${relay.file} names no relay.` : `${relay.file} says ${relay.onDisk.url}.`
+  return `${name} is set to ${value} in this app’s environment. ${beaten} Unset it and relaunch teamree.`
 }

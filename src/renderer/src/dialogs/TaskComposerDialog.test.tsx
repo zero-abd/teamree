@@ -234,9 +234,7 @@ describe('what it submits', () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     expect(screen.getByRole('button', { name: 'Create worktree' })).toBeTruthy()
-    expect(
-      screen.getByText('No coding agent on the PATH your login shell sets, so this creates the worktree alone.')
-    ).toBeTruthy()
+    expect(screen.getByText('No coding agent on your login shell’s PATH.')).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Agent' })).toHaveProperty('disabled', true)
     submit().click()
     expect(startTask).toHaveBeenCalledWith({
@@ -256,7 +254,7 @@ describe('what it submits', () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     fireEvent.change(screen.getByRole('combobox', { name: 'Agent' }), { target: { value: '' } })
-    expect(screen.getByText('Creates the worktree, with no agent in it.')).toBeTruthy()
+    expect(screen.getByText('No agent in it.')).toBeTruthy()
     submit().click()
     expect(startTask.mock.calls[0]?.[0]).not.toHaveProperty('agentCommand')
   })

@@ -33,11 +33,6 @@
   letter-spacing: -0.02em;
 }
 
-.help__lede {
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-}
-
 .help__close {
   padding: var(--s1);
   display: grid;

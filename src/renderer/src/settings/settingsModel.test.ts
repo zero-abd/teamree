@@ -41,7 +41,7 @@ describe('what the page says about updates', () => {
     const panel = updatePanel(update(), NOW)
     expect(panel.headline).toBe('This is teamree 1.4.0.')
     expect(panel.offersCheck).toBe(true)
-    expect(panel.detail).toContain('never installs')
+    expect(panel.detail).toContain('installs nothing by itself')
   })
 
   // The button is absent rather than disabled: there is nothing published to
@@ -50,7 +50,7 @@ describe('what the page says about updates', () => {
   it('offers no check at all when there is nothing to compare against', () => {
     const panel = updatePanel(update({ current: '0.0.0-dev', checkable: false }), NOW)
     expect(panel.offersCheck).toBe(false)
-    expect(panel.detail).toContain('not a released version')
+    expect(panel.detail).toContain('Not a released version')
   })
 
   it('says nothing about a version it has not been told yet', () => {
@@ -79,7 +79,7 @@ describe('what the page says about a relay', () => {
   it('names the file the URL came from, so it is clear the team shares it', () => {
     const panel = relayPanel(relay())
     expect(panel.headline).toBe('Teamwork dials wss://relay.example/v1/relay.')
-    expect(panel.detail).toContain('.teamree/relay, which is in the repository')
+    expect(panel.detail).toBe('From .teamree/relay.')
     expect(panel.override).toBeNull()
   })
 
@@ -104,8 +104,8 @@ describe('what the page says about a relay', () => {
         override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' }
       })
     )
-    expect(panel.override).toContain('It is overriding the repository, which says wss://relay.example/v1/relay')
-    expect(panel.override).toContain('teamree cannot change a variable it was started with')
+    expect(panel.override).toContain('.teamree/relay says wss://relay.example/v1/relay')
+    expect(panel.override).toContain('Unset it and relaunch teamree')
   })
 
   // The same variable, in a checkout that names no relay of its own. Saying it
@@ -121,8 +121,8 @@ describe('what the page says about a relay', () => {
         override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' }
       })
     )
-    expect(panel.override).toContain('names no relay, so there is nothing in the repository for it to beat')
-    expect(panel.override).not.toContain('overriding the repository')
+    expect(panel.override).toContain('.teamree/relay names no relay')
+    expect(panel.override).not.toContain('says wss://')
   })
 
   it('says it is still reading rather than answering for a project it has not read', () => {

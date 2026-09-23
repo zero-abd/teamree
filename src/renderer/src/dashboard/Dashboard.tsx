@@ -92,7 +92,7 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
               ? 'No panes anywhere yet.'
               : `${rows.length} pane${rows.length === 1 ? '' : 's'} across ${worktreeCount(rows)} worktree${
                   worktreeCount(rows) === 1 ? '' : 's'
-                }, the ones that need you first.`}
+                }`}
           </p>
         </div>
 
@@ -127,8 +127,7 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
         <div className="placeholder">
           <h2 className="placeholder__title">Nothing running</h2>
           <p className="placeholder__body">
-            Open a terminal in a worktree with <kbd>{shortcutHint('new-terminal', modifier)}</kbd> and it will show up
-            here.
+            Open a terminal with <kbd>{shortcutHint('new-terminal', modifier)}</kbd>.
           </p>
         </div>
       ) : (

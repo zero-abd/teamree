@@ -49,8 +49,7 @@ export const cliCommands: readonly CommandSpec[] = [
     path: ['cli', 'status'],
     summary: 'Show where the teamree CLI is linked and whether it is this app’s.',
     details:
-      'A link that exists and points at a different copy of teamree is the confusing one: the command runs, ' +
-      'and it drives the other app.',
+      'A link pointing at a different copy of teamree is the confusing case: the command runs, and drives that app.',
     examples: ['teamree cli status --json'],
     run: async (context) => {
       const status = await context.client.call('cli.status', {})
@@ -61,9 +60,8 @@ export const cliCommands: readonly CommandSpec[] = [
     path: ['cli', 'install'],
     summary: 'Link the teamree CLI into /usr/local/bin.',
     details:
-      'macOS only. Asks for an administrator password only when /usr/local/bin cannot be written without one. ' +
-      'A link that already points at this app is success, not an error. A regular file at the destination is ' +
-      'left alone and reported.',
+      'macOS only. Asks for an administrator password only when /usr/local/bin needs one. A link already ' +
+      'pointing here is success; a regular file at the destination is left alone and reported.',
     examples: ['teamree cli install'],
     run: async (context) => {
       const result = await context.client.call('cli.install', {})

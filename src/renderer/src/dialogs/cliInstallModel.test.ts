@@ -45,11 +45,9 @@ describe('before anything is pressed', () => {
     expect(panel.detail).toContain('move')
   })
 
-  it('says a password is coming, and why, before it is asked for', () => {
+  it('says a password is coming, in one line, before it is asked for', () => {
     const panel = cliPanel(status({ needsAdministrator: true }))
-    expect(panel.password).toContain('administrator password')
-    expect(panel.password).toContain('/usr/local/bin')
-    expect(panel.password).toContain('never reaches teamree')
+    expect(panel.password).toBe('macOS will ask for your administrator password; /usr/local/bin needs one.')
   })
 
   it('says when no password will be asked for, which is the common case with Homebrew', () => {
@@ -60,8 +58,9 @@ describe('before anything is pressed', () => {
 
   it('warns when the link will be made somewhere no shell looks', () => {
     const panel = cliPanel(status({ onPath: null }))
-    expect(panel.pathWarning).toContain('/usr/local/bin')
-    expect(panel.pathWarning).toContain('/etc/paths')
+    expect(panel.pathWarning).toBe(
+      'Nothing teamree can read puts /usr/local/bin on a PATH, so your shell may not find the command.'
+    )
     expect(panel.action).toBe('Put teamree on my PATH')
   })
 
@@ -94,7 +93,7 @@ describe('something in the way', () => {
   it('refuses a regular file and says what is there', () => {
     const panel = cliPanel(status({ state: 'file', resolved: '/usr/local/bin/teamree' }))
     expect(panel.headline).toBe('There is a regular file at /usr/local/bin/teamree.')
-    expect(panel.detail).toContain('will not delete it')
+    expect(panel.detail).toBe('Move it aside and open this again.')
     expect(panel.action).toBeNull()
   })
 
@@ -155,10 +154,7 @@ describe('platforms and builds this cannot serve', () => {
 
 describe('what happened afterwards', () => {
   /** The basis the success line carries, for the status above: onPath 'login'. */
-  const CHECKED =
-    'Your login shell could not be asked, so this is checked against /etc/paths, and /usr/local/bin is in it. ' +
-    'That is the PATH a shell *starts* with: a profile that sets PATH rather than adding to it replaces it, and ' +
-    'then the command will not be found in a terminal even though the link is fine.'
+  const CHECKED = '/usr/local/bin is in /etc/paths; your login shell could not be asked.'
 
   function install(extra: Partial<CliInstall> = {}): CliInstall {
     return {
@@ -187,8 +183,7 @@ describe('what happened afterwards', () => {
   it('says what the link used to point at when it replaced one', () => {
     const older = '/Users/ann/Downloads/teamree.app/Contents/Resources/cli/teamree'
     const message = cliOutcome(install({ outcome: 'replaced', replaced: older }))
-    expect(message).toContain(older)
-    expect(message).toContain('untouched')
+    expect(message).toContain(`no longer at ${older}`)
   })
 })
 
@@ -361,23 +356,22 @@ describe('what the line reporting success is standing on', () => {
   // and was false. teamree starts the login shell and reads the PATH it ends up
   // with for every pane in the app. The panel was the one place that did not
   // ask, and it said the app could not.
-  it('names /etc/paths as a fallback, and says what that does not prove', () => {
+  it('names /etc/paths as a fallback, and says the login shell was not asked', () => {
     const message = cliOutcome(linked({ onPath: 'login' }))
-    expect(message).toContain('/etc/paths')
+    expect(message).toContain('/usr/local/bin is in /etc/paths')
     expect(message).toContain('login shell could not be asked')
-    expect(message).toContain('will not be found in a terminal')
     expect(message).not.toContain('teamree cannot read your shell profile')
   })
 
   // The strong answer, and the one a Mac normally gives now.
   it('names the login shell’s own PATH when that is what answered', () => {
-    const message = cliOutcome(linked({ onPath: 'shell' }))
-    expect(message).toContain('PATH your login shell reports after reading your profile')
-    expect(message).toContain('a terminal you open will have')
+    expect(cliOutcome(linked({ onPath: 'shell' }))).toContain('/usr/local/bin is on the PATH your login shell reports')
   })
 
-  it('names this app’s own PATH when that is what answered', () => {
-    expect(cliOutcome(linked({ onPath: 'environment' }))).toContain('this app’s own PATH')
+  it('names this app’s own PATH, and that it is not the terminal’s, when that is what answered', () => {
+    const message = cliOutcome(linked({ onPath: 'environment' }))
+    expect(message).toContain('on this app’s PATH')
+    expect(message).toContain('not necessarily your terminal’s')
   })
 
   it('says nothing it can read claims the directory, rather than calling it done', () => {

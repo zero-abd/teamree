@@ -357,7 +357,7 @@ describe('running a relay on this Mac, as the other button', () => {
 
   it('says who it will not work for, beside the button', () => {
     mount()
-    expect(screen.getByText(/Two laptops behind two home routers cannot meet on it/)).toBeTruthy()
+    expect(screen.getByText(/Only reachable from machines that can already reach this Mac/)).toBeTruthy()
   })
 
   // One slot. Starting a second is refused rather than allowed to replace the
@@ -386,7 +386,7 @@ describe('running a relay on this Mac, as the other button', () => {
     const setRelay = vi.fn()
     seed({ setRelay, ...servePane(true) })
     mount()
-    expect(screen.getByText(/only reachable from that network/)).toBeTruthy()
+    expect(screen.getByText(/A private address is unreachable from outside that network/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Use this relay URL' }))
     expect(setRelay).toHaveBeenCalledWith('p1', 'ws://192.168.1.23:8787/v1/relay')
   })
@@ -419,7 +419,7 @@ describe('checking a relay from the panel', () => {
   it('says what a pass proves and what it does not', () => {
     seed({ relays: { p1: relayOnDisk() } })
     mount()
-    expect(screen.getAllByText(/says nothing about anybody else’s network/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Dialled from this Mac only.').length).toBeGreaterThan(0)
   })
 
   // Two buttons, two strings, two names: the one beside the configured relay
@@ -428,7 +428,7 @@ describe('checking a relay from the panel', () => {
   it('is disabled with the fix named when nothing has been typed to check', () => {
     mount()
     expect((screen.getByRole('button', { name: 'Check the URL you typed' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText(/Paste one into the field above/)).toBeTruthy()
+    expect(screen.getByText('No relay URL to check yet.')).toBeTruthy()
   })
 })
 
@@ -575,10 +575,10 @@ describe('the question the panel asks before anything else', () => {
     expect(screen.queryByRole('heading', { name: '4. Commit and push' })).toBeNull()
   })
 
-  it('shows the steps once it has been answered, in the words of the job chosen', () => {
+  it('shows the steps once it has been answered, and says which job was chosen', () => {
     mount('join')
     expect(screen.getByRole('heading', { name: '4. Commit and push' })).toBeTruthy()
-    expect(screen.getByText(/teamree on their machine says “No teammates”/)).toBeTruthy()
+    expect(screen.getByText(/join a team i was invited to/i)).toBeTruthy()
   })
 
   // People pick the wrong one, and a choice that cannot be unmade is a trap.

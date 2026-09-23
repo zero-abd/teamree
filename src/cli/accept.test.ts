@@ -270,8 +270,8 @@ describe('team accept, on a checkout that is already here', () => {
   it('ends by saying a key was pushed and refuses to call that a teammate being there', async () => {
     const cli = await harness(acceptHandler(world()))
     const result = await cli.run(['team', 'accept', LINK])
-    expect(result.out).toContain('your key is in the repository. That is what membership is.')
-    expect(result.out).toContain('Nothing here says a teammate is connected.')
+    expect(result.out).toContain('api is set up and your key is in the repository.')
+    expect(result.out).toContain('Nobody is known to be connected')
     expect(result.out).toContain('teamree team status api')
   })
 
@@ -332,7 +332,7 @@ describe('team accept, when it must not go on', () => {
     expect(result.code).toBe(ExitCode.Failure)
     expect(result.err).toContain('wss://other.example/v1/relay')
     expect(result.err).toContain('wss://relay.example/v1/relay')
-    expect(result.err).toContain('Two relays is two halves of a team that never meet')
+    expect(result.err).toContain('Settle which relay it is, then run this again.')
     expect(methodsCalled(cli.stub)).not.toContain('teamwork.setRelay')
   })
 
@@ -364,8 +364,8 @@ describe('team accept, when it must not go on', () => {
     const result = await cli.run(['team', 'accept', LINK])
     expect(result.code).toBe(ExitCode.Failure)
     expect(result.err).toContain('remote: Permission to acme/api.git denied')
-    expect(result.err).toContain('Being on this team is being able to push to https://github.com/acme/api.git')
-    expect(result.err).toContain('the invitation carried no permission and could not')
+    expect(result.err).toContain('You need push access to https://github.com/acme/api.git')
+    expect(result.err).toContain('the invitation grants none')
   })
 
   it('refuses an origin that names a transport rather than an address, and starts no git', async () => {

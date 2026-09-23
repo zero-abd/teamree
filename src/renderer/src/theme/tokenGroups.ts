@@ -37,7 +37,7 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
   },
   {
     title: 'Lines',
-    blurb: 'Hairlines do the separating in this window; raise them and the layout gets louder.',
+    blurb: 'Hairlines and separators.',
     tokens: [
       { token: 'line', label: 'Hairline', about: 'Borders between regions, and under the title strip.' },
       { token: 'line-strong', label: 'Strong line', about: 'Button and field borders, and the key caps.' }
@@ -45,7 +45,7 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
   },
   {
     title: 'Text',
-    blurb: 'Three weights of ink. Each is lifted if it lands too close to what it sits on.',
+    blurb: 'Three weights of ink.',
     tokens: [
       { token: 'fg', label: 'Text', about: 'Worktree names, dialog bodies, terminal output.' },
       { token: 'fg-secondary', label: 'Secondary', about: 'Field labels, notice text, the rail.' },
@@ -54,7 +54,7 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
   },
   {
     title: 'Accent',
-    blurb: 'Where you are and what is selected. It marks one thing at a time on purpose.',
+    blurb: 'Where you are, and what is selected.',
     tokens: [
       { token: 'accent', label: 'Accent', about: 'The active marker, the primary button, the wordmark dot.' },
       { token: 'accent-bright', label: 'Accent text', about: 'The accent when it has to be read rather than seen.' },
@@ -65,7 +65,7 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
   },
   {
     title: 'Status',
-    blurb: 'Four meanings. The terminal draws its red, green, yellow and blue from these too.',
+    blurb: 'Four meanings; the terminal draws its red, green, yellow and blue from these.',
     tokens: [
       { token: 'success', label: 'Success', about: 'A clean merge, a pane that finished.' },
       { token: 'warning', label: 'Warning', about: 'What a discard is about to cost.' },

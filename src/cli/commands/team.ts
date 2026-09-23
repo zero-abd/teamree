@@ -444,10 +444,7 @@ export const teamCommands: readonly CommandSpec[] = [
   {
     path: ['team', 'members'],
     summary: "List a project's roster: every committed public key.",
-    details:
-      'The roster is files in the repository, not an account system: a key is a member because somebody with ' +
-      'push access committed it. `problems` names files that could not be read, which is why a teammate can ' +
-      'be missing from a list that is otherwise fine.',
+    details: 'The roster is committed files, not an account system. `problems` names files that could not be read.',
     args: [PROJECT_ARG],
     examples: ['teamree team members api', 'teamree team members api --json'],
     run: async (context) => {
@@ -482,10 +479,7 @@ export const teamCommands: readonly CommandSpec[] = [
   {
     path: ['team', 'join'],
     summary: "Write this machine's public key into a project's roster.",
-    details:
-      'It writes the file and stops there: it does not stage, commit or push. Getting the file into the ' +
-      'repository is yours to do — being able to push it is what membership means.\n\n' +
-      'The private half never leaves this machine and is never written inside the repository.',
+    details: 'Writes the file only; it does not stage, commit or push. The private half never leaves this machine.',
     args: [PROJECT_ARG],
     flags: [
       {
@@ -508,7 +502,7 @@ export const teamCommands: readonly CommandSpec[] = [
         me === undefined
           ? 'Wrote the key, but it is not showing in the roster yet.'
           : `Joined ${project.name} as ${me.handle}.`,
-        me === undefined ? '' : `Wrote ${me.file}. Commit and push it — that is what makes it membership.`
+        me === undefined ? '' : `Wrote ${me.file}. Commit and push it.`
       ].filter((line) => line.length > 0)
       return { data: list, text: lines.join('\n') }
     }
@@ -517,16 +511,10 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'publish'],
     summary: 'Commit and push the teamwork files, which is what makes them the team’s.',
     details:
-      '`team join` and `team relay set` write files and stop. This is the second act they stop before: it ' +
-      'stages exactly the files the runtime names, commits them, and pushes. Nothing else is staged — it is ' +
-      '`git add` with paths and never `git add -A` — so work you had already staged is left where it was.\n\n' +
-      '--dry-run says what it would do and does none of it: the files, the message, the remote, the branch, ' +
-      'and whether this push is what sets the upstream.\n\n' +
-      'A commit that lands and a push that is refused is one ordinary outcome — a teammate pushed first — and ' +
-      'it is reported as both halves rather than as one failure. Exit is 1 when the push did not land, and ' +
-      '`data.push.kind` is the shape of the refusal to branch on: `rejected` is fixed by pulling, `auth` and ' +
-      '`host-key` are this machine’s credentials and no amount of retrying touches either.\n\n' +
-      'Pushing your key is not the same as a teammate being connected, and this never says it is.',
+      'Stages exactly the files the runtime names, commits them, and pushes. Nothing else is staged.\n\n' +
+      '--dry-run prints the plan and does none of it.\n\n' +
+      'Exit is 1 when the push did not land; `data.push.kind` is the shape of the refusal: `rejected`, ' +
+      '`auth`, `host-key`, `timeout` or `cancelled`.',
     args: [PROJECT_ARG],
     flags: [
       {
@@ -572,7 +560,7 @@ export const teamCommands: readonly CommandSpec[] = [
               ['committed', plan.committed ? 'yes - the commit would carry nothing new' : 'no']
             ]),
             '',
-            'Nothing was committed and nothing was pushed. Drop --dry-run to do it.'
+            'Nothing was committed or pushed. Drop --dry-run to do it.'
           ].join('\n')
         }
       }
@@ -589,12 +577,9 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'invite'],
     summary: 'Print one pasteable line that tells a teammate where this project is.',
     details:
-      'It is not a credential and it grants nothing. Membership is push access: a teammate is somebody whose ' +
-      'public key is committed to the repository, and nothing in this line changes who may push. What it ' +
-      'carries is the four public facts that are typed by hand today — where the repository is, where the ' +
-      'relay is, what the project is called, and who is asking — so that `teamree team accept` can act on ' +
-      'them instead of a person retyping them.\n\n' +
-      'One unbroken token with no spaces in it, because it has to survive being pasted into a chat message.\n\n' +
+      'Not a credential: it grants nothing. It carries four public facts — the repository, the relay, the ' +
+      'project name and who is asking — for `teamree team accept` to act on.\n\n' +
+      'One unbroken token, so it survives being pasted into a chat message.\n\n' +
       'It refuses rather than writing a line with a hole in it. No origin means it cannot name the ' +
       'repository, which is worse than no invitation at all. No relay means the two machines have nowhere ' +
       'to meet. And a machine whose own key is not on the roster is inviting somebody to a team it is not ' +
@@ -610,10 +595,7 @@ export const teamCommands: readonly CommandSpec[] = [
           code: 'no_origin',
           message: `${project.name} has no origin teamree can name: ${status.origin.reason}`,
           exitCode: ExitCode.Failure,
-          hint:
-            'An invitation that cannot say where the repository is is worse than none. Point this checkout at ' +
-            'the repository you both push to — `git remote add origin <url>` in the checkout, or the path a ' +
-            'shared volume is mounted at on both Macs — and run this again.',
+          hint: 'Set an origin: `git remote add origin <url>`, or the path a shared volume is mounted at.',
           data: { projectId: project.id, origin: status.origin }
         })
       }
@@ -641,8 +623,6 @@ export const teamCommands: readonly CommandSpec[] = [
           message: `${project.name} has no relay: ${relay.problem ?? 'nothing names one'}.`,
           exitCode: ExitCode.Failure,
           hint:
-            'Two machines behind two routers meet on a relay or not at all, so an invitation without one names ' +
-            'nowhere to meet. ' +
             (relay.deploy.command === null
               ? `This build carries no relay to deploy: ${relay.deploy.reason}. `
               : `Stand one up with \`${relay.deploy.command}\`, then `) +
@@ -658,9 +638,7 @@ export const teamCommands: readonly CommandSpec[] = [
           code: 'not_enrolled',
           message: `This machine’s key is not on ${project.name}’s roster, so it has no invitation to send.`,
           exitCode: ExitCode.Failure,
-          hint:
-            `Run \`teamree team join ${project.name}\` and then \`teamree team publish ${project.name}\`. Until ` +
-            'that key is pushed, a teammate who accepted this would be on the team and still unable to reach you.',
+          hint: `Run \`teamree team join ${project.name}\`, then \`teamree team publish ${project.name}\`.`,
           data: { projectId: project.id, enrolled: status.enrolled, self: list.self }
         })
       }
@@ -686,17 +664,12 @@ export const teamCommands: readonly CommandSpec[] = [
         // without naming it is one nobody can go and look at.
         const relay = await context.client.call('teamwork.relay', { projectId: project.id })
         notes.push(
-          `This relay came from ${relay.override.name} in this app’s environment rather than from the repository. ` +
-            'It is the address this machine dials, so the invitation is true — but nothing has committed it, and ' +
-            'a teammate who accepts this writes it into their checkout. Push `.teamree/relay` so it is the team’s.'
+          `This relay came from ${relay.override.name} in this app’s environment, not the repository. Push ` +
+            '`.teamree/relay` so it is the team’s.'
         )
       }
       if (shareable.removed) {
-        notes.push(
-          `This checkout reaches the repository with a credential embedded in its origin. The line below names ` +
-            `${shareable.origin} without it, because a credential of yours is not a fact about the repository and ` +
-            'your teammate uses their own.'
-        )
+        notes.push(`The origin carries a credential; the line below names ${shareable.origin} without it.`)
       }
       const originKind = checkOrigin(invitation.origin)
       if (originKind.ok && originKind.kind === 'path') {
@@ -713,8 +686,7 @@ export const teamCommands: readonly CommandSpec[] = [
             ['from', invitation.from]
           ]),
           '',
-          'Send them the last line. It is not a key and it opens nothing: every fact in it is already public, ' +
-            'and whoever accepts it still has to push their own key to this repository to be on the team.',
+          'Send them the last line. Whoever accepts it still has to push their own key to be on the team.',
           ...notes.flatMap((note) => ['', note]),
           '',
           'They run `teamree team accept` with it, or hand it to an agent working beside them.',
@@ -728,20 +700,12 @@ export const teamCommands: readonly CommandSpec[] = [
     path: ['team', 'accept'],
     summary: 'Take an invitation and do every manual step it stands in for.',
     details:
-      'The other half of `team invite`. It finds the repository on this machine or clones it, adds it as a ' +
-      'project, writes the relay, writes this machine’s key into the roster, and pushes — reporting each ' +
-      'step as it goes and stopping at the first one it cannot do honestly.\n\n' +
-      'The link is not a credential and this does not treat it as one. The last step is a push, and a ' +
-      'machine that may not push to that repository is refused there, in git’s own words: membership is push ' +
-      'access and nothing in a link can grant it.\n\n' +
-      'It finishes by saying a key was pushed. It does not say a teammate is connected, because that is a ' +
-      'fact about somebody else’s machine that this command has not observed — `teamree team status` is ' +
-      'where that is answered.\n\n' +
+      'The other half of `team invite`. It finds or clones the repository, adds it as a project, writes the ' +
+      'relay and this machine’s key, and pushes, stopping at the first step it cannot do.\n\n' +
       'Every refusal names the step it stopped at and leaves the steps before it done; `data.steps` under ' +
-      '--json is that list, on the way out and on the way to an error alike.\n\n' +
-      'A clone can take minutes. Without --json its progress goes to stderr as git prints it; with --json it ' +
-      'is silent until it finishes, because the one document a failure prints goes to stderr too and a meter ' +
-      'in front of it would not parse.',
+      '--json is that list.\n\n' +
+      'A clone can take minutes. Without --json git’s progress goes to stderr; with --json it is silent until ' +
+      'it finishes.',
     args: [{ name: 'link', description: 'The invitation from `teamree team invite`.', required: true }],
     flags: [
       {
