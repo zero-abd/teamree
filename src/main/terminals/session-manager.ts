@@ -432,10 +432,15 @@ export class TerminalSessionManager {
   restoreSessions(): { restored: number; resumed: number } {
     const stored = this.records.listTerminals()
     const worktreeCwd = (worktreeId: string): string | undefined => this.options.resolveWorktreeCwd?.(worktreeId)
-    const records = restorableRecords(stored, (worktreeId) => {
-      const cwd = worktreeCwd(worktreeId)
-      return cwd !== undefined && cwd.length > 0 && isDirectory(cwd)
-    })
+    const shown = (this.layouts.listLayouts?.() ?? []).flatMap((layout) => terminalIdsIn(layout.root))
+    const records = restorableRecords(
+      stored,
+      (worktreeId) => {
+        const cwd = worktreeCwd(worktreeId)
+        return cwd !== undefined && cwd.length > 0 && isDirectory(cwd)
+      },
+      shown
+    )
 
     // A record whose worktree is gone is forgotten; one whose checkout is merely
     // missing (unmounted volume) is skipped and kept.

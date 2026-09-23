@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -203,6 +204,27 @@ describe('restorableRecords', () => {
     )
 
     expect(rows.map((row) => row.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('breaks a same-millisecond tie by where the panes sat in the layout, whatever their ids', () => {
+    for (let trial = 0; trial < 50; trial += 1) {
+      const stored = [0, 1, 2].map(() => record({ id: `term_${randomUUID()}`, createdAt: 5 }))
+      const shown = [2, 0, 1].map((index) => (stored[index] as TerminalRecord).id)
+
+      const rows = restorableRecords(stored, () => true, shown)
+
+      expect(rows.map((row) => row.id)).toEqual(shown)
+    }
+  })
+
+  it('keeps stored order for a same-millisecond tie no layout mentions', () => {
+    for (let trial = 0; trial < 50; trial += 1) {
+      const stored = [0, 1, 2].map(() => record({ id: `term_${randomUUID()}`, createdAt: 5 }))
+
+      const rows = restorableRecords(stored, () => true)
+
+      expect(rows.map((row) => row.id)).toEqual(stored.map((row) => row.id))
+    }
   })
 })
 
