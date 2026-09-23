@@ -303,6 +303,91 @@ describe('pushing to a real remote', () => {
     expect((failure as GitServiceError).message).toContain('no remotes')
   })
 
+  // A worktree branch is cut from the project's base ref, and git hands it that
+  // ref as its upstream. `ahead` is measured against the upstream, so a push
+  // that leaves the upstream on the base leaves the button saying there is
+  // still a commit to send — after the commit has landed, and forever.
+  it('points the branch at its own branch on the remote, not at the base it was cut from', async () => {
+    const repo = await repository({ withRemote: true })
+    await repo.git(['checkout', '-q', '-b', 'feature'])
+    // Exactly what `worktree add --track origin/main` leaves behind.
+    await repo.git(['branch', '--set-upstream-to=origin/main', 'feature'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('some work')
+
+    const result = await pushWorktree(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      branch: 'feature',
+      baseRef: 'origin/main',
+      now: () => 777
+    })
+
+    expect(await repo.git(['rev-parse', '--abbrev-ref', 'feature@{upstream}'])).toBe('origin/feature')
+    // And the result says so, which is the other half of the defect: the fields
+    // claimed tracking this call had not touched.
+    expect(result.upstream).toBe('origin/feature')
+    expect(result.setUpstream).toBe(true)
+    // Nothing else moved: the base is still two commits away if it was.
+    expect(result.alreadyUpToDate).toBe(false)
+  })
+
+  // Re-pointing an upstream that is already right would be a write for nothing,
+  // and `setUpstream` would then say this push changed something it did not.
+  it('leaves a branch that already tracks its own branch on the remote alone', async () => {
+    const repo = await repository({ withRemote: true })
+    await repo.git(['checkout', '-q', '-b', 'feature'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('some work')
+    await repo.git(['push', '-u', 'origin', 'refs/heads/feature:refs/heads/feature'])
+
+    const pushes: string[][] = []
+    const recording: GitRunner = {
+      binary: repo.runner.binary,
+      run: (options) => repo.runner.run(options),
+      async tryRun(options) {
+        if (options.args[0] === 'push') pushes.push([...options.args])
+        return repo.runner.tryRun(options)
+      }
+    }
+
+    const result = await pushWorktree(recording, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      branch: 'feature',
+      baseRef: 'origin/main',
+      now: () => 777
+    })
+
+    expect(pushes[0]).not.toContain('--set-upstream')
+    expect(result.setUpstream).toBe(false)
+    expect(result.upstream).toBe('origin/feature')
+    expect(result.alreadyUpToDate).toBe(true)
+  })
+
+  // The base ref is the one upstream this may move, because it is the one no
+  // person chose. Anything else in that slot was somebody's decision.
+  it('leaves an upstream somebody chose deliberately where they put it', async () => {
+    const repo = await repository({ withRemote: true })
+    await repo.git(['checkout', '-q', '-b', 'feature'])
+    await repo.write('work.ts', 'export const a = 1\n')
+    await repo.commit('some work')
+    await repo.git(['push', 'origin', 'refs/heads/feature:refs/heads/elsewhere'])
+    await repo.git(['branch', '--set-upstream-to=origin/elsewhere', 'feature'])
+
+    const result = await pushWorktree(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      branch: 'feature',
+      baseRef: 'origin/main',
+      now: () => 777
+    })
+
+    expect(await repo.git(['rev-parse', '--abbrev-ref', 'feature@{upstream}'])).toBe('origin/elsewhere')
+    expect(result.upstream).toBe('origin/elsewhere')
+    expect(result.setUpstream).toBe(false)
+  })
+
   it('refuses a remote name shaped like a flag', async () => {
     const repo = await repository({ withRemote: true })
 
