@@ -1,12 +1,19 @@
-/* Modal layer and the form controls it contains. */
+/* Modal layer and the form controls it contains.
+
+   One frame for every dialog: centred over the window, the raised surface with
+   its border and radius, a head with the title, and a body the frame pads on
+   the same edge as the head. The content classes below — a form, the palette,
+   a confirm — lay out what is inside them and never inset themselves, which is
+   how the sentence under a question comes to start where the question does.
+   Every dialog ends in `.modal__actions`: one right-aligned row, the answer
+   that changes nothing first and the one that goes through with it last. */
 
 .modal-layer {
   position: fixed;
   inset: 0;
   z-index: 60;
   display: grid;
-  place-items: start center;
-  padding-top: 14vh;
+  place-items: center;
   background: var(--scrim);
   backdrop-filter: blur(2px);
   animation: scrim-in var(--motion-fast) var(--ease);
@@ -36,11 +43,30 @@
   font-size: var(--text-sm);
 }
 
+.modal__body {
+  padding: 0 var(--s5) var(--s5);
+}
+
+/* The last row of every dialog. 8px between buttons, which is the one gap in
+   these sheets off the spacing ramp: it is the gap a row of native buttons
+   has, and a dialog is the one place the app draws a row of them. */
+.modal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: var(--s1);
+}
+
+/* Four answers is more than a row holds in a narrow window. */
+.modal__actions--wrap {
+  flex-wrap: wrap;
+}
+
 .form {
   display: flex;
   flex-direction: column;
   gap: var(--s4);
-  padding: 0 var(--s5) var(--s5);
 }
 
 .field {
@@ -163,14 +189,6 @@ select.field__input {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--s4);
-}
-
-.form__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--s2);
-  padding-top: var(--s1);
 }
 
 .form__note {
@@ -357,9 +375,6 @@ select.field__input {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  /* Padded like a form body, so the input lines up with the title above it
-     rather than running flush to the panel's edge. */
-  padding: 0 var(--s5) var(--s5);
 }
 
 /* A palette is a list to scan, not fields to fill, so it wants more width than
@@ -441,10 +456,10 @@ select.field__input {
   font-size: var(--text-xs);
 }
 
-/* The confirmation for discarding a worktree. Wordy on purpose: this is the
-   one place in the app where reading the sentence matters. */
+/* A question with two answers — see Confirm.tsx. The title is the question,
+   the body one line, and whatever a question needs to add under it is a
+   detail or a path. */
 .confirm {
-  width: min(440px, 84vw);
   display: flex;
   flex-direction: column;
   gap: var(--s3);
@@ -468,12 +483,6 @@ select.field__input {
   color: var(--fg-muted);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-}
-
-.confirm__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--s2);
 }
 
 .button--danger {
@@ -534,16 +543,6 @@ select.field__input {
   overflow-wrap: anywhere;
   color: var(--fg-secondary);
   font-size: var(--text-sm);
-}
-
-/* Wrapping rather than scrolling: four answers is more than a row holds in a
-   narrow window, and a button that ran off the edge would be an answer the
-   owner could not give. */
-.consent__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--s2);
 }
 
 .consent__note {

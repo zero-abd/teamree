@@ -83,6 +83,19 @@ describe('answering it', () => {
     expect(buttons.indexOf('Leave it open')).toBeLessThan(buttons.indexOf('Stop it and close'))
   })
 
+  // Through the one confirm the app has, so it is framed, padded and keyed like
+  // every other question: the body on the title's edge, the two answers in one
+  // right-aligned row, the destructive one red and last.
+  it('is drawn through the shared confirm', () => {
+    seed(terminal())
+    mount()
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.querySelector('.modal__body > .confirm > .confirm__body')?.textContent).toMatch(/claude is working/)
+    const actions = [...dialog.querySelectorAll('.modal__actions > .button')]
+    expect(actions.map((button) => button.textContent)).toEqual(['Leave it open', 'Stop it and close'])
+    expect(actions[1]?.classList.contains('button--danger')).toBe(true)
+  })
+
   it('leaves the pane alone when the answer is no', () => {
     seed(terminal())
     mount()

@@ -14,7 +14,7 @@
 // has stopped mattering is how a safeguard becomes a thing to click past.
 
 import { useEffect } from 'react'
-import { Modal } from './Modal'
+import { Confirm } from './Confirm'
 import { closePaneWarning } from './closePaneModel'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
@@ -37,25 +37,16 @@ export function ConfirmClosePaneDialog({ terminalId }: { terminalId: string }): 
   if (warning === null) return null
 
   return (
-    <Modal title={warning.title} onClose={closeDialog}>
-      <div className="confirm">
-        <p className="confirm__body">{warning.body}</p>
-        <div className="confirm__actions">
-          <button type="button" className="button" onClick={closeDialog}>
-            Leave it open
-          </button>
-          <button
-            type="button"
-            className="button button--danger"
-            onClick={() => {
-              closeDialog()
-              void forceCloseTerminal(terminalId)
-            }}
-          >
-            {warning.confirm}
-          </button>
-        </div>
-      </div>
-    </Modal>
+    <Confirm
+      title={warning.title}
+      body={warning.body}
+      cancel="Leave it open"
+      confirm={warning.confirm}
+      onCancel={closeDialog}
+      onConfirm={() => {
+        closeDialog()
+        void forceCloseTerminal(terminalId)
+      }}
+    />
   )
 }

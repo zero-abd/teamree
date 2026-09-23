@@ -62,14 +62,15 @@
 
 /* The two sidebar toggles — one at the end of the sidebar's header, one at the
    start of the pane strip once the sidebar is away — drawn as the strip's
-   other icon buttons are. */
+   pane buttons are: the same 24px button around the same 16px icon box, so
+   that on the collapsed strip it is one more control in the same row. */
 .shell__toggle {
   display: flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: var(--r1);
@@ -83,8 +84,8 @@
 }
 
 .shell__toggle svg {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentcolor;
   stroke-width: 1.2;

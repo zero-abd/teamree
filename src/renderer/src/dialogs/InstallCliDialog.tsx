@@ -55,7 +55,7 @@ export function InstallCliDialog(): React.JSX.Element {
         {error ? <p className="cli-install__error">{error}</p> : null}
         {install && error === null ? <p className="cli-install__done">{cliOutcome(install)}</p> : null}
 
-        <div className="form__actions">
+        <div className="modal__actions">
           <button type="button" className="button button--ghost" onClick={closeDialog}>
             Close
           </button>

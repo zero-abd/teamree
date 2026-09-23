@@ -83,7 +83,10 @@ export function Modal({ title, description, onClose, children }: ModalProps): Re
     const panel = panelRef.current
     const id = idRef.current
     stack.push(id)
-    panel?.querySelector<HTMLElement>(FOCUSABLE)?.focus()
+    // The control marked as the safe answer, if the dialog named one, else the
+    // first. A confirm names its cancel or its confirm depending on which one
+    // is safe to press by reflex, and Enter then goes where the focus ring is.
+    ;(panel?.querySelector<HTMLElement>('[data-default]') ?? panel?.querySelector<HTMLElement>(FOCUSABLE))?.focus()
 
     const onKeyDown = (event: KeyboardEvent): void => {
       // Not the innermost modal, so not this one's key. Checked first, and for
@@ -140,7 +143,12 @@ export function Modal({ title, description, onClose, children }: ModalProps): Re
           <h2 className="modal__title">{title}</h2>
           {description ? <p className="modal__description">{description}</p> : null}
         </header>
-        <EscapeClaims value={register}>{children}</EscapeClaims>
+        {/* The frame pads the body on the same edge as the head. Content
+            classes bring their own layout and never their own inset, so a
+            sentence under a title starts where the title does. */}
+        <div className="modal__body">
+          <EscapeClaims value={register}>{children}</EscapeClaims>
+        </div>
       </div>
     </div>
   )

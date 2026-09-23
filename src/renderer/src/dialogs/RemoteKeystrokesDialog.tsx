@@ -92,12 +92,13 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
           {request.handle} is on this project’s roster as {request.publicKey.slice(0, 12)}…
         </p>
 
-        <div className="consent__actions">
-          <button
-            type="button"
-            className="button button--danger"
-            onClick={() => void decideConsent(request.id, 'deny', shown)}
-          >
+        {/* Refuse first and plain, not red: it is the answer that changes
+            nothing, which is the one a reflex should land on, and red is for
+            the button that destroys something. Wrapping rather than
+            scrolling: four answers is more than a row holds in a narrow
+            window, and an answer off the edge is one the owner cannot give. */}
+        <div className="modal__actions modal__actions--wrap">
+          <button type="button" className="button" onClick={() => void decideConsent(request.id, 'deny', shown)}>
             Refuse
           </button>
           <button type="button" className="button" onClick={() => void decideConsent(request.id, 'once', shown)}>

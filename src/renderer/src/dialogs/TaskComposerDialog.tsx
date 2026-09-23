@@ -223,7 +223,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
           branchName={branchName}
         />
 
-        <footer className="form__actions">
+        <footer className="modal__actions">
           <p className="form__note">{taskPlanNote(agents, agentsProbed, selection)}</p>
           <button type="button" className="button button--ghost" onClick={closeDialog}>
             Cancel
