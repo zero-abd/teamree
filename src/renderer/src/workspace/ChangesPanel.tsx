@@ -49,7 +49,10 @@ export function ChangesPanel(): React.JSX.Element | null {
   const changes = useWorkspaceStore((state) => (worktreeId ? state.changes[worktreeId] : undefined))
   const selectedPath = useWorkspaceStore((state) => state.selectedChangePath)
   const diff = useWorkspaceStore((state) => state.diff)
+  const stagedDiff = useWorkspaceStore((state) => state.stagedDiff)
   const diffPending = useWorkspaceStore((state) => state.diffPending)
+  const hunkPending = useWorkspaceStore((state) => state.hunkPending)
+  const applyHunk = useWorkspaceStore((state) => state.applyHunk)
   const diffLayout = useWorkspaceStore((state) => state.diffLayout)
   const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
   const selectChange = useWorkspaceStore((state) => state.selectChange)
@@ -224,10 +227,42 @@ export function ChangesPanel(): React.JSX.Element | null {
           <div className="changes__diff">
             {diffPending ? (
               <p className="changes__empty">Reading the patch…</p>
-            ) : diff && diff.patch !== '' ? (
-              <PatchView patch={diff.patch} truncated={diff.truncated} layout={diffLayout} />
-            ) : (
+            ) : (diff === null || diff.patch === '') && stagedDiff === null ? (
               <p className="changes__empty">No patch for this path.</p>
+            ) : (
+              <>
+                {/* The staged half first, because it is what the next commit
+                    already contains and the working half is what is still being
+                    decided. Headings only appear once there is something on
+                    both sides of the line — a patch with nothing staged is the
+                    ordinary case and reads better with nothing above it. */}
+                {stagedDiff === null ? null : (
+                  <>
+                    <h3 className="changes__half">Staged</h3>
+                    <PatchView
+                      patch={stagedDiff.patch}
+                      truncated={stagedDiff.truncated}
+                      layout={diffLayout}
+                      action="Unstage"
+                      busy={hunkPending}
+                      onHunk={(file, hunk) => void applyHunk(file.path, hunk, false)}
+                    />
+                  </>
+                )}
+                {diff === null || diff.patch === '' ? null : (
+                  <>
+                    {stagedDiff === null ? null : <h3 className="changes__half">Unstaged</h3>}
+                    <PatchView
+                      patch={diff.patch}
+                      truncated={diff.truncated}
+                      layout={diffLayout}
+                      action="Stage"
+                      busy={hunkPending}
+                      onHunk={(file, hunk) => void applyHunk(file.path, hunk, true)}
+                    />
+                  </>
+                )}
+              </>
             )}
           </div>
         </>

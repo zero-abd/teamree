@@ -81,6 +81,7 @@ import {
   writeStoredTerminalFontSize
 } from './preferences'
 import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen } from './paneSeen'
+import type { PatchHunk } from '@shared/patch'
 import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
@@ -494,7 +495,18 @@ type WorkspaceState = {
    * empty `agents` means "not asked yet", not "none installed". */
   agentsProbed: boolean
   diff: WorktreeDiff | null
+  /**
+   * The same path's staged patch, read alongside the working-tree one.
+   *
+   * Two reads rather than one because the two halves are different questions —
+   * `git diff` and `git diff --cached` — and a hunk cannot be offered a Stage
+   * or an Unstage without knowing which half it came out of. Null means there
+   * is nothing staged for this path, which is the ordinary case.
+   */
+  stagedDiff: WorktreeDiff | null
   diffPending: boolean
+  /** True while a hunk is being staged or unstaged, so the controls settle. */
+  hunkPending: boolean
 
   collapsedProjects: Record<string, boolean>
   openWorktreeIds: string[]
@@ -659,6 +671,14 @@ type WorkspaceState = {
   /** Every changed path, or none. */
   setAllStaged: (staged: boolean) => void
   commitStaged: (message: string) => Promise<void>
+  /**
+   * Puts one hunk of a file into the index, or takes it back out.
+   *
+   * The hunk is handed back exactly as it was parsed out of the patch on
+   * screen, so what gets staged is what was being looked at; the runtime
+   * refuses it if the file has moved on since.
+   */
+  applyHunk: (path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
   /** Sends the active worktree's branch to its remote. Never forces. */
   pushActiveWorktree: () => Promise<void>
   /** Opens a pane already running one of the agents found on this machine. */
@@ -1040,12 +1060,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
    */
   const refreshDiff = async (worktreeId: string, path: string): Promise<void> => {
     set({ diffPending: true })
-    const diff = await runtimeClient.call('worktree.diff', { worktreeId, path }).catch(() => null)
+    // Both halves at once: which of them a hunk came out of is what decides
+    // whether it is offered a Stage or an Unstage, and reading them apart would
+    // let the panel draw one against a repository the other never saw.
+    const [diff, staged] = await Promise.all([
+      runtimeClient.call('worktree.diff', { worktreeId, path }).catch(() => null),
+      runtimeClient.call('worktree.diff', { worktreeId, path, staged: true }).catch(() => null)
+    ])
     // The selection can move while a patch is in flight; a late answer for a
     // path nobody is looking at any more must not replace the current one.
     const current = get()
     if (current.selectedChangePath !== path || current.activeWorktreeId !== worktreeId) return
-    set({ diff, diffPending: false })
+    set({ diff, stagedDiff: staged && staged.patch !== '' ? staged : null, diffPending: false })
   }
 
   /**
@@ -1398,7 +1424,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     agents: [],
     agentsProbed: false,
     diff: null,
+    stagedDiff: null,
     diffPending: false,
+    hunkPending: false,
 
     // Which projects are folded away is a per-person arrangement of the same
     // sidebar the width belongs to, so it is remembered on the same terms.
@@ -1685,7 +1713,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // does not travel to another's — the tab you arrive at is the tab as
         // you left it.
         ...(switching
-          ? { selectedChangePath: null, diff: null, diffPending: false, stagedPaths: [], expandedTerminalId: null }
+          ? {
+              selectedChangePath: null,
+              diff: null,
+              stagedDiff: null,
+              diffPending: false,
+              stagedPaths: [],
+              expandedTerminalId: null
+            }
           : {})
       }))
       if (get().changesOpen) {
@@ -2013,11 +2048,35 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // The runtime announces the write, so the list and the chips refetch
         // through the same path everything else does; doing it here as well
         // would be a second way for this window to disagree with the others.
-        set({ stagedPaths: [], selectedChangePath: null, diff: null })
+        set({ stagedPaths: [], selectedChangePath: null, diff: null, stagedDiff: null })
       } catch (error) {
         failed('Could not commit')(error)
       } finally {
         set({ committing: false })
+      }
+    },
+
+    async applyHunk(path, hunk, staged) {
+      const worktreeId = get().activeWorktreeId
+      if (!worktreeId || get().hunkPending) return
+
+      set({ hunkPending: true })
+      try {
+        // The parsed hunk goes over the wire as it stands: the contract's own
+        // shape is a subset of it, so nothing here reshapes what was on screen.
+        await runtimeClient.call(staged ? 'worktree.stageHunk' : 'worktree.unstageHunk', {
+          worktreeId,
+          path,
+          hunk
+        })
+        // Nothing is set here. The runtime announces the write, and both halves
+        // of the patch come back through the same invalidation the file list
+        // and the chips ride — which is also the only route the other windows
+        // have, so this one must not get ahead of them.
+      } catch (error) {
+        failed(staged ? 'Could not stage that hunk' : 'Could not unstage that hunk')(error)
+      } finally {
+        set({ hunkPending: false })
       }
     },
 
@@ -2442,7 +2501,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     selectChange(path) {
       const worktreeId = get().activeWorktreeId
-      set({ selectedChangePath: path, diff: null, diffPending: path !== null })
+      set({ selectedChangePath: path, diff: null, stagedDiff: null, diffPending: path !== null })
       if (path === null || !worktreeId) return
       void refreshDiff(worktreeId, path).catch((error: unknown) => {
         set({ diffPending: false })

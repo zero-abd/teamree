@@ -438,6 +438,101 @@ describe('a push that opened a review', () => {
 })
 
 describe('selectors and flags reach the runtime', () => {
+  // The hunk number is the CLI's own convenience and never leaves it: the
+  // command resolves it against a patch it reads one call earlier and sends the
+  // hunk itself, so the runtime is never handed a position it would have to
+  // trust.
+  it('turns --hunk into the hunk, counting the patch it was told to count', async () => {
+    const twoHunks = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,3 +1,3 @@',
+      ' one',
+      '-two',
+      '+TWO',
+      ' three',
+      '@@ -20,3 +20,3 @@',
+      ' twenty',
+      '-x',
+      '+X',
+      ' twentytwo',
+      ''
+    ].join('\n')
+
+    const cli = await harness((method, params) => {
+      if (method === 'worktree.diff') {
+        return { worktreeId: 'wt_1', path: 'src/app.ts', staged: false, patch: twoHunks, truncated: false, readAt: 1 }
+      }
+      if (method === 'worktree.stageHunk' || method === 'worktree.unstageHunk') {
+        return {
+          worktreeId: 'wt_1',
+          path: 'src/app.ts',
+          staged: method.endsWith('stageHunk'),
+          added: 1,
+          removed: 1,
+          appliedAt: 1
+        }
+      }
+      return defaultHandler(method, params, { id: '', emit: () => {}, respond: () => {} })
+    })
+
+    const result = await cli.run(['worktree', 'stage-hunk', 'fix-login', '--path', 'src/app.ts', '--hunk', '2'])
+    expect(result.code).toBe(ExitCode.Success)
+    // Staging counts the working-tree patch, so the diff it read is the unstaged one.
+    expect(cli.stub.received.find((call) => call.method === 'worktree.diff')).toMatchObject({
+      params: { worktreeId: 'wt_1', path: 'src/app.ts', staged: false }
+    })
+    expect(cli.stub.received.at(-1)).toMatchObject({
+      method: 'worktree.stageHunk',
+      params: {
+        worktreeId: 'wt_1',
+        path: 'src/app.ts',
+        hunk: {
+          oldStart: 20,
+          oldCount: 3,
+          newStart: 20,
+          newCount: 3,
+          lines: [
+            { kind: 'context', text: 'twenty' },
+            { kind: 'removed', text: 'x' },
+            { kind: 'added', text: 'X' },
+            { kind: 'context', text: 'twentytwo' }
+          ]
+        }
+      }
+    })
+
+    // And unstaging counts the other patch.
+    await cli.run(['worktree', 'unstage-hunk', 'fix-login', '--path', 'src/app.ts', '--hunk', '1'])
+    expect(cli.stub.received.filter((call) => call.method === 'worktree.diff').at(-1)).toMatchObject({
+      params: { staged: true }
+    })
+    expect(cli.stub.received.at(-1)).toMatchObject({
+      method: 'worktree.unstageHunk',
+      params: { hunk: { oldStart: 1, newStart: 1 } }
+    })
+  })
+
+  it('refuses a hunk number the patch does not have, without calling the runtime', async () => {
+    const cli = await harness((method, params) => {
+      if (method === 'worktree.diff') {
+        return { worktreeId: 'wt_1', path: 'src/app.ts', staged: false, patch: '', truncated: false, readAt: 1 }
+      }
+      return defaultHandler(method, params, { id: '', emit: () => {}, respond: () => {} })
+    })
+
+    const result = await cli.run(['worktree', 'stage-hunk', 'fix-login', '--path', 'src/app.ts', '--hunk', '3'])
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(cli.stub.received.some((call) => call.method === 'worktree.stageHunk')).toBe(false)
+  })
+
+  it('needs a path to stage a hunk of', async () => {
+    const cli = await harness()
+    const result = await cli.run(['worktree', 'stage-hunk', 'fix-login', '--hunk', '1'])
+    expect(result.code).toBe(ExitCode.Usage)
+  })
+
   it('resolves a worktree name to its id', async () => {
     const cli = await harness()
     await cli.run(['worktree', 'remove', 'fix-login', '--force', '--delete-branch'])
@@ -739,7 +834,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(53)
+    expect(data.commands.length).toBe(55)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

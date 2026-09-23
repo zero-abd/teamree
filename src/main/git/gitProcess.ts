@@ -47,6 +47,16 @@ export type GitRun = {
    * `--progress`.
    */
   onStderr?: (chunk: string) => void
+  /**
+   * Written to the process's stdin, which is then closed.
+   *
+   * Only `git apply` needs it, and it needs it rather than a file because the
+   * patch being applied is assembled in memory from a hunk somebody clicked:
+   * a temp file would be the same bytes plus a path to clean up and a window
+   * in which another process could read them. Left undefined, stdin is the
+   * inherited pipe nobody writes to, which is what every other call here wants.
+   */
+  stdin?: string
 }
 
 export type GitOutput = {
@@ -161,6 +171,14 @@ function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
       stop()
     }
     signal?.addEventListener('abort', onAbort, { once: true })
+
+    if (run.stdin !== undefined) {
+      // EPIPE is the normal end of a git that refused the patch before reading
+      // all of it, and it arrives as an unhandled error on the stream rather
+      // than as the exit code that actually describes the failure.
+      child.stdin.on('error', () => undefined)
+      child.stdin.end(run.stdin)
+    }
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')

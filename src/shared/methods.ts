@@ -30,6 +30,7 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeDiff,
+  WorktreeHunkStage,
   WorktreeLog,
   WorktreeMergePreview,
   WorktreePush,
@@ -121,6 +122,53 @@ export const MAX_AGENT_ARGS_CHARS = 4096
  * stores is bounded somewhere.
  */
 export const MAX_SETUP_COMMAND_CHARS = 4096
+
+/**
+ * The most lines one hunk may carry over the wire.
+ *
+ * Generous — a hunk that size is a file somebody replaced, not a change
+ * anybody reviews — and here so a caller cannot hand the runtime a megabyte of
+ * "hunk" to reassemble. The protocol's own frame ceiling is the outer bound;
+ * this is the one that says what a hunk is.
+ */
+export const MAX_HUNK_LINES = 20_000
+
+/**
+ * One hunk of a patch, carried whole rather than named by its position.
+ *
+ * The alternative was an index into the diff plus a fingerprint of the hunk's
+ * content, and it is the weaker of the two for the same reason: it makes the
+ * runtime re-derive the hunk from a diff it must re-read with whatever context
+ * width the caller happened to use, so a disagreement becomes an argument about
+ * arithmetic rather than about content. Sent whole, the hunk *is* the patch —
+ * git checks it against the index and against the working tree itself, and a
+ * stale one is refused by the only thing qualified to refuse it.
+ *
+ * Line numbers per line are deliberately absent: those are the parser's output,
+ * and the header already carries the two the format needs. What travels is what
+ * the hunk is made of. A `PatchHunk` from `parsePatch` satisfies this as it
+ * stands, which is the point — a caller hands back what it was shown.
+ */
+export const Hunk = z.object({
+  oldStart: z.number().int().min(0),
+  oldCount: z.number().int().min(0),
+  newStart: z.number().int().min(0),
+  newCount: z.number().int().min(0),
+  lines: z
+    .array(
+      z.object({
+        kind: z.enum(['added', 'removed', 'context']),
+        text: z.string(),
+        /** What `\ No newline at end of file` was said about, said about the line. */
+        noNewline: z.boolean().optional()
+      })
+    )
+    .min(1)
+    .max(MAX_HUNK_LINES)
+})
+
+/** One hunk as it crosses the wire: the shape `Hunk` validates. */
+export type HunkInput = z.infer<typeof Hunk>
 
 export const Params = {
   statusGet: z.object({}),
@@ -234,6 +282,30 @@ export const Params = {
   worktreeStartPoints: z.object({
     projectId: z.string().min(1),
     limit: z.number().int().positive().optional()
+  }),
+
+  /**
+   * Puts one hunk of the working-tree patch into the index, and nothing else.
+   *
+   * Whole-file staging is `worktree.commit`'s `paths`; this is the other half
+   * of the same idea, for the change that is two unrelated edits in one file.
+   * The hunk is the one read out of `worktree.diff` for this path, handed back
+   * as it was read. Only the index is written — the working tree is never
+   * touched, so nothing a person has open changes underneath them.
+   *
+   * A binary file and an untracked one have no hunk to name: both stage whole,
+   * and this refuses them rather than inventing a partial answer.
+   */
+  worktreeStageHunk: z.object({
+    worktreeId: z.string().min(1),
+    path: z.string().min(1).max(4096),
+    hunk: Hunk
+  }),
+  /** The same in reverse: takes one hunk of the staged patch back out of the index. */
+  worktreeUnstageHunk: z.object({
+    worktreeId: z.string().min(1),
+    path: z.string().min(1).max(4096),
+    hunk: Hunk
   }),
 
   /** Coding agents found on PATH, so a pane can start one without being told. */
@@ -707,6 +779,8 @@ export type MethodContract = {
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
   'worktree.commit': { params: z.infer<typeof Params.worktreeCommit>; result: WorktreeCommit }
+  'worktree.stageHunk': { params: z.infer<typeof Params.worktreeStageHunk>; result: WorktreeHunkStage }
+  'worktree.unstageHunk': { params: z.infer<typeof Params.worktreeUnstageHunk>; result: WorktreeHunkStage }
   'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
   'worktree.log': { params: z.infer<typeof Params.worktreeLog>; result: WorktreeLog }
   'worktree.mergePreview': {

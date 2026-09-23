@@ -773,6 +773,16 @@ export function createSeededRuntimeClient(): RuntimeClient {
       }
     },
 
+    // Refused, like the other writes to a repository that is not there. The
+    // seeded patches are strings this file invented; "staged" would be a claim
+    // about an index nothing here has.
+    'worktree.stageHunk': () => {
+      throw new Error('the seeded runtime has no index to stage into')
+    },
+    'worktree.unstageHunk': () => {
+      throw new Error('the seeded runtime has no index to unstage from')
+    },
+
     'teamwork.relay': ({ projectId }) => relaySetting(projectId),
     // Refused rather than faked. The seeded runtime has no repository behind
     // it, so a demo that claimed to have set a remote or made a commit would be

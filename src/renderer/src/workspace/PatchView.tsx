@@ -31,14 +31,34 @@ const STATUS_NOTE: Record<PatchFile['status'], string> = {
   modified: ''
 }
 
+/**
+ * What the control on a hunk header does, and the word on it.
+ *
+ * A verb and nothing else. The panel is narrow, the two words are opposites,
+ * and which one appears is already decided by which half of the patch the hunk
+ * is in — a sentence explaining that would be longer than the patch.
+ */
+export type HunkAction = 'Stage' | 'Unstage'
+
 export function PatchView({
   patch,
   truncated,
-  layout
+  layout,
+  action,
+  busy = false,
+  onHunk
 }: {
   patch: string
   truncated: boolean
   layout: DiffLayout
+  /**
+   * The verb every hunk here is offered. Absent leaves the patch read-only,
+   * which is what every other caller of this component wants.
+   */
+  action?: HunkAction
+  /** True while one is in flight, so a second click cannot race the first. */
+  busy?: boolean
+  onHunk?: (file: PatchFile, hunk: PatchHunk) => void
 }): React.JSX.Element {
   // Parsed once per patch rather than per render: the panel re-renders on every
   // refresh tick the worktree produces, and a patch is a few thousand lines.
@@ -73,7 +93,19 @@ export function PatchView({
               // By position: two hunks of a patch cut short at a byte ceiling
               // can arrive with the same header and no content to tell them
               // apart, and a duplicate key drops one of them from the screen.
-              <HunkView hunk={hunk} key={at} language={syntaxLanguage(file.path)} layout={layout} />
+              <HunkView
+                hunk={hunk}
+                key={at}
+                language={syntaxLanguage(file.path)}
+                layout={layout}
+                busy={busy}
+                {...(action === undefined || onHunk === undefined
+                  ? {}
+                  : // A binary file has no hunks to reach this, and an added
+                    // one stages whole — the runtime refuses a hunk of either,
+                    // so the control is not offered for them here.
+                    { action, onHunk: () => onHunk(file, hunk) })}
+              />
             ))
           )}
         </details>
@@ -86,18 +118,45 @@ export function PatchView({
 function HunkView({
   hunk,
   language,
-  layout
+  layout,
+  action,
+  busy,
+  onHunk
 }: {
   hunk: PatchHunk
   language: SyntaxLanguage | null
   layout: DiffLayout
+  action?: HunkAction
+  busy: boolean
+  onHunk?: () => void
 }): React.JSX.Element {
   return (
     <details className="patch__hunk" open>
       {/* Sticky, and the reason the whole panel scrolls in one container: the
           `@@` line is the only thing on screen that says which part of the file
           is underneath the cursor, and it is the first thing to scroll away. */}
-      <summary className="patch__hunkHead">{hunk.header}</summary>
+      <summary className="patch__hunkHead">
+        {/* The header in a span of its own, so the control beside it is not
+            part of the line somebody reads the position off. */}
+        <span className="patch__hunkAt">{hunk.header}</span>
+        {action === undefined || onHunk === undefined ? null : (
+          <button
+            type="button"
+            className="patch__stage"
+            disabled={busy}
+            // The header is a `summary`, so a click inside it folds the hunk
+            // unless the button keeps it. Nobody asking to stage a hunk is also
+            // asking to stop looking at it.
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onHunk()
+            }}
+          >
+            {action}
+          </button>
+        )}
+      </summary>
       <div className="patch__lines">
         {layout === 'split'
           ? pairLines(hunk.lines).map((row, index) => (

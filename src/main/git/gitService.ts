@@ -22,6 +22,7 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeDiff,
+  WorktreeHunkStage,
   WorktreeLog,
   WorktreeMergePreview,
   WorktreePush,
@@ -41,6 +42,7 @@ import { allocateBranchName, allocateCheckoutPath, branchCollides } from './work
 import { readMergePreview } from './mergePreview'
 import { readWorktreeLog } from './worktreeLog'
 import { commitWorktree } from './worktreeCommit'
+import { applyHunk } from './worktreeHunk'
 import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
@@ -472,6 +474,34 @@ export class GitService {
       worktreePath: worktree.path,
       message: params.message,
       ...(params.paths === undefined ? {} : { paths: params.paths }),
+      now: this.#now
+    })
+  }
+
+  /**
+   * Puts one hunk of the working-tree patch into the index.
+   *
+   * The only write here besides a commit that changes what the next commit will
+   * contain, and the only one that writes the index without being asked for a
+   * commit at all. It never touches the working tree; see `worktreeHunk.ts`.
+   */
+  async worktreeStageHunk(params: ParamsOf<'worktree.stageHunk'>): Promise<WorktreeHunkStage> {
+    return this.#applyHunk(params, true)
+  }
+
+  /** The same in reverse: takes one hunk of the staged patch back out. */
+  async worktreeUnstageHunk(params: ParamsOf<'worktree.unstageHunk'>): Promise<WorktreeHunkStage> {
+    return this.#applyHunk(params, false)
+  }
+
+  async #applyHunk(params: ParamsOf<'worktree.stageHunk'>, staged: boolean): Promise<WorktreeHunkStage> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, staged ? 'staging' : 'unstaging')
+    return applyHunk(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      path: params.path,
+      hunk: params.hunk,
+      staged,
       now: this.#now
     })
   }
