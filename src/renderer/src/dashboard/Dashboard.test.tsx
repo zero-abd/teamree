@@ -147,3 +147,44 @@ describe('where the keyboard lands', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: /atlas/ }))
   })
 })
+
+// The board is where the question "which of these said something while I was
+// away" is asked across every worktree at once, so it is the one surface that
+// gets a filter rather than only a mark.
+describe('the unread filter', () => {
+  const printed = (id: string, title: string): Terminal => ({ ...PANE, id, title })
+
+  function seedTwo(): void {
+    seed({
+      terminals: { alpha: printed('alpha', 'alpha'), beta: printed('beta', 'beta') },
+      // Beta was in front of this person after it last printed; alpha has said
+      // something since.
+      paneSeenAt: { beta: Date.now() + 60_000 }
+    })
+  }
+
+  it('hides the panes that have already been read', () => {
+    seedTwo()
+    render(<Dashboard modifier={MODIFIER} />)
+    expect(screen.getByText('alpha')).toBeTruthy()
+    expect(screen.getByText('beta')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unread only' }))
+
+    expect(screen.getByText('alpha')).toBeTruthy()
+    expect(screen.queryByText('beta')).toBeNull()
+  })
+
+  it('goes back to every pane when it is pressed again', () => {
+    seedTwo()
+    render(<Dashboard modifier={MODIFIER} />)
+    const toggle = screen.getByRole('button', { name: 'Unread only' })
+
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(toggle)
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByText('beta')).toBeTruthy()
+  })
+})

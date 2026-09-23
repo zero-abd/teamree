@@ -26,6 +26,7 @@ import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 import { TeamworkView } from '../teamwork/TeamworkView'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { ChangesPanel } from './ChangesPanel'
+import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { terminalTarget } from './terminalTarget'
 import { TerminalTabs } from './TerminalTabs'
@@ -45,6 +46,12 @@ export function WorkspaceArea({
   const closeWatchedPane = useWorkspaceStore((state) => state.closeWatchedPane)
   const noteWatchedPaneOutput = useWorkspaceStore((state) => state.noteWatchedPaneOutput)
   const closeHint = shortcutHint('close-pane', modifier)
+
+  // Here rather than inside `WorkspaceMain`, because this component is the one
+  // that is always mounted: the surfaces below it replace each other, and the
+  // moment the panes stop being on screen is exactly the moment the pane that
+  // was focused has to be written down as read.
+  useMarkPanesSeen()
 
   // Keyed by the pane rather than by position, so closing the first of three
   // does not remount — and so re-open — the two beside it.

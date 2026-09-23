@@ -139,6 +139,13 @@
   white-space: nowrap;
 }
 
+/* The same mark the sidebar draws, on the same pane. See `.pip` in sidebar.css
+   for why it is a weight and a dot rather than a number. */
+.tab--unread .tab__name {
+  color: var(--fg);
+  font-weight: 600;
+}
+
 /* The name being typed, sized to the slot it replaces so the strip does not
    jump as a tab turns into a field and back. */
 .tab__rename-field {

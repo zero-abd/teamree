@@ -44,6 +44,14 @@ type WorktreeRowProps = {
    * this row is where a pane nobody is looking at says it anyway.
    */
   watchers: Readonly<Record<string, PaneAttention>>
+  /**
+   * Panes that have printed since this person last had them in front of them.
+   *
+   * Passed in rather than read here, because the sidebar asks the store once
+   * for every row: one reading of "what is unread" for the whole window, which
+   * is the same bargain `evidence` above makes.
+   */
+  unread: ReadonlySet<string>
   now: number
   onFocusTerminal: (terminalId: string) => void
   active: boolean
@@ -72,6 +80,7 @@ export function WorktreeRow({
   terminals,
   evidence,
   watchers,
+  unread,
   now,
   active,
   onFocusTerminal,
@@ -121,6 +130,9 @@ export function WorktreeRow({
   ]
   const rows = worktree.state === 'ready' ? agentRows(terminals, worktree.id, now, evidence) : []
   const overall = worktreeActivity(rows)
+  // Rolled up the way the dot is: the collapsed row says that something under
+  // it wants reading, and the pane rows say which.
+  const unreadHere = rows.some((row) => unread.has(row.terminalId))
 
   return (
     <li
@@ -163,7 +175,7 @@ export function WorktreeRow({
               line below with the branch is what stops four badges from
               squeezing the one thing that identifies the row. */}
           <span className="worktree__title">
-            <span className="worktree__name" title={worktree.name}>
+            <span className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`} title={worktree.name}>
               {worktree.name}
             </span>
             {overall ? (
@@ -173,6 +185,10 @@ export function WorktreeRow({
                 aria-label={ACTIVITY_LABEL[overall]}
               />
             ) : null}
+            {/* Beside the dot rather than instead of it: what a pane is doing
+                and whether you have read it are two facts, and a pane can be
+                finished and unread, or working and already seen. */}
+            {unreadHere ? <span className="pip" title="unread" /> : null}
           </span>
           <span className="worktree__meta">
             <span className="worktree__branch">{worktree.branch}</span>
@@ -223,16 +239,18 @@ export function WorktreeRow({
             // running commands as you is the more urgent of the two facts, and
             // they are almost always the same person anyway.
             const hands = typing.length > 0 ? typedBy(typing) : watchedBy(attention.watchers)
+            const isUnread = unread.has(row.terminalId)
             return (
               <li key={row.terminalId}>
                 <button
                   type="button"
-                  className="pane-row"
-                  title={paneTitle(row, attention, typing)}
+                  className={`pane-row${isUnread ? ' pane-row--unread' : ''}`}
+                  title={paneTitle(row, attention, typing, isUnread)}
                   onClick={() => onFocusTerminal(row.terminalId)}
                 >
                   <span className="pane-row__head">
                     <span className={`activity activity--${row.activity}`} aria-hidden="true" />
+                    {isUnread ? <span className="pip" aria-hidden="true" /> : null}
                     {/* Shortened for the row and only for the row: the hover text above
                         carries the whole of it, and so does the record. */}
                     <span className="pane-row__label">{truncateName(row.label)}</span>
@@ -286,8 +304,15 @@ export function WorktreeRow({
 
 /** The hover text, which says where the quoted line came from — the row itself
  *  has no room to, and a line with no provenance reads as a verdict. */
-function paneTitle(row: AgentRow, attention: PaneAttention, typing: readonly { handle: string }[]): string {
-  const head = `${row.label} · ${ACTIVITY_LABEL[row.activity]} · last output ${sinceLabel(row.quietFor)} ago`
+function paneTitle(
+  row: AgentRow,
+  attention: PaneAttention,
+  typing: readonly { handle: string }[],
+  unread: boolean
+): string {
+  const head = `${row.label} · ${ACTIVITY_LABEL[row.activity]}${unread ? ' · unread' : ''} · last output ${sinceLabel(
+    row.quietFor
+  )} ago`
   const lines = [row.evidence ? `${head}\nlast printed: ${row.evidence}` : head]
   if (attention.watchers.length > 0) lines.push(watchedBy(attention.watchers))
   if (typing.length > 0) lines.push(typedBy(typing))

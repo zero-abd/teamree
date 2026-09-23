@@ -95,6 +95,7 @@ function mount(
     terminals?: Terminal[]
     evidence?: Record<string, string | null>
     watchers?: Record<string, PaneAttention>
+    unread?: Iterable<string>
     active?: boolean
     editorLabel?: string
   } = {}
@@ -108,6 +109,7 @@ function mount(
         terminals={overrides.terminals ?? []}
         evidence={overrides.evidence ?? {}}
         watchers={overrides.watchers ?? {}}
+        unread={new Set(overrides.unread ?? [])}
         now={NOW}
         active={overrides.active ?? false}
         editorLabel={overrides.editorLabel ?? 'Zed'}
@@ -484,5 +486,27 @@ describe('the row menu from the keyboard', () => {
     expect(screen.queryByRole('menu')).toBeNull()
     expect(document.activeElement).toBe(openButton())
     expect(handlers.onRemove).not.toHaveBeenCalled()
+  })
+})
+
+// Which panes have said something since this person last read them. The row is
+// where the question is answered for a worktree that is not the one on screen,
+// which is the whole of the gap: the sidebar used to read identically whether a
+// worktree had been triaged a second ago or yesterday.
+describe('panes that have printed since they were read', () => {
+  it('marks the pane, and the worktree above it', () => {
+    mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], unread: ['t1'] })
+
+    const pane = screen.getByRole('button', { name: /claude/ })
+    expect(pane.className).toContain('pane-row--unread')
+    expect(pane.title).toContain('unread')
+    expect(screen.getByText('Rewrite the pager').className).toContain('worktree__name--unread')
+  })
+
+  it('says nothing about a pane nothing has arrived in since', () => {
+    mount({ terminals: [terminal({ id: 't1', agent: 'claude' })] })
+
+    expect(screen.getByRole('button', { name: /claude/ }).className).not.toContain('pane-row--unread')
+    expect(screen.getByText('Rewrite the pager').className).not.toContain('worktree__name--unread')
   })
 })

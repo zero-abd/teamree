@@ -682,6 +682,39 @@
   }
 }
 
+/* A pane has printed since this person last had it in front of them.
+
+   Weight and one dot, never a count. How many lines an agent wrote while you
+   were at lunch is not a thing anybody acts on, and a number invites being read
+   as progress; what a reader does with this is decide whether to open the pane,
+   which is a yes or a no.
+
+   Beside the activity dot rather than in place of it, because they are two
+   different facts about one pane: a pane can be finished and unread, or working
+   and already read. Nothing here moves — the dot next to it pulses while output
+   arrives and is stilled under `prefers-reduced-motion`, and a second animated
+   thing in the same 7px of row would be noise in either setting.
+
+   The accent at full strength rather than as a tint: this mark sits on the
+   sidebar, on the strip above the panes and on the board, and it has to hold up
+   against the lightest of those grounds. */
+.pip {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 99px;
+  background: var(--accent-bright);
+}
+
+/* The name carries it too, because the pip is 5px and the name is what the eye
+   is already reading down the list. Full-strength ink as well as weight: a row
+   worth going to should not be the dimmest thing on its line. */
+.worktree__name--unread,
+.pane-row--unread .pane-row__label {
+  color: var(--fg);
+  font-weight: 600;
+}
+
 .panes {
   margin: 0;
   padding: 0 0 var(--s1) 28px;

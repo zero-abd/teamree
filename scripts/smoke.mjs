@@ -679,6 +679,103 @@ async function checkWorktreeSurfaces(ask) {
     () => ask('document.querySelector(\'[role="dialog"]\') === null'),
     'closing a quiet shell put a question on the screen, which it is not supposed to'
   )
+
+  await checkUnreadPanes(ask, call, worktreeId)
+}
+
+/**
+ * That a pane which printed while somebody was looking at another one says so.
+ *
+ * The one behaviour in this window whose two halves are both real: when a pty
+ * last spoke, which only a running runtime knows, and when its pane was last in
+ * front of this person, which only a rendered window does. A unit test can say
+ * that a class is drawn from a set; nothing short of a launch can say that
+ * output arriving in one pane while the focus is in another ends as a mark on
+ * the right row.
+ *
+ * Last in this function, and after the close above rather than before it: a
+ * pane is busy for four seconds after it prints, and a busy pane is one the
+ * window is right to ask about before closing — so printing into one earlier
+ * would have this check break the one below it.
+ */
+async function checkUnreadPanes(ask, call, worktreeId) {
+  // Every pane is read first, by pressing each tab in turn: focusing a pane
+  // writes down both the one taken and the one left behind. So whatever is
+  // marked afterwards is what this check caused, rather than a prompt that
+  // happened to print while the panes were being opened.
+  const strip = await ask(`document.querySelectorAll('[role="tab"]').length`)
+  for (let index = 0; index < strip; index += 1) {
+    await ask(
+      `(() => {
+         const tabs = [...document.querySelectorAll('[role="tab"]')]
+         tabs[${index}]?.click()
+         return true
+       })()`
+    )
+  }
+
+  // Which pane the last of those presses landed on, read twice so a `layout.set`
+  // still in flight cannot be mistaken for the answer.
+  let focusedPaneId = null
+  const settled = await waitFor(async () => {
+    const read = await call('layout.get', { worktreeId })
+    if (read.ok !== true || read.result.focusedTerminalId === null) return false
+    const same = read.result.focusedTerminalId === focusedPaneId
+    focusedPaneId = read.result.focusedTerminalId
+    return same
+  }, 'the window never settled on a focused pane, so nothing could be left unread')
+  if (!settled) return
+
+  const panes = await call('terminal.list', { worktreeId })
+  const quiet = panes.ok === true ? panes.result.find((pane) => pane.id !== focusedPaneId) : undefined
+  if (quiet === undefined) {
+    failures.push('there was no second pane to print into, so the unread mark could not be checked')
+    return
+  }
+
+  const wrote = await call('terminal.write', { terminalId: quiet.id, data: 'echo teamree-unread\n' })
+  if (wrote.ok !== true) {
+    failures.push(`could not print into a pane: ${JSON.stringify(wrote.error ?? wrote)}`)
+    return
+  }
+
+  // Both surfaces in one wait rather than two, because the budget this whole
+  // gate runs on is thirty seconds and a wait that never comes true spends
+  // fifteen of them.
+  const marked = await waitFor(
+    () =>
+      ask(
+        `(() => {
+           const tabs = [...document.querySelectorAll('[role="tab"]')]
+           const unread = tabs.filter((tab) => tab.closest('.tab')?.classList.contains('tab--unread'))
+           const selected = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')
+           // Exactly one, and never the pane being looked at: a mark on the
+           // focused tab would be the window telling somebody they have not
+           // read what is on their screen.
+           return (
+             unread.length === 1 &&
+             !selected?.closest('.tab')?.classList.contains('tab--unread') &&
+             document.querySelector('.pane-row--unread') !== null
+           )
+         })()`
+      ),
+    'a pane that printed while another was focused was not marked unread on the strip and in the sidebar'
+  )
+  if (!marked) {
+    // What the window actually had, so the failure names a cause rather than a
+    // selector.
+    const said = await ask(
+      `JSON.stringify({
+         tabs: [...document.querySelectorAll('[role="tab"]')].map((tab) => ({
+           name: tab.textContent?.trim(),
+           selected: tab.getAttribute('aria-selected'),
+           unread: Boolean(tab.closest('.tab')?.classList.contains('tab--unread'))
+         })),
+         sidebarRows: document.querySelectorAll('.pane-row--unread').length
+       })`
+    )
+    failures.push(`the window said: ${said}`)
+  }
 }
 
 /**
