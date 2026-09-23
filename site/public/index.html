@@ -28,637 +28,346 @@
 <meta name="twitter:description" content="An ADE built for teamwork. Several coding agents at once, each in its own git worktree, all of them in one window.">
 <meta name="twitter:image" content="https://teamree.us/og.png">
 <style>
-/* The visual system: pure black, one accent hue at many alphas, and surfaces
-   that are white washes rather than greys — so the hero's grid and bloom show
-   through the cards near the top of the page and they read as glass.
+/* The page is built the way the window is: a rail on the left that names
+   things, a pane on the right that holds them. Three tones from brand/ do the
+   whole job — the ground, the tile, the ink — and the accent is spent only
+   where the app spends it: a link, a focus ring, the one status dot.
 
-   Three rules hold the whole thing together:
-   - The grid belongs to the hero alone and is masked to an ellipse, so it
-     dissolves before it reaches an edge. Unmasked and full-page it stops being
-     graph paper and becomes 1px rules through body copy.
-   - Emphasis is a zero-offset coloured halo, never a drop shadow. On black an
-     offset shadow is invisible; light coming off an object is not. The one
-     exception is the scrolled navbar, which does lift.
-   - Radius scales with the size of the object: 6 / 8 / 12 / 16 / 20 / pill.
+   Emphasis is never a glow. A raised surface is the tile tone on the ground;
+   a well (a terminal) is the ground inside the tile. That is the entire
+   vocabulary, and it is the app's own.
 
-   Every colour here was measured against the ground it actually sits on — pure
-   black, a white-wash card, the code well, or a grid line (white at 10%, an
-   effective #1a1a1a). Two values deliberately depart from the reference design
-   because the reference fails WCAG at those points; both are noted below. */
+   Type is the system face, on purpose. This is a macOS application and the
+   page sets in the face the window sets in; nothing is downloaded and nothing
+   swaps after the first paint. Commands are set in the system monospace.
+
+   Motion answers the reader and nothing else. The mark in the hero opens as
+   the page is scrolled — a spring follows the scroll position, so it can be
+   reversed mid-flight and settles with its own weight — and buttons answer a
+   press on a spring curve. Nothing loops and nothing fades in for effect. All
+   of it is off under prefers-reduced-motion. */
 :root{
-  --bg:#0B0C0E;
-
-  /* Surfaces: washes, not greys. */
-  --wash-1:#101114;
-  --wash-2:#141519;
-  --wash-3:#18191e;
-  --hairline:rgb(243 242 238 / 10%);
-  --hairline-hover:rgb(139 140 247 / 44%);
-  /* Code recedes while cards advance: the well is darker and bluer than the
-     page, where every card is lighter than it. A terminal is a hole; a card is
-     a plate. That is the whole separation, now that everything is dark. */
-  --well:#101114;
-  --well-2:#0E0F12;
-
-  /* Text. The reference puts its tertiary text at rgb(255 255 255 / 40%), which
-     composites to #666 on black — 3.66:1, a fail. Ours is 58% (6.92:1 on black,
-     6.60:1 on a wash card). Secondary at 72% is 10.5:1. */
-  --fg:#F3F2EE;
-  --fg-secondary:#C8C7C2;
-  --fg-muted:#A09F9B;
-
+  --ground:#0B0C0E;
+  --tile:#101114;
+  --tile-2:#151619;
+  --ink:#F3F2EE;
+  --ink-2:#C8C7C2;
+  --ink-3:#A09F9B;
+  --line:rgb(243 242 238 / 9%);
+  --line-2:rgb(243 242 238 / 16%);
   --accent:#8b8cf7;
-  --accent-bright:#A9AAFF;
-  --accent-soft:rgb(139 140 247 / 15%);
-  --accent-line:rgb(139 140 247 / 40%);
-  /* The primary button is a gradient, as asked, but a shade deeper than the
-     reference's #6366f1 -> #818cf8: white on #818cf8 is 2.98:1, so the
-     reference's own call to action is unreadable across most of its fill. At
-     these two stops white is 6.29:1 at the dark end and 4.79:1 at the light
-     end. Same hue, same direction, a couple of RGB points darker. */
-  --btn-a:#4f46e5;
-  --btn-b:#615fee;
+  --accent-2:#A9AAFF;
+  --working:#4ade80;
+  --waiting:#e3aa4f;
+  --failed:#f0625a;
 
-  --success:#4ade80;
-  --warning:#e3aa4f;
-  --danger:#f0625a;
-  --mark-a:#5ee0c0;
-  --mark-b:#7aa2ff;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
 
-  /* Inter first, then the system faces. The webfont is deliberately NOT loaded:
-     this site's own content-security-policy is `font-src 'self'; style-src
-     'self'`, so a font CDN is blocked outright, and the reference project that
-     set the brief declares Inter and never actually applies it — so the face
-     everyone has been looking at and approving IS the system face. This stack
-     reproduces it exactly, at no cost. Drop an @font-face in and nothing else
-     here needs to change. */
-  --font-ui:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  --font-mono:ui-monospace,SFMono-Regular,"SF Mono","Fira Code",Menlo,Consolas,monospace;
+  --t-13:.8125rem; --t-15:.9375rem; --t-17:1.0625rem; --t-20:1.25rem;
+  --t-24:1.5rem;
+  --t-h2:clamp(1.5rem,1.2rem + 1vw,1.75rem);
+  --t-h1:clamp(2.5rem,1.4rem + 4.4vw,4.5rem);
 
-  --text-xs:.8125rem;
-  --text-sm:.9375rem;
-  --text-base:1.0625rem;
-  --text-md:1.125rem;
-  --text-lg:clamp(1.125rem,.98rem + .6vw,1.3125rem);
-  --text-xl:clamp(1.25rem,1.08rem + .7vw,1.5rem);
-  --text-2xl:clamp(2rem,1.45rem + 2.2vw,2.75rem);
-  --text-3xl:clamp(2.5rem,1.6rem + 3.6vw,4rem);
+  --nav-h:60px;
+  --rail:280px;
+  --gutter:64px;
+  --maxw:1180px;
+  --pad:32px;
 
-  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px; --s7:32px; --s8:48px; --s9:64px; --s10:96px;
+  --r:6px; --r2:10px; --r3:14px;
 
-  --r1:6px; --r2:8px; --r3:12px; --r4:16px; --r5:20px; --r-pill:9999px;
-  --maxw:1100px;
-  --nav-top:40px;
-  --nav-h:56px;
-  --motion:300ms;
-  --ease:cubic-bezier(.4,0,.2,1);
+  --quick:160ms;
+  --ease:cubic-bezier(.2,0,0,1);
+  /* One spring, sampled: mass 1, stiffness 260, damping 22, 480ms. Slight
+     overshoot, the way a pressed thing comes back. Browsers without linear()
+     drop the second declaration and keep the ease above it. */
+  --spring:linear(0, 0.045, 0.153, 0.294, 0.443, 0.586, 0.712 25%, 0.818, 0.901, 0.963, 1.006, 1.033, 1.047 50%, 1.053, 1.052, 1.047, 1.04, 1.032, 1.024 75%, 1.017, 1.011, 1.007, 1.003, 1, 0.999 100%);
 }
 
 *,*::before,*::after{ box-sizing:border-box; }
 html{
-  -webkit-text-size-adjust:100%; scroll-behavior:smooth;
-  /* So an anchor never lands underneath the floating pill. */
-  scroll-padding-top:calc(var(--nav-top) + var(--nav-h) + 16px);
-  background:var(--bg);
+  -webkit-text-size-adjust:100%; background:var(--ground);
+  scroll-padding-top:calc(var(--nav-h) + 24px);
 }
 body{
-  margin:0; background:var(--bg); color:var(--fg);
-  font-family:var(--font-ui); font-size:var(--text-base); line-height:1.65;
-  /* Correct on a dark ground: light type on black blooms, and switching off
-     subpixel rendering is what keeps it from looking bloated. */
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--font); font-size:var(--t-17); line-height:1.6;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  overflow-x:hidden;
 }
-
-/* Motion. Two gestures only: the pill tightens its halo once the page has
-   moved, and things arriving in the viewport rise a little as they fade in.
-   Both are gated — the reference project honours no motion preference at all,
-   and a landing page is not the place to start ignoring one. */
-.reveal{ opacity:0; transform:translateY(16px); transition:opacity .55s var(--ease), transform .55s var(--ease); }
-.reveal.shown{ opacity:1; transform:none; }
-@media (prefers-reduced-motion:reduce){
-  html{ scroll-behavior:auto; }
-  .reveal{ opacity:1; transform:none; transition:none; }
-  .site-header{ transition:none; }
-  *,*::before,*::after{ animation-duration:1ms !important; animation-iteration-count:1 !important; transition-duration:1ms !important; }
-}
-
-/* --------------------------------------------------------------- the hero -- */
-.hero-section{ position:relative; overflow:hidden; }
-.grid-bg{
-  position:absolute; inset:0; pointer-events:none; z-index:0;
-  background-image:
-    linear-gradient(rgb(255 255 255 / 10%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 10%) 1px, transparent 1px);
-  background-size:80px 80px, 80px 80px;
-  /* Centred, so the leftover fraction of a cell splits evenly instead of piling
-     into one fat partial column against the right edge at 768 and 375. */
-  background-position:50% 0;
-  mask-image:radial-gradient(ellipse 80% 80% at 50% 50%, #000 40%, transparent 100%);
-  -webkit-mask-image:radial-gradient(ellipse 80% 80% at 50% 50%, #000 40%, transparent 100%);
-}
-/* Pulled above the top edge so only the lower lobe shows and the light reads as
-   arriving from off the page rather than from a blob sitting on it. */
-.hero-glow{
-  position:absolute; top:-20%; left:50%; transform:translateX(-50%);
-  width:800px; height:600px; max-width:150vw; pointer-events:none; z-index:0;
-  background:radial-gradient(ellipse, rgb(99 102 241 / 12%) 0%, rgb(99 102 241 / 4%) 40%, transparent 70%);
-}
-/* On a phone the hero is twice as tall as it is wide, and the ellipse tuned at
-   1440 then reaches past the bottom edge: every vertical line was still at
-   about 60% where the hero ends, so the grid did not dissolve, it was cut off
-   along the section's border. A flatter ellipse sitting higher is gone 120px
-   clear of that edge. The lines also drop from 10% to 6% — at 375 there are
-   under five columns and at 10% they stop being texture behind the headline
-   and become rules through it. */
-@media (max-width:700px){
-  .grid-bg{
-    background-image:
-      linear-gradient(rgb(255 255 255 / 6%) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(255 255 255 / 6%) 1px, transparent 1px);
-    mask-image:radial-gradient(ellipse 88% 58% at 50% 26%, #000 26%, transparent 100%);
-    -webkit-mask-image:radial-gradient(ellipse 88% 58% at 50% 26%, #000 26%, transparent 100%);
-  }
-  /* The bloom is 800 wide against a 375 page. Left at 150vw it is a wall of
-     violet rather than light arriving from off the top; narrower and pulled
-     further up, only the lobe shows, which is what it does at 1440. */
-  .hero-glow{ top:-26%; width:620px; height:520px; max-width:125vw; }
-}
-.hero-section > .wrap{ position:relative; z-index:1; }
-main, footer{ position:relative; z-index:1; }
-
 img{ max-width:100%; height:auto; display:block; }
-h1,h2,h3{ margin:0; text-wrap:balance; }
-h1{ font-size:var(--text-3xl); font-weight:800; line-height:1.08; letter-spacing:-.03em; }
-h2{ font-size:var(--text-2xl); font-weight:800; line-height:1.14; letter-spacing:-.02em; max-width:24ch; }
-h3{ font-size:var(--text-md); font-weight:700; line-height:1.3; letter-spacing:-.02em; }
-p,ul,ol{ margin:0; }
-p{ text-wrap:pretty; hyphens:none; }
-a{ color:var(--accent-bright); text-decoration:none; }
+h1,h2,h3{ margin:0; text-wrap:balance; font-weight:600; letter-spacing:-.02em; }
+h1{ font-size:var(--t-h1); line-height:1.02; letter-spacing:-.035em; }
+h2{ font-size:var(--t-h2); line-height:1.2; }
+h3{ font-size:var(--t-20); line-height:1.3; letter-spacing:-.015em; }
+p,ul,ol,figure{ margin:0; }
+p{ text-wrap:pretty; }
+a{ color:var(--accent-2); text-decoration:none; }
 a:hover{ text-decoration:underline; text-underline-offset:3px; }
-/* Light violet rather than the accent itself: on a page whose whole premise is
-   one violet call to action, a violet ring on an ordinary link would read as
-   "this is the primary action". The 2px offset is load-bearing — it keeps page
-   black on both sides of the ring, so the ring never has to resolve against the
-   button's own bright fill, where it would be 1.6:1 and vanish. */
-:focus-visible{ outline:2px solid #b9baff; outline-offset:2px; border-radius:var(--r1); box-shadow:0 0 0 6px rgb(99 102 241 / 28%); }
-@media (forced-colors:active){ :focus-visible{ outline:3px solid Highlight; box-shadow:none; } }
-::selection{ background:rgb(99 102 241 / 40%); color:#fff; }
-code,kbd{ font-family:var(--font-mono); }
+:focus-visible{ outline:2px solid var(--accent-2); outline-offset:3px; border-radius:var(--r); }
+@media (forced-colors:active){ :focus-visible{ outline:3px solid Highlight; } }
+::selection{ background:rgb(139 140 247 / 35%); color:#fff; }
+code,kbd,pre{ font-family:var(--mono); }
+strong,b{ color:var(--ink); font-weight:600; }
 
-.wrap{ width:100%; max-width:var(--maxw); margin:0 auto; padding:0 var(--s6); }
-@media (max-width:560px){ .wrap{ padding:0 var(--s5); } }
-/* White on the flat accent is 4.47:1 and misses; on the gradient's dark stop it
-   is 6.29:1. The skip link is the first thing a keyboard user meets, so it uses
-   the stop that passes. */
-.skip{ position:absolute; left:-9999px; top:0; z-index:200; background:var(--btn-a); color:#fff; padding:var(--s3) var(--s4); font-weight:600; border-radius:0 0 var(--r2) 0; }
+.wrap{ width:100%; max-width:var(--maxw); margin:0 auto; padding:0 var(--pad); }
+@media (max-width:560px){ :root{ --pad:20px; } }
+
+.skip{ position:absolute; left:-9999px; top:0; z-index:200; background:var(--ink); color:var(--ground); padding:12px 16px; font-weight:600; border-radius:0 0 var(--r2) 0; }
 .skip:focus{ left:0; }
 
-/* --------------------------------------------------------------- branding -- */
-.brand{ display:inline-flex; align-items:center; gap:10px; color:var(--fg); font-weight:700; font-size:var(--text-md); letter-spacing:-.025em; white-space:nowrap; }
-.brand:hover{ text-decoration:none; }
-/* The mark sits on a rounded tile everywhere it is shown as a badge. The tile is
-   this box and the artwork is the image inside it, kept apart on purpose so the
-   vector can replace the raster without touching the lockup — and so a reduced
-   small-size variant can drop in for the header without changing anything else. */
-.brand .tile{
-  width:34px; height:34px; flex:none; border-radius:22.5%;
-  background:linear-gradient(to bottom,#101114,#0B0C0E); border:1px solid rgb(243 242 238 / 10%);
-  display:flex; align-items:center; justify-content:center;
-  transition:border-color var(--motion) var(--ease), background var(--motion) var(--ease);
-}
-.brand:hover .tile{ border-color:var(--hairline-hover); }
-.brand .mark{ width:22px; height:22px; color:#F3F2EE; }
-.brand .wordmark-svg{ width:92px; height:18px; color:var(--fg); }
-.brand .word{ display:inline-flex; align-items:baseline; gap:3px; }
-.brand .dot{ width:5px; height:5px; border-radius:50%; background:var(--accent-bright); flex:none; }
-
-/* --------------------------------------------------------- floating navbar -- */
-/* A pill that floats clear of the page rather than a bar ruled across it. On a
-   black ground an offset shadow is invisible, so separation comes from a
-   zero-offset coloured halo — and the halo tightens and gains the design's one
-   y-offset once the page has scrolled. */
+/* ------------------------------------------------------------------ header -- */
+/* A bar, not a pill. Transparent over the hero; once the page has moved it
+   becomes a material — the ground at 72% behind a blur, with a hairline — so
+   the content passing under it is felt rather than hidden. */
 .site-header{
-  position:fixed; top:var(--nav-top); left:50%; transform:translateX(-50%);
-  z-index:100; width:auto; max-width:calc(100vw - 32px);
-  background:rgb(0 0 0 / 50%);
-  backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
-  border:1px solid rgb(99 102 241 / 30%); border-radius:var(--r-pill);
-  box-shadow:0 0 30px rgb(99 102 241 / 20%);
-  transition:background var(--motion) var(--ease), border-color var(--motion) var(--ease), box-shadow var(--motion) var(--ease);
+  position:fixed; top:0; left:0; right:0; z-index:100; height:var(--nav-h);
+  background:transparent; border-bottom:1px solid transparent;
+  transition:background var(--quick) var(--ease), border-color var(--quick) var(--ease);
+}
+.site-header.scrolled, .site-header[data-nav="open"], .site-header:has(.nav:target){
+  background:rgb(11 12 14 / 72%); border-color:var(--line);
+  backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
 }
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .site-header{ background:rgb(0 0 0 / 92%); }
+  .site-header.scrolled, .site-header[data-nav="open"], .site-header:has(.nav:target){ background:rgb(11 12 14 / 96%); }
 }
-.site-header.scrolled{
-  background:rgb(0 0 0 / 80%);
-  border-color:rgb(99 102 241 / 50%);
-  box-shadow:0 10px 50px rgb(99 102 241 / 60%);
-}
-.header-row{ display:flex; align-items:center; gap:var(--s7); min-height:var(--nav-h); padding:0 var(--s4) 0 var(--s6); }
-.nav{ display:flex; align-items:center; justify-content:flex-end; gap:var(--s7); font-size:var(--text-sm); font-weight:500; }
-.nav a{ color:var(--fg-secondary); display:inline-flex; align-items:center; min-height:40px; white-space:nowrap; transition:color var(--motion) var(--ease); }
-.nav a:hover{ color:#fff; text-decoration:none; }
-.nav .ghlink{
-  display:inline-flex; align-items:center; gap:7px;
-  padding:8px 15px; min-height:38px; border-radius:var(--r-pill);
-  border:1px solid rgb(255 255 255 / 15%); font-size:var(--text-xs);
-  transition:border-color var(--motion) var(--ease), background var(--motion) var(--ease), color var(--motion) var(--ease);
-}
-.nav .ghlink:hover{ border-color:rgb(99 102 241 / 50%); background:var(--accent-soft); color:#fff; }
-.nav .ghlink svg{ width:15px; height:15px; fill:currentColor; flex:none; }
-/* The disclosure that opens the phone menu. Absent above 820px, where the links
-   are already in the row. */
+.header-row{ display:flex; align-items:center; justify-content:space-between; gap:24px; height:var(--nav-h); }
+.brand{ display:inline-flex; align-items:center; color:var(--ink); min-height:44px; }
+.brand:hover{ text-decoration:none; }
+.brand .lockup{ width:118px; height:auto; display:block; }
+.brand .dot{ width:5px; height:5px; border-radius:50%; background:var(--accent); flex:none; margin:8px 0 0 3px; }
+.nav{ display:flex; align-items:center; gap:28px; font-size:var(--t-15); font-weight:500; }
+.nav a{ color:var(--ink-2); display:inline-flex; align-items:center; min-height:44px; white-space:nowrap; transition:color var(--quick) var(--ease); }
+.nav a:hover{ color:var(--ink); text-decoration:none; }
+.nav .ghlink{ gap:8px; color:var(--ink); }
+.nav .ghlink svg{ width:16px; height:16px; fill:currentColor; flex:none; }
 .nav-toggle{ display:none; }
 
-/* Below 820px — which is also 200% zoom on an ordinary laptop — the pill keeps
-   one row and the links move into a panel behind a disclosure.
-
-   Spreading all four across a second row, which is what this did before, cost
-   107px of a 667px screen permanently, ran the GitHub chip off the right edge
-   at 320, and still left every link short of a 44px target. One row is 62px,
-   and the panel can then give each destination a full-width 48px row. Nothing
-   is dropped: the same four links are in the panel, in the same order.
-
-   No link is hidden from a reader without JavaScript either. The panel is a
-   region with an id and the toggle is an ordinary link to it, so `:target`
-   opens it with no script at all; the script only upgrades that to a
-   disclosure that does not touch the URL.
-
-   `left`/`right` rather than a `100vw` width: vw includes a classic scrollbar,
-   which would push the pill's right edge under it at 200% zoom on a desktop. */
+/* Below 820px the links move into a panel behind a disclosure. No link is hidden
+   from a reader without JavaScript: the toggle is an ordinary link to the panel
+   and `:target` opens it; the script only upgrades that to a disclosure that
+   leaves the address bar alone. */
 @media (max-width:820px){
-  :root{ --nav-top:12px; --nav-h:60px; }
-  .site-header{
-    left:var(--s3); right:var(--s3); transform:none; width:auto; max-width:none;
-    border-radius:var(--r5);
-  }
-  .header-row{
-    flex-wrap:wrap; gap:var(--s3); justify-content:space-between;
-    min-height:var(--nav-h); padding:0 var(--s4);
-  }
-  /* The lockup is a link, so it is a touch target like any other. */
-  .brand{ min-height:44px; }
-
+  .site-header{ height:auto; min-height:var(--nav-h); }
+  /* The row grows with the panel, so the header's ground is under all of it. */
+  .header-row{ flex-wrap:wrap; height:auto; min-height:var(--nav-h); }
   .nav-toggle{
-    display:inline-flex; align-items:center; gap:8px;
-    min-height:44px; min-width:44px; padding:0 var(--s3);
-    border:1px solid rgb(255 255 255 / 15%); border-radius:var(--r-pill);
-    color:var(--fg-secondary); background:var(--wash-2);
-    font-size:var(--text-xs); font-weight:600; white-space:nowrap;
-    transition:color var(--motion) var(--ease), border-color var(--motion) var(--ease), background var(--motion) var(--ease);
+    display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 4px;
+    color:var(--ink-2); font-size:var(--t-15); font-weight:500;
   }
-  .nav-toggle:hover{ color:#fff; border-color:var(--hairline-hover); background:var(--accent-soft); text-decoration:none; }
-  .nav-toggle svg{ width:13px; height:13px; fill:currentColor; flex:none; transition:transform var(--motion) var(--ease); }
-  .site-header[data-nav="open"] .nav-toggle{ color:#fff; border-color:var(--hairline-hover); background:var(--accent-soft); }
+  .nav-toggle:hover, .site-header[data-nav="open"] .nav-toggle{ color:var(--ink); text-decoration:none; }
+  .nav-toggle svg{ width:12px; height:12px; fill:currentColor; transition:transform var(--quick) var(--ease); }
   .site-header[data-nav="open"] .nav-toggle svg{ transform:rotate(180deg); }
-  /* Glass at 50% is right for a 62px pill sitting on mostly-black. Opened, the
-     same 50% is a 291px panel laid over the headline, and the headline reads
-     straight through the blur. The open state is a surface, not a veil.
-     Two rules, not one selector list: a browser without `:has()` drops the
-     whole list, and that would take the state that does the work with it. */
-  .site-header[data-nav="open"]{ background:rgb(0 0 0 / 94%); }
-  .site-header:has(.nav:target){ background:rgb(0 0 0 / 94%); }
-
-  /* The panel. Closed by default in CSS, so it is closed on the first paint and
-     not after a frame of script. */
   .nav{
-    display:none; order:3; width:100%;
-    flex-direction:column; align-items:stretch; justify-content:flex-start;
-    gap:var(--s1); font-size:var(--text-sm);
-    margin:0 0 var(--s3); padding-top:var(--s3);
-    border-top:1px solid var(--hairline);
+    display:none; width:100%; flex-direction:column; align-items:stretch; gap:0;
+    padding:8px 0 12px; border-top:1px solid var(--line);
   }
   .site-header[data-nav="open"] .nav, .nav:target{ display:flex; }
-  .nav a{
-    min-height:48px; width:100%; justify-content:flex-start;
-    padding:0 var(--s3); border-radius:var(--r2);
-  }
-  .nav a:hover{ background:var(--wash-2); }
-  .nav .ghlink{ margin-top:var(--s1); min-height:48px; padding:0 var(--s3); border-radius:var(--r2); font-size:var(--text-sm); }
-}
-@media (max-width:420px){
-  .header-row{ padding:0 var(--s3); }
-  .nav-toggle{ padding:0 var(--s2); }
+  .nav a{ min-height:48px; }
+  /* Opened, the panel lies over the headline: a surface, not a veil. Two
+     rules, not one list, so a browser without :has() keeps the working one. */
+  .site-header[data-nav="open"]{ background:rgb(11 12 14 / 96%); border-color:var(--line); }
+  .site-header:has(.nav:target){ background:rgb(11 12 14 / 96%); border-color:var(--line); }
 }
 
-/* ------------------------------------------------------------------- hero -- */
-.hero{ padding-block:calc(var(--nav-top) + var(--nav-h) + var(--s10)) var(--s10); text-align:center; }
-.hero-icon{ width:112px; height:112px; display:block; margin:0 auto var(--s6); filter:drop-shadow(0 0 28px rgb(139 140 247 / 18%)); }
-/* The reservation is the pill's own two numbers plus a gap, so it cannot drift
-   away from the pill: --nav-h is redefined alongside --nav-top in the same
-   breakpoint that resizes the header, and this, and the scroll-padding that
-   stops an anchor landing underneath, both follow it. */
-@media (max-width:820px){
-  /* The section rule adds another 64px on top of the reservation, which put the
-     headline 110px below a pill it was supposed to clear by 46. The hero owns
-     its own top spacing here so the calc above is the whole of it. */
-  .hero-section{ padding-top:0; }
-  .hero{ padding-block:calc(var(--nav-top) + var(--nav-h) + var(--s8)) var(--s9); }
+/* -------------------------------------------------------------------- hero -- */
+/* The hero sits on the same rail and pane as everything below it: the mark in
+   the rail, the words in the pane. */
+.hero{ padding:calc(var(--nav-h) + 96px) 0 80px; }
+.hero-mark{ width:168px; height:126px; display:block; margin:6px 0 0 -10px; color:var(--ink); }
+.hero .rail{ position:static; }
+.hero h1{ max-width:16ch; }
+.hero .lede{ margin-top:28px; max-width:52ch; font-size:var(--t-20); line-height:1.5; color:var(--ink-2); }
+.cta{ margin-top:40px; display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.btn, .btn-2{
+  display:inline-flex; align-items:center; gap:10px; min-height:48px; padding:0 20px;
+  border-radius:var(--r2); font:inherit; font-weight:600; font-size:var(--t-15); line-height:1.2;
+  text-decoration:none; cursor:pointer; -webkit-tap-highlight-color:transparent;
+  transition:transform 480ms var(--ease), background var(--quick) var(--ease), border-color var(--quick) var(--ease);
+  transition-timing-function:var(--spring), var(--ease), var(--ease);
 }
-.hero h1{ margin-inline:auto; max-width:17ch; font-size:clamp(2.75rem,1.7rem + 4vw,4.5rem); letter-spacing:-.045em; }
-.hero .lede{ margin-inline:auto; max-width:54ch; }
-h1 em{
-  font-style:normal;
-  background:linear-gradient(135deg, #818cf8, #a5b4fc, #c7d2fe);
-  -webkit-background-clip:text; background-clip:text;
-  -webkit-text-fill-color:transparent; color:#a5b4fc;
-}
-.lede{ margin-top:var(--s6); font-size:var(--text-lg); color:var(--fg-secondary); max-width:54ch; line-height:1.6; }
-.lede strong{ color:#fff; font-weight:600; }
-
-/* --------------------------------------------------------------- download -- */
-.cta{ margin-top:var(--s8); display:flex; flex-wrap:wrap; align-items:stretch; justify-content:center; gap:var(--s4); }
-.btn{
-  display:inline-flex; align-items:center; gap:var(--s3);
-  background:linear-gradient(to bottom right, var(--btn-a), var(--btn-b)); color:#fff;
-  font:inherit; font-weight:600; font-size:var(--text-sm);
-  padding:15px 26px; border-radius:var(--r3); border:0;
-  transition:box-shadow var(--motion) var(--ease), transform var(--motion) var(--ease);
-  /* Halo outward, hairline highlight inward. The pair is what makes it read lit. */
-  box-shadow:0 0 20px rgb(99 102 241 / 30%), inset 0 1px 0 rgb(255 255 255 / 10%);
-}
-.btn:hover{ text-decoration:none; transform:translateY(-2px); box-shadow:0 0 30px rgb(99 102 241 / 50%), inset 0 1px 0 rgb(255 255 255 / 10%); }
-.btn:active{ transform:translateY(0); }
-.btn .apple{ width:19px; height:23px; fill:currentColor; flex:none; margin-top:-2px; }
-.btn .stack{ display:flex; flex-direction:column; line-height:1.25; text-align:left; }
-.btn .stack small{ font-size:var(--text-xs); font-weight:500; opacity:.82; }
-.btn-ghost{
-  display:inline-flex; align-items:center; gap:var(--s2);
-  color:#fff; background:var(--wash-2); border:1px solid var(--hairline);
-  padding:15px 24px; border-radius:var(--r3); font-weight:600; font-size:var(--text-sm);
-  transition:border-color var(--motion) var(--ease), background var(--motion) var(--ease), transform var(--motion) var(--ease);
-}
-.btn-ghost:hover{ border-color:var(--hairline-hover); background:var(--wash-3); text-decoration:none; transform:translateY(-2px); }
-.btn-ghost svg{ width:16px; height:16px; fill:currentColor; flex:none; }
-.dl-note{ margin-top:var(--s6); font-size:var(--text-sm); color:var(--fg-muted); max-width:60ch; margin-inline:auto; text-align:center; }
-
-/* --------------------------------------------------------------- sections -- */
-section{ padding:var(--s10) 0; }
-section + section{ border-top:1px solid var(--hairline); }
-@media (max-width:820px){ section{ padding:var(--s9) 0; } }
-/* One alignment rule for the whole page, so that nothing is centred or left by
-   accident:
-
-     A section header — its eyebrow, its heading, its lede — is CENTRED.
-     Everything below the header is set LEFT, and its block is centred in the
-     column, so its left edge is a decision rather than wherever the wrap ends.
-
-   Figure captions follow their header and centre; the download unit centres in
-   both the places it appears. Code, lists, tables and cards keep their left
-   edge in every case, because they are unreadable without it. */
-.sec-head{ text-align:center; margin-bottom:var(--s9); }
-.sec-head > *{ margin-inline:auto; }
-.sec-head + .cta{ margin-top:0; }
-.sec-label{ font-size:var(--text-xs); font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-bright); margin-bottom:var(--s3); }
-.sec-lede{ margin-top:var(--s4); color:var(--fg-secondary); max-width:60ch; font-size:var(--text-base); line-height:1.65; }
-
-/* ------------------------------------------------------------- gatekeeper -- */
-/* The card is the block that gets centred; its contents keep one left edge
-   inside it. A full-wrap card with a 66ch column floating in the middle of it
-   reads as text that failed to fill its box. */
-.gate{ background:var(--wash-2); border:1px solid var(--hairline); border-radius:var(--r4); padding:var(--s9); max-width:820px; margin-inline:auto; }
-@media (max-width:700px){ .gate{ padding:var(--s7) var(--s5); } }
-.gate h3{ font-size:var(--text-xl); }
-.gate p{ margin-top:var(--s6); color:var(--fg-secondary); max-width:66ch; line-height:1.7; }
-.gate .quote{
-  margin-top:var(--s6); padding:var(--s4) var(--s5);
-  border-left:2px solid var(--accent); background:var(--wash-1);
-  border-radius:0 var(--r2) var(--r2) 0; color:#fff; max-width:66ch;
-}
-.gate-warn{
-  display:flex; gap:var(--s3); align-items:flex-start;
-  margin-top:var(--s6); padding:var(--s5);
-  background:rgb(227 170 79 / 8%); border:1px solid rgb(227 170 79 / 30%);
-  border-radius:var(--r3); color:#fff; max-width:66ch;
-}
-.gate-warn svg{ width:19px; height:19px; fill:var(--warning); flex:none; margin-top:4px; }
-.gate-warn b, .gate-warn strong{ color:#fff; font-weight:700; }
-.gate .quote b{ color:#fff; font-weight:700; }
-.gate ol{ margin-top:var(--s7); padding-left:0; list-style:none; counter-reset:step; }
-.gate ol li{ counter-increment:step; position:relative; padding-left:46px; margin-top:var(--s7); color:var(--fg-secondary); max-width:66ch; line-height:1.7; }
-.gate ol li:first-child{ margin-top:0; }
-.gate ol li::before{
-  content:counter(step); position:absolute; left:0; top:0;
-  width:30px; height:30px; border-radius:var(--r2);
-  background:var(--accent-soft); border:1px solid rgb(99 102 241 / 30%); color:var(--accent-bright);
-  font-family:var(--font-mono); font-size:var(--text-xs); font-weight:700;
-  display:flex; align-items:center; justify-content:center;
-}
-.gate ol li strong{ color:#fff; font-weight:650; }
-
-/* ------------------------------------------------------------------ code -- */
-.cmd{ position:relative; margin-top:var(--s5); }
-pre{
-  margin:0; background:var(--well); border:1px solid var(--hairline);
-  border-radius:var(--r3); padding:var(--s5) var(--s6);
-  overflow-x:auto; font-family:var(--font-mono); font-size:var(--text-xs);
-  line-height:1.75; color:#e3e8f2; tab-size:2;
-}
-pre code{ font-size:inherit; }
-/* Every one of these can overflow, so every one is a focus stop with a name.
-   A scroll container that overflows is added to the tab order by Chrome and not
-   by Safari, and on a macOS-only product page Safari is the wrong browser in
-   which to make the end of a command unreachable. */
-pre[tabindex]{ scrollbar-gutter:stable; }
-
-/* The copy button is positioned on the wrapper, which does not scroll, while the
-   `pre` beneath it does — so right padding on the `pre` scrolled away with the
-   content and the command ran underneath the chip at every scroll position but
-   the last. The box chrome moves onto the wrapper and the scrolling strip stops
-   short of the gutter the button sits in, so nothing can pass beneath it. Only
-   blocks that actually carry a button reserve the gutter. */
-.cmd.has-copy{
-  background:var(--well); border:1px solid var(--hairline); border-radius:var(--r3);
-  padding:var(--s5) var(--s6); padding-right:104px;
-}
-.cmd.has-copy > pre{ background:none; border:0; border-radius:0; padding:0; }
-.cmd-copy{
-  position:absolute; top:10px; right:10px;
-  font:inherit; font-family:var(--font-ui); font-size:var(--text-xs); font-weight:500;
-  color:var(--fg-secondary); background:var(--wash-3);
-  border:1px solid var(--hairline); border-radius:var(--r1);
-  padding:7px 14px; min-height:34px; cursor:pointer;
-  display:inline-flex; align-items:center; justify-content:center;
-  transition:color var(--motion) var(--ease), border-color var(--motion) var(--ease), background var(--motion) var(--ease);
-}
-/* Narrow enough that a 104px gutter would take a third of the line: the button
-   drops below the command instead, and gets a full touch target while it is there. */
-@media (max-width:560px){
-  .cmd.has-copy{ padding-right:var(--s5); padding-left:var(--s5); padding-bottom:64px; }
-  .cmd-copy{ top:auto; bottom:10px; right:10px; padding:10px 16px; }
-}
-/* Between 560 and 820 the chip stays in its gutter, but a tablet is touched
-   rather than pointed at, so it still owes a 44px target. 44 plus the 10px
-   inset is 54, and the block it sits in is 64.8 tall, so it gains the height
-   inside the gutter — without growing the block or reaching the command. */
-@media (max-width:820px){ .cmd-copy{ min-height:44px; } }
-.cmd-copy:hover{ color:#fff; border-color:var(--hairline-hover); background:var(--accent-soft); }
-.cmd-copy[data-copied="yes"]{ color:var(--success); border-color:rgb(74 222 128 / 45%); }
-.tok-c{ color:rgb(255 255 255 / 52%); }
-.tok-p{ color:var(--accent-bright); }
-.tok-s{ color:var(--success); }
-.tok-f{ color:var(--warning); }
-.caption{ margin-top:var(--s5); font-size:var(--text-sm); color:var(--fg-muted); max-width:66ch; line-height:1.7; }
-
-/* ------------------------------------------------------------ the media -- */
-/* A media box, not an image slot. The still and the demo clip that will replace
-   it share one ratio — 1400x900, which is the still's own 2800x1800 halved — so
-   the frame reserves that ratio and both the <img> and the <video> fill it
-   absolutely. Swapping one for the other is then a content change: nothing
-   reflows, nothing resizes, and nothing on the page moves while the clip loads
-   or if it never loads at all.
-   The mat is the outer box (border, wash, rounding, shadow); the ratio is the
-   inner one, so the 8px mat is not inside the reserved area. */
-.shot{ margin:var(--s9) 0 0;
-  border:1px solid var(--hairline); border-radius:var(--r4);
-  background:var(--wash-2); padding:8px;
-  box-shadow:0 20px 60px rgb(0 0 0 / 50%), 0 0 90px -40px rgb(99 102 241 / 40%);
-}
-.shot-frame{
-  position:relative; aspect-ratio:1400 / 900; overflow:hidden;
-  border-radius:calc(var(--r4) - 8px); background:var(--well-2);
-}
-.shot-frame > img, .shot-frame > video{
-  position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;
-}
-/* Transparent, so a clip that never paints shows its poster rather than a black
-   rectangle. */
-.shot-frame > video{ background:transparent; }
-.shot-cap{ margin-top:var(--s4); font-size:var(--text-sm); color:var(--fg-muted); text-align:center; }
-@media (max-width:560px){
-  .shot{ padding:5px; }
-  .shot-frame{ border-radius:calc(var(--r4) - 5px); }
-}
-
-/* -------------------------------------------------------------- the steps -- */
-/* Landing to running in three, ahead of the long account of why macOS asks. */
-.steps{ display:grid; gap:var(--s5); grid-template-columns:repeat(3,minmax(0,1fr)); align-items:start; list-style:none; padding-left:0; counter-reset:none; }
-@media (max-width:900px){ .steps{ grid-template-columns:minmax(0,1fr); } }
-.step{ background:var(--wash-2); border:1px solid var(--hairline); border-radius:var(--r4); padding:var(--s7); transition:border-color var(--motion) var(--ease), background var(--motion) var(--ease); }
-.step:hover{ border-color:var(--hairline-hover); background:var(--wash-3); }
-.step .n{
-  display:flex; align-items:center; justify-content:center;
-  width:34px; height:34px; border-radius:var(--r2); margin-bottom:var(--s4);
-  background:var(--accent-soft); border:1px solid rgb(99 102 241 / 30%);
-  color:var(--accent-bright); font-family:var(--font-mono); font-size:var(--text-sm); font-weight:700;
-}
-.step p{ margin-top:var(--s3); color:var(--fg-secondary); font-size:var(--text-sm); line-height:1.7; }
-.step strong{ color:#fff; font-weight:650; }
-.step .cmd{ margin-top:var(--s4); }
-.steps-after{ margin-top:var(--s6); font-size:var(--text-sm); text-align:center; }
-/* A step card is about a third of the content column, so the 104px gutter the
-   copy button normally sits in would leave roughly 170px of a 56-character
-   command visible. The button drops below the command here for the same reason
-   it does on a phone, and gets a full touch target while it is there. */
-.step .cmd.has-copy{ padding-right:var(--s6); padding-bottom:62px; }
-.step .cmd-copy{ top:auto; bottom:10px; right:10px; min-height:44px; padding:10px 16px; }
-
-/* ----------------------------------------------------------------- footer -- */
-.site-footer{ border-top:1px solid var(--hairline); padding:var(--s9) 0 var(--s8); color:var(--fg-muted); font-size:var(--text-sm); }
-.footer-row{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--s5); }
-/* The footer lockup is a link home, and it was the one target on the page left
-   at the height of its 34px tile. */
-.site-footer .brand{ min-height:44px; }
-.footer-links{ display:flex; flex-wrap:wrap; gap:0 var(--s7); }
-.footer-links a{ color:var(--fg-secondary); display:inline-flex; align-items:center; min-height:44px; }
-.footer-links a:hover{ color:#fff; text-decoration:none; }
-.footer-note{ margin-top:var(--s5); max-width:62ch; line-height:1.7; }
-
-/* ------------------------------------------------------------------ demos -- */
-/* Each feature that is easier shown than described gets a short screen capture
-   of the real application beside its explanation. The text is the feature;
-   the clip is evidence. Everything here reads correctly with video disabled. */
-/* The alternating rows alternate in the markup, not with `order`. Reordering the
-   two columns in CSS left the DOM — and so the tab order and the reading order —
-   running right to left across every flipped row. */
-.demo{ display:grid; gap:var(--s9); align-items:center; grid-template-columns:minmax(0,30rem) minmax(0,1fr); }
-.demo.flip{ grid-template-columns:minmax(0,1fr) minmax(0,30rem); }
-/* The CLI samples are the whole point of the sections that carry them, and in the
-   narrow column a 61-character command was showing about 33 of it with no visual
-   hint of the rest. They span the row instead. */
-.demo-wide{ grid-column:1 / -1; min-width:0; }
-.demo-wide .cmd{ margin-top:0; }
-.demo-wide .cmd + .cmd{ margin-top:var(--s4); }
-@media (max-width:1080px){
-  .demo{ grid-template-columns:minmax(0,26rem) minmax(0,1fr); gap:var(--s8); }
-  .demo.flip{ grid-template-columns:minmax(0,1fr) minmax(0,26rem); }
-}
+.btn{ background:var(--ink); color:var(--ground); border:1px solid var(--ink); }
+.btn:hover{ background:#fff; border-color:#fff; text-decoration:none; }
+.btn-2{ background:transparent; color:var(--ink); border:1px solid var(--line-2); }
+.btn-2:hover{ border-color:var(--ink-3); background:var(--tile); text-decoration:none; }
+.btn:active, .btn-2:active{ transform:scale(.97); transition-duration:60ms; }
+.btn .apple{ width:16px; height:20px; fill:currentColor; flex:none; margin-top:-2px; }
+.btn-2 svg{ width:16px; height:16px; fill:currentColor; flex:none; }
+.btn .stack{ display:flex; flex-direction:column; text-align:left; }
+.btn .stack small{ font-size:var(--t-13); font-weight:500; opacity:.7; }
+.hero-note{ margin-top:20px; font-size:var(--t-15); color:var(--ink-3); }
+.hero-note code{ color:var(--ink-2); }
 @media (max-width:900px){
-  .demo, .demo.flip{ grid-template-columns:minmax(0,1fr); gap:var(--s7); }
-}
-.demo-step{ font-size:var(--text-xs); font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-bright); }
-.demo-body{ max-width:58ch; }
-.demo-body > :first-child{ margin-top:0; }
-.demo-body p{ margin-top:var(--s5); color:var(--fg-secondary); line-height:1.7; }
-.demo-body ul{ margin-top:var(--s5); padding-left:0; list-style:none; }
-.demo-body ul li{ position:relative; padding-left:24px; margin-top:var(--s3); color:var(--fg-secondary); font-size:var(--text-sm); line-height:1.7; }
-.demo-body ul li::before{ content:""; position:absolute; left:2px; top:.66em; width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px rgb(99 102 241 / 60%); }
-.demo-body p strong{ color:#fff; font-weight:650; }
-/* One treatment for inline code everywhere it appears in prose. */
-.demo-body code, .gate code, .sec-lede code, .caption code, .dl-note code,
-.step code, .footer-note code{
-  color:var(--accent-bright); background:var(--accent-soft);
-  border-radius:var(--r1); padding:1px 6px; font-size:.9em;
+  .hero{ padding:calc(var(--nav-h) + 48px) 0 56px; }
+  .hero-mark{ width:112px; height:84px; margin:0 0 4px -6px; }
 }
 
-.demo-figure{ margin:0; min-width:0; }
-.demo-frame{
-  position:relative; border:1px solid var(--hairline); border-radius:var(--r4); overflow:hidden;
-  background:var(--well-2); box-shadow:0 20px 60px rgb(0 0 0 / 50%);
+/* -------------------------------------------------------------- the rows -- */
+/* Every section is a rail and a pane. The rail holds the heading and stays put
+   while the pane scrolls past, which is what the sidebar does in the window. */
+section{ padding:88px 0; border-top:1px solid var(--line); }
+.row{ display:grid; grid-template-columns:var(--rail) minmax(0,1fr); gap:0 var(--gutter); align-items:start; }
+.rail{ position:sticky; top:calc(var(--nav-h) + 32px); }
+.rail h2{ max-width:12ch; }
+.rail .status{ margin-top:20px; }
+.pane{ min-width:0; }
+.pane > :first-child{ margin-top:0; }
+.prose{ max-width:60ch; }
+.prose p{ margin-top:20px; color:var(--ink-2); }
+.prose p:first-child{ margin-top:0; }
+.prose ul{ margin-top:20px; padding-left:0; list-style:none; }
+.prose ul > li{ position:relative; padding-left:20px; margin-top:8px; color:var(--ink-2); }
+.prose ul > li::before{ content:""; position:absolute; left:2px; top:.72em; width:6px; height:6px; border-radius:50%; background:var(--ink-3); }
+.prose .steps{ margin-top:24px; }
+.prose code, .steps code, .hero-note code, .dialog code{
+  font-size:.9em; color:var(--ink); background:var(--tile-2); border:1px solid var(--line);
+  border-radius:4px; padding:1px 5px;
 }
+.lede-2{ font-size:var(--t-20); line-height:1.5; color:var(--ink-2); max-width:56ch; }
+@media (max-width:900px){
+  section{ padding:64px 0; }
+  .row{ grid-template-columns:minmax(0,1fr); gap:28px 0; }
+  .rail{ position:static; }
+  .rail h2{ max-width:22ch; }
+}
+
+/* The status motif: the four states a pane can be in, set the way the window
+   sets them. Content, not ornament — the section beside it is about exactly
+   this. */
+.status{ display:flex; flex-wrap:wrap; gap:6px 16px; font-family:var(--mono); font-size:var(--t-13); color:var(--ink-3); }
+.status span{ display:inline-flex; align-items:center; gap:7px; }
+.status i{ width:7px; height:7px; border-radius:50%; flex:none; }
+.status .w i{ background:var(--working); }
+.status .p i{ background:var(--waiting); }
+.status .d i{ background:var(--ink-3); }
+.status .f i{ background:var(--failed); }
+
+/* -------------------------------------------------------------- the media -- */
+/* The frame reserves its ratio and both the <video> and the <img> fill it, so
+   swapping one for the other moves nothing. The tile is the mat; the ground is
+   the well inside it. */
+.shot{ margin-top:48px; border:1px solid var(--line); border-radius:var(--r3); background:var(--tile); padding:6px; }
+.shot-frame{ position:relative; aspect-ratio:1400 / 900; overflow:hidden; border-radius:calc(var(--r3) - 6px); background:var(--ground); }
+.shot-frame > img, .shot-frame > video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+.shot-frame > video{ background:transparent; }
+.shot-cap{ margin-top:14px; font-size:var(--t-15); color:var(--ink-3); }
+@media (max-width:900px){ .shot{ margin-top:32px; } }
+
+.demo-figure{ margin-top:32px; min-width:0; }
+.demo-frame{ position:relative; border:1px solid var(--line); border-radius:var(--r3); overflow:hidden; background:var(--tile); }
 /* The aspect ratio is fixed here and the video carries width/height attributes,
-   so nothing on the page moves while a clip loads — or if it never loads. */
+   so nothing on the page moves while a clip loads — or if it never loads.
+   site/tools/sync-demos.mjs rewrites this number from demos/manifest.json. */
 .demo-frame::before{ content:""; display:block; padding-top:62.5%; }
-.demo-frame > video, .demo-frame > img, .demo-frame > .demo-pending{
-  position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;
-}
-/* Transparent, so that before the clips land — or if one ever fails to load —
-   the placeholder beneath shows through instead of a black rectangle. */
+.demo-frame > video, .demo-frame > img, .demo-frame > .demo-pending{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
 .demo-frame > video{ background:transparent; }
 .demo-frame > .demo-pending{
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--s4);
-  color:var(--fg-muted); font-size:var(--text-xs); font-weight:600; letter-spacing:.1em; text-transform:uppercase;
-  background:
-    radial-gradient(560px 300px at 50% 0%, rgb(99 102 241 / 14%), transparent 65%),
-    var(--well-2);
-  text-align:center; padding:var(--s6);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+  color:var(--ink-3); font-family:var(--mono); font-size:var(--t-13); text-align:center; padding:24px;
 }
-.demo-pending svg{ width:72px; height:72px; opacity:.45; }
+.demo-pending svg{ width:56px; height:56px; opacity:.4; }
 .demo-play{
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-  width:64px; height:64px; border-radius:50%; cursor:pointer;
-  background:rgb(0 0 0 / 64%); border:1px solid rgb(255 255 255 / 15%);
+  width:60px; height:60px; border-radius:50%; cursor:pointer; padding:0;
+  background:rgb(11 12 14 / 70%); border:1px solid var(--line-2);
   backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-  display:flex; align-items:center; justify-content:center; padding:0;
-  transition:background var(--motion) var(--ease), border-color var(--motion) var(--ease), opacity var(--motion) var(--ease);
+  display:flex; align-items:center; justify-content:center;
+  transition:opacity var(--quick) var(--ease), border-color var(--quick) var(--ease);
 }
-.demo-play svg{ width:22px; height:22px; fill:#fff; margin-left:3px; }
-.demo-play:hover{ background:rgb(0 0 0 / 86%); border-color:var(--hairline-hover); }
-/* While a clip is moving the button recedes; it never leaves. Hiding it was the
-   only control over a clip that autoplays on scroll and loops forever, so for
-   exactly as long as one was playing there was nothing to focus and nothing to
-   press — the JS also takes the native `controls` off. Hover and focus bring it back. */
-[data-paused="no"] .demo-play{ opacity:.3; }
-[data-paused="no"] .demo-play:hover,
-[data-paused="no"] .demo-play:focus-visible,
-[data-paused="no"]:focus-within .demo-play{ opacity:1; }
-.demo-cap{ margin-top:var(--s4); font-size:var(--text-sm); color:var(--fg-muted); text-align:center; }
-/* The clips are parked inside HTML comments, so there is no <video> in the frame
-   and the frame renders as a reserved empty box — 215px tall on a phone, ~540px at
-   desktop — under a caption confidently describing a clip that is not there. While
-   they are parked the figure is gone and the row is one column. Un-parking the video
-   markup (`node site/tools/sync-demos.mjs`) puts a <video> back in the frame and
-   restores both, with nothing else to change.
-   A clip that loads and then fails is a different case: the script removes the
-   <video> and marks the frame, and that frame keeps its figure so the poster or
-   the placeholder underneath becomes the picture. */
+.demo-play svg{ width:20px; height:20px; fill:var(--ink); margin-left:3px; }
+.demo-play:hover{ border-color:var(--ink-3); }
+/* While a clip is moving the button recedes; it never leaves. */
+[data-paused="no"] .demo-play{ opacity:.25; }
+[data-paused="no"] .demo-play:hover, [data-paused="no"] .demo-play:focus-visible, [data-paused="no"]:focus-within .demo-play{ opacity:1; }
+.demo-cap{ margin-top:14px; font-size:var(--t-15); color:var(--ink-3); }
+/* The clips are parked inside HTML comments until they land, so there is no
+   <video> in the frame. While they are parked the figure is gone. Un-parking
+   (`node site/tools/sync-demos.mjs`) puts a <video> back and the figure with it.
+   A clip that loads and then fails keeps its figure: the poster or the
+   placeholder underneath becomes the picture. */
 .demo-figure:not(:has(video)):not(:has([data-failed])){ display:none; }
-.demo:not(:has(video)):not(:has([data-failed])),
-.demo.flip:not(:has(video)):not(:has([data-failed])){
-  grid-template-columns:minmax(0,1fr);
-  max-width:68ch; margin-inline:auto;
+
+/* -------------------------------------------------------------------- code -- */
+.cmd{ position:relative; margin-top:24px; }
+pre{
+  margin:0; background:var(--ground); border:1px solid var(--line); border-radius:var(--r2);
+  padding:16px 20px; overflow-x:auto; font-size:var(--t-13); line-height:1.75; color:var(--ink-2); tab-size:2;
 }
-.demo:not(:has(video)):not(:has([data-failed])) .demo-body{ max-width:none; }
+pre code{ font-size:inherit; }
+pre[tabindex]{ scrollbar-gutter:stable; }
+/* The copy chip lives on the wrapper, which does not scroll; the strip inside
+   stops short of its gutter so no command can pass beneath it. */
+.cmd.has-copy{ background:var(--ground); border:1px solid var(--line); border-radius:var(--r2); padding:16px 20px; padding-right:96px; }
+.cmd.has-copy > pre{ background:none; border:0; border-radius:0; padding:0; }
+.cmd-copy{
+  position:absolute; top:9px; right:9px; min-height:32px; padding:0 12px; cursor:pointer;
+  font:inherit; font-size:var(--t-13); font-weight:500; color:var(--ink-2);
+  background:var(--tile); border:1px solid var(--line-2); border-radius:var(--r);
+  display:inline-flex; align-items:center;
+  transition:color var(--quick) var(--ease), border-color var(--quick) var(--ease), transform 480ms var(--ease);
+  transition-timing-function:var(--ease), var(--ease), var(--spring);
+}
+.cmd-copy:hover{ color:var(--ink); border-color:var(--ink-3); }
+.cmd-copy:active{ transform:scale(.96); transition-duration:60ms; }
+.cmd-copy[data-copied="yes"]{ color:var(--working); border-color:rgb(74 222 128 / 45%); }
+@media (max-width:560px){
+  .cmd.has-copy{ padding:16px; padding-bottom:60px; }
+  .cmd-copy{ top:auto; bottom:10px; right:10px; min-height:40px; }
+}
+@media (max-width:820px){ .cmd-copy{ min-height:44px; } }
+.tok-c{ color:var(--ink-3); }
+.tok-p{ color:var(--ink); }
+.tok-s{ color:var(--working); }
+.tok-f{ color:var(--waiting); }
+
+/* ------------------------------------------------------------------- steps -- */
+/* The install is the one sequence on the page, so it is the one thing numbered. */
+.steps{ list-style:none; padding:0; counter-reset:step; max-width:64ch; }
+.steps li{ counter-increment:step; display:grid; grid-template-columns:40px minmax(0,1fr); gap:0 16px; padding:24px 0; border-top:1px solid var(--line); }
+.steps li:first-child{ border-top:0; padding-top:0; }
+.steps li::before{ content:counter(step); font-family:var(--mono); font-size:var(--t-15); color:var(--ink-3); line-height:1.3; padding-top:3px; }
+.steps p{ margin-top:8px; color:var(--ink-2); }
+.steps .cmd{ margin-top:16px; }
+.steps-after{ margin-top:24px; font-size:var(--t-15); }
+
+/* ------------------------------------------------------------- the dialog -- */
+/* macOS's own dialog, redrawn so a reader recognises it before they meet it.
+   Its two buttons are set exactly as prominent as macOS sets them, because
+   that prominence is the whole hazard. */
+.dialog{
+  margin-top:24px; max-width:420px; padding:24px 24px 20px; text-align:center;
+  background:var(--tile-2); border:1px solid var(--line-2); border-radius:var(--r3);
+}
+.dialog svg{ width:56px; height:56px; margin:0 auto 12px; display:block; }
+.dialog b{ display:block; font-size:var(--t-15); }
+.dialog p{ margin-top:6px; font-size:var(--t-13); color:var(--ink-2); line-height:1.45; }
+.dialog .buttons{ display:flex; gap:10px; margin-top:20px; }
+.dialog .buttons span{ flex:1; min-height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:7px; font-size:var(--t-13); font-weight:500; }
+.dialog .trash{ background:rgb(243 242 238 / 8%); color:var(--ink); }
+.dialog .done{ background:var(--accent); color:#0B0C0E; }
+.warn{ margin-top:24px; padding:14px 16px; border-left:2px solid var(--waiting); background:var(--tile); border-radius:0 var(--r) var(--r) 0; max-width:60ch; }
+.warn p{ margin:0; color:var(--ink-2); }
+.prose .aside{ font-size:var(--t-15); color:var(--ink-3); }
+.prose .aside b{ color:var(--ink-2); }
+
+/* -------------------------------------------------------------------- get -- */
+.get .row{ align-items:center; }
+.get .cta{ margin-top:0; }
+.get .hero-note{ margin-top:16px; }
+
+/* ----------------------------------------------------------------- footer -- */
+.site-footer{ border-top:1px solid var(--line); padding:48px 0 56px; color:var(--ink-3); font-size:var(--t-15); }
+.footer-row{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:20px 32px; }
+.footer-links{ display:flex; flex-wrap:wrap; gap:0 24px; }
+.footer-links a{ color:var(--ink-2); display:inline-flex; align-items:center; min-height:44px; }
+.footer-links a:hover{ color:var(--ink); }
+.footer-note{ margin-top:16px; max-width:60ch; }
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{ transition-duration:1ms !important; animation:none !important; }
+}
 </style>
 </head>
 <body>
@@ -668,115 +377,113 @@ pre[tabindex]{ scrollbar-gutter:stable; }
   <defs>
     <!-- The full mark and reduced mark share the same two-slab idea. The
          reduced form is used at 32px and below, where its slanted windows stay
-         crisp; the full form is reserved for larger placements. -->
+         crisp; the full form is reserved for larger placements. Both are checked
+         against brand/ by `npm run icons:verify`. -->
     <symbol id="mark" viewBox="0 0 256 256" fill="currentColor">
   <path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/>
     </symbol>
     <symbol id="mark-sm" viewBox="0 0 256 256" fill="currentColor">
   <path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM34 68L94 53V203L34 188ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM162 52L222 70V186L162 204Z"/>
     </symbol>
-    <symbol id="wordmark" viewBox="0 10 440 82" fill="currentColor">
-  <path fill-rule="evenodd" d="M8 12H20V27H38V39H20V69Q20 78 30 78H39V90H28Q8 90 8 70V39H2V27H8ZM54 56Q54 25 78 25Q101 25 101 51V60H67Q69 78 84 78Q94 78 101 71V85Q93 90 81 90Q54 90 54 61ZM67 49H88Q88 37 78 37Q68 37 67 49ZM114 48Q114 25 138 25Q160 25 160 47V88H148V81Q140 90 129 90Q111 90 111 73Q111 55 134 55H148V48Q148 37 138 37Q128 37 128 48ZM148 66H135Q123 66 123 73Q123 79 132 79Q148 79 148 66ZM178 27H190V35Q197 25 209 25Q222 25 228 37Q235 25 248 25Q268 25 268 48V88H256V50Q256 38 247 38Q234 38 234 54V88H222V50Q222 38 213 38Q190 38 190 59V88H178ZM286 27H298V37Q305 25 319 25H324V38H318Q298 38 298 60V88H286ZM336 56Q336 25 360 25Q383 25 383 51V60H349Q351 78 366 78Q376 78 383 71V85Q375 90 363 90Q336 90 336 61ZM349 49H370Q370 37 360 37Q350 37 349 49ZM390 56Q390 25 414 25Q437 25 437 51V60H403Q405 78 420 78Q430 78 437 71V85Q429 90 417 90Q390 90 390 61ZM403 49H424Q424 37 414 37Q404 37 403 49Z"/>
+    <!-- brand/lockup.svg: the exact mark and wordmark paths. -->
+    <symbol id="lockup" viewBox="0 10 582 82" fill="currentColor">
+  <g transform="translate(0 1.08) scale(.39)"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></g>
+  <g transform="translate(142)"><path fill-rule="evenodd" d="M8 12H20V27H38V39H20V69Q20 78 30 78H39V90H28Q8 90 8 70V39H2V27H8ZM54 56Q54 25 78 25Q101 25 101 51V60H67Q69 78 84 78Q94 78 101 71V85Q93 90 81 90Q54 90 54 61ZM67 49H88Q88 37 78 37Q68 37 67 49ZM114 48Q114 25 138 25Q160 25 160 47V88H148V81Q140 90 129 90Q111 90 111 73Q111 55 134 55H148V48Q148 37 138 37Q128 37 128 48ZM148 66H135Q123 66 123 73Q123 79 132 79Q148 79 148 66ZM178 27H190V35Q197 25 209 25Q222 25 228 37Q235 25 248 25Q268 25 268 48V88H256V50Q256 38 247 38Q234 38 234 54V88H222V50Q222 38 213 38Q190 38 190 59V88H178ZM286 27H298V37Q305 25 319 25H324V38H318Q298 38 298 60V88H286ZM336 56Q336 25 360 25Q383 25 383 51V60H349Q351 78 366 78Q376 78 383 71V85Q375 90 363 90Q336 90 336 61ZM349 49H370Q370 37 360 37Q350 37 349 49ZM390 56Q390 25 414 25Q437 25 437 51V60H403Q405 78 420 78Q430 78 437 71V85Q429 90 417 90Q390 90 390 61ZM403 49H424Q424 37 414 37Q404 37 403 49Z"/></g>
     </symbol>
     <symbol id="app-icon" viewBox="0 0 1024 1024">
   <defs><linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#101114"/><stop offset="1" stop-color="#0B0C0E"/></linearGradient></defs>
   <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
   <g fill="#F3F2EE" transform="translate(256.5 237.875) scale(2.1291667)"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></g>
     </symbol>
-    <symbol id="chev" viewBox="0 0 16 16">
-      <path d="M8 10.6 2.7 5.3l1.3-1.3L8 8l4-4 1.3 1.3z"/>
-    </symbol>
+    <symbol id="chev" viewBox="0 0 16 16"><path d="M8 10.6 2.7 5.3l1.3-1.3L8 8l4-4 1.3 1.3z"/></symbol>
     <symbol id="gh" viewBox="0 0 16 16">
       <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
     </symbol>
+    <symbol id="apple" viewBox="0 0 814 1000"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z"/></symbol>
   </defs>
 </svg>
 
 <header class="site-header">
-  <div class="header-row">
+  <div class="wrap header-row">
     <a class="brand" href="/" aria-label="teamree, home">
-      <span class="tile" aria-hidden="true"><svg class="mark" viewBox="0 0 256 256" focusable="false"><use href="#mark-sm"/></svg></span>
-      <span class="word"><svg class="wordmark-svg" viewBox="0 10 440 82" aria-hidden="true" focusable="false"><use href="#wordmark"/></svg><i class="dot" aria-hidden="true"></i></span>
+      <svg class="lockup" viewBox="0 10 582 82" aria-hidden="true" focusable="false"><use href="#lockup"/></svg><i class="dot" aria-hidden="true"></i>
     </a>
     <a class="nav-toggle" href="#site-nav" aria-controls="site-nav">Menu<svg aria-hidden="true" focusable="false"><use href="#chev"/></svg></a>
     <nav class="nav" id="site-nav" aria-label="Primary">
-      <a class="nav-link" href="#what">What it does</a>
-      <a class="nav-link" href="#teamwork">Teamwork</a>
-      <a class="nav-link" href="#start">Install</a>
-      <a class="ghlink" href="https://github.com/zero-abd/teamree" rel="noopener">
-        <svg aria-hidden="true" focusable="false"><use href="#gh"/></svg>GitHub
-      </a>
+      <a href="#what">Worktrees</a>
+      <a href="#terminals">Terminals</a>
+      <a href="#cli">CLI</a>
+      <a href="#teamwork">Teamwork</a>
+      <a href="#start">Install</a>
+      <a class="ghlink" href="https://github.com/zero-abd/teamree" rel="noopener"><svg aria-hidden="true" focusable="false"><use href="#gh"/></svg>GitHub</a>
     </nav>
   </div>
 </header>
 
 <main id="main">
 
-<section class="hero-section">
-<div class="grid-bg" aria-hidden="true"></div>
-<div class="hero-glow" aria-hidden="true"></div>
-
-<div class="wrap hero">
-  <svg class="hero-icon" viewBox="0 0 1024 1024" role="img" aria-label="teamree app icon"><use href="#app-icon"/></svg>
-  <h1>Agentic development, <em>built for teams.</em></h1>
+<div class="wrap hero row">
+  <div class="rail">
+  <!-- The mark, drawn as two slabs so each can move. At rest this is exactly
+       brand/mark.svg; as the page scrolls the windows straighten into two
+       panes and the slabs part. Script only rewrites the four numbers. -->
+  <svg class="hero-mark" id="hero-mark" viewBox="-16 20 288 216" role="img" aria-label="The teamree mark: two slabs, each with a window, facing a shared centre" fill="currentColor">
+    <path data-slab="l" fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190Z"/>
+    <path data-slab="r" fill-rule="evenodd" d="M140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/>
+  </svg>
+  </div>
+  <div class="pane">
+  <h1>Five agents. Five worktrees. One window.</h1>
   <p class="lede">
-    Every task gets its own git worktree and its own terminals, with a coding agent in
-    each — and your teammates can watch any pane from their own machine, and type into it
-    once you allow them.
+    Every task gets its own git worktree and its own terminals, with a coding agent in each.
+    Teammates watch any pane from their own machine and, once you allow it, type into it.
   </p>
-
   <div class="cta">
     <a class="btn" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">
-      <svg class="apple" viewBox="0 0 814 1000" aria-hidden="true" focusable="false"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z"/></svg>
-      <span class="stack">Download for macOS<small>Universal &middot; Apple Silicon and Intel</small></span>
+      <svg class="apple" aria-hidden="true" focusable="false"><use href="#apple"/></svg>
+      <span class="stack">Download for macOS<small>Universal, Apple Silicon and Intel</small></span>
     </a>
-    <a class="btn-ghost" href="https://github.com/zero-abd/teamree" rel="noopener">
-      <svg aria-hidden="true" focusable="false"><use href="#gh"/></svg>Read the source
-    </a>
+    <a class="btn-2" href="https://github.com/zero-abd/teamree" rel="noopener"><svg aria-hidden="true" focusable="false"><use href="#gh"/></svg>Read the source</a>
   </div>
-
+  <p class="hero-note">Free. macOS 12 or later. Signed ad-hoc, so the first launch takes <a href="#start">one command</a>.</p>
+  </div>
 </div>
-</section>
 
-<section>
+<section id="window">
   <div class="wrap">
-    <div class="sec-head">
-      <p class="sec-label">The window</p>
-      <h2>Three worktrees, four panes, and no question about which one stopped.</h2>
-      <p class="sec-lede">
-        Every pane in every worktree carries what it is doing &mdash; working, waiting,
-        finished, failed &mdash; and how long since it last said anything. teamree watches a
-        PTY, not an agent&rsquo;s protocol, so &ldquo;waiting&rdquo; means the output stopped,
-        not that the agent asked you something.
-      </p>
+    <div class="row">
+      <div class="rail">
+        <h2>Three worktrees, four panes, and no question about which one stopped.</h2>
+        <p class="status" aria-label="The four pane states">
+          <span class="w"><i></i>working</span><span class="p"><i></i>waiting</span><span class="d"><i></i>finished</span><span class="f"><i></i>failed</span>
+        </p>
+      </div>
+      <div class="pane">
+        <p class="lede-2">
+          Every pane in every worktree shows what it is doing and how long since it last printed
+          anything. teamree watches the PTY, not the agent&rsquo;s protocol: &ldquo;waiting&rdquo;
+          means the output stopped, not that the agent asked you something.
+        </p>
+      </div>
     </div>
     <figure class="shot">
       <!-- The media slot. The frame reserves 1400x900 and both the <video> and
            the <img> inside it fill it absolutely, so replacing one with the
-           other moves nothing in the stylesheet and reflows nothing on the page.
-           The <img> is the fallback a browser that plays neither source lands
-           on, which is why it carries its own alt text.
+           other reflows nothing. The <img> is the fallback a browser that plays
+           neither source lands on, which is why it carries its own alt text.
 
            BOTH the clip and that still were captured before 0.2.0 and look it:
            the window in them is the old slate ground rather than the absolute
            black teamree now ships, the status rail reads "Runtime ready 0.1.2",
            the teamwork panel is the one that did not ask which end you were on,
-           and a watched pane is still the corner card it stopped being. What
-           they show is otherwise what the aria-label and the alt text say. They
-           want retaking on a Mac; nothing here has to change when they are, as
-           the names do not carry a version.
+           and a watched pane is still the corner card it stopped being. They
+           want retaking on a Mac; nothing here has to change when they are.
 
-           The width/height are the clip's real intrinsic size, read off the
-           decoded video rather than off the filename — videoWidth is 1281, not
-           the round 1280 it looks like it should be. That is 1.5622 against the
-           1.5556 this box reserves, 0.4% apart, which object-fit:cover absorbs
-           by cropping about two pixels a side. The reserved ratio stays the
-           still's, so the box is the same box either way, and the attributes
-           say what the file actually is.
-           This frame is deliberately not one of the four that
-           site/tools/sync-demos.mjs reconciles against demos/manifest.json, and
-           carries no `demo:video:parked` marker, so that tool leaves its size
-           and its caption alone. -->
+           The width/height are the clip's real intrinsic size read off the
+           decoded video (videoWidth is 1281), 0.4% off the 1400x900 the box
+           reserves, which object-fit:cover absorbs. This frame is deliberately
+           not one of the four that site/tools/sync-demos.mjs reconciles and
+           carries no `demo:video:parked` marker. -->
       <div class="shot-frame" data-media="tour">
         <video width="1281" height="820" muted loop playsinline preload="metadata" controls
                poster="/demos/showcase.jpg"
@@ -794,52 +501,46 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 
 <!-- demo-sections:start — the width/height on each <video> and the aspect ratio
      in .demo-frame::before come from public/demos/manifest.json. Run
-     `node site/tools/sync-demos.mjs` after the clips land and it will reconcile
-     both against the manifest rather than anyone doing it by hand.
+     `node site/tools/sync-demos.mjs` after the clips land.
 
      preload is "none", not "metadata", because the host does not answer byte
-     ranges: a metadata preload cannot be a partial fetch there, so it opens a
-     connection per clip and throws away whatever arrives before the browser
-     gives up. Nothing is fetched until a clip is scrolled to, the poster covers
-     the gap, and the width/height attributes mean the layout never waited on
-     the metadata anyway. -->
+     ranges: a metadata preload cannot be a partial fetch there. Nothing is
+     fetched until a clip is scrolled to; the poster covers the gap, and the
+     width/height attributes mean the layout never waited on the metadata. -->
 <section id="what">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="demo-step">01 &mdash; Worktrees</p>
-      <h2>Start five things at once. Keep five checkouts apart.</h2>
-    </div>
-    <div class="demo">
-    <div class="demo-body">
-      <p>
-        Add a repository, then start a worktree from any point in its history. Each is its own
-        checkout on its own branch: five attempts at the same task never see each other&rsquo;s
-        files, and abandoning one is deleting a directory, not unpicking a commit.
-      </p>
-      <ul>
-        <li>Start from a base ref, a local branch, a tag, a commit or a remote branch</li>
-        <li>Created in the background, with progress and a recoverable failure</li>
-        <li>Listed against real git state, not against what teamree last remembered</li>
-        <li>Delete the worktree, and its branch with it if you say so</li>
-      </ul>
-      <p>
-        Status per worktree comes from watching the checkout rather than polling it, so an edit
-        an agent makes inside a ten-minute shell session moves the chips immediately. A panel
-        shows the changed paths and the patch for any of them.
-      </p>
-      <p>
-        See what changed, tick what should go in, commit it, and check whether the branch would
-        merge into its base, answered in memory. Push when it is ready. There is no force push
-        and no flag to ask for one.
-      </p>
-    </div>
-    <figure class="demo-figure">
-      <div class="demo-frame" data-demo="worktrees">
-        <div class="demo-pending" aria-hidden="true">
-          <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
-          <span>Worktrees</span>
-        </div>
-        <!-- demo:video:parked
+  <div class="wrap row">
+    <div class="rail"><h2>Start five things at once. Keep five checkouts apart.</h2></div>
+    <div class="pane">
+      <div class="prose">
+        <p>
+          Add a repository, then start a worktree from any point in its history. Each is its own
+          checkout on its own branch: five attempts at the same task never see each other&rsquo;s
+          files, and abandoning one is deleting a directory, not unpicking a commit.
+        </p>
+        <ul>
+          <li>Start from a base ref, a local branch, a tag, a commit or a remote branch</li>
+          <li>Created in the background, with progress and a recoverable failure</li>
+          <li>Listed against real git state, not against what teamree last remembered</li>
+          <li>Delete the worktree, and its branch with it if you say so</li>
+        </ul>
+        <p>
+          Status per worktree comes from watching the checkout, not polling it: an edit an agent
+          makes ten minutes into a shell session moves the chips immediately. A panel shows the
+          changed paths and the patch for any of them.
+        </p>
+        <p>
+          See what changed, tick what should go in, commit it, and check whether the branch would
+          merge into its base, answered in memory. Push when it is ready. There is no force push
+          and no flag to ask for one.
+        </p>
+      </div>
+      <figure class="demo-figure">
+        <div class="demo-frame" data-demo="worktrees">
+          <div class="demo-pending" aria-hidden="true">
+            <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
+            <span>worktrees</span>
+          </div>
+          <!-- demo:video:parked
 <video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/worktrees.jpg"
                aria-label="Screen capture: starting three parallel tasks in teamree, each in its own git worktree.">
@@ -847,27 +548,50 @@ pre[tabindex]{ scrollbar-gutter:stable; }
           <source src="/demos/worktrees.mp4" type="video/mp4">
         </video>
 demo:video:parked -->
-      </div>
-      <figcaption class="demo-cap">Starting parallel tasks, each in its own git worktree.</figcaption>
-    </figure>
+        </div>
+        <figcaption class="demo-cap">Starting parallel tasks, each in its own git worktree.</figcaption>
+      </figure>
     </div>
   </div>
 </section>
 
 <section id="terminals">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="demo-step">02 &mdash; Terminals</p>
-      <h2>Split the pane. Run the work side by side.</h2>
-    </div>
-    <div class="demo flip">
-    <figure class="demo-figure">
-      <div class="demo-frame" data-demo="terminals">
-        <div class="demo-pending" aria-hidden="true">
-          <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
-          <span>Terminals</span>
-        </div>
-        <!-- demo:video:parked
+  <div class="wrap row">
+    <div class="rail"><h2>Split the pane. Run the work side by side.</h2></div>
+    <div class="pane">
+      <div class="prose">
+        <p>
+          Arbitrarily nested, resizable panes per worktree, with a real PTY behind each one. At
+          startup teamree looks on your PATH for the agents it knows how to resume &mdash;
+          <code>claude</code>, <code>codex</code>, <code>gemini</code>, <code>opencode</code> and
+          <code>droid</code> &mdash; and offers what it finds; anything else you type into a pane
+          yourself.
+        </p>
+        <p>
+          One view lists every pane in every worktree, ordered by what would make you look:
+          failures first, then work in progress, then waiting, then finished &mdash; and within
+          each, the one that has been silent longest. Counts per state sit above it, and a row
+          takes you to that pane.
+        </p>
+        <p>
+          Quitting kills every shell. A pane running a coding agent returns with its conversation
+          resumed; an ordinary pane returns as a shell in the same directory, and its command is
+          never re-run.
+        </p>
+        <p>
+          The window is absolute black by default, and every colour in it is yours: four presets,
+          forty-two colours you can edit, and a legibility pass over whatever you build, so an
+          editor this open cannot leave teamree unreadable. Terminals follow the window, all
+          sixteen ANSI colours with them.
+        </p>
+      </div>
+      <figure class="demo-figure">
+        <div class="demo-frame" data-demo="terminals">
+          <div class="demo-pending" aria-hidden="true">
+            <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
+            <span>terminals</span>
+          </div>
+          <!-- demo:video:parked
 <video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/terminals.jpg"
                aria-label="Screen capture: splitting a terminal in teamree and running two commands side by side.">
@@ -875,66 +599,43 @@ demo:video:parked -->
           <source src="/demos/terminals.mp4" type="video/mp4">
         </video>
 demo:video:parked -->
-      </div>
-      <figcaption class="demo-cap">Splitting terminals and running work side by side.</figcaption>
-    </figure>
-    <div class="demo-body">
-      <p>
-        Arbitrarily nested, resizable panes per worktree, with a real PTY behind each one. At
-        startup teamree looks on your PATH for the agents it knows how to resume &mdash;
-        <code>claude</code>, <code>codex</code>, <code>gemini</code>, <code>opencode</code> and
-        <code>droid</code> &mdash; and offers what it finds; anything else you can still type
-        into a pane yourself.
-      </p>
-      <p>
-        One view lists every pane in every worktree, ordered by what would make you look:
-        failures first, then work in progress, then waiting, then finished &mdash; and within
-        each, the one that has been silent longest. Counts per state sit above it, and a row
-        takes you to that pane.
-      </p>
-      <p>
-        Quitting kills every shell. A pane running a coding agent returns with its conversation
-        resumed; an ordinary pane returns as a shell in the same directory, and its command is
-        never re-run.
-      </p>
-      <p>
-        The window is absolute black by default, and every colour in it is yours: four presets,
-        forty-two colours you can edit, and a legibility pass over whatever you build, so an
-        editor this open cannot leave teamree unreadable. Terminals follow the window, all
-        sixteen ANSI colours with them.
-      </p>
-    </div>
+        </div>
+        <figcaption class="demo-cap">Splitting terminals and running work side by side.</figcaption>
+      </figure>
     </div>
   </div>
 </section>
 
 <section id="cli">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="demo-step">03 &mdash; The CLI</p>
-      <h2>A surface an agent can hold.</h2>
-    </div>
-    <div class="demo">
-    <div class="demo-body">
-      <p>
-        <code>teamree</code> talks to the running app over a local socket, so an agent can
-        create a worktree, open a terminal, run a command and read the output back. The window
-        reflects all of it live.
-      </p>
-      <p>
-        Every command takes <code>--json</code> and emits exactly one JSON document on stdout,
-        with errors on stderr and exit codes: 0 success, 1 the command failed, 2 you typed it
-        wrong, 3 nothing is running to talk to. If the app is not running it says so and exits
-        3, rather than hanging.
-      </p>
-    </div>
-    <figure class="demo-figure">
-      <div class="demo-frame" data-demo="cli">
-        <div class="demo-pending" aria-hidden="true">
-          <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
-          <span>The CLI</span>
-        </div>
-        <!-- demo:video:parked
+  <div class="wrap row">
+    <div class="rail"><h2>A surface an agent can hold.</h2></div>
+    <div class="pane">
+      <div class="prose">
+        <p>
+          <code>teamree</code> talks to the running app over a local socket, so an agent can
+          create a worktree, open a terminal, run a command and read the output back. The window
+          reflects all of it live.
+        </p>
+        <p>
+          Every command takes <code>--json</code> and emits exactly one JSON document on stdout,
+          with errors on stderr and exit codes: 0 success, 1 the command failed, 2 you typed it
+          wrong, 3 nothing is running to talk to. If the app is not running it says so and exits
+          3, rather than hanging.
+        </p>
+      </div>
+      <div class="cmd">
+<pre tabindex="0" role="region" aria-label="Example teamree CLI commands. Scrolls horizontally."><code><span class="tok-p">teamree</span> worktree create <span class="tok-f">--project</span> app <span class="tok-f">--name</span> <span class="tok-s">"fix login"</span>
+<span class="tok-p">teamree</span> worktree wait fix-login
+<span class="tok-p">teamree</span> terminal run <span class="tok-f">--worktree</span> fix-login <span class="tok-f">--command</span> <span class="tok-s">"npm test"</span>
+<span class="tok-p">teamree</span> worktree changes fix-login <span class="tok-f">--json</span></code></pre>
+      </div>
+      <figure class="demo-figure">
+        <div class="demo-frame" data-demo="cli">
+          <div class="demo-pending" aria-hidden="true">
+            <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
+            <span>cli</span>
+          </div>
+          <!-- demo:video:parked
 <video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/cli.jpg"
                aria-label="Screen capture: a coding agent driving teamree through the teamree command line, with the window updating as it goes.">
@@ -942,97 +643,69 @@ demo:video:parked -->
           <source src="/demos/cli.mp4" type="video/mp4">
         </video>
 demo:video:parked -->
-      </div>
-      <figcaption class="demo-cap">An agent driving the app through the teamree CLI.</figcaption>
-    </figure>
-    <div class="demo-wide">
-      <div class="cmd">
-<pre tabindex="0" role="region" aria-label="Example teamree CLI commands. Scrolls horizontally."><code><span class="tok-p">teamree</span> worktree create <span class="tok-f">--project</span> app <span class="tok-f">--name</span> <span class="tok-s">"fix login"</span>
-<span class="tok-p">teamree</span> worktree wait fix-login
-<span class="tok-p">teamree</span> terminal run <span class="tok-f">--worktree</span> fix-login <span class="tok-f">--command</span> <span class="tok-s">"npm test"</span>
-<span class="tok-p">teamree</span> worktree changes fix-login <span class="tok-f">--json</span></code></pre>
-      </div>
-    </div>
+        </div>
+        <figcaption class="demo-cap">An agent driving the app through the teamree CLI.</figcaption>
+      </figure>
     </div>
   </div>
 </section>
 
 <section id="teamwork">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="demo-step">04 &mdash; Teamwork</p>
-      <h2>Watch a teammate's pane. Ask to answer the prompt it is stuck on.</h2>
-    </div>
-    <div class="demo flip">
-    <figure class="demo-figure">
-      <div class="demo-frame" data-demo="teamwork">
-        <div class="demo-pending" aria-hidden="true">
-          <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
-          <span>Teamwork</span>
-        </div>
-        <!-- demo:video:parked
-<video width="1600" height="1000" muted loop playsinline preload="none" controls
-               poster="/demos/teamwork.jpg"
-               aria-label="Screen capture: two people connected in teamree, one typing into the other's pane, and the owner being asked and allowing it before the keystrokes run.">
-          <source src="/demos/teamwork.webm" type="video/webm">
-          <source src="/demos/teamwork.mp4" type="video/mp4">
-        </video>
-demo:video:parked -->
+  <div class="wrap row">
+    <div class="rail"><h2>Watch a teammate&rsquo;s pane. Ask to answer the prompt it is stuck on.</h2></div>
+    <div class="pane">
+      <div class="prose">
+        <p>
+          A teammate&rsquo;s worktrees appear in your sidebar, and one of their panes opens as a
+          pane of your own &mdash; beside your work rather than floating over it, moved, resized
+          and closed like any other. You can read what a pane is doing and type into it; what you
+          type runs when its owner allows it.
+        </p>
+        <p>
+          <strong>Adding a teammate&rsquo;s key lets them ask to run commands on your machine, as
+          you.</strong> Their keystrokes are held until you have been shown who is asking, which
+          pane, and the bytes themselves &mdash; then you allow them once, for the session, from
+          now on in that pane, or not at all. Anything nobody answers expires, and they are told
+          so. None of it can be used invisibly: the pane says it is being watched and by whom,
+          typing is attributed live, and every remote write is recorded on your machine with who
+          and when. Mute is instant and yours, and answers the question before it is asked.
+        </p>
+        <p>
+          Be plain about what the prompt is: a guard against accident and inattention &mdash; a
+          paste into the wrong window, an answer to a question the pane has already moved past
+          &mdash; and not a boundary against somebody who means you harm, who can be allowed once,
+          legitimately, and then type anything. Add the keys of people you would hand an unlocked
+          laptop to.
+        </p>
+        <p>
+          Every guard sits at the owner&rsquo;s end: their machine refuses unless your key is on
+          the roster, refuses outright when they have muted the pane, holds the keystroke until
+          they have read it and allowed it, caps one write, and records who typed how much into
+          which pane in a log that survives a restart.
+        </p>
+        <p>
+          <strong>Built, not weathered.</strong> All five stages have landed &mdash; identity, the
+          relay and presence, watching a pane, typing into one, staleness. Two Macs in two places
+          is the one thing still untested.
+        </p>
+        <p><strong>What it takes to set up.</strong> None of it is inside the app alone:</p>
+        <ul>
+          <li>A git repository you can both push to, cloned by each of you, with an <code>origin</code> remote &mdash; push access <em>is</em> membership</li>
+          <li>A relay your team deploys, its <code>wss://</code> URL committed to <code>.teamree/relay</code></li>
+          <li>Each person&rsquo;s public key committed to <code>.teamree/members/&lt;handle&gt;.pub</code> <em>and pushed</em> &mdash; written is not enough</li>
+          <li>Node 20 or newer, a Cloudflare account and one browser sign-in, on whichever machine deploys the relay</li>
+        </ul>
+        <p>
+          Both machines dial out to a small relay that splices their connections together and is
+          never trusted with what crosses it. A team runs its own, as a Cloudflare Worker; the
+          installed app carries it, so deploying is one command from any directory, with no clone
+          of the repository.
+        </p>
+        <p>
+          <a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md" rel="noopener">Trying teamwork</a>
+          is the walkthrough in order, with what you should see after each step.
+        </p>
       </div>
-      <figcaption class="demo-cap">Connecting two people and a shared session.</figcaption>
-    </figure>
-    <div class="demo-body">
-      <p>
-        A teammate&rsquo;s worktrees appear in your sidebar, and one of their panes opens as a
-        pane of your own &mdash; beside your work rather than floating over it, moved, resized
-        and closed like any other, so two teammates side by side is an ordinary thing to do.
-        You can read what a pane is doing and type into it; what you type runs when its owner
-        allows it.
-      </p>
-      <p>
-        <strong>Adding a teammate's key lets them ask to run commands on your machine, as
-        you.</strong> Their keystrokes are held until you have been shown who is asking, which
-        pane, and the bytes themselves &mdash; then you allow them once, for the session, from
-        now on in that pane, or not at all. Anything nobody answers expires, and they are told
-        so. It is also built so that none of it can be used invisibly: the pane says it is being
-        watched and by whom, typing is attributed live, and every remote write is recorded on
-        your machine with who and when. Mute is instant and yours, and answers the question
-        before it is asked. Be plain about what the prompt is: a guard against accident and
-        inattention &mdash; a paste into the wrong window, an answer to a question the pane has
-        already moved past &mdash; and not a boundary against somebody who means you harm, who
-        can be allowed once, legitimately, and then type anything. Add the keys of people you
-        would hand an unlocked laptop to.
-      </p>
-      <p>
-        Every guard sits at the owner&rsquo;s end: their machine refuses unless your key is on
-        the roster, refuses outright when they have muted the pane, holds the keystroke until
-        they have read it and allowed it, caps one write, and records who typed how much into
-        which pane in a log that survives a restart.
-      </p>
-      <p>
-        <strong>Built, not weathered.</strong> All five stages have landed &mdash; identity, the
-        relay and presence, watching a pane, typing into one, staleness. Two Macs in two places
-        is the one thing still untested.
-      </p>
-      <p><strong>What it takes to set up.</strong> None of it is inside the app alone:</p>
-      <ul>
-        <li>A git repository you can both push to, cloned by each of you, with an <code>origin</code> remote — push access <em>is</em> membership</li>
-        <li>A relay your team deploys, its <code>wss://</code> URL committed to <code>.teamree/relay</code></li>
-        <li>Each person's public key committed to <code>.teamree/members/&lt;handle&gt;.pub</code> <em>and pushed</em> — written is not enough</li>
-        <li>Node 20 or newer, a Cloudflare account and one browser sign-in, on whichever machine deploys the relay</li>
-      </ul>
-      <p>
-        Both machines dial out to a small relay that splices their connections together and is
-        never trusted with what crosses it. A team runs its own, as a Cloudflare Worker; the
-        installed app carries it, so deploying is one command from any directory, with no clone
-        of the repository.
-      </p>
-      <p>
-        <a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md" rel="noopener">Trying teamwork</a>
-        is the walkthrough in order, with what you should see after each step.
-      </p>
-    </div>
-    <div class="demo-wide">
       <div class="cmd">
 <pre tabindex="0" role="region" aria-label="Example teamree team commands. Scrolls horizontally."><code><span class="tok-p">teamree</span> team status app          <span class="tok-c"># on? who is connected? which relay?</span>
 <span class="tok-p">teamree</span> team members app         <span class="tok-c"># the roster, as the repository records it</span>
@@ -1047,174 +720,177 @@ demo:video:parked -->
         <button class="cmd-copy" type="button" data-copy="cmd-relay"
                 data-what="the relay deploy command" aria-label="Copy the relay deploy command">Copy</button>
       </div>
-    </div>
+      <figure class="demo-figure">
+        <div class="demo-frame" data-demo="teamwork">
+          <div class="demo-pending" aria-hidden="true">
+            <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
+            <span>teamwork</span>
+          </div>
+          <!-- demo:video:parked
+<video width="1600" height="1000" muted loop playsinline preload="none" controls
+               poster="/demos/teamwork.jpg"
+               aria-label="Screen capture: two people connected in teamree, one typing into the other's pane, and the owner being asked and allowing it before the keystrokes run.">
+          <source src="/demos/teamwork.webm" type="video/webm">
+          <source src="/demos/teamwork.mp4" type="video/mp4">
+        </video>
+demo:video:parked -->
+        </div>
+        <figcaption class="demo-cap">Connecting two people and a shared session.</figcaption>
+      </figure>
     </div>
   </div>
 </section>
 
-
 <section id="start">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="sec-label">Getting started</p>
+  <div class="wrap row">
+    <div class="rail">
       <h2>Download, clear one flag, open it.</h2>
-      <p class="sec-lede">
-        teamree is signed ad-hoc rather than with a Developer ID, so macOS asks you to confirm
-        the first launch.
-      </p>
+      <p class="status">teamree is signed ad-hoc, not with a Developer ID, so macOS asks once.</p>
     </div>
-    <ol class="steps">
-      <li class="step">
-        <span class="n">1</span>
-        <h3>Drag it to Applications</h3>
-        <p>
-          One universal <code>.dmg</code>. There is an Applications shortcut in the window to
-          drag onto, and no licence to agree to. macOS 12 or later.
-        </p>
-      </li>
-      <li class="step">
-        <span class="n">2</span>
-        <h3>Open it once, press Done</h3>
-        <p>
-          macOS refuses the first launch with a dialog whose two buttons are Move to Trash and
-          Done. <strong>Do not press Move to Trash</strong> &mdash; it is the prominent button
-          and it deletes the app you just downloaded.
-        </p>
-      </li>
-      <li class="step">
-        <span class="n">3</span>
-        <h3>Clear the quarantine flag</h3>
-        <p>Then open it normally. It will not ask again.</p>
-        <div class="cmd has-copy">
-          <pre tabindex="0" role="region" aria-label="Command to clear the quarantine flag. Scrolls horizontally."><code id="cmd-quarantine">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
-          <button class="cmd-copy" type="button" data-copy="cmd-quarantine"
-                  data-what="the quarantine command" aria-label="Copy the quarantine command">Copy</button>
-        </div>
-      </li>
-    </ol>
-    <p class="steps-after">
-      <a href="#install">Why macOS says that, and what it does not mean</a>
-    </p>
+    <div class="pane">
+      <ol class="steps">
+        <li>
+          <div>
+            <h3>Drag it to Applications</h3>
+            <p>One universal <code>.dmg</code>. There is an Applications shortcut in the window to drag onto, and no licence to agree to. macOS 12 or later.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Open it once, press Done</h3>
+            <p>macOS refuses the first launch with a dialog whose two buttons are Move to Trash and Done. <strong>Do not press Move to Trash</strong> &mdash; it is the prominent button and it deletes the app you just downloaded.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Clear the quarantine flag</h3>
+            <p>Then open it normally. It will not ask again.</p>
+            <div class="cmd has-copy">
+              <pre tabindex="0" role="region" aria-label="Command to clear the quarantine flag. Scrolls horizontally."><code id="cmd-quarantine">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
+              <button class="cmd-copy" type="button" data-copy="cmd-quarantine"
+                      data-what="the quarantine command" aria-label="Copy the quarantine command">Copy</button>
+            </div>
+          </div>
+        </li>
+      </ol>
+      <p class="steps-after"><a href="#install">Why macOS says that, and what it does not mean</a></p>
+    </div>
   </div>
 </section>
 
 <section id="install">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="sec-label">Installing</p>
-      <h2>First launch, and the one command it needs.</h2>
-    </div>
-    <div class="gate">
-      <h3>What macOS shows you, and what to do</h3>
-      <p>
-        teamree is signed ad-hoc, with no Developer ID behind it, so macOS has no way to tell
-        who built it. The first time you open it, macOS refuses, with a dialog whose two
-        buttons are <b>Move to Trash</b> and <b>Done</b>:
-      </p>
-      <p class="quote">
-        <b>&ldquo;teamree&rdquo; Not Opened</b><br>
-        Apple could not verify &ldquo;teamree&rdquo; is free of malware that may harm your
-        Mac or compromise your privacy.
-      </p>
-      <p class="gate-warn">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2 2 21h20L12 2Zm0 5.6 6.2 11.6H5.8L12 7.6ZM11 10v4.6h2V10h-2Zm0 6v2h2v-2h-2Z"/></svg>
-        <span><strong>Do not press Move to Trash.</strong> It is the prominent button and it is the
-        wrong one — it deletes the app you just downloaded. Press <b>Done</b>.</span>
-      </p>
-      <p>
-        Nothing has been found wrong with teamree. macOS has not examined it and detected
-        something; it is telling you the file arrived without a certificate naming who built it.
-        What the missing signature costs you is the guarantee that the file was not altered on
-        its way here, and a checksum gives you that by another route &mdash; which is why every
-        release publishes one.
-      </p>
-      <ol>
-        <li><strong>Open the <code>.dmg</code> and drag teamree to Applications.</strong></li>
-        <li><strong>Open it, get the dialog above, and press Done.</strong></li>
-        <li>
-          <strong>Clear the quarantine flag, once.</strong> Every file a browser downloads is marked
-          with <code>com.apple.quarantine</code>; removing it tells macOS this is a file you
-          put there on purpose.
-          <div class="cmd has-copy">
-            <pre tabindex="0" role="region" aria-label="Command to clear the quarantine flag, repeated here in the full instructions. Scrolls horizontally."><code id="cmd-xattr">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
-            <button class="cmd-copy" type="button" data-copy="cmd-xattr"
-                    data-what="the quarantine command, from the full instructions"
-                    aria-label="Copy the quarantine command, from the full instructions">Copy</button>
-          </div>
-        </li>
-        <li><strong>Open it normally.</strong> It will not ask again.</li>
-      </ol>
-      <p>
-        <strong>There is no &ldquo;Open Anyway&rdquo; button in that dialog.</strong> Through macOS 14
-        you could Control-click the app and choose Open; macOS 15 removed that, and on 15 and
-        later — macOS 26 included — the dialog offers no way through at all. If you would
-        rather not type a command, the button does exist elsewhere: after pressing Done,
-        go to <b>System Settings &rarr; Privacy &amp; Security</b> and scroll to the Security
-        section, where a line naming teamree appears with <b>Open Anyway</b> beside it. Expect
-        it to ask for your password or Touch ID.
-      </p>
-      <p class="caption">
-        Being exact about that last paragraph, because the rest of this was written from
-        watching a real download install itself: the command above was run against this build
-        and watched to work, the dialog is quoted off the screen, and <b>Done</b> was pressed
-        on it and dismissed it. The System Settings route was not clicked through.
-        <code>Open Anyway</code> is the button macOS ships for this case, but nobody here has
-        confirmed how that pane looks on macOS 26 with teamree in it. If you take that route
-        and it does not match, the command is the one that was tested.
-      </p>
-      <p>
-        <strong>Two silences that look like something worse than they are.</strong> Before you clear
-        the flag, <code>open teamree.app</code> from a terminal prints nothing and exits 0,
-        and the app still does not start. The bundled <code>teamree</code> CLI is killed
-        outright — no stdout, no stderr, exit status 137. Neither is a broken build; both are
-        this.
-      </p>
-      <p>
-        <strong>And one thing that will look like failure afterwards.</strong>
-        <code>spctl -a -vv</code> says <code>rejected</code> before you clear quarantine and
-        after. Clearing the attribute removes what makes macOS enforce the check; it does not
-        give the app a signature, and nothing short of a Developer ID will make
-        <code>spctl</code> say <code>accepted</code>. The app opens regardless. If you went
-        looking for a way to confirm the fix worked, open the app — do not ask
-        <code>spctl</code>.
-      </p>
-      <p>
-        <strong>Check the download against the release.</strong> Compare the output of this
-        against <code>SHA256SUMS.txt</code>, published beside the <code>.dmg</code> on the
-        release page. If they agree, the file you have is the file the build produced. It
-        lists the same digest twice, once under the release&rsquo;s versioned file name and
-        once under the name you downloaded: one image, published under both.
-      </p>
-      <div class="cmd has-copy">
-        <pre tabindex="0" role="region" aria-label="Command to check the download&#39;s checksum. Scrolls horizontally."><code id="cmd-sum">shasum -a 256 teamree-mac-universal.dmg</code></pre>
-        <button class="cmd-copy" type="button" data-copy="cmd-sum"
-                data-what="the checksum command" aria-label="Copy the checksum command">Copy</button>
+  <div class="wrap row">
+    <div class="rail"><h2>First launch, and the one command it needs.</h2></div>
+    <div class="pane">
+      <div class="prose">
+        <p>
+          teamree is signed ad-hoc, with no Developer ID behind it, so macOS has no way to tell
+          who built it. The first time you open it, macOS refuses with this dialog:
+        </p>
+        <figure class="dialog" role="group" aria-label="The macOS dialog, as it appears">
+          <svg viewBox="0 0 1024 1024" aria-hidden="true" focusable="false"><use href="#app-icon"/></svg>
+          <b>&ldquo;teamree&rdquo; Not Opened</b>
+          <p>Apple could not verify &ldquo;teamree&rdquo; is free of malware that may harm your Mac or compromise your privacy.</p>
+          <div class="buttons" aria-hidden="true"><span class="trash">Move to Trash</span><span class="done">Done</span></div>
+        </figure>
+        <div class="warn">
+          <p><strong>Do not press Move to Trash.</strong> It is the prominent button and it is the wrong one &mdash; it deletes the app you just downloaded. Press <b>Done</b>.</p>
+        </div>
+        <p>
+          Nothing has been found wrong with teamree. macOS has not examined it and detected
+          something; it is telling you the file arrived without a certificate naming who built it.
+          What the missing signature costs you is the guarantee that the file was not altered on
+          its way here, and a checksum gives you that by another route &mdash; which is why every
+          release publishes one.
+        </p>
+        <ol class="steps">
+          <li><div><h3>Open the <code>.dmg</code> and drag teamree to Applications.</h3></div></li>
+          <li><div><h3>Open it, get the dialog above, and press Done.</h3></div></li>
+          <li>
+            <div>
+              <h3>Clear the quarantine flag, once.</h3>
+              <p>Every file a browser downloads is marked with <code>com.apple.quarantine</code>; removing it tells macOS this is a file you put there on purpose.</p>
+              <div class="cmd has-copy">
+                <pre tabindex="0" role="region" aria-label="Command to clear the quarantine flag, repeated here in the full instructions. Scrolls horizontally."><code id="cmd-xattr">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
+                <button class="cmd-copy" type="button" data-copy="cmd-xattr"
+                        data-what="the quarantine command, from the full instructions"
+                        aria-label="Copy the quarantine command, from the full instructions">Copy</button>
+              </div>
+            </div>
+          </li>
+          <li><div><h3>Open it normally.</h3><p>It will not ask again.</p></div></li>
+        </ol>
+        <p>
+          <strong>There is no &ldquo;Open Anyway&rdquo; button in that dialog.</strong> Through macOS 14
+          you could Control-click the app and choose Open; macOS 15 removed that, and on 15 and
+          later &mdash; macOS 26 included &mdash; the dialog offers no way through at all. If you
+          would rather not type a command, the button does exist elsewhere: after pressing Done,
+          go to <b>System Settings &rarr; Privacy &amp; Security</b> and scroll to the Security
+          section, where a line naming teamree appears with <b>Open Anyway</b> beside it. Expect
+          it to ask for your password or Touch ID.
+        </p>
+        <p class="aside">
+          Being exact about that last paragraph, because the rest of this was written from
+          watching a real download install itself: the command above was run against this build
+          and watched to work, the dialog is quoted off the screen, and <b>Done</b> was pressed
+          on it and dismissed it. The System Settings route was not clicked through.
+          <code>Open Anyway</code> is the button macOS ships for this case, but nobody here has
+          confirmed how that pane looks on macOS 26 with teamree in it. If you take that route
+          and it does not match, the command is the one that was tested.
+        </p>
+        <p>
+          <strong>Two silences that look like something worse than they are.</strong> Before you clear
+          the flag, <code>open teamree.app</code> from a terminal prints nothing and exits 0,
+          and the app still does not start. The bundled <code>teamree</code> CLI is killed
+          outright &mdash; no stdout, no stderr, exit status 137. Neither is a broken build; both
+          are this.
+        </p>
+        <p>
+          <strong>And one thing that will look like failure afterwards.</strong>
+          <code>spctl -a -vv</code> says <code>rejected</code> before you clear quarantine and
+          after. Clearing the attribute removes what makes macOS enforce the check; it does not
+          give the app a signature, and nothing short of a Developer ID will make
+          <code>spctl</code> say <code>accepted</code>. The app opens regardless. If you went
+          looking for a way to confirm the fix worked, open the app &mdash; do not ask
+          <code>spctl</code>.
+        </p>
+        <p>
+          <strong>Check the download against the release.</strong> Compare the output of this
+          against <code>SHA256SUMS.txt</code>, published beside the <code>.dmg</code> on the
+          release page. If they agree, the file you have is the file the build produced. It
+          lists the same digest twice, once under the release&rsquo;s versioned file name and
+          once under the name you downloaded: one image, published under both.
+        </p>
+        <div class="cmd has-copy">
+          <pre tabindex="0" role="region" aria-label="Command to check the download&#39;s checksum. Scrolls horizontally."><code id="cmd-sum">shasum -a 256 teamree-mac-universal.dmg</code></pre>
+          <button class="cmd-copy" type="button" data-copy="cmd-sum"
+                  data-what="the checksum command" aria-label="Copy the checksum command">Copy</button>
+        </div>
+        <p class="aside">
+          The macOS builds <em>are</em> signed, but only ad-hoc &mdash; a signature with no identity
+          attached, which is the floor Apple Silicon needs to execute a binary at all. It is not
+          a Developer ID, it is not notarised, and the <code>.dmg</code> itself is not signed at
+          all. The full account, including what <code>codesign</code> prints if you check, is in
+          <a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md" rel="noopener">docs/install.md</a>.
+        </p>
       </div>
-      <p class="caption">
-        The macOS builds <em>are</em> signed, but only ad-hoc — a signature with no identity
-        attached, which is the floor Apple Silicon needs to execute a binary at all. It is not
-        a Developer ID, it is not notarised, and the <code>.dmg</code> itself is not signed at
-        all. The full account, including what <code>codesign</code> prints if you check, is in
-        <a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md" rel="noopener">docs/install.md</a>.
-      </p>
     </div>
   </div>
 </section>
 
-<section id="get">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="sec-label">Get it</p>
-      <h2>One file, one drag, one command.</h2>
+<section id="get" class="get">
+  <div class="wrap row">
+    <div class="rail"><h2>One file, one drag, one command.</h2></div>
+    <div class="pane">
+      <div class="cta">
+        <a class="btn" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">
+          <svg class="apple" aria-hidden="true" focusable="false"><use href="#apple"/></svg>
+          <span class="stack">Download for macOS<small>Universal, Apple Silicon and Intel</small></span>
+        </a>
+        <a class="btn-2" href="https://github.com/zero-abd/teamree/releases/latest" rel="noopener">Release notes and checksums</a>
+      </div>
+      <p class="hero-note">Then <code>xattr -dr com.apple.quarantine /Applications/teamree.app</code> &mdash; <a href="#install">why</a>.</p>
     </div>
-    <div class="cta">
-      <a class="btn" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">
-        <svg class="apple" viewBox="0 0 814 1000" aria-hidden="true" focusable="false"><path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76.5 0-103.7 40.8-165.9 40.8s-105.6-57-155.5-127C46.7 790.7 0 663 0 541.8c0-194.4 126.4-297.5 250.8-297.5 66.1 0 121.2 43.4 162.7 43.4 39.5 0 101.1-46 176.3-46 28.5 0 130.9 2.6 198.3 99.2zm-234-181.5c31.1-36.9 53.1-88.1 53.1-139.3 0-7.1-.6-14.3-1.9-20.1-50.6 1.9-110.8 33.7-147.1 75.8-28.5 32.4-55.1 83.6-55.1 135.5 0 7.8 1.3 15.6 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 45.4 0 102.5-30.4 135.5-71.3z"/></svg>
-        <span class="stack">Download for macOS<small>Universal &middot; Apple Silicon and Intel</small></span>
-      </a>
-      <a class="btn-ghost" href="https://github.com/zero-abd/teamree/releases/latest" rel="noopener">Release notes &amp; checksums</a>
-    </div>
-    <p class="dl-note">Then: <code>xattr -dr com.apple.quarantine /Applications/teamree.app</code> — <a href="#install">why this command is needed</a>.</p>
   </div>
 </section>
 
@@ -1224,8 +900,7 @@ demo:video:parked -->
   <div class="wrap">
     <div class="footer-row">
       <a class="brand" href="/" aria-label="teamree, home">
-        <span class="tile" aria-hidden="true"><svg class="mark" viewBox="0 0 256 256" focusable="false"><use href="#mark-sm"/></svg></span>
-        <span class="word">teamree<i class="dot" aria-hidden="true"></i></span>
+        <svg class="lockup" viewBox="0 10 582 82" aria-hidden="true" focusable="false"><use href="#lockup"/></svg><i class="dot" aria-hidden="true"></i>
       </a>
       <nav class="footer-links" aria-label="Footer">
         <a href="https://github.com/zero-abd/teamree" rel="noopener">Source</a>
@@ -1245,34 +920,26 @@ demo:video:parked -->
 
 <script>
 // The phone menu. Without this the toggle is still a working link to the panel
-// and `:target` opens it, so the four destinations are reachable either way —
-// this only upgrades it to a disclosure that leaves the address bar alone, and
-// adds the three ways out that `:target` has no answer for: Escape, a tap
-// outside, and choosing something.
+// and `:target` opens it; this only upgrades it to a disclosure that leaves the
+// address bar alone, and adds Escape, a tap outside, and choosing something.
 (function () {
   var header = document.querySelector('.site-header');
   var toggle = header && header.querySelector('.nav-toggle');
   var panel = document.getElementById('site-nav');
   if (!header || !toggle || !panel) return;
 
-  // A link arriving as /#site-nav would leave the panel held open by :target
-  // while this thinks it is shut. Take the fragment back before anything reads it.
   if (location.hash === '#site-nav') {
     history.replaceState(null, '', location.pathname + location.search);
   }
-
   function setOpen(open) {
     header.dataset.nav = open ? 'open' : 'closed';
     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
   setOpen(false);
-
   toggle.addEventListener('click', function (event) {
     event.preventDefault();
     setOpen(header.dataset.nav !== 'open');
   });
-  // Choosing a destination closes it: the panel covers the top of what you
-  // just asked to be taken to.
   panel.addEventListener('click', function (event) {
     if (event.target.closest('a')) setOpen(false);
   });
@@ -1284,14 +951,70 @@ demo:video:parked -->
   });
 })();
 
+// The header becomes a material once the page has moved. A passive listener,
+// nothing per frame.
+(function () {
+  var header = document.querySelector('.site-header');
+  if (!header) return;
+  var onScroll = function () { header.classList.toggle('scrolled', window.scrollY > 8); };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+
+// The mark opens. Scroll position sets a target between 0 (the mark at rest)
+// and 1 (two straight panes, the slabs parted); a spring follows that target,
+// so a reader who reverses halfway sees it turn back with the velocity it had,
+// and it settles with its own weight rather than on a timer. Only the numbers
+// in two path strings change. With reduced motion the target is applied as
+// is, and with no script the SVG is exactly the mark.
+(function () {
+  var svg = document.getElementById('hero-mark');
+  if (!svg || !window.requestAnimationFrame) return;
+  var left = svg.querySelector('[data-slab="l"]');
+  var right = svg.querySelector('[data-slab="r"]');
+  var calm = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  var x = 0, v = 0, target = 0, raf = 0, last = 0;
+  var STIFFNESS = 170, DAMPING = 24, PART = 16;
+
+  function draw(p) {
+    var s = -PART * p, t = PART * p;
+    left.setAttribute('d',
+      'M' + (16 + s) + ' 28H' + (116 + s) + 'V228H' + (16 + s) + 'Q' + (8 + s) + ' 228 ' + (8 + s) + ' 220V36Q' + (8 + s) + ' 28 ' + (16 + s) + ' 28Z' +
+      'M' + (32 + s) + ' ' + (66 - 16 * p) + 'L' + (96 + s) + ' 50V206L' + (32 + s) + ' ' + (190 + 16 * p) + 'Z');
+    right.setAttribute('d',
+      'M' + (140 + t) + ' 28H' + (240 + t) + 'Q' + (248 + t) + ' 28 ' + (248 + t) + ' 36V220Q' + (248 + t) + ' 228 ' + (240 + t) + ' 228H' + (140 + t) + 'Z' +
+      'M' + (160 + t) + ' 48L' + (224 + t) + ' ' + (68 - 20 * p) + 'V' + (188 + 20 * p) + 'L' + (160 + t) + ' 208Z');
+  }
+  function step(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    var a = -STIFFNESS * (x - target) - DAMPING * v;
+    v += a * dt;
+    x += v * dt;
+    draw(x);
+    if (Math.abs(v) > 0.002 || Math.abs(x - target) > 0.001) {
+      raf = window.requestAnimationFrame(step);
+    } else {
+      raf = 0; x = target; v = 0; draw(x);
+    }
+  }
+  function want() {
+    var span = Math.max(240, window.innerHeight * 0.5);
+    target = Math.max(0, Math.min(1, window.scrollY / span));
+    if (calm.matches) { x = target; v = 0; draw(x); return; }
+    if (!raf) { last = performance.now(); raf = window.requestAnimationFrame(step); }
+  }
+  window.addEventListener('scroll', want, { passive: true });
+  window.addEventListener('resize', want);
+  want();
+})();
+
 // Progressive only: the commands are selectable text with or without this.
 document.querySelectorAll('.cmd-copy').forEach(function (button) {
   button.addEventListener('click', function () {
     var source = document.getElementById(button.dataset.copy);
     if (!source || !navigator.clipboard) return;
-    // Each button carries an aria-label naming what it copies, because three
-    // buttons all called "Copy" name nothing. That label is then the accessible
-    // name, so moving the visible text alone would never be announced: both move.
     var what = button.dataset.what || 'this command';
     navigator.clipboard.writeText(source.textContent.trim()).then(function () {
       button.textContent = 'Copied';
@@ -1305,6 +1028,7 @@ document.querySelectorAll('.cmd-copy').forEach(function (button) {
     }, function () {});
   });
 });
+
 // Demo clips. The markup ships with native `controls`, so with no JavaScript the
 // page is still a set of playable videos. With JavaScript we take the controls
 // off and drive them ourselves: a clip plays only while it is on screen, and
@@ -1344,31 +1068,23 @@ document.querySelectorAll('.cmd-copy').forEach(function (button) {
 
     // A clip that cannot play must not leave a dead rectangle where a feature
     // was being explained. The host serving these does not answer byte-range
-    // requests — it returns the whole file with a 200 rather than a 206 — and
-    // some browsers decline to play media on that basis. So failure is treated
-    // as a real outcome rather than an impossibility: the video and its button
-    // are removed, the poster-or-placeholder underneath becomes the picture,
-    // and the caption and the prose beside it already say what the clip shows.
+    // requests, and some browsers decline to play media on that basis. So
+    // failure is a real outcome: the dead control goes, the <video> stays so
+    // its poster is the picture, and the caption already says what it showed.
     var giveUp = function () {
       if (frame.dataset.failed === 'yes') return;
       frame.dataset.failed = 'yes';
       frame.dataset.paused = 'yes';
-      // The <video> deliberately stays in the DOM. Removing it looked tidier and
-      // was wrong twice over: the poster frame is the best possible fallback for
-      // a clip that will not play, and the stylesheet decides whether to show
-      // this figure at all with `:has(video)` — which does not reliably
-      // re-evaluate when script changes the subtree, so removing the element
-      // hid the whole figure, caption included. Only the dead control goes.
+      // The <video> stays in the DOM: `:has(video)` decides whether the figure
+      // shows at all and does not reliably re-evaluate when script changes the
+      // subtree, so removing the element hid the whole figure, caption included.
       if (button.parentNode) button.parentNode.removeChild(button);
       frame.__video = null;
     };
-    // A <video> that carries <source> children does NOT fire `error` at itself
-    // when they all fail — the event goes to the last <source> and the video is
-    // simply left with networkState NETWORK_NO_SOURCE. Listening on the video
-    // alone therefore never fires, which is what testing the failure path with
-    // deliberately broken sources turned up. So: listen on the sources, keep
-    // the listener on the video for the direct-src case, and check the one
-    // unambiguous state afterwards.
+    // A <video> with <source> children does NOT fire `error` at itself when
+    // they all fail — the event goes to the last <source> and the video is left
+    // with networkState NETWORK_NO_SOURCE. So: listen on the sources, keep the
+    // listener on the video for the direct-src case, and check the one state.
     var NO_SOURCE = 3; // HTMLMediaElement.NETWORK_NO_SOURCE
     var giveUpIfExhausted = function () { if (video.networkState === NO_SOURCE) giveUp(); };
 
@@ -1379,7 +1095,6 @@ document.querySelectorAll('.cmd-copy').forEach(function (button) {
     video.addEventListener('stalled', function () {
       setTimeout(function () { if (video.readyState < 1) giveUpIfExhausted(); }, 8000);
     });
-    // Belt and braces for a browser that reports exhaustion without an event.
     setTimeout(giveUpIfExhausted, 4000);
 
     frame.__video = video;
@@ -1401,48 +1116,12 @@ document.querySelectorAll('.cmd-copy').forEach(function (button) {
 
   frames.forEach(function (frame) { watcher.observe(frame); });
 
-  // Somebody can turn reduced motion on while the page is open. Honour it then too.
   if (stillness && stillness.addEventListener) {
     stillness.addEventListener('change', function () {
       if (!wantsStillness()) return;
       frames.forEach(function (frame) { if (frame.__video && !frame.__video.paused) frame.__video.pause(); });
     });
   }
-})();
-
-/* The navbar's scrolled state, and the reveal. Both are deliberately small:
-   a passive listener and one observer, no library, nothing that runs per
-   frame. Everything starts visible in markup and is only hidden once script
-   has confirmed it can put it back, so a failed script leaves a readable page
-   rather than an empty one. */
-(function(){
-  var header = document.querySelector('.site-header')
-  if (header) {
-    var onScroll = function(){ header.classList.toggle('scrolled', window.scrollY > 50) }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    onScroll()
-  }
-
-  var calm = window.matchMedia('(prefers-reduced-motion: reduce)')
-  if (calm.matches || !('IntersectionObserver' in window)) return
-
-  var targets = document.querySelectorAll('.hero h1, .hero .lede, .hero .cta, .sec-head h2, .demo, .shot')
-  if (!targets.length) return
-  targets.forEach(function(el){ el.classList.add('reveal') })
-
-  var seen = new IntersectionObserver(function(entries){
-    entries.forEach(function(entry){
-      if (!entry.isIntersecting) return
-      entry.target.classList.add('shown')
-      seen.unobserve(entry.target)
-    })
-  }, { rootMargin: '0px 0px -12% 0px' })
-  targets.forEach(function(el){ seen.observe(el) })
-
-  calm.addEventListener('change', function(){
-    if (!calm.matches) return
-    targets.forEach(function(el){ el.classList.add('shown') })
-  })
 })();
 </script>
 </body>
