@@ -575,7 +575,7 @@ describe('worktree create --agent, repeated', () => {
       .map((call) => call.params as { worktreeId: string; label?: string })
     expect(new Map(labels.map((pane) => [pane.worktreeId, pane.label]))).toEqual(
       new Map([
-        ['wt_made_1', 'fix login'],
+        ['wt_made_1', 'fix login claude'],
         ['wt_made_2', 'fix login claude 2'],
         ['wt_made_3', 'fix login codex']
       ])
