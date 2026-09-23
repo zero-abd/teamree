@@ -1,10 +1,5 @@
-// The Files tab's two reads, against a real repository.
-//
-// Both are questions git already answers — what is here, and which of it is
-// ignored — and the only thing this file adds to git's answer is where it is
-// allowed to look. So the cases worth having are the ones where a wrong answer
-// is quiet: an ignored file drawn like a tracked one, a symlink read as the
-// thing it points at, a `..` that reads a directory the worktree does not own.
+// The Files tab's two reads, against a real repository. The cases worth having
+// are the ones where a wrong answer is quiet.
 
 import { symlink } from 'node:fs/promises'
 import path from 'node:path'
@@ -45,9 +40,7 @@ describe('readWorktreeFiles', () => {
 
     expect(listed.worktreeId).toBe('wt')
     expect(listed.path).toBe('')
-    // Directories before files, each half in name order — the case-blind
-    // order a file manager uses, so `README.md` is not sorted above `debug.log`
-    // by the accident of its capital.
+    // Directories before files, each half in case-blind name order.
     expect(listed.entries.map((entry) => entry.name)).toEqual([
       'dist',
       'docs',

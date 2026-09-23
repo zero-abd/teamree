@@ -1,7 +1,5 @@
-// The test this feature exists for: a mutation made on one connection reaches a
-// subscriber on another. Nothing here is faked — a real runtime, a real unix
-// socket, two real clients, a real repository — because the bug being prevented
-// lives precisely in the wiring that a mock would replace.
+// A mutation made on one connection reaches a subscriber on another. Nothing
+// is faked: the bug being prevented lives in the wiring a mock would replace.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { connect, type Socket } from 'node:net'
@@ -92,10 +90,8 @@ let userDataDir: string
 let runtime: Runtime
 let repo: TempRepo
 /**
- * What the workspace bus carries with nobody subscribed. The runtime keeps a
- * listener of its own — teamwork feeds off the same bus — so the counts below
- * are read against this rather than against zero, and stay honest if the app
- * grows another one.
+ * What the bus carries with nobody subscribed; the runtime keeps a listener of its
+ * own (teamwork feeds off the same bus).
  */
 let restingListeners: number
 
@@ -131,17 +127,13 @@ describe('workspace stream across connections', () => {
 
     // The mutation an agent would make through the CLI.
     const project = await mutator.call<Project>('project.add', { path: repo.repoPath })
-    // Compared canonically: a project's path is stored resolved and with its
-    // separators normalised, which on Windows is not the string that was handed
-    // in. Asserting the raw input would be asserting that the app does not do
-    // the normalisation it deliberately does.
+    // Compared canonically: the path is stored resolved and separator-normalised.
     expect(project.path).toBe(canonicalPath(repo.repoPath))
 
     const event = await watcher.waitForEvent(subscription, 'projects')
     expect(event).toEqual({ type: 'projects' })
 
-    // The stream is the subscriber's alone: the mutating client asked for
-    // nothing and is sent nothing.
+    // The stream is the subscriber's alone: the mutating client is sent nothing.
     expect(mutator.frames.filter((frame) => !isResponse(frame))).toEqual([])
 
     // And the subscriber can refetch what changed over its own connection.
@@ -150,8 +142,7 @@ describe('workspace stream across connections', () => {
 
     watcher.close()
     mutator.close()
-    // Waited for rather than assumed: the case below counts subscriptions on
-    // this same runtime and must not be racing this one's teardown.
+    // Waited for: the case below counts subscriptions on this same runtime.
     await waitForTrue(
       () =>
         runtime.context.subscriptions.size === 0 && runtime.context.workspaceEvents.listenerCount === restingListeners,
@@ -160,20 +151,9 @@ describe('workspace stream across connections', () => {
   }, 30_000)
 
   it("drops a subscription when its client's socket dies", async () => {
-    // Asserted on the runtime, not on the dead client's frame list. A client
-    // whose socket has been destroyed cannot receive a frame whatever the
-    // server does, so "no events arrived here" is true of a correct runtime and
-    // equally true of one streaming into the void forever — it is not evidence
-    // of anything. What the socket dying has to cause is server-side: the
-    // subscription gone, and the workspace bus listener that backed it gone
-    // with it, because a runtime that leaks one listener per client that ever
-    // connected degrades over a day of use.
-    //
-    // This is the only place the whole chain runs for real. socketServer.test
-    // drops a real socket but against a stand-in handler and a hand-built hub;
-    // workspaceSubscription.test asserts the listener count but reaches in and
-    // calls closeConnection itself, so neither of them would notice the socket
-    // 'close' event failing to reach the hub.
+    // Asserted on the runtime, not the dead client's frame list: a destroyed socket
+    // receives nothing whatever the server does. The subscription and its bus listener
+    // must go, and this is the only place the socket 'close' to hub chain runs for real.
     const hub = runtime.context.subscriptions
     const bus = runtime.context.workspaceEvents
 
@@ -188,8 +168,7 @@ describe('workspace stream across connections', () => {
     expect(bus.listenerCount).toBe(restingListeners)
 
     const projects = await mutator.call<Project[]>('project.list')
-    // Removing the project the first case added is a real mutation with nobody
-    // left to hear it; the runtime must survive it and keep serving.
+    // A real mutation with nobody left to hear it; the runtime must keep serving.
     for (const project of projects) await mutator.call('project.remove', { projectId: project.id })
     expect(await mutator.call<Project[]>('project.list')).toEqual([])
     mutator.close()

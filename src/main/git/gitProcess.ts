@@ -1,9 +1,6 @@
-// The only place in the app that starts a git process.
-//
-// `shell: false` is not negotiable: worktree names, branch names and refs are
-// user input, and a shell would turn any of them into a command injection.
-// Everything else here exists so a hung or chatty git can never wedge the
-// runtime: separate pipes, a hard timeout, an abort hook, and an output cap.
+// The only place in the app that starts a git process. `shell: false` is not
+// negotiable: names and refs are user input. Everything else exists so a hung
+// or chatty git can never wedge the runtime.
 
 import { spawn } from 'node:child_process'
 import { GitCommandError } from './errors'
@@ -21,41 +18,15 @@ export type GitRun = {
   readOnly?: boolean
   /**
    * Stop reading stdout at this many bytes and report the output as clipped,
-   * rather than letting it run up against the hard cap and fail outright.
-   *
-   * For a caller that is going to cut the output down to a budget anyway, the
-   * whole thing never needed to fit in memory first — and a 40MB patch that
-   * ends as a rejection is reported to the user as "no patch", which is a
-   * confident wrong answer rather than a truncated right one.
+   * rather than hitting the hard cap: a truncated right answer, not "no patch".
    */
   stdoutLimitBytes?: number
   /**
-   * Called with each chunk of stderr as it arrives, before the process ends.
-   *
-   * Every other caller here waits for `close` and reads the whole of stderr at
-   * once, which is right for a command that answers a question and wrong for
-   * one that takes a minute: a push spends its time counting and compressing
-   * objects and says so on stderr the entire time, and a caller that can only
-   * see that afterwards has nothing to show anybody meanwhile. That was the
-   * whole of "it gets stuck at git push" — the bytes existed and there was no
-   * seam to hand them out of.
-   *
-   * stderr and not stdout because that is where git's progress meter goes;
-   * stdout carries the machine-readable result, which is read once at the end
-   * and means nothing in pieces. Note that git only draws that meter when it
-   * believes something is watching, so a caller that wants it has to ask with
-   * `--progress`.
+   * Each chunk of stderr as it arrives, for a push that spends a minute saying
+   * what it is doing. Git only draws its meter when asked with `--progress`.
    */
   onStderr?: (chunk: string) => void
-  /**
-   * Written to the process's stdin, which is then closed.
-   *
-   * Only `git apply` needs it, and it needs it rather than a file because the
-   * patch being applied is assembled in memory from a hunk somebody clicked:
-   * a temp file would be the same bytes plus a path to clean up and a window
-   * in which another process could read them. Left undefined, stdin is the
-   * inherited pipe nobody writes to, which is what every other call here wants.
-   */
+  /** Written to stdin, which is then closed. Only `git apply` needs it; a patch is assembled in memory. */
   stdin?: string
 }
 
@@ -86,8 +57,7 @@ export function createGitRunner(binary = process.env.TEAMREE_GIT_BINARY || 'git'
     tryRun,
     async run(run) {
       const output = await tryRun(run)
-      // A clipped read killed git itself, so the exit code describes our own
-      // signal rather than anything git decided about the command.
+      // A clipped read killed git itself, so the exit code describes our own signal.
       if (output.exitCode !== 0 && output.stdoutClipped !== true) {
         throw new GitCommandError({
           args: run.args,
@@ -102,11 +72,8 @@ export function createGitRunner(binary = process.env.TEAMREE_GIT_BINARY || 'git'
 }
 
 /**
- * Windows cannot execute a .cmd or .bat directly: CreateProcess hands it to
- * cmd.exe, which re-parses the whole command line by its own rules. Branch names
- * and refs are user input, so `&` or `|` in one would become a second command —
- * the exact injection `shell: false` exists to rule out. Node refuses to spawn a
- * batch file without a shell for the same reason; this says why first.
+ * Windows hands a .cmd or .bat to cmd.exe, which re-parses the command line, so
+ * `&` or `|` in a ref would become a second command; this says why first.
  */
 export function rejectBatchBinary(binary: string, platform: NodeJS.Platform = process.platform): string | null {
   if (platform !== 'win32' || !/\.(cmd|bat)$/i.test(binary)) return null
@@ -174,8 +141,7 @@ function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
 
     if (run.stdin !== undefined) {
       // EPIPE is the normal end of a git that refused the patch before reading
-      // all of it, and it arrives as an unhandled error on the stream rather
-      // than as the exit code that actually describes the failure.
+      // all of it; the exit code describes the failure.
       child.stdin.on('error', () => undefined)
       child.stdin.end(run.stdin)
     }
@@ -185,8 +151,7 @@ function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
     const stdoutLimit = run.stdoutLimitBytes
     child.stdout.on('data', (chunk: string) => {
       if (clipped) return
-      // Kept whole: the caller asked for a prefix long enough to answer its own
-      // question, and a chunk boundary is not a place to cut a patch.
+      // Kept whole: a chunk boundary is not a place to cut a patch.
       if (stdoutLimit !== undefined && stdout.length + chunk.length >= stdoutLimit) {
         stdout += chunk
         clipped = true
@@ -202,14 +167,12 @@ function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
     })
     child.stderr.on('data', (chunk: string) => {
       if (stderr.length < MAX_OUTPUT_BYTES) stderr += chunk
-      // Handed on even past the cap: what is being dropped is the buffer this
-      // process keeps, and a watcher that stops being told anything looks
-      // exactly like the hang it was added to rule out.
+      // Handed on even past the cap: a watcher that stops being told anything
+      // looks exactly like the hang it was added to rule out.
       try {
         run.onStderr?.(chunk)
       } catch {
-        // A watcher that throws is the watcher's problem. It must never be the
-        // reason a git command this app is running fails.
+        // A watcher that throws must never be the reason a git command fails.
       }
     })
 
@@ -254,16 +217,11 @@ function buildEnv(run: GitRun): NodeJS.ProcessEnv {
     // A background worktree create must never stall on a credential prompt.
     GIT_TERMINAL_PROMPT: '0',
     GIT_ASKPASS: process.env.GIT_ASKPASS ?? '',
-    // Several decisions in this app are made by reading git's own prose, and
-    // git ships translations in most distro packages and in Git for Windows.
-    // Under the C locale gettext hands back the untranslated message, which is
-    // the only thing that makes reading it meaningful at all. LANGUAGE outranks
-    // LC_ALL everywhere but the C locale, so it is cleared rather than trusted
-    // to stay out of the way.
+    // Decisions here are made by reading git's prose, and git ships translations.
+    // LANGUAGE outranks LC_ALL everywhere but the C locale, so it is cleared.
     LC_ALL: 'C',
     LANGUAGE: '',
-    // Status is polled; taking the index lock on every poll would fight the
-    // user's own git commands in the same checkout.
+    // Status is polled; the index lock on every poll would fight the user's own git.
     ...(run.readOnly ? { GIT_OPTIONAL_LOCKS: '0' } : {}),
     ...run.env
   }

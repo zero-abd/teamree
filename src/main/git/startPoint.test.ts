@@ -234,10 +234,8 @@ describe('worktree.create start points', () => {
     expect(await started('from sha', first.slice(0, 10))).toBe(first)
   })
 
-  // The branch it started from is history, not an upstream. Inheriting it as
-  // one is what made "how much is left to push" keep counting commits the
-  // remote already had: see `worktreePush.ts`, which sets the tracking to the
-  // branch it actually wrote.
+  // The branch it started from is history, not an upstream: inheriting it made
+  // "left to push" keep counting commits the remote had. See `worktreePush.ts`.
   it('records the remote branch it started from without tracking it', async () => {
     const repo = await newRepo({ withRemote: true })
     await pushFromElsewhere(repo, 'api-rewrite')

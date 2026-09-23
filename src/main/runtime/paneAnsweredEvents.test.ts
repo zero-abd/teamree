@@ -1,16 +1,6 @@
-// What a keystroke retires, as every window hears about it.
-//
-// Three badges leave a pane when somebody types into it, and none is a thing
-// the person who typed is the only one looking at: the `resumed` badge on a
-// restored pane, the bell that puts "waiting on you" beside its name in every
-// sidebar, and the agent's own word that it is waiting, when it said so
-// through a hook rather than a bell. All are cleared inside the pty session,
-// out of sight of the pane list — which answers what the pane is now, not what
-// it was a byte ago — so the manager reports the edge and this is the file
-// that holds it to it.
-//
-// Wired the way the app wires it: the service, then the handlers, then the
-// producers, with a real pty on the other end of every write.
+// What a keystroke retires: the `resumed` badge, the bell, and the agent's own
+// word that it is waiting. All are cleared inside the pty session, so the manager
+// reports the edge and this file holds it to it. Wired as the app wires it, real pty.
 
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -52,10 +42,8 @@ afterEach(async () => {
 })
 
 /**
- * A stand-in for an agent that says one thing, rings the bell, and then waits —
- * which is the shape of an agent that has asked a question. It never reads its
- * stdin, so a keystroke in these tests produces no output of its own and cannot
- * be mistaken for the thing that published.
+ * An agent that says one thing, rings the bell, and waits. Never reads stdin, so a
+ * keystroke produces no output of its own.
  */
 async function fakeAgent(): Promise<{ checkout: string; binary: string }> {
   const base = await mkdtemp(join(tmpdir(), 'teamree-answered-'))
@@ -87,8 +75,7 @@ async function startAfterRestart(): Promise<Harness> {
     resolveWorktreeCwd: (worktreeId) => (worktreeId === WORKTREE ? checkout : undefined),
     layouts: store,
     sessions: store,
-    // Said here rather than left to the real probe, which would answer for
-    // whatever is in the home directory of whoever runs this suite.
+    // Said here rather than probed from the home directory of whoever runs this suite.
     conversationEvidence: () => 'present'
   })
   services.push(terminals)
@@ -150,8 +137,7 @@ describePty('a keystroke that retires a badge', () => {
       await harness.call('terminal.write', { terminalId: RESTORED_ID, data: 'y' })
 
       expect(paneIn(harness, RESTORED_ID).restored).toBeUndefined()
-      // Once. A window that has to redraw a badge needs telling exactly as many
-      // times as the badge changed.
+      // Once: a window needs telling exactly as many times as the badge changed.
       expect(invalidations(harness.events)).toEqual([{ type: 'terminals' }])
     },
     TEST_TIMEOUT_MS
@@ -161,8 +147,7 @@ describePty('a keystroke that retires a badge', () => {
     'announces the bell going out when somebody answers the pane',
     async () => {
       const harness = await startAfterRestart()
-      // A second pane, opened in this run, so the restored badge is not what is
-      // being watched: this one has only ever had a bell.
+      // A second pane opened this run, so only the bell is being watched.
       const asking = await harness.call<Terminal>('terminal.create', {
         worktreeId: WORKTREE,
         command: harness.binary
@@ -172,8 +157,7 @@ describePty('a keystroke that retires a badge', () => {
       harness.events.length = 0
       await harness.call('terminal.write', { terminalId: asking.id, data: 'y' })
 
-      // The sidebar draws "waiting on you" from this, and a bell that outlives
-      // the answer is a row asking for something it has already been given.
+      // A bell that outlives the answer is a row asking for what it was already given.
       expect(paneIn(harness, asking.id).lastBellAt).toBeUndefined()
       expect(invalidations(harness.events)).toEqual([{ type: 'terminals' }])
     },
@@ -189,9 +173,8 @@ describePty('a keystroke that retires a badge', () => {
         command: harness.binary
       })
       await waitUntil(() => paneIn(harness, asking.id).lastBellAt !== undefined, 'the pane to ring its bell')
-      // The bell answered first, so what the next keystroke retires is the
-      // agent's word alone — which is all a Claude Code pane ever shows, since
-      // it rings no bell of its own.
+      // The bell answered first, so the next keystroke retires the agent's word alone
+      // — all a Claude Code pane ever shows, since it rings no bell.
       await harness.call('terminal.write', { terminalId: asking.id, data: 'y' })
       expect(paneIn(harness, asking.id).lastBellAt).toBeUndefined()
 
@@ -202,8 +185,7 @@ describePty('a keystroke that retires a badge', () => {
       expect(paneIn(harness, asking.id).agentEvent).toBeUndefined()
       expect(invalidations(harness.events)).toEqual([{ type: 'terminals' }])
 
-      // A turn that ended stays ended: typing the next prompt changes nothing
-      // on the record, so no window is told to redraw.
+      // A turn that ended stays ended: no record change, no redraw.
       await harness.call('terminal.agentEvent', { terminalId: asking.id, event: 'Stop', at: 2 })
       harness.events.length = 0
       await harness.call('terminal.write', { terminalId: asking.id, data: 'next prompt' })

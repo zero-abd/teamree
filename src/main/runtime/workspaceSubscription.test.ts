@@ -1,6 +1,5 @@
 // The workspace stream as a subscriber experiences it: real services, real
-// mutations dispatched the way a transport dispatches them, and assertions on
-// the frames that come back out of the subscription hub.
+// mutations, assertions on the frames out of the subscription hub.
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -58,11 +57,7 @@ type Harness = {
 type HarnessOptions = {
   repo?: TempRepo
   slowWorktreeAddMs?: number
-  /**
-   * Off by default. Every other test here is about producers driven by a call,
-   * and a watcher firing on the files those calls move would put events in
-   * their way that they are not about.
-   */
+  /** Off by default: a watcher firing on files the calls move would put events in the other tests' way. */
   watchFiles?: boolean
 }
 
@@ -91,8 +86,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
     ...(options.slowWorktreeAddMs === undefined
       ? {}
       : {
-          // A checkout that takes longer than the coalescing window is what
-          // makes the background creating -> ready transition its own event.
+          // A checkout slower than the coalescing window makes creating -> ready its own event.
           runner: createDelayedRunner(
             baseRunner,
             (args) => args[0] === 'worktree' && args[1] === 'add',
@@ -105,13 +99,11 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
   publishGitWrites(registry, git, context.workspaceEvents)
   let refused: WatchDegraded | undefined
   const worktreeFiles = options.watchFiles
-    ? // Far shorter than the real windows: this test is about whether a file
-      // change reaches a subscriber at all, not about how long it is held.
+    ? // Far shorter than the real windows: the test is about whether, not how long.
       publishWorktreeFileEvents(git, context.workspaceEvents, {
         settleMs: 20,
         minIntervalMs: 0,
-        // Kept rather than logged, because a refused watch is the one thing
-        // that makes a test here wait for something that can never arrive.
+        // Kept rather than logged: a refused watch makes a test wait for what can never arrive.
         onDegraded: (event) => {
           refused ??= event
         }
@@ -263,8 +255,7 @@ describe('workspace stream producers', () => {
       const project = await app.call<Project>('c1', 'project.add', { path: repo.repoPath })
       const first = await app.call<Worktree>('c1', 'worktree.create', { projectId: project.id, name: 'one' })
       const second = await app.call<Worktree>('c1', 'worktree.create', { projectId: project.id, name: 'two' })
-      // Settled first, so removal is the in-memory burst under test rather than
-      // two checkouts being torn off disk seconds apart.
+      // Settled first, so removal is one in-memory burst.
       await Promise.all([app.git.whenSettled(first.id), app.git.whenSettled(second.id)])
 
       const watcher = await app.watch('c1')
@@ -302,16 +293,14 @@ describe('git writes as producers', () => {
         paths: ['new.txt']
       })
 
-      // Nothing about the worktree record changed, so this event can only have
-      // come from the write announcing itself.
+      // The record did not change, so this event came from the write announcing itself.
       await watcher.waitFor(has('worktrees'), 'the invalidation for a commit')
     },
     TEST_TIMEOUT_MS
   )
 
-  // A push moves only remote-tracking refs, which live in the common git
-  // directory no worktree watch covers — so this is the one route the chips
-  // have to the new numbers, and without it they wait for the next poll.
+  // A push moves only remote-tracking refs, in the common git directory no
+  // worktree watch covers.
   it(
     'announces a push, which the filesystem watch would never see',
     async () => {
@@ -351,29 +340,23 @@ describe('worktree files as a producer', () => {
       const ready = await app.git.whenSettled(worktree.id)
       expect(ready.state, ready.error).toBe('ready')
 
-      // Subscribed only now, and cleared, so nothing from creating the checkout
-      // can be mistaken for what the edit below produces.
+      // Subscribed only now, so nothing from the create is mistaken for the edit below.
       const watcher = await app.watch('c1')
       await settle()
       watcher.clear()
 
-      // No call, no shell, no exit: a file appears the way an editor or an
-      // agent would leave it, and the only thing that can notice is the watch.
+      // No call, no shell: only the watch can notice this.
       await writeFile(join(ready.path, 'NOTES.md'), '# changed underneath\n')
 
-      // A watch this machine could not give out is the one way the event never
-      // arrives however long this waits, so it ends the wait too — otherwise
-      // the run dies at the deadline saying only that nothing was seen, and
-      // sends the next reader hunting a race in the producer that is not there.
+      // A refused watch is the one way the event never arrives, so it ends the
+      // wait too rather than dying at the deadline.
       await watcher.waitFor(
         (events) => has('worktrees')(events) || app.watchRefused() !== undefined,
         'the invalidation for a file that changed on disk'
       )
 
       const refused = app.watchRefused()
-      // A machine with nothing left to give proves nothing about this producer,
-      // so it is said out loud and stepped over rather than reported as a fault
-      // in code that was never run.
+      // A machine with nothing left to give proves nothing about this producer.
       if (refused && isResourceShortage(refused)) ctx.skip(watchRefusalReport(refused))
       if (refused) throw new Error(watchRefusalReport(refused))
       expect(watcher.events.some((event) => event.type === 'worktrees')).toBe(true)
@@ -397,8 +380,7 @@ describe('worktree files as a producer', () => {
       await settle()
       watcher.clear()
 
-      // Put the checkout path back and write into it. It is the exact directory
-      // that was being watched, so a watch left behind would announce this.
+      // The exact directory that was watched, so a watch left behind would announce this.
       await mkdir(ready.path, { recursive: true })
       await writeFile(scratch, 'after\n')
       await settle()

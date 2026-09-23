@@ -1,23 +1,12 @@
-// The workspace change stream, from whatever caused a change to whoever is
-// watching.
-//
-// One process-wide bus sits between producers and subscribers, and producers
-// publish without knowing whether anyone is listening or which transport asked.
-// That indirection is the entire point of the feature: a mutation arriving over
-// the CLI socket reaches a GUI subscriber on Electron IPC because both ends meet
-// here rather than in a transport.
-//
-// Events are deliberately coarse — they name a collection, not a delta — so a
-// subscriber refetches and cannot drift out of sync with the runtime.
+// The workspace change stream: one process-wide bus, so a mutation over the CLI
+// socket reaches a GUI subscriber on IPC. Events name a collection, not a delta,
+// so a subscriber refetches and cannot drift.
 
 import type { WorkspaceEvent } from '../../shared/methods'
 
 /**
- * How long events are held before delivery. One user action fans out into
- * several changes (creating a worktree writes a record, then transitions it;
- * opening a terminal also rewrites a layout), and a subscriber that refetches
- * per event would refetch several times for one action. Short enough that a
- * click still feels instant, long enough to swallow that fan-out.
+ * How long events are held before delivery: long enough to swallow one action's
+ * fan-out, short enough that a click still feels instant.
  */
 export const WORKSPACE_EVENT_COALESCE_MS = 40
 
@@ -50,11 +39,7 @@ export class WorkspaceEventBus {
   }
 }
 
-/**
- * What makes two events the same invalidation. Events carrying an id keep it in
- * the key, so a burst touching two worktrees' layouts stays two events while a
- * burst touching one stays one.
- */
+/** What makes two events the same invalidation; an id stays in the key. */
 export function coalesceKey(event: WorkspaceEvent): string {
   switch (event.type) {
     case 'layout':
@@ -80,8 +65,7 @@ export type CoalescedStreamOptions = {
 
 /**
  * Buffers events for one window and delivers at most one per key, in the order
- * their keys were first seen. Each subscriber gets its own stream so a slow or
- * departing subscriber cannot hold up anyone else's events.
+ * their keys were first seen. One stream per subscriber.
  */
 export function createCoalescedStream(
   deliver: WorkspaceEventListener,
@@ -101,11 +85,9 @@ export function createCoalescedStream(
 
   return {
     push: (event) => {
-      // Re-setting an existing key keeps its original position and takes the
-      // newer payload, which is what a client should act on.
+      // Re-setting a key keeps its position and takes the newer payload.
       pending.set(coalesceKey(event), event)
-      // The window runs from the first event of a burst, not the last, so a
-      // continuous stream of changes still gets delivered every window.
+      // The window runs from the first event of a burst, so a continuous stream still delivers.
       if (!cancelScheduled) cancelScheduled = schedule(flush, windowMs)
     },
     cancel: () => {

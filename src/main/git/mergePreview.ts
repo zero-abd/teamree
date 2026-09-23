@@ -1,28 +1,14 @@
-// Would this worktree merge cleanly, and if not, what fights?
-//
-// Running several attempts at one task in parallel is the point of this app,
-// and the question that follows immediately is which of them can actually go
-// in. Answering it by trying the merge is the obvious approach and a bad one:
-// it dirties a checkout, needs somewhere to put the result, and leaves the
-// repository mid-merge when it fails — for a question that was only ever
-// hypothetical.
-//
-// `git merge-tree --write-tree` answers it without touching any working tree at
-// all. It merges two commits in memory, writes the result into the object
-// database, and reports what conflicted. Nothing is checked out, no index is
-// touched, and the tree it writes is unreferenced and collected later.
+// Would this worktree merge cleanly, and if not, what fights? `git merge-tree
+// --write-tree` answers without touching a working tree: it merges in memory,
+// writes an unreferenced tree, and reports what conflicted.
 
 import type { WorktreeMergePreview } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
 import { assertRefShape } from './repository'
 
 /**
- * What the porcelain says, in the `-z` form.
- *
- * The output is one NUL-terminated tree oid, then the conflicted paths, then an
- * empty entry, then human-readable messages. A clean merge stops after the oid,
- * which is why the file list is read up to the terminator rather than to the
- * end.
+ * The porcelain in `-z` form: one NUL-terminated tree oid, the conflicted paths,
+ * an empty entry, then prose. A clean merge stops after the oid.
  */
 export function parseMergeTree(raw: string): { tree: string; conflicts: string[] } {
   const records = raw.split('\0')
@@ -34,25 +20,18 @@ export function parseMergeTree(raw: string): { tree: string; conflicts: string[]
     if (record === '') break
     conflicts.push(record)
   }
-  // The same path conflicts once per reason — a modify/delete reports both the
-  // conflict and the resolution it chose — and a list that repeats itself reads
-  // as more damage than there is.
+  // The same path conflicts once per reason (a modify/delete reports the conflict
+  // and the resolution it chose); a list that repeats reads as more damage.
   return { tree, conflicts: [...new Set(conflicts)] }
 }
 
 /**
- * Older git has `merge-tree` but not the form that answers this question.
- *
- * The English wordings are matched first because they are precise, and then
- * the shape that survives translation: a refusal that names both the command
- * and the option is this refusal whatever language the prose around it is in.
- * Git translates "unknown option" and "usage"; it does not translate the
- * spelling of its own subcommands and flags.
+ * Older git has `merge-tree` but not `--write-tree`. English wordings first, then
+ * the shape that survives translation: git does not translate its own flag spellings.
  */
 export function lacksWriteTree(stderr: string): boolean {
   return (
-    // git spells it several ways: "unknown option `write-tree'" with no dashes
-    // at all, "--write-tree" with them, and quoted either way.
+    // git spells it "write-tree" with no dashes, "--write-tree", or quoted either way.
     /(?:unknown|invalid|unrecognized) option[:\s]+[`']?-{0,2}write-tree[`']?/i.test(stderr) ||
     /unknown rev [`']?--write-tree[`']?/i.test(stderr) ||
     /usage:\s*git merge-tree\s+<base-tree>/i.test(stderr) ||
@@ -73,14 +52,8 @@ export type MergePreviewOptions = {
 }
 
 /**
- * Whether this worktree's branch would merge into the base ref, and what would
- * conflict if it would not.
- *
- * Every answer it cannot give is named rather than guessed at. A base ref that
- * does not resolve, two histories with nothing in common, a git too old to be
- * asked — each comes back as its own state with a reason, because "no
- * conflicts" and "could not tell" look identical to a caller and mean opposite
- * things.
+ * Whether this branch would merge into the base ref, and what would conflict.
+ * Every answer it cannot give is named: "no conflicts" and "could not tell" look identical to a caller.
  */
 export async function readMergePreview(runner: GitRunner, options: MergePreviewOptions): Promise<WorktreeMergePreview> {
   const readAt = (options.now ?? Date.now)()
@@ -88,22 +61,9 @@ export async function readMergePreview(runner: GitRunner, options: MergePreviewO
   const run = { cwd: options.repoPath, readOnly: true, timeoutMs: 60_000 } as const
   const signal = options.signal ? { signal: options.signal } : {}
 
-  // Four git commands below take these two names as bare positional arguments,
-  // and a name beginning with a dash is an option rather than a revision — which
-  // is a thing a ref is genuinely allowed to be. `git check-ref-format` accepts
-  // `refs/heads/--anything`, and a clone of a repository whose HEAD points at
-  // one checks it out, so `detectBaseRef` can hand this function a base ref the
-  // other end of a network chose. Whether any option reachable from `merge-base`
-  // or `merge-tree` is worth having is not a question to answer per command and
-  // then re-answer whenever git grows one.
-  //
-  // Refused here, at the function that starts the processes, rather than trusted
-  // from whoever assembled the record: `readDivergence` in worktreeStatus.ts and
-  // `pushWorktree` in worktreePush.ts already hold their own refs to this shape,
-  // and a preview is the third reader of the same two strings. `unavailable`
-  // rather than a throw, because that is what this function already does with
-  // every question it cannot answer, and a caller that branches on `state` needs
-  // no new case for this one.
+  // Four git commands take these names as bare positionals, and a name beginning
+  // with a dash is an option — which `git check-ref-format` allows, so `detectBaseRef`
+  // can hand over a base ref a remote chose. `unavailable` rather than a throw, as every answer here.
   for (const [ref, label] of [
     [options.baseRef, 'base ref'],
     [options.branch, 'branch']
@@ -150,8 +110,7 @@ export async function readMergePreview(runner: GitRunner, options: MergePreviewO
     }
   }
 
-  // How much there is to merge at all. A branch with nothing the base lacks
-  // needs no merge preview and no `merge-tree` process to say so.
+  // A branch with nothing the base lacks needs no `merge-tree` process.
   const counted = await runner.tryRun({
     args: ['rev-list', '--count', `${options.baseRef}..${options.branch}`],
     ...run,
@@ -196,8 +155,7 @@ export async function readMergePreview(runner: GitRunner, options: MergePreviewO
   }
 
   const { conflicts } = parseMergeTree(merged.stdout)
-  // Trust the exit code over the parse: a clean merge writes no file list, and
-  // a conflicted one always sets 1.
+  // Trust the exit code over the parse: a clean merge writes no file list.
   if (merged.exitCode === 0) return { ...base, ahead, state: 'clean', conflicts: [] }
   return { ...base, ahead, state: 'conflicts', conflicts }
 }

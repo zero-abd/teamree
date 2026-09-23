@@ -1,17 +1,6 @@
-// Compatibility floor. Everything this service runs is available in git 2.25:
-//
-//   worktree add/list --porcelain/remove   2.7 / 2.7 / 2.17
-//   status --porcelain=v2 --branch         2.11
-//   rev-parse --absolute-git-dir           2.13
-//   GIT_OPTIONAL_LOCKS                     2.15
-//
-// Deliberately avoided because they are newer than the floor:
-//   worktree list --porcelain -z           2.36
-//   worktree add --orphan                  2.42
-//   rev-parse --path-format                2.31
-//
-// The version is probed once per runner and cached; a repo that predates the
-// floor fails loudly at project.add rather than halfway through a create.
+// Compatibility floor: git 2.25 covers everything this service runs. Newer and
+// avoided: `worktree list --porcelain -z` (2.36), `worktree add --orphan`
+// (2.42), `rev-parse --path-format` (2.31). Probed once per runner and cached.
 
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'

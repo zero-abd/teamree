@@ -1,71 +1,6 @@
-// THE FOURTH TRANSPORT.
-//
-// The runtime already answers one catalogue of methods over Electron IPC for
-// the window and over a unix socket for the CLI. A teammate is another way in,
-// and this file is deliberately the same shape as `socketServer.ts`: give the
-// connection an id, give it a frame decoder, give it a subscription scope, feed
-// whatever arrives to the one dispatcher, and write what comes back. Nothing
-// below this line knows the caller is two thousand miles away, which is what
-// makes `terminal.subscribe` reachable over a peer link in milestone C without
-// touching the terminal service at all.
-//
-// Two things are not like the socket server, and both are because the caller is
-// somebody else's machine:
-//
-// **The bytes are encrypted.** What arrives is a Noise transport message; what
-// comes out of it is the same newline-delimited JSON a CLI client sends.
-// `peerFraming.ts` owns the boundary between the two.
-//
-// **The catalogue is not fully open.** A CLI client is the user; a peer is a
-// teammate. `docs/teamwork.md` means for a teammate to see panes and to type
-// into one, and it does not mean for them to remove a worktree or drop a
-// project. So a peer's reachable surface is an explicit allow-list: C added the
-// two reads that stream a pane's output and D added `terminal.write`, and
-// nothing else has ever been on it. Everything absent from the set answers as
-// an unknown method, which is what it is from where the peer stands.
-//
-// **One of those methods runs code.** `terminal.write` is the whole of
-// milestone D and the whole of the risk in this product, so it does not simply
-// join the list. Every one of them passes `onRemoteWrite` first — a synchronous
-// verdict from the thing that knows whose link this is, whether that person is
-// still on the roster, and whether the owner has muted the pane — and a
-// transport given no such verdict carries no keystrokes at all. The check and
-// the dispatch are in one task with nothing awaited between them, which is what
-// makes a mute instant: a mute can only be applied in some later task, and the
-// keystroke after it is refused.
-//
-// **And the verdict may be a person's.** A teammate typing at a pane they have
-// no standing permission on is neither allowed nor refused: the owner's machine
-// holds the bytes and asks the owner, and answers `held` — a promise, not a
-// verdict. Nothing is dispatched while that promise is unsettled, so a held
-// keystroke has not happened to the pane in any sense; when it settles, an
-// allowed one goes through the same one-task check-and-dispatch as any other,
-// because consent is permission to run and not a way round the rest of the
-// judgment. The teammate's own request stays open across the wait, which is why
-// `terminal.write` alone carries a longer deadline than everything else here.
-//
-// Refusals are answered rather than dropped. A keystroke that went nowhere and
-// said nothing would leave the person who typed it believing they had typed
-// into somebody's shell, which is its own kind of lie. That is true of a held
-// one too: it ends as an answer — allowed, denied, or expired — in every case,
-// including the link going away underneath it.
-//
-// **The wire has a budget and a pane can outrun it.** `relay/README.md` gives a
-// connection 200 frames and 4 MiB a second, and an agent that prints a build log
-// can beat both. So stream frames are paced on the way out and consecutive
-// output for one pane is merged, which is lossless — concatenating two chunks of
-// a byte stream is the same byte stream. What is not lossless is the bound on
-// how much may be held while the wire catches up, and past it the oldest bytes
-// go. That is the one case where a watcher is shown less than the owner
-// produced, so it is the one case where the watcher is told: an `elided` event
-// carries the byte count, in the stream, where the hole is. Dropping output
-// silently would make the whole feature a lie.
-//
-// Pacing holds output back, so it can also reorder it against something that is
-// not paced: a `terminal.read` answer would otherwise overtake output its own
-// scrollback already carries, and a watcher joining the two by frame order
-// would be shown that output twice. So a read flushes its pane first, and the
-// answer leaves after everything it describes.
+// A teammate's way into the runtime, the same shape as `socketServer.ts`: the bytes
+// are Noise-encrypted (`peerFraming.ts`), the reachable catalogue is the allow-list
+// `PEER_METHODS`, and `terminal.write` passes `onRemoteWrite` before it is dispatched.
 
 import { CONSENT_WINDOW_MS } from '../../shared/entities'
 import {
@@ -90,47 +25,17 @@ import { createLineReader, encodeLine } from './peerFraming'
 import type { SubscriptionHub } from './subscriptionHub'
 
 /**
- * What has to be true about the caller before one admitted method runs.
- *
- * Admission was already an allow-list with a safe default. The scoping that
- * makes a teammate's reach *mean* "the one project we share" was not: it was
- * two branches further down this file, matching method names by hand, with
- * nothing joining them to the list. A method added to the list was admitted and
- * handed to the dispatcher carrying nothing but the id the remote caller named
- * — no project check at all, and no test failing. That is not hypothetical:
- * `terminal.read` and `terminal.subscribe` shipped exactly that way the first
- * time, and the comment recording it is a few hundred lines below.
- *
- * So the list is the table of scopes, and a method cannot be on one without
- * being on the other. The next omission is a type error rather than a hole.
- *
- *   * `link` — nothing to scope. The method is about this link and answers with
- *     what this link is already entitled to.
- *   * `read-pane` — names a pane, and the owner decides whether this teammate
- *     may look at it.
- *   * `write-pane` — names a pane and runs code in it. Judged separately from
- *     looking, because permitting the two is not the same decision.
+ * What has to be true about the caller before one admitted method runs. The list
+ * is the table of scopes, so a method cannot be admitted without naming one:
+ * `link` needs nothing, `read-pane` asks the owner whether this teammate may look,
+ * `write-pane` runs code and is judged separately from looking.
  */
 export type PeerScope = 'link' | 'read-pane' | 'write-pane'
 
 /**
- * What a teammate may ask this runtime to do.
- *
- * Presence, the two reads that let somebody watch a pane — `terminal.read` for
- * the scrollback they are joining, `terminal.subscribe` for everything after it
- * — and `terminal.write`, which types into one. That last is the only entry
- * that changes anything on this machine, and it is gated again below.
- *
- * `terminal.resize` and `terminal.close` are absent and stay absent: a
- * teammate's window is not this pane's window, and a reader who could end
- * somebody's process would be a different feature. Everything touching git is
- * absent for the reason `docs/teamwork.md` gives — "anyone can type" is a
- * statement about panes, not a licence to delete a colleague's worktree.
- *
- * Adding a method here is the deliberate act of handing a teammate a new
- * capability, so the set is spelled out rather than derived — and each entry
- * names the check that makes that capability mean "one project" rather than
- * "this machine". See `PeerScope`.
+ * What a teammate may ask this runtime to do. `terminal.resize` and `terminal.close`
+ * stay absent (a teammate's window is not this pane's window), and everything
+ * touching git is absent — "anyone can type" is about panes, not worktrees.
  */
 export const PEER_METHODS: Readonly<Partial<Record<MethodName, PeerScope>>> = {
   'peer.presence': 'link',
@@ -142,63 +47,33 @@ export const PEER_METHODS: Readonly<Partial<Record<MethodName, PeerScope>>> = {
 } as const
 
 /**
- * How long a call to the teammate may go unanswered before it is refused.
- *
- * Every method on `PEER_METHODS` is answered out of memory or out of a pty
- * buffer on the far machine, so thirty seconds is not a slow answer, it is no
- * answer. The link's own silence deadline in `peerLink.ts` is the real backstop
- * and is deliberately longer; this is the cheaper belt, and what it buys is
- * that no single wedged call can become a keystroke that vanished, a watch that
- * never opens, or a promise nothing ever settles.
+ * How long a call to the teammate may go unanswered. Every method on `PEER_METHODS`
+ * is answered out of memory, so thirty seconds is no answer; `peerLink.ts`'s silence deadline is the longer backstop.
  */
 export const PEER_CALL_TIMEOUT_MS = 30_000
 
 /**
- * The same, for the one method whose answer may be a person's.
- *
- * `terminal.write` stopped being answered out of memory the day the owner began
- * being asked about it: a held keystroke waits for somebody to look at their
- * screen, and `CONSENT_WINDOW_MS` is how long the owner's machine gives them.
- * So the deadline here is that window plus the ordinary allowance for the round
- * trip, and it is derived from the window rather than chosen beside it — the
- * one ordering that must never break is that the machine doing the typing is
- * more patient than the machine doing the deciding. The other way round, a
- * teammate would be told their colleague never answered at the very moment
- * their colleague was answering, and the owner's "yes" would land on a request
- * that had already been given up on.
- *
- * A link that has genuinely gone does not wait this out: the transport fails
- * every call in flight the moment it is released.
+ * The same, for the one method whose answer may be a person's. Derived from the
+ * consent window so the machine doing the typing is always more patient than the
+ * machine doing the deciding; otherwise the owner's "yes" lands on a request already given up on.
  */
 export const PEER_WRITE_TIMEOUT_MS = CONSENT_WINDOW_MS + PEER_CALL_TIMEOUT_MS
 
 /**
- * How long output for one pane is gathered before it is sent.
- *
- * Fifty flushes a second per watched pane, against the relay's 200 frames, and
- * a twentieth of a second is under the threshold at which a reader would call a
- * terminal laggy. A quiet pane pays none of it: the first chunk after a pause
- * goes out immediately and only a pane that is still talking is paced.
+ * How long output for one pane is gathered before it is sent: fifty flushes a
+ * second against the relay's 200 frames, under what a reader calls laggy. A quiet pane pays none of it.
  */
 export const STREAM_FLUSH_MS = 20
 
 /**
- * The share of the relay's 4 MiB/s one connection's terminal output may take.
- *
- * A quarter, because a link carries presence snapshots and several panes at
- * once, and because a budget spent exactly is a budget the relay closes the
- * connection for. A terminal that sustains a megabyte a second is not being
- * read by anybody anyway.
+ * The share of the relay's 4 MiB/s one connection's terminal output may take. A
+ * quarter: a link carries several panes, and a budget spent exactly gets the connection closed.
  */
 export const STREAM_BYTES_PER_SECOND = 1_048_576
 
 /**
- * How much of a pane's output may wait for the wire before the oldest of it is
- * dropped.
- *
- * One relay frame's worth. A watcher wants the newest output, not a faithful
- * replay of a burst from ten seconds ago, so the buffer keeps the tail and says
- * how much of the head it threw away.
+ * How much of a pane's output may wait for the wire before the head is dropped: one
+ * relay frame. The watcher wants the tail.
  */
 export const STREAM_BUFFER_BYTES = 262_144
 
@@ -210,104 +85,49 @@ export type RemoteWriteRequest = {
   bytes: number
 }
 
-/**
- * What the owner's machine decided about one keystroke.
- *
- * A refusal carries the words the teammate is given, because they are the only
- * thing that tells somebody two thousand miles away why their typing went
- * nowhere.
- */
+/** What the owner's machine decided about one keystroke. A refusal carries the words the teammate is given. */
 export type RemoteWriteDecision = { ok: true } | { ok: false; code: ErrorCode; message: string }
 
 /**
- * A decision, or the promise of one.
- *
- * `held` is what the owner's machine says when the answer is a person's and not
- * a rule's: this keystroke is not refused and it is not running, the bytes are
- * sitting in the owner's memory, and somebody is being asked. The request stays
- * open across the wait — nothing is answered and nothing is dropped — so what
- * the teammate finally gets is the owner's answer rather than a timeout, and
- * they get one either way.
- *
- * The promise settling is the ONLY thing that can put a held keystroke in front
- * of the dispatcher, which is what keeps the guarantee in this file true: bytes
- * reach a pty from exactly one place, and that place is a verdict of `ok: true`
- * returned into the task that dispatches them.
+ * A decision, or the promise of one. `held` means a person is being asked: not
+ * refused, not running, the bytes in the owner's memory. The promise settling is
+ * the ONLY thing that can put a held keystroke in front of the dispatcher.
  */
 export type RemoteWriteVerdict = RemoteWriteDecision | { held: Promise<RemoteWriteDecision> }
 
 /**
- * What the owner's machine decided about one read.
- *
- * The same shape as a write's verdict, and deliberately a separate name: what
- * they permit is not the same thing, and a single type would invite one call
- * site to be wired to the other's judge.
+ * What the owner's machine decided about one read. A separate name from a write's
+ * verdict, so one call site cannot be wired to the other's judge.
  */
 export type RemoteReadVerdict = { ok: true } | { ok: false; code: ErrorCode; message: string }
 
 /**
- * How many streams one teammate may hold open on this runtime at once.
- *
- * A watcher needs one for presence and one for each pane they are reading, and
- * nobody reads thirty panes. Every record past that is a pacing buffer this
- * machine keeps on somebody else's say-so, and `peer.subscribe` answers with a
- * full snapshot each time it is called — so an unbounded count is a way to
- * spend this process's memory from the other end of a relay.
+ * How many streams one teammate may hold open at once. Nobody reads thirty panes;
+ * every record past that is a pacing buffer kept on somebody else's say-so.
  */
 export const MAX_PEER_SUBSCRIPTIONS = 32
 
 /**
- * What a reader is told when the pane they were reading is no longer there.
- *
- * One sentence in one place, said down two paths that must never disagree: the
- * stream ends here when the owner closes a pane, and a read that raced that
- * close is refused with the same words by `PeerService.remoteRead`. A watcher
- * that got one of those and not the other would be told the pane went for two
- * different reasons depending on which frame won.
+ * What a reader is told when the pane is no longer there. One sentence down two
+ * paths that must not disagree: the stream ending here, and `PeerService.remoteRead` refusing a read that raced the close.
  */
 export const PANE_CLOSED = 'the owner closed this pane'
 
-/**
- * The methods on the allow-list that leave a subscription behind.
- *
- * Spelled out for the same reason `PEER_METHODS` is: which calls cost this
- * machine something that outlives the call is a fact about the catalogue, and
- * guessing at it from a method's name would be a rule that quietly stopped
- * covering the next one.
- */
+/** The methods on the allow-list that leave a subscription behind. Spelled out, as `PEER_METHODS` is. */
 const SUBSCRIBING_METHODS: readonly MethodName[] = ['peer.subscribe', 'terminal.subscribe'] as const
 
 /**
- * How many requests a second one teammate may ask this runtime for, and how
- * many may arrive at once.
- *
- * A frame is not a request: one Noise transport message carries 65,455 bytes of
- * newline-delimited JSON, which is some nine hundred `unsubscribe`s, so the
- * relay's 200-frames-a-second budget bounds the wire and bounds nothing about
- * this process. Every request past this is work the owner's main thread does on
- * somebody else's say-so — and that thread owns every pty and the window's IPC,
- * so it is the thing the whole app stops with.
- *
- * The burst is what a legitimate client does at once: a watcher joining opens
- * presence, reads a scrollback and subscribes per pane, which is tens of calls
- * in one breath and never hundreds. The rate is what it may sustain.
+ * How many requests a second one teammate may ask for, and how many at once. A
+ * frame is not a request: one Noise message carries some nine hundred `unsubscribe`s,
+ * and every request is work on the owner's main thread. The burst is what a watcher joining does in one breath.
  */
 export const PEER_REQUEST_BURST = 200
 export const PEER_REQUESTS_PER_SECOND = 100
 
 /**
- * The same, for the one method that runs code.
- *
- * `terminal.write` is a keystroke, and a person types ten a second; a key held
- * down repeats at thirty. Fifty a second sustained, a hundred at once, is a
- * ceiling no human hand or paste reaches and a long way below what it costs to
- * flood a pty — and the write bucket is spent *as well as* the request bucket,
- * never instead of it.
- *
- * A write refused here never reaches `onRemoteWrite`, so it is never recorded:
- * that is deliberate. A flood the owner's disk faithfully recorded would be a
- * flood of the owner's audit log, which is the thing `writeLog.ts` exists to
- * keep. The teammate is still told, in the answer, that they were too fast.
+ * The same, for the one method that runs code: a key held down repeats at thirty
+ * a second. Spent as well as the request bucket, never instead. A write refused here
+ * never reaches `onRemoteWrite`, so a flood is not recorded in the owner's audit log.
  */
 export const PEER_WRITE_BURST = 100
 export const PEER_WRITES_PER_SECOND = 50
@@ -322,76 +142,35 @@ export type PeerTransportOptions = {
   connectionId: string
   /** Defaults to `PEER_METHODS`; a test narrows it to prove the gate is real. */
   allowedMethods?: readonly MethodName[]
-  /**
-   * Stream frames the *peer* pushed to us, for a subscription we opened there.
-   *
-   * `sequence` is where the frame sat in the received order, which is what a
-   * reader joining a stream to a snapshot compares against the answer that
-   * carried the snapshot. See `received` below for why the clock has to be this
-   * one.
-   */
+  /** Stream frames the *peer* pushed to us. `sequence` is the frame's place in the received order; see `received`. */
   onStreamEvent?: (stream: string, event: unknown, sequence: number) => void
   /**
-   * Which of this machine's panes the teammate currently has open, whenever
-   * that changes.
-   *
-   * Observed here rather than reported by the terminal service, because this is
-   * the only place that knows a caller is a teammate at all — which is exactly
-   * the property the rest of the design depends on, and the reason the owner
-   * can be told who is reading without the pane learning what a peer is.
+   * Which of this machine's panes the teammate has open, whenever that changes. Observed
+   * here because this is the only place that knows a caller is a teammate at all.
    */
   onWatchChange?: (terminalIds: readonly string[]) => void
   /**
-   * Asked about every keystroke this teammate sends, before it reaches a pane.
-   *
-   * Observed in the same place and for the same reason as the watching above:
-   * this is the only layer that knows the caller is a teammate at all, so it is
-   * the only layer that can attribute a write, record it, or refuse it — and
-   * the terminal service on the other side of the dispatcher goes on not
-   * knowing what a peer is.
-   *
-   * Synchronous on purpose. Nothing is awaited between the verdict and the
-   * dispatch, so a mute applied while a keystroke was in flight is applied to
-   * that keystroke rather than to some later one. **A transport without this
-   * refuses every write**, because a byte reaching a pty with nobody able to
-   * say who sent it is the one thing this design may not do.
+   * Asked about every keystroke before it reaches a pane; the only layer that can
+   * attribute, record or refuse a write. Synchronous on purpose, so a mute applied
+   * mid-flight lands on that keystroke. **A transport without this refuses every write.**
    */
   onRemoteWrite?: (write: RemoteWriteRequest) => RemoteWriteVerdict
   /**
-   * Whether this teammate may read that pane. Asked of the same thing that
-   * knows whose link the request arrived on, for the same reason the write
-   * verdict is: a transport cannot know what a project is.
-   *
-   * A transport wired without one carries no reads at all, which is the safe
-   * direction: a peer transport that forgot to ask would otherwise stream every
-   * pane on the machine.
+   * Whether this teammate may read that pane. A transport wired without one carries
+   * no reads at all: one that forgot to ask would stream every pane on the machine.
    */
   onRemoteRead?: (terminalId: string) => RemoteReadVerdict
-  /**
-   * Timers and the clock, so the pacing below is driven rather than slept
-   * through. Defaults to the real ones.
-   */
+  /** Timers and the clock, so the pacing is driven rather than slept through. */
   scheduler?: TransportScheduler
   /**
-   * Called once, on the first transport message from the peer that decrypts.
-   *
-   * This is key confirmation, and it is not the same event as the handshake
-   * completing. A responder finishes `IK` having only written message 2, so a
-   * replayer with a captured message 1 and no private key reaches `established`
-   * carrying the real peer's static key. It can never produce a transport
-   * message, because that needs keys it does not have — so the first one that
-   * authenticates is the first evidence anybody is actually there, and it is
-   * evidence a recording cannot manufacture.
+   * Called once, on the first transport message that decrypts: key confirmation, which
+   * is not the handshake completing. A replayer with a captured message 1 reaches
+   * `established` carrying the real peer's static key but can never produce a transport message.
    */
   onConfirmed?: () => void
   /**
-   * The link can no longer be trusted and must be torn down: a Noise failure, a
-   * frame that is not JSON. Both are unrecoverable — a Noise stream has no
-   * resynchronisation point — so this is never a warning.
-   *
-   * Not called for a `close` the owner asked for. Tearing a link down on
-   * purpose is not a failure, and a caller that cannot tell the two apart ends
-   * up reporting its own shutdown as something going wrong.
+   * The link can no longer be trusted: a Noise failure or a frame that is not JSON,
+   * neither recoverable. Not called for a `close` the owner asked for.
    */
   onFatal: (failure: TransportFailure) => void
   /** Failures that cost one call and not the link. */
@@ -399,20 +178,9 @@ export type PeerTransportOptions = {
 }
 
 /**
- * Why a transport gave up, in the only distinction its caller can act on.
- *
- * `unauthenticated` is a frame that did not open under the session keys, or
- * opened into something that is not a frame. Those keys are held by two
- * machines and nobody else, so what arrived is not what was sent: a bit
- * changed, a frame replayed, dropped or reordered between the two sockets.
- * That is a statement about the trip, and it is the only symptom the one
- * untrusted component in this design has.
- *
- * `local` is this side's own session refusing to encrypt — a fact about this
- * process, with nothing in it about the peer or about anything in between.
- *
- * Separated because the caller puts a sentence on somebody's screen, and the
- * two of them are sentences about different machines.
+ * Why a transport gave up. `unauthenticated`: a frame did not open under the session
+ * keys, so what arrived is not what was sent — a fact about the trip. `local`: this
+ * side's own session refusing to encrypt. The caller puts a sentence on a screen about one machine or the other.
  */
 export type TransportFailure = {
   reason: string
@@ -425,11 +193,8 @@ export type TransportScheduler = {
   /** Returns the cancel for the timer it set. */
   setTimer: (run: () => void, delayMs: number) => () => void
   /**
-   * A clock a sleeping machine cannot move. Defaults to `performance.now()`.
-   *
-   * Anything that decides a peer has failed to answer is measured against this
-   * rather than against `now`, because the wall clock jumps by the length of a
-   * lid being closed and the peer is not the one who closed it.
+   * A clock a sleeping machine cannot move. Defaults to `performance.now()`; a peer's
+   * silence is measured against this because the wall clock jumps by the length of a closed lid.
    */
   monotonicNow?: () => number
 }
@@ -441,37 +206,20 @@ export type PeerTransport = {
   /** A request to the peer, typed from the same catalogue. */
   call: <M extends MethodName>(method: M, params: ParamsOf<M>) => Promise<ResultOf<M>>
   /**
-   * The same request, and where the peer's answer sat in the received order.
-   *
-   * For the one caller that has to place an answer among the stream frames
-   * around it. A promise cannot carry that by itself: it settles in a later
-   * task than the one that read its frame, and by then any frames decoded
-   * behind it in the same socket read have already been routed.
+   * The same request, and where the answer sat in the received order. A promise settles
+   * in a later task than the one that read its frame, after frames behind it were routed.
    */
   callInOrder: <M extends MethodName>(method: M, params: ParamsOf<M>) => Promise<Answered<M>>
   /** One Noise transport message, exactly as the peer framed it. */
   receive: (message: Uint8Array) => void
   /**
-   * A content frame carrying nothing.
-   *
-   * The relay's idle deadline counts content frames only — a text ping does not
-   * reset it — so a pair that is merely quiet has to say something in the one
-   * language the relay is not allowed to read. An empty line is a whole,
-   * well-formed frame that the decoder on the far side drops without waking
-   * anything, which makes it the cheapest legal thing to say.
+   * A content frame carrying nothing. The relay's idle deadline counts content frames
+   * only — a text ping does not reset it — and an empty line is the cheapest legal frame.
    */
   keepalive: () => void
   /**
-   * How long it is since this session last turned something from the peer into
-   * plaintext, measured against a clock a sleeping machine cannot move.
-   *
-   * The only honest evidence anybody is there. A socket that has not been
-   * closed is not evidence — a machine that suspends leaves one open on both
-   * hosts — and neither is a frame this side sent. `peerLink.ts` reads this
-   * and nothing else to decide whether a link is still a link, and it reads
-   * this rather than the difference between two wall-clock stamps because the
-   * wall clock moves by the whole of a sleep this side spent not listening —
-   * which is why there is no timestamp on this interface to subtract.
+   * How long since this session last decrypted something from the peer, on a clock a
+   * sleeping machine cannot move. The only honest evidence anybody is there; an open socket is not.
    */
   readonly quietForMs: number
   /** Fails every call still in flight and releases this peer's subscriptions. */
@@ -498,31 +246,16 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   /** Subscription id to the pane it streams, for every watch the peer holds. */
   const watching = new Map<string, string>()
   /**
-   * Subscriptions the peer has itself asked to end, so its own goodbye is not
-   * echoed.
-   *
-   * Only ids this link actually holds ever reach it — see `ours` below. An id
-   * this connection never opened is not remembered at all, because a set fed
-   * from the wire is a set the other end chooses the size of, and the only
-   * thing that ever emptied this one was a subscription genuinely ending.
+   * Subscriptions the peer itself asked to end, so its goodbye is not echoed. Only ids
+   * this link holds reach it (see `ours`): a set fed from the wire is sized by the other end.
    */
   const releasing = new Set<string>()
   /**
-   * Subscription ids the hub has minted for this link and has not yet ended.
-   *
-   * The transport's own books, kept because the hub's count moves inside the
-   * handler and the cap has to be decided in front of it. `reserved` is the
-   * part that is promised and not yet minted: a subscribing request takes its
-   * slot the moment it is let past the check, so a burst in one frame cannot
-   * all read the same count — which is what would happen the day a subscribing
-   * handler awaits anything before it subscribes.
+   * Subscription ids the hub minted for this link and has not ended. `reserved` is
+   * promised and not yet minted: a slot is taken at the check, so a burst in one frame cannot all read the same count.
    */
   const ours = new Set<string>()
-  /**
-   * Subscriptions that ended before the answer naming them came back, which is
-   * what a source closing itself synchronously looks like from here. Held so
-   * the slot that answer was going to occupy is released rather than leaked.
-   */
+  /** Subscriptions that ended before the answer naming them came back, so that answer releases the slot rather than leaking it. */
   const endedEarly = new Set<string>()
   let reserved = 0
   const paced = new Map<string, PacedStream>()
@@ -534,24 +267,14 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   let budgetAt = scheduler.now()
   let nextId = 0
   /**
-   * Frames read off this session, counted.
-   *
-   * The clock that says which of two frames came first, and the only one that
-   * can. One socket read decodes a batch and `receive` routes the batch in a
-   * synchronous loop, so a stream frame decoded *after* an answer still reaches
-   * its route before that answer's promise continuation runs. Anything joining
-   * a stream to a snapshot has to compare positions in this count rather than
-   * the order in which its own callbacks happened to be scheduled.
+   * Frames read off this session, counted: the only clock that says which of two frames
+   * came first. `receive` routes a batch synchronously, so a stream frame decoded after
+   * an answer still reaches its route before the answer's promise continuation runs.
    */
   let received = 0
   let live = true
   let confirmed = false
-  /**
-   * Starts at construction rather than at zero, so a session that has said
-   * nothing yet reads as quiet for no time rather than quiet since the epoch.
-   * The window before the first frame is the handshake's to police, and
-   * `peerLink.ts` has a separate deadline for it.
-   */
+  /** Starts at construction, so a session that has said nothing reads as quiet for no time; the handshake window is `peerLink.ts`'s to police. */
   let quiet = startTimedWindow(scheduler)
 
   const write = (frame: Frame): void => {
@@ -559,20 +282,13 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     try {
       for (const message of encodeLine(options.session, encodeFrame(frame))) options.send(message)
     } catch (error) {
-      // Encryption only fails once the session is already unusable, so there is
-      // nothing left to send an error over. This side's own session, so it says
-      // nothing about the peer and nothing about the relay.
+      // Encryption only fails once the session is unusable; this side's own, so it
+      // says nothing about the peer.
       fail(messageOf(error), 'local')
     }
   }
 
-  /**
-   * Releases everything this transport holds. Silent: the caller asked.
-   *
-   * Kept apart from `fail` because a link the owner is taking down and a link
-   * that broke are not the same event, and a transport that reported both the
-   * same way would have every ordinary shutdown arrive somewhere as a fault.
-   */
+  /** Releases everything this transport holds. Silent: the caller asked, and a shutdown reported as a fault is wrong. */
   const release = (reason: string): void => {
     if (!live) return
     live = false
@@ -587,13 +303,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   }
 
   /**
-   * This transport is over and nobody asked for it.
-   *
-   * The reason goes two places on purpose. `onError` is the operator's trace:
-   * a relay quietly breaking every session on a team is indistinguishable from
-   * bad luck unless the words survive somewhere they can be read, and this used
-   * to be discarded at the call site. `onFatal` is the link's cue to say
-   * something true on screen, which needs to know *which* failure this was.
+   * This transport is over and nobody asked. `onError` is the operator's trace (a relay
+   * quietly breaking every session looks like bad luck otherwise); `onFatal` is the link's cue to say which failure.
    */
   const fail = (reason: string, kind: TransportFailure['kind']): void => {
     if (!live) return
@@ -616,15 +327,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   }
 
   /**
-   * One stream's waiting output, onto the wire.
-   *
-   * `force` spends past the byte budget instead of leaving the remainder for
-   * the next flush. Only the answer to a `terminal.read` asks for it, and only
-   * because a remainder left behind would be output the answer's own scrollback
-   * already contains, arriving after it — see `flushPane`. The debit still
-   * happens, so the budget repays itself at the next flushes rather than the
-   * spend going unrecorded, and the most one read can push out early is the one
-   * buffer `STREAM_BUFFER_BYTES` bounds.
+   * One stream's waiting output, onto the wire. `force` spends past the byte budget;
+   * only the answer to a `terminal.read` asks for it (see `flushPane`), and the debit still happens.
    */
   const flush = (streamId: string, stream: PacedStream, force = false): void => {
     if (!live) return
@@ -632,8 +336,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     refill(now)
     stream.at = now
 
-    // Before the output it precedes, because that is where the hole is: the
-    // bytes that went were the ones in front of whatever is about to be sent.
+    // Before the output it precedes: the bytes that went were in front of what is about to be sent.
     if (stream.lost > 0) {
       write({ stream: streamId, event: { type: 'elided', bytes: stream.lost } })
       stream.lost = 0
@@ -654,30 +357,17 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       write({ stream: streamId, event: { type: 'data', data: item.data } })
     }
 
-    // The record stays even when it is empty: it remembers when this stream
-    // last flushed, and a stream that forgot that would let every chunk of a
-    // burst out on its own leading edge and pace nothing at all. It is dropped
-    // when the subscription is.
+    // The record stays when empty: it remembers when this stream last flushed, or every
+    // chunk of a burst would go out on its own leading edge. Dropped with the subscription.
     if (stream.items.length === 0 && stream.lost === 0) return
     arm(streamId, stream)
   }
 
   /**
-   * Everything one pane has waiting, out before the answer that describes it.
-   *
-   * The pacer is the only thing on this machine that can put a pane's output on
-   * the wire *after* a scrollback that already contains it: the scrollback is
-   * taken the moment the read is handled, while output from a twentieth of a
-   * second ago may still be sitting here waiting for its timer. A reader joining
-   * a stream to a snapshot decides what to drop by frame order, so output that
-   * overtook its own answer would be shown twice — the one thing this seam
-   * exists to prevent.
-   *
-   * Called between the handler taking the scrollback and the answer being
-   * written, which is inside a single turn of the loop: everything from the
-   * dispatcher to here is microtasks, and a pty's output arrives in a task of
-   * its own. So this flushes exactly what the answer carries and never anything
-   * later than it.
+   * Everything one pane has waiting, out before the answer that describes it. The
+   * scrollback is taken the moment the read is handled while output from a twentieth
+   * of a second ago may still wait for its timer; a reader joining by frame order would
+   * show it twice. Runs inside one turn, so it flushes exactly what the answer carries.
    */
   const flushPane = (terminalId: string): void => {
     for (const [subscriptionId, watched] of watching) {
@@ -702,9 +392,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   const evict = (stream: PacedStream): void => {
     while (stream.bytes > STREAM_BUFFER_BYTES) {
       const first = stream.items[0]
-      // Only output can be thrown away. An exit or a title is a fact, not a
-      // volume, and a watcher that lost one would be told the pane is still
-      // running when it is not.
+      // Only output can be thrown away; an exit or a title is a fact, not a volume.
       if (first === undefined || first.kind !== 'data') return
       const over = stream.bytes - STREAM_BUFFER_BYTES
       if (first.bytes <= over) {
@@ -723,20 +411,14 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   }
 
   /**
-   * Everything a subscription pushes, on its way to the wire.
-   *
-   * Presence snapshots and every other event go straight out: they are small,
-   * rare, and a snapshot held back is a sidebar that lags for no gain. Only a
-   * pane's output is paced — and once a pane has output waiting, its own exit
-   * and title events queue behind it, because a reader must not be told a pane
-   * finished before being shown what it said.
+   * Everything a subscription pushes. Only a pane's output is paced; once output is
+   * waiting, its exit and title queue behind it so a pane never finishes before it speaks.
    */
   const publish = (frame: StreamEvent): void => {
     if (!live) return
     const existing = paced.get(frame.stream)
     const data = outputOf(frame.event)
-    // Nothing is waiting, so nothing is held back: a presence snapshot and a
-    // pane's exit both go straight out.
+    // Nothing is waiting, so nothing is held back.
     if (data === undefined && (!existing || existing.items.length === 0)) {
       write(frame)
       return
@@ -750,8 +432,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     } else {
       const last = stream.items[stream.items.length - 1]
       const bytes = byteLength(data)
-      // Lossless: two consecutive chunks of one byte stream concatenate into
-      // the same byte stream, so merging them costs the reader nothing.
+      // Lossless: two consecutive chunks of one byte stream concatenate into the same stream.
       if (last !== undefined && last.kind === 'data') {
         last.data += data
         last.bytes += bytes
@@ -762,50 +443,32 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       evict(stream)
     }
 
-    // Leading edge: a pane that has been quiet is sent the moment it speaks, so
-    // watching is not uniformly a twentieth of a second behind.
+    // Leading edge: a quiet pane is sent the moment it speaks.
     if (!stream.cancel && scheduler.now() - stream.at >= STREAM_FLUSH_MS) flush(frame.stream, stream)
     else arm(frame.stream, stream)
   }
 
-  // The peer gets its own subscription scope, so whatever it opened dies with
-  // the link and cannot outlive the machine that asked for it. Its end is
-  // reported back, because a pane that exits ends the stream from the producer
-  // side and the owner must stop being told somebody is reading it.
+  // The peer gets its own subscription scope, so whatever it opened dies with the link.
+  // Its end is reported back, so the owner stops being told somebody is reading.
   options.subscriptions.openConnection(options.connectionId, publish, (subscriptionId) => {
     const stream = paced.get(subscriptionId)
     if (stream) {
       stream.cancel?.()
       stream.cancel = undefined
-      // Out before it is let go of, and forced, because there is no later.
-      //
-      // `session-manager.ts` ends a pane's streams *before* it closes the
-      // session, so the producer stops while the pacer is still holding up to a
-      // flush interval of that pane's output, and behind it whatever exit or
-      // title was queued. Deleting the record used to take all of it — the last
-      // thing the pane printed and the code it exited with — and hand the
-      // watcher `lost` and nothing else. `evict` a few lines up refuses to drop
-      // an exit for exactly that reason, and this is the one path where the
-      // stream ends rather than overruns.
-      //
-      // `live` is still true here, and `flush` writes the pending `elided` in
-      // front of whatever survived, so a reader gets the hole as well as the
-      // rest.
+      // Out before it is let go of, and forced. `session-manager.ts` ends a pane's
+      // streams *before* it closes the session, so the pacer may hold a flush interval
+      // of output plus the exit behind it. `live` is still true, so `elided` goes out first.
       flush(subscriptionId, stream, true)
       paced.delete(subscriptionId)
     }
     const asked = releasing.delete(subscriptionId)
-    // The slot goes back when the subscription does, whichever end ended it. An
-    // id that is not on our books ended before its own answer came back — the
-    // source closed itself synchronously — and is remembered so that answer
-    // gives the slot back rather than holding it for the life of the link.
+    // The slot goes back when the subscription does. An id not on our books ended
+    // before its own answer came back, and is remembered so that answer gives the slot back.
     if (!ours.delete(subscriptionId) && reserved > 0) noteEndedEarly(subscriptionId)
     if (!watching.delete(subscriptionId)) return
     announceWatches()
-    // The owner closed the pane out from under a reader. Nothing else would
-    // tell them: the stream simply stops, and a watcher left looking at a
-    // window that no longer updates would read it as a teammate gone quiet.
-    // A peer that ended its own subscription already knows and is not told.
+    // The owner closed the pane out from under a reader; nothing else would tell
+    // them. A peer that ended its own subscription already knows.
     if (!asked) write({ stream: subscriptionId, event: { type: 'lost', reason: PANE_CLOSED } })
   })
 
@@ -822,8 +485,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     const method = methodOf(value)
     const scope = scopeOf(method)
     if (method !== undefined && scope === undefined) {
-      // Deliberately the same answer a method that does not exist gets. From
-      // where the peer stands that is exactly what this is.
+      // Deliberately the same answer a method that does not exist gets.
       write({
         id: idOf(value),
         ok: false,
@@ -831,10 +493,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       })
       return
     }
-    // Before anything is decided about what this request is: a request is work
-    // on the owner's main thread, and a frame is nine hundred of them. Answered
-    // rather than dropped, for the same reason every other refusal here is —
-    // typing that went nowhere and said nothing is a lie to whoever typed it.
+    // Before anything is decided: a request is work on the owner's main thread, and a
+    // frame is nine hundred of them. Answered rather than dropped, like every refusal here.
     if (!requests.spend()) {
       write({
         id: idOf(value),
@@ -846,17 +506,12 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       })
       return
     }
-    // The subscription slot is taken here, synchronously, rather than counted
-    // out of the hub. The hub's count only moves inside the handler, so a
-    // check that read it would be a check every request in one frame passed —
-    // today only because no subscribing handler awaits anything before it
-    // subscribes. That is one `await` away from being a cap on nothing.
+    // The slot is taken here, synchronously. The hub's count only moves inside the
+    // handler, so a check that read it is one `await` away from being a cap on nothing.
     const subscribes = method !== undefined && subscribing.has(method)
     if (subscribes) {
       if (heldSubscriptions() >= MAX_PEER_SUBSCRIPTIONS) {
-        // Answered rather than dropped, and answered with the reason: a teammate
-        // that has genuinely opened too many panes can close some, and one that
-        // is not going to learns nothing from this it did not already know.
+        // Answered with the reason, so a teammate that opened too many panes can close some.
         write({
           id: idOf(value),
           ok: false,
@@ -875,36 +530,22 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     }
 
     /**
-     * The request, once everything in front of it has let it past.
-     *
-     * A function rather than the tail of this one, because a held keystroke
-     * runs it from a later task: the owner's answer arrives long after the
-     * frame that carried the write was read, and what has to happen then is
-     * exactly what would have happened then — the same bookkeeping, the same
-     * dispatcher, the same answer written back.
+     * The request, once everything in front of it has let it past. A function because a
+     * held keystroke runs it from a later task, with the same bookkeeping and dispatcher.
      */
     const run = (): void => {
-      // Noted before the call and answered after it: the subscription id only
-      // exists once the handler has minted one, and it is the id the pane is
-      // remembered under for as long as the teammate holds it.
+      // Noted before the call and answered after it: the id only exists once the handler has minted one.
       if (method === 'terminal.subscribe') {
         const terminalId = terminalIdOf(value)
         if (terminalId !== undefined) asked.set(idOf(value), terminalId)
       }
-      // Only for a subscription this link actually holds. The id arrives from
-      // the wire, so remembering it on the caller's say-so was a set the far
-      // end chose the size and the contents of — an id naming nothing was kept
-      // for the life of the link, and an id naming a subscription that did not
-      // exist *yet* was believed when it did, which swallowed the owner's "I
-      // closed this pane". Both stop being possible when the only ids that are
-      // remembered are the ids the hub minted here.
+      // Only for a subscription this link holds. An id from the wire naming a subscription
+      // that did not exist *yet* was believed when it did, swallowing the owner's "I closed this pane".
       if (method === 'unsubscribe') {
         const subscription = subscriptionOf(value)
         if (subscription !== undefined && ours.has(subscription)) releasing.add(subscription)
       }
-      // The pane whose scrollback is about to be answered, so its own output
-      // can be got out of the pacer first. Read here rather than in the
-      // continuation because that is where the method is still known.
+      // The pane whose scrollback is about to be answered, read here where the method is still known.
       const reading = method === 'terminal.read' ? terminalIdOf(value) : undefined
       void options.dispatch(value, { connectionId: options.connectionId }).then(
         (response) => {
@@ -915,12 +556,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         },
         (error: unknown) => {
           releaseReservation()
-          // Defensive, and only that: the dispatcher this runtime builds turns
-          // every throw into an error response, so nothing reaches here today.
-          // The note taken above is keyed and valued by two strings the far end
-          // chose the length of, and it is only ever removed by an answer coming
-          // back — so a dispatcher that ever did reject would leave one behind
-          // per call, for the life of the link.
+          // Defensive: this runtime's dispatcher turns every throw into an error response.
+          // The note above is only ever removed by an answer, so a rejection would leak one per call.
           asked.delete(idOf(value))
           options.onError?.(error)
         }
@@ -928,9 +565,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     }
 
     if (scope === 'write-pane') {
-      // The keystroke's own budget, spent on top of the request's. A person
-      // types ten a second; nothing legitimate is refused here, and a flood is
-      // refused before it reaches a verdict, a pty, or the owner's log.
+      // The keystroke's own budget, on top of the request's; a flood is refused before a verdict, a pty, or the log.
       if (!writes.spend()) {
         releaseReservation()
         write({
@@ -944,10 +579,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         return
       }
       const verdict = judgeWrite(value)
-      // The owner is being asked. Nothing is answered, nothing is dispatched,
-      // and the bytes are in their memory rather than in this request — so what
-      // happens next happens in a later task, and `live` is re-checked there
-      // because the link may be gone by then.
+      // The owner is being asked; the bytes are in their memory, not this request. What
+      // follows runs in a later task, and `live` is re-checked there.
       if ('held' in verdict) {
         void verdict.held.then(
           (decision) => {
@@ -959,11 +592,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
             run()
           },
           (error: unknown) => {
-            // Defensive: the service settles every held write it takes, and
-            // settles them with a decision rather than a rejection. A promise
-            // that broke anyway must still end as an answer, because a
-            // keystroke nobody is ever told the fate of is the one outcome
-            // this path exists to make impossible.
+            // Defensive: the service settles every held write with a decision. A promise that
+            // broke anyway must still end as an answer.
             options.onError?.(error)
             if (!live) return
             write({
@@ -980,11 +610,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
         return
       }
     }
-    // Reading is scoped too, and was not. `terminal.read` and
-    // `terminal.subscribe` went to the dispatcher carrying nothing but the id
-    // the caller named, so a teammate on one repository's roster could stream a
-    // pane of a project they hold no key for. Typing has been scoped since it
-    // was built; this is reading catching up.
+    // Reading is scoped too: `terminal.read` and `terminal.subscribe` once went to the
+    // dispatcher carrying only the id, so a teammate could stream a pane of a project they hold no key for.
     if (scope === 'read-pane') {
       const terminalId = terminalIdOf(value)
       const verdict = judgeRead(terminalId)
@@ -998,24 +625,13 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   }
 
   /**
-   * What this link holds, counted the way that cannot be raced.
-   *
-   * Reservations plus the subscriptions already on our books, and never less
-   * than what the hub says: a handler that subscribes synchronously has already
-   * moved the hub's count while its own reservation is still outstanding, so
-   * the two are a maximum rather than a sum — adding them would count one
-   * subscription twice and halve the cap.
+   * What this link holds, counted the way that cannot be raced: the maximum of reservations
+   * plus our books and the hub's count, since a synchronous subscribe has moved the hub while its reservation is outstanding.
    */
   const heldSubscriptions = (): number =>
     Math.max(ours.size + reserved, options.subscriptions.countFor(options.connectionId))
 
-  /**
-   * A reservation, once the answer says what became of it.
-   *
-   * A subscription that was minted takes the slot its reservation was holding;
-   * anything else — a refusal, a handler that answered without subscribing, a
-   * source that closed itself before the answer got back — gives it up.
-   */
+  /** A reservation, once the answer says what became of it: a minted subscription takes the slot, anything else gives it up. */
   const settleReservation = (response: Frame): void => {
     reserved -= 1
     if (!('ok' in response) || response.ok !== true) return
@@ -1025,12 +641,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     ours.add(subscription)
   }
 
-  /**
-   * An id whose subscription ended before its own answer came back.
-   *
-   * Bounded by what can be in flight, because nothing else can be waiting for
-   * an answer that would claim it.
-   */
+  /** An id whose subscription ended before its answer came back. Bounded by what can be in flight. */
   const noteEndedEarly = (subscriptionId: string): void => {
     endedEarly.add(subscriptionId)
     while (endedEarly.size > reserved) {
@@ -1041,29 +652,15 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
   }
 
   /**
-   * Whether one keystroke may reach a pane, and nothing else.
-   *
-   * Everything here is a refusal this transport can make on its own, in front
-   * of the owner's own decision: a session that has never decrypted anything, a
-   * request that is not shaped like a write, a write too large for the wire it
-   * arrived on, and a transport with nobody to report the write to. The owner's
-   * verdict is asked last, because it is the one that has to be freshest.
-   */
-  /**
-   * The owner's verdict on a read, with the transport's own refusals in front:
-   * a request that named no pane cannot be scoped to a project, and a transport
-   * with nobody to ask must not answer for one.
+   * The owner's verdict on a read, with the transport's refusals in front: no pane
+   * named, or nobody to ask.
    */
   const judgeRead = (terminalId: string | undefined): RemoteReadVerdict => {
     if (terminalId === undefined) {
       return { ok: false, code: ErrorCode.InvalidParams, message: 'no pane was named' }
     }
-    // Here as well as in the schema, and for the same reason `judgeWrite` has
-    // it: this runs *before* the schema does, and the id does not stop at the
-    // verdict — it is kept in the map that remembers which pane each of this
-    // link's subscriptions streams, and handed on from there to whoever is told
-    // who is reading. A field a remote caller chooses the length of should be
-    // bounded in one place in this file, not in one of the two that use it.
+    // Here as well as in the schema, because this runs *before* the schema: the id is
+    // kept in the watching map and handed to whoever is told who is reading.
     if (terminalId.length > MAX_TERMINAL_ID_CHARS) {
       return {
         ok: false,
@@ -1078,12 +675,10 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     return ask(terminalId)
   }
 
+  /** Whether one keystroke may reach a pane: the transport's own refusals, then the owner's verdict last, because it must be freshest. */
   const judgeWrite = (value: unknown): RemoteWriteVerdict => {
-    // A replayed handshake reaches `established` holding somebody's key and can
-    // never produce a transport message. Nothing can arrive here without having
-    // decrypted, so this is already true — and it is asserted rather than
-    // assumed, because "typing was possible before the keys were confirmed" is
-    // not a sentence anybody should have to reconstruct from the call graph.
+    // A replayed handshake reaches `established` and can never produce a transport message,
+    // so this is already true; asserted so "typing before the keys were confirmed" needs no call graph.
     if (!confirmed) {
       return { ok: false, code: ErrorCode.NotFound, message: 'this session is not confirmed' }
     }
@@ -1092,10 +687,8 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     if (terminalId === undefined || data === undefined) {
       return { ok: false, code: ErrorCode.InvalidParams, message: 'a write needs a terminal and some data' }
     }
-    // The id is capped here as well as in the schema, because this runs *before*
-    // the schema does: the owner's verdict below records the write whether or
-    // not it lands, so an unbounded id is a megabyte of the caller's choosing
-    // in the owner's audit log, and two of them are the whole log rotated away.
+    // Capped here as well as in the schema, because this runs *before* the schema and the
+    // owner's verdict records the write whether or not it lands: an unbounded id is a megabyte in the audit log.
     if (terminalId.length > MAX_TERMINAL_ID_CHARS) {
       return {
         ok: false,
@@ -1112,9 +705,7 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       }
     }
     const judge = options.onRemoteWrite
-    // Not a fallback to "allow". A transport wired without a verdict has no way
-    // to attribute or record what it is about to run, and typing into a pane
-    // unattributably is exactly what this milestone exists to prevent.
+    // Not a fallback to "allow": a transport without a verdict cannot attribute or record what it runs.
     if (!judge) {
       return { ok: false, code: ErrorCode.UnknownMethod, message: 'this runtime is not accepting remote keystrokes' }
     }
@@ -1138,29 +729,21 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
     if (!live) return Promise.reject(new Error('the peer link is closed'))
     nextId += 1
     const id = `peer_${nextId}`
-    // A write may be waiting on a person rather than on a machine, so it is
-    // given the owner's whole consent window on top of the ordinary allowance.
-    // Everything else is answered out of memory, where thirty seconds is not a
-    // slow answer but no answer at all.
+    // A write may be waiting on a person, so it gets the owner's consent window on top.
     const deadlineMs = method === 'terminal.write' ? PEER_WRITE_TIMEOUT_MS : PEER_CALL_TIMEOUT_MS
     return new Promise<Answered<M>>((resolve, reject) => {
-      // Armed before the frame is written, because `write` can fail the whole
-      // transport in place and the cleanup that does must find this waiter
-      // already holding its own cancel.
+      // Armed before the frame is written, because `write` can fail the whole transport
+      // in place and that cleanup must find this waiter holding its own cancel.
       const window = startTimedWindow(scheduler, deadlineMs)
       const cancel = scheduler.setTimer(() => {
         if (!pending.delete(id)) return
-        // A deadline this side slept through gave the teammate no thirty
-        // seconds to answer in, so it is not evidence about them. The call is
-        // still settled — a promise nobody ever answers is the worse failure —
-        // but it is settled with what actually happened.
+        // A deadline this side slept through is not evidence about the teammate. Still
+        // settled — a promise nobody answers is the worse failure — with what happened.
         if (window.wasInterrupted()) {
           reject(new Error(`this machine was asleep, so ${method} was never given an answer`))
           return
         }
-        // Named, and named as silence rather than as a refusal: the far end has
-        // not said no, it has said nothing, and the person who typed is owed
-        // the difference.
+        // Named as silence rather than refusal: the far end said nothing, not no.
         reject(new Error(`your teammate’s machine did not answer ${method} within ${deadlineMs / 1000} seconds`))
       }, deadlineMs)
       pending.set(id, { resolve: resolve as (answer: never) => void, reject, cancel })
@@ -1179,34 +762,22 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       let values: unknown[]
       try {
         values = reader.push(message)
-        // After the decrypt, before anything is acted on: whatever is in this
-        // message, the fact that it authenticated is the interesting part.
-        // Recorded for every message and not only the first, because this
-        // number is the link's whole evidence that somebody is still there and
-        // it is worth exactly as much as it is fresh. A keepalive counts: it
-        // carries an empty line that the decoder drops, and the decrypt that
-        // produced it is the proof.
+        // After the decrypt, before anything is acted on, for every message: this number is
+        // the link's whole evidence somebody is there. A keepalive counts; the decrypt is the proof.
         quiet = startTimedWindow(scheduler)
         if (!confirmed) {
           confirmed = true
           options.onConfirmed?.()
         }
       } catch (error) {
-        // A Noise message that fails to authenticate and a line that is not
-        // JSON are the same kind of event: the stream's position is gone and
-        // there is no point from which it could be picked up again. Both mean
-        // what arrived is not what the peer sent, which is a fact about the
-        // trip between the two machines and not about either end of it.
+        // A Noise message that fails to authenticate and a line that is not JSON are the same
+        // event: the stream's position is gone, a fact about the trip and not either end.
         fail(messageOf(error), 'unauthenticated')
         return
       }
       for (const value of values) {
-        // Re-checked every turn, because confirming the keys can itself end the
-        // link: a session that authenticated a different key than the one this
-        // side dialled is torn down inside `onConfirmed`, in the middle of this
-        // message. Whatever else that message was carrying arrived over a
-        // session this machine has just refused, and a keystroke in it must not
-        // be run merely because the loop had already started.
+        // Re-checked every turn: confirming the keys can itself end the link inside
+        // `onConfirmed`, and a keystroke in the same message must not run.
         if (!live) return
         received += 1
         if (isResponse(value)) handleResponse(value, received)
@@ -1244,14 +815,8 @@ export class PeerCallError extends Error {
 }
 
 /**
- * One link's allowance for something, refilled by time and spent by asking.
- *
- * A token bucket rather than a counter per window, because a window boundary is
- * a thing to aim at: a caller that sends its whole allowance at the end of one
- * window and the start of the next gets twice the rate for an instant, which is
- * exactly the burst this is here to bound. Measured on the wall clock the rest
- * of this file's pacing uses — a machine that slept comes back with a full
- * bucket, which errs towards letting a teammate type.
+ * One link's allowance, refilled by time and spent by asking. A token bucket rather
+ * than a counter per window, since a window boundary is a thing to aim at for double rate. Wall clock: a machine that slept comes back full.
  */
 type Bucket = { spend: () => boolean }
 
@@ -1298,16 +863,8 @@ const realScheduler: TransportScheduler = {
 }
 
 /**
- * The output one stream frame stands for, in bytes.
- *
- * A `data` event is worth what it carries and an `elided` is worth what it says
- * went missing, because both describe bytes the pane printed — the difference
- * between them is only whether the wire had room for them. Everything else is a
- * fact rather than a volume and is worth nothing: an exit is not output.
- *
- * Exported because two readers downstream have to weigh a run of frames against
- * a scrollback that may or may not still hold the same bytes, and a second
- * opinion about what counts as output is a second answer to the same question.
+ * The output one stream frame stands for, in bytes: a `data` is what it carries, an
+ * `elided` what it says went missing, anything else is a fact and worth nothing. Exported so downstream readers share one answer.
  */
 export function outputBytes(event: unknown): number {
   const data = outputOf(event)
@@ -1330,10 +887,8 @@ function byteLength(text: string): number {
 }
 
 /**
- * Turns a byte count back into a character count when a chunk has to be cut in
- * the middle. Terminal output is overwhelmingly ASCII, so this is 1 almost
- * always; where it is not the cut lands near enough, and what the watcher is
- * told about is the real byte length of what was kept either way.
+ * Byte count back to character count for a mid-chunk cut. Terminal output is
+ * overwhelmingly ASCII, so this is 1 almost always.
  */
 function averageBytesPerChar(item: { data: string; bytes: number }): number {
   return item.data.length === 0 ? 1 : item.bytes / item.data.length

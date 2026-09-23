@@ -28,8 +28,7 @@ describe('parsePushStatus', () => {
 })
 
 describe('pushRefusal', () => {
-  // The message git prints for this suggests forcing to a reader in a hurry,
-  // which is precisely the wrong thing to do to somebody else's commits.
+  // git's message for this suggests forcing to a reader in a hurry.
   it('explains a rejection without suggesting a force', () => {
     const message = pushRefusal(
       'To /tmp/origin.git\n ! [rejected]   main -> main (non-fast-forward)\nhint: Updates were rejected',
@@ -42,8 +41,7 @@ describe('pushRefusal', () => {
     expect(message.toLowerCase()).not.toContain('force')
   })
 
-  // The prose is git's; the porcelain flag is not, and a translated git only
-  // has the second one left to say it with.
+  // The prose is git's; the porcelain flag is not, and survives a translated git.
   it('explains a rejection from the porcelain flag when the prose is not English', () => {
     const message = pushRefusal('Fehler: Push einiger Referenzen nach ... fehlgeschlagen', 'origin', 'main', {
       flag: '!',
@@ -53,11 +51,8 @@ describe('pushRefusal', () => {
     expect(message).toContain('origin has commits that main does not')
   })
 
-  // "Check that this machine can write to it" was a diagnosis wearing the
-  // clothes of a remedy. These are the failures a person is least able to work
-  // out for themselves — the app runs git with no terminal to prompt on, so a
-  // machine that would have asked for a password simply refuses — so each shape
-  // of refusal now names the command that fixes that shape.
+  // The app runs git with no terminal to prompt on, so a machine that would have
+  // asked for a password simply refuses; each shape of refusal names the fix.
   it('says when the remote would not let this machine in, and what to do about it', () => {
     const general = pushRefusal('fatal: Authentication failed for https://example.invalid/x.git', 'origin', 'work')
     expect(general).toContain('fatal: Authentication failed')
@@ -72,16 +67,14 @@ describe('pushRefusal', () => {
     )
   })
 
-  // ssh refusing to guess at a host it has never met is neither a credential
-  // nor a rejection, and the remedy is neither of theirs.
+  // ssh refusing a host it has never met is neither a credential nor a rejection.
   it('says when ssh has never accepted the host key, rather than blaming the account', () => {
     const message = pushRefusal('Host key verification failed.', 'origin', 'work')
     expect(message).toContain('never accepted the host key')
     expect(message).not.toContain('push access')
   })
 
-  // A string of git's is the right thing to show and the wrong thing to branch
-  // on, so the shape of the refusal is reported separately from its prose.
+  // The shape of the refusal is reported separately from its prose.
   it('reports the shape of the refusal, for a caller that has to do more than print it', () => {
     expect(pushFailureKind('', { flag: '!', summary: '[rejected] (non-fast-forward)' })).toBe('rejected')
     expect(pushFailureKind('fatal: Authentication failed')).toBe('auth')
@@ -137,8 +130,7 @@ describe('pushing to a real remote', () => {
     expect(await repo.git(['ls-remote', '--heads', 'origin', 'feature'])).toContain('refs/heads/feature')
   })
 
-  // "Everything up-to-date" and "pushed four commits" are different outcomes,
-  // and a caller that cannot tell them apart tells somebody the wrong thing.
+  // "Everything up-to-date" and "pushed four commits" are different outcomes.
   it('knows the difference between sending work and having nothing to send', async () => {
     const repo = await repository({ withRemote: true })
     await repo.git(['checkout', '-q', '-b', 'feature'])
@@ -192,8 +184,7 @@ describe('pushing to a real remote', () => {
 
     const result = await push(repo, 'feature')
 
-    // The edit counts; the stray log does not, because it was never going to
-    // be part of a push in the first place.
+    // The edit counts; the stray log was never going to be part of a push.
     expect(result.uncommitted).toBe(1)
     expect(result.alreadyUpToDate).toBe(false)
   })
@@ -205,8 +196,7 @@ describe('pushing to a real remote', () => {
     await repo.commit('first')
     await push(repo, 'feature')
 
-    // Somebody else moves the remote branch on, then this side rewrites its own
-    // history — the ordinary way a push gets rejected.
+    // Somebody else moves the remote on, then this side rewrites its history.
     const other = await repo.git(['rev-parse', 'HEAD'])
     await repo.git(['push', 'origin', `${other}:refs/heads/feature`])
     await repo.write('work.ts', 'two\n')
@@ -225,10 +215,8 @@ describe('pushing to a real remote', () => {
     expect((failure as GitServiceError).message).toContain('has commits that feature does not')
   })
 
-  // The remote is a local bare repository, so nothing leaves this machine, and
-  // its `url` is the address the repository is known by — which is exactly the
-  // arrangement a mirror or a proxy produces, and the one the review link has
-  // to read. `pushurl` keeps the commits local.
+  // A local bare repository as remote, whose `url` is the address the repository
+  // is known by — what a mirror or proxy produces. `pushurl` keeps commits local.
   it('names the review page from the URL the remote is known by', async () => {
     const repo = await repository({ withRemote: true })
     const bare = await repo.git(['remote', 'get-url', 'origin'])
@@ -247,9 +235,8 @@ describe('pushing to a real remote', () => {
     })
 
     expect(result.reviewUrl).toBe('https://github.com/o/r/compare/main...feature%2Flogin?expand=1')
-    // Still a real push, and it went to the bare repository beside this one —
-    // asked of that path rather than of `origin`, whose fetch URL now names a
-    // host no test may go anywhere near.
+    // Still a real push, to the bare repository beside this one — asked of that
+    // path, since `origin`'s fetch URL now names a host no test may go near.
     expect(await repo.git(['ls-remote', '--heads', bare, 'feature/login'])).toContain('refs/heads/feature/login')
   })
 
@@ -303,10 +290,8 @@ describe('pushing to a real remote', () => {
     expect((failure as GitServiceError).message).toContain('no remotes')
   })
 
-  // A worktree branch is cut from the project's base ref, and git hands it that
-  // ref as its upstream. `ahead` is measured against the upstream, so a push
-  // that leaves the upstream on the base leaves the button saying there is
-  // still a commit to send — after the commit has landed, and forever.
+  // git hands a worktree branch the base ref as upstream, and `ahead` is measured
+  // against the upstream, so the button says a commit is left to send, forever.
   it('points the branch at its own branch on the remote, not at the base it was cut from', async () => {
     const repo = await repository({ withRemote: true })
     await repo.git(['checkout', '-q', '-b', 'feature'])
@@ -324,16 +309,14 @@ describe('pushing to a real remote', () => {
     })
 
     expect(await repo.git(['rev-parse', '--abbrev-ref', 'feature@{upstream}'])).toBe('origin/feature')
-    // And the result says so, which is the other half of the defect: the fields
-    // claimed tracking this call had not touched.
+    // And the result says so: the fields claimed tracking this call had not touched.
     expect(result.upstream).toBe('origin/feature')
     expect(result.setUpstream).toBe(true)
     // Nothing else moved: the base is still two commits away if it was.
     expect(result.alreadyUpToDate).toBe(false)
   })
 
-  // Re-pointing an upstream that is already right would be a write for nothing,
-  // and `setUpstream` would then say this push changed something it did not.
+  // Re-pointing an upstream already right would be a write for nothing.
   it('leaves a branch that already tracks its own branch on the remote alone', async () => {
     const repo = await repository({ withRemote: true })
     await repo.git(['checkout', '-q', '-b', 'feature'])
@@ -365,8 +348,7 @@ describe('pushing to a real remote', () => {
     expect(result.alreadyUpToDate).toBe(true)
   })
 
-  // The base ref is the one upstream this may move, because it is the one no
-  // person chose. Anything else in that slot was somebody's decision.
+  // The base ref is the one upstream no person chose.
   it('leaves an upstream somebody chose deliberately where they put it', async () => {
     const repo = await repository({ withRemote: true })
     await repo.git(['checkout', '-q', '-b', 'feature'])

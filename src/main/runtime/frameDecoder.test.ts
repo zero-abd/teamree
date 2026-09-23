@@ -51,11 +51,8 @@ describe('frame decoder', () => {
 })
 
 describe('a sender that never completes a frame', () => {
-  // The reason this exists: `buffer += chunk` builds a rope, and every
-  // `indexOf` on it flattens the whole rope — so newline-free input cost the
-  // accumulated length again on every chunk. 52MB of it took 18 seconds of a
-  // pegged main thread, which owns every PTY and the window's IPC, and any
-  // member of the roster could send it.
+  // `buffer += chunk` builds a rope and every `indexOf` flattens it, so 52MB of
+  // newline-free input took 18 seconds of a pegged main thread.
   it('costs about the same for fifty megabytes as for one', () => {
     const chunk = 'x'.repeat(64 * 1024)
     const once = (megabytes: number): number => {
@@ -66,10 +63,7 @@ describe('a sender that never completes a frame', () => {
       return performance.now() - started
     }
 
-    // The suite runs many files at once, so any single reading includes however
-    // much CPU the scheduler gave someone else. The fastest of several runs is
-    // the one least polluted by that, which is why this takes a minimum rather
-    // than an average: an average moves with the load, a minimum does not.
+    // A minimum rather than an average: an average moves with the load.
     const fastest = (megabytes: number): number => {
       let best = Number.POSITIVE_INFINITY
       for (let attempt = 0; attempt < 5; attempt += 1) best = Math.min(best, once(megabytes))
@@ -79,10 +73,7 @@ describe('a sender that never completes a frame', () => {
     const small = fastest(4)
     const large = fastest(32)
 
-    // Eight times the input. Linear lands near eight, quadratic near sixty-four,
-    // and the gap between those is wide enough that a loose bound still tells
-    // the two apart. Comparing two measurements taken the same way keeps this a
-    // ratio rather than a wall-clock budget that a slow machine would fail.
+    // Eight times the input: linear lands near eight, quadratic near sixty-four.
     expect(large / Math.max(small, 0.05)).toBeLessThan(24)
   })
 
@@ -92,8 +83,7 @@ describe('a sender that never completes a frame', () => {
     expect(() => decode('x'.repeat(2048))).toThrow(/without completing/)
   })
 
-  // Half a frame is not a frame: a reader that resynchronised mid-stream could
-  // be made to parse the sender's choice of boundary.
+  // A reader that resynchronised mid-stream could be made to parse the sender's choice of boundary.
   it('keeps nothing of the frame it refused', () => {
     const decode = createFrameDecoder(1024)
     expect(() => decode('x'.repeat(2048))).toThrow()

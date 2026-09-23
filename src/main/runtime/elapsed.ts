@@ -1,32 +1,10 @@
-// Elapsed time, measured so that this machine falling asleep cannot be read as
-// somebody else's machine going quiet.
-//
-// Every deadline in teamwork is a one-shot that, when it fires, asks how long
-// it has been. `Date.now()` cannot answer that across a closing lid: the wall
-// clock jumps by the whole sleep, so the deadline fires on wake and the answer
-// it computes indicts whoever it was watching. The teammate was fine. This
-// machine slept.
-//
-// What separates the two is that a suspended process leaves a trace on the
-// clocks, and platforms split over which trace:
-//
-//   * where the monotonic source counts time spent suspended — macOS's does —
-//     a one-shot armed for five minutes returns having measured an hour, and
-//     the two clocks agree;
-//   * where it does not, the monotonic reading comes back near what the timer
-//     was armed for while the wall clock has run away from it.
-//
-// So both are checked. Either shape means this process was not running, which
-// is a fact about this machine and no evidence whatsoever about another one.
+// Elapsed time, measured so this machine falling asleep cannot be read as a
+// teammate going quiet. macOS's monotonic clock counts time suspended and
+// others do not, so both the wall and monotonic readings are checked.
 
 /**
- * How far a reading may be out before it is an interruption rather than noise.
- *
- * Far above scheduler jitter and NTP slew, far below every deadline that reads
- * it. The cost of calling a wedged event loop a sleep is that a healthy link is
- * re-established and liveness is briefly unknown; the cost of the opposite
- * mistake is telling somebody their teammate's machine died. They are not the
- * same size, so the threshold sits where the cheaper mistake is the likelier.
+ * How far a reading may be out before it is an interruption rather than noise:
+ * far above scheduler jitter and NTP slew, far below every deadline that reads it.
  */
 export const CLOCK_JUMP_TOLERANCE_MS = 30_000
 
@@ -41,22 +19,13 @@ export type ElapsedClock = {
 export type TimedWindow = {
   /** How long the window has been open, on the monotonic clock. */
   elapsedMs: () => number
-  /**
-   * Whether this process stopped running inside the window.
-   *
-   * A suspended machine, a stepped clock, an event loop wedged for half a
-   * minute: all of them mean the same thing here, which is that nothing
-   * measured across this window says anything about a peer.
-   */
+  /** Whether this process stopped running inside the window; if so nothing measured says anything about a peer. */
   wasInterrupted: () => boolean
 }
 
 /**
- * Starts measuring one interval.
- *
- * `armedForMs` is what a timer covering this window was asked to wait — zero
- * for a window nobody is waiting on — so a one-shot that comes back far later
- * than it was armed for can say so.
+ * Starts measuring one interval. `armedForMs` is what a timer covering this
+ * window was asked to wait, so a one-shot that comes back far later can say so.
  */
 export function startTimedWindow(clock: ElapsedClock, armedForMs = 0): TimedWindow {
   const monotonicNow = clock.monotonicNow ?? defaultMonotonicNow

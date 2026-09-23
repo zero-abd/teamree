@@ -1,11 +1,6 @@
-// What a stopped runtime leaves behind: nothing that says it is running.
-//
-// The discovery file is how the CLI finds the app, and a stale one is a CLI
-// that tries a socket nobody answers. The teardown used to reach the file only
-// at the end of a chain of steps, any one of which could throw and take the
-// rest of the chain with it — and the quit went ahead regardless, because an
-// app that cannot be quit is the worse failure. So the file has to go whatever
-// else the teardown managed, and the socket with it.
+// What a stopped runtime leaves behind: nothing that says it is running. A stale
+// discovery file is a CLI trying a socket nobody answers, so the file has to go
+// whatever else the teardown managed.
 
 import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -15,9 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { discoveryFilePath } from './discoveryFile'
 import { startRuntime, type Runtime } from './startRuntime'
 
-// The bridge is the first thing `stop` takes down, and its uninstall is the
-// one step that has nothing to do with the socket or the file. Standing in for
-// it here is one that refuses when the test says so.
+// The bridge is the first thing `stop` takes down; this one refuses when the test says so.
 const bridge = vi.hoisted(() => ({ uninstallThrows: false }))
 vi.mock('./ipcBridge', () => ({
   installIpcBridge: (): (() => void) => () => {

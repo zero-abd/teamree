@@ -57,12 +57,8 @@ function repositoryName(root: string): string {
 }
 
 /**
- * The one base ref that cannot be compared against.
- *
- * Every `base..branch` read runs inside the worktree, where `HEAD` *is* that
- * branch. The comparison becomes the branch against itself, which exits 0 and
- * answers zero commits and zero ahead however much work is there — the worst
- * shape a wrong answer can take, because nothing about it looks like a failure.
+ * The one base ref that cannot be compared against: inside a worktree `HEAD`
+ * *is* the branch, and the comparison exits 0 with zero commits.
  */
 const SELF_REFERENTIAL_BASE = 'HEAD'
 
@@ -91,11 +87,8 @@ export async function detectBaseRef(runner: GitRunner, root: string): Promise<st
   const head = await runner.tryRun({ args: ['symbolic-ref', '--short', 'HEAD'], cwd: root, readOnly: true })
   if (head.exitCode === 0 && head.stdout.trim()) return head.stdout.trim()
 
-  // A primary checkout on a detached HEAD — bisecting, or sitting on a tag —
-  // has no branch name to offer, and the literal "HEAD" would be read inside
-  // each worktree as that worktree's own branch. The commit it is parked on is
-  // a real, stable base that says the same thing without the trap; a worktree
-  // already records its start point as "a ref name or a commit sha".
+  // A detached HEAD has no branch name, and the literal "HEAD" would be read
+  // inside each worktree as its own branch; the parked commit is a stable base.
   const detached = await runner.tryRun({
     args: ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'],
     cwd: root,
@@ -103,8 +96,7 @@ export async function detectBaseRef(runner: GitRunner, root: string): Promise<st
   })
   if (detached.exitCode === 0 && detached.stdout.trim()) return detached.stdout.trim()
 
-  // Nothing is committed yet, so there is genuinely nothing to branch from.
-  // Every reader of a base ref refuses this one rather than comparing with it.
+  // Nothing is committed yet; every reader of a base ref refuses this one.
   return SELF_REFERENTIAL_BASE
 }
 

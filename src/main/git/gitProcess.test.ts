@@ -62,11 +62,8 @@ describe('git runner', () => {
     const repo = await newRepo()
     const runner = createGitRunner()
 
-    // `hash-object --stdin` reads until end of input, and the runner never
-    // closes the child's stdin, so this one never finishes on its own. A fast
-    // command with a 1ms timeout would race instead: under load the timer fires
-    // late enough for git to have already succeeded, and the test fails for a
-    // reason that has nothing to do with timeouts.
+    // `hash-object --stdin` never finishes on its own; a fast command with a
+    // 1ms timeout would race under load.
     const error = (await runner
       .run({ args: ['hash-object', '--stdin'], cwd: repo.repoPath, timeoutMs: 250 })
       .catch((e: unknown) => e)) as GitCommandError
@@ -76,10 +73,8 @@ describe('git runner', () => {
     expect(error.message).toContain('timed out')
   })
 
-  // Four decisions in this app are made by matching git's English prose, and
-  // git is translated in most distro packages and in Git for Windows. Without
-  // this pin a German machine reads "Alles aktuell" and reports a push that
-  // sent nothing as a push that sent the work.
+  // Decisions are made by matching git's English prose; without this pin a
+  // German machine reads "Alles aktuell" and reports a push that sent nothing as work.
   it('hands git a locale that keeps its messages untranslated', async () => {
     if (process.platform === 'win32') return
     const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-locale-'))
@@ -98,9 +93,7 @@ describe('git runner', () => {
     await rm(base, { recursive: true, force: true })
   })
 
-  // A caller that only ever wanted the first megabyte should not have to get
-  // forty of them into memory first, and must not be handed a failure for
-  // output that arrived perfectly well.
+  // A caller that wanted the first megabyte must not be handed a failure for forty.
   it('clips stdout to the caller’s budget instead of failing on a huge read', async () => {
     const repo = await newRepo()
     const runner = createGitRunner()

@@ -1,13 +1,6 @@
-// What "runs visibly in a pane" has to mean, in two halves.
-//
-// The first half is the contract with the terminal service: one pane, labelled
-// `setup`, in the new worktree, and the command with an Enter after it — which
-// is asserted against a double, because those are the four facts and nothing
-// else about them needs a process.
-//
-// The second half is that the bytes actually run, which no double can say. That
-// one goes through a real TerminalSessionManager and a real pty, and proves it
-// the only way a terminal can be proved: the command leaves a file behind.
+// What "runs visibly in a pane" means: the contract with the terminal service
+// (one pane labelled `setup`, the command with an Enter) against a double, and
+// the bytes actually running through a real pty, proved by the file left behind.
 
 import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -62,8 +55,7 @@ describe('starting a setup command', () => {
 
     expect(opened).toEqual([{ worktreeId: 'wt_1', label: SETUP_PANE_LABEL }])
     expect(SETUP_PANE_LABEL).toBe('setup')
-    // A carriage return, which is the byte Enter sends a pty — the same one
-    // `teamree terminal send --enter` appends.
+    // A carriage return, the byte Enter sends a pty — what `teamree terminal send --enter` appends.
     expect(written).toEqual([{ terminalId: 't_setup', data: 'npm ci\r' }])
     expect(terminal.id).toBe('t_setup')
   })
@@ -91,8 +83,7 @@ describePty('a setup pane on a real pty', () => {
       const service = createTerminalService({ resolveWorktreeCwd: (id) => (id === 'wt_1' ? dir : undefined) })
       services.push(service)
 
-      // Written with no path, so what is being proved is the pane's cwd as
-      // much as the command: the file can only land in `dir` if the shell
+      // Written with no path, so the file can only land in `dir` if the shell
       // started there.
       startSetupCommand(service.manager, { worktreeId: 'wt_1', command: 'echo SETUP-RAN > setup.txt' })
 

@@ -15,8 +15,7 @@ export type IpcBridgeOptions = {
 
 export function installIpcBridge(options: IpcBridgeOptions): () => void {
   const { dispatch, subscriptions } = options
-  // One connection per WebContents; a reload or close ends it and takes every
-  // subscription that page opened with it.
+  // One connection per WebContents; a reload or close ends it and its subscriptions.
   const watched = new WeakSet<WebContents>()
 
   const connectionIdFor = (sender: WebContents): string => `renderer_${sender.id}`
@@ -29,8 +28,7 @@ export function installIpcBridge(options: IpcBridgeOptions): () => void {
       if (!sender.isDestroyed()) sender.send(RPC_STREAM_CHANNEL, frame)
     })
 
-    // The next navigation belongs to a different page than the one that
-    // subscribed, so its streams end here.
+    // The next navigation is a different page, so its streams end here.
     sender.once('did-start-loading', () => subscriptions.closeConnection(connectionId))
     if (!watched.has(sender)) {
       watched.add(sender)
@@ -53,14 +51,9 @@ export function installIpcBridge(options: IpcBridgeOptions): () => void {
   return () => {
     ipcMain.removeHandler(RPC_CALL_CHANNEL)
     ipcMain.removeAllListeners(RPC_RELEASE_CHANNEL)
-    // The bridge comes down first in the runtime's `stop()`, and the window is
-    // still open for the seconds it takes to kill every pty and flush the
-    // store. A call the page makes in that window — a store reacting to a
-    // stream ending, a status poll — used to land on a channel with no handler,
-    // which Electron reports on stderr as an error in the main process and
-    // hands the page as a rejection with Electron's own wording. Neither is
-    // wrong, exactly; both are noise about a quit that is going to plan. So the
-    // channel keeps answering, with a frame the page already knows how to read.
+    // The bridge comes down first in `stop()`, while the window is still open. A call
+    // made then used to land on a channel with no handler, which Electron logs as an
+    // error and rejects with its own wording; instead the channel keeps answering.
     ipcMain.handle(RPC_CALL_CHANNEL, async (_event, raw: unknown) => closing(raw))
   }
 }

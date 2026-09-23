@@ -319,8 +319,7 @@ describe('WorktreeWatcher', () => {
     expect(degraded[0]?.checkoutPath).toBe('/checkouts/a')
   })
 
-  // The old default discarded this, and a status display that has stopped
-  // covering edits while still showing numbers is the quietest way to be wrong.
+  // A status display that stopped covering edits while still showing numbers is the quietest way to be wrong.
   it('says what a degraded watch costs, in terms somebody could act on', () => {
     const report = degradedWatchReport({ worktreeId: 'a', checkoutPath: '/checkouts/a', error: enospc() })
 
@@ -329,8 +328,7 @@ describe('WorktreeWatcher', () => {
     expect(report).toContain('edits will not')
   })
 
-  // A dying inotify watch reports over and over; the app only stops covering
-  // edits once.
+  // A dying inotify watch reports over and over; the app stops covering edits once.
   it('reports a degradation once however many times the watch complains', () => {
     const fake = createFakeWatch()
     const degraded: WatchDegraded[] = []
@@ -349,11 +347,8 @@ describe('WorktreeWatcher', () => {
     expect(degraded).toHaveLength(1)
   })
 
-  // Degraded is a state to recover from, not a verdict. The usual cause is this
-  // machine running out of inotify instances, which a handful of editors and
-  // test runners reach between them — and which passes the moment one of them
-  // exits. Recording it once and never looking again left the worktree
-  // uncovered for the life of the process, still showing numbers.
+  // Degraded is a state to recover from: inotify instances run out between a few
+  // editors and test runners, and come back the moment one exits.
   it('picks the working tree back up on the next sync once watches are available again', () => {
     const fake = createFakeWatch()
     const degraded: WatchDegraded[] = []
@@ -395,8 +390,7 @@ describe('WorktreeWatcher', () => {
     watcher.sync([worktree('a')])
 
     // inotify runs out while the app is running. Nothing calls sync after this:
-    // the watch set only moves on a git event, and a machine under watch
-    // pressure is not one that is creating worktrees.
+    // the watch set only moves on a git event.
     fake.fail('/checkouts/a', enospc())
     expect(watcher.degradedIds).toEqual(['a'])
 
@@ -488,22 +482,17 @@ describe('WorktreeWatcher', () => {
     created.push(checkout)
     await mkdir(path.join(checkout, 'src'), { recursive: true })
 
-    // darwin hands a new recursive watch the changes of the last ~50ms, so a
-    // watch opened straight after `mkdtemp` is told about its own directory
-    // being created and reports before this test has written anything. Measured
-    // here: 188 replays in 200 attempts at no gap, none at all at 50ms. Waiting
-    // the creation out is what makes the report below evidence of the write.
+    // darwin hands a new recursive watch the changes of the last ~50ms, so a watch
+    // opened straight after `mkdtemp` reports its own directory being created.
+    // Measured: 188 replays in 200 attempts at no gap, none at 50ms.
     await delay(250)
 
     let watcher!: WorktreeWatcher
     const reported = new Promise<void>((resolve, reject) => {
       watcher = new WorktreeWatcher({
         onChange: resolve,
-        // This is the only test that asks the kernel for a real watch, and a
-        // watch is a scarce per-user resource. Left alone it does not fail —
-        // it simply never fires, and the run dies thirty seconds later saying
-        // nothing at all, sending the next reader hunting a race that is not
-        // there.
+        // The only test asking the kernel for a real watch, a scarce per-user resource.
+        // Left alone it never fires and the run dies thirty seconds later saying nothing.
         onDegraded: (event) => reject(new WatchRefused(event)),
         resolveGitDir: () => undefined,
         settleMs: 20,
@@ -513,25 +502,20 @@ describe('WorktreeWatcher', () => {
     })
 
     try {
-      // The watch has to be listening before the write, and on darwin it starts
-      // some unmeasured time after `sync` returns — the same replay window is
-      // what covers the gap.
+      // The watch has to be listening before the write, and on darwin it starts some
+      // unmeasured time after `sync` returns; the same replay window covers the gap.
       await delay(50)
-      // Awaited rather than left to a timer. A write still to come when the
-      // test ends lands in a directory `afterEach` has already removed, and an
-      // ENOENT nobody is waiting on fails whichever run it happens to land in.
+      // Awaited: a write still to come when the test ends lands in a directory
+      // `afterEach` has removed, and the ENOENT fails whichever run it lands in.
       await writeFile(path.join(checkout, 'src', 'App.tsx'), 'export {}\n')
       await reported
     } catch (error) {
-      // A machine with nothing left to give proves nothing about this watcher,
-      // so it is said out loud and stepped over rather than reported as a
-      // fault in code that was never run.
+      // A machine with nothing left to give proves nothing about this watcher.
       if (error instanceof WatchRefused && error.isResourceShortage) ctx.skip(error.message)
       throw error
     } finally {
       watcher.close()
-      // Claimed even on a path that never awaited it, so a rejection cannot
-      // outlive the test as the unhandled one this test used to leave behind.
+      // Claimed even on a path that never awaited it, so a rejection cannot outlive the test.
       void reported.catch(() => {})
     }
   })

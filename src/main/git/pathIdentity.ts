@@ -1,12 +1,6 @@
-// Deciding whether two path strings name the same checkout.
-//
-// This is harder than string equality on every platform we ship to: macOS puts
-// temp and /var behind symlinks, Windows is case-insensitive and mixes
-// separators, and git prints its own resolved spelling in `worktree list`.
-// Records and git output are therefore compared through one canonical form.
-//
-// The platform-dependent parts are parameterised so all three shapes can be
-// exercised from one machine; the exported defaults bind the running platform.
+// Deciding whether two path strings name the same checkout. macOS puts temp
+// behind symlinks, Windows is case-insensitive and mixes separators, and git
+// prints its own resolved spelling, so everything compares through one canonical form.
 
 import { realpathSync } from 'node:fs'
 import path from 'node:path'
@@ -23,12 +17,8 @@ export function isCaseInsensitivePlatform(platform: NodeJS.Platform): boolean {
 }
 
 /**
- * Symlink-resolves as much of `absolute` as exists and re-appends the rest.
- *
- * realpath fails outright when the leaf is missing, which is the normal state of
- * a checkout we are about to create — and returning the unresolved spelling for
- * those makes a path under /var compare unequal to the same path under
- * /private/var once it lands on disk.
+ * Symlink-resolves as much of `absolute` as exists and re-appends the rest. realpath
+ * fails when the leaf is missing (normal for a checkout about to be created), and /var must still equal /private/var.
  */
 export function resolveThroughAncestors(
   absolute: string,

@@ -1,17 +1,6 @@
-// Deciding what "start this work from" means, and offering the choices.
-//
-// A start point arrives as one string typed by a person or picked from a list,
-// and the same string can name several different commits: `release` can be a
-// local branch and a tag at once, and a bare `feature` can exist on two
-// remotes. Git's own DWIM rules would pick one silently, and they are not the
-// rules a branching UI wants — `git rev-parse` prefers a tag over a branch of
-// the same name, which is the opposite of what someone starting a task means.
-//
-// So this module classifies the string itself and then hands `worktree add` a
-// concrete sha. Nothing downstream re-interprets the name, which is what makes
-// the recorded start point trustworthy.
-//
-// PRECEDENCE, highest first:
+// Deciding what "start this work from" means, and offering the choices. Git's
+// own DWIM prefers a tag over a branch of the same name, so this classifies the
+// string itself and hands `worktree add` a concrete sha. PRECEDENCE, highest first:
 //   1. `HEAD`                          the primary checkout's current commit
 //   2. a full ref path (`refs/...`)    exact, no interpretation at all
 //   3. a local branch                  refs/heads/<name>
@@ -20,11 +9,7 @@
 //   6. the same name on some remote    refs/remotes/*/<name>
 //   7. a commit sha, full or short
 //   8. a remote branch not fetched yet fetched on demand, then (5)
-//
-// Every resolution reports the rule it used and any same-named ref it passed
-// over, so a caller can show "used the local branch, not the tag of that name".
-// The one case with no principled ordering — a bare name living on two remotes
-// at two different commits — is refused rather than guessed.
+// A bare name on two remotes at two different commits is refused, not guessed.
 
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
@@ -71,12 +56,7 @@ export type ResolvedStartPoint = {
   sha: string
   shortSha: string
   refName?: string
-  /**
-   * The remote-tracking ref this start point is, e.g. `origin/main`; absent for
-   * every other kind. A fact about where the work began, not an upstream: a new
-   * branch is created with `--no-track`, and what it tracks is decided by the
-   * push that first puts it on a remote. See `worktreePush.ts`.
-   */
+  /** The remote-tracking ref this is, e.g. `origin/main`. Where the work began, not an upstream: branches are created `--no-track`. */
   track?: string
   /** True when the ref had to be fetched before it could be resolved. */
   fetched: boolean
@@ -114,11 +94,7 @@ type RefRow = {
 
 // -------------------------------------------------------------------- reading
 
-/**
- * One process for every ref in the repository. A busy monorepo has thousands of
- * them, so anything per-ref — a rev-parse each, a branch --contains each — is
- * the difference between a picker that opens and one that hangs.
- */
+/** One process for every ref; anything per-ref hangs the picker on a monorepo with thousands of them. */
 async function readRefs(
   runner: GitRunner,
   root: string,
@@ -269,9 +245,8 @@ async function resolveExactRef(
 }
 
 /**
- * Every ref the name could mean, in one call: its own three namespaces plus the
- * same leaf under any remote. The glob can over-match (`*` crosses slashes), so
- * the results are filtered back down to exact names here.
+ * Every ref the name could mean, in one call. The glob over-matches (`*` crosses
+ * slashes), so results are filtered to exact names.
  */
 async function lookupCandidates(
   runner: GitRunner,
@@ -338,10 +313,8 @@ function chooseCandidate(requested: string, candidates: readonly RefRow[], fetch
 }
 
 /**
- * Branch beats tag by a stated rule, but no rule orders one remote against
- * another. When they disagree the caller has to say which one it meant; when
- * they agree the choice is arbitrary but stable, since for-each-ref returns
- * refs in name order.
+ * No rule orders one remote against another: disagreeing remotes are refused,
+ * agreeing ones take the first, stable since for-each-ref returns name order.
  */
 function pickSingleRemote(requested: string, rows: readonly RefRow[]): RefRow {
   const first = rows[0]
@@ -395,9 +368,8 @@ async function resolveAsCommit(
 }
 
 /**
- * `origin/feature` for a branch nobody has fetched yet. The refspec is explicit
- * so the remote-tracking ref exists afterwards and upstream tracking can be set
- * from it; a bare `git fetch` would update everything else too.
+ * `origin/feature` for a branch nobody has fetched. The refspec is explicit so the
+ * remote-tracking ref exists afterwards.
  */
 async function fetchRemoteBranch(
   runner: GitRunner,
@@ -472,14 +444,9 @@ export type ListStartPointsOptions = {
 }
 
 /**
- * Everything the picker can offer, ordered by how likely it is to be wanted:
- * the base ref, then the primary checkout's current branch, then local
- * branches, remote branches and tags, each most-recently-touched first.
- *
- * The cap is a hard requirement rather than a nicety — a repository with ten
- * thousand tags would otherwise push a list nobody can render across the wire —
- * and `truncated` says plainly that a tail was dropped, so a UI can offer a
- * search box instead of pretending the list is complete.
+ * Everything the picker can offer: base ref, current branch, then local branches,
+ * remote branches and tags, most recently touched first. The cap is a hard
+ * requirement (ten thousand tags would cross the wire); `truncated` says a tail was dropped.
  */
 export async function listStartPoints(runner: GitRunner, options: ListStartPointsOptions): Promise<StartPointList> {
   const { root, baseRef } = options

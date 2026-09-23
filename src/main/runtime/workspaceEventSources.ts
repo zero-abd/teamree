@@ -1,22 +1,6 @@
-// Where workspace events actually come from.
-//
-// Each producer is attached to the thing that owns the state, never to a
-// transport, which is what makes the stream transport-agnostic: the CLI and the
-// GUI both reach the same service, so both mutations announce themselves.
-//
-// Three shapes of producer exist, because the services differ:
-//   - git already emits its own state transitions (including the ones that
-//     happen on a background task, long after the call returned), so that
-//     emitter is simply bridged onto the bus.
-//   - the terminal service announces only one transition of its own — a pane's
-//     process ending, which no call causes — so that rides the manager's exit
-//     report and every other terminal change is a mutating handler
-//     re-registered wrapped: the wrapper publishes after the inner handler
-//     succeeds. Registering a method twice is how the runtime already replaces
-//     placeholders, so this needs nothing new from the registry.
-//   - and the filesystem, which answers to nobody's call at all: files under a
-//     checkout change because of an editor or a build, and a watcher is the
-//     only way to hear about it.
+// Where workspace events come from. Each producer is attached to the service
+// that owns the state, never to a transport: git's emitter is bridged, mutating
+// terminal handlers are re-registered wrapped, and a watcher covers the filesystem.
 
 import type { Terminal } from '../../shared/entities'
 import { Params } from '../../shared/methods'
@@ -26,10 +10,7 @@ import type { TerminalService } from '../terminals/method-handlers'
 import type { MethodRegistry } from './methodRegistry'
 import type { WorkspaceEventBus } from './workspaceEvents'
 
-/**
- * Bridges git's own transitions onto the bus. Returns the detach function; the
- * runtime keeps the service for its whole life and so never calls it.
- */
+/** Bridges git's own transitions onto the bus. Returns the detach function. */
 export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () => void {
   return git.events.on((event) => {
     switch (event.type) {
@@ -39,27 +20,16 @@ export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () =>
         bus.emit({ type: 'projects' })
         return
       default:
-        // created / updated (creating -> ready | failed) / removed all mean the
-        // same thing to a client: refetch the list.
+        // created / updated / removed all mean the same to a client: refetch.
         bus.emit({ type: 'worktrees' })
     }
   })
 }
 
 /**
- * The git calls that write, wrapped so they announce what they did.
- *
- * Every other git producer rides the service's own event emitter, which fires
- * for projects and for worktree lifecycle transitions and for nothing else. A
- * commit and a push change what `worktree.status` answers without changing any
- * record, so without this they are silent: a commit made through the CLI would
- * leave every open window describing the repository as it was.
- *
- * A commit currently gets noticed anyway, because it writes `index` and `HEAD`
- * and the filesystem watch below picks that up. That is luck rather than
- * design — a push changes only remote-tracking refs, which live in the common
- * git directory that no worktree watch covers — and relying on one producer to
- * cover for another is how a stream quietly stops being trustworthy.
+ * The git calls that write, wrapped to announce what they did: they change what
+ * `worktree.status` answers without changing any record. A push moves only
+ * remote-tracking refs, in the common git directory no worktree watch covers.
  */
 export function publishGitWrites(registry: MethodRegistry, git: GitService, bus: WorkspaceEventBus): void {
   registry.register('worktree.commit', Params.worktreeCommit, async (params) => {
@@ -68,11 +38,8 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
     return result
   })
 
-  // Staging moves what `worktree.status` counts as staged and what either half
-  // of the patch contains, and it does it without writing a file the watcher
-  // below would notice — `.git/index` is inside the git directory, which the
-  // watch covers, but relying on that is the same luck this function exists to
-  // stop relying on.
+  // Staging moves the counts and both halves of the patch; the watch noticing
+  // `.git/index` is luck, not design.
   registry.register('worktree.stageHunk', Params.worktreeStageHunk, async (params) => {
     const result = await git.worktreeStageHunk(params)
     bus.emit({ type: 'worktrees' })
@@ -87,34 +54,16 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
 
   registry.register('worktree.push', Params.worktreePush, async (params) => {
     const result = await git.worktreePush(params)
-    // Ahead and behind moved even when nothing was sent: the remote-tracking
-    // ref is now where the branch is.
+    // Ahead and behind moved even when nothing was sent.
     bus.emit({ type: 'worktrees' })
     return result
   })
 }
 
 /**
- * The third producer, and the only one that is not a consequence of a call:
- * files changing under a checkout because of something outside this app
- * entirely — an editor saving, a build writing, an agent's `git commit` in a
- * shell we are not watching the exit of.
- *
- * Git status is the one part of a worktree row with no call behind it, so
- * without this it is only ever as fresh as the last command boundary. The
- * watcher turns a settled burst of file changes into the same coarse
- * `worktrees` invalidation every other producer emits, and the client re-reads
- * the statuses it already knows how to re-read.
- *
- * The watch set follows git's own events, so a worktree becoming ready starts
- * being watched and a removed one stops, without anything polling.
- *
- * A watch can also be refused — a filesystem that cannot do it recursively, or
- * a machine with no inotify instances left, which takes only a handful of
- * editors and test runners on Linux. The watcher carries on with the git
- * directory alone when that happens, and this is the point where somebody has
- * to be told: the chips keep moving on commits and stop moving on edits, and
- * the difference is invisible from the outside.
+ * The producer that is not a consequence of a call: files changing under a
+ * checkout. The watch set follows git's own events. A refused watch (no inotify
+ * instances left) is reported here, since chips then stop moving on edits and nothing shows it.
  */
 export function publishWorktreeFileEvents(
   git: GitService,
@@ -129,9 +78,7 @@ export function publishWorktreeFileEvents(
   })
 
   const resync = (): void => watcher.sync(git.snapshot().worktrees)
-  // Records restored from a previous launch are already ready, so the first
-  // sync has to happen now rather than waiting for a transition that will
-  // never come.
+  // Records restored from a previous launch are already ready, so sync now.
   resync()
   const detach = git.events.on(resync)
 
@@ -145,8 +92,7 @@ export function publishWorktreeFileEvents(
 
 /**
  * Re-registers the terminal and layout methods that change state, each wrapped
- * to publish once the inner handler has succeeded. A failed call changes
- * nothing, so it must announce nothing.
+ * to publish once the inner handler has succeeded.
  */
 export function publishTerminalEvents(
   registry: MethodRegistry,
@@ -155,31 +101,24 @@ export function publishTerminalEvents(
 ): void {
   const { handlers, schemas } = terminals
 
-  // A shell exiting on its own is nobody's method call, so the only way to hear
-  // about it is the session's own lifecycle. The manager reports it for every
-  // pane it started, which is what makes a pane restored at startup — started
-  // before any of these handlers exist — announce its exit like any other.
+  // A shell exiting on its own is nobody's method call; the manager reports it
+  // for every pane it started, restored ones included.
   terminals.manager.onTerminalExit((terminalId, exitCode) => {
     bus.emit({ type: 'terminalExited', terminalId, exitCode })
-    // The terminal's own record changed with it: `running` is false now.
+    // `running` is false now.
     bus.emit({ type: 'terminals' })
   })
 
-  // The keystrokes worth announcing: the ones that retire a badge somebody is
-  // looking at — the restored pane's, and the bell that put "waiting on you"
-  // beside the pane's name. Publishing per keystroke would be absurd, so the
-  // manager reports only the writes that changed something a client holds; an
-  // emulator answering the program's own questions changes neither and says
-  // nothing. This is a listener rather than a wrapper around `terminal.write`
-  // because the edge is invisible from out here: the pane list answers what the
-  // pane is now, and the bell it was ringing a byte ago has already gone.
+  // The manager reports only the writes that retired a badge a client holds. A
+  // listener rather than a wrapper around `terminal.write` because the edge is
+  // invisible from out here: the bell it rang a byte ago has already gone.
   terminals.manager.onPaneAnswered(() => {
     bus.emit({ type: 'terminals' })
   })
 
   const announceOpened = (terminal: Terminal): void => {
     bus.emit({ type: 'terminals' })
-    // Opening a pane rewrites the worktree's tree, so the layout changed too.
+    // Opening a pane rewrites the worktree's tree.
     bus.emit({ type: 'layout', worktreeId: terminal.worktreeId })
   }
 
@@ -195,18 +134,15 @@ export function publishTerminalEvents(
     return result
   })
 
-  // The pane is running again, so `running`, `exitCode` and the agent it is
-  // under have all changed. The layout has not: relaunch keeps the terminal id
-  // and its leaf precisely so nothing has to move.
+  // The record changed; the layout has not, since relaunch keeps the terminal id.
   registry.register('terminal.relaunch', schemas['terminal.relaunch'], async (params, call) => {
     const terminal = await handlers['terminal.relaunch'](params, call)
     bus.emit({ type: 'terminals' })
     return terminal
   })
 
-  // The agent's own word about the pane, reported from inside its process over
-  // the CLI socket. The window drawing the sidebar is never the caller, so
-  // this is the only way it hears: `agentEvent` changed on the record.
+  // Reported from inside the agent's process over the CLI socket; the window
+  // drawing the sidebar is never the caller.
   registry.register('terminal.agentEvent', schemas['terminal.agentEvent'], async (params, call) => {
     const terminal = await handlers['terminal.agentEvent'](params, call)
     bus.emit({ type: 'terminals' })
@@ -214,8 +150,7 @@ export function publishTerminalEvents(
   })
 
   registry.register('terminal.close', schemas['terminal.close'], async (params, call) => {
-    // Read before closing: afterwards the session is gone and with it the only
-    // record of which worktree's layout just changed.
+    // Read before closing: afterwards the session is gone.
     const worktreeId = terminals.manager.list().find((terminal) => terminal.id === params.terminalId)?.worktreeId
     const result = await handlers['terminal.close'](params, call)
     bus.emit({ type: 'terminals' })
@@ -223,18 +158,15 @@ export function publishTerminalEvents(
     return result
   })
 
-  // A name is what every client draws the pane with, so the rename has to
-  // reach the windows that did not make the call — including the sidebar of
-  // whoever renamed it, which reads the same list the strip does.
+  // The rename has to reach the windows that did not make the call.
   registry.register('terminal.rename', schemas['terminal.rename'], async (params, call) => {
     const terminal = await handlers['terminal.rename'](params, call)
     bus.emit({ type: 'terminals' })
     return terminal
   })
 
-  // terminal.resize is deliberately not a producer: the caller already gets the
-  // new size back, and a drag-resize would otherwise invalidate the terminal
-  // list on every frame.
+  // terminal.resize is deliberately not a producer: a drag-resize would
+  // invalidate the terminal list on every frame.
   registry.register('layout.set', schemas['layout.set'], async (params, call) => {
     const layout = await handlers['layout.set'](params, call)
     bus.emit({ type: 'layout', worktreeId: layout.worktreeId })

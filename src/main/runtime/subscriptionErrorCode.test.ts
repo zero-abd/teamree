@@ -1,8 +1,5 @@
-// The code a failed subscribe puts on the wire.
-//
-// The hub is the one service whose errors nobody is left to read: a connection
-// that is gone cannot be told anything. That makes it the easiest place for a
-// code to be decided by accident, which is what this pins down.
+// The code a failed subscribe puts on the wire. The hub's errors reach nobody
+// (the connection is gone), so a code is easily decided by accident.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -34,10 +31,8 @@ describe('subscribing on a connection the hub does not know', () => {
       thrown = error
     }
 
-    // The difference this protects is not the code — it is that the code is
-    // this module's decision. A plain Error reaches the wire as `internal`
-    // too, from the dispatcher's catch-all, which is the same answer for a
-    // deliberate refusal and for a crash in a handler.
+    // What matters is that the code is this module's decision: a plain Error
+    // reaches the wire as `internal` too, from the dispatcher's catch-all.
     expect(thrown).toBeInstanceOf(RuntimeError)
     expect((thrown as RuntimeError).code).toBe(ErrorCode.Internal)
   })

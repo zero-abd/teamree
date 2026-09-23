@@ -1,19 +1,6 @@
-// What is in a worktree's directories, for a tree somebody opens one folder at
-// a time — and which of it git is ignoring, so a build directory is drawn
-// dimmed rather than as if somebody wrote it.
-//
-// Names and kinds only, never contents, and never more than one directory per
-// call. A tree of a checkout with `node_modules` in it is a hundred thousand
-// entries, and a read that walked it to answer "what is at the root" would be
-// the app doing an agent's work for it: the Files tab reads a directory when
-// it is opened and re-reads it when it is opened again, which is all the
-// watching it does.
-//
-// `git check-ignore` is what decides "ignored" — one process per listing, fed
-// every name on stdin — rather than a second reading of `.gitignore` here.
-// The rules git applies are the rules that matter, exclusions from
-// `.git/info/exclude` and `core.excludesFile` included, and a re-implementation
-// would be right until the first pattern it read differently.
+// What is in a worktree's directories, one directory per call, names and kinds
+// only, and which of it git ignores. `git check-ignore` decides "ignored", fed
+// every name on stdin, rather than a second reading of `.gitignore` here.
 
 import { lstat, readdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -28,11 +15,7 @@ export const DEFAULT_FILES_LIMIT = 2_000
 /** Matches returned before a search reports itself truncated. */
 export const DEFAULT_FIND_LIMIT = 200
 
-/**
- * The bytes of `git ls-files` a search reads before it stops. A monorepo lists
- * hundreds of thousands of paths; a search over them is still a substring test
- * per line, and the cap keeps one keystroke from holding a runtime's memory.
- */
+/** The bytes of `git ls-files` a search reads before it stops, so one keystroke cannot hold a runtime's memory. */
 const FIND_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
 
 export type FilesReadOptions = {
@@ -46,15 +29,8 @@ export type FilesReadOptions = {
 }
 
 /**
- * The directory `relative` names inside `worktreePath`, or null when it does
- * not name one inside it.
- *
- * Resolved lexically, on purpose: `..` is refused by what it spells rather
- * than by where it lands, and an absolute path is refused outright. A symlink
- * inside the tree that points outside it is a different question — the entry
- * is reported as a symlink and never followed, so it cannot be opened here at
- * all. The relative form comes back with forward slashes because it is the
- * form git is later asked about, and git speaks that form on every platform.
+ * The directory `relative` names inside `worktreePath`, or null. Resolved
+ * lexically: `..` is refused by what it spells. Forward slashes because git is asked about it later.
  */
 export function resolveInsideWorktree(
   worktreePath: string,
@@ -88,9 +64,7 @@ export async function readWorktreeFiles(runner: GitRunner, options: FilesReadOpt
     throw new GitServiceError(ErrorCode.Internal, `could not read "${target.relative}": ${String(error)}`)
   }
 
-  // The repository's own bookkeeping is not part of the tree somebody works
-  // in. A linked worktree has a `.git` file rather than a directory; either
-  // way it is not a thing to open in an editor.
+  // A linked worktree has a `.git` file rather than a directory; either way it is not the tree.
   const listed = names.filter((name) => name !== '.git')
 
   const kinds = await Promise.all(
@@ -99,8 +73,7 @@ export async function readWorktreeFiles(runner: GitRunner, options: FilesReadOpt
         const stat = await lstat(path.join(target.absolute, name))
         return stat.isSymbolicLink() ? 'symlink' : stat.isDirectory() ? 'dir' : 'file'
       } catch {
-        // Gone between the readdir and the stat, which a build directory does
-        // constantly. It was there a moment ago; called a file rather than
+        // Gone between the readdir and the stat; called a file rather than
         // dropped, so the listing and the count agree.
         return 'file' as const
       }
@@ -138,13 +111,8 @@ function byName(left: string, right: string): number {
 }
 
 /**
- * Which of these paths git ignores, asked once for the lot.
- *
- * `check-ignore` exits 1 when none of them is ignored and 0 when at least one
- * is; both are answers, so this goes through `tryRun`. Anything else — a
- * repository git cannot read — is treated as nothing ignored, because a tree
- * with nothing dimmed is a tree, and a tree that could not be listed at all is
- * the worse failure of the two.
+ * Which of these paths git ignores, asked once for the lot. `check-ignore` exits
+ * 1 when none is ignored, so `tryRun`; anything else is treated as nothing ignored.
  */
 async function ignoredPaths(
   runner: GitRunner,
@@ -154,8 +122,7 @@ async function ignoredPaths(
 ): Promise<Set<string>> {
   if (relativePaths.length === 0) return new Set()
   const answer = await runner.tryRun({
-    // `--no-index` is deliberately absent: git does not call a tracked path
-    // ignored, and neither should this.
+    // `--no-index` is deliberately absent: git does not call a tracked path ignored.
     args: ['check-ignore', '-z', '--stdin'],
     cwd: worktreePath,
     readOnly: true,
@@ -177,13 +144,8 @@ export type FindOptions = {
 }
 
 /**
- * Every path git tracks or would track whose path contains `query`.
- *
- * `ls-files --cached --others --exclude-standard` is the set a person means by
- * "the files in this repository": what is committed or staged, plus what is
- * new but not ignored. The match is on the whole relative path rather than the
- * name, so `util/str` finds `src/util/strings.ts`, and it is a substring rather
- * than a pattern because the field it serves is typed into, not composed.
+ * Every path git tracks or would track whose relative path contains `query`,
+ * so `util/str` finds `src/util/strings.ts`.
  */
 export async function findWorktreeFiles(runner: GitRunner, options: FindOptions): Promise<WorktreeFileMatches> {
   const limit = options.limit ?? DEFAULT_FIND_LIMIT
@@ -211,8 +173,7 @@ export async function findWorktreeFiles(runner: GitRunner, options: FindOptions)
     paths.push(entry)
   }
 
-  // Path order rather than git's, which lists the index before the untracked
-  // files and so puts a new file after everything old beside it.
+  // Path order rather than git's, which lists the index before the untracked files.
   paths.sort(byName)
   return { worktreeId: options.worktreeId, query: options.query, paths, truncated, readAt }
 }

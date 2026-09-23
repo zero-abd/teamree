@@ -1,23 +1,6 @@
-// Committing from inside the app.
-//
-// This is the first thing here that writes to a repository, so it is built to
-// refuse rather than to guess. Everything else in this folder answers
-// questions; a bad answer is a wrong chip. A bad commit is in the history.
-//
-// Four refusals shape it:
-//
-//   - Nothing is ever staged on the caller's behalf. Passing paths stages those
-//     paths and nothing else; passing none commits what the user already
-//     staged. There is no "commit everything", because the thing a sweep picks
-//     up that nobody wanted is exactly the thing you find out about later.
-//   - A worktree with unmerged paths is refused outright. Committing a
-//     conflicted tree writes the conflict markers into the history as if they
-//     were code.
-//   - An empty commit is refused, because it is almost always a sign that the
-//     paths named were not the paths that changed.
-//   - A machine whose git has no identity is refused before anything is staged,
-//     because the alternative is a wall of git's own prose at the last step of
-//     a commit the user has already composed.
+// Committing from inside the app: the first thing here that writes to a
+// repository, so it refuses rather than guesses. Nothing is staged on the caller's
+// behalf; a conflicted tree, an empty commit and a git with no identity are refused.
 
 import type { WorktreeCommit } from '../../shared/entities'
 import { GitServiceError } from './errors'
@@ -32,10 +15,7 @@ export type CommitOptions = {
   worktreeId: string
   worktreePath: string
   message: string
-  /**
-   * Paths to stage before committing. Omitted means commit what is already
-   * staged — never everything, which is a different and much less careful act.
-   */
+  /** Paths to stage before committing. Omitted means commit what is already staged — never everything. */
   paths?: readonly string[]
   signal?: AbortSignal
   now?: () => number
@@ -91,29 +71,18 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
     sha,
     shortSha: sha.slice(0, 7),
     message,
-    // What this commit actually captured, which is not always what was asked
-    // for: a path already staged from an earlier edit goes in too, and saying
-    // so is the difference between a report and a guess.
+    // What this commit actually captured: a path already staged from an earlier
+    // edit goes in too.
     paths: staged.map((change) => change.path).sort(),
     committedAt: (options.now ?? Date.now)()
   }
 }
 
 /**
- * Refuses before anything is staged when git has no identity to sign with.
- *
- * This is the fourth refusal, and the only one whose cause is the machine
- * rather than the tree: git is installed, `git config --global user.email` was
- * never run, and the commit fails at the last step with "Author identity
- * unknown" — after the paths have been staged, and after the user has typed a
- * message. Asked first, nothing has moved when the refusal arrives, and the
- * answer is the same one git's own `commit` would have reached: `git var`
- * resolves the ident through env, local, global and system config exactly as a
- * commit does, so this cannot disagree with the command it stands in front of.
- *
- * It does not set the identity. Whose name a commit carries is the user's to
- * say, and a tool that picks one for them has forged the history of the
- * repository rather than helped.
+ * Refuses before anything is staged when git has no identity. Otherwise the
+ * commit fails at the last step with "Author identity unknown", after staging and
+ * a typed message. `git var` resolves the ident exactly as `commit` does, so this
+ * cannot disagree with it. Never sets one: whose name a commit carries is the user's to say.
  */
 export async function requireCommitIdentity(
   runner: GitRunner,
@@ -142,11 +111,9 @@ async function readStatus(
   worktreePath: string,
   signal?: AbortSignal
 ): Promise<ReturnType<typeof parseChangeRecords>> {
-  // `--untracked-files=normal` is pinned, never left to the repository's own
-  // `status.showUntrackedFiles`. People set that to `no` in ~/.gitconfig to
-  // make status usable on a large repository, where it then covers every
-  // repository they own — and this read would answer "nothing untracked" for
-  // a checkout whose own status chip, which pins the flag, says otherwise.
+  // `--untracked-files=normal` is pinned: `status.showUntrackedFiles=no` in
+  // ~/.gitconfig would otherwise answer "nothing untracked" for a checkout whose
+  // status chip, which pins the flag, says otherwise.
   const { stdout } = await runner.run({
     args: ['status', '--porcelain=v2', '-z', '--untracked-files=normal'],
     cwd: worktreePath,

@@ -45,9 +45,8 @@ describe('dispatcher', () => {
     })
   })
 
-  // The wiring, not the handler: a runtime assembled with no way to quit must
-  // answer `app.quit` with a refusal that says so, and never with
-  // unknown_method — which would read as a CLI too new for this app.
+  // The wiring: a runtime with no way to quit must refuse `app.quit`, never
+  // answer unknown_method — which would read as a CLI too new for this app.
   it('offers app.quit, and refuses it when there is no app behind the runtime', async () => {
     const response = (await dispatch({ id: 'a3', method: 'app.quit', params: {} }, call)) as ErrorResponse
 
@@ -107,8 +106,7 @@ describe('dispatcher', () => {
   })
 
   it('reports a method left as a placeholder as not_found', async () => {
-    // Every contract method now has a real handler, so the placeholder path is
-    // exercised against a registry that deliberately has not been wired.
+    // Every contract method has a real handler, so this uses a registry left unwired.
     const bare = new MethodRegistry(context)
     registerPlaceholderHandlers(bare)
     const response = (await createDispatcher(bare)(
@@ -121,66 +119,47 @@ describe('dispatcher', () => {
   })
 
   it('registers every method in the contract', () => {
-    // Named rather than counted: a bare count tells you a number changed, not
-    // which method arrived or went missing.
+    // Named rather than counted, so the diff says which method arrived or went.
     expect([...registry.methods()].sort()).toEqual([
       'agent.list',
-      // Ending the app. Local by nature and pointedly not on the peer list: a
-      // teammate watching a pane does not get to close the machine it runs on.
+      // Local: a teammate does not get to close the machine.
       'app.quit',
-      // How this machine paints itself. Local by nature: a theme is a fact
-      // about one person's screen, and there is nothing for a teammate to read
-      // in it or ask of it.
+      // Local: a theme is a fact about one person's screen.
       'appearance.get',
       'appearance.set',
-      // This machine's own, and deliberately not on the peer list: linking a
-      // command into /usr/local/bin is not something a teammate gets to ask
-      // for, and neither is a password dialog on somebody else's screen.
+      // Local: no symlink into /usr/local/bin or password dialog for a teammate.
       'cli.dismissPrompt',
       'cli.install',
       'cli.status',
-      // Local for the same reason, and more bluntly: this one starts a program
-      // on this machine, and the only hands that get to ask for that are the
-      // ones in front of it.
+      // Local: starts a program on this machine.
       'editor.list',
       'editor.open',
       'layout.get',
       'layout.set',
       'members.join',
       'members.list',
-      // Reachable over the peer transport and nowhere else. They are in the one
-      // registry because a teammate is another transport onto the catalogue
-      // rather than a catalogue of its own; `PEER_METHODS` in peerTransport.ts
-      // is what makes the two audiences different.
+      // Reachable over the peer transport and nowhere else; in the one registry
+      // because a teammate is another transport onto the catalogue. See `PEER_METHODS`.
       'peer.presence',
       'peer.subscribe',
       'project.add',
       'project.list',
       'project.remove',
-      // Local, and not peer-reachable: what this machine's checkouts carry over
-      // from its own primary checkout is nobody else's setting to change.
+      // Local: what this machine's checkouts carry over is nobody else's setting.
       'project.setPaths',
       'status.get',
-      // Local, and not peer-reachable: what this machine's processes cost is
-      // this machine's to read, and a signal to one of them is this machine's
-      // to send. The kill is guarded by a fresh sample as well, so it reaches
-      // nothing but what a pane started.
+      // Local: this machine's processes are its own to read and signal. The kill is
+      // guarded by a fresh sample too, so it reaches nothing but what a pane started.
       'system.kill',
       'system.resources',
-      // Stops a push this machine started, so it is local for exactly the
-      // reason the push is: a teammate has no business halting a commit on
-      // somebody else's laptop.
+      // Local for the reason the push is.
       'teamwork.cancelPublish',
-      // Local, not peer-reachable, and the owner's own: answering a held
-      // keystroke, lifting a permission and muting a pane all need nobody's
-      // agreement, and the write log never leaves this machine.
+      // Local and the owner's own; the write log never leaves this machine.
       'teamwork.decide',
       'teamwork.mute',
       'teamwork.presence',
-      // Local, and emphatically not peer-reachable: these write to the
-      // repository this machine owns — a remote, a commit, a push — and the
-      // peer allow-list admits none of them. `publishProgress` only reads, and
-      // what it reads is what that push is doing right now.
+      // Local: these write to the repository this machine owns, and the peer
+      // allow-list admits none of them. `publishProgress` only reads.
       'teamwork.publish',
       'teamwork.publishPlan',
       'teamwork.publishProgress',
@@ -190,24 +169,19 @@ describe('dispatcher', () => {
       'teamwork.setOrigin',
       'teamwork.setRelay',
       'teamwork.status',
-      // Local, not peer-reachable. `teamwork.watch` and `teamwork.type` are
-      // this machine asking to read and to type into somebody else's pane; what
-      // crosses the wire underneath them is `terminal.subscribe`,
-      // `terminal.read` and `terminal.write` on their runtime.
+      // Local: this machine asking to read and type into somebody else's pane; on
+      // the wire they are `terminal.subscribe`, `terminal.read` and `terminal.write`.
       'teamwork.type',
       'teamwork.watch',
       'teamwork.watchers',
       'teamwork.writeLog',
-      // Local by nature: this is the agent in a pane reporting on itself,
-      // through the CLI socket on the machine the pane runs on. A teammate
-      // watching a pane does not get to say what its agent is doing.
+      // Local: the agent in a pane reporting on itself through the CLI socket.
       'terminal.agentEvent',
       'terminal.close',
       'terminal.create',
       'terminal.list',
       'terminal.read',
-      // Local by nature: running somebody else's pane again starts a process on
-      // their machine, which no peer allow-list admits.
+      // Local: a relaunch starts a process on this machine.
       'terminal.relaunch',
       'terminal.rename',
       'terminal.resize',
@@ -215,9 +189,7 @@ describe('dispatcher', () => {
       'terminal.subscribe',
       'terminal.write',
       'unsubscribe',
-      // Local, and never peer-reachable: a teammate has no business making this
-      // machine ask GitHub anything, changing a preference on it, or opening a
-      // page in the browser of whoever is sitting in front of it.
+      // Local: no asking GitHub, changing a preference or opening a browser page for a teammate.
       'update.check',
       'update.download',
       'update.setAutomatic',
@@ -227,9 +199,7 @@ describe('dispatcher', () => {
       'worktree.commit',
       'worktree.create',
       'worktree.diff',
-      // Local, and not on the peer allow-list: a directory listing of this
-      // machine's checkout is this machine's to show, and the tree it feeds
-      // is drawn beside the panes of whoever is sitting in front of it.
+      // Local: a directory listing of this machine's checkout is its own to show.
       'worktree.files',
       'worktree.findFiles',
       'worktree.get',
