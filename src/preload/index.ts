@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { Response, StreamEvent } from '../shared/protocol'
 
 // Channel names are spelled out rather than imported: preload belongs to both
@@ -137,6 +137,10 @@ const keepAwake = {
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
+  },
+  /** Where a dropped file or folder is on disk; empty for one that is not on disk. */
+  pathForFile(file: File): string {
+    return webUtils.getPathForFile(file)
   },
 
   /**

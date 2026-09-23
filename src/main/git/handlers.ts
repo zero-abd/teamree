@@ -10,6 +10,9 @@ import type { GitService } from './gitService'
 export const GIT_METHODS = [
   'project.list',
   'project.add',
+  'project.clone',
+  'project.cloneProgress',
+  'project.cancelClone',
   'project.remove',
   'project.setPaths',
   'worktree.list',
@@ -43,6 +46,9 @@ export function createGitHandlers(service: GitService): GitHandlers {
   return {
     'project.list': async () => service.listProjects(),
     'project.add': (params) => service.addProject(params),
+    'project.clone': (params) => service.cloneProject(params),
+    'project.cloneProgress': async (params) => service.cloneProgress(params),
+    'project.cancelClone': async (params) => service.cancelClone(params),
     'project.remove': (params) => service.removeProject(params),
     'project.setPaths': (params) => service.setProjectPaths(params),
     'worktree.list': (params) => service.listWorktrees(params),
@@ -72,6 +78,9 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   const handlers = createGitHandlers(service)
   registry.register('project.list', Params.projectList, handlers['project.list'])
   registry.register('project.add', Params.projectAdd, handlers['project.add'])
+  registry.register('project.clone', Params.projectClone, handlers['project.clone'])
+  registry.register('project.cloneProgress', Params.projectCloneProgress, handlers['project.cloneProgress'])
+  registry.register('project.cancelClone', Params.projectCancelClone, handlers['project.cancelClone'])
   registry.register('project.remove', Params.projectRemove, handlers['project.remove'])
   registry.register('project.setPaths', Params.projectSetPaths, handlers['project.setPaths'])
   registry.register('worktree.list', Params.worktreeList, handlers['worktree.list'])

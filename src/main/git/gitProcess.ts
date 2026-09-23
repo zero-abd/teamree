@@ -184,6 +184,14 @@ function spawnGit(binary: string, run: GitRun): Promise<GitOutput> {
       finish(() => reject(new GitCommandError({ args, cwd, exitCode: null, stderr: hint })))
     })
 
+    child.on('exit', () => {
+      // A helper git started (`git-remote-http`, ssh) can outlive a killed git holding
+      // stderr, and 'close' waits for every pipe: a hung server would hold the cancel too.
+      if (!timedOut && !cancelled) return
+      child.stdout.destroy()
+      child.stderr.destroy()
+    })
+
     child.on('close', (code) => {
       finish(() => {
         if (timedOut || cancelled) {

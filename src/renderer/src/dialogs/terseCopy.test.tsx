@@ -207,14 +207,20 @@ describe('dialogs', () => {
   it('add project: no sentence in any state', async () => {
     const selectProjectFolder = vi.fn(() => Promise.reject(new Error('no picker')))
     ;(window as unknown as { teamree: unknown }).teamree = { selectProjectFolder }
-    seed({ addProject: vi.fn(async () => 'not-a-repository') })
-    const view = render(<AddProjectDialog />)
-    fireEvent.click(view.getByRole('button', { name: 'Choose folder…' }))
-    fireEvent.change(view.getByRole('textbox', { name: 'Repository path' }), { target: { value: '/tmp/x' } })
+    seed({ cloneProject: vi.fn(async () => 'Repository not found') })
+    const view = render(<AddProjectDialog folder="/tmp/x" refusal="not-a-repository" />)
     await act(async () => {
-      fireEvent.click(view.getByRole('button', { name: 'Add project' }))
+      fireEvent.click(view.getByRole('button', { name: 'Choose Folder…' }))
     })
     await vi.waitFor(() => expect(view.getAllByRole('alert').length).toBe(2))
+    expect(sentenceStops(document.body)).toEqual([])
+
+    fireEvent.click(view.getByRole('button', { name: 'Clone…' }))
+    fireEvent.change(view.getByRole('textbox', { name: 'Repository URL' }), { target: { value: '/srv/x.git' } })
+    await act(async () => {
+      fireEvent.click(view.getByRole('button', { name: 'Clone' }))
+    })
+    expect(view.getByRole('alert').textContent).toBe('Repository not found')
     expect(sentenceStops(document.body)).toEqual([])
   })
 

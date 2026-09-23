@@ -73,6 +73,35 @@ describe('git runner', () => {
     expect(error.message).toContain('timed out')
   })
 
+  // `git clone` over http leaves `git-remote-http` holding stderr after git itself is killed, and a
+  // hung server kept that helper, and so the cancel, waiting indefinitely.
+  it('answers a cancel even when a helper it started still holds its output open', async () => {
+    if (process.platform === 'win32') return
+    const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-helper-'))
+    const fake = path.join(base, 'git-with-helper')
+    await writeFile(fake, '#!/bin/sh\nsleep 30 &\necho started >&2\nexec sleep 30\n', 'utf8')
+    await chmod(fake, 0o755)
+    const controller = new AbortController()
+
+    let aborted = 0
+    const error = (await createGitRunner(fake)
+      .tryRun({
+        args: ['clone'],
+        cwd: base,
+        signal: controller.signal,
+        // Once the helper is running, which is when git would be cancelled mid-transfer.
+        onStderr: () => {
+          aborted = Date.now()
+          controller.abort()
+        }
+      })
+      .catch((e: unknown) => e)) as GitCommandError
+
+    expect(error.cancelled).toBe(true)
+    expect(Date.now() - aborted).toBeLessThan(5_000)
+    await rm(base, { recursive: true, force: true })
+  }, 10_000)
+
   // Decisions are made by matching git's English prose; without this pin a
   // German machine reads "Alles aktuell" and reports a push that sent nothing as work.
   it('hands git a locale that keeps its messages untranslated', async () => {

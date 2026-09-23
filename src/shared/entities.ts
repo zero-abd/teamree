@@ -31,6 +31,17 @@ export type Project = {
   setupCommand?: string
 }
 
+/** A `project.clone` while it runs. */
+export type CloneProgress = {
+  url: string
+  /** Where it is being cloned to, `~` expanded. */
+  path: string
+  /** The last line git printed; empty until it has. */
+  line: string
+  startedAt: number
+  cancelling: boolean
+}
+
 export type WorktreeState =
   | 'creating'
   | 'ready'

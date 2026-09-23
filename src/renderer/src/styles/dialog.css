@@ -198,6 +198,23 @@ select.field__input {
   gap: var(--s2);
 }
 
+.add-project__choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s2);
+}
+
+/* git's own last line, as it redraws its meter. */
+.clone__progress {
+  margin: 0;
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
 .form__note {
   margin-right: auto;
   color: var(--fg-muted);

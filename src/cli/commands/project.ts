@@ -1,7 +1,11 @@
 import { resolve } from 'node:path'
+import { cloneDestination, cloneFailureLine, runClone } from '../../main/git/clone.js'
+import { createGitRunner } from '../../main/git/gitProcess.js'
 import type { Project } from '../../shared/entities.js'
+import { checkTransport } from '../../shared/origin.js'
 import type { CommandSpec } from '../command-spec.js'
 import { readBoolean, readString } from '../argv.js'
+import { CliError, ExitCode, UsageError } from '../exit.js'
 import { formatTable } from '../output.js'
 import { resolveProject } from '../selectors.js'
 
@@ -47,6 +51,67 @@ export const projectCommands: readonly CommandSpec[] = [
       return {
         data: withProjectDefaults(project),
         text: `added project ${project.name} (${project.id}) at ${project.path}`
+      }
+    }
+  },
+  {
+    path: ['project', 'clone'],
+    summary: 'Clone a repository and track it.',
+    details: "Runs git clone with git's own credential helper; nothing is prompted for.",
+    args: [
+      { name: 'url', description: 'Repository URL or path.', required: true },
+      {
+        name: 'dir',
+        description: 'Where to clone; relative paths resolve from the cwd. Defaults to ~/code/<repo>.',
+        required: false
+      }
+    ],
+    flags: [
+      {
+        name: 'name',
+        kind: 'string',
+        placeholder: '<name>',
+        description: 'Display name; defaults to the directory name.'
+      }
+    ],
+    examples: [
+      'teamree project clone git@github.com:acme/api.git',
+      'teamree project clone https://github.com/acme/api ~/src/api'
+    ],
+    run: async (context) => {
+      const url = (context.args[0] as string).trim()
+      const dir = context.args[1]
+      const transport = checkTransport(url)
+      if (!transport.ok) throw new UsageError(transport.reason)
+      let into: string
+      try {
+        into = cloneDestination(url, dir === undefined ? undefined : resolve(context.cwd, dir))
+      } catch (error) {
+        throw new UsageError(error instanceof Error ? error.message : String(error))
+      }
+      const result = await runClone(createGitRunner(), {
+        origin: url,
+        into,
+        cwd: context.cwd,
+        // Progress on stderr, never under --json: a failure document goes there too.
+        ...(context.json ? {} : { onProgress: (line: string) => context.streams.err(`${line}\n`) })
+      })
+      if (!result.ok) {
+        throw new CliError({
+          code: 'clone_failed',
+          message: cloneFailureLine(result.kind, result.stderr),
+          exitCode: ExitCode.Failure,
+          data: { url, into, kind: result.kind }
+        })
+      }
+      const name = readString(context.flags, 'name')
+      const project = await context.client.call(
+        'project.add',
+        name === undefined ? { path: into } : { path: into, name }
+      )
+      return {
+        data: withProjectDefaults(project),
+        text: `cloned ${url} into ${project.path} as ${project.name} (${project.id})`
       }
     }
   },

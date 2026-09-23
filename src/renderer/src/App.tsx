@@ -24,6 +24,7 @@ import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { openInBrowser } from './shell/openInBrowser'
 import { shellClassName } from './shell/shellClass'
+import { useFolderDrop } from './shell/useFolderDrop'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
 import { useWorkspaceStore } from './state/workspaceStore'
@@ -42,6 +43,8 @@ export function App(): React.JSX.Element {
   useMenuBar()
   // What this window tells the main process about agent notices. See src/renderer/src/notices.
   useAgentNotices()
+  // A folder dropped anywhere on the window becomes a project.
+  useFolderDrop()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
@@ -142,7 +145,12 @@ export function App(): React.JSX.Element {
           {...(dialog.hunk ? { hunk: dialog.hunk } : {})}
         />
       ) : null}
-      {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
+      {dialog?.kind === 'add-project' ? (
+        <AddProjectDialog
+          {...(dialog.folder === undefined ? {} : { folder: dialog.folder })}
+          {...(dialog.refusal === undefined ? {} : { refusal: dialog.refusal })}
+        />
+      ) : null}
       {dialog?.kind === 'appearance' ? <AppearanceDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}

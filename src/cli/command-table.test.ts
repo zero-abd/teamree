@@ -24,6 +24,7 @@ const EXPECTED = [
   'quit',
   'project list',
   'project add',
+  'project clone',
   'project linked',
   'project copied',
   'project setup',

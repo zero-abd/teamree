@@ -7,6 +7,7 @@ import { mkdir, rm, rmdir, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
+  CloneProgress,
   Project,
   Worktree,
   WorktreeChanges,
@@ -22,7 +23,9 @@ import type {
   WorktreeStatus
 } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
+import { checkTransport } from '../../shared/origin'
 import { ErrorCode } from '../../shared/protocol'
+import { cloneDestination, cloneFailureCode, cloneFailureLine, runClone } from './clone'
 import { describeError, GitCommandError, GitServiceError, isTransient } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
 import { createVersionProbe } from './gitVersion'
@@ -133,6 +136,8 @@ export class GitService {
   readonly #reservations = new Map<string, Promise<void>>()
   // How each start point was interpreted; session-scoped, `startedFrom` holds the sha.
   readonly #startPoints = new Map<string, ResolvedStartPoint>()
+  // Running clones by URL, the key the window already holds when it asks.
+  readonly #clones = new Map<string, { progress: CloneProgress; controller: AbortController }>()
   #disposed = false
 
   constructor(options: GitServiceOptions = {}) {
@@ -179,6 +184,57 @@ export class GitService {
     this.#store.putProject(project)
     this.events.emit({ type: 'project.added', project })
     return project
+  }
+
+  /** Clones, then adds the checkout. Failures are one line each; see `cloneFailureLine`. */
+  async cloneProject(params: ParamsOf<'project.clone'>): Promise<Project> {
+    const url = params.url.trim()
+    const transport = checkTransport(url)
+    if (!transport.ok) throw new GitServiceError(ErrorCode.InvalidParams, transport.reason)
+    const into = cloneDestination(url, params.path)
+    if (this.#clones.has(url)) throw new GitServiceError(ErrorCode.Conflict, 'Already cloning')
+
+    const controller = new AbortController()
+    const progress: CloneProgress = { url, path: into, line: '', startedAt: this.#now(), cancelling: false }
+    this.#clones.set(url, { progress, controller })
+    try {
+      await this.#ensureVersion(process.cwd())
+      const existed = await stat(into).then(
+        () => true,
+        () => false
+      )
+      const result = await runClone(this.#runner, {
+        origin: url,
+        into,
+        cwd: os.homedir(),
+        signal: controller.signal,
+        onProgress: (line) => {
+          progress.line = line
+        }
+      })
+      if (!result.ok) {
+        // git cleans up after itself on SIGTERM, but not after the SIGKILL that follows a stuck one.
+        if (!existed && (result.kind === 'cancelled' || result.kind === 'timeout')) {
+          await rm(into, { recursive: true, force: true }).catch(() => undefined)
+        }
+        throw new GitServiceError(cloneFailureCode(result.kind), cloneFailureLine(result.kind, result.stderr))
+      }
+    } finally {
+      this.#clones.delete(url)
+    }
+    return this.addProject({ path: into, ...(params.name ? { name: params.name } : {}) })
+  }
+
+  cloneProgress(params: ParamsOf<'project.cloneProgress'>): CloneProgress | null {
+    const running = this.#clones.get(params.url.trim())
+    return running ? { ...running.progress, cancelling: running.controller.signal.aborted } : null
+  }
+
+  cancelClone(params: ParamsOf<'project.cancelClone'>): { cancelled: boolean } {
+    const running = this.#clones.get(params.url.trim())
+    if (!running) return { cancelled: false }
+    running.controller.abort()
+    return { cancelled: true }
   }
 
   /** Untracks the repo and forgets its worktrees. Nothing on disk is touched. */
@@ -645,6 +701,7 @@ export class GitService {
 
   async dispose(): Promise<void> {
     this.#disposed = true
+    for (const { controller } of this.#clones.values()) controller.abort()
     await Promise.all([...this.#creating.keys()].map((id) => this.cancelWorktreeCreate(id).catch(() => undefined)))
   }
 

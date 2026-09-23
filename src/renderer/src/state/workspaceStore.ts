@@ -124,7 +124,8 @@ import {
 } from '../workspace/rightPanel/rightPanelState'
 
 export type DialogState =
-  | { kind: 'add-project' }
+  /** `folder` and `refusal`: a folder dropped on the window that could not be added as it was. */
+  | { kind: 'add-project'; folder?: string; refusal?: ProjectAddRefusal }
   | { kind: 'appearance' }
   | { kind: 'install-cli' }
   | { kind: 'new-task'; projectId: string }
@@ -376,6 +377,8 @@ type WorkspaceState = {
 
   /** Answers the refusal when the folder cannot be a project, for the dialog to show; null otherwise. */
   addProject: (path: string, name?: string, init?: boolean) => Promise<ProjectAddRefusal | null>
+  /** Clones and adds; answers the one line to show when it did not happen, null when it did. */
+  cloneProject: (url: string, path: string) => Promise<string | null>
   /** Creates the worktree, waits for it, then starts the agent in it. */
   startTask: (draft: TaskDraft) => void
   retryWorktree: (worktreeId: string) => void
@@ -1200,6 +1203,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         failed('Could not add the project')(error)
       }
       return null
+    },
+
+    async cloneProject(url, path) {
+      try {
+        const project = await runtimeClient.call('project.clone', { url, ...(path.trim() ? { path } : {}) })
+        set((state) => ({ projects: [...state.projects, project], dialog: null }))
+        notify(`Cloned ${project.name}`, 'info')
+        return null
+      } catch (error) {
+        const refusal = (error as { data?: { refusal?: ProjectAddRefusal } } | null)?.data?.refusal
+        if (refusal === 'no-commits') return 'No commits yet'
+        return error instanceof Error ? error.message : String(error)
+      }
     },
 
     /**
