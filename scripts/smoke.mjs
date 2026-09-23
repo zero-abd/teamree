@@ -106,11 +106,20 @@ function finish() {
   clearTimeout(bail)
   if (failures.length) {
     for (const failure of failures) console.error(`smoke: ${failure}`)
-    app.exit(1)
+    process.exitCode = 1
   } else {
     console.log('smoke: renderer mounted, preload bridge reachable, runtime answering')
-    app.exit(0)
+    process.exitCode = 0
   }
+  // `app.quit()` rather than `app.exit()`, and the difference is the whole of
+  // the fix. `exit` tears the process down under the ptys this check opened,
+  // and a pty whose child is still being reaped when its native handle goes
+  // throws from inside node-pty with nothing left to catch it — the process
+  // died with SIGABRT after printing its success line, once there were three
+  // panes open rather than one. `quit` goes through the app's own `before-quit`,
+  // which stops the runtime and every pane first; that is the sequence a person
+  // pressing ⌘Q gets and it is the one that ends cleanly.
+  app.quit()
 }
 
 /** Polls `probe` until it is true, and records `failure` if it never is. */
