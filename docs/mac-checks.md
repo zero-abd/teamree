@@ -285,22 +285,12 @@ nobody has watched fail is a gate nobody knows works.
   after launch and confirm it fails with `the packaged app is wrong about its own
   CLI`. The Mach-O block above it has been demonstrated; this half has not.
 
-## Four screen captures of an app that no longer exists
+## The screen captures
 
-All four were taken on 0.1.2, hours before the absolute-black theme landed, and
-can be retaken nowhere but a Mac. The staleness is recorded beside the markup in
-`site/index.html` and under "The feature clips" in `site/README.md` as well as
-here.
-
-| File | What it shows that the app no longer does |
-| --- | --- |
-| `site/public/demos/showcase.mp4` | The hero tour: the old slate ground rather than absolute black, `Runtime ready 0.1.2` in the status rail, the **Start teamwork** panel in its pre-0.2.0 shape — the one that did not ask which end you are on — and a teammate's pane arriving as the floating corner card it stopped being. |
-| `site/public/demos/showcase.webm` | The same capture, the same problems. |
-| `site/public/demos/showcase.jpg` | The hero poster, a frame of the above: old ground, `Runtime ready 0.1.2`, the old **Start teamwork** step list. |
-| `site/public/screenshot.png` | The `<img>` fallback inside the hero `<video>`. Old ground, and `Runtime ready 0.1.2` bottom left. Its content — sidebar, three worktrees, status dots, two split terminals — is still accurate, which makes it the least urgent of the four. |
-
-`og.png`, `favicon.svg` and the icon set are the mark rather than the app, and
-`og/card.html` already renders on black, so none of those need retaking. The four
-feature clips do not exist yet and ship parked in an HTML comment, so there is
-nothing to retake there either — but the parked `teamwork` clip's `aria-label` is
-written against 0.2.0, so whoever shoots it shoots the consent prompt.
+The hero clip, its `screenshot.png` fallback and the feature clips under
+`site/public/demos/` were retaken on 0.2.0 from the packaged app, on a throwaway
+profile against a small demo repository. The `cli` and `teamwork` clips still do
+not exist and ship parked in an HTML comment; the teamwork `aria-label` is
+written against 0.2.0, so whoever shoots it shoots the consent prompt. `og.png`, `favicon.svg`
+and the icon set are the mark rather than the app, so they never needed
+retaking.
