@@ -31,6 +31,7 @@ import { terminalFailed, TerminalServiceError } from './service-error'
 import { ErrorCode } from '../../shared/protocol'
 import type { AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
+import { titleOpinion, type TitleOpinion } from '../../shared/titleOpinion'
 
 /** How long close() waits for the tree to die before giving up on the exit event. */
 const CLOSE_TIMEOUT_MS = 5_000
@@ -207,6 +208,15 @@ export class PtySession {
   private exitCode: number | undefined
   private restored: 'shell' | 'agent' | undefined
   private busy = false
+  /**
+   * When the bell last rang, within the burst of output this pane is still in.
+   *
+   * Kept per burst rather than forever: see `Terminal.lastBellAt`. Held here
+   * and not merely emitted, because the pane that rang it is asking for
+   * something for as long as nobody has answered, and a subscriber that
+   * attached a minute later would otherwise have no way to learn that.
+   */
+  private lastBellAt: number | undefined
   private lastOutputAt: number
   private readonly startedAt: number
   private cancelQuietWatch: (() => void) | undefined
@@ -278,6 +288,7 @@ export class PtySession {
   }
 
   snapshot(): Terminal {
+    const titleSays: TitleOpinion | null = titleOpinion(this.agent, this.title)
     return {
       id: this.id,
       worktreeId: this.worktreeId,
@@ -296,6 +307,10 @@ export class PtySession {
       ...(this.agent === undefined ? {} : { agent: this.agent }),
       ...(this.label === undefined ? {} : { label: this.label }),
       busy: this.busy,
+      // Derived here rather than stored, so it cannot drift from the title it
+      // is a reading of. A reader with both fields is reading one fact.
+      ...(titleSays === null ? {} : { titleSays }),
+      ...(this.lastBellAt === undefined ? {} : { lastBellAt: this.lastBellAt }),
       lastOutputAt: this.lastOutputAt
     }
   }
@@ -339,6 +354,9 @@ export class PtySession {
     // said what it had to say by then.
     this.restored = undefined
     this.typedInto = true
+    // And a bell is a question: this is somebody answering it. Leaving it set
+    // would leave the pane asking for something it has just been given.
+    this.lastBellAt = undefined
     this.pty.write(data)
   }
 
@@ -459,7 +477,16 @@ export class PtySession {
     this.noteActivity()
     this.scrollback.append(chunk)
     this.emit({ type: 'data', data: chunk })
-    for (const title of this.titles.scan(chunk)) {
+    const { titles, bells } = this.titles.scan(chunk)
+    // Announced before it is thrown away. Downstream a bell is stripped as
+    // noise -- `outputEvidence.ts` drops it so it cannot become a glyph in the
+    // middle of a quoted line -- and stripping it there is right, which is
+    // exactly why it has to be reported from here.
+    if (bells > 0) {
+      this.lastBellAt = this.clock()
+      this.emit({ type: 'bell', at: this.lastBellAt })
+    }
+    for (const title of titles) {
       if (title === this.title) continue
       this.title = title
       this.emit({ type: 'title', title })
@@ -481,6 +508,9 @@ export class PtySession {
     this.cancelQuietWatch?.()
     if (!this.busy) {
       this.busy = true
+      // A fresh burst of output retires the previous burst's bell. Whatever the
+      // pane was asking for, it has gone back to doing something since.
+      this.lastBellAt = undefined
       this.init.onActivityChange?.(this)
     }
     const cancel = this.scheduler(() => {

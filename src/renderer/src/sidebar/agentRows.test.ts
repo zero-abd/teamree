@@ -43,11 +43,47 @@ describe('activityOf', () => {
     expect(activityOf(terminal({ id: 't', busy: true }))).toBe('working')
   })
 
-  // The honest reading. Teamree watches a PTY, not an agent's protocol: a pane
-  // that has stopped saying things is what waiting looks like from outside, and
-  // calling it anything more specific would be a guess.
-  it('is quiet — not "waiting for input" — when output stops', () => {
+  // The honest reading, and the fallback the other cases are measured against.
+  // A pane that has stopped saying things and said nothing about why is a pane
+  // this app knows nothing more about, and calling that "waiting on you" would
+  // be a guess.
+  it('is quiet — not "waiting for input" — when output stops with no bell and no title', () => {
     expect(activityOf(terminal({ id: 't', busy: false }))).toBe('quiet')
+  })
+
+  // The whole point. A bell is the one byte a program sends for no reason
+  // except to be noticed; a bell and then silence is a pane that asked for
+  // something and is sitting on the answer.
+  it('is waiting when a bell rang and the pane then went quiet', () => {
+    expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 1_000 }))).toBe('waiting')
+  })
+
+  // The session clears the bell when a new burst of output starts, so a bell
+  // that is still set alongside `busy` rang inside the burst still running.
+  it('is working while output is still arriving, bell or no bell', () => {
+    expect(activityOf(terminal({ id: 't', busy: true, lastBellAt: 1_000 }))).toBe('working')
+  })
+
+  it('is waiting when the pane’s own title says so, even mid-output', () => {
+    expect(activityOf(terminal({ id: 't', busy: true, titleSays: 'waiting' }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'waiting' }))).toBe('waiting')
+  })
+
+  // A long tool call prints nothing for minutes. Its title, written before the
+  // silence, is the pane's own account of what it is doing in it.
+  it('is working when output stopped but the title still says it is working', () => {
+    expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'working' }))).toBe('working')
+  })
+
+  // A title is a status the program repaints; a bell is something it did on
+  // purpose, at a person. The one aimed at a person wins.
+  it('lets an unanswered bell outrank a title left saying "working"', () => {
+    expect(activityOf(terminal({ id: 't', busy: false, titleSays: 'working', lastBellAt: 1_000 }))).toBe('waiting')
+  })
+
+  it('says nothing about a pane that has exited, whatever it rang on the way out', () => {
+    expect(activityOf(terminal({ id: 't', running: false, exitCode: 0, lastBellAt: 1_000 }))).toBe('done')
+    expect(activityOf(terminal({ id: 't', running: false, exitCode: 1, titleSays: 'waiting' }))).toBe('failed')
   })
 
   it('separates a clean finish from a failure', () => {
@@ -248,6 +284,12 @@ describe('worktreeActivity', () => {
 
   it('puts work in progress above waiting', () => {
     expect(worktreeActivity([row({ activity: 'quiet' }), row({ activity: 'working' })])).toBe('working')
+  })
+
+  // One pane in five asking a question is the reason somebody opened this app.
+  it('surfaces a pane that is asking over panes that are merely working', () => {
+    expect(worktreeActivity([row({ activity: 'working' }), row({ activity: 'waiting' })])).toBe('waiting')
+    expect(worktreeActivity([row({ activity: 'waiting' }), row({ activity: 'failed' })])).toBe('failed')
   })
 
   it('is done only when everything is', () => {

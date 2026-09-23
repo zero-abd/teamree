@@ -65,19 +65,36 @@ describe('dashboardRows', () => {
   })
 
   // Ordered by what would make somebody look. A failure is finished and wrong;
-  // work in progress is merely unfinished; a finished pane asks for nothing.
-  it('ranks failures above work in progress, work above waiting, waiting above finished', () => {
+  // a pane that has asked for something cannot move without you; work in
+  // progress is merely unfinished; a finished pane asks for nothing.
+  it('ranks failures above asking, asking above working, working above waiting, waiting above finished', () => {
     const rows = build(
       [
         terminal({ id: 'done', running: false, exitCode: 0 }),
         terminal({ id: 'quiet' }),
         terminal({ id: 'working', busy: true }),
+        terminal({ id: 'waiting', lastBellAt: 1_000 }),
         terminal({ id: 'failed', running: false, exitCode: 1 })
       ],
       [worktree({ id: 'wt1' })]
     )
 
-    expect(rows.map((row) => row.terminalId)).toEqual(['failed', 'working', 'quiet', 'done'])
+    expect(rows.map((row) => row.terminalId)).toEqual(['failed', 'waiting', 'working', 'quiet', 'done'])
+  })
+
+  // The case the board exists for: five panes, four of them fine, and the one
+  // that rang the bell at the top whatever its silence is next to theirs.
+  it('puts the pane that rang the bell above panes that have been quiet far longer', () => {
+    const rows = build(
+      [
+        terminal({ id: 'silent-an-hour', lastOutputAt: NOW - 3_600_000 }),
+        terminal({ id: 'silent-ten-minutes', lastOutputAt: NOW - 600_000 }),
+        terminal({ id: 'rang-just-now', lastOutputAt: NOW - 5_000, lastBellAt: NOW - 5_000 })
+      ],
+      [worktree({ id: 'wt1' })]
+    )
+
+    expect(rows.map((row) => row.terminalId)).toEqual(['rang-just-now', 'silent-an-hour', 'silent-ten-minutes'])
   })
 
   // The pane that has been sitting there is the one being neglected.
@@ -140,12 +157,12 @@ describe('activityCounts', () => {
       [worktree({ id: 'wt1' })]
     )
 
-    expect(activityCounts(rows)).toEqual({ failed: 1, working: 1, quiet: 2, done: 0 })
+    expect(activityCounts(rows)).toEqual({ failed: 1, waiting: 0, working: 1, quiet: 2, done: 0 })
   })
 
   // Every state present, so the row of counts keeps its shape as panes move
   // between them rather than reflowing under the reader.
   it('reports a zero for a state nothing is in, including with no panes at all', () => {
-    expect(activityCounts([])).toEqual({ failed: 0, working: 0, quiet: 0, done: 0 })
+    expect(activityCounts([])).toEqual({ failed: 0, waiting: 0, working: 0, quiet: 0, done: 0 })
   })
 })

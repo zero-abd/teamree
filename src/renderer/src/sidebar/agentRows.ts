@@ -7,16 +7,28 @@
 //
 // What is knowable here is deliberately narrower than what a reader might want.
 // Teamree watches a PTY, not an agent's protocol, so there is no "thinking" and
-// no "waiting for permission" — only whether bytes are still arriving, and how
-// the process ended. Every state below is one of those two facts, and none of
-// them is a guess dressed up as a reading.
+// no reading of an agent's internal state — only whether bytes are still
+// arriving, how the process ended, and the two things a program says about
+// itself out loud: the window title it sets, and the bell it rings. Every state
+// below is one of those, and none of them is a guess dressed up as a reading.
+//
+// `quiet` used to carry two answers at once, and they were the two that matter
+// most: an agent that asked you a question and is waiting, and an agent that
+// finished and printed nothing more, both stop producing output. Nothing in a
+// byte stream separates them. But a pane that rang the bell, or wrote a title
+// saying so, has said something positive about itself — and that, and only
+// that, is what `waiting` is read from. A pane with neither stays `quiet`, in
+// the same words as before, because about that pane nothing more is known.
 
 import type { AgentKind, PaneWatcher, Terminal } from '@shared/entities'
+import type { TitleOpinion } from '@shared/titleOpinion'
 
 export type AgentActivity =
+  /** The pane has said it wants something: it rang the bell, or its title says so. */
+  | 'waiting'
   /** Output is still arriving. */
   | 'working'
-  /** Running, but it has stopped saying things — which is what waiting looks like. */
+  /** Running, but it has stopped saying things, and has said nothing about why. */
   | 'quiet'
   /** Exited cleanly. */
   | 'done'
@@ -48,6 +60,7 @@ export type AgentRow = {
  * ends up calling one of them two different things.
  */
 export const ACTIVITY_LABEL: Record<AgentActivity, string> = {
+  waiting: 'waiting on you',
   working: 'working',
   quiet: 'waiting — no output',
   done: 'finished',
@@ -88,8 +101,16 @@ function listOf(handles: readonly string[]): string {
   return `${handles.slice(0, -1).join(', ')} and ${last} are `
 }
 
-/** The one-word form, for counts and column headings. */
+/**
+ * The one-word form, for counts and column headings.
+ *
+ * `waiting` is nouned "asking" and not "waiting", which would be the obvious
+ * word, because `quiet` already has it and has had it since there was only one
+ * of these two states. Two columns headed "waiting" would put the app back
+ * where it started: unable to say which of them needs you.
+ */
 export const ACTIVITY_NOUN: Record<AgentActivity, string> = {
+  waiting: 'asking',
   working: 'working',
   quiet: 'waiting',
   done: 'finished',
@@ -103,11 +124,35 @@ export const ACTIVITY_NOUN: Record<AgentActivity, string> = {
  * metadata and has no cwd, no columns and no scrollback — is read by this
  * function rather than by a second one written to agree with it.
  */
-export type PaneActivitySource = { running: boolean; exitCode?: number; busy: boolean }
+export type PaneActivitySource = {
+  running: boolean
+  exitCode?: number
+  busy: boolean
+  /** What the pane's own title says, when it says anything. */
+  titleSays?: TitleOpinion
+  /** When the bell last rang, if it rang in the burst of output that just ended. */
+  lastBellAt?: number
+}
 
+/**
+ * The order is the argument.
+ *
+ * A title claiming to be waiting is the pane saying so in the present tense, so
+ * it outranks even output still arriving — an agent can print its question and
+ * then sit on it. A bell comes next: it is a request, aimed at a person, that
+ * nobody has answered yet. Only then the two readings of silence, and the last
+ * of them is the honest shrug this file started with.
+ *
+ * A stale title claiming to be working ranks below the bell on purpose. It is a
+ * status the program repaints, and one that has not been repainted for seconds;
+ * a bell is something the program did on purpose, to be noticed.
+ */
 export function activityOf(terminal: PaneActivitySource): AgentActivity {
   if (!terminal.running) return terminal.exitCode === 0 ? 'done' : 'failed'
-  return terminal.busy ? 'working' : 'quiet'
+  if (terminal.titleSays === 'waiting') return 'waiting'
+  if (terminal.busy) return 'working'
+  if (terminal.lastBellAt !== undefined) return 'waiting'
+  return terminal.titleSays === 'working' ? 'working' : 'quiet'
 }
 
 /**
@@ -246,12 +291,15 @@ function shellName(shell: string): string {
  * What the worktree as a whole is doing, for the collapsed row.
  *
  * Ordered by what would make someone look: anything failed outranks anything
- * working, because a failure is finished and wrong while work in progress is
- * merely unfinished.
+ * waiting, because a failure is finished and wrong while a question is merely
+ * unanswered, and anything waiting outranks anything working, because a pane
+ * that has asked for something cannot proceed without you and one that is
+ * working can.
  */
 export function worktreeActivity(rows: readonly AgentRow[]): AgentActivity | null {
   if (rows.length === 0) return null
   if (rows.some((row) => row.activity === 'failed')) return 'failed'
+  if (rows.some((row) => row.activity === 'waiting')) return 'waiting'
   if (rows.some((row) => row.activity === 'working')) return 'working'
   if (rows.some((row) => row.activity === 'quiet')) return 'quiet'
   return 'done'

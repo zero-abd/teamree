@@ -807,6 +807,16 @@ export type TerminalEvent =
   | { type: 'data'; data: string }
   | { type: 'exit'; exitCode: number }
   | { type: 'title'; title: string }
+  /**
+   * The pane rang the terminal bell, with the owner's clock reading at the
+   * time.
+   *
+   * Reported because it is the one byte a program sends for no reason except to
+   * be noticed, and because everything downstream of here quite correctly
+   * throws it away: it is not text, it draws nothing, and a line quoted with a
+   * bell in it would be a line with a control character in it.
+   */
+  | { type: 'bell'; at: number }
 
 /**
  * Events pushed on a teamwork.watch subscription.

@@ -149,6 +149,77 @@ describePty('PtySession', () => {
     TEST_TIMEOUT_MS
   )
 
+  // The bell is the one byte a program sends for no reason except to be
+  // noticed, and everything downstream of the session throws it away. So it is
+  // reported from here, and remembered here, or it is lost.
+  it(
+    'raises a bell event and remembers when it rang',
+    async () => {
+      const session = start({ command: `printf '\\007' && sleep 2` })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'bell'), 'bell event')
+      const bell = events.find((event) => event.type === 'bell')
+      expect(bell).toMatchObject({ type: 'bell' })
+      expect(session.snapshot().lastBellAt).toBe(bell?.type === 'bell' ? bell.at : undefined)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  // An agent that repaints a spinner into its window title emits one of these
+  // several times a second. Counted, every one of those panes would look like a
+  // pane asking for attention.
+  it(
+    'does not count the BEL that terminates a title as a bell',
+    async () => {
+      const session = start({ command: `printf '\\033]0;agent-run\\007' && sleep 2` })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'title'), 'title event')
+      expect(events.some((event) => event.type === 'bell')).toBe(false)
+      expect(session.snapshot().lastBellAt).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  // A bell is a request. A keystroke is somebody answering it, and a pane that
+  // has been answered is not asking for anything.
+  it(
+    'forgets the bell once somebody types into the pane',
+    async () => {
+      const session = start({ command: `printf '\\007' && sleep 5` })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'bell'), 'bell event')
+      session.write('\n')
+      expect(session.snapshot().lastBellAt).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  // And a fresh burst of output is the pane overtaking its own request: whatever
+  // it rang about, it has gone back to doing something since.
+  it(
+    'forgets the bell when a new burst of output starts',
+    async () => {
+      // A quiet window of a few milliseconds, so the second printf a second
+      // later is a burst of its own rather than more of the first.
+      const session = start({
+        command: `printf '\\007' && sleep 1 && echo carried-on && sleep 2`,
+        schedule: (run, _delayMs) => {
+          const timer = setTimeout(run, 10)
+          return () => clearTimeout(timer)
+        }
+      })
+      const events = collect(session)
+
+      await waitUntil(() => events.some((event) => event.type === 'bell'), 'bell event')
+      await waitUntil(() => outputOf(events).includes('carried-on'), 'output after the bell')
+      expect(session.snapshot().lastBellAt).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
   it(
     'caps scrollback no matter how much the child prints',
     async () => {

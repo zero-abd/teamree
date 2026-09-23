@@ -690,7 +690,7 @@ export function resizeWatchedPane(
  */
 export function readWatchedPaneEvent(value: unknown): WatchedPaneEvent | null {
   if (typeof value !== 'object' || value === null) return null
-  const { type, data, exitCode, title, bytes, reason } = value as Record<string, unknown>
+  const { type, data, exitCode, title, at, bytes, reason } = value as Record<string, unknown>
   switch (type) {
     case 'data':
       return typeof data === 'string' ? { type: 'data', data } : null
@@ -698,6 +698,8 @@ export function readWatchedPaneEvent(value: unknown): WatchedPaneEvent | null {
       return Number.isInteger(exitCode) ? { type: 'exit', exitCode: exitCode as number } : null
     case 'title':
       return typeof title === 'string' ? { type: 'title', title } : null
+    case 'bell':
+      return Number.isFinite(at) ? { type: 'bell', at: at as number } : null
     case 'elided':
       return Number.isInteger(bytes) ? { type: 'elided', bytes: bytes as number } : null
     case 'lost':
