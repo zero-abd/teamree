@@ -2,11 +2,12 @@
 // right panel. It rides the same invalidation as everything else, so pane edits move it.
 
 import { useState } from 'react'
-import { useWorkspaceStore } from '../../state/workspaceStore'
+import { openInBrowser } from '../../shell/openInBrowser'
+import { useWorkspaceStore, type PushState } from '../../state/workspaceStore'
 import { PatchView } from '../PatchView'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import type { DiffLayout } from '../../state/preferences'
-import type { WorktreeLog } from '@shared/entities'
+import type { WorktreeLog, WorktreeStatus } from '@shared/entities'
 
 /** The two layouts, and the two words that offer them. */
 const LAYOUTS: readonly [DiffLayout, string][] = [
@@ -32,6 +33,10 @@ export function ChangesTab(): React.JSX.Element | null {
   const commitStaged = useWorkspaceStore((state) => state.commitStaged)
   const committing = useWorkspaceStore((state) => state.committing)
   const log = useWorkspaceStore((state) => (worktreeId ? state.logs[worktreeId] : undefined))
+  const status = useWorkspaceStore((state) => (worktreeId ? state.statuses[worktreeId] : undefined))
+  const push = useWorkspaceStore((state) => (worktreeId ? state.pushes[worktreeId] : undefined))
+  const pushing = useWorkspaceStore((state) => state.pushing)
+  const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
   // Per worktree: the panel is not remounted on tab change, and a message could land on the wrong diff.
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const message = draftFor(drafts, worktreeId)
@@ -45,6 +50,8 @@ export function ChangesTab(): React.JSX.Element | null {
   const allTicked = rows.length > 0 && rows.every((change) => ticked.has(change.path))
   const canCommit = ticked.size > 0 && message.trim().length > 0 && !committing
 
+  const offer = pushOffer(status, push)
+
   const commit = (): void => {
     if (!canCommit) return
     // The message is the one thing the app cannot reconstruct; only a commit that landed clears it.
@@ -55,6 +62,29 @@ export function ChangesTab(): React.JSX.Element | null {
 
   return (
     <section className="changes" aria-label="Changes in this worktree">
+      {offer === null && push?.phase !== 'failed' ? null : (
+        <div className="changes__head">
+          {push?.phase === 'failed' ? (
+            <p className="changes__pushError" role="alert" title={push.error}>
+              {push.error}
+            </p>
+          ) : null}
+          {offer?.kind === 'review' ? (
+            <button type="button" className="button button--small" onClick={() => openInBrowser(offer.url)}>
+              Open review
+            </button>
+          ) : offer ? (
+            <button
+              type="button"
+              className="button button--primary button--small"
+              disabled={pushing}
+              onClick={() => void pushActiveWorktree()}
+            >
+              {PUSH_LABEL[offer.kind][push?.phase === 'pushing' ? 1 : 0]}
+            </button>
+          ) : null}
+        </div>
+      )}
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
@@ -221,6 +251,19 @@ export function ChangesTab(): React.JSX.Element | null {
       )}
     </section>
   )
+}
+
+const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish branch', 'Publishing…'] } as const
+
+export type PushOffer = { kind: 'push' | 'publish' } | { kind: 'review'; url: string }
+
+/** The header's one button: send what the remote lacks, else open the review the last push made. */
+export function pushOffer(status: WorktreeStatus | undefined, push: PushState | undefined): PushOffer | null {
+  if (!status || status.missing) return null
+  if (status.upstream === null) return { kind: 'publish' }
+  if (status.ahead > 0 || push?.phase === 'pushing') return { kind: 'push' }
+  if (push?.phase === 'pushed' && push.reviewUrl !== undefined) return { kind: 'review', url: push.reviewUrl }
+  return null
 }
 
 /** The commit message for one worktree, kept when looking at another. */

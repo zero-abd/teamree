@@ -410,3 +410,26 @@
   padding: var(--s2) var(--s2);
   overflow: auto;
 }
+
+/* Changes ----------------------------------------------------------------- */
+
+.changes__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s2);
+  padding: var(--s2) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+.changes__pushError {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--danger);
+  font-size: var(--text-xs);
+}

@@ -162,6 +162,7 @@ export async function readWorktreeStatus(runner: GitRunner, options: StatusReadO
   return {
     worktreeId: options.worktreeId,
     branch: parsed.branch || options.fallbackBranch,
+    upstream: parsed.upstream,
     ahead: parsed.ahead,
     behind: parsed.behind,
     staged: parsed.staged,

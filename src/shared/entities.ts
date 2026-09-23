@@ -89,6 +89,8 @@ export type WorktreeStatus = {
    * nothing was asked, not because the tree is clean.
    */
   missing?: true
+  /** What the branch tracks; null when it tracks nothing, absent when not read. */
+  upstream?: string | null
   ahead: number
   behind: number
   staged: number
