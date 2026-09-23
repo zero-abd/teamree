@@ -2,6 +2,7 @@
 // of whatever box it is handed; the window measures pixels, the runtime makes do with a guess.
 
 import type { PaneNode } from './entities'
+import { isFileColumn } from './filePane'
 
 export type Box = { width: number; height: number }
 export type PaneRect = { id: string; x: number; y: number; width: number; height: number }
@@ -23,6 +24,10 @@ export function paneRects(root: PaneNode | null, box: Box, gutter = PANE_GUTTER_
       rects.push({ id: node.terminalId, x, y, width, height })
       return
     }
+    if (isFileColumn(node)) {
+      for (const tab of node.children) walk(tab, x, y, width, height)
+      return
+    }
     const row = node.direction === 'row'
     const room = Math.max(0, (row ? width : height) - gutter * (node.children.length - 1))
     const sizes = shares(node.sizes, node.children.length)
@@ -40,7 +45,7 @@ export function paneRects(root: PaneNode | null, box: Box, gutter = PANE_GUTTER_
 
 /** The least room `node` can be given along `direction` with every pane in it at least `min`. */
 export function minExtent(node: PaneNode, direction: SplitDirection, min: Box, gutter = PANE_GUTTER_PX): number {
-  if (node.kind === 'leaf') return direction === 'row' ? min.width : min.height
+  if (node.kind === 'leaf' || isFileColumn(node)) return direction === 'row' ? min.width : min.height
   const extents = node.children.map((child) => minExtent(child, direction, min, gutter))
   if (node.direction !== direction) return Math.max(...extents)
   return extents.reduce((sum, extent) => sum + extent, 0) + gutter * (extents.length - 1)
@@ -100,10 +105,8 @@ function* placements(root: PaneNode, added: PaneNode, box: Box, gutter: number):
  * split out: a new column beside columns rather than a half-width sliver. With none, halves the target.
  */
 function insertBeside(node: PaneNode, targetId: string, direction: SplitDirection, added: PaneNode): PaneNode {
-  if (node.kind === 'leaf') {
-    return node.terminalId === targetId
-      ? { kind: 'split', direction, sizes: [0.5, 0.5], children: [node, added] }
-      : node
+  if (node.kind === 'leaf' || isFileColumn(node)) {
+    return holds(node, targetId) ? { kind: 'split', direction, sizes: [0.5, 0.5], children: [node, added] } : node
   }
   const index = node.children.findIndex((child) => holds(child, targetId))
   const child = node.children[index]
@@ -125,7 +128,7 @@ function holds(node: PaneNode, id: string): boolean {
 
 /** Whether a split along `direction` lies between `node` (inclusive) and the leaf `id`. */
 function splitsAlong(node: PaneNode, id: string, direction: SplitDirection): boolean {
-  if (node.kind === 'leaf') return false
+  if (node.kind === 'leaf' || isFileColumn(node)) return false
   if (node.direction === direction) return true
   const next = node.children.find((child) => holds(child, id))
   return next !== undefined && splitsAlong(next, id, direction)

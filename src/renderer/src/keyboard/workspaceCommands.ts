@@ -4,9 +4,9 @@
 
 import type { ConsentRequest, Layout, WorktreeStatus } from '@shared/entities'
 import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
-import { isFilePaneId } from '@shared/filePane'
+import { fileColumnIn, fileLeavesIn, isFilePaneId } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
-import { collectTerminalIds } from '../panes/paneLayout'
+import { collectTerminalIds, paneStops } from '../panes/paneLayout'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
 import { numberedTab, tabAfter } from '../workspace/paneTabs'
 import { TERMINAL_FONT_DEFAULT_PX, TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
@@ -93,9 +93,16 @@ function ownFocusedPane(state: CommandState): string | null {
   return activeLayout(state)?.focusedTerminalId ?? null
 }
 
-/** The strip's tabs, every kind, in the order it draws them (`paneTabs`). */
+/** The strip's tabs, every kind, in the order it draws them (`paneTabs`); the file column is one. */
 function stripTabs(state: CommandState): string[] {
-  return collectTerminalIds(activeLayout(state)?.root ?? null)
+  return paneStops(activeLayout(state)?.root ?? null)
+}
+
+/** The file column's tabs while one of them has the focus, else none. */
+function focusedColumnTabs(state: CommandState): string[] {
+  const focused = ownFocusedPane(state)
+  const tabs = fileLeavesIn(fileColumnIn(activeLayout(state)?.root ?? null)).map((leaf) => leaf.terminalId)
+  return focused !== null && tabs.includes(focused) ? tabs : []
 }
 
 /** The tab the strip marks; none while a teammate's pane has the focus. */
@@ -169,6 +176,9 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
     case 'select-next-pane':
     case 'select-previous-pane':
       return stripTabs(state).length >= 2
+    case 'next-file-tab':
+    case 'previous-file-tab':
+      return focusedColumnTabs(state).length >= 2
     case 'expand-pane':
       // A pane of your own, as `splitFocusedPane` requires; a lone pane can still be maximised.
       return ownFocusedPane(state) !== null
@@ -256,6 +266,12 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'select-next-pane':
     case 'select-previous-pane': {
       const next = tabAfter(stripTabs(store), stripFocus(store), command === 'select-next-pane' ? 1 : -1)
+      if (next) store.showPane(next)
+      break
+    }
+    case 'next-file-tab':
+    case 'previous-file-tab': {
+      const next = tabAfter(focusedColumnTabs(store), ownFocusedPane(store), command === 'next-file-tab' ? 1 : -1)
       if (next) store.showPane(next)
       break
     }

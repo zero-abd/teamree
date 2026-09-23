@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { EditorView } from '@codemirror/view'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FileContent, FileView as FileViewAnswer, Layout, PaneNode, Worktree } from '@shared/entities'
-import { fileLeaf, fileLeavesIn } from '@shared/filePane'
+import { fileColumnIn, fileLeaf, fileLeavesIn } from '@shared/filePane'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 const call = vi.fn()
@@ -84,17 +84,78 @@ describe('file tabs in the store', () => {
     expect(call.mock.calls.filter(([method]) => method === 'terminal.create')).toHaveLength(0)
   })
 
-  it('stacks further files in the column the first one opened, leaving the terminal its width', () => {
+  it('opens further files as tabs of one column, leaving the terminal its width', () => {
     useWorkspaceStore.getState().openFilePane('w1', 'a.ts')
+    const sizes = (layout().root as Extract<PaneNode, { kind: 'split' }>).sizes
     useWorkspaceStore.getState().focusPane('t1')
     useWorkspaceStore.getState().openFilePane('w1', 'b.png')
+    useWorkspaceStore.getState().openFilePane('w1', 'c.ts')
     const root = layout().root
-    expect(root?.kind === 'split' && root.direction).toBe('row')
+    expect(root).toMatchObject({ kind: 'split', direction: 'row', sizes })
+    expect(root?.kind === 'split' && root.children[0]).toEqual({ kind: 'leaf', terminalId: 't1' })
+    const column = fileColumnIn(root)
+    expect(fileLeavesIn(column).map((leaf) => leaf.path)).toEqual(['a.ts', 'b.png', 'c.ts'])
+    const c = fileLeavesIn(column).at(-1)!.terminalId
+    expect(column?.shown).toBe(c)
+    expect(layout().focusedTerminalId).toBe(c)
+  })
+
+  it('shows a tab when it takes the focus', () => {
+    useWorkspaceStore.getState().openFilePane('w1', 'a.ts')
+    useWorkspaceStore.getState().openFilePane('w1', 'b.ts')
+    const a = fileLeavesIn(layout().root)[0]!.terminalId
+    useWorkspaceStore.getState().focusPane(a)
+    expect(fileColumnIn(layout().root)?.shown).toBe(a)
+  })
+
+  it('replaces the preview tab with the next preview, until it is opened for good or edited', () => {
+    const open = (path: string, mode?: 'preview'): void => useWorkspaceStore.getState().openFilePane('w1', path, mode)
+    const paths = (): string[] => fileLeavesIn(layout().root).map((leaf) => leaf.path)
+    open('a.ts', 'preview')
+    open('b.ts', 'preview')
+    expect(paths()).toEqual(['b.ts'])
+    expect(fileColumnIn(layout().root)?.preview).toBe(fileLeavesIn(layout().root)[0]!.terminalId)
+
+    open('b.ts')
+    expect(fileColumnIn(layout().root)?.preview).toBeUndefined()
+    open('c.ts', 'preview')
+    expect(paths()).toEqual(['b.ts', 'c.ts'])
+
+    const c = fileLeavesIn(layout().root)[1]!.terminalId
+    useWorkspaceStore.getState().setFileUnsaved(c, true)
+    expect(fileColumnIn(layout().root)?.preview).toBeUndefined()
+    open('d.ts', 'preview')
+    expect(paths()).toEqual(['b.ts', 'c.ts', 'd.ts'])
+
+    const d = fileLeavesIn(layout().root)[2]!.terminalId
+    useWorkspaceStore.getState().pinFilePane(d)
+    open('e.ts', 'preview')
+    expect(paths()).toEqual(['b.ts', 'c.ts', 'd.ts', 'e.ts'])
+  })
+
+  it('still splits beside the focused pane when asked, rather than adding a tab', () => {
+    useWorkspaceStore.getState().openFilePane('w1', 'a.ts')
+    useWorkspaceStore.getState().openFilePane('w1', 'b.ts', 'split')
+    const root = layout().root
+    expect(fileColumnIn(root)?.children).toHaveLength(1)
+    expect(root).toMatchObject({ kind: 'split', direction: 'row' })
     if (root?.kind !== 'split') return
-    expect(root.children[0]).toEqual({ kind: 'leaf', terminalId: 't1' })
-    const column = root.children[1]
-    expect(column?.kind === 'split' && column.direction).toBe('column')
-    expect(fileLeavesIn(column ?? null).map((leaf) => leaf.path)).toEqual(['a.ts', 'b.png'])
+    expect(root.children[1]).toBe(fileColumnIn(root))
+    expect(root.children[2]).toMatchObject({ kind: 'leaf', pane: 'file', path: 'b.ts' })
+  })
+
+  it('shows the next tab when the shown one closes, and makes the column again at its old width', async () => {
+    useWorkspaceStore.getState().openFilePane('w1', 'a.ts')
+    const sizes = (layout().root as Extract<PaneNode, { kind: 'split' }>).sizes
+    useWorkspaceStore.getState().openFilePane('w1', 'b.ts')
+    const [a, b] = fileLeavesIn(layout().root).map((leaf) => leaf.terminalId)
+    await useWorkspaceStore.getState().closeTerminal(b!)
+    expect(fileColumnIn(layout().root)?.shown).toBe(a)
+    expect(layout().focusedTerminalId).toBe(a)
+    await useWorkspaceStore.getState().closeTerminal(a!)
+    expect(layout().root).toEqual({ kind: 'leaf', terminalId: 't1' })
+    useWorkspaceStore.getState().openFilePane('w1', 'a.ts')
+    expect((layout().root as Extract<PaneNode, { kind: 'split' }>).sizes).toEqual(sizes)
   })
 
   it('closes a clean tab by rewriting the tree, never by ending a terminal', async () => {
@@ -117,6 +178,21 @@ describe('file tabs in the store', () => {
     await useWorkspaceStore.getState().forceCloseTerminal(id)
     expect(fileLeavesIn(layout().root)).toEqual([])
     expect(useWorkspaceStore.getState().unsavedFiles).toEqual({})
+  })
+})
+
+describe('the strip over a file column', () => {
+  it('shows the column as one tab: the shown file, the others counted, a click focusing it', () => {
+    for (const path of ['a.ts', 'src/app.ts', 'b.ts', 'c.ts']) useWorkspaceStore.getState().openFilePane('w1', path)
+    const app = fileLeavesIn(layout().root)[1]!.terminalId
+    useWorkspaceStore.getState().focusPane(app)
+    useWorkspaceStore.getState().focusPane('t1')
+    render(<TerminalTabs modifier={resolvePlatformModifier('darwin')} />)
+    const tabs = within(screen.getByRole('tablist', { name: 'Terminals in this worktree' })).getAllByRole('tab')
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['terminal', 'app.ts+3'])
+    fireEvent.click(tabs[1]!)
+    expect(layout().focusedTerminalId).toBe(app)
+    expect(screen.getByRole('button', { name: 'Close 4 files' })).toBeTruthy()
   })
 })
 

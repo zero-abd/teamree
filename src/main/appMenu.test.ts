@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { MenuItemConstructorOptions } from 'electron'
 import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type ApplicationMenuOptions } from './appMenu'
-import type { MenuBarItem } from './menuBar'
+import { readMenuBarItems, type MenuBarItem } from './menuBar'
 import { menuBarSpec } from '../renderer/src/menu/menuBar'
 import type { CommandState } from '../renderer/src/keyboard/workspaceCommands'
 import type { WorkspaceCommand } from '../renderer/src/keyboard/workspaceShortcuts'
@@ -72,6 +72,13 @@ const EMPTY: CommandState = {
 const SPEC: readonly MenuBarItem[] = menuBarSpec(EMPTY)
   .filter((item) => SHOWN.includes(item.command))
   .map((item) => ({ ...item, enabled: !DEAD.includes(item.command) }))
+
+// The window's whole table as it publishes it: one chord main will not read and the menu bar is lost.
+describe('the published menu bar', () => {
+  it('is read whole by main', () => {
+    expect(readMenuBarItems(menuBarSpec(EMPTY))).toEqual(menuBarSpec(EMPTY))
+  })
+})
 
 /** The label the window publishes for one command, for an assertion to name. */
 function shipped(command: WorkspaceCommand): string {

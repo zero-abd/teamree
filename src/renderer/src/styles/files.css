@@ -298,3 +298,126 @@
   background-color: var(--accent);
   color: var(--on-accent);
 }
+
+/* The file column: one frame, a row of tabs, the shown file's pane under it without a frame of its own. */
+
+.column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--term-bg);
+  overflow: hidden;
+  transition: border-color var(--motion-fast) var(--ease);
+}
+
+.column--focused {
+  border-color: var(--accent-line);
+}
+
+.column__tabs {
+  display: flex;
+  flex: none;
+  height: 26px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
+}
+
+.column__tab {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s1);
+  max-width: 200px;
+  padding-right: var(--s1);
+  border-right: 1px solid var(--line);
+  color: var(--fg-muted);
+}
+
+.column__tab:hover {
+  background: var(--bg-hover);
+}
+
+.column__tab--shown {
+  background: var(--term-bg);
+  color: var(--fg-secondary);
+}
+
+.column--focused .column__tab--shown {
+  box-shadow: inset 0 2px 0 var(--accent);
+  color: var(--fg);
+}
+
+.column__name {
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--s1) 0 var(--s3);
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.column__name--preview {
+  font-style: italic;
+}
+
+.column__close {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.column__close svg {
+  width: 9px;
+  height: 9px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.column__tab:hover .column__close,
+.column__tab--shown .column__close,
+.column__close:focus-visible {
+  opacity: 1;
+}
+
+.column__close:hover {
+  background: var(--bg-press);
+  color: var(--fg);
+}
+
+.column__page {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.column__page[hidden] {
+  display: none;
+}
+
+.column .pane {
+  border: 0;
+  border-radius: 0;
+}

@@ -3,7 +3,7 @@
 // subscription.
 
 import type { PaneNode } from '@shared/entities'
-import { collectTerminalIds } from './paneLayout'
+import { paneStops } from './paneLayout'
 
 /** The prefix marking a teammate's pane id; without it `terminal.close` could target their laptop. */
 export const WATCHED_PANE_PREFIX = 'watch:'
@@ -32,9 +32,9 @@ export function isWatchedPaneId(id: string): boolean {
   return id.startsWith(WATCHED_PANE_PREFIX)
 }
 
-/** The focus chord's order: your panes as laid out, then teammates' in opening order, as drawn. */
+/** The focus chord's order: your panes as laid out (the file column once), then teammates' as drawn. */
 export function paneCycle(root: PaneNode | null, watches: readonly WatchedPane[]): string[] {
-  return [...collectTerminalIds(root), ...watches.map((watch) => watch.id)]
+  return [...paneStops(root), ...watches.map((watch) => watch.id)]
 }
 
 /** Where focus lands when `id` closes (the next, else previous, as `neighbourTerminalId`), or null. */

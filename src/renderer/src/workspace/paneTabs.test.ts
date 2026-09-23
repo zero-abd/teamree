@@ -183,4 +183,29 @@ describe('file tabs', () => {
     expect(tabs[0]?.kind).toBeUndefined()
     expect(paneTabTitle(tabs[1]!)).toBe('NOTES.md')
   })
+
+  it('gives the file column one tab, named after its shown file, with the others counted', () => {
+    const file = (id: string, path: string): PaneNode => ({ kind: 'leaf', terminalId: id, pane: 'file', path })
+    const column: PaneNode = {
+      kind: 'split',
+      direction: 'column',
+      sizes: [0.25, 0.25, 0.25, 0.25],
+      children: [file('file:1', 'a.ts'), file('file:2', 'src/app.ts'), file('file:3', 'b.ts'), file('file:4', 'c.ts')],
+      tabs: true,
+      shown: 'file:2'
+    }
+    const root: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leaf('a'), column] }
+    const tabs = paneTabs(root, { a: terminal({ id: 'a', title: 'zsh' }) })
+    expect(tabs).toHaveLength(2)
+    expect(tabs[1]).toEqual({
+      terminalId: 'file:2',
+      agent: undefined,
+      label: 'app.ts',
+      text: 'app.ts',
+      activity: null,
+      kind: 'file',
+      files: ['file:1', 'file:2', 'file:3', 'file:4']
+    })
+    expect(paneTabTitle(tabs[1]!)).toBe('app.ts +3')
+  })
 })

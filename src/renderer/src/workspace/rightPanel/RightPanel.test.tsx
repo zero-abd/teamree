@@ -12,7 +12,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fileLeaf, fileLeavesIn } from '@shared/filePane'
+import { fileColumnIn, fileLeaf, fileLeavesIn } from '@shared/filePane'
 import type {
   Layout,
   Project,
@@ -344,23 +344,45 @@ describe('the files tab', () => {
     expect(within(tree).getByText('app.ts')).toBeTruthy()
   })
 
-  it('opens a file as a pane beside the terminals, and a second as another', async () => {
+  it('previews a file on a click, and keeps it on a double-click', async () => {
     seed({ rightPanelOpen: true, rightPanelTab: 'files', editorCommands: { p1: 'mate' } })
     mount()
     const tree = await screen.findByRole('tree', { name: 'Files' })
     await within(tree).findByText('README.md')
+    const paths = (): string[] => fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root).map((leaf) => leaf.path)
+    const row = (name: RegExp): HTMLElement => within(tree).getByRole('button', { name })
 
-    fireEvent.click(within(tree).getByRole('button', { name: /^README\.md/ }))
+    fireEvent.click(row(/^README\.md/))
     await waitFor(() => expect(call).toHaveBeenCalledWith('layout.set', expect.objectContaining({ worktreeId: 'w1' })))
-    let layout = useWorkspaceStore.getState().layouts.w1!
-    expect(fileLeavesIn(layout.root).map((leaf) => leaf.path)).toEqual(['README.md'])
+    const layout = useWorkspaceStore.getState().layouts.w1!
+    expect(paths()).toEqual(['README.md'])
     expect(layout.focusedTerminalId).toBe(fileLeavesIn(layout.root)[0]?.terminalId)
 
-    fireEvent.click(within(tree).getByRole('button', { name: /^src/ }))
+    fireEvent.click(row(/^src/))
     fireEvent.click(await within(tree).findByRole('button', { name: /^app\.ts/ }))
-    layout = useWorkspaceStore.getState().layouts.w1!
-    expect(fileLeavesIn(layout.root).map((leaf) => leaf.path)).toEqual(['README.md', 'src/app.ts'])
+    expect(paths()).toEqual(['src/app.ts'])
+
+    fireEvent.doubleClick(row(/^app\.ts/))
+    fireEvent.click(row(/^README\.md/))
+    expect(paths()).toEqual(['src/app.ts', 'README.md'])
+
     expect(call).not.toHaveBeenCalledWith('editor.open', expect.anything())
+  })
+
+  it('splits a file beside the focused pane on ⌘-click, and from the row menu', async () => {
+    seed({ rightPanelOpen: true, rightPanelTab: 'files' })
+    mount()
+    const tree = await screen.findByRole('tree', { name: 'Files' })
+    fireEvent.click(await within(tree).findByRole('button', { name: /^README\.md/ }), { metaKey: true })
+    fireEvent.click(within(tree).getByRole('button', { name: /^src/ }))
+    fireEvent.contextMenu(await within(tree).findByRole('button', { name: /^app\.ts/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Open to the side' }))
+    const root = useWorkspaceStore.getState().layouts.w1!.root
+    expect(fileColumnIn(root)).toBeNull()
+    expect(root).toMatchObject({ kind: 'split', direction: 'row' })
+    expect(
+      root?.kind === 'split' && root.children.map((child) => child.kind === 'leaf' && (child.path ?? 't'))
+    ).toEqual(['t', 'README.md', 'src/app.ts'])
   })
 
   it('still opens a file in the editor from its row menu', async () => {

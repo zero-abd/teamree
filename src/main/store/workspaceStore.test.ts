@@ -85,6 +85,35 @@ describe('workspace store', () => {
     expect(reopened.getLayout('w1')?.root).toEqual(root)
   })
 
+  it('brings the file column back with its tabs, the shown one and the preview', async () => {
+    const store = await WorkspaceStore.open(filePath)
+    store.putProject(project)
+    store.putWorktree(worktree('w1'))
+    const tab = (id: string) => ({ kind: 'leaf' as const, terminalId: id, pane: 'file' as const, path: `${id}.ts` })
+    const root = {
+      kind: 'split' as const,
+      direction: 'row' as const,
+      sizes: [0.5, 0.5],
+      children: [
+        { kind: 'leaf' as const, terminalId: 't1' },
+        {
+          kind: 'split' as const,
+          direction: 'column' as const,
+          sizes: [0.5, 0.5],
+          children: [tab('file:1'), tab('file:2')],
+          tabs: true as const,
+          shown: 'file:2',
+          preview: 'file:2'
+        }
+      ]
+    }
+    store.putLayout({ worktreeId: 'w1', root, focusedTerminalId: 'file:2' })
+    await store.flush()
+
+    const reopened = await WorkspaceStore.open(filePath)
+    expect(reopened.getLayout('w1')?.root).toEqual(root)
+  })
+
   it('coalesces a burst of mutations into a durable final state', async () => {
     const store = await WorkspaceStore.open(filePath)
     store.putProject(project)

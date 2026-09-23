@@ -53,7 +53,10 @@ const PaneNodeSchema: z.ZodType<PaneNode> = z.lazy(() =>
       kind: z.literal('split'),
       direction: z.enum(['row', 'column']),
       sizes: z.array(z.number()),
-      children: z.array(PaneNodeSchema)
+      children: z.array(PaneNodeSchema),
+      tabs: z.literal(true).optional(),
+      shown: z.string().min(1).optional(),
+      preview: z.string().min(1).optional()
     })
   ])
 )

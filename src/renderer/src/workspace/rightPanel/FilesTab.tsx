@@ -1,5 +1,6 @@
-// The worktree's files one directory at a time, plus find by name. Clicking opens a file pane; the
-// row menu still offers the editor. The tree adds the changes tab's letters and git's ignored dimming.
+// The worktree's files one directory at a time, plus find by name. A click previews a file in the file
+// column, a double-click keeps it, ⌘-click splits; the row menu still offers the editor. The tree adds
+// the changes tab's letters and git's ignored dimming.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Worktree, WorktreeFileMatches } from '@shared/entities'
@@ -94,12 +95,14 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
   }, [query, worktree.id])
 
   const absolute = (path: string): string => `${worktree.path}/${path}`
-  const open = (path: string): void => openFilePane(worktree.id, path)
+  const open = (path: string, event?: React.MouseEvent): void =>
+    openFilePane(worktree.id, path, event?.metaKey || event?.ctrlKey ? 'split' : 'preview')
+  const keep = (path: string): void => openFilePane(worktree.id, path)
   const reveal = (path: string): void => void revealInFinder(absolute(path), path)
 
-  const toggle = (row: TreeRow): void => {
+  const toggle = (row: TreeRow, event: React.MouseEvent): void => {
     if (row.kind !== 'dir') {
-      open(row.path)
+      open(row.path, event)
       return
     }
     if (row.expanded) {
@@ -158,7 +161,8 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                   type="button"
                   className="tree__row tree__row--found"
                   title={path}
-                  onClick={() => open(path)}
+                  onClick={(event) => open(path, event)}
+                  onDoubleClick={() => keep(path)}
                   onContextMenu={(event) => showMenu(path, true, event)}
                 >
                   <span className="tree__name">
@@ -195,7 +199,10 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                     className={`tree__row tree__row--${row.kind}`}
                     style={{ ['--depth' as string]: row.depth }}
                     title={row.error ?? row.path}
-                    onClick={() => toggle(row)}
+                    onClick={(event) => toggle(row, event)}
+                    onDoubleClick={() => {
+                      if (row.kind !== 'dir') keep(row.path)
+                    }}
                     onContextMenu={(event) => showMenu(row.path, row.kind !== 'dir', event)}
                   >
                     {row.kind === 'dir' ? (
@@ -245,6 +252,9 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
           anchor={menu.at}
           onClose={() => setMenu(null)}
           items={[
+            ...(menu.file
+              ? [{ label: 'Open to the side', onChoose: () => openFilePane(worktree.id, menu.path, 'split') }]
+              : []),
             {
               label: 'Copy path',
               onChoose: () => void copyToClipboard(absolute(menu.path), `the path to ${menu.path}`)

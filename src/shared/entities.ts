@@ -433,7 +433,18 @@ export type PaneNode =
       /** The file a file leaf shows, relative to the worktree root; its extension picks the viewer. */
       path?: string
     }
-  | { kind: 'split'; direction: 'row' | 'column'; sizes: number[]; children: PaneNode[] }
+  | {
+      kind: 'split'
+      direction: 'row' | 'column'
+      sizes: number[]
+      children: PaneNode[]
+      /** File leaves drawn one at a time under a tab row: the file column. Never flattened or dissolved. */
+      tabs?: true
+      /** The tab on show; the first when absent. */
+      shown?: string
+      /** The preview tab, which the next preview open replaces. */
+      preview?: string
+    }
 
 export type Layout = {
   worktreeId: string

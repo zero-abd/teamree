@@ -3,13 +3,15 @@
 // only ever touches the two panes either side of the handle it grabbed.
 
 import type { PaneNode, Terminal } from '@shared/entities'
-import { filePaneName, isFileLeaf } from '@shared/filePane'
+import { filePaneName, isFileColumn, isFileLeaf, shownTabId, type FileColumn } from '@shared/filePane'
 import { freshAgentLabel } from '@shared/paneRestore'
 import { minExtent, type Box } from '@shared/paneRoom'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { activityOf, dotClass, dotTone, paneAgent, paneNames, TONE_LABEL } from '../sidebar/agentRows'
 import { TerminalView } from '../terminal/TerminalView'
+import { useWorkspaceStore } from '../state/workspaceStore'
 import { usePaneMenu } from '../workspace/paneMenu'
+import { UnsavedDot } from '../files/FileBar'
 import { FilePane } from './FilePane'
 import { collectLeaves } from './paneLayout'
 import { SplitFrame } from './SplitFrame'
@@ -49,6 +51,7 @@ export function PaneTree({
   if (node.kind === 'leaf') {
     return <PaneLeaf terminalId={node.terminalId} {...callbacks} names={names} />
   }
+  if (isFileColumn(node)) return <FileColumnPane node={node} {...callbacks} />
   return <PaneSplit node={node} path={path} {...callbacks} names={names} />
 }
 
@@ -81,6 +84,58 @@ function FileLeaf({
       />
       {menu.menu}
     </>
+  )
+}
+
+/** The file column: a tab per file, and every file's pane kept mounted under them, the shown one drawn. */
+function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColumn }): React.JSX.Element {
+  const unsaved = useWorkspaceStore((state) => state.unsavedFiles)
+  const pin = useWorkspaceStore((state) => state.pinFilePane)
+  const shown = shownTabId(node)
+  const tabs = node.children.filter(isFileLeaf)
+  const focused = tabs.some((tab) => tab.terminalId === callbacks.focusedTerminalId)
+  return (
+    <div className={`column${focused ? ' column--focused' : ''}`}>
+      <div className="column__tabs" role="tablist" aria-label="Open files">
+        {tabs.map((tab) => {
+          const name = filePaneName(tab.path)
+          const on = tab.terminalId === shown
+          const preview = node.preview === tab.terminalId
+          return (
+            <div key={tab.terminalId} className={`column__tab${on ? ' column__tab--shown' : ''}`}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={on}
+                className={`column__name${preview ? ' column__name--preview' : ''}`}
+                title={tab.path}
+                onClick={() => callbacks.onFocus(tab.terminalId)}
+                onDoubleClick={() => pin(tab.terminalId)}
+              >
+                {name}
+              </button>
+              {unsaved[tab.terminalId] ? <UnsavedDot /> : null}
+              <button
+                type="button"
+                className="column__close"
+                title="Close"
+                aria-label={`Close ${name}`}
+                onClick={() => callbacks.onClose(tab.terminalId)}
+              >
+                <svg viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M3 3 L9 9 M9 3 L3 9" />
+                </svg>
+              </button>
+            </div>
+          )
+        })}
+      </div>
+      {tabs.map((tab) => (
+        <div key={tab.terminalId} className="column__page" hidden={tab.terminalId !== shown}>
+          <FileLeaf paneId={tab.terminalId} path={tab.path} {...callbacks} />
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -217,7 +272,9 @@ function PaneSplit({
 
 /** Keys follow the terminals, so resizing never remounts (and reloads) a pane. */
 function paneKey(node: PaneNode, index: number): string {
-  return node.kind === 'leaf' ? node.terminalId : `split:${index}:${firstTerminalId(node)}`
+  if (node.kind === 'leaf') return node.terminalId
+  // One column per tree; keyed by a tab, a closed first tab would remount every editor in it.
+  return isFileColumn(node) ? 'file-column' : `split:${index}:${firstTerminalId(node)}`
 }
 
 function firstTerminalId(node: PaneNode): string {
