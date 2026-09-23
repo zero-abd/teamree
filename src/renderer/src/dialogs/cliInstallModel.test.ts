@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CliInstall, CliStatus } from '@shared/entities'
-import { cliOffer, cliOutcome, cliPanel, offerCliInstall } from './cliInstallModel'
+import { cliActionLabel, cliOffer, cliOutcome, cliPanel, offerCliInstall } from './cliInstallModel'
 
 const APP_CLI = '/Applications/teamree.app/Contents/Resources/cli/teamree'
 const APP_BUNDLE = '/Applications/teamree.app/Contents/Resources/cli/teamree.mjs'
@@ -197,6 +197,36 @@ describe('whether the sidebar offers it', () => {
     expect(offerCliInstall(status({ state: 'absent' }))).toBe(true)
     expect(offerCliInstall(status({ state: 'elsewhere', resolved: '/elsewhere/teamree' }))).toBe(true)
     expect(offerCliInstall(status({ state: 'file' }))).toBe(true)
+  })
+
+  // Taken off a real mounted disk image of this build, which is how every macOS
+  // user meets this app before they drag it anywhere: open the .dmg,
+  // double-click, look around. The runtime really does report
+  // `impermanent: "volume"` and a source under /Volumes there.
+  //
+  // The rail still carries a way in — that is deliberate and asserted below,
+  // because the panel is where the answer lives and this is how somebody finds
+  // it. What it must not do is get them there by naming an action it cannot
+  // perform: in this state the panel has no control at all, so a label reading
+  // "Point teamree at this app" is a promise the next screen breaks.
+  it('routes to the explanation without promising an action it cannot perform', () => {
+    const fromTheImage = status({
+      state: 'elsewhere',
+      impermanent: 'volume',
+      source: '/Volumes/teamree 0.2.0-universal/teamree.app/Contents/Resources/cli/teamree',
+      resolved: '/somewhere/else/teamree',
+      needsAdministrator: true
+    })
+
+    expect(offerCliInstall(fromTheImage)).toBe(true)
+    expect(cliActionLabel(fromTheImage)).toBe('Why teamree is not on your PATH')
+    expect(cliActionLabel(fromTheImage)).not.toContain('Point teamree')
+
+    // And what it routes to: which state it is, what to do instead, no control.
+    const panel = cliPanel(fromTheImage)
+    expect(panel.headline).toContain('mounted volume')
+    expect(panel.detail).toContain('Applications')
+    expect(panel.action).toBeNull()
   })
 
   it('offers nothing once the link is right, or where the button could not work', () => {
