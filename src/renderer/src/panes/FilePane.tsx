@@ -15,8 +15,9 @@ export type FilePaneProps = {
   onHeaderMenu?: (event: React.MouseEvent<HTMLElement>) => void
   /** The header's `⋯`: the same menu, hung from it. */
   onMenu?: (event: React.MouseEvent<HTMLElement>) => void
-  /** Bumped to open the find bar. */
+  /** Bumped to open the find bar over the diff. */
   searchToken?: number
+  onCloseSearch?: () => void
 }
 
 export function FilePane(props: FilePaneProps): React.JSX.Element {

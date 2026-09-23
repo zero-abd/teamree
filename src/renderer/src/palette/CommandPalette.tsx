@@ -71,6 +71,7 @@ export function CommandPalette({
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const statuses = useWorkspaceStore((state) => state.statuses)
   const pushing = useWorkspaceStore((state) => state.pushing)
+  const diffPanes = useWorkspaceStore((state) => state.diffPanes)
   const offered = useMemo(
     () =>
       items.filter((item) => {
@@ -87,10 +88,23 @@ export function CommandPalette({
           watches,
           focusedWatchId,
           statuses,
-          pushing
+          pushing,
+          diffPanes
         })
       }),
-    [items, consent, projects, worktrees, activeWorktreeId, layouts, watches, focusedWatchId, statuses, pushing]
+    [
+      items,
+      consent,
+      projects,
+      worktrees,
+      activeWorktreeId,
+      layouts,
+      watches,
+      focusedWatchId,
+      statuses,
+      pushing,
+      diffPanes
+    ]
   )
 
   const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)

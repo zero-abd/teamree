@@ -61,6 +61,7 @@ function FileLeaf({
   onClose,
   searchTerminalId,
   searchToken,
+  onCloseSearch,
   modifier
 }: PaneCallbacks & { paneId: string; path: string }): React.JSX.Element {
   const menu = usePaneMenu(modifier)
@@ -76,6 +77,7 @@ function FileLeaf({
         onHeaderMenu={(event) => menu.onContextMenu(paneId, filePaneName(path), event)}
         onMenu={(event) => menu.onButton(paneId, filePaneName(path), event)}
         searchToken={searchTerminalId === paneId ? searchToken : 0}
+        onCloseSearch={onCloseSearch}
       />
       {menu.menu}
     </>

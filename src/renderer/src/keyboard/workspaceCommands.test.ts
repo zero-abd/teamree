@@ -178,11 +178,13 @@ describe('what a window can be asked to do', () => {
     expect(isCommandAvailable('toggle-sidebar', WORKING)).toBe(true)
   })
 
-  it('withholds find from a file pane, which has no scrollback', () => {
+  // Its text has the editor's own find, which takes the chord while the item is greyed.
+  it('offers find on a file pane only while it shows its diff', () => {
     const layouts = {
       w1: { worktreeId: 'w1', root: { kind: 'leaf' as const, terminalId: 'file:1' }, focusedTerminalId: 'file:1' }
     }
     expect(isCommandAvailable('find-in-pane', { ...WORKING, layouts })).toBe(false)
+    expect(isCommandAvailable('find-in-pane', { ...WORKING, layouts, diffPanes: { 'file:1': true } })).toBe(true)
     expect(isCommandAvailable('split-right', { ...WORKING, layouts })).toBe(true)
   })
 

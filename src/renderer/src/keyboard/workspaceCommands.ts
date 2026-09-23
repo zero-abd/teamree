@@ -33,6 +33,8 @@ export type CommandState = {
   terminalFontSize?: number
   /** Code panes with edits not on disk; absent reads as none. */
   editedFiles?: Readonly<Record<string, unknown>>
+  /** File panes showing their diff; absent reads as none. */
+  diffPanes?: Readonly<Record<string, unknown>>
 }
 
 /** The store's own methods, named so this module does not import the store. */
@@ -132,9 +134,9 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
     case 'split-down':
       return ownFocusedPane(state) !== null
     case 'find-in-pane': {
-      // A file pane has no scrollback to search.
+      // A file pane's own text has its editor's find, which takes the chord while this item is greyed.
       const focused = ownFocusedPane(state)
-      return focused !== null && !isFilePaneId(focused)
+      return focused !== null && (!isFilePaneId(focused) || state.diffPanes?.[focused] !== undefined)
     }
     case 'close-pane':
       // Either kind: closing a teammate's pane is how a watch stops.
