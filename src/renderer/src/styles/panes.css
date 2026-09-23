@@ -386,3 +386,67 @@
   background: var(--accent-soft);
   color: var(--accent-bright);
 }
+
+/* A tab being dragged: where it would land, and its name under the pointer. */
+
+body.is-dragging-pane,
+body.is-dragging-pane * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+.pane-drag {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.pane-drag__mark {
+  position: absolute;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r2);
+  background: var(--accent-soft);
+  transition:
+    left var(--motion-fast) var(--ease),
+    top var(--motion-fast) var(--ease),
+    width var(--motion-fast) var(--ease),
+    height var(--motion-fast) var(--ease);
+}
+
+.pane-drag__mark--line {
+  border: 0;
+  border-radius: 1px;
+  background: var(--accent);
+  transition: none;
+}
+
+/* Where the drop will be refused for want of room. */
+.pane-drag__mark--refused {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.pane-drag__mark--line.pane-drag__mark--refused {
+  background: var(--danger);
+}
+
+.pane-drag__ghost {
+  position: absolute;
+  max-width: 200px;
+  padding: 2px var(--s2);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab--dragged,
+.column__tab--dragged {
+  opacity: 0.45;
+}

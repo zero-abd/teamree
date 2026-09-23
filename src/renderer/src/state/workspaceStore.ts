@@ -50,6 +50,7 @@ import {
   appendPane,
   closePane,
   collectTerminalIds,
+  hasTerminal,
   neighbourTerminalId,
   pinTab,
   setSizesAt,
@@ -474,6 +475,8 @@ type WorkspaceState = {
   /** Opens the worktree one row along the sidebar, wrapping at both ends. */
   stepWorktree: (step: 1 | -1) => void
   applySplitSizes: (worktreeId: string, path: number[], sizes: number[]) => void
+  /** Rearranges the open worktree's panes, focusing `focus`; refused, said, when a pane would end under its floor. */
+  arrangePanes: (arrange: (root: PaneNode) => PaneNode, focus: string) => void
   /** Opens the find bar over the focused pane, or re-takes it if it is already there. */
   openPaneSearch: () => void
   closePaneSearch: () => void
@@ -1907,6 +1910,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const layout = get().layouts[worktreeId]
       if (!layout?.root) return
       persistLayout({ ...layout, root: setSizesAt(layout.root, path, sizes) as PaneNode })
+    },
+
+    arrangePanes(arrange, focus) {
+      const layout = activeLayout()
+      if (!layout?.root) return
+      const arranged = arrange(layout.root)
+      const root = arranged === layout.root ? null : withRoom(layout.root, arranged)
+      if (root === null) return
+      persistLayout({ ...layout, root, focusedTerminalId: hasTerminal(root, focus) ? focus : layout.focusedTerminalId })
     },
 
     toggleChanges() {

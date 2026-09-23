@@ -13,6 +13,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { usePaneMenu } from '../workspace/paneMenu'
 import { UnsavedDot } from '../files/FileBar'
 import { FilePane } from './FilePane'
+import { usePaneDrag, useTabDrag } from './paneDrag'
 import { collectLeaves } from './paneLayout'
 import { SplitFrame } from './SplitFrame'
 
@@ -91,6 +92,8 @@ function FileLeaf({
 function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColumn }): React.JSX.Element {
   const unsaved = useWorkspaceStore((state) => state.unsavedFiles)
   const pin = useWorkspaceStore((state) => state.pinFilePane)
+  const startDrag = useTabDrag()
+  const dragged = usePaneDrag((state) => state.drag?.source.id)
   const shown = shownTabId(node)
   const tabs = node.children.filter(isFileLeaf)
   const focused = tabs.some((tab) => tab.terminalId === callbacks.focusedTerminalId)
@@ -102,7 +105,14 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
           const on = tab.terminalId === shown
           const preview = node.preview === tab.terminalId
           return (
-            <div key={tab.terminalId} className={`column__tab${on ? ' column__tab--shown' : ''}`}>
+            <div
+              key={tab.terminalId}
+              className={`column__tab${on ? ' column__tab--shown' : ''}${
+                dragged === tab.terminalId ? ' column__tab--dragged' : ''
+              }`}
+              data-pane-id={tab.terminalId}
+              onPointerDown={(event) => startDrag(event, { kind: 'tab', id: tab.terminalId, label: name })}
+            >
               <button
                 type="button"
                 role="tab"

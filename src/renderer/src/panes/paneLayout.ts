@@ -3,7 +3,15 @@
 // DOM: the components below only translate the results into CSS.
 
 import type { PaneNode } from '@shared/entities'
-import { isFileColumn, shownTabId, withTabs, type FileColumn, type FileLeaf } from '@shared/filePane'
+import {
+  fileColumnIn,
+  isFileColumn,
+  isFileLeaf,
+  shownTabId,
+  withTabs,
+  type FileColumn,
+  type FileLeaf
+} from '@shared/filePane'
 import { PANE_GUTTER_PX } from '@shared/paneRoom'
 
 /** Smallest slice of a split a pane may shrink to, as a fraction of the axis. */
@@ -125,19 +133,21 @@ export function splitPane(
   return splitPaneWith(root, terminalId, direction, leaf(newTerminalId))
 }
 
-/** `splitPane` for a leaf built by the caller, which is how a file pane arrives. */
+/** `splitPane` for a leaf built by the caller, which is how a file pane arrives; `before` puts it first. */
 export function splitPaneWith(
   root: PaneNode | null,
   terminalId: string,
   direction: 'row' | 'column',
-  added: PaneNode
+  added: PaneNode,
+  before = false
 ): PaneNode {
   if (!root) return added
   // The file column splits as one pane: a tab's split goes beside the column.
   const isTarget = (node: PaneNode): boolean =>
     node.kind === 'leaf' ? node.terminalId === terminalId : isFileColumn(node) && hasTerminal(node, terminalId)
   if (root.kind === 'leaf' || isFileColumn(root)) {
-    return isTarget(root) ? { kind: 'split', direction, sizes: [0.5, 0.5], children: [root, added] } : root
+    if (!isTarget(root)) return root
+    return { kind: 'split', direction, sizes: [0.5, 0.5], children: before ? [added, root] : [root, added] }
   }
 
   const index = root.children.findIndex(isTarget)
@@ -145,7 +155,7 @@ export function splitPaneWith(
     const sizes = normalizeSizes(root.sizes, root.children.length)
     const share = sizes[index] ?? 1 / sizes.length
     const children = [...root.children]
-    children.splice(index + 1, 0, added)
+    children.splice(before ? index : index + 1, 0, added)
     const nextSizes = [...sizes]
     nextSizes.splice(index, 1, share / 2, share / 2)
     return { kind: 'split', direction: root.direction, sizes: normalizeSizes(nextSizes, children.length), children }
@@ -155,7 +165,7 @@ export function splitPaneWith(
     kind: 'split',
     direction: root.direction,
     sizes: normalizeSizes(root.sizes, root.children.length),
-    children: root.children.map((child) => splitPaneWith(child, terminalId, direction, added))
+    children: root.children.map((child) => splitPaneWith(child, terminalId, direction, added, before))
   }
 }
 
@@ -247,6 +257,109 @@ function mapColumn(root: PaneNode, change: (column: FileColumn) => FileColumn): 
   if (isFileColumn(root)) return change(root)
   const children = root.children.map((child) => mapColumn(child, change))
   return children.every((child, index) => child === root.children[index]) ? root : { ...root, children }
+}
+
+/** Where a dragged pane lands on another: beside it on one side, or in its place (`center`, a swap). */
+export type DropEdge = 'left' | 'right' | 'top' | 'bottom' | 'center'
+
+/**
+ * The pane holding `id` moved to `edge` of the pane holding `targetId`, the file column moving as one.
+ * The same tree when either is missing or both are the same pane.
+ */
+export function movePane(root: PaneNode, id: string, targetId: string, edge: DropEdge): PaneNode {
+  const stops = stopsOf(root)
+  const from = stops.findIndex((stop) => hasTerminal(stop, id))
+  const to = stops.findIndex((stop) => hasTerminal(stop, targetId))
+  const moved = stops[from]
+  if (moved === undefined || to === -1 || from === to) return root
+  if (edge === 'center') {
+    return withStops(
+      root,
+      stops.map((stop, at) => (at === from ? (stops[to] ?? stop) : at === to ? moved : stop))
+    )
+  }
+  const rest = collectTerminalIds(moved).reduce<PaneNode | null>((tree, each) => closePane(tree, each), root)
+  return rest === null ? root : beside(rest, targetId, edge, moved)
+}
+
+/** The column's tab `id` taken out as a pane of its own at `edge` of `targetId`; the same tree when it cannot be. */
+export function moveTabOut(root: PaneNode, id: string, targetId: string, edge: DropEdge): PaneNode {
+  const tab = fileColumnIn(root)?.children.find((child) => child.kind === 'leaf' && child.terminalId === id)
+  if (tab === undefined || edge === 'center') return root
+  const rest = closePane(root, id)
+  return rest === null || !hasTerminal(rest, targetId) ? root : beside(rest, targetId, edge, tab)
+}
+
+/** The pane holding `id` moved to `index` in the strip's order: panes change places, places keep their sizes. */
+export function reorderPanes(root: PaneNode, id: string, index: number): PaneNode {
+  const stops = stopsOf(root)
+  const from = stops.findIndex((stop) => hasTerminal(stop, id))
+  const to = clamp(index, 0, stops.length - 1)
+  const [moved] = from === -1 ? [] : stops.splice(from, 1)
+  if (moved === undefined || from === to) return root
+  stops.splice(to, 0, moved)
+  return withStops(root, stops)
+}
+
+/** The file pane `id` at `index` among the column's tabs, from inside it or from a pane of its own. */
+export function placeTab(root: PaneNode, id: string, index: number): PaneNode {
+  const column = fileColumnIn(root)
+  const tab = collectLeaves(root).find((each) => each.terminalId === id)
+  if (column === null || !isFileLeaf(tab)) return root
+  const inColumn = column.children.includes(tab)
+  const at = clamp(index, 0, column.children.length - (inColumn ? 1 : 0))
+  if (inColumn && column.children.indexOf(tab) === at) return root
+  const rest = inColumn ? root : closePane(root, id)
+  if (rest === null) return root
+  return mapColumn(rest, (current) => {
+    const tabs = current.children.filter((child) => child !== tab)
+    tabs.splice(at, 0, tab)
+    return withTabs(current, tabs, inColumn ? current.shown : id)
+  })
+}
+
+/** Where the pane holding `id` stands in the strip's order, the column as one; -1 when not in the tree. */
+export function paneStopIndex(root: PaneNode | null, id: string): number {
+  return root === null ? -1 : stopsOf(root).findIndex((stop) => hasTerminal(stop, id))
+}
+
+/** The panes as the strip lists them: leaves, and the file column whole. */
+function stopsOf(node: PaneNode): PaneNode[] {
+  return node.kind === 'leaf' || isFileColumn(node) ? [node] : node.children.flatMap(stopsOf)
+}
+
+/** `root` with its stops, in reading order, replaced by `stops`; the shape and every size stay. */
+function withStops(root: PaneNode, stops: readonly PaneNode[]): PaneNode {
+  let at = 0
+  const walk = (node: PaneNode): PaneNode =>
+    node.kind === 'leaf' || isFileColumn(node) ? (stops[at++] ?? node) : { ...node, children: node.children.map(walk) }
+  return walk(root)
+}
+
+function beside(root: PaneNode, targetId: string, edge: Exclude<DropEdge, 'center'>, added: PaneNode): PaneNode {
+  const direction = edge === 'left' || edge === 'right' ? 'row' : 'column'
+  return flatten(splitPaneWith(root, targetId, direction, added, edge === 'left' || edge === 'top'))
+}
+
+/** Same-direction splits merged into their parent, as the runtime stores them; the column stays whole. */
+function flatten(node: PaneNode): PaneNode {
+  if (node.kind === 'leaf' || isFileColumn(node)) return node
+  const sizes = normalizeSizes(node.sizes, node.children.length)
+  const children: PaneNode[] = []
+  const shares: number[] = []
+  node.children.forEach((child, index) => {
+    const flat = flatten(child)
+    const share = sizes[index] ?? 0
+    if (flat.kind === 'split' && !isFileColumn(flat) && flat.direction === node.direction) {
+      const inner = normalizeSizes(flat.sizes, flat.children.length)
+      children.push(...flat.children)
+      shares.push(...inner.map((size) => size * share))
+    } else {
+      children.push(flat)
+      shares.push(share)
+    }
+  })
+  return { ...node, sizes: shares, children }
 }
 
 /** Replaces the sizes of the split at `path`, addressed by child indices. */

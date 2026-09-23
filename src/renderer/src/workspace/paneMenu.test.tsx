@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Layout, PaneNode, Terminal, Worktree, WorktreeFiles } from '@shared/entities'
 import { fileLeaf } from '@shared/filePane'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
-import { leaf } from '../panes/paneLayout'
+import { collectTerminalIds, leaf } from '../panes/paneLayout'
 
 const listing: WorktreeFiles = {
   worktreeId: 'w1',
@@ -89,6 +89,7 @@ const actions = {
   copyPaneOutput: vi.fn(async () => {}),
   closeTerminal: vi.fn(async () => {}),
   closeOtherPanes: vi.fn(async () => {}),
+  arrangePanes: vi.fn(),
   copyToClipboard: vi.fn(async () => {}),
   revealInFinder: vi.fn(async () => {}),
   openInEditor: vi.fn(async () => {}),
@@ -160,6 +161,7 @@ describe('a terminal tab', () => {
       { label: 'Split Right', hint: '⌘D' },
       { label: 'Split Down', hint: '⌘⇧D' },
       { label: 'Maximize', hint: '⌘⇧↩' },
+      { label: 'Move Pane Left', hint: null },
       { label: 'Copy Output', hint: null },
       { label: 'Close', hint: '⌘W' },
       { label: 'Close Others', hint: null }
@@ -224,6 +226,7 @@ describe('the rows that depend on the pane', () => {
       'Split Right',
       'Split Down',
       'Restore',
+      'Move Pane Right',
       'Run Again',
       'Copy Output',
       'Close',
@@ -234,10 +237,32 @@ describe('the rows that depend on the pane', () => {
     expect(labels(rightClickTab('Claude Code'))).not.toContain('Run Again')
   })
 
-  it('leaves Close Others out when there are no others', () => {
+  it('leaves Close Others and the moves out when there are no others', () => {
     seed(leaf('t1'))
     render(<TerminalTabs modifier={MAC} />)
     expect(labels(rightClickTab('npm test'))).not.toContain('Close Others')
+    expect(labels(rightClickTab('npm test'))).not.toContain('Move Pane Right')
+  })
+
+  it('moves the pane one place along the strip, and focuses it', () => {
+    seed(row(leaf('t1'), leaf('t2'), leaf('t3')), {
+      terminals: {
+        t1: terminal({ id: 't1', title: 'npm test' }),
+        t2: terminal({ id: 't2', agent: 'claude' }),
+        t3: terminal({ id: 't3', title: 'vim' })
+      }
+    })
+    render(<TerminalTabs modifier={MAC} />)
+    const menu = rightClickTab('Claude Code')
+    expect(labels(menu)).toEqual(expect.arrayContaining(['Move Pane Left', 'Move Pane Right']))
+    choose(menu, 'Move Pane Right')
+    choose(rightClickTab('Claude Code'), 'Move Pane Left')
+    type Call = [(root: PaneNode) => PaneNode, string]
+    const [[right, rightFocus], [left]] = actions.arrangePanes.mock.calls as unknown as [Call, Call]
+    const root = useWorkspaceStore.getState().layouts.w1!.root!
+    expect(collectTerminalIds(right(root))).toEqual(['t1', 't3', 't2'])
+    expect(collectTerminalIds(left(root))).toEqual(['t2', 't1', 't3'])
+    expect(rightFocus).toBe('t2')
   })
 })
 
@@ -254,6 +279,7 @@ describe('a file tab', () => {
       'Open in',
       'Open as artifact',
       'Maximize',
+      'Move Pane Left',
       'Close',
       'Close Others'
     ])
@@ -327,6 +353,7 @@ describe('a pane header', () => {
       'Reveal in Finder',
       'Open in',
       'Maximize',
+      'Move Pane Left',
       'Close',
       'Close Others'
     ])

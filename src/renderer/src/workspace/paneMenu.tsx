@@ -6,7 +6,7 @@ import { fileLeavesIn, fileViewerFor } from '@shared/filePane'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { openAsArtifact } from '../markdown/openAsArtifact'
-import { collectTerminalIds } from '../panes/paneLayout'
+import { collectTerminalIds, paneStopIndex, paneStops, reorderPanes } from '../panes/paneLayout'
 import { useOpenIn } from '../sidebar/openIn'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -118,6 +118,16 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
     hint: hint('expand-pane'),
     onChoose: () => store.expandPane(terminalId)
   }
+  // One place along the strip, as a drag along it would.
+  const place = paneStopIndex(root, terminalId)
+  const move = (label: string, step: 1 | -1): RowMenuItem => ({
+    label,
+    onChoose: () => store.arrangePanes((tree) => reorderPanes(tree, terminalId, place + step), terminalId)
+  })
+  const moves = [
+    ...(place > 0 ? [move('Move Pane Left', -1)] : []),
+    ...(place !== -1 && place < paneStops(root).length - 1 ? [move('Move Pane Right', 1)] : [])
+  ]
   const closing: RowMenuItem[] = [
     { label: 'Close', hint: hint('close-pane'), separated: true, onChoose: () => void store.closeTerminal(terminalId) },
     ...(collectTerminalIds(root).length > 1
@@ -136,6 +146,7 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
         ? [{ label: 'Open as artifact', onChoose: () => void openAsArtifact(terminalId, name) }]
         : []),
       { ...maximize, separated: true },
+      ...moves,
       ...closing
     ]
   }
@@ -146,6 +157,7 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
     { label: 'Split Right', hint: hint('split-right'), separated: true, onChoose: () => split('row') },
     { label: 'Split Down', hint: hint('split-down'), onChoose: () => split('column') },
     maximize,
+    ...moves,
     ...(exited
       ? [{ label: 'Run Again', separated: true, onChoose: () => void store.relaunchTerminal(terminalId) }]
       : []),
