@@ -73,6 +73,7 @@ import {
   writeStoredTerminalFontSize,
   type AgentNoticePreference
 } from './preferences'
+import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen } from './paneSeen'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
 
@@ -256,6 +257,16 @@ type WorkspaceState = {
    * stale id rather than an empty workspace.
    */
   expandedTerminalId: string | null
+
+  /**
+   * When each pane was last in front of this person, by terminal id.
+   *
+   * Local to this machine and read from `localStorage` at startup, for the
+   * reason `preferences.ts` gives about the font size: it is a fact about the
+   * eyes in front of this screen rather than about the work, and the workspace
+   * file is for the second kind. See `paneSeen.ts` for what it makes unread.
+   */
+  paneSeenAt: PaneSeen
 
   /** Open state of the changes panel, and what it is showing. */
   /** Whether each ready worktree would merge into its base, as last read. */
@@ -575,6 +586,8 @@ type WorkspaceState = {
 
   /** Puts the focus on one pane, whether it is yours or a teammate's. */
   focusPane: (paneId: string) => void
+  /** Writes down that these panes are in front of this person now. */
+  markPanesSeen: (terminalIds: readonly string[]) => void
   /** Adopts a fresh terminal record, e.g. the one a resize answers with. */
   recordTerminal: (terminal: Terminal) => void
   splitFocusedPane: (direction: 'row' | 'column') => Promise<void>
@@ -905,8 +918,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const terminals = Object.fromEntries(listed.map((terminal) => [terminal.id, terminal]))
     // And the relay pane is reconciled against the same truth in the same
     // breath, because it is the one slot in this store that points at a
-    // terminal and was never checked against the list it came from.
-    set((state) => ({ terminals, relayPanes: reconcileRelayPanes(state.relayPanes, terminals) }))
+    // terminal and was never checked against the list it came from. What was
+    // read of each pane goes the same way: a closed terminal's id is never
+    // issued again, so keeping its time would only grow the record.
+    set((state) => ({
+      terminals,
+      relayPanes: reconcileRelayPanes(state.relayPanes, terminals),
+      paneSeenAt: forgetClosedPanes(state.paneSeenAt, terminals)
+    }))
   }
 
   const refreshLayout = async (worktreeId: string): Promise<void> => {
@@ -1349,6 +1368,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     agentNotices: readStoredAgentNotices(storage),
     editorCommands: readStoredEditorCommands(storage),
     editors: null,
+    paneSeenAt: readPaneSeen(storage),
 
     // The default until the runtime answers, which is the same palette
     // `tokens.css` already painted the first frame in — so the window does not
@@ -1650,8 +1670,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // next keystroke goes, and one of them would be wrong.
       if (get().focusedWatchId !== null) set({ focusedWatchId: null })
       const layout = activeLayout()
+      // Both ends of the move, and before the early return: the pane being left
+      // is read up to this moment, and the pane being taken is being looked at
+      // now — including when it is the one that already had the focus, which is
+      // what clicking a row of a pane you are already in means.
+      get().markPanesSeen([paneId, ...(layout?.focusedTerminalId ? [layout.focusedTerminalId] : [])])
       if (!layout || layout.focusedTerminalId === paneId) return
       persistLayout({ ...layout, focusedTerminalId: paneId })
+    },
+
+    markPanesSeen(terminalIds) {
+      if (terminalIds.length === 0) return
+      const now = Date.now()
+      set((state) => {
+        const paneSeenAt = markSeen(state.paneSeenAt, terminalIds, now)
+        return paneSeenAt === state.paneSeenAt ? {} : { paneSeenAt }
+      })
     },
 
     async splitFocusedPane(direction) {
@@ -2622,6 +2656,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 useWorkspaceStore.subscribe((state, previous) => {
   if (!sessionChanged(state, previous)) return
   writeStoredSession(storage, state)
+})
+
+/**
+ * And one writer for what has been read, on the same terms and for the same
+ * reason: a pane is marked seen from the focus moving, from a worktree being
+ * opened onto its panes, and from a beat of the clock while one is watched.
+ */
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.paneSeenAt === previous.paneSeenAt) return
+  writePaneSeen(storage, state.paneSeenAt)
 })
 
 /**

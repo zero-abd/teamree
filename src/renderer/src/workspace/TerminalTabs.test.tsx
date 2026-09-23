@@ -443,3 +443,41 @@ describe('when there are no panes to list', () => {
     expect(screen.queryByText('deploy.sh')).toBeNull()
   })
 })
+
+// The mark the sidebar draws, on the same panes and read the same way: a pane
+// that has printed since this person last had it in front of them. The strip is
+// what somebody is looking at while an agent works beside them in the next
+// pane, so it is where a tab going quietly unread would cost the most.
+describe('panes that have printed since they were read', () => {
+  it('marks the tab of a pane that spoke while another had the focus', () => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1', 't2'), 't2') },
+      terminals: byId(
+        terminal({ id: 't1', title: 'claude', lastOutputAt: 5_000 }),
+        terminal({ id: 't2', title: 'npm test', lastOutputAt: 5_000 })
+      ),
+      paneSeenAt: { t1: 1_000, t2: 1_000 }
+    })
+    mount()
+
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs.find((tab) => tab.textContent?.includes('claude'))?.closest('.tab')?.className).toContain('tab--unread')
+    // The one being looked at is never unread, however much it prints.
+    expect(tabs.find((tab) => tab.textContent?.includes('npm test'))?.closest('.tab')?.className).not.toContain(
+      'tab--unread'
+    )
+  })
+
+  it('leaves a pane alone when nothing has arrived since it was read', () => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1', 't2'), 't2') },
+      terminals: byId(terminal({ id: 't1', title: 'claude', lastOutputAt: 1_000 })),
+      paneSeenAt: { t1: 5_000 }
+    })
+    mount()
+
+    expect(screen.getByRole('tab', { name: /claude/ }).closest('.tab')?.className).not.toContain('tab--unread')
+  })
+})

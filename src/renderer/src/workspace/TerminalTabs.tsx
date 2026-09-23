@@ -23,6 +23,7 @@ import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { truncateName } from '../sidebar/agentRows'
+import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
 export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element | null {
@@ -43,6 +44,9 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
   const renamePane = useWorkspaceStore((state) => state.renamePane)
   const [renaming, setRenaming] = useState<string | null>(null)
+  // The same reading the sidebar draws, on the same panes: a strip that called
+  // a pane read while the row beside it called it unread would be two answers.
+  const unread = useUnreadPanes()
 
   const tabs = paneTabs(layout?.root ?? null, terminals)
   if (tabs.length === 0) return null
@@ -54,8 +58,9 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
       <div className="tabs__list" role="tablist" aria-label="Terminals in this worktree">
         {tabs.map((tab) => {
           const active = tab.terminalId === focusedTerminalId
+          const isUnread = unread.has(tab.terminalId)
           return (
-            <div className={`tab${active ? ' tab--active' : ''}`} key={tab.terminalId}>
+            <div className={`tab${active ? ' tab--active' : ''}${isUnread ? ' tab--unread' : ''}`} key={tab.terminalId}>
               {renaming === tab.terminalId ? (
                 <RenameField
                   name={terminals[tab.terminalId]?.label ?? ''}
@@ -71,7 +76,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                   role="tab"
                   aria-selected={active}
                   className="tab__main"
-                  title={paneTabTitle(tab)}
+                  title={isUnread ? `${paneTabTitle(tab)} · unread` : paneTabTitle(tab)}
                   onClick={() => focusPane(tab.terminalId)}
                   onDoubleClick={() => setRenaming(tab.terminalId)}
                 >
@@ -86,6 +91,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                   {/* Shortened here and nowhere behind here. The strip is narrow
                       and a name can be a whole task description; the tooltip
                       above and the record underneath both keep all of it. */}
+                  {isUnread ? <span className="pip" aria-hidden="true" /> : null}
                   <span className="tab__name">{truncateName(tab.label)}</span>
                 </button>
               )}

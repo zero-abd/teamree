@@ -11,12 +11,13 @@
 // Nothing here is unmounted that was costing anything: the PTYs live in the
 // runtime, so a pane keeps running and keeps its scrollback while this is up.
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { modalOnScreen } from '../dialogs/modalLayer'
 import { ACTIVITY_LABEL, ACTIVITY_NOUN, sinceLabel, truncateName } from '../sidebar/agentRows'
 import { useNow } from '../state/useNow'
+import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { ACTIVITIES_BY_ATTENTION, activityCounts, dashboardRows } from './dashboardRows'
 
@@ -34,6 +35,19 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
     [paneList, worktrees, projects, now]
   )
   const counts = useMemo(() => activityCounts(rows), [rows])
+
+  // The one filter this board has, and the reason it is a toggle rather than a
+  // field: "which of these has said something since I last looked" is the
+  // question somebody opens this view with after an hour away, and it has
+  // exactly one answer. Not remembered across launches — a board that opened
+  // hiding most of its rows because of a press yesterday would be a board that
+  // lies about how many panes there are.
+  const [unreadOnly, setUnreadOnly] = useState(false)
+  const unread = useUnreadPanes()
+  const shown = useMemo(
+    () => (unreadOnly ? rows.filter((row) => unread.has(row.terminalId)) : rows),
+    [rows, unread, unreadOnly]
+  )
 
   // Escape is what every reader tries first on a view they opened to look at
   // something. Capture, for the same reason the chords are captured: a focused
@@ -75,12 +89,12 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
   const list = useRef<HTMLUListElement>(null)
   const landed = useRef(false)
   useEffect(() => {
-    if (landed.current || rows.length === 0) return
+    if (landed.current || shown.length === 0) return
     const first = list.current?.querySelector('button')
     if (!first) return
     landed.current = true
     first.focus()
-  }, [rows.length])
+  }, [shown.length])
 
   return (
     <main className="workspace board" aria-label="Every pane">
@@ -88,10 +102,10 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
         <div className="board__identity">
           <h1 className="board__title">All panes</h1>
           <p className="board__lede">
-            {rows.length === 0
+            {shown.length === 0
               ? 'No panes anywhere yet.'
-              : `${rows.length} pane${rows.length === 1 ? '' : 's'} across ${worktreeCount(rows)} worktree${
-                  worktreeCount(rows) === 1 ? '' : 's'
+              : `${shown.length} pane${shown.length === 1 ? '' : 's'} across ${worktreeCount(shown)} worktree${
+                  worktreeCount(shown) === 1 ? '' : 's'
                 }`}
           </p>
         </div>
@@ -112,6 +126,16 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
 
         <button
           type="button"
+          className={`button button--ghost button--small${unreadOnly ? ' button--on' : ''}`}
+          aria-pressed={unreadOnly}
+          title="Only panes that have printed since you last read them"
+          onClick={() => setUnreadOnly((on) => !on)}
+        >
+          Unread only
+        </button>
+
+        <button
+          type="button"
           className="board__close"
           title={`Back to the panes · ${shortcutHint('open-dashboard', modifier)}`}
           aria-label="Back to the panes"
@@ -123,27 +147,36 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
         </button>
       </header>
 
-      {rows.length === 0 ? (
+      {shown.length === 0 ? (
         <div className="placeholder">
-          <h2 className="placeholder__title">Nothing running</h2>
+          <h2 className="placeholder__title">{unreadOnly && rows.length > 0 ? 'Nothing unread' : 'Nothing running'}</h2>
           <p className="placeholder__body">
-            Open a terminal with <kbd>{shortcutHint('new-terminal', modifier)}</kbd>.
+            {unreadOnly && rows.length > 0 ? (
+              'Every pane has been read.'
+            ) : (
+              <>
+                Open a terminal with <kbd>{shortcutHint('new-terminal', modifier)}</kbd>.
+              </>
+            )}
           </p>
         </div>
       ) : (
         <ul className="board__list" ref={list}>
-          {rows.map((row) => (
+          {shown.map((row) => (
             <li key={row.terminalId}>
               <button
                 type="button"
-                className={`board-row board-row--${row.activity}`}
-                title={`${row.label} in ${row.worktreeName} · ${ACTIVITY_LABEL[row.activity]} · last output ${sinceLabel(
-                  row.quietFor
-                )} ago`}
+                className={`board-row board-row--${row.activity}${
+                  unread.has(row.terminalId) ? ' board-row--unread' : ''
+                }`}
+                title={`${row.label} in ${row.worktreeName} · ${ACTIVITY_LABEL[row.activity]}${
+                  unread.has(row.terminalId) ? ' · unread' : ''
+                } · last output ${sinceLabel(row.quietFor)} ago`}
                 onClick={() => void revealPane(row.worktreeId, row.terminalId)}
               >
                 <span className={`activity activity--${row.activity}`} aria-hidden="true" />
                 <span className="board-row__what">
+                  {unread.has(row.terminalId) ? <span className="pip" aria-hidden="true" /> : null}
                   <span className="board-row__label">{truncateName(row.label)}</span>
                   {/* An agent pane is named by its agent, so only a shell needs saying. */}
                   {row.agent ? null : <span className="board-row__kind">shell</span>}

@@ -22,6 +22,7 @@ import { teammatesHeard, type PaneWatchers } from '@shared/entities'
 import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
 import type { PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
+import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { evidenceLine } from '@shared/outputEvidence'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
@@ -103,6 +104,9 @@ export function Sidebar({
   }, [collapsed, matching, paneList])
 
   const evidence = usePaneEvidence(onScreen, terminals)
+  // Asked once for the whole sidebar. Which panes have printed since they were
+  // last looked at is a question about the window, not about a row.
+  const unread = useUnreadPanes()
   const watching = useWorkspaceStore((state) => state.watchers)
 
   // The panes themselves are in the workspace, beside this window's own — the
@@ -361,6 +365,7 @@ export function Sidebar({
                         terminals={paneList}
                         evidence={evidence}
                         watchers={reading}
+                        unread={unread}
                         now={now}
                         onFocusTerminal={(terminalId) => void revealPane(worktree.id, terminalId)}
                         active={worktree.id === activeWorktreeId}
