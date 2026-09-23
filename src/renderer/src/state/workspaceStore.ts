@@ -257,6 +257,9 @@ export function reconcileRelayPanes(
   return unchanged ? panes : next
 }
 
+/** A section of the settings page that can be asked for by name. */
+export type SettingsSection = 'agents'
+
 type WorkspaceState = {
   connection: ConnectionState
   runtimeVersion: string | null
@@ -570,6 +573,8 @@ type WorkspaceState = {
    * carries a row that opens it rather than a second copy of it.
    */
   settingsOpen: boolean
+  /** The section the settings page opens scrolled to, until it has. */
+  settingsSection: SettingsSection | null
   helpOpen: boolean
 
   sidebarWidth: number
@@ -855,6 +860,8 @@ type WorkspaceState = {
   closeTeamwork: () => void
   /** Gives the main area to settings, or takes it back. */
   toggleSettings: () => void
+  /** Opens the settings page with the named section in view. */
+  openSettings: (section: SettingsSection) => void
   /** The same for help. */
   toggleHelp: () => void
   /**
@@ -1540,6 +1547,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     // you go to answer a question, and reopening the app onto the answer to
     // yesterday's question is not where anybody left off.
     settingsOpen: false,
+    settingsSection: null,
     helpOpen: false,
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
@@ -2758,10 +2766,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // hunt for a close button on.
       set((state) => ({
         settingsOpen: !state.settingsOpen,
+        settingsSection: null,
         helpOpen: false,
         dashboardOpen: false,
         teamworkProjectId: null
       }))
+    },
+
+    openSettings(section) {
+      set({
+        settingsOpen: true,
+        settingsSection: section,
+        helpOpen: false,
+        dashboardOpen: false,
+        teamworkProjectId: null
+      })
     },
 
     toggleHelp() {

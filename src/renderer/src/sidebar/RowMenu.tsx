@@ -30,10 +30,14 @@ export type RowMenuItem = {
   separated?: boolean
   /** Painted as destructive. */
   danger?: boolean
+  /** A chord at the row's end, for a row the keyboard already has a way to. */
+  hint?: string
+  /** A mark before the label. Every row of a menu has one, or none does. */
+  icon?: React.ReactNode
 }
 
-/** Where the menu goes, in viewport coordinates. */
-export type RowMenuAnchor = { x: number; y: number }
+/** Where the menu goes, in viewport coordinates; `right` hangs it off `x` leftwards. */
+export type RowMenuAnchor = { x: number; y: number; align?: 'left' | 'right' }
 
 type RowMenuProps = {
   /** Names the menu for anybody listening rather than looking. */
@@ -42,9 +46,11 @@ type RowMenuProps = {
   anchor: RowMenuAnchor
   /** Closing is the caller's, because the focus that goes back is too. */
   onClose: () => void
+  /** The control that opened it, whose press is a toggle rather than a dismissal. */
+  opener?: HTMLElement | null
 }
 
-export function RowMenu({ label, items, anchor, onClose }: RowMenuProps): React.JSX.Element {
+export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps): React.JSX.Element {
   const menu = useRef<HTMLDivElement | null>(null)
   const entries = useRef<(HTMLDivElement | null)[]>([])
   const [active, setActive] = useState(0)
@@ -62,11 +68,12 @@ export function RowMenu({ label, items, anchor, onClose }: RowMenuProps): React.
   useEffect(() => {
     const dismiss = (event: PointerEvent): void => {
       if (menu.current?.contains(event.target as Node) === true) return
+      if (opener?.contains(event.target as Node) === true) return
       onClose()
     }
     document.addEventListener('pointerdown', dismiss, true)
     return () => document.removeEventListener('pointerdown', dismiss, true)
-  }, [onClose])
+  }, [onClose, opener])
 
   const choose = (item: RowMenuItem): void => {
     // Closed first, so that the focus the caller puts back on the row is not
@@ -118,7 +125,11 @@ export function RowMenu({ label, items, anchor, onClose }: RowMenuProps): React.
       role="menu"
       aria-label={label}
       ref={menu}
-      style={{ left: `${anchor.x}px`, top: `${anchor.y}px` }}
+      style={
+        anchor.align === 'right'
+          ? { right: `${window.innerWidth - anchor.x}px`, top: `${anchor.y}px` }
+          : { left: `${anchor.x}px`, top: `${anchor.y}px` }
+      }
       onKeyDown={onKeyDown}
     >
       {items.map((item, index) => (
@@ -135,7 +146,17 @@ export function RowMenu({ label, items, anchor, onClose }: RowMenuProps): React.
           onClick={() => choose(item)}
           onMouseEnter={() => setActive(index)}
         >
-          {item.label}
+          {item.icon === undefined ? null : (
+            <span className="row-menu__icon" aria-hidden="true">
+              {item.icon}
+            </span>
+          )}
+          <span className="row-menu__label">{item.label}</span>
+          {item.hint === undefined ? null : (
+            <kbd className="row-menu__hint" aria-hidden="true">
+              {item.hint}
+            </kbd>
+          )}
         </div>
       ))}
     </div>

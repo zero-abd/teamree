@@ -90,6 +90,15 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
     region.current?.focus()
   }, [])
 
+  // Opened at a section — the strip's "Agent settings…" — the page scrolls
+  // there once and forgets the request, so the next plain open starts at the top.
+  const section = useWorkspaceStore((state) => state.settingsSection)
+  useEffect(() => {
+    if (section === null) return
+    document.getElementById(`settings-${section}`)?.scrollIntoView({ block: 'start' })
+    useWorkspaceStore.setState({ settingsSection: null })
+  }, [section])
+
   return (
     <main className="workspace settings" aria-label="Settings" tabIndex={-1} ref={region}>
       <header className="settings__head">

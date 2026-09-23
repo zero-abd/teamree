@@ -197,6 +197,25 @@ describe('the page itself', () => {
     expect(loadUpdate).toHaveBeenCalled()
   })
 
+  // Reached from the strip's + menu as "Agent settings…": the page opens with
+  // that section in view rather than at the top with the answer below the fold.
+  it('scrolls to the section it was opened at, once, and forgets it', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    seed({ agents: [claude, codex], settingsSection: 'agents' })
+    render(<SettingsView modifier={modifier} />)
+    expect(scrollIntoView).toHaveBeenCalledOnce()
+    expect(scrollIntoView.mock.instances[0]).toBe(document.getElementById('settings-agents'))
+    expect(useWorkspaceStore.getState().settingsSection).toBeNull()
+  })
+
+  it('scrolls nowhere when opened plainly', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    render(<SettingsView modifier={modifier} />)
+    expect(scrollIntoView).not.toHaveBeenCalled()
+  })
+
   it('closes on Escape, which is what a reader tries first', () => {
     render(<SettingsView modifier={modifier} />)
     fireEvent.keyDown(window, { key: 'Escape' })

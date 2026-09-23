@@ -23,23 +23,34 @@
 // which made a row of six out of a row of two and put commands about a pane
 // above the panes' own strip rather than in it. They act on the focused pane —
 // the one this strip is already drawing as current — so the strip says what
-// they will happen to.
+// they will happen to. The `+` opens a menu of what can be started here — a
+// terminal, an agent the machine has — rather than a terminal outright; the
+// chord is still the one-press way to a terminal.
 //
 // It is also where a pane gets renamed, because this is where the name is a
 // problem: three agents on three approaches read `claude`, `claude`, `claude`
 // along the top, and the strip is what somebody is looking at when they wish
 // one of them said which was the auth refactor.
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { paneTabs, paneTabTitle } from './paneTabs'
+import { startMenuItems } from './startMenu'
+import type { PlatformModifier } from '../keyboard/platformModifier'
 import { truncateName } from '../sidebar/agentRows'
+import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { SidebarGlyph } from '../shell/Brand'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
-export function TerminalTabs(): React.JSX.Element {
+/** Between the `+` and the menu that hangs from it. */
+const MENU_GAP_PX = 4
+
+export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
+  const startAgent = useWorkspaceStore((state) => state.startAgent)
+  const openSettings = useWorkspaceStore((state) => state.openSettings)
+  const agents = useWorkspaceStore((state) => state.agents)
   const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
   const layout = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
@@ -62,6 +73,13 @@ export function TerminalTabs(): React.JSX.Element {
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
   const renamePane = useWorkspaceStore((state) => state.renamePane)
   const [renaming, setRenaming] = useState<string | null>(null)
+  const plus = useRef<HTMLButtonElement | null>(null)
+  const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
+  // Back on the `+`, so a keyboard user who opened the menu is where they were.
+  const closeMenu = useCallback((): void => {
+    setMenuAt(null)
+    plus.current?.focus()
+  }, [])
   // The same reading the sidebar draws, on the same panes: a strip that called
   // a pane read while the row beside it called it unread would be two answers.
   const unread = useUnreadPanes()
@@ -217,13 +235,21 @@ export function TerminalTabs(): React.JSX.Element {
             nothing by then — a pane cannot be listed in a worktree there is
             none of. */}
           <button
+            ref={plus}
             type="button"
             className="tabs__action"
-            title="New terminal"
-            aria-label="New terminal"
+            title="New pane"
+            aria-label="New pane"
+            aria-haspopup="menu"
+            aria-expanded={menuAt !== null}
             disabled={activeWorktreeId === null}
             onClick={() => {
-              if (activeWorktreeId !== null) void createTerminal(activeWorktreeId)
+              if (menuAt !== null) {
+                closeMenu()
+                return
+              }
+              const rect = plus.current?.getBoundingClientRect()
+              if (rect) setMenuAt({ x: rect.right, y: rect.bottom + MENU_GAP_PX, align: 'right' })
             }}
           >
             <svg viewBox="0 0 12 12" aria-hidden="true">
@@ -231,6 +257,20 @@ export function TerminalTabs(): React.JSX.Element {
             </svg>
           </button>
         </div>
+      )}
+
+      {menuAt === null || activeWorktreeId === null ? null : (
+        <RowMenu
+          label="New pane"
+          anchor={menuAt}
+          opener={plus.current}
+          onClose={closeMenu}
+          items={startMenuItems(agents, modifier, {
+            newTerminal: () => void createTerminal(activeWorktreeId),
+            startAgent: (command) => void startAgent(command),
+            openAgentSettings: () => openSettings('agents')
+          })}
+        />
       )}
     </div>
   )
