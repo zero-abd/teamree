@@ -28,7 +28,8 @@ export function FileView({
   onClose,
   onHeaderMenu,
   onMenu,
-  searchToken = 0
+  searchToken = 0,
+  onCloseSearch
 }: FilePaneProps): React.JSX.Element {
   const worktreePath = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.path)
   const unsaved = useWorkspaceStore((state) => state.unsavedFiles[paneId] === true)
@@ -211,7 +212,9 @@ export function FileView({
       ) : null}
 
       <div className="file__body" ref={diff.body}>
-        {showDiff ? <DiffBody worktreeId={worktreeId} diff={diff} /> : null}
+        {showDiff ? (
+          <DiffBody worktreeId={worktreeId} diff={diff} searchToken={searchToken} onCloseSearch={onCloseSearch} />
+        ) : null}
         <div className="file__view" hidden={showDiff}>
           {content === null ? (
             error === null ? (
@@ -227,7 +230,6 @@ export function FileView({
                 {...(draft === undefined ? {} : { draftText: draft.text })}
                 lineEnding={content.lineEnding ?? '\n'}
                 focused={focused && !showDiff}
-                searchToken={searchToken}
                 onDirtyChange={onDirtyChange}
                 onEdit={onEdit}
               />

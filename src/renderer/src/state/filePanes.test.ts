@@ -98,10 +98,17 @@ describe('file panes in the store', () => {
     call.mockRestore()
   })
 
-  it('refuses the find bar on a file pane, which has no scrollback to search', async () => {
+  it('opens the find bar on a file pane only over its diff, and closes it with the diff', async () => {
     const worktreeId = await openReady()
     useWorkspaceStore.getState().openFilePane(worktreeId, 'find.md')
     useWorkspaceStore.getState().openPaneSearch()
+    expect(useWorkspaceStore.getState().paneSearch).toBeNull()
+
+    const paneId = useWorkspaceStore.getState().layouts[worktreeId]!.focusedTerminalId!
+    useWorkspaceStore.getState().setPaneDiff(paneId, true)
+    useWorkspaceStore.getState().openPaneSearch()
+    expect(useWorkspaceStore.getState().paneSearch?.terminalId).toBe(paneId)
+    useWorkspaceStore.getState().setPaneDiff(paneId, false)
     expect(useWorkspaceStore.getState().paneSearch).toBeNull()
   })
 

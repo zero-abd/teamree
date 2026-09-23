@@ -118,9 +118,28 @@
   display: none;
 }
 
+.file__diffs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-panel);
+}
+
+/* In flow above the diff rather than over it, where the sticky hunk header keeps Stage and Discard. */
+.file__diffs > .pane-search {
+  position: static;
+  align-self: flex-end;
+  /* A whole number of pixels: from a fractional edge, a sliver of the row under the stuck hunk header shows. */
+  height: 32px;
+  margin: var(--s2) var(--s3) 0;
+}
+
 .file__diff {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   overflow: auto;
   /* The patch's headers are sized to this, the width actually on screen. */
   container-type: inline-size;
@@ -264,4 +283,18 @@
 
 .tab--active .tab__main .file__glyph {
   opacity: 0.9;
+}
+
+/* The pane's border already says it has the keyboard. */
+.file__diff:focus-visible {
+  outline: none;
+}
+
+::highlight(diff-find) {
+  background-color: var(--term-selection);
+}
+
+::highlight(diff-find-current) {
+  background-color: var(--accent);
+  color: var(--on-accent);
 }

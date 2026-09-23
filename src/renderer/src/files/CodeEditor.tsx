@@ -3,7 +3,7 @@
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { bracketMatching, foldGutter, foldKeymap, indentOnInput } from '@codemirror/language'
-import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search'
+import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, type Text } from '@codemirror/state'
 import {
   crosshairCursor,
@@ -39,8 +39,6 @@ export type CodeEditorProps = {
   draftText?: string
   lineEnding: '\n' | '\r\n'
   focused: boolean
-  /** Bumped to open the find bar. */
-  searchToken: number
   onDirtyChange: (dirty: boolean) => void
   /** Every change to the document. */
   onEdit: () => void
@@ -53,7 +51,6 @@ export function CodeEditor({
   draftText,
   lineEnding,
   focused,
-  searchToken,
   onDirtyChange,
   onEdit
 }: CodeEditorProps): React.JSX.Element {
@@ -146,10 +143,6 @@ export function CodeEditor({
   useEffect(() => {
     if (focused && view.current !== null && !view.current.hasFocus) view.current.focus()
   }, [focused])
-
-  useEffect(() => {
-    if (searchToken > 0 && view.current !== null) openSearchPanel(view.current)
-  }, [searchToken])
 
   return <div className="code" ref={host} />
 }

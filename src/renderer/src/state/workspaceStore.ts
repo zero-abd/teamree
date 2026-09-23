@@ -1080,9 +1080,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     return activeWorktreeId ? (layouts[activeWorktreeId] ?? null) : null
   }
 
-  const filePathOf = (paneId: string): string | undefined =>
-    fileLeavesIn(activeLayout()?.root ?? null).find((leaf) => leaf.terminalId === paneId)?.path
-
   /** The question closing this pane needs first, or null: see `closePaneWarning`. */
   const closeQuestion = (paneId: string): 'confirm-close-pane' | 'confirm-close-file' | null => {
     if (isFilePaneId(paneId)) return get().editedFiles[paneId] ? 'confirm-close-file' : null
@@ -1683,7 +1680,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         const diffPanes = { ...state.diffPanes }
         if (on) diffPanes[paneId] = true
         else delete diffPanes[paneId]
-        return { diffPanes }
+        return on || state.paneSearch?.terminalId !== paneId ? { diffPanes } : { diffPanes, paneSearch: null }
       })
     },
 
@@ -1860,10 +1857,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     openPaneSearch() {
       // A watched pane's scrollback is a scaled picture with no search addon; the field opens only over your own.
-      // A markdown page has no find bar; a code pane opens its editor's.
+      // A file pane has one over its diff only.
       if (get().focusedWatchId !== null) return
       const focused = activeLayout()?.focusedTerminalId
-      if (!focused || (isFilePaneId(focused) && isMarkdownPath(filePathOf(focused) ?? ''))) return
+      if (!focused || (isFilePaneId(focused) && get().diffPanes[focused] !== true)) return
       set((state) => ({ paneSearch: { terminalId: focused, token: (state.paneSearch?.token ?? 0) + 1 } }))
     },
 

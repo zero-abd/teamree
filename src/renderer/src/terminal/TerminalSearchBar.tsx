@@ -13,6 +13,8 @@ type TerminalSearchBarProps = {
    * way a second press does anywhere else.
    */
   focusToken: number
+  /** Where counting stops; the default is the terminal's. */
+  limit?: number
   onQueryChange: (value: string) => void
   onToggle: (option: keyof PaneSearchOptions) => void
   onStep: (direction: 'next' | 'previous') => void
@@ -22,6 +24,7 @@ type TerminalSearchBarProps = {
 export function TerminalSearchBar({
   state,
   focusToken,
+  limit,
   onQueryChange,
   onToggle,
   onStep,
@@ -36,7 +39,7 @@ export function TerminalSearchBar({
     field.select()
   }, [focusToken])
 
-  const label = matchLabel(state)
+  const label = matchLabel(state, limit)
   const steppable = canStep(state)
   const missed = state.query !== '' && state.total === 0
 

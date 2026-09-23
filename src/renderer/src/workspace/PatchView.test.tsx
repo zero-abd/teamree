@@ -481,6 +481,76 @@ describe('a big patch', () => {
   })
 })
 
+describe('finding in the diff', () => {
+  // jsdom lays nothing out, and has no box for a range at all.
+  beforeEach(() => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect()
+  })
+
+  /** A file pane in Diff mode on a lockfile, whose two hunks open folded, with its find bar up. */
+  async function mountFind(onCloseSearch = (): void => {}): Promise<void> {
+    const working = { ...diff, path: 'package-lock.json', patch: editedFile('package-lock.json', 2, 2) }
+    call.mockImplementation((method: string, params: unknown) => {
+      if (method !== 'worktree.diff') return new Promise(() => {})
+      return Promise.resolve((params as { staged?: boolean }).staged === true ? empty(true) : working)
+    })
+    render(
+      <FileView
+        paneId="file:1"
+        worktreeId="wt"
+        path="package-lock.json"
+        focused
+        onFocus={() => {}}
+        onClose={() => {}}
+        searchToken={1}
+        onCloseSearch={onCloseSearch}
+      />
+    )
+    await waitFor(() => expect(document.querySelector('.patch')).not.toBeNull())
+  }
+
+  const count = (): string | null => screen.getByRole('status').textContent
+
+  it('finds a line inside a folded hunk and unfolds that hunk alone', async () => {
+    await mountFind()
+    expect(screen.getAllByRole('button', { name: 'Show 3 lines' })).toHaveLength(2)
+    const { default: userEvent } = await import('@testing-library/user-event')
+    // Pasted: typed, each prefix would land on a first match of its own.
+    await userEvent.click(screen.getByRole('textbox', { name: 'Find in pane' }))
+    await userEvent.paste('k1-1')
+
+    expect(count()).toBe('1 of 1')
+    expect(screen.getAllByRole('button', { name: 'Show 3 lines' })).toHaveLength(1)
+    const row = [...document.querySelectorAll('.patch__row')].find((node) => node.textContent?.includes('"k1-1"'))
+    expect(row).toBeTruthy()
+  })
+
+  it('steps with Return and Shift+Return, round the ends', async () => {
+    await mountFind()
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Find in pane' }), '"v"')
+    expect(count()).toBe('1 of 4')
+
+    await userEvent.keyboard('{Enter}{Enter}')
+    expect(count()).toBe('3 of 4')
+    expect(screen.queryByRole('button', { name: /^Show / })).toBeNull()
+    await userEvent.keyboard('{Shift>}{Enter}{/Shift}')
+    expect(count()).toBe('2 of 4')
+    await userEvent.keyboard('{Enter}{Enter}{Enter}')
+    expect(count()).toBe('1 of 4')
+  })
+
+  it('closes on Escape and hands the keyboard back to the diff', async () => {
+    const onCloseSearch = vi.fn()
+    await mountFind(onCloseSearch)
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Find in pane' }), 'k0{Escape}')
+
+    expect(onCloseSearch).toHaveBeenCalledOnce()
+    expect(document.activeElement?.classList.contains('file__diff')).toBe(true)
+  })
+})
+
 // The stylesheet's half of the same two claims.
 describe('the rules the patch is drawn with', () => {
   const styles = path.join(path.dirname(fileURLToPath(import.meta.url)), '../styles')

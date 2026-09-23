@@ -36,12 +36,16 @@ export function fitLayout(chosen: DiffLayout, width: number | null): DiffLayout 
 /** The verb on a hunk header's control; which one follows from the half of the patch the hunk is in. */
 export type HunkAction = 'Stage' | 'Unstage'
 
+/** A line by its place in the parsed patch. */
+export type PatchPlace = { file: number; hunk: number; line: number }
+
 export function PatchView({
   patch,
   truncated,
   layout,
   action,
   busy = false,
+  reveal = null,
   onHunk,
   onDiscard
 }: {
@@ -52,6 +56,8 @@ export function PatchView({
   action?: HunkAction
   /** True while one is in flight, so a second click cannot race the first. */
   busy?: boolean
+  /** A line find landed on: its hunk unfolds and draws down to it. */
+  reveal?: PatchPlace | null
   onHunk?: (file: PatchFile, hunk: PatchHunk) => void
   /** Offers `Discard` on each hunk of a modified or renamed file; a whole-file change is discarded as a file. */
   onDiscard?: (file: PatchFile, hunk: PatchHunk) => void
@@ -89,9 +95,11 @@ export function PatchView({
               <HunkView
                 hunk={hunk}
                 key={at}
+                place={`${index}:${at}`}
                 language={syntaxLanguage(file.path)}
                 layout={layout}
                 startFolded={folded[index]?.[at] ?? false}
+                revealLine={reveal?.file === index && reveal.hunk === at ? reveal.line : null}
                 busy={busy}
                 {...(action === undefined || onHunk === undefined
                   ? {}
@@ -135,28 +143,34 @@ function drawCost(hunk: PatchHunk): number {
 
 function HunkView({
   hunk,
+  place,
   language,
   layout,
   startFolded,
+  revealLine,
   action,
   busy,
   onHunk,
   onDiscard
 }: {
   hunk: PatchHunk
+  /** `file:hunk`, which find paints by. */
+  place: string
   language: SyntaxLanguage | null
   layout: DiffLayout
   startFolded: boolean
+  revealLine: number | null
   action?: HunkAction
   busy: boolean
   onHunk?: () => void
   onDiscard?: () => void
 }): React.JSX.Element {
   const [folded, setFolded] = useState(startFolded)
+  if (folded && revealLine !== null) setFolded(false)
   const head = useRef<HTMLElement | null>(null)
   const count = hunk.lines.length
   return (
-    <details className="patch__hunk" open>
+    <details className="patch__hunk" open data-hunk={place}>
       {/* Sticky, and the reason the whole diff scrolls in one container: the
           `@@` line is the only thing on screen that says which part of the file
           is underneath the cursor, and it is the first thing to scroll away. */}
@@ -185,7 +199,7 @@ function HunkView({
         </button>
       ) : (
         // Keyed by layout, so a switch redraws from the top rather than all at once.
-        <HunkLines key={layout} hunk={hunk} language={language} layout={layout} />
+        <HunkLines key={layout} hunk={hunk} language={language} layout={layout} revealLine={revealLine} />
       )}
     </details>
   )
@@ -198,15 +212,24 @@ const ROWS_PER_TASK = 500
 const HunkLines = memo(function HunkLines({
   hunk,
   language,
-  layout
+  layout,
+  revealLine
 }: {
   hunk: PatchHunk
   language: SyntaxLanguage | null
   layout: DiffLayout
+  revealLine: number | null
 }): React.JSX.Element {
   const rows = useMemo(() => (layout === 'split' ? pairLines(hunk.lines) : null), [hunk, layout])
+  // Each line's index, which find paints by; a split row does not keep it.
+  const lineIndex = useMemo(
+    () => (rows === null ? null : new Map(hunk.lines.map((line, index) => [line, index]))),
+    [hunk, rows]
+  )
   const total = rows?.length ?? hunk.lines.length
   const [drawn, setDrawn] = useState(ROWS_PER_TASK)
+  const reach = rowOf(hunk, rows, revealLine) + 1
+  if (reach > drawn) setDrawn(Math.ceil(reach / ROWS_PER_TASK) * ROWS_PER_TASK)
   useEffect(() => {
     if (drawn >= total) return
     const next = setTimeout(() => setDrawn((now) => now + ROWS_PER_TASK), 0)
@@ -217,15 +240,23 @@ const HunkLines = memo(function HunkLines({
   return (
     <div className="patch__lines">
       {slices.map((from) =>
-        rows === null ? (
+        rows === null || lineIndex === null ? (
           <InlineRows key={from} lines={hunk.lines} from={from} language={language} />
         ) : (
-          <SplitRows key={from} rows={rows} from={from} language={language} />
+          <SplitRows key={from} rows={rows} lineIndex={lineIndex} from={from} language={language} />
         )
       )}
     </div>
   )
 })
+
+/** The row `line` is drawn on, or -1. */
+function rowOf(hunk: PatchHunk, rows: readonly PatchRow[] | null, line: number | null): number {
+  if (line === null) return -1
+  if (rows === null) return line
+  const target = hunk.lines[line]
+  return rows.findIndex((row) => row.old === target || row.new === target)
+}
 
 const InlineRows = memo(function InlineRows({
   lines,
@@ -243,7 +274,7 @@ const InlineRows = memo(function InlineRows({
         <div className={`patch__row patch__row--${line.kind}`} key={index}>
           <span className="patch__num">{line.oldNumber ?? ''}</span>
           <span className="patch__num">{line.newNumber ?? ''}</span>
-          <Text line={line} language={language} />
+          <Text line={line} index={from + index} language={language} />
         </div>
       ))}
     </>
@@ -252,10 +283,12 @@ const InlineRows = memo(function InlineRows({
 
 const SplitRows = memo(function SplitRows({
   rows,
+  lineIndex,
   from,
   language
 }: {
   rows: readonly PatchRow[]
+  lineIndex: ReadonlyMap<PatchLine, number>
   from: number
   language: SyntaxLanguage | null
 }): React.JSX.Element {
@@ -263,8 +296,18 @@ const SplitRows = memo(function SplitRows({
     <>
       {rows.slice(from, from + ROWS_PER_TASK).map((row, index) => (
         <div className="patch__row patch__row--split" key={index}>
-          <Side line={row.old} side="old" language={language} />
-          <Side line={row.new} side="new" language={language} />
+          <Side
+            line={row.old}
+            index={row.old === null ? -1 : (lineIndex.get(row.old) ?? -1)}
+            side="old"
+            language={language}
+          />
+          <Side
+            line={row.new}
+            index={row.new === null ? -1 : (lineIndex.get(row.new) ?? -1)}
+            side="new"
+            language={language}
+          />
         </div>
       ))}
     </>
@@ -302,10 +345,12 @@ function HunkButton({
 /** One column of a side-by-side row; an empty one is the other side's gap. */
 function Side({
   line,
+  index,
   side,
   language
 }: {
   line: PatchLine | null
+  index: number
   side: 'old' | 'new'
   language: SyntaxLanguage | null
 }): React.JSX.Element {
@@ -313,18 +358,26 @@ function Side({
   return (
     <span className={`patch__side patch__side--${line.kind}`}>
       <span className="patch__num">{(side === 'old' ? line.oldNumber : line.newNumber) ?? ''}</span>
-      <Text line={line} language={language} />
+      <Text line={line} index={index} language={language} />
     </span>
   )
 }
 
-/** The line's own text, with the marker git put in column one beside it. */
-function Text({ line, language }: { line: PatchLine; language: SyntaxLanguage | null }): React.JSX.Element {
+/** The line's own text, with the marker git put in column one beside it; `index` is its place in the hunk. */
+function Text({
+  line,
+  index,
+  language
+}: {
+  line: PatchLine
+  index: number
+  language: SyntaxLanguage | null
+}): React.JSX.Element {
   const sign = line.kind === 'added' ? '+' : line.kind === 'removed' ? '-' : ' '
   return (
     <>
       <span className={`patch__sign patch__sign--${line.kind}`}>{sign}</span>
-      <code className="patch__text">
+      <code className="patch__text" data-line={index}>
         {tokenizeLine(line.text, language).map((token, index) => (
           <span className={`patch__tok patch__tok--${token.kind}`} key={index}>
             {token.text}

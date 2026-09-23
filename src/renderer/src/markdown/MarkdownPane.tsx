@@ -50,7 +50,9 @@ export function MarkdownPane({
   onFocus,
   onClose,
   onHeaderMenu,
-  onMenu
+  onMenu,
+  searchToken = 0,
+  onCloseSearch
 }: FilePaneProps): React.JSX.Element {
   const worktreePath = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.path)
   const dirty = useWorkspaceStore((state) => state.unsavedFiles[paneId] === true)
@@ -218,7 +220,9 @@ export function MarkdownPane({
         <DiffTools diff={diff} />
       </FileBar>
       <div className="file__body" ref={diff.body}>
-        {diff.shown ? <DiffBody worktreeId={worktreeId} diff={diff} /> : null}
+        {diff.shown ? (
+          <DiffBody worktreeId={worktreeId} diff={diff} searchToken={searchToken} onCloseSearch={onCloseSearch} />
+        ) : null}
         <div className="file__view" hidden={diff.shown}>
           {loaded === null ? (
             <div className="md-frame" />
