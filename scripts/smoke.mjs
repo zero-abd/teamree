@@ -3,7 +3,7 @@
 // Boots the real `out/main/index.js`: a window of its own had no IPC bridge
 // behind it and passed anyway. Callbacks, not top-level await — Electron does
 // not pump its event loop until this module finishes evaluating.
-import { app, Menu } from 'electron'
+import { app, Menu, systemPreferences } from 'electron'
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -96,6 +96,10 @@ async function waitFor(probe, failure) {
 async function run() {
   // After `whenReady`, so the two settings above are made before the app reads them.
   await import(pathToFileURL(join(root, 'out/main/index.js')).href)
+  // Unset reads as '', registered false as '0'. See src/main/stateRestoration.ts.
+  if (process.platform === 'darwin' && systemPreferences.getUserDefault('ApplePersistence', 'string') !== '0') {
+    failures.push("AppKit's window restoration is still on")
+  }
 
   const window = await opened
   if (window.webContents.isLoading()) {
