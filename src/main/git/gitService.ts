@@ -229,6 +229,15 @@ export class GitService {
     return this.#requireWorktree(params.worktreeId)
   }
 
+  /** Renames the record only: branch, path and task are left alone, in any state. */
+  async renameWorktree(params: ParamsOf<'worktree.rename'>): Promise<Worktree> {
+    const current = this.#requireWorktree(params.worktreeId)
+    const name = params.name.trim()
+    if (!name) throw new GitServiceError(ErrorCode.InvalidParams, 'worktree name must not be blank')
+    if (name === current.name) return current
+    return this.#patch(current.id, { name }) ?? current
+  }
+
   /**
    * Returns as soon as the record exists, in state 'creating'; `whenSettled` or an
    * `events` subscription tells you how it ended.

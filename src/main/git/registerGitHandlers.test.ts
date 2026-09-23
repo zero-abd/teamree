@@ -4,6 +4,7 @@
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Project, Worktree } from '../../shared/entities'
+import { MAX_WORKTREE_NAME_CHARS } from '../../shared/methods'
 import { createDispatcher } from '../runtime/dispatcher'
 import { MethodRegistry } from '../runtime/methodRegistry'
 import { createRuntimeContext } from '../runtime/runtimeContext'
@@ -79,5 +80,30 @@ describe('registerGitHandlers', () => {
     const dispatch = call('worktree.get', { worktreeId: 'nope' })
 
     await expect(dispatch).rejects.toThrow(/^not_found:/)
+  })
+})
+
+describe('worktree.rename on the wire', () => {
+  it('renames the record, leaves branch and path, and survives a restart', async () => {
+    const { repo, service, call, store } = await wire()
+    const project = (await call('project.add', { path: repo.repoPath })) as Project
+    const created = (await call('worktree.create', { projectId: project.id, name: 'race claude' })) as Worktree
+    const ready = await service.whenSettled(created.id)
+
+    const renamed = (await call('worktree.rename', { worktreeId: created.id, name: 'the winner' })) as Worktree
+    expect(renamed).toMatchObject({ name: 'the winner', branch: ready.branch, path: ready.path })
+
+    await store.flush()
+    const reopened = await WorkspaceStore.open(path.join(repo.base, 'workspace.json'))
+    expect(reopened.getWorktree(created.id)).toMatchObject({ name: 'the winner', branch: ready.branch })
+  })
+
+  it('refuses a missing, empty or oversized name before the handler runs', async () => {
+    const { call } = await wire()
+    await expect(call('worktree.rename', { worktreeId: 'w1' })).rejects.toThrow(/^invalid_params:/)
+    await expect(call('worktree.rename', { worktreeId: 'w1', name: '' })).rejects.toThrow(/^invalid_params:/)
+    await expect(
+      call('worktree.rename', { worktreeId: 'w1', name: 'x'.repeat(MAX_WORKTREE_NAME_CHARS + 1) })
+    ).rejects.toThrow(/^invalid_params:/)
   })
 })

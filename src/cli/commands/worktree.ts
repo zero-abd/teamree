@@ -247,6 +247,25 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'rename'],
+    summary: 'Rename a worktree.',
+    details: 'Changes the name shown everywhere. The branch and the checkout path stay as they are.',
+    args: [
+      { name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true },
+      { name: 'name', description: 'The new name.', required: true }
+    ],
+    examples: ['teamree worktree rename "fix login claude" "fix login"'],
+    run: async (context) => {
+      const name = (context.args[1] as string).trim()
+      if (name.length === 0) {
+        throw new CliError({ code: 'empty_name', message: '<name> is empty.', exitCode: ExitCode.Usage })
+      }
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const renamed = await context.client.call('worktree.rename', { worktreeId: worktree.id, name })
+      return { data: renamed, text: `renamed worktree ${worktree.name} to ${renamed.name} (${renamed.id})` }
+    }
+  },
+  {
     path: ['worktree', 'status'],
     summary: 'Show live git status for one worktree.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],

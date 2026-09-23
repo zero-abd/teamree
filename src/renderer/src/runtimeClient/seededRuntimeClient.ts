@@ -591,6 +591,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'worktrees' }, { type: 'terminals' })
       return { removed: true }
     },
+    'worktree.rename': ({ worktreeId, name }) => {
+      const renamed = { ...required(worktrees.get(worktreeId), 'worktree'), name: name.trim() }
+      worktrees.set(worktreeId, renamed)
+      announce({ type: 'worktrees' })
+      return renamed
+    },
     'worktree.startPoints': ({ projectId, limit }) => {
       const project = required(projects.get(projectId), 'project')
       // Branches this window has already made are start points in their own right.

@@ -87,6 +87,9 @@ export const MAX_TERMINAL_ID_CHARS = 256
 /** Cap on a pane's name. Generous: what was typed is kept whole and shortened only where drawn. */
 export const MAX_PANE_LABEL_CHARS = 512
 
+/** Cap on a worktree's name as `worktree.rename` sets it; drawn shortened, like a pane's. */
+export const MAX_WORKTREE_NAME_CHARS = 512
+
 // Defined in `agentLaunch.ts` (importable without zod); re-exported for callers.
 export { MAX_AGENT_ARGS_CHARS }
 
@@ -213,6 +216,9 @@ export const Params = {
   }),
   /** Whether this worktree would merge into its base, without merging it. */
   worktreeMergePreview: z.object({ worktreeId: z.string().min(1) }),
+
+  /** Changes the name shown for a worktree; its branch, path and task stay as they are. */
+  worktreeRename: z.object({ worktreeId: z.string().min(1), name: z.string().min(1).max(MAX_WORKTREE_NAME_CHARS) }),
   /** The patch itself: the whole worktree, or one path in it. */
   worktreeDiff: z.object({
     worktreeId: z.string().min(1),
@@ -599,6 +605,8 @@ export type MethodContract = {
     params: z.infer<typeof Params.worktreeMergePreview>
     result: WorktreeMergePreview
   }
+
+  'worktree.rename': { params: z.infer<typeof Params.worktreeRename>; result: Worktree }
 
   'agent.list': { params: z.infer<typeof Params.agentList>; result: InstalledAgent[] }
 

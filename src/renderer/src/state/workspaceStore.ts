@@ -374,6 +374,8 @@ type WorkspaceState = {
   removeWorktree: (worktreeId: string) => Promise<void>
   /** Goes through with a removal git refused, discarding the work in it. */
   forceRemoveWorktree: (worktreeId: string) => Promise<void>
+  /** Shown at once; a refusal puts the old name back. A blank name is ignored. */
+  renameWorktree: (worktreeId: string, name: string) => Promise<void>
 
   openWorktree: (worktreeId: string) => Promise<void>
   closeWorktreeTab: (worktreeId: string) => void
@@ -1262,6 +1264,23 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           return
         }
         failed('Could not remove the worktree')(error)
+      }
+    },
+
+    async renameWorktree(worktreeId, name) {
+      const named = name.trim()
+      const previous = get().worktrees.find((entry) => entry.id === worktreeId)
+      if (!previous || named.length === 0 || named === previous.name) return
+      const withName = (to: string) => (state: WorkspaceState) => ({
+        worktrees: state.worktrees.map((entry) => (entry.id === worktreeId ? { ...entry, name: to } : entry))
+      })
+      set(withName(named))
+      try {
+        const renamed = await runtimeClient.call('worktree.rename', { worktreeId, name: named })
+        set((state) => ({ worktrees: state.worktrees.map((entry) => (entry.id === renamed.id ? renamed : entry)) }))
+      } catch (error) {
+        set(withName(previous.name))
+        failed('Could not rename the worktree')(error)
       }
     },
 

@@ -38,6 +38,7 @@ export function Sidebar({
   const openWorktree = useWorkspaceStore((state) => state.openWorktree)
   const retryWorktree = useWorkspaceStore((state) => state.retryWorktree)
   const removeWorktree = useWorkspaceStore((state) => state.removeWorktree)
+  const renameWorktree = useWorkspaceStore((state) => state.renameWorktree)
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
   const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
   const openInEditor = useWorkspaceStore((state) => state.openInEditor)
@@ -367,6 +368,7 @@ export function Sidebar({
                         onOpen={() => void openWorktree(worktree.id)}
                         onRetry={() => retryWorktree(worktree.id)}
                         onRemove={() => void removeWorktree(worktree.id)}
+                        onRename={(name) => void renameWorktree(worktree.id, name)}
                         onReveal={() => void revealInFinder(worktree.path, `the ${worktree.name} checkout`)}
                         onCopyPath={() => void copyToClipboard(worktree.path, `the path to ${worktree.name}`)}
                         onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}

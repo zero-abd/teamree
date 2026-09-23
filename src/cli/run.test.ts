@@ -273,6 +273,37 @@ describe('naming a pane from the CLI', () => {
       { terminalId: 't_1', label: null }
     ])
   })
+
+  it('renames a worktree by any selector, and carries the record in --json', async () => {
+    const seen: Array<Record<string, unknown>> = []
+    const cli = await harness((method, params, context) => {
+      if (method !== 'worktree.rename') return defaultHandler(method, params, context)
+      seen.push(params as Record<string, unknown>)
+      return { ...WORKTREES[0], name: (params as { name: string }).name }
+    })
+
+    const text = await cli.run(['worktree', 'rename', 'fix-login', 'login, the winner'])
+    expect(text.code).toBe(ExitCode.Success)
+    expect(text.out).toContain('login, the winner')
+
+    const json = await cli.run(['worktree', 'rename', 'wt_1', 'again', '--json'])
+    expect(soleJsonDocument(json.out)['data']).toMatchObject({ id: 'wt_1', name: 'again', branch: 'feature/fix-login' })
+    expect(seen).toEqual([
+      { worktreeId: 'wt_1', name: 'login, the winner' },
+      { worktreeId: 'wt_1', name: 'again' }
+    ])
+  })
+
+  it('refuses a blank worktree name without calling the runtime', async () => {
+    const seen: string[] = []
+    const cli = await harness((method, params, context) => {
+      seen.push(method)
+      return defaultHandler(method, params, context)
+    })
+
+    expect((await cli.run(['worktree', 'rename', 'fix-login', '   '])).code).toBe(ExitCode.Usage)
+    expect(seen).not.toContain('worktree.rename')
+  })
 })
 
 describe('--json output', () => {
@@ -940,7 +971,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(57)
+    expect(data.commands.length).toBe(58)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

@@ -541,6 +541,25 @@ describe('the row menu acts on the worktree it was opened on', () => {
     expect(useWorkspaceStore.getState().worktrees).toEqual([])
   })
 
+  it('renames the worktree it was opened on, and the row says the new name', async () => {
+    call.mockImplementation(async (method, params) =>
+      method === 'worktree.rename' ? worktree({ name: (params as { name: string }).name }) : undefined
+    )
+    seed({ worktrees: [worktree(), worktree({ id: 'w2', name: 'other' })] })
+    mount()
+    mouseClick(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
+    mouseClick(screen.getByRole('menuitem', { name: 'Rename…' }))
+
+    const field = screen.getByRole('textbox', { name: 'Worktree name' })
+    fireEvent.change(field, { target: { value: 'pager, the winner' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    await act(async () => undefined)
+
+    expect(call).toHaveBeenCalledWith('worktree.rename', { worktreeId: 'w1', name: 'pager, the winner' })
+    expect(screen.getByRole('button', { name: /^pager, the winner/ })).toBeTruthy()
+    expect(useWorkspaceStore.getState().worktrees.map((entry) => entry.name)).toEqual(['pager, the winner', 'other'])
+  })
+
   it('puts the runtime’s refusal in front of you as the question it is', async () => {
     call.mockRejectedValue(
       Object.assign(new Error('worktree "Rewrite the pager" has uncommitted changes'), { code: 'conflict' })

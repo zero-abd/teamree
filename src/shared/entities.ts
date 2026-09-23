@@ -42,7 +42,7 @@ export type WorktreeState =
 export type Worktree = {
   id: string
   projectId: string
-  /** Human-facing task name; also seeds the branch name. */
+  /** Human-facing name. Seeds the branch at creation; `worktree.rename` changes it later, never the branch. */
   name: string
   branch: string
   /** Absolute path to this worktree's checkout. */
@@ -62,7 +62,7 @@ export type Worktree = {
   setupTerminalId?: string
   /**
    * What this worktree was opened to do, as typed: the agent's first prompt,
-   * kept whole. `name` is its first line and the branch a slug of that.
+   * kept whole. `name` starts as its first line and the branch a slug of that.
    * Absent on a checkout made without one.
    */
   task?: string

@@ -790,3 +790,34 @@ describe('opening the settings at a section', () => {
     expect(useWorkspaceStore.getState().settingsSection).toBeNull()
   })
 })
+
+it('renames a worktree at once, keeps the runtime’s answer, and leaves branch and path alone', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const before = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!
+
+  const renaming = useWorkspaceStore.getState().renameWorktree(before.id, '  the winner ')
+  expect(useWorkspaceStore.getState().worktrees.find((entry) => entry.id === before.id)?.name).toBe('the winner')
+  await renaming
+
+  const after = useWorkspaceStore.getState().worktrees.find((entry) => entry.id === before.id)!
+  expect(after).toEqual({ ...before, name: 'the winner' })
+  expect((await runtimeClient.call('worktree.get', { worktreeId: before.id })).name).toBe('the winner')
+})
+
+it('puts the old name back when the runtime refuses a rename, and never sends a blank one', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const before = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!
+  const call = vi.spyOn(runtimeClient, 'call')
+
+  await useWorkspaceStore.getState().renameWorktree(before.id, '   ')
+  expect(call.mock.calls.filter(([method]) => method === 'worktree.rename')).toHaveLength(0)
+
+  call.mockImplementationOnce(() => Promise.reject(new Error('no')))
+  await useWorkspaceStore.getState().renameWorktree(before.id, 'refused')
+
+  expect(useWorkspaceStore.getState().worktrees.find((entry) => entry.id === before.id)?.name).toBe(before.name)
+  expect(useWorkspaceStore.getState().notices.at(-1)?.text).toBe('Could not rename the worktree: no')
+  call.mockRestore()
+})

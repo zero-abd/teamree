@@ -287,6 +287,51 @@ describe('worktree.create', () => {
   })
 })
 
+describe('worktree.rename', () => {
+  it('changes the name and nothing else', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const pending = await service.createWorktree({ projectId: project.id, name: 'pager claude', task: 'Fix the pager' })
+    const before = await service.whenSettled(pending.id)
+    const seen: GitEvent[] = []
+    service.events.on((event) => seen.push(event))
+
+    const renamed = await service.renameWorktree({ worktreeId: before.id, name: '  the winner  ' })
+
+    expect(renamed).toEqual({ ...before, name: 'the winner' })
+    expect((await service.getWorktree({ worktreeId: before.id })).name).toBe('the winner')
+    expect(seen).toEqual([{ type: 'worktree.updated', worktree: renamed }])
+  })
+
+  it('refuses a blank name and an unknown worktree', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await readyWorktree(service, project.id, 'keep me')
+
+    expect((await rejection(service.renameWorktree({ worktreeId: worktree.id, name: '   ' }))).code).toBe(
+      ErrorCode.InvalidParams
+    )
+    expect((await rejection(service.renameWorktree({ worktreeId: 'nope', name: 'x' }))).code).toBe(ErrorCode.NotFound)
+    expect((await service.getWorktree({ worktreeId: worktree.id })).name).toBe('keep me')
+  })
+
+  it('keeps a name given while the checkout is still being built', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const pending = await service.createWorktree({ projectId: project.id, name: 'early' })
+
+    await service.renameWorktree({ worktreeId: pending.id, name: 'renamed early' })
+    const settled = await service.whenSettled(pending.id)
+
+    expect(settled.state).toBe('ready')
+    expect(settled.name).toBe('renamed early')
+    expect(settled.branch).toBe('early')
+  })
+})
+
 describe('worktree.remove', () => {
   it('removes the checkout and the branch', async () => {
     const repo = await newRepo()
@@ -497,6 +542,8 @@ describe('handler seam', () => {
     const status = await handlers['worktree.status']({ worktreeId: created.id })
     expect(status.worktreeId).toBe(created.id)
     expect(status.branch).toBe('via-handlers')
+
+    expect((await handlers['worktree.rename']({ worktreeId: created.id, name: 'renamed' })).name).toBe('renamed')
 
     expect(await handlers['worktree.remove']({ worktreeId: created.id })).toEqual({ removed: true })
     expect(await handlers['project.remove']({ projectId: project.id })).toEqual({ removed: true })
