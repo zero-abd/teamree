@@ -15,16 +15,31 @@
 // Cmd+C/V in every text field. Reload is offered only under a dev server: Cmd+R
 // throws every pane view away silently.
 
-import type { MenuItemConstructorOptions } from 'electron'
+import type { AboutPanelOptionsOptions, MenuItemConstructorOptions } from 'electron'
+import { DEV_VERSION } from './appVersion'
 import type { MenuBarItem } from './menuBar'
+import { RELEASE_HOST, UPDATE_REPOSITORY } from './updates/latestRelease'
+
+const SITE_URL = 'https://teamree.us'
+
+const REPOSITORY_URL = `https://${RELEASE_HOST}/${UPDATE_REPOSITORY}`
 
 export type ApplicationMenuOptions = {
   /** Defaults to this process's platform; named so the shape can be asserted. */
   platform?: NodeJS.Platform
   /** True under `electron-vite dev`, where reloading the renderer is wanted. */
   developing?: boolean
+  /** Offers Toggle Developer Tools; see `offersDevTools`. */
+  devTools?: boolean
   /** Asks GitHub for a newer release; omitted, the item is not offered. Sits under About, where a Mac user looks. */
   checkForUpdates?: () => void
+  /** The Help menu's web pages; omitted, they are not offered. */
+  links?: {
+    version: string
+    /** `process.getSystemVersion()`. */
+    systemVersion: string
+    open: (url: string) => void
+  }
   /**
    * teamree's own commands as the window last described them. Absent until the
    * window has published: the menu is installed before the first window exists.
@@ -132,8 +147,7 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
       // Terminal text size, in place of the zoom roles that scaled the whole window.
       ...before(inSection('text')),
       { role: 'togglefullscreen' },
-      { type: 'separator' },
-      { role: 'toggleDevTools' }
+      ...(options.devTools === true ? ([{ type: 'separator' }, { role: 'toggleDevTools' }] as const) : [])
     ]
   })
 
@@ -149,8 +163,47 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
   })
 
   // The `help` role is what attaches the system's own Help search on macOS.
-  const help = inSection('help')
+  const links = options.links ? helpLinks(options.links, mac, platform) : []
+  const shortcuts = inSection('help')
+  const help = shortcuts.length > 0 ? [...shortcuts, ...after(links)] : links
   if (help.length > 0) template.push({ label: top('Help'), role: 'help', submenu: help })
 
   return template
+}
+
+/** A dev server, or `TEAMREE_DEVTOOLS=1` for debugging a built app. */
+export function offersDevTools(env: NodeJS.ProcessEnv): boolean {
+  return env.ELECTRON_RENDERER_URL !== undefined || env.TEAMREE_DEVTOOLS === '1'
+}
+
+/** `iconPath` is read off macOS only; there the panel draws the app's icon. */
+export function aboutPanelOptions(version: string, iconPath?: string): AboutPanelOptionsOptions {
+  return {
+    applicationName: 'teamree',
+    applicationVersion: version,
+    // Empty hides the bundle's build number, which is Electron's when unpackaged.
+    version: '',
+    copyright: 'Copyright © teamree contributors',
+    // `website` is read on Linux only; macOS and Windows show the credits.
+    credits: SITE_URL,
+    website: SITE_URL,
+    ...(iconPath === undefined ? {} : { iconPath })
+  }
+}
+
+function helpLinks(
+  links: NonNullable<ApplicationMenuOptions['links']>,
+  mac: boolean,
+  platform: NodeJS.Platform
+): MenuItemConstructorOptions[] {
+  const releaseNotes =
+    links.version === DEV_VERSION ? `${REPOSITORY_URL}/releases` : `${REPOSITORY_URL}/releases/tag/v${links.version}`
+  // Versions only: nothing that names the person or the machine.
+  const body = `\n\n---\nteamree ${links.version}\n${mac ? 'macOS' : platform} ${links.systemVersion}\n`
+  const issue = `${REPOSITORY_URL}/issues/new?body=${encodeURIComponent(body)}`
+  return [
+    { label: 'teamree Website', click: () => links.open(SITE_URL) },
+    { label: 'Release Notes', click: () => links.open(releaseNotes) },
+    { label: 'Report an Issue', click: () => links.open(issue) }
+  ]
 }

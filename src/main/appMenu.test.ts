@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { MenuItemConstructorOptions } from 'electron'
-import { applicationMenuTemplate, type ApplicationMenuOptions } from './appMenu'
+import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type ApplicationMenuOptions } from './appMenu'
 import type { MenuBarItem } from './menuBar'
 import { menuBarSpec } from '../renderer/src/menu/menuBar'
 import type { CommandState } from '../renderer/src/keyboard/workspaceCommands'
@@ -196,7 +196,104 @@ describe('the application menu', () => {
   it('offers reload only against a dev server', () => {
     expect(roles(applicationMenuTemplate({ platform: 'darwin' }))).not.toContain('reload')
     expect(roles(applicationMenuTemplate({ platform: 'darwin', developing: true }))).toContain('reload')
-    expect(roles(applicationMenuTemplate({ platform: 'darwin' }))).toContain('toggleDevTools')
+  })
+
+  it('offers the developer tools only when asked to', () => {
+    for (const platform of ['darwin', 'win32', 'linux'] as const) {
+      expect(roles(applicationMenuTemplate({ platform })), platform).not.toContain('toggleDevTools')
+      expect(roles(applicationMenuTemplate({ platform, devTools: true })), platform).toContain('toggleDevTools')
+    }
+  })
+
+  it('asks for the developer tools under a dev server or the debug variable, and never otherwise', () => {
+    expect(offersDevTools({})).toBe(false)
+    expect(offersDevTools({ TEAMREE_DEVTOOLS: '0' })).toBe(false)
+    expect(offersDevTools({ ELECTRON_RENDERER_URL: 'http://localhost:5173' })).toBe(true)
+    expect(offersDevTools({ TEAMREE_DEVTOOLS: '1' })).toBe(true)
+  })
+})
+
+describe('the Help menu', () => {
+  const opened = (options: Partial<ApplicationMenuOptions['links'] & object> = {}): string[] => {
+    const open = vi.fn<(url: string) => void>()
+    const template = applicationMenuTemplate({
+      platform: 'darwin',
+      commands: published(),
+      links: { version: '1.2.3', systemVersion: '15.2.0', open, ...options }
+    })
+    for (const item of submenuOf(template, 'Help')) item.click?.(undefined as never, undefined, undefined as never)
+    return open.mock.calls.map(([url]) => url)
+  }
+
+  it('lists Shortcuts, then the website, the release notes and the issue form', () => {
+    const template = applicationMenuTemplate({
+      platform: 'darwin',
+      commands: published(),
+      links: { version: '1.2.3', systemVersion: '15.2.0', open: () => {} }
+    })
+    expect(labelsOf(template, 'Help')).toEqual([
+      shipped('open-help'),
+      '—',
+      'teamree Website',
+      'Release Notes',
+      'Report an Issue'
+    ])
+    expect(shipped('open-help')).toBe('Shortcuts')
+    expect(template.find((item) => item.label === 'Help')?.role).toBe('help')
+  })
+
+  it('opens each one in the browser', () => {
+    expect(opened()).toEqual([
+      'https://teamree.us',
+      'https://github.com/zero-abd/teamree/releases/tag/v1.2.3',
+      `https://github.com/zero-abd/teamree/issues/new?body=${encodeURIComponent('\n\n---\nteamree 1.2.3\nmacOS 15.2.0\n')}`
+    ])
+  })
+
+  // The body carries the two versions and nothing that names the person or the machine.
+  it('prefills the issue with the versions and nothing else', () => {
+    const issue = new URL(opened()[2] ?? '')
+    expect([...issue.searchParams.keys()]).toEqual(['body'])
+    expect(issue.searchParams.get('body')).toBe('\n\n---\nteamree 1.2.3\nmacOS 15.2.0\n')
+  })
+
+  // A dev build has no release of its own to show.
+  it('sends a dev build to the release list', () => {
+    expect(opened({ version: '0.0.0-dev' })[1]).toBe('https://github.com/zero-abd/teamree/releases')
+  })
+
+  it('names the platform where it is not macOS', () => {
+    const open = vi.fn<(url: string) => void>()
+    const template = applicationMenuTemplate({
+      platform: 'linux',
+      links: { version: '1.2.3', systemVersion: '6.8.0', open }
+    })
+    submenuOf(template, '&Help')
+      .find((item) => item.label === 'Report an Issue')
+      ?.click?.(undefined as never, undefined, undefined as never)
+    expect(new URL(open.mock.calls[0]?.[0] ?? '').searchParams.get('body')).toContain('linux 6.8.0')
+  })
+
+  it('is there before the window has published anything', () => {
+    const template = applicationMenuTemplate({
+      platform: 'darwin',
+      links: { version: '1.2.3', systemVersion: '15.2.0', open: () => {} }
+    })
+    expect(labelsOf(template, 'Help')).toEqual(['teamree Website', 'Release Notes', 'Report an Issue'])
+  })
+})
+
+describe('the About panel', () => {
+  it('shows the version, a copyright line and the website', () => {
+    expect(aboutPanelOptions('1.2.3')).toEqual({
+      applicationName: 'teamree',
+      applicationVersion: '1.2.3',
+      version: '',
+      copyright: 'Copyright © teamree contributors',
+      credits: 'https://teamree.us',
+      website: 'https://teamree.us'
+    })
+    expect(aboutPanelOptions('1.2.3', '/icon.png').iconPath).toBe('/icon.png')
   })
 })
 
@@ -223,15 +320,13 @@ describe('the window’s own commands in the menu bar', () => {
       commands: { items: menuBarSpec(EMPTY), choose: () => {} }
     })
     for (const role of ['resetZoom', 'zoomIn', 'zoomOut'] as const) expect(roles(template)).not.toContain(role)
-    expect(labelsOf(template, 'View').slice(-8)).toEqual([
+    expect(labelsOf(template, 'View').slice(-6)).toEqual([
       '—',
       'Actual Size',
       'Bigger Text',
       'Smaller Text',
       '—',
-      'togglefullscreen',
-      '—',
-      'toggleDevTools'
+      'togglefullscreen'
     ])
     const accelerators = Object.fromEntries(items(template).map((item) => [item.label, item.accelerator]))
     expect(accelerators['Bigger Text']).toBe('CommandOrControl+=')
