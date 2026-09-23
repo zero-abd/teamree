@@ -8,7 +8,7 @@ import {
   type UpdateState,
   type Worktree
 } from '@shared/entities'
-import { fuzzyPathScore } from '@shared/fuzzyPath'
+import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
 import { cliActionLabel } from '../dialogs/cliInstallModel'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
@@ -282,20 +282,19 @@ export function moveSelection(count: number, current: number, delta: number): nu
 }
 
 /**
- * The files to list: recent ones that match first, best match first, then the runtime's answer, which
- * may be for a shorter query and is narrowed here so it does not wait on the next reply.
+ * The files to list, match quality first (`matchTier`) and recency breaking ties within a tier; with
+ * nothing typed, the recent files. The runtime's answer may be for a shorter query and is narrowed here.
  */
 export function rankFiles(found: readonly string[], recent: readonly string[], query: string, limit: number): string[] {
   const wanted = query.trim()
   if (wanted === '') return recent.slice(0, limit)
-  const hits = recent
-    .map((path, order) => ({ path, order, points: fuzzyPathScore(path, wanted) }))
-    .filter((hit): hit is { path: string; order: number; points: number } => hit.points !== null)
-    .sort((left, right) => right.points - left.points || left.order - right.order)
-    .map((hit) => hit.path)
-  const listed = new Set(hits)
-  const rest = found.filter((path) => !listed.has(path) && fuzzyPathScore(path, wanted) !== null)
-  return [...hits, ...rest].slice(0, limit)
+  const rows = [...new Set([...recent, ...found])]
+    .map((path) => ({ path, points: fuzzyPathScore(path, wanted) }))
+    .filter((row): row is { path: string; points: number } => row.points !== null)
+    .map((row) => ({ ...row, tier: matchTier(row.path, wanted), seen: recent.indexOf(row.path) }))
+  const age = (seen: number): number => (seen === -1 ? Infinity : seen)
+  rows.sort((left, right) => right.tier - left.tier || age(left.seen) - age(right.seen) || right.points - left.points)
+  return rows.slice(0, limit).map((row) => row.path)
 }
 
 /** A file row: the name to read, its directory beside it. */

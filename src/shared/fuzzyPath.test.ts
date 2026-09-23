@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fuzzyPathScore, rankPaths } from './fuzzyPath'
+import { fuzzyPathScore, matchTier, rankPaths } from './fuzzyPath'
 
 const PATHS = [
   'src/renderer/src/keyboard/workspaceShortcuts.ts',
@@ -25,6 +25,16 @@ describe('fuzzyPathScore', () => {
 
   it('ignores spaces in the query', () => {
     expect(fuzzyPathScore('src/renderer/src/palette/paletteModel.ts', 'palette model')).not.toBeNull()
+  })
+})
+
+describe('matchTier', () => {
+  it('orders exact file name, then name prefix, then one run in the path, then fuzzy', () => {
+    expect(matchTier('src/math.ts', 'math')).toBe(3)
+    expect(matchTier('src/math.ts', 'math.ts')).toBe(3)
+    expect(matchTier('src/mathHelper.ts', 'math')).toBe(2)
+    expect(matchTier('src/lib/math/index.ts', 'math')).toBe(1)
+    expect(matchTier('src/m/a/t/h.ts', 'math')).toBe(0)
   })
 })
 

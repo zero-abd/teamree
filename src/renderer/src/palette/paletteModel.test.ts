@@ -462,9 +462,20 @@ describe('the files ⌘P lists', () => {
     expect(rankFiles([], ['b.ts', 'a.ts'], '', 50)).toEqual(['b.ts', 'a.ts'])
   })
 
-  it('puts recent files that match ahead of the runtime answer, and each file once', () => {
-    const ranked = rankFiles(found, ['README.md', 'docs/mathematics.md'], 'math', 50)
-    expect(ranked).toEqual(['docs/mathematics.md', 'src/math.ts', 'src/lib/math/index.ts'])
+  // Recency breaks ties; it never lifts a worse match over a better one.
+  it('puts an exact file name above a recent file that only starts with the query', () => {
+    const ranked = rankFiles(
+      ['src/math.ts', 'packages/pkg0/src/auth7/mathHelper6.ts'],
+      ['packages/pkg0/src/auth7/mathHelper6.ts'],
+      'math',
+      50
+    )
+    expect(ranked).toEqual(['src/math.ts', 'packages/pkg0/src/auth7/mathHelper6.ts'])
+  })
+
+  it('ranks by match quality, then recency within it, and lists each file once', () => {
+    const ranked = rankFiles([...found, 'src/mathUtils.ts'], ['README.md', 'docs/mathematics.md'], 'math', 50)
+    expect(ranked).toEqual(['src/math.ts', 'docs/mathematics.md', 'src/mathUtils.ts', 'src/lib/math/index.ts'])
   })
 
   it('narrows an answer to an earlier query to what is typed now', () => {

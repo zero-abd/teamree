@@ -1,11 +1,22 @@
-// Go-to-file matching: the query's characters in order anywhere in the path, ranked so a match in
-// the file name, at word starts and in one run beats one scattered across directories.
+// Go-to-file matching: the query's characters in order anywhere in the path, ranked by tier (`matchTier`),
+// then so a match in the file name, at word starts and in one run beats one scattered across directories.
 
 const WORD_START = 8
 const IN_NAME = 3
 const RUN = 10
-const NAME_HAS_QUERY = 40
-const NAME_STARTS_WITH_QUERY = 20
+/** Above any in-tier score, so a better tier always wins. */
+const TIER = 10_000
+
+/** 3: the file name is the query (with or without extension); 2: it starts with it; 1: the path holds it in one run; 0: fuzzy. */
+export function matchTier(path: string, query: string): number {
+  const wanted = query.toLowerCase().replace(/\s+/g, '')
+  const lower = path.toLowerCase()
+  const name = lower.slice(lower.lastIndexOf('/') + 1)
+  const dot = name.lastIndexOf('.')
+  if (name === wanted || (dot > 0 && name.slice(0, dot) === wanted)) return 3
+  if (name.startsWith(wanted)) return 2
+  return lower.includes(wanted) ? 1 : 0
+}
 
 /** How well `query` matches `path`, higher is better; null when its characters are not all there in order. */
 export function fuzzyPathScore(path: string, query: string): number | null {
@@ -42,11 +53,8 @@ export function fuzzyPathScore(path: string, query: string): number | null {
     best = next
   }
 
-  const name = lower.slice(nameStart)
-  const whole = name.indexOf(wanted)
-  const named = whole === -1 ? 0 : NAME_HAS_QUERY + (whole === 0 ? NAME_STARTS_WITH_QUERY : 0)
   // Shorter paths win ties: `math.ts` over `lib/math/index.ts`.
-  return Math.max(...best) + named - path.length / 100
+  return matchTier(path, wanted) * TIER + Math.max(...best) - path.length / 100
 }
 
 /** The best `limit` of `paths` for `query`, best first; ties in path order. */
