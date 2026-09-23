@@ -371,11 +371,7 @@ export function TerminalView({
           <button
             type="button"
             className={`button button--ghost button--tiny${attention.muted ? ' pane-hands__mute--on' : ''}`}
-            title={
-              attention.muted
-                ? 'Teammates cannot type into this pane. They can still read it.'
-                : 'Stop teammates typing into this pane. It stays visible to them.'
-            }
+            title={muteTitle(attention.muted)}
             onClick={() => void mutePane(terminalId, !attention.muted)}
           >
             {attention.muted ? 'Muted' : 'Mute'}
@@ -409,6 +405,11 @@ function typedHere(typists: readonly PaneTypist[], now: number): string {
   return latest === undefined ? '' : `${latest.handle} typed here ${agoLabel(now - latest.at)}`
 }
 
+/** The mute button's tooltip: the state when muted, the action when not. */
+export function muteTitle(muted: boolean): string {
+  return muted ? 'Muted for teammates' : 'Mute for teammates'
+}
+
 /** On hover: who, how many keystrokes and bytes, and what this machine refused. */
 function attributionTitle(attention: PaneAttention, typing: readonly PaneTypist[]): string {
   const lines = attention.typists.map((typist) => {
@@ -419,7 +420,7 @@ function attributionTitle(attention: PaneAttention, typing: readonly PaneTypist[
     }, ${typist.bytes} bytes${refused}${live}`
   })
   if (attention.watchers.length > 0) lines.push(watchedBy(attention.watchers))
-  if (attention.muted) lines.push('muted: their keystrokes are refused, their reading is not')
+  if (attention.muted) lines.push('muted for teammates')
   return lines.join('\n')
 }
 

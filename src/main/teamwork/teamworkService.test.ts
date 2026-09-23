@@ -393,9 +393,7 @@ describe('adding the origin remote', () => {
   it('refuses a path no two machines could agree on, and touches nothing', async () => {
     const { service, project, repo } = await wire()
 
-    await expect(service.setOrigin({ projectId: project.id, url: '~/code/pager' })).rejects.toThrow(
-      /~ is a different directory/
-    )
+    await expect(service.setOrigin({ projectId: project.id, url: '~/code/pager' })).rejects.toThrow(/not ~$/)
     await expect(service.setOrigin({ projectId: project.id, url: '../pager' })).rejects.toThrow(/relative path/)
     expect(await repo.git(['remote'])).toBe('')
   })
@@ -406,18 +404,14 @@ describe('adding the origin remote', () => {
   it('refuses an origin that names a transport, and leaves the checkout without one', async () => {
     const { service, project, repo } = await wire()
 
-    await expect(service.setOrigin({ projectId: project.id, url: 'ext::bash' })).rejects.toThrow(
-      /not a transport teamree hands git/
-    )
+    await expect(service.setOrigin({ projectId: project.id, url: 'ext::bash' })).rejects.toThrow(/not ext::$/)
 
     expect(await repo.git(['remote'])).toBe('')
   })
 
   it('refuses anything that is neither', async () => {
     const { service, project } = await wire()
-    await expect(service.setOrigin({ projectId: project.id, url: 'pager' })).rejects.toThrow(
-      /neither a URL with a host in it/
-    )
+    await expect(service.setOrigin({ projectId: project.id, url: 'pager' })).rejects.toThrow(/not a URL with a host/)
   })
 
   // Green without a restart because the status is re-read, because something told the window `.teamree` moved.
@@ -438,7 +432,7 @@ describe('what committing and pushing would do', () => {
     const plan = await service.publishPlan({ projectId: project.id })
 
     expect(plan.files).toEqual([])
-    expect(plan.blocker).toMatch(/nothing to push yet/)
+    expect(plan.blocker).toBe('Nothing to push yet · add your key or set the relay')
   })
 
   it('names the files, the message, the remote and the branch', async () => {
@@ -463,7 +457,7 @@ describe('what committing and pushing would do', () => {
 
     const plan = await harness.service.publishPlan({ projectId: harness.project.id })
 
-    expect(plan.blocker).toMatch(/no origin remote/)
+    expect(plan.blocker).toBe('No origin remote · add it above')
   })
 })
 
@@ -527,7 +521,7 @@ describe('committing and pushing', () => {
     const harness = await wire({ email: 'ada@example.com' })
     await harness.service.joinProject({ projectId: harness.project.id })
 
-    await expect(harness.service.publish({ projectId: harness.project.id })).rejects.toThrow(/no origin remote/)
+    await expect(harness.service.publish({ projectId: harness.project.id })).rejects.toThrow(/No origin remote/)
     expect(await harness.repo.git(['status', '--porcelain'])).toMatch(/\.teamree/)
   })
 })

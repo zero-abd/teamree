@@ -19,21 +19,20 @@ export type RelayUrlParse =
  */
 export function parseRelayUrl(raw: string): RelayUrlParse {
   const trimmed = raw.trim()
-  if (!trimmed) return { ok: false, reason: 'it is empty' }
+  if (!trimmed) return { ok: false, reason: 'empty' }
 
   let url: URL
   try {
     url = new URL(trimmed)
   } catch {
-    return { ok: false, reason: 'it is not a URL' }
+    return { ok: false, reason: 'not a URL' }
   }
   if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
-    const reason = `the scheme is "${url.protocol.replace(':', '')}", not ws or wss`
     const suggestion = websocketFormOf(url)
-    if (suggestion === undefined) return { ok: false, reason }
-    return { ok: false, reason: `${reason}. A deployed relay is reached at ${suggestion}`, suggestion }
+    if (suggestion === undefined) return { ok: false, reason: `use ws:// or wss://, not ${url.protocol}//` }
+    return { ok: false, reason: `use ${suggestion}, not ${url.protocol}//`, suggestion }
   }
-  if (url.search || url.hash) return { ok: false, reason: 'a relay URL carries no query or fragment' }
+  if (url.search || url.hash) return { ok: false, reason: 'drop the query and fragment' }
   // The rendezvous id is appended, so a trailing slash would leave an empty segment mid-path.
   const path = url.pathname.replace(/\/+$/, '')
   // An origin with no path (scheme corrected, endpoint not added) can be dialled by
@@ -41,11 +40,7 @@ export function parseRelayUrl(raw: string): RelayUrlParse {
   // and send two people to debug a healthy deploy. Refused rather than corrected.
   if (path === '') {
     const suggestion = `${url.origin}${RELAY_ENDPOINT_PATH}`
-    return {
-      ok: false,
-      reason: `it has no path, and a relay is served under one. A deployed relay is reached at ${suggestion}`,
-      suggestion
-    }
+    return { ok: false, reason: `add a path: ${suggestion}`, suggestion }
   }
   return { ok: true, url: `${url.origin}${path}` }
 }

@@ -569,13 +569,13 @@ describe('team publish', () => {
       teamHandler({
         'teamwork.publishPlan': () => ({
           ...PUBLISH_PLAN,
-          blocker: 'This checkout has no origin remote, so there is nowhere to push. Add it at the top of this page.'
+          blocker: 'No origin remote · add it above'
         })
       })
     )
     const result = await cli.run(['team', 'publish', 'api'])
     expect(result.code).toBe(ExitCode.Failure)
-    expect(result.err).toContain('so there is nowhere to push')
+    expect(result.err).toContain('No origin remote · add it above')
     expect(cli.stub.received.map((call) => call.method)).not.toContain('teamwork.publish')
   })
 
@@ -588,7 +588,7 @@ describe('team publish', () => {
             ok: false,
             kind: 'rejected',
             error: ' ! [rejected]        main -> main (fetch first)',
-            advice: 'origin has commits that main does not. Pull or rebase onto origin/main and push again.'
+            advice: 'origin has commits that main does not · pull or rebase onto origin/main'
           }
         })
       })
@@ -598,7 +598,7 @@ describe('team publish', () => {
     expect(result.err).toContain('! [rejected]        main -> main (fetch first)')
     // Both halves: a commit reported as total failure gets made a second time.
     expect(result.err).toContain('Committed ccccccc')
-    expect(result.err).toContain('Pull or rebase')
+    expect(result.err).toContain('pull or rebase')
   })
 
   it('carries the kind of refusal into --json so an agent can tell retrying from fixing', async () => {
@@ -750,7 +750,7 @@ describe('team invite', () => {
     )
     const result = await cli.run(['team', 'invite', 'api'])
     expect(result.code).toBe(ExitCode.Failure)
-    expect(result.err).toContain('not a transport teamree hands git')
+    expect(result.err).toContain('not ext::')
     expect(result.out).toBe('')
   })
 

@@ -16,7 +16,7 @@ import {
   type TeamworkStatus
 } from '@shared/entities'
 import { sanitiseHandle } from '@shared/handle'
-import { checkOrigin, pathIdentityNote, type OriginKind } from '@shared/origin'
+import { checkOrigin, type OriginKind } from '@shared/origin'
 import { parseRelayUrl } from '@shared/relayUrl'
 
 export type StepId = 'identity' | 'key' | 'relay' | 'push' | 'connected'
@@ -501,7 +501,7 @@ export type OriginDraftCheck =
       /** What git will be given, which for a path is the normalised spelling. */
       url: string
       kind: OriginKind
-      /** What a teammate has to match for a path, null for a URL. Carried here so the invitation and the runtime say the same. */
+      /** What a teammate has to match for a path, null for a URL. */
       note: string | null
     }
   | { state: 'bad'; reason: string }
@@ -518,7 +518,7 @@ export function checkOriginDraft(raw: string): OriginDraftCheck {
     state: 'ok',
     url: checked.remote,
     kind: checked.kind,
-    note: checked.kind === 'path' ? pathIdentityNote(checked.remote) : null
+    note: checked.kind === 'path' ? `Teammates must mount it at ${checked.remote}` : null
   }
 }
 

@@ -531,7 +531,7 @@ describe('the origin field’s verdict on what has been typed', () => {
   it('accepts a shared path, and says what the other Mac has to match', () => {
     const checked = checkOriginDraft(' file:///Volumes/team/pager.git/ ')
     expect(checked).toMatchObject({ state: 'ok', kind: 'path', url: '/Volumes/team/pager.git' })
-    expect(checked.state === 'ok' && checked.note).toMatch(/\/Volumes\/team\/pager\.git, character for character/)
+    expect(checked.state === 'ok' && checked.note).toBe('Teammates must mount it at /Volumes/team/pager.git')
   })
 
   // The refusals left are paths no two machines could agree on; each says
@@ -539,7 +539,7 @@ describe('the origin field’s verdict on what has been typed', () => {
   it('refuses a path that means something different on each machine, and says why', () => {
     expect(checkOriginDraft('/Users/ada/code/pager').state).toBe('ok')
     expect(checkOriginDraft('../pager')).toMatchObject({ reason: expect.stringMatching(/relative path/) })
-    expect(checkOriginDraft('~/code/pager')).toMatchObject({ reason: expect.stringMatching(/different directory/) })
+    expect(checkOriginDraft('~/code/pager')).toMatchObject({ reason: expect.stringMatching(/not ~$/) })
     expect(checkOriginDraft('/Volumes/team/../team/pager.git')).toMatchObject({
       reason: expect.stringMatching(/\.\. segment/)
     })
@@ -550,15 +550,14 @@ describe('the origin field’s verdict on what has been typed', () => {
   it('refuses a transport in the field, where the allowlist used to be out of reach', () => {
     expect(checkOriginDraft('ext::bash')).toMatchObject({
       state: 'bad',
-      reason: expect.stringMatching(/not a transport teamree hands git/)
+      reason: 'Use https, http, ssh, git, host:path or a path, not ext::'
     })
   })
 
   it('refuses a word that is neither a URL nor a path', () => {
     expect(checkOriginDraft('pager')).toEqual({
       state: 'bad',
-      reason:
-        'That is neither a URL with a host in it, like https://github.com/you/repo.git, nor a path starting with /'
+      reason: 'Not a URL with a host, or a path starting with /'
     })
   })
 
@@ -579,8 +578,7 @@ describe('the relay field’s verdict on what has been typed', () => {
   it('refuses the https:// address a deploy prints, and offers the corrected one', () => {
     expect(checkRelayDraft('https://teamree-relay.example.workers.dev')).toEqual({
       state: 'bad',
-      reason:
-        'The scheme is "https", not ws or wss. A deployed relay is reached at wss://teamree-relay.example.workers.dev/v1/relay',
+      reason: 'Use wss://teamree-relay.example.workers.dev/v1/relay, not https://',
       suggestion: 'wss://teamree-relay.example.workers.dev/v1/relay'
     })
   })
@@ -592,7 +590,7 @@ describe('the relay field’s verdict on what has been typed', () => {
   })
 
   it('has no suggestion for an address nothing like a relay, and still says what is wrong', () => {
-    expect(checkRelayDraft('not a url')).toEqual({ state: 'bad', reason: 'It is not a URL', suggestion: null })
+    expect(checkRelayDraft('not a url')).toEqual({ state: 'bad', reason: 'Not a URL', suggestion: null })
   })
 
   it('says nothing at all about an empty field', () => {
@@ -1185,13 +1183,13 @@ describe('where this ended up', () => {
         ok: false,
         kind: 'rejected',
         error: '! [rejected] main -> main (fetch first)',
-        advice: 'origin has commits that main does not. Pull or rebase onto origin/main and push again.'
+        advice: 'origin has commits that main does not · pull or rebase onto origin/main'
       })
     })
     expect(result?.head).toBe('Committed, not pushed')
     const push = result?.facts.find((fact) => fact.label === 'Pushed')
     expect(push?.state).toBe('no')
-    expect(push?.detail).toMatch(/Pull or rebase onto origin\/main/)
+    expect(push?.detail).toBe('Refused: Origin has commits that main does not · pull or rebase onto origin/main')
   })
 
   // A tick or a cross would be teamree claiming it can see a commit made in a terminal.

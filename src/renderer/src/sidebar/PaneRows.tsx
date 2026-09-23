@@ -102,6 +102,6 @@ export function paneTitle(
     if (typist.writes > 0) lines.push(`${typist.handle} has typed ${typist.writes} keystrokes here`)
     if (typist.refused > 0) lines.push(`${typist.handle} tried ${typist.refused} this machine refused`)
   }
-  if (attention.muted) lines.push('muted: their keystrokes are refused, their reading is not')
+  if (attention.muted) lines.push('muted for teammates')
   return lines.join('\n')
 }

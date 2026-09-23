@@ -43,7 +43,7 @@ export type OriginCheck =
 export function checkOrigin(raw: string): OriginCheck {
   const remote = raw.trim()
   if (remote === '') {
-    return { ok: false, reason: 'type the URL you both cloned, or the path the repository is mounted at on both Macs' }
+    return { ok: false, reason: 'no URL or path' }
   }
   if (pathShaped(remote)) {
     const path = normalisePath(remote)
@@ -54,14 +54,10 @@ export function checkOrigin(raw: string): OriginCheck {
   // is what is wrong with it.
   const transport = checkTransport(remote)
   if (!transport.ok) return transport
-  if (/\s/.test(remote)) return { ok: false, reason: 'a remote URL has no spaces in it' }
+  if (/\s/.test(remote)) return { ok: false, reason: 'no spaces in a URL' }
   const normalised = normaliseUrl(remote)
   if (normalised === undefined) {
-    return {
-      ok: false,
-      reason:
-        'that is neither a URL with a host in it, like https://github.com/you/repo.git, nor a path starting with /'
-    }
+    return { ok: false, reason: 'not a URL with a host, or a path starting with /' }
   }
   return { ok: true, kind: 'url', remote, normalised }
 }
@@ -95,14 +91,7 @@ export function checkTransport(raw: string): TransportCheck {
   // `::` is the helper spelling whatever follows it, so a name is allowed only
   // in the spelling that is a URL: `https::` is not https.
   if (named[2] === '://' && TRANSPORTS.has(name)) return { ok: true }
-  return {
-    ok: false,
-    reason:
-      `"${name}" is not a transport teamree hands git. git's remote syntax includes spellings that name a ` +
-      'program rather than a place — `name::address` hands the address to one, and a scheme git has no transport ' +
-      'of its own for sends it looking for one — so an origin is held to https, http, ssh, git, file, an ' +
-      'scp-style host:path, or a path on this Mac'
-  }
+  return { ok: false, reason: `use https, http, ssh, git, host:path or a path, not ${name}${named[2]}` }
 }
 
 /**
@@ -142,60 +131,37 @@ function normalisePath(remote: string): PathCheck {
     try {
       url = new URL(remote)
     } catch {
-      return { ok: false, reason: 'that file:// URL cannot be read as a path — give the path plainly, starting with /' }
+      return { ok: false, reason: 'unreadable file:// URL · use a path starting with /' }
     }
     const host = url.hostname.toLowerCase()
     if (host !== '' && host !== 'localhost') {
-      return {
-        ok: false,
-        reason:
-          `a file:// URL with a host in it (${url.hostname}) names a machine rather than a directory on this Mac — ` +
-          'give the path the volume is mounted at here, starting with /'
-      }
+      return { ok: false, reason: `file:// URL names host ${url.hostname} · use the path it is mounted at here` }
     }
     try {
       path = decodeURIComponent(url.pathname)
     } catch {
-      return {
-        ok: false,
-        reason: 'that file:// URL has an escape in it teamree cannot decode — give the path plainly, starting with /'
-      }
+      return { ok: false, reason: 'undecodable file:// URL · use a path starting with /' }
     }
   }
 
   // About to be hashed, printed and pasted to a teammate: an invisible
   // character goes wrong silently.
   if (/[\u0000-\u001F\u007F]/.test(path)) {
-    return { ok: false, reason: 'that path has a control character in it, which no directory on a Mac is named with' }
+    return { ok: false, reason: 'control character in the path' }
   }
   if (path.startsWith('~')) {
-    return {
-      ok: false,
-      reason:
-        '~ is a different directory for every account, so two machines could never agree on what it named — give ' +
-        'the path the repository is mounted at, starting with /'
-    }
+    return { ok: false, reason: 'use a path starting with /, not ~' }
   }
   if (!path.startsWith('/')) {
-    return {
-      ok: false,
-      reason:
-        'a relative path names a different directory depending on where it is read from — give the path the ' +
-        'repository is mounted at, starting with /'
-    }
+    return { ok: false, reason: 'use a path starting with /, not a relative path' }
   }
   const segments = path.split('/').filter((segment) => segment !== '' && segment !== '.')
   // Against what was written too: the URL parser folds `..` out of a `file://`
   // URL, escapes and all, before this could see it.
   if (segments.includes('..') || hasParentSegment(fromUrl ? decodeIfPossible(remote) : remote)) {
-    return {
-      ok: false,
-      reason:
-        'a path with a .. segment in it lands somewhere different depending on the links along the way, so teamree ' +
-        'will not fold one — give the path with no .. in it'
-    }
+    return { ok: false, reason: 'use a path with no .. segment' }
   }
-  if (segments.length === 0) return { ok: false, reason: 'that is the root of the disk rather than a repository on it' }
+  if (segments.length === 0) return { ok: false, reason: 'the root of the disk, not a repository' }
   return { ok: true, path: `/${segments.join('/')}` }
 }
 

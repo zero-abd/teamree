@@ -398,7 +398,7 @@ describe('the origin remote, as a field rather than a command to go and run', ()
     fireEvent.change(screen.getByRole('textbox', { name: 'Origin' }), {
       target: { value: '~/code/pager' }
     })
-    expect(screen.getByText(/~ is a different directory for every account/)).toBeTruthy()
+    expect(screen.getByText('Use a path starting with /, not ~')).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Add origin' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
@@ -420,7 +420,7 @@ describe('the origin remote, as a field rather than a command to go and run', ()
     fireEvent.change(screen.getByRole('textbox', { name: 'Origin' }), {
       target: { value: '/Volumes/team/pager.git/' }
     })
-    expect(screen.getByText(/\/Volumes\/team\/pager\.git, character for character/)).toBeTruthy()
+    expect(screen.getByText('Teammates must mount it at /Volumes/team/pager.git')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Add origin' }))
     // Normalised, because those are the characters both machines hash.
     expect(setOrigin).toHaveBeenCalledWith('p1', '/Volumes/team/pager.git')
@@ -483,12 +483,12 @@ describe('committing and pushing, which is the one that leaves the machine', () 
   it('is disabled with the reason when the runtime says it cannot be done', () => {
     ready({
       publishPlans: {
-        p1: plan({ branch: null, blocker: 'This checkout is not on a branch, so there is nothing to push.' })
+        p1: plan({ branch: null, blocker: 'Not on a branch · git switch -c main' })
       }
     })
     mount()
     expect((screen.getByRole('button', { name: 'Commit and push' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText(/so there is nothing to push/)).toBeTruthy()
+    expect(screen.getByText('Not on a branch · git switch -c main')).toBeTruthy()
   })
 
   // A commit that landed and a push that was refused reported as one failure
@@ -505,7 +505,7 @@ describe('committing and pushing, which is the one that leaves the machine', () 
           push: {
             ok: false,
             error: '! [rejected]        main -> main (fetch first)\nerror: failed to push some refs',
-            advice: 'origin has commits that main does not. Pull or rebase onto origin/main and push again.'
+            advice: 'origin has commits that main does not · pull or rebase onto origin/main'
           },
           at: 0
         }
@@ -515,7 +515,7 @@ describe('committing and pushing, which is the one that leaves the machine', () 
     // Scoped to step 4: the summary at the bottom repeats the same advice.
     const step = within(pushStep())
     expect(step.getByText(/Committed abc1234/)).toBeTruthy()
-    expect(step.getByText(/Pull or rebase onto origin\/main/)).toBeTruthy()
+    expect(step.getByText(/pull or rebase onto origin\/main/)).toBeTruthy()
     expect(step.getByText(/failed to push some refs/)).toBeTruthy()
   })
 })

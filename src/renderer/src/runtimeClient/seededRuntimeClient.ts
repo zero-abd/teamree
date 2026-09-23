@@ -817,7 +817,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       branch: null,
       upstream: null,
       committed: false,
-      blocker: 'The seeded runtime has no repository, so there is nothing to commit or push.',
+      blocker: 'Seeded runtime: no repository',
       readAt: Date.now()
     }),
     'teamwork.publish': () => {

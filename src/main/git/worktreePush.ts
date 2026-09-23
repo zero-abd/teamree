@@ -195,14 +195,11 @@ export function pushRefusal(stderr: string, remote: string, branch: string, repo
   const text = stderr.trim()
   switch (pushFailureKind(text, reported)) {
     case 'rejected':
-      return `${remote} has commits that ${branch} does not. Pull or rebase onto ${remote}/${branch} and push again.`
+      return `${remote} has commits that ${branch} does not · pull or rebase onto ${remote}/${branch}`
     case 'host-key':
-      return (
-        `ssh has never accepted the host key for ${remote} and will not guess at one. Run ssh against that host ` +
-        'once in Terminal, accept the key, and push again.'
-      )
+      return `Unknown ssh host key for ${remote} · accept it once in Terminal`
     case 'auth':
-      return `${remote} refused the push: ${firstLine(text)}. ${authRemedy(text)}`
+      return `${remote} refused the push: ${firstLine(text).replace(/\.$/, '')} · ${authRemedy(text)}`
     default:
       return firstLine(text) || `could not push ${branch} to ${remote}`
   }
@@ -215,18 +212,12 @@ export function pushRefusal(stderr: string, remote: string, branch: string, repo
  */
 function authRemedy(stderr: string): string {
   if (/could not read (username|password)|terminal prompts disabled/i.test(stderr)) {
-    return (
-      'git wanted a username and password, and teamree runs git with no terminal to ask on. Store them once with ' +
-      'git config --global credential.helper osxkeychain and push from Terminal, or point origin at an ssh URL.'
-    )
+    return 'no terminal for a password prompt; git config --global credential.helper osxkeychain, or use an ssh URL'
   }
   if (/permission denied \(publickey|publickey,|no supported authentication/i.test(stderr)) {
-    return (
-      'ssh offered no key the remote accepts. Add yours with ssh-add --apple-use-keychain, and check that this ' +
-      'account has push access to the repository.'
-    )
+    return 'no ssh key accepted; ssh-add --apple-use-keychain, and check push access'
   }
-  return 'Check that this account has push access to the repository, and that this machine holds a credential for it.'
+  return 'check push access and this machine’s credential'
 }
 
 function firstLine(text: string): string {

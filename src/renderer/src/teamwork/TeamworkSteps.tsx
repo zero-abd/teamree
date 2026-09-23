@@ -750,7 +750,7 @@ function RelayPaneBlock({
 }
 
 /**
- * Why the typed address was refused, and the corrected one as a button rather than substituted:
+ * Why the typed address was refused, or the corrected one as a button rather than substituted:
  * host-plus-path is a guess, and wrong on the one deployment whose relay is not at the root.
  */
 function RelayRefusal({
@@ -763,8 +763,10 @@ function RelayRefusal({
   const { suggestion } = check
   return (
     <p className="members__relay-error">
-      {check.reason}
-      {suggestion === null ? null : (
+      {/* The button names the fix; the reason would say it twice. */}
+      {suggestion === null ? (
+        check.reason
+      ) : (
         <button type="button" className="button button--ghost" onClick={() => onUse(suggestion)}>
           Use {suggestion}
         </button>

@@ -52,7 +52,10 @@ describe('a repository shared over a path', () => {
 
   it('accepts a space in a path while still refusing one in a URL', () => {
     expect(checkOrigin('/Volumes/team share/app.git').ok).toBe(true)
-    expect(checkOrigin('https://example.com/a repo')).toMatchObject({ ok: false, reason: /no spaces/ })
+    expect(checkOrigin('https://example.com/a repo')).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/no spaces/)
+    })
   })
 
   it('keeps a trailing .git, because on a disk that is a different directory', () => {
@@ -88,7 +91,10 @@ describe('a repository shared over a path', () => {
       'file:///Volumes/team/../team/app.git',
       'file:///Volumes/team/%2e%2e/team/app.git'
     ]) {
-      expect(checkOrigin(spelling), spelling).toMatchObject({ ok: false, reason: /\.\. segment/ })
+      expect(checkOrigin(spelling), spelling).toMatchObject({
+        ok: false,
+        reason: expect.stringMatching(/\.\. segment/)
+      })
     }
   })
 
@@ -98,27 +104,39 @@ describe('a repository shared over a path', () => {
 
   it('refuses a relative path, because it names a different directory on each machine', () => {
     for (const spelling of ['./app.git', '../app.git', 'team/app.git']) {
-      expect(checkOrigin(spelling), spelling).toMatchObject({ ok: false, reason: /relative path/ })
+      expect(checkOrigin(spelling), spelling).toMatchObject({
+        ok: false,
+        reason: expect.stringMatching(/relative path/)
+      })
     }
   })
 
   it('refuses ~, because it is a different directory for every account', () => {
-    expect(checkOrigin('~/shared/app.git')).toMatchObject({ ok: false, reason: /~ is a different directory/ })
+    expect(checkOrigin('~/shared/app.git')).toMatchObject({ ok: false, reason: expect.stringMatching(/not ~$/) })
     expect(checkOrigin('~ada/shared/app.git').ok).toBe(false)
   })
 
   it('refuses a file:// URL that names a host, because that is a machine and not a directory', () => {
-    expect(checkOrigin('file://fileserver/team/app.git')).toMatchObject({ ok: false, reason: /names a machine/ })
+    expect(checkOrigin('file://fileserver/team/app.git')).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/names host fileserver/)
+    })
   })
 
   it('refuses a control character, which nothing on a Mac is named with', () => {
-    expect(checkOrigin('/Volumes/team/app\n.git')).toMatchObject({ ok: false, reason: /control character/ })
-    expect(checkOrigin('file:///Volumes/team/app%0A.git')).toMatchObject({ ok: false, reason: /control character/ })
+    expect(checkOrigin('/Volumes/team/app\n.git')).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/control character/)
+    })
+    expect(checkOrigin('file:///Volumes/team/app%0A.git')).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/control character/)
+    })
   })
 
   it('refuses the root of the disk, which is not a repository', () => {
-    expect(checkOrigin('/')).toMatchObject({ ok: false, reason: /root of the disk/ })
-    expect(checkOrigin('file:///')).toMatchObject({ ok: false, reason: /root of the disk/ })
+    expect(checkOrigin('/')).toMatchObject({ ok: false, reason: expect.stringMatching(/root of the disk/) })
+    expect(checkOrigin('file:///')).toMatchObject({ ok: false, reason: expect.stringMatching(/root of the disk/) })
   })
 
   it('refuses a drive letter rather than reading it as a host', () => {
@@ -198,16 +216,22 @@ describe('whether a typed origin can be used', () => {
   it('refuses an empty field by asking for the URL rather than scolding', () => {
     expect(checkOrigin('  ')).toEqual({
       ok: false,
-      reason: 'type the URL you both cloned, or the path the repository is mounted at on both Macs'
+      reason: 'no URL or path'
     })
   })
 
   it('refuses something with a space in it before git has to', () => {
-    expect(checkOrigin('https://example.com/a repo')).toMatchObject({ ok: false, reason: /no spaces/ })
+    expect(checkOrigin('https://example.com/a repo')).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/no spaces/)
+    })
   })
 
   it('says what a word that is neither could have been', () => {
-    expect(checkOrigin('pager')).toMatchObject({ ok: false, reason: /nor a path starting with \// })
+    expect(checkOrigin('pager')).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/or a path starting with \//)
+    })
   })
 })
 
@@ -219,7 +243,7 @@ describe('the transports teamree hands git', () => {
     for (const spelling of ['ext::bash', 'ext::sh -c id', 'EXT::bash', 'hg::https://hg.example/api']) {
       expect(checkOrigin(spelling), spelling).toMatchObject({
         ok: false,
-        reason: /is not a transport teamree hands git/
+        reason: expect.stringMatching(/not [\w+.-]+(::|:\/\/)$/i)
       })
     }
     expect(normaliseRemote('ext::bash')).toBeUndefined()
@@ -228,20 +252,26 @@ describe('the transports teamree hands git', () => {
   // A refusal that named the space would send somebody off to delete it.
   it('says the transport is wrong rather than the spacing', () => {
     const checked = checkOrigin('ext::sh -c id')
-    expect(checked).toMatchObject({ ok: false, reason: /"ext" is not a transport/ })
+    expect(checked).toMatchObject({ ok: false, reason: expect.stringMatching(/not ext::$/) })
     expect(checked.ok === false && checked.reason).not.toMatch(/no spaces/)
   })
 
   // An allowlist: an unknown scheme sends git looking for `git-remote-<scheme>`.
   it('refuses a scheme it does not mean to hand git, whatever the scheme is', () => {
     for (const spelling of ['ftp://example.com/api.git', 'rsync://example.com/api.git', 'made-up://example.com/api']) {
-      expect(checkOrigin(spelling), spelling).toMatchObject({ ok: false, reason: /not a transport teamree hands git/ })
+      expect(checkOrigin(spelling), spelling).toMatchObject({
+        ok: false,
+        reason: expect.stringMatching(/not [\w+.-]+(::|:\/\/)$/i)
+      })
     }
   })
 
   // `https::x` is not https.
   it('does not let an allowed name in the helper spelling through', () => {
-    expect(checkOrigin('https::evil')).toMatchObject({ ok: false, reason: /not a transport teamree hands git/ })
+    expect(checkOrigin('https::evil')).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/not [\w+.-]+(::|:\/\/)$/i)
+    })
   })
 
   // Protects against the one above: `gitlab.example:team/api.git` is scp-style
