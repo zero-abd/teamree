@@ -8,6 +8,7 @@ import {
   isFileLeaf,
   isFilePaneId,
   isMarkdownPath,
+  mediaTypeFor,
   newFilePaneId
 } from './filePane'
 
@@ -48,10 +49,24 @@ describe('file leaves', () => {
     expect(filePaneName('NOTES.md')).toBe('NOTES.md')
   })
 
-  it('picks the markdown viewer for .md and .markdown, and none for anything else', () => {
+  it('picks a viewer by extension, case-blind, with code as the fallback', () => {
     expect(isMarkdownPath('README.md')).toBe(true)
     expect(fileViewerFor('docs/Guide.MARKDOWN')).toBe('markdown')
-    expect(fileViewerFor('src/app.ts')).toBeNull()
-    expect(fileViewerFor('md')).toBeNull()
+    expect(fileViewerFor('src/app.ts')).toBe('code')
+    expect(fileViewerFor('md')).toBe('code')
+    expect(fileViewerFor('Makefile')).toBe('code')
+    expect(fileViewerFor('.env')).toBe('code')
+    expect(fileViewerFor('brand/Logo.PNG')).toBe('image')
+    expect(fileViewerFor('icon.svg')).toBe('image')
+    expect(fileViewerFor('spec.pdf')).toBe('pdf')
+    expect(fileViewerFor('a.mp3')).toBe('audio')
+    expect(fileViewerFor('b.mov')).toBe('video')
+  })
+
+  it('serves media with its MIME type and nothing else', () => {
+    expect(mediaTypeFor('a.jpg')).toBe('image/jpeg')
+    expect(mediaTypeFor('a.webm')).toBe('video/webm')
+    expect(mediaTypeFor('a.ts')).toBeNull()
+    expect(mediaTypeFor('a.md')).toBeNull()
   })
 })

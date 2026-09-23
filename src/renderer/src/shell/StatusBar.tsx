@@ -1,6 +1,7 @@
 // The bottom rail: runtime, what is on screen, how much is running, and keep-awake and its cost.
 // State only, never instructions; the git line and the two utilities open panels.
 
+import { isFilePaneId } from '@shared/filePane'
 import { collectTerminalIds } from '../panes/paneLayout'
 import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
@@ -35,7 +36,7 @@ export function StatusBar(): React.JSX.Element {
   // The rail is always mounted, so it keeps main told which way sleep should go.
   useKeepAwake()
 
-  const paneCount = collectTerminalIds(layout?.root ?? null).length
+  const paneCount = collectTerminalIds(layout?.root ?? null).filter((id) => !isFilePaneId(id)).length
   const summary = summarizeWorktreeStatus(status)
 
   const runtimeTitle =

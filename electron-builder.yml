@@ -41,6 +41,12 @@ files:
   - '!node_modules/scheduler/**'
   - '!node_modules/@xterm/**'
   - '!node_modules/zustand/**'
+  - '!node_modules/@codemirror/**'
+  - '!node_modules/@lezer/**'
+  - '!node_modules/@marijn/**'
+  - '!node_modules/crelt/**'
+  - '!node_modules/style-mod/**'
+  - '!node_modules/w3c-keyname/**'
   # node-pty's build inputs. The prebuilt binaries stay; the C++ sources,
   # vendored dependencies and gyp files that produced them do not.
   - '!node_modules/node-pty/{src,deps,third_party,scripts,binding.gyp}'

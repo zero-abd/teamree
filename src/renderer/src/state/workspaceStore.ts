@@ -131,6 +131,8 @@ export type DialogState =
   | { kind: 'confirm-remove'; worktreeId: string; reason: string; intent: RemoveIntent }
   /** Raised only when the pane is doing work a close would kill. See `closePaneModel`. */
   | { kind: 'confirm-close-pane'; terminalId: string }
+  /** A file pane with edits not on disk. */
+  | { kind: 'confirm-close-file'; terminalId: string }
   | null
 
 /** Why the removal was asked for: a retry removes the old checkout to build a new one, and the confirmation says so. */
@@ -525,6 +527,8 @@ type WorkspaceState = {
    * so it goes over the preload bridge (see `src/main/reveal`). `what` names the thing for the refusal notice.
    */
   revealInFinder: (path: string, what: string) => Promise<void>
+  /** Opens a file in the app the OS picks for it. */
+  openInDefaultApp: (path: string, what: string) => Promise<void>
   /** Sets the size of the text in every pane, and remembers it. */
   setTerminalFontSize: (size: number) => void
   /** Changes some of how every pane draws and reads keys, and remembers all of it. */
@@ -975,6 +979,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     return activeWorktreeId ? (layouts[activeWorktreeId] ?? null) : null
   }
 
+  const filePathOf = (paneId: string): string | undefined =>
+    fileLeavesIn(activeLayout()?.root ?? null).find((leaf) => leaf.terminalId === paneId)?.path
+
   /**
    * Moves the focus `step` places around the pane cycle, wrapping. One walk for both directions, so
    * the two chords undo each other; teammates' panes are in the cycle as they are in the tree.
@@ -1403,9 +1410,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
      * The question lives here and not on the buttons, so a fourth button is not written without it.
      */
     async closeTerminal(terminalId) {
-      // Nothing runs behind a file pane, and it flushes its last edit on unmount.
       if (isFilePaneId(terminalId)) {
-        await get().forceCloseTerminal(terminalId)
+        // A markdown page saves as it goes; any other file with unsaved edits asks first.
+        if (get().unsavedFiles[terminalId] && !isMarkdownPath(filePathOf(terminalId) ?? '')) {
+          set({ dialog: { kind: 'confirm-close-file', terminalId } })
+        } else await get().forceCloseTerminal(terminalId)
         return
       }
       const warning = closePaneWarning(get().terminals[terminalId])
@@ -1513,10 +1522,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
       const added = fileLeaf(newFilePaneId(), path)
       const focused = layout.focusedTerminalId
+      const files = fileLeavesIn(layout.root)
+      // Files stack in one column beside the terminals, so each new one does not halve a shell.
+      const besideFile = files.find((leaf) => leaf.terminalId === focused) ?? files.at(-1)
       const root =
-        focused !== null && collectTerminalIds(layout.root).includes(focused)
-          ? splitPaneWith(layout.root, focused, 'row', added)
-          : appendPane(layout.root, added)
+        besideFile !== undefined
+          ? splitPaneWith(layout.root, besideFile.terminalId, 'column', added)
+          : focused !== null && collectTerminalIds(layout.root).includes(focused)
+            ? splitPaneWith(layout.root, focused, 'row', added)
+            : appendPane(layout.root, added)
       set({ namingMarkdown: null })
       persistLayout({ worktreeId, root, focusedTerminalId: added.terminalId })
     },
@@ -1599,10 +1613,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     openPaneSearch() {
       // A watched pane's scrollback is a scaled picture with no search addon; the field opens only over your own.
-      // A file pane has no scrollback.
+      // A markdown page has no find bar; a code pane opens its editor's.
       if (get().focusedWatchId !== null) return
       const focused = activeLayout()?.focusedTerminalId
-      if (!focused || isFilePaneId(focused)) return
+      if (!focused || (isFilePaneId(focused) && isMarkdownPath(filePathOf(focused) ?? ''))) return
       set((state) => ({ paneSearch: { terminalId: focused, token: (state.paneSearch?.token ?? 0) + 1 } }))
     },
 
@@ -2245,6 +2259,20 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         if (!result.revealed) notify(`Could not show ${what}: ${result.reason}`, 'info')
       } catch (error) {
         failed(`Could not show ${what}`)(error)
+      }
+    },
+
+    async openInDefaultApp(path, what) {
+      const open = typeof window === 'undefined' ? undefined : window.teamree?.openPath
+      if (open === undefined) {
+        notify(`teamree cannot open ${what} from this window.`, 'info')
+        return
+      }
+      try {
+        const result = await open(path)
+        if (!result.revealed) notify(`Could not open ${what}: ${result.reason}`, 'info')
+      } catch (error) {
+        failed(`Could not open ${what}`)(error)
       }
     },
 

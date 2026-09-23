@@ -1,9 +1,8 @@
-// The worktree's files one directory at a time, plus find by name. Clicking opens the project's editor;
-// the tree adds the changes tab's letters and git's ignored dimming. No watcher; see `fileTree.ts`.
+// The worktree's files one directory at a time, plus find by name. Clicking opens a file pane; the
+// row menu still offers the editor. The tree adds the changes tab's letters and git's ignored dimming.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Worktree, WorktreeFileMatches } from '@shared/entities'
-import { fileViewerFor } from '@shared/filePane'
 import { runtimeClient } from '../../runtimeClient/currentRuntimeClient'
 import { editorLabel } from '../../sidebar/Sidebar'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
@@ -96,11 +95,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
   }, [query, worktree.id])
 
   const absolute = (path: string): string => `${worktree.path}/${path}`
-  // A file the app has a viewer for opens as a pane; the row menu still offers the editor.
-  const open = (path: string): void => {
-    if (fileViewerFor(path) !== null) openFilePane(worktree.id, path)
-    else void openInEditor(absolute(path), editorCommand, path)
-  }
+  const open = (path: string): void => openFilePane(worktree.id, path)
   const openInTheEditor = (path: string): void => void openInEditor(absolute(path), editorCommand, path)
   const reveal = (path: string): void => void revealInFinder(absolute(path), path)
 

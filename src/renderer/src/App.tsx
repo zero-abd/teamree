@@ -12,6 +12,7 @@ import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { useMenuBar } from './menu/useMenuBar'
 import { useAgentNotices } from './notices/useAgentNotices'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
+import { ConfirmCloseFileDialog } from './dialogs/ConfirmCloseFileDialog'
 import { ConfirmClosePaneDialog } from './dialogs/ConfirmClosePaneDialog'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
@@ -132,6 +133,7 @@ export function App(): React.JSX.Element {
         <ConfirmRemoveDialog worktreeId={dialog.worktreeId} reason={dialog.reason} />
       ) : null}
       {dialog?.kind === 'confirm-close-pane' ? <ConfirmClosePaneDialog terminalId={dialog.terminalId} /> : null}
+      {dialog?.kind === 'confirm-close-file' ? <ConfirmCloseFileDialog terminalId={dialog.terminalId} /> : null}
       {dialog?.kind === 'add-project' ? <AddProjectDialog /> : null}
       {dialog?.kind === 'appearance' ? <AppearanceDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}

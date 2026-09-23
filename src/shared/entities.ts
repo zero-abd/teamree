@@ -430,7 +430,18 @@ export type FileContent = {
   /** The file's mtime in ms, or 0 when it does not exist. */
   modifiedAt: number
   size: number
+  /** Text only: how the bytes were decoded and which line ending they use, kept on save. */
+  encoding?: 'utf-8' | 'utf-8-bom'
+  lineEnding?: '\n' | '\r\n'
+  /** Only for a `viewer` read: what to draw instead of `content`, which is then empty. */
+  view?: FileView
 }
+
+/** A file a viewer draws without its text: loaded from a URL, or described. */
+export type FileView =
+  | { kind: 'image' | 'pdf' | 'media'; url: string; mime: string }
+  | { kind: 'binary' }
+  | { kind: 'tooLarge'; limit: number }
 
 /** The receipt for `file.write`: the mtime the caller can compare later reads against. */
 export type FileWritten = {
