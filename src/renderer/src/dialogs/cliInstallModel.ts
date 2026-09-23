@@ -1,12 +1,5 @@
-// What the install-CLI panel says, in each state it can be in.
-//
-// Kept apart from the component for the reason the other dialog models are:
-// the interesting part is the wording, and wording is worth testing. Three of
-// these sentences carry the whole weight of the feature — the one that says a
-// password is coming and why, before it is asked for; the one that says the
-// link already exists and points at a *different* teamree, which is the failure
-// nobody works out unaided; and the one that says this app cannot do it here,
-// rather than offering a button that would fail.
+// What the install-CLI panel says in each state. The wording is the feature, so it is tested apart
+// from the component.
 
 import type { CliInstall, CliStatus } from '@shared/entities'
 
@@ -27,13 +20,7 @@ export type CliPanel = {
   pathWarning: string | null
 }
 
-/**
- * What the CLI is for, in one sentence.
- *
- * A constant because two surfaces say it — the first-run card and the dialog it
- * opens — and they had already drifted into two wordings of the same claim,
- * which is how a reader comes to wonder whether they are two different claims.
- */
+/** What the CLI is for, in one sentence; shared by the first-run card and the dialog so they agree. */
 export const CLI_PURPOSE = 'teamree ships a CLI that does everything this window can.'
 
 /** Shown while the first read is in flight, so the panel is never blank. */
@@ -68,10 +55,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     }
   }
 
-  // Ahead of the bundle and of the link itself, because this is about the app
-  // rather than about either: from here every other sentence in this panel
-  // would be true when it was read and false by the time the volume was
-  // ejected. No button, which is also what keeps the first-run card quiet.
+  // Ahead of everything: running from an image, every other sentence goes false on eject. No button.
   if (status.impermanent !== null) {
     return {
       ...CLI_PANEL_READING,
@@ -88,10 +72,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
   }
 
   if (status.bundle === null) {
-    // A packaged app ships the bundle beside the launcher, so only a source
-    // checkout reaches this — and `npm run dev` is exactly what puts it here.
-    // No button: linking a launcher with nothing behind it produces a `teamree`
-    // that exits on its first line, and on macOS it costs a password to do.
+    // Only a source checkout gets here. No button: a launcher with nothing behind it exits at once.
     return {
       ...CLI_PANEL_READING,
       headline: 'The teamree CLI has not been built yet.',
@@ -128,10 +109,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
       headline: status.dangling
         ? `${status.destination} leads to a teamree that is not there.`
         : `${status.destination} points at a different copy of teamree.`,
-      // Two failures under one state, and the sentences are opposites. The
-      // confusing one is the command that works and drives the wrong app; the
-      // other is a link whose app has been deleted or ejected, where the shell
-      // does not run anything at all and says so.
+      // Two failures, opposite sentences: a link that drives the wrong app, and one into nothing.
       detail: status.dangling
         ? `It leads to ${status.resolved}, and nothing is there.`
         : `It leads to ${status.resolved}, so typing teamree drives that copy.`,
@@ -145,10 +123,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
 
   return {
     headline: 'The teamree CLI is not on your PATH yet.',
-    // A packaged app ships its CLI; a checkout is a directory somebody can move
-    // out from under the link, which is the one thing they need told before they
-    // make one. Saying "ships inside this app" of a checkout is the kind of
-    // sentence that makes the panel's other sentences worth less.
+    // A checkout can move out from under the link; say so rather than "ships inside this app".
     detail: status.packaged
       ? `It ships inside this app, at ${status.source}.`
       : `It is at ${status.source}, in the checkout you are running from, so the link breaks if you move it.`,
@@ -160,65 +135,23 @@ export function cliPanel(status: CliStatus | null): CliPanel {
   }
 }
 
-/**
- * What the sidebar's button and the palette's entry call this.
- *
- * One function because there were two copies of these words and both were the
- * same copy — "Put teamree on my PATH", said unconditionally, in every state
- * this can be in. That sentence is true in exactly one of them.
- *
- * The state it is worst in is the one people actually meet. A link made once
- * into a build directory that has since been cleaned, or into a copy of the app
- * that has been moved or deleted, leaves `/usr/local/bin/teamree` pointing at
- * nothing: the shell finds the link, follows it, and reports that the command
- * does not exist. The app knows this exactly — `status.dangling` is that fact —
- * and was answering it by offering to do the thing that had already been done.
- * Somebody who can see a teamree on their PATH is then told to put one there,
- * which reads as an app that cannot tell whether its own link exists, and the
- * real problem goes unnamed on the one surface that knew it.
- */
+/** What the sidebar button and the palette entry call this; a dangling link is named, not re-offered. */
 export function cliActionLabel(status: CliStatus | null): string {
-  // Running from a mounted image, or from the copy macOS translocates an app
-  // to, the panel has no control at all — a link into either stops leading
-  // anywhere the moment the image is ejected or the copy is replaced, so the
-  // only honest answer is a sentence about dragging the app to Applications.
-  // The rail still carries a way in, deliberately: the panel is where that
-  // sentence lives and this is how somebody finds it. What it must not do is
-  // get them there by naming an action. Every other label here is a promise,
-  // and this is the one state where the promise cannot be kept — which is also
-  // the state every macOS user is in the first time they open this app, before
-  // they have dragged it anywhere.
+  // From an image or translocated copy there is no action to name; the label points at the panel
+  // that says to drag the app to Applications.
   if (status !== null && status.impermanent !== null) return 'Why teamree is not on your PATH'
   if (status?.state !== 'elsewhere') return 'Put teamree on my PATH'
-  // Two different failures under one state, and they need different words: a
-  // link into thin air is broken, a link into another copy works and drives the
-  // wrong app.
+  // A link into nothing is broken; a link into another copy drives the wrong app.
   return status.dangling ? 'Fix the broken teamree command' : 'Point teamree at this app'
 }
 
-/**
- * The hover text on that button: what is wrong, and then what pressing it does.
- *
- * Both halves, because either alone leaves the question the other answers. The
- * headline names a state and the promise names an effect, and somebody deciding
- * whether to press a button that will ask for their administrator password is
- * owed both before they press it.
- */
+/** The button's hover: what is wrong, then what pressing it (and its password prompt) does. */
 export function cliTitle(status: CliStatus | null): string {
   const panel = cliPanel(status)
   return panel.promise === null ? panel.headline : `${panel.headline} ${panel.promise}`
 }
 
-/**
- * Whether the sidebar should offer this at all.
- *
- * Only while there is something to do about it, and only while doing it would
- * leave a command that runs. A CLI that is already linked needs no button; a
- * platform or a build this app cannot serve needs an explanation rather than an
- * affordance; and a launcher whose bundle has not been built needs one build
- * command, not a privileged operation that ends in a broken link. The palette
- * still reaches the panel, which says which of those it is.
- */
+/** Whether the sidebar offers this: only when there is something to do and doing it leaves a working command. */
 export function offerCliInstall(status: CliStatus | null): boolean {
   return (
     status !== null &&
@@ -229,14 +162,7 @@ export function offerCliInstall(status: CliStatus | null): boolean {
   )
 }
 
-/**
- * The offer made once, unprompted, to somebody who has just installed the app.
- *
- * Null when there is nothing to offer, which is most of the time. The two
- * sentences that matter — where the link goes and whether a password is coming
- * — are taken from the panel rather than written again, so the offer and the
- * thing it opens cannot come to say different things.
- */
+/** The one unprompted offer after install, or null; its sentences come from the panel so they agree. */
 export type CliOffer = {
   headline: string
   detail: string
@@ -249,17 +175,7 @@ export type CliOffer = {
   once: string
 }
 
-/**
- * Whether to put the question at all, and in what words.
- *
- * Four reasons to stay quiet, and each of them is a case where asking would be
- * either useless or a lie: the question has been answered already; there is
- * nothing to do or no way to do it (`offerCliInstall`); this is a source
- * checkout, where the answer would be asked again on every `npm run dev` and
- * where the link would break the moment the checkout moved; or something is in
- * the way at the destination, which is a problem to explain rather than an
- * offer to make — the sidebar still carries it to the panel that explains it.
- */
+/** Whether to ask at all: not when answered, nothing to do, a source checkout, or something is in the way. */
 export function cliOffer(status: CliStatus | null): CliOffer | null {
   if (status === null || status.askedAt !== null || !status.packaged) return null
   if (!offerCliInstall(status)) return null
@@ -299,26 +215,12 @@ export function cliOutcome(install: CliInstall): string {
   return `${status.destination} now points at ${status.source}.${password}${basis}`
 }
 
-/**
- * What the sentence above it is standing on.
- *
- * The link was read back and resolved, which is a fact about a link and not
- * about the command a terminal will find. Two things can be read from here —
- * this process's own PATH and `/etc/paths` — and a shell profile is neither, so
- * the one that answered is named rather than left to be heard as "it works".
- * Somebody whose dotfiles assign PATH instead of extending it is told where to
- * look on the same line that told them the link was made.
- */
+/** Which PATH source confirmed the link, named so it is not heard as "it works". */
 function pathBasis(status: CliStatus): string {
   if (status.onPath === 'environment') {
     return `${status.directory} is on this app’s PATH, which is not necessarily your terminal’s.`
   }
-  // The strong one, and the reason this function was rewritten. teamree starts
-  // the login shell, lets it read the profile, and reads back the PATH it ended
-  // up with — the same probe every pane is built with. It used to say the
-  // opposite of this in as many words: "teamree cannot read your shell
-  // profile", appended to every answer, while the probe had been running for
-  // every terminal in the app all along.
+  // teamree reads the login shell's PATH back, the same probe every pane is built with.
   if (status.onPath === 'shell') {
     return `${status.directory} is on the PATH your login shell reports.`
   }
@@ -328,14 +230,7 @@ function pathBasis(status: CliStatus): string {
   return `Nothing teamree can read puts ${status.directory} on a PATH.`
 }
 
-/**
- * Said only when nothing this app can read puts the directory on a PATH.
- *
- * An app opened from Finder inherits no shell environment, so its own PATH
- * proves only the positive case; `/etc/paths` is the other half, and is what a
- * login shell is built from. With neither, the link will be made and the
- * command still will not be found, which is worth saying before it happens.
- */
+/** Said only when neither this process's PATH nor `/etc/paths` includes the directory. */
 function pathWarning(status: CliStatus): string | null {
   if (status.onPath !== null) return null
   return `Nothing teamree can read puts ${status.directory} on a PATH, so your shell may not find the command.`

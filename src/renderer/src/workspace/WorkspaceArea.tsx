@@ -1,24 +1,6 @@
-// The right-hand side: the panes of the worktree that is open, under the strip
-// that lists them — and, beside them, whatever teammates' panes this window has
-// open.
-//
-// Nothing else. There used to be a header row between the strip and the panes
-// — the worktree's name, a way to its directory, two counts — and every one of
-// those is said somewhere already: the sidebar's selected row and the status
-// bar name the worktree, the row's menu reveals the checkout, and the status
-// bar's git line carries the counts and opens the changes panel. A row that
-// repeats three other surfaces is a row of nothing.
-//
-// The teammates' panes are held out here rather than inside the worktree's own
-// tree for one reason, and it is about their lifetime rather than about the
-// layout. Every navigation in this area replaces what is under it: the pane
-// board takes the whole area, so does teamwork's setup, and opening another
-// worktree mounts a different tree. A watched pane put inside any of those
-// would unmount on the next click, and unmounting closes the subscription and
-// reopens it when you come back — the relay's budget paid twice over for a pane
-// nobody stopped watching. So the area is a split: the workspace on one side, a
-// teammate's pane on the other, and the gutter between them is the same gutter
-// that sits between two of your own.
+// The right-hand side: the open worktree's panes under the strip, and beside them any teammates'
+// panes. Those sit outside the worktree's tree because every navigation here replaces what is under
+// it, and unmounting a watched pane closes and reopens its subscription.
 
 import { useCallback, useMemo } from 'react'
 import { Dashboard } from '../dashboard/Dashboard'
@@ -51,14 +33,10 @@ export function WorkspaceArea({
   const closeWatchedPane = useWorkspaceStore((state) => state.closeWatchedPane)
   const noteWatchedPaneOutput = useWorkspaceStore((state) => state.noteWatchedPaneOutput)
 
-  // Here rather than inside `WorkspaceMain`, because this component is the one
-  // that is always mounted: the surfaces below it replace each other, and the
-  // moment the panes stop being on screen is exactly the moment the pane that
-  // was focused has to be written down as read.
+  // Here because this component is always mounted: the focused pane must be marked read as the panes leave.
   useMarkPanesSeen()
 
-  // Keyed by the pane rather than by position, so closing the first of three
-  // does not remount — and so re-open — the two beside it.
+  // Keyed by pane, so closing the first of three does not remount the other two.
   const cells = [
     { key: 'workspace', node: <WorkspaceMain modifier={modifier} isAppChord={isAppChord} /> },
     ...watches.map((watch) => ({
@@ -79,24 +57,13 @@ export function WorkspaceArea({
     }))
   ]
 
-  // A split of one when nobody is being watched, which renders as the workspace
-  // filling the area and no gutter at all. Rendered unconditionally all the
-  // same: a wrapper that appeared the moment a watch opened would remount the
-  // workspace under it, and with it every terminal in the open worktree.
+  // Rendered even with nobody watched: a wrapper that appeared later would remount every terminal.
   return (
     <SplitFrame className="workspace-split" direction="row" sizes={watchSizes} onResize={setWatchSizes} cells={cells} />
   )
 }
 
-/**
- * The strip, then whatever the area is showing under it.
- *
- * The strip is outside the view rather than inside the open-worktree branch of
- * it, because it is the window's top edge on this side and has to be there
- * whatever is under it: the empty states, the pane board, settings and help are
- * all drawn under the same row the window is dragged by and — with the sidebar
- * away — the macOS window buttons sit on. `TerminalTabs` decides what to list.
- */
+/** The strip, then whatever the area shows under it; the strip is the window's drag edge on this side. */
 function WorkspaceMain({
   modifier,
   isAppChord
@@ -125,13 +92,9 @@ function WorkspaceView({
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
   )
   const terminals = useWorkspaceStore((state) => state.terminals)
-  // The pane filling the workspace on its own, if one is. It is not in the
-  // layout and never goes to the runtime: maximising is a way of looking at an
-  // arrangement rather than one, and `shownRoot` is the whole of applying it.
+  // Maximising is a view, never sent to the runtime; `shownRoot` is the whole of it.
   const expandedTerminalId = useWorkspaceStore((state) => state.expandedTerminalId)
-  // A teammate's pane holding the focus is what takes it off yours. Two panes
-  // wearing the focused border would be two answers to where the next keystroke
-  // goes, and the border is the only place the window says it.
+  // A teammate's pane holding focus takes it off yours: one focused border.
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
@@ -146,16 +109,12 @@ function WorkspaceView({
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
   const helpOpen = useWorkspaceStore((state) => state.helpOpen)
 
-  // The tree as it is drawn: one leaf while a pane is maximised, otherwise the
-  // whole of it. Read here with the other hooks rather than beside the JSX,
-  // which is where the early returns below put it out of reach.
+  // Read with the other hooks, above the early returns.
   const paneRoot = useMemo(
     () => shownRoot(layout?.root ?? null, expandedTerminalId),
     [layout?.root, expandedTerminalId]
   )
-  // Where the welcome's New task would go: the open worktree's project, else
-  // the first — the same rule the ⌘N command applies, so the button and the
-  // chord under it cannot disagree about which composer opens.
+  // The same rule ⌘N applies, so button and chord open the same composer.
   const taskProject = worktree ? projects.find((project) => project.id === worktree.projectId) : projects[0]
 
   const onResize = useCallback(
@@ -167,30 +126,18 @@ function WorkspaceView({
   const onClose = useCallback((terminalId: string) => void closeTerminal(terminalId), [closeTerminal])
   const onRelaunch = useCallback((terminalId: string) => void relaunchTerminal(terminalId), [relaunchTerminal])
 
-  // Before the empty state, not after it: which pane needs you is a question
-  // about every worktree, and it is worth asking with none of them open.
+  // Before the empty state: which pane needs you is a question about every worktree.
   if (dashboardOpen) return <Dashboard />
 
-  // Same reasoning, and the reason this stopped being a modal: setting teamwork
-  // up is a question about a repository, not about the worktree that happens to
-  // be open, so it takes the area rather than floating over it.
+  // Teamwork setup is about a repository, so it takes the area.
   if (teamworkProjectId !== null) return <TeamworkView projectId={teamworkProjectId} />
 
-  // And the same for both of these. Settings is read against the machine — what
-  // is on its PATH, what its panes look like, where its checkouts are — and
-  // help is read while doing the thing it describes, which is the one case a
-  // modal is worst at: a scrim over the app is a scrim over the very panes the
-  // reader is trying to apply the sentence to. Ahead of the empty state,
-  // because a window with nothing open is exactly where somebody goes looking
-  // for either of them.
+  // Settings and help too, ahead of the empty state: a window with nothing open is where people look.
   if (settingsOpen) return <SettingsView modifier={modifier} />
   if (helpOpen) return <HelpView modifier={modifier} />
 
   if (!worktree || !activeWorktreeId) {
-    // A runtime that never came up leaves a window that looks ordinary and
-    // answers nothing. The status bar says so in three words at the bottom of
-    // the screen; this is the surface somebody is actually looking at, and
-    // every shortcut the empty state would otherwise offer is inert.
+    // A runtime that never came up looks ordinary and answers nothing; say so where people are looking.
     if (connection.phase === 'offline') {
       return (
         <main className="workspace workspace--empty">
@@ -203,9 +150,7 @@ function WorkspaceView({
       )
     }
 
-    // Nothing open — the first run, or a window with worktrees and none of
-    // them picked. One card for both: what changes is which of its buttons can
-    // answer, and the card says that by disabling the one that cannot.
+    // Nothing open: one card, the button that cannot answer disabled.
     return (
       <main className="workspace workspace--empty">
         <Welcome modifier={modifier} project={taskProject} worktree={undefined} />

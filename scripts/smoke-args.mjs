@@ -1,33 +1,12 @@
-// What `run-smoke.mjs` has to tell the Electron process it launches, and how.
-//
-// It used to tell it one thing — where the peer bundle is — as a bare
-// positional argument, read back as `process.argv[2]`. Counting positions only
-// works while nothing else is on the command line, and something else is:
-// `electronSandboxArgs()` prepends `--no-sandbox` when the run is root on
-// Linux, Electron leaves that switch in `process.argv`, and argv[2] then named
-// the smoke script rather than the bundle. The check duly reported that it
-// could not import the peer library — which is exactly what it would have said
-// if the peer library were broken.
-//
-// So these are named rather than counted. A flag read by name cannot be
-// displaced by anything added beside it, which is the property a position never
-// had, and the spellings live here so that the launcher writing them and the
-// scripts reading them cannot drift apart.
+// What `run-smoke.mjs` tells the Electron process it launches. Named flags, not positions:
+// `--no-sandbox` prepended on root Linux once shifted argv[2] and faked a broken peer library.
 
 /** Where `buildPeerBundle()` wrote the compiled peer library. */
 export const PEER_BUNDLE_FLAG = '--peer-bundle'
 
 /**
- * The throwaway user data directory the app is to run against.
- *
- * Named by the launcher rather than made by the app, because the launcher is
- * what is still running when Electron has exited, and Chromium writes its
- * profile out during shutdown — a directory the app deletes on its own way out
- * is a directory that comes back.
- *
- * Named, and deliberately not created: the launcher makes the directory *above*
- * it and leaves this one to Electron, so that the mode the smoke test reads off
- * it is the one the app would have on a first launch.
+ * The throwaway user data directory, named by the launcher (Chromium writes its profile during shutdown)
+ * and left for Electron to create, so its mode is a first launch's.
  */
 export const USER_DATA_FLAG = '--smoke-user-data'
 
@@ -43,16 +22,7 @@ export function readNamedArg(flag, argv = process.argv) {
 }
 
 /**
- * A git repository for the window to open, made by the launcher.
- *
- * Here rather than in the Electron process because making one is three
- * synchronous `git` calls and the Electron process is a callback world that
- * cannot use top-level await — but mostly because the window's own surfaces are
- * the thing being checked, and a fixture that failed to build inside the checks
- * would read as the window being broken.
- *
- * Optional: a run given no repository does the window-level checks and skips
- * the ones that need a worktree, rather than failing. That keeps this usable
- * from anywhere the launcher cannot make one.
+ * A git repository for the window to open, made by the launcher so a fixture failure does not read as
+ * a broken window. Optional: without one the worktree checks are skipped.
  */
 export const FIXTURE_REPO_FLAG = '--fixture-repo'

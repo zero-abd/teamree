@@ -1,12 +1,5 @@
-// Everything the start-from combobox decides, kept out of React so it can be
-// tested without a DOM: which rows a query leaves, how they group, where an
-// arrow key lands, and what a given row actually submits.
-//
-// Two rules shape the whole model. The runtime already ordered its options —
-// base ref first, then the current branch, then by kind and recency — so
-// nothing here re-sorts; grouping only partitions. And the typed text is always
-// a candidate in its own right, because the ref someone wants may be a raw sha,
-// or may sit in the tail the runtime dropped when it capped the list.
+// The start-from combobox, kept out of React for testing. The runtime's order is kept (grouping only
+// partitions), and the typed text is always a candidate: it may be a sha or a ref past the cap.
 
 import type { StartPoint, StartPointList } from '@shared/entities'
 

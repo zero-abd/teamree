@@ -1,15 +1,5 @@
-// Every pane in the window, flat, ordered by what needs a person.
-//
-// It takes the whole main area rather than sitting beside the panes as a
-// drawer. Two reasons, both about what this view is for: it is read across all
-// the worktrees, so binding it to the tab that happens to be open would be the
-// wrong frame; and every row in it is a way of leaving it, so it is somewhere
-// you pass through rather than something to keep open beside your work. A
-// permanent drawer would also spend terminal width on a question that is asked
-// in bursts.
-//
-// Nothing here is unmounted that was costing anything: the PTYs live in the
-// runtime, so a pane keeps running and keeps its scrollback while this is up.
+// Every pane in the window, flat, ordered by what needs a person. It takes the main area: it is read
+// across worktrees and every row is a way out. PTYs live in the runtime, so panes keep running.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -35,12 +25,7 @@ export function Dashboard(): React.JSX.Element {
   )
   const counts = useMemo(() => activityCounts(rows), [rows])
 
-  // The one filter this board has, and the reason it is a toggle rather than a
-  // field: "which of these has said something since I last looked" is the
-  // question somebody opens this view with after an hour away, and it has
-  // exactly one answer. Not remembered across launches — a board that opened
-  // hiding most of its rows because of a press yesterday would be a board that
-  // lies about how many panes there are.
+  // "Said something since I last looked"; not remembered across launches, or the board would hide rows.
   const [unreadOnly, setUnreadOnly] = useState(false)
   const unread = useUnreadPanes()
   const shown = useMemo(
@@ -48,24 +33,12 @@ export function Dashboard(): React.JSX.Element {
     [rows, unread, unreadOnly]
   )
 
-  // Escape is what every reader tries first on a view they opened to look at
-  // something. Capture, for the same reason the chords are captured: a focused
-  // pane must not eat it first.
+  // Capture phase, so a focused pane cannot eat Escape first.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      // Anything modal on top owns Escape: dismissing the palette and this view
-      // with one press would take away more than the reader asked for.
-      //
-      // `modalOnScreen` rather than `dialog`, and that is a fix rather than a
-      // tidy-up. A question about a teammate's keystrokes is not in `dialog` —
-      // nobody in this window opened it — and it is the one modal here that
-      // refuses to be dismissed, so with the old check Escape went straight
-      // past it and closed the board underneath a scrim the owner could not
-      // see through and could not get out of without answering. The window's
-      // own key handler had already been taught this; see `modalLayer.ts`,
-      // which exists because each surface learned only the half it was written
-      // beside.
+      // Anything modal on top owns Escape. `modalOnScreen`, not `dialog`: a remote-keystrokes question is
+      // not in `dialog` and would otherwise have the board close under its scrim (see `modalLayer.ts`).
       if (modalOnScreen(useWorkspaceStore.getState())) return
       event.preventDefault()
       toggleDashboard()
@@ -74,17 +47,8 @@ export function Dashboard(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [toggleDashboard])
 
-  // Opened from a chord, so the keyboard has to land somewhere it can act:
-  // the first row is both the answer to "who needs me" and the way to go there.
-  //
-  // Keyed on whether there is a row to land on rather than on mount alone,
-  // because at the moment this mounts there very often is not: the board is
-  // reachable before `bootstrap` has answered, and the empty state renders no
-  // list at all — so a mount-only effect focused nothing and the rows that
-  // arrived a moment later were unreachable from the keyboard. The ref guard is
-  // what keeps it to once: `rows` is rebuilt on every tick of the clock behind
-  // the "quiet for" column, and a focus call on each of those would drag the
-  // focus back off whatever the reader had moved it to, once a second.
+  // Focus the first row once there is one: the board opens before `bootstrap` answers, and the ref keeps
+  // it to once, since `rows` rebuilds every second for the "quiet for" column.
   const list = useRef<HTMLUListElement>(null)
   const landed = useRef(false)
   useEffect(() => {
@@ -147,9 +111,6 @@ export function Dashboard(): React.JSX.Element {
       </header>
 
       {shown.length === 0 ? (
-        /* The heading is the whole message. The sentence that used to follow
-           it — "Open a terminal with ⌘T." — was an instruction where a state
-           belongs, and one more place teaching a chord. */
         <div className="placeholder">
           <h2 className="placeholder__title">{unreadOnly && rows.length > 0 ? 'Nothing unread' : 'Nothing running'}</h2>
         </div>

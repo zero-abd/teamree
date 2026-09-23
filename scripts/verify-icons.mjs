@@ -1,41 +1,6 @@
-// Checks that the generated icon set is the thing the three packaging targets
-// and the landing page actually need, rather than a set of files with the right
-// names.
-//
-// `npm run icons` hand-writes PNG, ICO and ICNS containers with no image
-// library involved, and the artwork inside them is being replaced. The failure
-// that matters is not a missing file — electron-builder says so loudly — it is a
-// container whose directory *claims* one size and whose payload is another. An
-// ICNS assembled from a single render, with the same 512px image filed under
-// every OSType, is a valid file that macOS accepts and then draws soft in the
-// Dock at 1024, and nothing in a build log ever mentions it.
-//
-// So every check here opens the payload and reads its real IHDR width and
-// height, and compares that against what the enclosing directory promised.
-//
-// That was not enough, and the way it was not enough is the reason for the
-// second half of this file. An earlier .icns filed its 16px and 32px renders
-// under the OSTypes `icp4` and `icp5`. Every chunk in it was a clean,
-// correctly-sized PNG — this script read them and passed — and macOS drew red
-// and green noise in the Dock, because both codes are ambiguous and it read
-// them as raw ARGB, running off the end of the payload into the next chunk.
-// Reading the chunks directly is *precisely* what missed it: the chunks were
-// fine and the type was wrong.
-//
-// So there are now two independent checks that a header cannot express:
-//
-//   1. `icp4` and `icp5` are a hard failure wherever they appear. Apple's own
-//      `iconutil` writes neither; it writes `ic04`/`ic05` as RLE ARGB instead.
-//   2. Every icon is decoded and its saturated pixels counted. The mark is
-//      an off-white and two near-blacks, so a correct icon has essentially none;
-//      the corrupt 16x16 had 218 of 256. For the .icns this runs against the
-//      file *extracted* with `iconutil`, which is the only reader whose opinion
-//      matters.
-//
-// Check 2 on the .icns therefore needs macOS. Everything else — the PNGs, the
-// ICO, the chunk table, the saturation of every standalone file — is pure Node
-// and still runs on a Linux CI runner; the icns extraction is skipped there
-// with a note rather than failing.
+// Checks the generated icons are what packaging and the site need: each payload's real IHDR size
+// against what its container claims, `icp4`/`icp5` as a hard failure (macOS reads them as raw ARGB
+// and draws noise), and saturation of the decoded pixels. The .icns extraction needs macOS.
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
@@ -53,15 +18,8 @@ function fail(file, message) {
 }
 
 /**
- * The PNG-backed OSTypes `iconutil` emits, each paired with the pixel size that
- * code promises. The retina codes are the ones worth naming: ic11 is 16@2x,
- * ic12 is 32@2x, ic13 is 128@2x, ic14 is 256@2x and ic10 is 512@2x — so their
- * pixel sizes are 32, 64, 256, 512 and 1024.
- *
- * Deliberately a second, independent statement of the table in
- * scripts/make-icons.mjs rather than an import of it. A check that reads its
- * expectations out of the code it is checking agrees with that code by
- * construction, including when that code is wrong.
+ * PNG-backed OSTypes `iconutil` emits and their pixel sizes. Stated again rather than imported from
+ * make-icons.mjs, so the check cannot agree with a wrong table by construction.
  */
 const ICNS_PNG_TYPES = [
   ['ic11', 32],
@@ -74,44 +32,24 @@ const ICNS_PNG_TYPES = [
   ['ic10', 1024]
 ]
 
-/**
- * 16 and 32, which `iconutil` writes as RLE-compressed ARGB rather than PNG.
- * There is no IHDR to read, so all that can be checked here is that they are
- * present and not empty; the artwork in them is checked by extracting the file
- * further down.
- */
+/** 16 and 32: RLE ARGB with no IHDR, so only presence is checked here; extraction checks the art. */
 const ICNS_ARGB_TYPES = [
   ['ic04', 16],
   ['ic05', 32]
 ]
 
-/**
- * Never acceptable. `icp4` and `icp5` nominally mean 16x16 and 32x32, and a PNG
- * filed under either is read by macOS as raw ARGB and drawn as noise. Their
- * presence is the signature of a hand-assembled .icns and is a hard failure,
- * not a warning — this exact file shipped once.
- */
+/** Never acceptable: a PNG under `icp4`/`icp5` is read as raw ARGB and drawn as noise. It shipped once. */
 const ICNS_FORBIDDEN_TYPES = ['icp4', 'icp5']
 
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 const LINUX_SIZES = [16, 32, 48, 64, 128, 256, 512]
 
-// The page's own declarations, read off site/public/index.html: icon-256.png is
-// linked with sizes="256x256", og.png is declared 1200x630 by og:image:width and
-// og:image:height, and screenshot.png carries width/height attributes. The
-// remaining entries are the rest of the set `npm run icons` now writes — the tab
-// icon, the iOS home-screen icon and the two large web-manifest sizes — each
-// named for the pixels it must contain, which is the only thing a browser or a
-// home screen has to go on when it picks one.
+// Sizes declared by site/public/index.html, plus the rest of the set `npm run icons` writes.
 const SITE_PNGS = [
   { path: 'site/public/icon-32.png', width: 32, height: 32, required: true },
   { path: 'site/public/icon-256.png', width: 256, height: 256, required: true },
   { path: 'site/public/og.png', width: 1200, height: 630, required: true },
-  // The screenshot is the one entry here that is a 2x asset: the page reserves a
-  // 1400x900 slot for it (`width`/`height` on the <img>), and the file is the
-  // device-pixel version of that slot. Checking the 1x number would fail a
-  // correct retina image, and checking nothing would let a mismatched aspect
-  // through and shift the layout while it loads.
+  // The one 2x asset: the page reserves a 1400x900 slot for it.
   { path: 'site/public/screenshot.png', width: 2800, height: 1800, required: true },
   { path: 'site/public/apple-touch-icon.png', width: 180, height: 180, required: true },
   { path: 'site/public/icon-192.png', width: 192, height: 192, required: true },
@@ -120,11 +58,7 @@ const SITE_PNGS = [
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
-/**
- * Real dimensions of a PNG, from its IHDR. The IHDR is required by the format to
- * be the first chunk, so it always starts at byte 8: a four-byte length, the
- * four-byte type, then the width and the height.
- */
+/** Real dimensions of a PNG, from its IHDR, which the format fixes at byte 8. */
 function pngSize(bytes) {
   if (bytes.length < 24) return null
   if (!bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return null
@@ -139,14 +73,8 @@ function describe(size) {
 // ------------------------------------------------------------- the pixels --
 
 /**
- * The mark is drawn in exactly three colours — #F3F2EE, #101114 and #0B0C0E —
- * so every pixel in a correct icon is a grey, and the only spread between its
- * channels is whatever antialiasing introduces between two greys, which is
- * none. A corrupt payload read as the wrong format is the opposite: channel
- * values that no longer belong to the same pixel, which is why it comes out as
- * saturated colour. `SATURATION_LIMIT` is generous — the corrupt 16x16 that
- * prompted this was 85% saturated and a correct one is 0% — because the point
- * is to catch garbage, not to police a fringe pixel.
+ * The mark is three greys, so a correct icon has no saturated pixels; a payload read as the wrong
+ * format comes out as coloured noise (the corrupt 16x16 was 85%). The limit is generous on purpose.
  */
 const CHANNEL_SPREAD = 40
 const SATURATION_LIMIT = 0.02
@@ -158,8 +86,7 @@ function decodePng(bytes) {
   const bitDepth = bytes[24]
   const colourType = bytes[25]
   const channels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[colourType]
-  // Palette images would need the PLTE table resolved; nothing here writes one,
-  // and guessing is worse than saying so.
+  // Palette images would need PLTE resolved; nothing here writes one.
   if (bitDepth !== 8 || !channels || colourType === 3 || bytes[28] !== 0) return null
 
   const parts = []
@@ -303,8 +230,7 @@ function checkIcns(relativePath) {
     offset += length
   }
 
-  // The hard failure. A PNG under either of these is read by macOS as raw ARGB
-  // and drawn as colour noise, and it passes every size check there is.
+  // A PNG under either is drawn as noise and passes every size check.
   for (const type of ICNS_FORBIDDEN_TYPES) {
     if (found.has(type)) {
       fail(
@@ -326,9 +252,7 @@ function checkIcns(relativePath) {
       fail(relativePath, `chunk \`${type}\` does not contain a PNG.`)
       continue
     }
-    // The check this whole script exists for: the OSType is a promise about
-    // pixels, and an icns built from one render and filed under every code
-    // passes every other check there is.
+    // The point of the script: an icns filed from one render under every code passes everything else.
     if (size.width !== expected || size.height !== expected) {
       fail(
         relativePath,
@@ -339,9 +263,7 @@ function checkIcns(relativePath) {
     checkNotNoise(`${relativePath} chunk \`${type}\``, payload)
   }
 
-  // ic04/ic05 are RLE ARGB with no header to read. Presence and a plausible
-  // length is all this half of the script can say; the artwork in them is
-  // checked by extracting the file below.
+  // RLE ARGB, no header: presence and a plausible length only.
   for (const [type, expected] of ICNS_ARGB_TYPES) {
     const payload = found.get(type)
     if (!payload) {
@@ -349,8 +271,7 @@ function checkIcns(relativePath) {
     } else if (payload.length < 64) {
       fail(relativePath, `chunk \`${type}\` is only ${payload.length} bytes, which cannot be a ${expected}px icon.`)
     } else if (pngSize(payload)) {
-      // A PNG here is the icp4/icp5 mistake wearing a different name: these two
-      // codes are ARGB, and macOS will read a PNG under them as raw pixels.
+      // A PNG here is the icp4/icp5 mistake under another name.
       fail(relativePath, `chunk \`${type}\` contains a PNG. ic04 and ic05 are RLE ARGB — let iconutil write them.`)
     }
   }
@@ -362,14 +283,7 @@ function checkIcns(relativePath) {
   extractAndCheckIcns(relativePath)
 }
 
-/**
- * The check the chunk walk above cannot make: hand the file to the reader that
- * actually draws it. `iconutil -c iconset` expands every entry, ic04 and ic05
- * included, through macOS's own decoder — so if a payload is filed under a type
- * that decoder misreads, what lands on disk is the noise, and the saturation
- * check sees it. Skipped where iconutil does not exist, which is everywhere
- * except a Mac.
- */
+/** Expands the file with `iconutil`, macOS's own decoder, so misfiled payloads land as noise. Mac only. */
 function extractAndCheckIcns(relativePath) {
   if (process.platform !== 'darwin') {
     notes.push(`${relativePath} was not expanded with iconutil (not macOS), so its entries were checked as chunks only`)
@@ -417,8 +331,7 @@ function checkIco(relativePath) {
 
   for (const [index, expected] of ICO_SIZES.entries()) {
     const at = 6 + index * 16
-    // A zero byte in the directory means 256: the field is one byte wide and
-    // 256 does not fit in it.
+    // Zero means 256: the field is one byte.
     const width = bytes[at] === 0 ? 256 : bytes[at]
     const height = bytes[at + 1] === 0 ? 256 : bytes[at + 1]
     const length = bytes.readUInt32LE(at + 8)
@@ -449,21 +362,8 @@ function checkIco(relativePath) {
 // ----------------------------------------------------- the inlined copies --
 
 /**
- * Three files paste the brand vectors in rather than fetching them, for good
- * reasons — the page wants the mark in its first paint, and the OG card is
- * rasterised offline. The cost is that they drift, and drift here means the
- * site, the social card and the app icon are visibly different logos.
- *
- * They have drifted twice. Once silently, when the vectors were corrected and
- * the page kept an older drawing; and once loudly, when a resync script split
- * the lockup on its first `-->` to strip a header comment, the file turned out
- * to have several comments, and the card shipped with no mark at all. Nothing
- * caught either, because every file still existed and still parsed.
- *
- * So: extract the geometry from both sides, normalise whitespace, and insist
- * they are the same string under the same viewBox. The host's open tag is
- * matched by its id or class alone, so a change to the vector's viewBox is a
- * change to one file and a check, not to three files.
+ * The site, OG card and lockup inline the brand vectors, and have drifted twice (once shipping with no
+ * mark). Extract the geometry from both sides and insist on the same string under the same viewBox.
  */
 const INLINED = [
   { source: 'brand/mark.svg', host: 'site/public/index.html', open: '<symbol id="mark"', close: '</symbol>' },
@@ -473,12 +373,7 @@ const INLINED = [
   { source: 'brand/wordmark.svg', host: 'site/og/card.html', open: '<symbol id="wordmark"', close: '</symbol>' }
 ]
 
-/**
- * An SVG file's drawable content: everything after the root `<svg …>` tag,
- * before the closing one. The header comment, if the file has one, is stripped
- * with every other comment by `squash`, so a vector with no comment at all
- * extracts just the same.
- */
+/** An SVG's drawable content between the root tags; comments go with `squash`. */
 function vectorBody(text) {
   const root = text.indexOf('<svg')
   const start = root < 0 ? -1 : text.indexOf('>', root)
@@ -507,9 +402,7 @@ function checkInlined({ source, host, open, close }) {
     return
   }
   const wanted = squash(body)
-  // A sanity floor on the extraction itself. The failure that shipped was a
-  // three-line paste that looked like a successful one; the mark is one path
-  // of some 180 characters, so anything shorter is a fragment of it.
+  // A floor on the extraction: the mark is one ~180-character path, so anything shorter is a fragment.
   if (wanted.length < 120) {
     fail(source, `extracted to only ${wanted.length} characters of geometry, which cannot be the whole mark.`)
     return
@@ -527,8 +420,7 @@ function checkInlined({ source, host, open, close }) {
     fail(host, `has an unterminated block where ${source} is inlined.`)
     return
   }
-  // The viewBox travels with the geometry: the same paths under a different
-  // box are a cropped or a floating copy of the mark, not the mark.
+  // Same paths under a different viewBox are a cropped copy, not the mark.
   const wantedBox = viewBoxOf(text.slice(text.indexOf('<svg'), text.indexOf('>', text.indexOf('<svg'))))
   const foundBox = viewBoxOf(html.slice(at, tagEnd))
   if (wantedBox !== foundBox) {
@@ -555,9 +447,7 @@ checkPng('build/icon.png', 1024, 1024)
 checkIco('build/icon.ico')
 checkIcns('build/icon.icns')
 
-// electron-builder's `linux.icon` points at a directory and takes the size from
-// each filename, so the name and the pixels have to agree or the .desktop entry
-// installs an icon into the wrong theme directory.
+// `linux.icon` takes the size from each filename, so name and pixels must agree.
 for (const size of LINUX_SIZES) checkPng(join('build/icons', `${size}x${size}.png`), size, size)
 
 for (const entry of SITE_PNGS) {
