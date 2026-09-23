@@ -25,6 +25,7 @@ import type {
   Terminal,
   UpdateState,
   Worktree,
+  WorktreeChange,
   WorktreeChanges,
   WorktreeLog,
   WorktreeMergePreview,
@@ -194,6 +195,15 @@ export type TeamworkReadErrors = { list?: string; relay?: string; status?: strin
 
 /** A relay command running in a pane in this window, one pane per project. Rebuilt from the runtime's list, see `reconcileRelayPanes`. */
 export type { RelayPaneKind, RelayPaneState } from '../teamwork/startTeamwork'
+
+/** What Commit takes: the ticked paths plus the index, else the index alone, else every listed change. */
+export function commitScope(
+  ticked: readonly string[],
+  changes: readonly WorktreeChange[]
+): 'ticked' | 'staged' | 'all' {
+  if (ticked.length > 0) return 'ticked'
+  return changes.some((change) => change.staged) ? 'staged' : 'all'
+}
 
 /**
  * The worktree id a project's teamwork pane is created under. Namespaced so it cannot collide; the verb
@@ -494,7 +504,7 @@ type WorkspaceState = {
   toggleStaged: (path: string) => void
   /** Every changed path, or none. */
   setAllStaged: (staged: boolean) => void
-  /** Commits the ticked paths, or every listed change (new files too) when none is ticked; true when it landed. */
+  /** Commits what `commitScope` names; true when it landed. */
   commitStaged: (message: string) => Promise<boolean>
   /** Puts one hunk into the index, or takes it out. The hunk is exactly what was on screen; the runtime refuses it if the file moved on. */
   applyHunk: (worktreeId: string, path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
@@ -1970,16 +1980,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const worktreeId = get().activeWorktreeId
       if (!worktreeId) return false
       const ticked = get().stagedPaths
-      // The list is `git status` without ignored files, so this is `git add -A` for what is on screen.
-      const paths = ticked.length > 0 ? ticked : (get().changes[worktreeId]?.changes ?? []).map((change) => change.path)
-      if (paths.length === 0) return false
+      const rows = get().changes[worktreeId]?.changes ?? []
+      const scope = commitScope(ticked, rows)
+      // 'staged' names no paths: a path would be added whole, and a hunk left out of the index with it.
+      // The list is `git status` without ignored files, so 'all' is `git add -A` for what is on screen.
+      const paths = scope === 'ticked' ? ticked : scope === 'all' ? rows.map((change) => change.path) : undefined
+      if (paths?.length === 0) return false
 
       set({ committing: true })
       try {
-        const result = await runtimeClient.call('worktree.commit', { worktreeId, message, paths })
+        const result = await runtimeClient.call('worktree.commit', { worktreeId, message, ...(paths && { paths }) })
         // The commit can capture more than was ticked (anything staged earlier in a terminal); saying
         // so is the difference between a notice and a surprise.
-        const extra = result.paths.filter((path) => !paths.includes(path))
+        const extra = paths ? result.paths.filter((path) => !paths.includes(path)) : []
         notify(
           extra.length === 0
             ? `Committed ${result.shortSha}: ${result.message}`
