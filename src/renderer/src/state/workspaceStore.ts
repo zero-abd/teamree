@@ -54,6 +54,7 @@ import {
 } from '../teamwork/startTeamwork'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
+import { newPaneSize } from '../terminal/paneMetrics'
 import {
   clampSidebarWidth,
   readStoredSidebarWidth,
@@ -1025,6 +1026,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }))
   }
 
+  /**
+   * The size to open a pane at, or nothing when this window cannot say.
+   *
+   * Sent with `terminal.create` so the pty is born the size of the pane. A
+   * full-screen agent reads its terminal's size once, at startup, and lays the
+   * whole frame out to it; a pane spawned at 80x24 and corrected a frame later
+   * has already been drawn wrong, and stays wrong until something resizes it.
+   * `paneMetrics.ts` makes the argument in full.
+   *
+   * Nothing is a real answer — there is no grid on screen during the first
+   * bootstrap, and a headless window has nothing to measure — and the runtime's
+   * own default stands for it, exactly as it does for a pane the CLI opens.
+   */
+  const paneSizeFor = (worktreeId: string): { cols?: number; rows?: number } =>
+    newPaneSize(get().terminalFontSize, get().layouts[worktreeId]?.root ?? null) ?? {}
+
   const refreshLayout = async (worktreeId: string): Promise<void> => {
     // Nothing on screen depends on the layout of a worktree with no tab open.
     if (!get().openWorktreeIds.includes(worktreeId)) return
@@ -1694,6 +1711,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
                 worktreeId: worktree.id,
                 command: agentCommand,
                 label,
+                ...paneSizeFor(worktree.id),
                 ...(agentArgs === undefined ? {} : { agentArgs }),
                 ...(task ? { prompt: task } : {})
               })
@@ -2001,7 +2019,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async createTerminal(worktreeId) {
       try {
-        const terminal = await runtimeClient.call('terminal.create', { worktreeId })
+        const terminal = await runtimeClient.call('terminal.create', { worktreeId, ...paneSizeFor(worktreeId) })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
         // Creation appends and focuses one pane in the runtime, and this is the
         // one focus a layout may bring with it: it was asked for here.
@@ -2192,9 +2210,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         const terminal = await runtimeClient.call('terminal.create', {
           worktreeId,
           command,
+          ...paneSizeFor(worktreeId),
           ...(agentArgs === undefined ? {} : { agentArgs })
         })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+        // A click on the picker, like a click on the new-terminal button: the
+        // one kind of pane whose focus the layout may carry in. Named before
+        // the refresh that reads it, same as `createTerminal`.
+        panesAskedFor.add(terminal.id)
         refresher.request(refreshTargets({ layouts: [worktreeId] }))
         await refresher.flush()
       } catch (error) {
@@ -2436,7 +2459,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         const terminal = await runtimeClient.call('terminal.create', {
           worktreeId: teamworkPaneWorktreeId(projectId, kind),
           cwd: project.path,
-          command
+          command,
+          ...paneSizeFor(teamworkPaneWorktreeId(projectId, kind))
         })
         set((state) => ({
           terminals: { ...state.terminals, [terminal.id]: terminal },

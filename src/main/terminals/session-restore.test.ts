@@ -625,12 +625,16 @@ describePty('restoring terminals across a restart', () => {
     // The command was not re-run, so this one is honest about being new.
     expect(byId.get(plainPane.id)?.restored).toBe('shell')
 
-    // Typing is the user taking the pane over, and the write says so, which is
-    // what lets the change stream retire the badge.
-    expect(second.write(agentPane.id, 'x')).toBe(true)
+    // Typing is the user taking the pane over, and the write reports it, which
+    // is what lets the change stream retire the badge.
+    const answered: string[] = []
+    second.onPaneAnswered((terminalId) => answered.push(terminalId))
+    second.write(agentPane.id, 'x')
+    expect(answered).toEqual([agentPane.id])
     expect(second.list('wt_1').find((terminal) => terminal.id === agentPane.id)?.restored).toBeUndefined()
     // A second keystroke has nothing left to announce.
-    expect(second.write(agentPane.id, 'y')).toBe(false)
+    second.write(agentPane.id, 'y')
+    expect(answered).toEqual([agentPane.id])
   }, 20_000)
 
   // A pane whose conversation is not in the agent's store starts the agent
@@ -674,9 +678,12 @@ describePty('restoring terminals across a restart', () => {
     // A device-attributes reply and a cursor-position report, which is what
     // xterm sends back when the agent asks — and nothing an announcement is
     // owed for, because nothing a client holds has changed.
-    expect(first.write(pane.id, '\u001b[?62;c', false)).toBe(false)
+    const answered: string[] = []
+    first.onPaneAnswered((terminalId) => answered.push(terminalId))
+    first.write(pane.id, '\u001b[?62;c', false)
     first.write(pane.id, '\u001b[1;1R', false)
     expect(repositories.listTerminals()[0]?.typed).toBe(false)
+    expect(answered).toEqual([])
 
     // And one keystroke says what all of those could not.
     first.write(pane.id, 'hello\r')

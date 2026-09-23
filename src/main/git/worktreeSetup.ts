@@ -31,7 +31,7 @@ export const SETUP_PANE_LABEL = 'setup'
  */
 export type SetupPanes = {
   create(params: { worktreeId: string; label: string }): Terminal
-  write(terminalId: string, data: string): boolean
+  write(terminalId: string, data: string): void
 }
 
 /**
