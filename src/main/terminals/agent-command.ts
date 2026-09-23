@@ -3,6 +3,7 @@
 // it cannot model comes back unchanged or with the selector appended.
 
 import { randomUUID } from 'node:crypto'
+import { z } from 'zod'
 import type { AgentKind } from '../../shared/entities'
 
 export type { AgentKind }
@@ -163,6 +164,14 @@ const AGENTS: Readonly<Record<AgentKind, AgentSpec>> = {
 }
 
 export const AGENT_KINDS = Object.keys(AGENTS) as AgentKind[]
+
+const KNOWN_KINDS: ReadonlySet<string> = new Set(AGENT_KINDS)
+
+/** An agent field another build wrote. A kind this build does not know reads as no agent, not as a bad record. */
+export const AgentKindOnRead = z
+  .string()
+  .transform((kind) => (KNOWN_KINDS.has(kind) ? (kind as AgentKind) : undefined))
+  .optional()
 
 /** The names a harness runs under, the one discovery prefers first. */
 export function agentExecutables(agent: AgentKind): readonly string[] {

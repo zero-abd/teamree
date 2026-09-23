@@ -56,7 +56,7 @@ import {
   TEAMMATE_CACHE_FILE,
   type TeammateCache
 } from '../../store/teammateCache'
-import { AGENT_KINDS } from '../../terminals/agent-command'
+import { AgentKindOnRead } from '../../terminals/agent-command'
 import { badPaneId, TeamworkError } from '../errors'
 import { createRemoteWriteLog, returnsIn, type RemoteWriteRecorder } from './writeLog'
 import { previewOf } from './writePreview'
@@ -1900,7 +1900,7 @@ const PanePayload = z.object({
   id: z.string().min(1),
   title: z.string(),
   shell: z.string(),
-  agent: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
+  agent: AgentKindOnRead,
   running: z.boolean(),
   exitCode: z.number().optional(),
   busy: z.boolean(),
@@ -1944,9 +1944,7 @@ export function parsePeerPresence(value: unknown, onlyProjectKey: string | undef
   return {
     revision: parsed.data.revision,
     handle: parsed.data.handle ?? null,
-    // `AGENT_KINDS` is an array rather than a tuple, so `z.enum` over it widens
-    // the agent to `string`; the cast puts it back, as in `store/teammateCache.ts`.
-    projects: project ? [boundProject(project as PeerProject)] : []
+    projects: project ? [boundProject(project)] : []
   }
 }
 

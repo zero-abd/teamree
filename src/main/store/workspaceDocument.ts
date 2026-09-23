@@ -7,7 +7,7 @@ import { z } from 'zod'
 import type { Layout, PaneNode, Project, Worktree } from '../../shared/entities'
 import { MAX_PANE_LABEL_CHARS } from '../../shared/methods'
 import { sanitizeAppearance, type Appearance } from '../../shared/theme'
-import { AGENT_KINDS } from '../terminals/agent-command'
+import { AgentKindOnRead } from '../terminals/agent-command'
 import type { TerminalRecord } from '../terminals/session-restore'
 
 export const WORKSPACE_DOCUMENT_VERSION = 1
@@ -71,7 +71,7 @@ const TerminalRecordSchema = z.object({
   cwd: z.string().min(1),
   shell: z.string().min(1),
   command: z.string().min(1).optional(),
-  agent: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
+  agent: AgentKindOnRead,
   agentSessionId: z.string().min(1).optional(),
   // `terminal rename --help` promises the label survives a restart; capped at the wire's length.
   label: z.string().min(1).max(MAX_PANE_LABEL_CHARS).optional(),
