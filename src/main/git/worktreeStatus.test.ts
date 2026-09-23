@@ -3,6 +3,9 @@ import { GitService } from './gitService'
 import { createTempRepo, type TempRepo } from './testRepository'
 import { parsePorcelainV2, readWorktreeStatus } from './worktreeStatus'
 
+/** Builds a NUL-separated status stream the way git writes one. */
+const records = (...entries: string[]): string => entries.map((entry) => `${entry}\0`).join('')
+
 const repos: TempRepo[] = []
 const services: GitService[] = []
 
@@ -14,7 +17,7 @@ afterEach(async () => {
 describe('parsePorcelainV2', () => {
   it('separates staged, unstaged, untracked and conflicted entries', () => {
     const parsed = parsePorcelainV2(
-      [
+      records(
         '# branch.oid 1111111111111111111111111111111111111111',
         '# branch.head feature',
         '# branch.upstream origin/feature',
@@ -22,12 +25,12 @@ describe('parsePorcelainV2', () => {
         '1 M. N... 100644 100644 100644 aaa bbb staged.txt',
         '1 .M N... 100644 100644 100644 aaa bbb unstaged.txt',
         '1 MM N... 100644 100644 100644 aaa bbb both.txt',
-        '2 R. N... 100644 100644 100644 aaa bbb R100 renamed.txt\toriginal.txt',
+        '2 R. N... 100644 100644 100644 aaa bbb R100 renamed.txt',
+        'original.txt',
         'u UU N... 100644 100644 100644 100644 aaa bbb ccc conflicted.txt',
         '? untracked one.txt',
-        '! ignored.txt',
-        ''
-      ].join('\n')
+        '! ignored.txt'
+      )
     )
 
     expect(parsed).toEqual({
@@ -47,8 +50,17 @@ describe('parsePorcelainV2', () => {
     })
   })
 
+  it('does not count what the project carries into every worktree', () => {
+    const stream = records('# branch.head main', '? node_modules', '? .env', '? notes.md')
+
+    const parsed = parsePorcelainV2(stream, { linkedPaths: ['node_modules'], copiedPaths: ['.env'] })
+
+    expect(parsePorcelainV2(stream).untracked).toBe(3)
+    expect(parsed.untracked).toBe(1)
+  })
+
   it('reports a detached head with no branch and no divergence', () => {
-    const parsed = parsePorcelainV2('# branch.oid abc\n# branch.head (detached)\n')
+    const parsed = parsePorcelainV2(records('# branch.oid abc', '# branch.head (detached)'))
     expect(parsed.detached).toBe(true)
     expect(parsed.branch).toBe('')
     expect(parsed.ahead).toBe(0)

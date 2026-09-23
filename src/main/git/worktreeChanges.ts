@@ -13,6 +13,7 @@
 
 import type { WorktreeChange, WorktreeChangeKind, WorktreeChanges, WorktreeDiff } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
+import { hasPreparedPaths, isPreparedPath, type PreparedPaths } from './worktreePreparation'
 
 /** Rows returned before the list reports itself truncated. */
 export const DEFAULT_CHANGE_LIMIT = 500
@@ -21,6 +22,16 @@ export const DEFAULT_CHANGE_LIMIT = 500
 export const DEFAULT_DIFF_MAX_BYTES = 1024 * 1024
 
 export const DEFAULT_DIFF_CONTEXT_LINES = 3
+
+/**
+ * Untracked files a whole-worktree patch will show before it stops adding them.
+ *
+ * Each one costs a `git diff --no-index`, a process apiece, so an unbounded
+ * list is a minute of spawning for a patch nobody will read to the end. Past
+ * the cap the diff says it is truncated, which is the same thing it says when
+ * the bytes run out.
+ */
+export const DEFAULT_DIFF_UNTRACKED_LIMIT = 100
 
 /**
  * Reads the NUL-separated records of `status --porcelain=v2 -z`.
@@ -134,10 +145,29 @@ export function sortChanges(changes: readonly WorktreeChange[]): WorktreeChange[
   return [...changes].sort((left, right) => rank(left) - rank(right) || left.path.localeCompare(right.path))
 }
 
+/**
+ * Drops what teamree put in the checkout itself.
+ *
+ * A worktree is born with the project's linked directories and copied files
+ * already in it, and git has no way to know they were not written by whoever is
+ * working here. Counting them as changes makes every new worktree open dirty,
+ * with a row nobody can act on: the developer did not add `node_modules`, and
+ * committing or discarding it is the wrong answer either way.
+ */
+export function withoutPreparedPaths(
+  changes: readonly WorktreeChange[],
+  prepared: PreparedPaths | undefined
+): WorktreeChange[] {
+  if (!hasPreparedPaths(prepared)) return [...changes]
+  return changes.filter((change) => !isPreparedPath(prepared, change.path, change.kind === 'untracked'))
+}
+
 export type ChangesReadOptions = {
   worktreeId: string
   worktreePath: string
   limit?: number
+  /** What this project carries into every worktree, and so is not a change. */
+  prepared?: PreparedPaths
   signal?: AbortSignal
   now?: () => number
 }
@@ -157,7 +187,7 @@ export async function readWorktreeChanges(runner: GitRunner, options: ChangesRea
     timeoutMs: 30_000
   })
 
-  const all = sortChanges(parseChangeRecords(stdout))
+  const all = sortChanges(withoutPreparedPaths(parseChangeRecords(stdout), options.prepared))
   return {
     worktreeId: options.worktreeId,
     changes: all.slice(0, limit),
@@ -175,6 +205,10 @@ export type DiffReadOptions = {
   staged?: boolean
   contextLines?: number
   maxBytes?: number
+  /** Untracked files the whole-worktree patch will show. */
+  untrackedLimit?: number
+  /** What this project carries into every worktree, and so is not a change. */
+  prepared?: PreparedPaths
   /** The platform's empty file, for diffing something git is not tracking. */
   nullDevice?: string
   signal?: AbortSignal
@@ -189,6 +223,12 @@ export type DiffReadOptions = {
  * files a new branch is usually full of. `--no-index` against the platform's
  * empty file produces the add-everything patch that was wanted, and exits 1
  * because it found a difference — which is why this goes through `tryRun`.
+ *
+ * So the whole-worktree patch is two reads glued together: what git will diff,
+ * then one add-everything hunk per untracked file. The alternative was a list
+ * of three changes whose patch showed one, with nothing to say the two
+ * disagreed — and the fix git's own porcelain uses for it, an intent-to-add,
+ * writes to the index, which is the user's.
  */
 export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptions): Promise<WorktreeDiff> {
   const staged = options.staged ?? false
@@ -218,25 +258,36 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
   })
 
   let patch = stdout
-  // Only for a named path: asking for the whole worktree's untracked files one
-  // `--no-index` at a time would be a command per file.
-  if (!patch && !staged && options.path !== undefined) {
-    const attempt = await runner.tryRun({
-      args: ['diff', '--no-color', `--unified=${context}`, '--no-index', '--', nullDevice, options.path],
-      cwd: options.worktreePath,
-      readOnly: true,
-      stdoutLimitBytes,
-      ...(options.signal ? { signal: options.signal } : {}),
-      timeoutMs: 60_000
-    })
-    // Exit 1 is "there was a difference"; anything higher is a real failure,
-    // including the path simply not existing, and leaves the patch empty. A
-    // clipped read reports git's own death by signal instead, and has the
-    // difference in hand already.
-    if (attempt.stdoutClipped === true || attempt.exitCode <= 1) patch = attempt.stdout
+  let cutShort = false
+
+  // Nothing is untracked in the index, so a staged patch is already complete.
+  if (!staged) {
+    let untracked: string[] = []
+    if (options.path === undefined) {
+      const listed = await listUntrackedFiles(runner, options)
+      untracked = listed.paths
+      cutShort = listed.cutShort
+    } else if (!patch && !isPreparedPath(options.prepared, options.path, true)) {
+      untracked = [options.path]
+    }
+
+    for (const file of untracked) {
+      if (Buffer.byteLength(patch, 'utf8') > maxBytes) {
+        cutShort = true
+        break
+      }
+      patch += await addedFilePatch(runner, {
+        file,
+        context,
+        nullDevice,
+        stdoutLimitBytes,
+        cwd: options.worktreePath,
+        ...(options.signal ? { signal: options.signal } : {})
+      })
+    }
   }
 
-  const truncated = Buffer.byteLength(patch, 'utf8') > maxBytes
+  const truncated = cutShort || Buffer.byteLength(patch, 'utf8') > maxBytes
   return {
     worktreeId: options.worktreeId,
     ...(options.path === undefined ? {} : { path: options.path }),
@@ -245,6 +296,66 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
     truncated,
     readAt: (options.now ?? Date.now)()
   }
+}
+
+/**
+ * The untracked files a whole-worktree patch should carry, in reading order.
+ *
+ * `--untracked-files=all` rather than `normal`: the change list names a new
+ * directory once, but a patch of a directory is not a thing, so the files
+ * inside it are what gets diffed.
+ */
+async function listUntrackedFiles(
+  runner: GitRunner,
+  options: DiffReadOptions
+): Promise<{ paths: string[]; cutShort: boolean }> {
+  const { stdout } = await runner.run({
+    args: ['status', '--porcelain=v2', '-z', '--untracked-files=all'],
+    cwd: options.worktreePath,
+    readOnly: true,
+    ...(options.signal ? { signal: options.signal } : {}),
+    timeoutMs: 30_000
+  })
+
+  const paths = withoutPreparedPaths(parseChangeRecords(stdout), options.prepared)
+    .filter((change) => change.kind === 'untracked')
+    .map((change) => change.path)
+    .sort((left, right) => left.localeCompare(right))
+
+  const limit = options.untrackedLimit ?? DEFAULT_DIFF_UNTRACKED_LIMIT
+  return { paths: paths.slice(0, limit), cutShort: paths.length > limit }
+}
+
+/**
+ * The add-everything hunk for one file git is not tracking.
+ *
+ * Exit 1 is "there was a difference"; anything higher is a real failure,
+ * including the path simply not existing, and contributes nothing. A clipped
+ * read reports git's own death by signal instead, and has the difference in
+ * hand already. Binary content is left to git, which writes its one-line
+ * "Binary files ... differ" rather than the bytes.
+ */
+async function addedFilePatch(
+  runner: GitRunner,
+  spec: {
+    file: string
+    context: number
+    nullDevice: string
+    stdoutLimitBytes: number
+    cwd: string
+    signal?: AbortSignal
+  }
+): Promise<string> {
+  const attempt = await runner.tryRun({
+    args: ['diff', '--no-color', `--unified=${spec.context}`, '--no-index', '--', spec.nullDevice, spec.file],
+    cwd: spec.cwd,
+    readOnly: true,
+    stdoutLimitBytes: spec.stdoutLimitBytes,
+    ...(spec.signal ? { signal: spec.signal } : {}),
+    timeoutMs: 60_000
+  })
+  if (attempt.stdoutClipped === true || attempt.exitCode <= 1) return attempt.stdout
+  return ''
 }
 
 /**

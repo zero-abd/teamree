@@ -44,7 +44,7 @@ import { commitWorktree } from './worktreeCommit'
 import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
-import { normalizePreparedPaths, prepareWorktree } from './worktreePreparation'
+import { normalizePreparedPaths, prepareWorktree, type PreparedPaths } from './worktreePreparation'
 
 export type GitEvent =
   | { type: 'project.added'; project: Project }
@@ -387,8 +387,24 @@ export class GitService {
       worktreePath: worktree.path,
       fallbackBranch: worktree.branch,
       baseRef: project?.baseRef,
+      prepared: this.#preparedPaths(worktree.projectId),
       now: this.#now
     })
+  }
+
+  /**
+   * What this project puts in every worktree of its own accord.
+   *
+   * Read fresh on each call rather than remembered from creation: the lists are
+   * editable, and what counts as a change has to follow what they say now — a
+   * path dropped from the list is the developer's to deal with from then on.
+   */
+  #preparedPaths(projectId: string): PreparedPaths {
+    const project = this.#store.getProject(projectId)
+    return {
+      ...(project?.linkedPaths === undefined ? {} : { linkedPaths: project.linkedPaths }),
+      ...(project?.copiedPaths === undefined ? {} : { copiedPaths: project.copiedPaths })
+    }
   }
 
   /**
@@ -401,6 +417,7 @@ export class GitService {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
       ...(params.limit === undefined ? {} : { limit: params.limit }),
+      prepared: this.#preparedPaths(worktree.projectId),
       now: this.#now
     })
   }
@@ -415,6 +432,7 @@ export class GitService {
       ...(params.staged === undefined ? {} : { staged: params.staged }),
       ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
       ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
+      prepared: this.#preparedPaths(worktree.projectId),
       now: this.#now
     })
   }
