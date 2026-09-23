@@ -283,12 +283,11 @@ export const Params = {
   /** Records that the first-run offer has been answered, so it is never made again. */
   cliDismissPrompt: z.object({}),
 
-  /** Which known editors are on this machine: a probe of PATH, not a setting. */
+  /** Which known editors, terminals and Finder are installed: found by bundle id or on PATH, not a setting. */
   editorList: z.object({}),
   /**
-   * Opens a path in an editor. `command` is the name of one program, resolved on
-   * PATH and spawned with the path as argument, never a shell line. Absent, the
-   * first editor found.
+   * Opens a path. `command` is a listed entry's `command` (an app's bundle id) or
+   * one program name on PATH, never a shell line. Absent, the first editor found.
    */
   editorOpen: z.object({
     path: z.string().min(1),
@@ -622,10 +621,10 @@ export type MethodContract = {
   'cli.install': { params: z.infer<typeof Params.cliInstall>; result: CliInstall }
   'cli.dismissPrompt': { params: z.infer<typeof Params.cliDismissPrompt>; result: CliStatus }
 
-  /** The editors found on PATH, in this app's own order of preference. */
+  /** What Open in offers, editors first in this app's own order of preference. */
   'editor.list': {
     params: z.infer<typeof Params.editorList>
-    result: { editors: { command: string; label: string }[] }
+    result: { editors: { command: string; label: string; kind?: 'editor' | 'terminal' | 'finder' }[] }
   }
   /** A refusal is a result, not an error: a menu item told why can say so. */
   'editor.open': {

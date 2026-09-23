@@ -130,7 +130,7 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
   / **⌘]** walk the panes, **⌘⇧↩** maximises one and restores it, **⌘K** is the
   palette and **⌘/** lists the rest.
 - **A menu on the worktree row.** Right-click it, or press `⋯`: reveal in Finder,
-  copy path, copy branch, open in your editor, remove.
+  copy path, copy branch, open in an installed editor, terminal or Finder, remove.
 - **Panes you can act on.** A URL an agent prints is a link, and **⌘C** / **⌘V**
   copy the selection and paste into the pane.
 - **Your own colours.** Four presets ship and all forty-two colours are editable

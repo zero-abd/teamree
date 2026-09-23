@@ -551,9 +551,22 @@
 }
 
 .row-menu__item:hover,
-.row-menu__item:focus-visible {
+.row-menu__item:focus-visible,
+.row-menu__item--open {
   background: var(--bg-press);
   outline: none;
+}
+
+.row-menu__more {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-left: var(--s4);
+  fill: none;
+  stroke: var(--fg-muted);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* The rule that keeps the destructive item from being the one under the
