@@ -93,5 +93,7 @@ function formatKeyName(key: string): string {
   if (key === 'Enter') return '↩'
   if (key === 'ArrowLeft') return '←'
   if (key === 'ArrowRight') return '→'
+  if (key === 'ArrowUp') return '↑'
+  if (key === 'ArrowDown') return '↓'
   return key
 }

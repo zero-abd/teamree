@@ -32,6 +32,7 @@ import type {
 import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
 import { closePaneWarning } from '../dialogs/closePaneModel'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
+import { worktreeAfter, worktreeOrder } from '../sidebar/worktreeOrder'
 import {
   isWatchedPaneId,
   neighbourWatchId,
@@ -229,6 +230,23 @@ type WorkspaceState = {
   unreadableSince: Record<string, number>
   terminals: Record<string, Terminal>
   layouts: Record<string, Layout>
+  /**
+   * The pane that is filling the workspace on its own, or null.
+   *
+   * Beside the layouts rather than inside one, and that is the whole decision.
+   * A `Layout` is the runtime's record of how a worktree's panes are arranged,
+   * saved and restored across launches; maximising is not an arrangement, it is
+   * a way of looking at one for as long as you are looking. Putting it in the
+   * record would send it over `layout.set`, write it to the workspace file, and
+   * bring somebody back tomorrow to a window with one pane in it and no memory
+   * of having asked for that. So it lives here, in this window, and dies with
+   * it.
+   *
+   * `shownRoot` is what reads it, and it takes the whole tree back the moment
+   * the id is not in it — a maximised pane that has since been closed leaves a
+   * stale id rather than an empty workspace.
+   */
+  expandedTerminalId: string | null
 
   /** Open state of the changes panel, and what it is showing. */
   /** Whether each ready worktree would merge into its base, as last read. */
@@ -542,6 +560,12 @@ type WorkspaceState = {
   forceCloseTerminal: (terminalId: string) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
   focusNextPane: () => void
+  /** The other way round the same cycle. See `paneCycle`. */
+  focusPreviousPane: () => void
+  /** Fills the workspace with the focused pane, or gives the tree back. */
+  toggleExpandedPane: () => void
+  /** Opens the worktree one row along the sidebar, wrapping at both ends. */
+  stepWorktree: (step: 1 | -1) => void
   applySplitSizes: (worktreeId: string, path: number[], sizes: number[]) => void
   /** Opens the find bar over the focused pane, or re-takes it if it is already there. */
   openPaneSearch: () => void
@@ -1172,6 +1196,29 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     return activeWorktreeId ? (layouts[activeWorktreeId] ?? null) : null
   }
 
+  /**
+   * Moves the focus `step` places around the pane cycle, wrapping.
+   *
+   * Both directions out of one walk, because they are one walk: forwards and
+   * backwards disagreeing about the order — and they would, written twice — is
+   * a pair of chords that do not undo each other.
+   *
+   * Teammates' panes are in the cycle for the same reason they are in the tree:
+   * a pane you can type into that the chord for the next pane refuses to reach
+   * is a pane that is only half in the window.
+   */
+  const stepFocus = (step: 1 | -1): void => {
+    const layout = activeLayout()
+    const ids = paneCycle(layout?.root ?? null, get().watches)
+    if (ids.length === 0) return
+    const current = get().focusedWatchId ?? layout?.focusedTerminalId ?? null
+    const index = current === null ? -1 : ids.indexOf(current)
+    // From nowhere, forwards is the first pane and backwards is the last.
+    const from = index === -1 ? (step === 1 ? -1 : 0) : index
+    const next = ids[(from + step + ids.length) % ids.length]
+    if (next !== undefined) get().focusPane(next)
+  }
+
   return {
     connection: runtimeClient.connection,
     runtimeVersion: null,
@@ -1182,6 +1229,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     unreadableSince: {},
     terminals: {},
     layouts: {},
+    expandedTerminalId: null,
 
     mergePreviews: {},
     members: {},
@@ -1466,7 +1514,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // diff.
         // Ticks belong to the worktree they were made in; carrying them across
         // would stage one worktree's paths against another's index.
-        ...(switching ? { selectedChangePath: null, diff: null, diffPending: false, stagedPaths: [] } : {})
+        // A maximised pane is a way of looking at one worktree's tree, so it
+        // does not travel to another's — the tab you arrive at is the tab as
+        // you left it.
+        ...(switching
+          ? { selectedChangePath: null, diff: null, diffPending: false, stagedPaths: [], expandedTerminalId: null }
+          : {})
       }))
       if (get().changesOpen) {
         void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
@@ -1601,7 +1654,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set((state) => {
         const terminals = { ...state.terminals }
         delete terminals[terminalId]
-        return { terminals }
+        // Closing the pane that was filling the workspace is a way of asking
+        // for the tree back, whether or not it was meant as one.
+        return { terminals, ...(state.expandedTerminalId === terminalId ? { expandedTerminalId: null } : {}) }
       })
     },
 
@@ -1618,16 +1673,44 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     focusNextPane() {
-      const layout = activeLayout()
-      // Teammates' panes are in the cycle for the same reason they are in the
-      // tree: a pane you can type into that the chord for "next pane" refuses
-      // to reach is a pane that is only half in the window.
-      const ids = paneCycle(layout?.root ?? null, get().watches)
-      if (ids.length === 0) return
-      const current = get().focusedWatchId ?? layout?.focusedTerminalId ?? null
-      const index = current === null ? -1 : ids.indexOf(current)
-      const next = ids[(index + 1) % ids.length]
-      if (next !== undefined) get().focusPane(next)
+      stepFocus(1)
+    },
+
+    focusPreviousPane() {
+      stepFocus(-1)
+    },
+
+    /**
+     * Maximises the focused pane, or restores the tree if one already is.
+     *
+     * One command for both halves rather than two, because the second half is
+     * not something anybody goes looking for: whatever key put the window into
+     * this state is the key that has to take it out again, or the state is a
+     * trap. Nothing is saved — see `expandedTerminalId` — so the tree that
+     * comes back is the one the runtime has, not a copy made here.
+     *
+     * A teammate's pane is not maximised, for the reason their pane is refused
+     * everywhere else: it is not in this worktree's tree, so there is no tree
+     * for it to fill and nothing to give back.
+     */
+    toggleExpandedPane() {
+      if (get().expandedTerminalId !== null) {
+        set({ expandedTerminalId: null })
+        return
+      }
+      if (get().focusedWatchId !== null) return
+      const focused = activeLayout()?.focusedTerminalId
+      if (focused) set({ expandedTerminalId: focused })
+    },
+
+    stepWorktree(step) {
+      const { projects, worktrees, activeWorktreeId } = get()
+      // The sidebar's order, not the store's: these two chords move the same
+      // highlight the sidebar draws, so walking the array the runtime happened
+      // to answer with would send the highlight up and down the list for
+      // reasons nobody looking at it could see.
+      const next = worktreeAfter(worktreeOrder(projects, worktrees), activeWorktreeId, step)
+      if (next && next.id !== activeWorktreeId) void get().openWorktree(next.id)
     },
 
     openPaneSearch() {

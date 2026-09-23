@@ -54,7 +54,18 @@ describe('reading a published menu', () => {
   // above Quit in the same menu wins the key. Only the spellings the window's
   // own table produces are accepted.
   it('refuses an accelerator that is not shaped like one of the table’s chords', () => {
-    for (const accelerator of ['CommandOrControl+Alt+Shift+D', 'CommandOrControl+,', 'CommandOrControl+Shift+D']) {
+    for (const accelerator of [
+      'CommandOrControl+Alt+Shift+D',
+      'CommandOrControl+,',
+      'CommandOrControl+Shift+D',
+      // The keys whose name is a word rather than a character. The window binds
+      // two of these — the worktree moves are on the arrows — and Electron's
+      // spelling of an arrow is `Up`, so a rule that took one character only
+      // would drop the item and say nothing.
+      'CommandOrControl+Alt+Up',
+      'CommandOrControl+Alt+Down',
+      'CommandOrControl+Shift+Enter'
+    ]) {
       expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toEqual([{ ...ITEM, accelerator }])
     }
     for (const accelerator of [
@@ -64,7 +75,14 @@ describe('reading a published menu', () => {
       'CommandOrControl+Shift+Alt+D',
       'CommandOrControl+Escape',
       'CommandOrControl+ ',
-      'CommandOrControl+D+'
+      'CommandOrControl+D+',
+      // Named keys are the four arrows and Return, one by one, and not "a
+      // word": each of these is a key equivalent a menu item can take off the
+      // platform, and none of them is in the table this rule exists to admit.
+      'CommandOrControl+Tab',
+      'CommandOrControl+F4',
+      'CommandOrControl+Space',
+      'CommandOrControl+UpDown'
     ]) {
       expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toBeNull()
     }

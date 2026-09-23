@@ -28,6 +28,7 @@ vi.mock('../terminal/TerminalView', () => ({
 }))
 
 const { PaneTree } = await import('./PaneTree')
+const { shownRoot } = await import('./paneLayout')
 
 const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
   id,
@@ -257,5 +258,29 @@ describe('a tree of panes', () => {
     const alive = screen.getByRole('region', { name: 'zsh' })
     expect(within(dead).getByText('exited 1')).toBeTruthy()
     expect(within(alive).queryByText(/exited/)).toBeNull()
+  })
+})
+
+// Maximising, from the only angle that settles it: what is on screen. The store
+// holds an id and `shownRoot` turns the tree into one leaf; whether that is
+// really one pane, and really the same pane rather than a fresh one, is a
+// question about the render.
+describe('one pane filling the workspace', () => {
+  const tree = row(leaf('t1'), leaf('t2'))
+  const panes = [terminal('t1', { title: 'zsh' }), terminal('t2', { title: 'claude' })]
+
+  it('draws the maximised pane and nothing beside it', () => {
+    mount(shownRoot(tree, 't2')!, panes, 't2')
+    expect(screen.getByRole('region', { name: 'claude' })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'zsh' })).toBeNull()
+    // No split around it either: a gutter with nothing on the far side of it is
+    // a handle that drags nothing.
+    expect(document.querySelectorAll('.split')).toHaveLength(0)
+  })
+
+  it('draws the whole tree again once nothing is maximised', () => {
+    mount(shownRoot(tree, null)!, panes, 't2')
+    expect(screen.getByRole('region', { name: 'claude' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'zsh' })).toBeTruthy()
   })
 })

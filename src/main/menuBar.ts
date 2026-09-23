@@ -53,8 +53,16 @@ export type MenuBarItem = {
  * is not a chord from the shortcut table — and a page that could publish any
  * string here could publish `CommandOrControl+Q` and take the key equivalent
  * off Quit, which sits below these items in the same menu.
+ *
+ * The key is one character, or one of five names spelled out. The names are
+ * here because a key can be a chord's key without being a character: the window
+ * binds the arrows and Return, and Electron spells those `Up`, `Down` and
+ * `Enter`. They are named one by one rather than admitted as "a word", and that
+ * is the point of the list — `Tab`, `Escape` and `F4` are keys a menu item can
+ * take off the platform itself, and none of them is in the table this is
+ * guarding.
  */
-const ACCELERATOR = /^CommandOrControl(\+Alt)?(\+Shift)?\+[^+\s]$/
+const ACCELERATOR = /^CommandOrControl(\+Alt)?(\+Shift)?\+([^+\s]|Up|Down|Left|Right|Enter)$/
 
 /**
  * More items than the window has commands, by a margin, and far fewer than

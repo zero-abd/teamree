@@ -9,6 +9,7 @@ import {
   neighbourTerminalId,
   normalizeSizes,
   setSizesAt,
+  shownRoot,
   splitChildBases,
   splitPane
 } from './paneLayout'
@@ -210,5 +211,29 @@ describe('neighbourTerminalId', () => {
 
   it('has nothing to offer for the only pane', () => {
     expect(neighbourTerminalId(leaf('a'), 'a')).toBeNull()
+  })
+})
+
+// Maximising, as the tree on its way to the screen. The store holds only an id;
+// this is the whole of applying it, which is why it is a function rather than a
+// rewrite of the layout — nothing here is saved and nothing is rebuilt to undo.
+describe('the tree as it is drawn', () => {
+  const tree = splitPane(leaf('t1'), 't1', 'row', 't2')
+
+  it('is the whole tree when nothing is maximised', () => {
+    expect(shownRoot(tree, null)).toBe(tree)
+    expect(shownRoot(null, null)).toBeNull()
+  })
+
+  it('is the one pane when one is', () => {
+    expect(shownRoot(tree, 't2')).toEqual({ kind: 'leaf', terminalId: 't2' })
+    expect(collectTerminalIds(shownRoot(tree, 't2'))).toEqual(['t2'])
+  })
+
+  // The maximised pane has since been closed, or belongs to the worktree that
+  // was open a moment ago. An empty workspace is the wrong answer to either.
+  it('gives the whole tree back for a pane that is not in it', () => {
+    expect(shownRoot(tree, 'gone')).toBe(tree)
+    expect(shownRoot(null, 't1')).toBeNull()
   })
 })

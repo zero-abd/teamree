@@ -28,6 +28,7 @@ import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
+import { worktreesByProject } from './worktreeOrder'
 import { WorktreeRow } from './WorktreeRow'
 
 export function Sidebar({
@@ -258,8 +259,10 @@ export function Sidebar({
         <div className="sidebar__scroll">
           {projects.length === 0 ? <p className="sidebar__empty">No projects yet. Add a repository.</p> : null}
 
-          {projects.map((project) => {
-            const rows = matching.filter((worktree) => worktree.projectId === project.id)
+          {/* Grouped by the same function the next-worktree chord walks, so
+              the chord moves down this list rather than through whatever order
+              the runtime answered in. See `worktreeOrder.ts`. */}
+          {worktreesByProject(projects, matching).map(({ project, rows }) => {
             const isCollapsed = Boolean(collapsed[project.id])
             const summary = teamworkSummary(teamwork[project.id], now)
             // Under the same project, because that is what they are: the same

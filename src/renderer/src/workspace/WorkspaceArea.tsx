@@ -18,6 +18,7 @@ import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
+import { shownRoot } from '../panes/paneLayout'
 import { PaneTree } from '../panes/PaneTree'
 import { SplitFrame } from '../panes/SplitFrame'
 import { SettingsView } from '../settings/SettingsView'
@@ -90,6 +91,10 @@ function WorkspaceMain({
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
   )
   const terminals = useWorkspaceStore((state) => state.terminals)
+  // The pane filling the workspace on its own, if one is. It is not in the
+  // layout and never goes to the runtime: maximising is a way of looking at an
+  // arrangement rather than one, and `shownRoot` is the whole of applying it.
+  const expandedTerminalId = useWorkspaceStore((state) => state.expandedTerminalId)
   // A teammate's pane holding the focus is what takes it off yours. Two panes
   // wearing the focused border would be two answers to where the next keystroke
   // goes, and the border is the only place the window says it.
@@ -129,6 +134,13 @@ function WorkspaceMain({
   // would set up. Both are read before the early returns below, because hooks
   // are, and both are null only in states this component then does not offer.
   const target = useMemo(() => terminalTarget(worktrees, openWorktreeIds), [worktrees, openWorktreeIds])
+  // The tree as it is drawn: one leaf while a pane is maximised, otherwise the
+  // whole of it. Read here with the other hooks rather than beside the JSX,
+  // which is where the early returns below put it out of reach.
+  const paneRoot = useMemo(
+    () => shownRoot(layout?.root ?? null, expandedTerminalId),
+    [layout?.root, expandedTerminalId]
+  )
   const teamworkProject = worktree
     ? projects.find((project) => project.id === worktree.projectId)
     : (projects.find((project) => project.id === target?.projectId) ?? projects[0])
@@ -289,6 +301,14 @@ function WorkspaceMain({
               <dd>new worktree</dd>
             </div>
             <div>
+              <dt>{shortcutHint('previous-worktree', modifier)}</dt>
+              <dd>previous worktree</dd>
+            </div>
+            <div>
+              <dt>{shortcutHint('next-worktree', modifier)}</dt>
+              <dd>next worktree</dd>
+            </div>
+            <div>
               <dt>{shortcutHint('new-terminal', modifier)}</dt>
               <dd>new terminal</dd>
             </div>
@@ -305,8 +325,16 @@ function WorkspaceMain({
               <dd>close pane</dd>
             </div>
             <div>
+              <dt>{shortcutHint('focus-previous-pane', modifier)}</dt>
+              <dd>previous pane</dd>
+            </div>
+            <div>
               <dt>{shortcutHint('focus-next-pane', modifier)}</dt>
               <dd>next pane</dd>
+            </div>
+            <div>
+              <dt>{shortcutHint('expand-pane', modifier)}</dt>
+              <dd>maximise pane</dd>
             </div>
             <div>
               <dt>{shortcutHint('open-palette', modifier)}</dt>
@@ -326,7 +354,7 @@ function WorkspaceMain({
             </div>
           </dl>
 
-          {/* The legend above is nine chords offered to somebody who may not
+          {/* The legend above is a dozen chords offered to somebody who may not
               yet know what a worktree is, which is the question underneath all
               of them. These two lines are the way out of that: one goes to the
               page that answers it — and lists every chord, generated from the
@@ -448,13 +476,13 @@ function WorkspaceMain({
 
       <div className="workspace__body">
         <div className="workspace__panes">
-          {layout?.root ? (
+          {paneRoot ? (
             <PaneTree
               key={activeWorktreeId}
-              node={layout.root}
+              node={paneRoot}
               path={[]}
               terminals={terminals}
-              focusedTerminalId={focusedWatchId === null ? layout.focusedTerminalId : null}
+              focusedTerminalId={focusedWatchId === null ? (layout?.focusedTerminalId ?? null) : null}
               onFocus={focusPane}
               onClose={onClose}
               onResize={onResize}

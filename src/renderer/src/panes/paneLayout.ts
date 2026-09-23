@@ -172,6 +172,25 @@ export function setSizesAt(root: PaneNode, path: readonly number[], sizes: reado
 }
 
 /**
+ * The tree as it is drawn: one pane filling the workspace, or all of them.
+ *
+ * Maximising is done here, over the tree on its way to the screen, rather than
+ * by rewriting the layout — which is the difference between a way of looking at
+ * an arrangement and an arrangement. Nothing is saved, nothing is rebuilt to
+ * restore, and the pane keeps its identity all the way through: `PaneTree` keys
+ * its leaves by terminal id, so the maximised pane is the same React element it
+ * was in the tree and neither maximising nor restoring remounts an emulator.
+ *
+ * An id that is not in this tree gives the whole tree back. That is the case
+ * where the maximised pane has since been closed or belongs to the worktree
+ * that was open a moment ago, and a blank workspace is the wrong answer to it.
+ */
+export function shownRoot(root: PaneNode | null, expandedTerminalId: string | null): PaneNode | null {
+  if (expandedTerminalId === null) return root
+  return hasTerminal(root, expandedTerminalId) ? leaf(expandedTerminalId) : root
+}
+
+/**
  * The pane focus should land on once `terminalId` goes away: its next sibling
  * in document order, or the previous one if it was last.
  */

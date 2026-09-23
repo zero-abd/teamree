@@ -39,6 +39,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { Sidebar } = await import('./Sidebar')
+const { worktreeOrder } = await import('./worktreeOrder')
 
 const INITIAL = useWorkspaceStore.getState()
 const NOW = Date.now()
@@ -435,5 +436,30 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(screen.getByRole('button', { name: /Settings/ }).querySelector('kbd')).toBeNull()
     act(() => screen.getByRole('button', { name: /Help/ }).click())
     expect(toggleHelp).toHaveBeenCalled()
+  })
+})
+
+// The claim the worktree chords rest on, made where it can actually be checked:
+// against the DOM the sidebar produces. `worktreeOrder.test.ts` proves the
+// function groups by project; only a rendered sidebar can say that the function
+// is what the sidebar renders. If these two ever part company, ⌘⌥↓ starts
+// jumping around a list that is sitting still.
+describe('the order the chords walk', () => {
+  it('is the order the rows are drawn in', () => {
+    const projects = [project, { id: 'p2', name: 'relay', path: '/repos/relay', baseRef: 'origin/main' }]
+    // Interleaved, which is how a runtime answer arrives: two projects' rows in
+    // whatever order the worktrees were made.
+    const worktrees = [
+      worktree({ id: 'w1', projectId: 'p1', name: 'one' }),
+      worktree({ id: 'w2', projectId: 'p2', name: 'two' }),
+      worktree({ id: 'w3', projectId: 'p1', name: 'three' }),
+      worktree({ id: 'w4', projectId: 'p2', name: 'four' })
+    ]
+    seed({ projects, worktrees })
+    const { container } = render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," helpHint="⌘/" />)
+
+    const drawn = [...container.querySelectorAll('.worktree__name')].map((node) => node.textContent)
+    expect(drawn).toEqual(['one', 'three', 'two', 'four'])
+    expect(drawn).toEqual(worktreeOrder(projects, worktrees).map((entry) => entry.name))
   })
 })
