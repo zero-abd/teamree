@@ -998,6 +998,29 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
     ).toBe(undefined)
   })
 
+  it('shows a pane running a harness this build has never heard of as a plain terminal', () => {
+    const projectKey = 'k'.repeat(64)
+    const pane = { title: 'zsh', shell: '/bin/zsh', running: true, busy: false, quietForMs: 0 }
+    const worktrees = [
+      {
+        id: 'wt_1',
+        name: 'one',
+        branch: 'main',
+        state: 'ready',
+        panes: [
+          { ...pane, id: 't_new', agent: 'harness-from-next-year' },
+          { ...pane, id: 't_known', agent: 'claude' }
+        ]
+      }
+    ]
+    const panes = parsePeerPresence({ revision: 1, handle: 'bob', projects: [{ projectKey, worktrees }] }, projectKey)
+      ?.projects[0]?.worktrees[0]?.panes
+    expect(panes?.map((one) => [one.id, one.agent])).toEqual([
+      ['t_new', undefined],
+      ['t_known', 'claude']
+    ])
+  })
+
   it('keeps only the repository the session is for, however many a snapshot names', () => {
     const ours = 'a'.repeat(64)
     const theirs = 'b'.repeat(64)

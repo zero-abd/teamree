@@ -141,6 +141,22 @@ describe('a file written by another build', () => {
     expect(document.version).toBe(1)
   })
 
+  it('keeps a teammate whose pane runs a harness this build has never heard of', () => {
+    const pane = { title: 'zsh', shell: '/bin/zsh', running: true, busy: false, quietForMs: 0 }
+    const panes = [
+      { ...pane, id: 't_new', agent: 'harness-from-next-year' },
+      { ...pane, id: 't_known', agent: 'codex' }
+    ]
+    const read = parseTeammateCache({
+      version: 1,
+      teammates: [{ ...entry(), worktrees: [{ ...theirWorktree(), panes }] }]
+    })
+    expect(read.teammates[0]?.worktrees[0]?.panes.map((one) => [one.id, one.agent])).toEqual([
+      ['t_new', undefined],
+      ['t_known', 'codex']
+    ])
+  })
+
   it('reads a document that is not one as an empty cache rather than as a failure', () => {
     expect(parseTeammateCache('nonsense').teammates).toEqual([])
     expect(parseTeammateCache(null).teammates).toEqual([])

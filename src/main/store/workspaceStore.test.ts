@@ -569,6 +569,19 @@ describe('workspace store', () => {
       expect((await WorkspaceStore.open(filePath)).listTerminals()).toEqual([terminal('t1', false)])
     })
 
+    it('brings back a pane whose harness this build has never heard of, as a plain shell', async () => {
+      const path = join(directory, 'workspace.json')
+      const newer = { ...terminal('t1'), command: 'someday --go', agent: 'harness-from-next-year' }
+      const known = { ...terminal('t2'), command: 'claude', agent: 'claude' }
+      await writeFile(path, JSON.stringify({ version: 1, projects: [project], terminals: [newer, known] }), 'utf8')
+
+      const records = (await WorkspaceStore.open(path)).listTerminals()
+      expect(records.map((record) => [record.id, record.agent])).toEqual([
+        ['t1', undefined],
+        ['t2', 'claude']
+      ])
+    })
+
     it('drops a record whose answer is garbage, and keeps the rest of the file', async () => {
       const path = join(directory, 'workspace.json')
       await writeFile(

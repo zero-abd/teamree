@@ -5,7 +5,7 @@
 import { rename, stat } from 'node:fs/promises'
 import { z } from 'zod'
 import type { PeerPane, PeerWorktree } from '../../shared/entities'
-import { AGENT_KINDS } from '../terminals/agent-command'
+import { AgentKindOnRead } from '../terminals/agent-command'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
 import type { StoreProblem } from './workspaceStore'
 
@@ -46,7 +46,7 @@ const PaneSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
   shell: z.string(),
-  agent: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
+  agent: AgentKindOnRead,
   running: z.boolean(),
   exitCode: z.number().optional(),
   busy: z.boolean(),
@@ -86,7 +86,7 @@ export function parseTeammateCache(raw: unknown): TeammateCacheDocument {
   const teammates: CachedTeammate[] = []
   for (const candidate of rows.slice(0, MAX_CACHED_PEERS)) {
     const parsed = TeammateSchema.safeParse(candidate)
-    if (parsed.success) teammates.push(boundTeammate(parsed.data as CachedTeammate))
+    if (parsed.success) teammates.push(boundTeammate(parsed.data))
   }
   return { version: TEAMMATE_CACHE_VERSION, teammates }
 }
