@@ -175,6 +175,7 @@ function WorkspaceView({
               onRelaunch={onRelaunch}
               onResize={onResize}
               isAppChord={isAppChord}
+              modifier={modifier}
               searchTerminalId={paneSearch?.terminalId ?? null}
               searchToken={paneSearch?.token ?? 0}
               onCloseSearch={closePaneSearch}

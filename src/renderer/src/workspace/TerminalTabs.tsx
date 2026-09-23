@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
 import { FileGlyph } from '../files/FileView'
+import { usePaneMenu } from './paneMenu'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { useStartMenuItems } from './startMenu'
 import { PaneGlyph } from '../agents/glyphs'
@@ -45,7 +46,9 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const unsavedFiles = useWorkspaceStore((state) => state.unsavedFiles)
   const namingMarkdown = useWorkspaceStore((state) => state.namingMarkdown)
   const nameMarkdown = useWorkspaceStore((state) => state.nameMarkdown)
-  const [renaming, setRenaming] = useState<string | null>(null)
+  const renaming = useWorkspaceStore((state) => state.editingPaneName)
+  const setRenaming = useWorkspaceStore((state) => state.editPaneName)
+  const paneMenu = usePaneMenu(modifier)
   const plus = useRef<HTMLButtonElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   // Back on the `+`, so a keyboard user who opened the menu is where they were.
@@ -90,6 +93,9 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
               <div
                 className={`tab${active ? ' tab--active' : ''}${isUnread ? ' tab--unread' : ''}`}
                 key={tab.terminalId}
+                onContextMenu={(event) => {
+                  if (renaming !== tab.terminalId) paneMenu.onContextMenu(tab.terminalId, tab.label, event)
+                }}
               >
                 {renaming === tab.terminalId ? (
                   <RenameField
@@ -118,6 +124,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                           : paneTabTitle(tab)
                     }
                     onClick={() => focusPane(tab.terminalId)}
+                    onKeyDown={(event) => paneMenu.onKeyDown(tab.terminalId, tab.label, event)}
                     onDoubleClick={() => {
                       if (!isFile) setRenaming(tab.terminalId)
                     }}
@@ -240,6 +247,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
       {menuAt === null || activeWorktreeId === null ? null : (
         <RowMenu label="New pane" anchor={menuAt} opener={plus.current} onClose={closeMenu} items={startItems} />
       )}
+      {paneMenu.menu}
     </div>
   )
 }

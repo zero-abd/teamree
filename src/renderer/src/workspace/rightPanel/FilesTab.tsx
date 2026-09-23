@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Worktree, WorktreeFileMatches } from '@shared/entities'
 import { runtimeClient } from '../../runtimeClient/currentRuntimeClient'
-import { editorLabel } from '../../sidebar/Sidebar'
+import { useOpenIn } from '../../sidebar/openIn'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { useWorkspaceStore } from '../../state/workspaceStore'
 import { KIND_LETTER } from './changeKinds'
@@ -33,9 +33,8 @@ const FIND_LIMIT = 200
 
 export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Element {
   const changes = useWorkspaceStore((state) => state.changes[worktree.id])
-  const editorCommand = useWorkspaceStore((state) => state.editorCommands[worktree.projectId])
-  const editors = useWorkspaceStore((state) => state.editors)
-  const openInEditor = useWorkspaceStore((state) => state.openInEditor)
+  const openIn = useOpenIn()
+  const loadEditors = useWorkspaceStore((state) => state.loadEditors)
   const openFilePane = useWorkspaceStore((state) => state.openFilePane)
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
   const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
@@ -43,7 +42,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
   const [tree, setTree] = useState<TreeState>(emptyTree)
   const [query, setQuery] = useState('')
   const [found, setFound] = useState<WorktreeFileMatches | null>(null)
-  const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
+  const [menu, setMenu] = useState<{ path: string; file: boolean; at: RowMenuAnchor } | null>(null)
   // Answers for a worktree this tab has left are dropped.
   const alive = useRef(true)
   useEffect(() => {
@@ -96,7 +95,6 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
 
   const absolute = (path: string): string => `${worktree.path}/${path}`
   const open = (path: string): void => openFilePane(worktree.id, path)
-  const openInTheEditor = (path: string): void => void openInEditor(absolute(path), editorCommand, path)
   const reveal = (path: string): void => void revealInFinder(absolute(path), path)
 
   const toggle = (row: TreeRow): void => {
@@ -118,7 +116,11 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
 
   const root = tree.dirs[ROOT]
   const rows = treeRows(tree)
-  const label = editorLabel(editorCommand, editors)
+  const showMenu = (path: string, file: boolean, event: React.MouseEvent): void => {
+    event.preventDefault()
+    void loadEditors()
+    setMenu({ path, file, at: { x: event.clientX, y: event.clientY } })
+  }
 
   return (
     <section className="tree" aria-label="Files in this worktree">
@@ -157,10 +159,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                   className="tree__row tree__row--found"
                   title={path}
                   onClick={() => open(path)}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    setMenu({ path, at: { x: event.clientX, y: event.clientY } })
-                  }}
+                  onContextMenu={(event) => showMenu(path, true, event)}
                 >
                   <span className="tree__name">
                     <span className="tree__dir">{directoryOf(path)}</span>
@@ -197,10 +196,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                     style={{ ['--depth' as string]: row.depth }}
                     title={row.error ?? row.path}
                     onClick={() => toggle(row)}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      setMenu({ path: row.path, at: { x: event.clientX, y: event.clientY } })
-                    }}
+                    onContextMenu={(event) => showMenu(row.path, row.kind !== 'dir', event)}
                   >
                     {row.kind === 'dir' ? (
                       <svg
@@ -249,11 +245,15 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
           anchor={menu.at}
           onClose={() => setMenu(null)}
           items={[
-            { label: `Open in ${label}`, onChoose: () => openInTheEditor(menu.path) },
-            { label: 'Reveal in Finder', onChoose: () => reveal(menu.path) },
             {
               label: 'Copy path',
               onChoose: () => void copyToClipboard(absolute(menu.path), `the path to ${menu.path}`)
+            },
+            { label: 'Reveal in Finder', onChoose: () => reveal(menu.path) },
+            {
+              label: 'Open in',
+              onChoose: () => {},
+              items: openIn(worktree.projectId, absolute(menu.path), menu.path, menu.file)
             }
           ]}
         />

@@ -20,6 +20,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneNode, Terminal } from '@shared/entities'
+import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 vi.mock('../terminal/TerminalView', () => ({
   TerminalView: ({ terminalId, focused }: { terminalId: string; focused: boolean }) => (
@@ -76,6 +77,7 @@ function mount(node: PaneNode, terminals: Terminal[], focusedTerminalId: string 
       onRelaunch={onRelaunch}
       onResize={onResize}
       isAppChord={() => false}
+      modifier={resolvePlatformModifier('darwin')}
       searchTerminalId={null}
       searchToken={0}
       onCloseSearch={() => {}}

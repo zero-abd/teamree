@@ -26,6 +26,7 @@ export function FileView({
   focused,
   onFocus,
   onClose,
+  onHeaderMenu,
   searchToken = 0
 }: FilePaneProps): React.JSX.Element {
   const worktreePath = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.path)
@@ -159,7 +160,7 @@ export function FileView({
       onMouseDownCapture={onFocus}
       style={{ ['--file-font-size' as string]: `${fontSize}px` }}
     >
-      <header className="pane__bar file__bar">
+      <header className="pane__bar file__bar" onContextMenu={onHeaderMenu}>
         <FileGlyph />
         <span className="pane__title file__path" title={absolute}>
           <span className="file__dir">{path.slice(0, path.length - name.length)}</span>
