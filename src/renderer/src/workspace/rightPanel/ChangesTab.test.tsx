@@ -239,7 +239,7 @@ describe('which button is the next step', () => {
 })
 
 describe('committing', () => {
-  it('commits every tracked change when nothing is ticked, and only the ticked ones otherwise', () => {
+  it('commits every listed change, new files included, when nothing is ticked, and only the ticked ones otherwise', () => {
     withChanges(rows)
     render(<ChangesTab />)
     fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
@@ -252,7 +252,7 @@ describe('committing', () => {
     expect(call).toHaveBeenCalledWith('worktree.commit', {
       worktreeId: 'w1',
       message: 'Rank',
-      paths: ['README.md', 'src/gone.ts']
+      paths: ['README.md', 'src/app.ts', 'src/gone.ts']
     })
   })
 
@@ -263,11 +263,16 @@ describe('committing', () => {
     expect(screen.getByRole('button', { name: 'Commit' })).toBeTruthy()
   })
 
-  it('has nothing to commit all when every change is untracked', () => {
+  // An agent that only created files is the common case: its work must be one click from a commit.
+  it('commits all on a worktree whose only changes are new files', () => {
     withChanges([{ path: 'src/app.ts', kind: 'untracked', staged: false, unstaged: true }])
     render(<ChangesTab />)
     fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
-    expect(screen.getByRole('button', { name: 'Commit All' })).toHaveProperty('disabled', true)
+
+    const commitAll = screen.getByRole('button', { name: 'Commit All' })
+    expect(commitAll).toHaveProperty('disabled', false)
+    fireEvent.click(commitAll)
+    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', paths: ['src/app.ts'] })
   })
 })
 

@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
-import { trackedPaths, useWorkspaceStore, type PushState } from '../../state/workspaceStore'
+import { useWorkspaceStore, type PushState } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import type { WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 
@@ -39,7 +39,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const ticked = new Set(stagedPaths)
   const tickedCount = rows.filter((change) => ticked.has(change.path)).length
   const allTicked = rows.length > 0 && tickedCount === rows.length
-  const canCommit = (tickedCount > 0 || trackedPaths(rows).length > 0) && message.trim().length > 0 && !committing
+  const canCommit = rows.length > 0 && message.trim().length > 0 && !committing
 
   const offer = pushOffer(status, push, rows.length > 0)
   // One primary at a time: commit what is uncommitted first, then send it.

@@ -25,7 +25,6 @@ import type {
   Terminal,
   UpdateState,
   Worktree,
-  WorktreeChange,
   WorktreeChanges,
   WorktreeLog,
   WorktreeMergePreview,
@@ -179,11 +178,6 @@ export type PushState =
   | { phase: 'pushing' }
   | { phase: 'pushed'; reviewUrl?: string }
   | { phase: 'failed'; error: string; detail: string }
-
-/** What Commit All takes with nothing ticked: every tracked change, as `git commit -a` would. */
-export function trackedPaths(changes: readonly WorktreeChange[]): string[] {
-  return changes.filter((change) => change.kind !== 'untracked').map((change) => change.path)
-}
 
 /** The find bar belongs to the focused pane. `token` changes on every press, which is how a repeat press re-takes an open field. */
 export type PaneSearch = { terminalId: string; token: number }
@@ -489,7 +483,7 @@ type WorkspaceState = {
   toggleStaged: (path: string) => void
   /** Every changed path, or none. */
   setAllStaged: (staged: boolean) => void
-  /** Commits the ticked paths, or every tracked change when none is ticked; true when it landed. */
+  /** Commits the ticked paths, or every listed change (new files too) when none is ticked; true when it landed. */
   commitStaged: (message: string) => Promise<boolean>
   /** Puts one hunk into the index, or takes it out. The hunk is exactly what was on screen; the runtime refuses it if the file moved on. */
   applyHunk: (worktreeId: string, path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
@@ -1932,7 +1926,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const worktreeId = get().activeWorktreeId
       if (!worktreeId) return false
       const ticked = get().stagedPaths
-      const paths = ticked.length > 0 ? ticked : trackedPaths(get().changes[worktreeId]?.changes ?? [])
+      // The list is `git status` without ignored files, so this is `git add -A` for what is on screen.
+      const paths = ticked.length > 0 ? ticked : (get().changes[worktreeId]?.changes ?? []).map((change) => change.path)
       if (paths.length === 0) return false
 
       set({ committing: true })

@@ -13,7 +13,6 @@ import {
   reconcileRelayPanes,
   teamworkPaneFromWorktreeId,
   teamworkPaneWorktreeId,
-  trackedPaths,
   useWorkspaceStore,
   type RelayPaneState
 } from './workspaceStore'
@@ -158,19 +157,19 @@ it('commits only the ticked paths, and unticks them afterwards', async () => {
   call.mockRestore()
 })
 
-it('commits every tracked change when nothing is ticked, and nothing when there is none', async () => {
+it('commits every listed change when nothing is ticked, and nothing when there is none', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
   await store.openWorktree(worktreeId)
   if (!changesOnScreen(useWorkspaceStore.getState())) useWorkspaceStore.getState().toggleChanges()
   await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[worktreeId]).toBeDefined())
-  const tracked = trackedPaths(useWorkspaceStore.getState().changes[worktreeId]!.changes)
-  expect(tracked.length).toBeGreaterThan(0)
+  const listed = useWorkspaceStore.getState().changes[worktreeId]!.changes.map((change) => change.path)
+  expect(listed.length).toBeGreaterThan(0)
 
   const call = vi.spyOn(runtimeClient, 'call')
   expect(await useWorkspaceStore.getState().commitStaged('has a message')).toBe(true)
-  expect(call.mock.calls.find(([method]) => method === 'worktree.commit')?.[1]).toMatchObject({ paths: tracked })
+  expect(call.mock.calls.find(([method]) => method === 'worktree.commit')?.[1]).toMatchObject({ paths: listed })
 
   call.mockClear()
   useWorkspaceStore.setState((state) => ({
