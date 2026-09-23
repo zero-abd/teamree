@@ -1,15 +1,6 @@
-// Proves that a packaged build actually works, rather than that it merely
-// built. Run after `npm run package` (or `npm run package:dir`):
-//
-//   npm run package:verify            # finds the artifact in dist/
-//   node scripts/verify-package.mjs "/Applications/teamree.app"
-//
-// It launches the packaged app against a throwaway user-data directory, drives
-// it through the CLI the app itself ships, opens a real PTY inside it and reads
-// back what the shell printed. The PTY is the point: node-pty needs its native
-// binary outside the asar, plus an executable spawn-helper on macOS and two
-// backends and a sidecar on Windows, and nothing short of spawning a shell
-// proves all of that survived packaging.
+// Proves a packaged build works: launches it on a throwaway user-data dir, drives it through the
+// shipped CLI and opens a real PTY. `npm run package:verify` finds the artifact in dist/, or name one.
+// The PTY is the point: only spawning a shell proves node-pty's unpacked binaries survived packaging.
 import { spawn, spawnSync } from 'node:child_process'
 import {
   closeSync,
@@ -56,17 +47,12 @@ function describeVersion(candidate) {
 
 /** Layout of a packaged app differs per platform; everything else does not. */
 function locateApp(explicit) {
-  // Newest first, not a fixed order — see scripts/packaged-app.mjs for the
-  // stale build this used to pick up and pass.
   const candidates = explicit ? [explicit] : packagedAppCandidates()
 
   const present = candidates.filter((candidate) => existsSync(candidate))
   if (present.length === 0) fail(`no packaged app found. Looked for: ${candidates.join(', ')}`)
 
-  // Taking the first match silently verified whichever build happened to be
-  // listed earliest, which on a machine that has packaged more than once is the
-  // older one. A verification that passes against a stale app is worse than no
-  // verification, so an ambiguous dist is a refusal rather than a guess.
+  // A verification that passes against a stale app is worse than none, so ambiguous is a refusal.
   if (present.length > 1) {
     fail(
       `more than one packaged app is in dist/, so it is not clear which one to verify:\n` +
@@ -103,12 +89,8 @@ ok('app binary and shipped CLI are in place')
 
 // ------------------------------------------------- the relay it ships with --
 
-// Standing up a relay used to need a clone of this repository, and the first
-// person to try it from an installed app got npm's ENOENT about a package.json
-// that was never going to be there. The app now carries the relay's deployable
-// project, and `relay/teamree-relay` writes it into a directory the person owns
-// and deploys it. That claim is only worth making if the files are really in
-// the package, so this checks each one and then runs the launcher for real.
+// The app carries the relay's deployable project so a .dmg user needs no clone; check each file
+// is really in the package, then run the launcher for real.
 const relayRoot = join(app.resources, 'relay')
 const relayLauncher = join(relayRoot, process.platform === 'win32' ? 'teamree-relay.cmd' : 'teamree-relay')
 const relayFiles = [
@@ -117,10 +99,7 @@ const relayFiles = [
   join(relayRoot, 'wrangler.jsonc'),
   join(relayRoot, 'src', 'workers', 'worker.ts'),
   join(relayRoot, 'src', 'core', 'rendezvous.ts'),
-  // The Node host. `teamree-relay serve` copies this half out and runs it, so
-  // without it that command is one a .dmg user cannot run — and the failure
-  // would be at the end of a write, an install and a build rather than at the
-  // start of one.
+  // The Node host `teamree-relay serve` copies out; missing, it fails after a write, install and build.
   join(relayRoot, 'src', 'node', 'server.ts')
 ]
 for (const path of relayFiles) {
@@ -130,10 +109,7 @@ if (process.platform !== 'win32' && !(statSync(relayLauncher).mode & 0o111)) {
   fail(`${relayLauncher} is not executable, so the one command in relay/README.md would not run`)
 }
 
-// The whole of the command short of Wrangler: it resolves the sources beside
-// it, refuses nothing, and writes a project a deploy could run from. Deploying
-// is not attempted — that needs somebody's Cloudflare account — and `--dry-run`
-// is not either, because it fetches Wrangler from the network.
+// The command short of Wrangler. No deploy (needs an account) and no `--dry-run` (fetches Wrangler).
 {
   const isCmd = relayLauncher.endsWith('.cmd')
   const runRelayCommand = (args) =>
@@ -153,13 +129,8 @@ if (process.platform !== 'win32' && !(statSync(relayLauncher).mode & 0o111)) {
   rmSync(dirname(target), { recursive: true, force: true })
   ok('the shipped relay command wrote a deployable Worker project from inside the package')
 
-  // And the other half of the same claim: `serve` writes a Node relay project
-  // out of the app's own copy of `src/node` and `src/core`. Stopped at
-  // `--write-only` for the same reason the deploy check is — the steps after it
-  // are `npm install` and a TypeScript build, which need the network and a
-  // minute, and neither of them is what packaging could have broken. What
-  // packaging could have broken is a source file that never made it into the
-  // bundle, and that is exactly what writing the project proves.
+  // `serve`, stopped at `--write-only` likewise: what packaging could break is a source file
+  // missing from the bundle, and writing the project proves that.
   const serveTarget = join(mkdtempSync(join(tmpdir(), 'teamree-verify-serve-')), 'relay-server')
   const served = runRelayCommand(['serve', serveTarget, '--write-only'])
   if (served.status !== 0) {
@@ -175,9 +146,7 @@ if (process.platform !== 'win32' && !(statSync(relayLauncher).mode & 0o111)) {
   ]) {
     if (!existsSync(join(serveTarget, name))) fail(`the shipped relay command wrote no ${name} into ${serveTarget}`)
   }
-  // The two files the build depends on being right, read rather than assumed:
-  // `npm run build` compiles `src` to `dist/node/index.js`, and `npm start`
-  // needs the `ws` the server imports to have been asked for.
+  // Read rather than assumed: the build lands in `dist/node/index.js` and the server imports `ws`.
   const servedPackage = JSON.parse(readFileSync(join(serveTarget, 'package.json'), 'utf8'))
   if (servedPackage.dependencies?.ws === undefined) {
     fail(`the written server project asks for no ws, so it would build and then fail to start`)
@@ -205,32 +174,11 @@ const binaryDirs = [
 if (binaryDirs.length === 0) fail(`node-pty ships no pty.node for ${process.platform}-${process.arch} in ${ptyRoot}`)
 ok(`node-pty binary for ${process.platform}-${process.arch} is unpacked (${binaryDirs[0]})`)
 
-// macOS only: node-pty builds spawn-helper under `OS=="mac"` and calls it from
-// a `#if defined(__APPLE__)` branch. Linux execvp's in process and ships none.
-//
-// Both architectures, not just the one this is running on, and that is the
-// whole point of this block. A universal app carries a node-pty prebuild per
-// architecture — `node-gyp-build` resolves `prebuilds/darwin-<arch>` from
-// `process.arch` at run time — and everything below this section runs the app,
-// so it exercises whichever half the machine happens to be. Every Mac that has
-// packaged this is Apple Silicon, which makes the Intel half the half nothing
-// ever executes. If
-// the universal merge or the ad-hoc signature damaged it, a release would go
-// out green and every Intel Mac would open no terminal, which for this app is
-// the whole app.
-//
-// What is here is static, and static is the most that can be said without an
-// Intel Mac or Rosetta: each architecture's `pty.node` and `spawn-helper` are
-// present, spawn-helper is executable, and each file is a Mach-O for the
-// architecture whose directory it is sitting in and is no shorter than its own
-// header says it must be. The last two are the ones with teeth — they catch a
-// merge that wrote the same slice into both directories, and a file cut off
-// before its load commands end.
-//
-// Neither is complete, and neither is running it. A copy truncated past the
-// load commands still reads as well-formed here, and nothing static can tell
-// you a binary executes. Until an Intel Mac or Rosetta runs the x64 slice, that
-// half of the universal app is asserted, not demonstrated.
+// macOS only: node-pty builds spawn-helper under `OS=="mac"`; Linux execvp's in process and ships none.
+// Both architectures, statically: `node-gyp-build` picks `prebuilds/darwin-<arch>` at run time, so the
+// launch below only ever exercises this machine's half, and every Mac that packages this is Apple
+// Silicon. A Mach-O check per directory catches a merge that wrote one slice into both and a file cut
+// off before its load commands end. Until Rosetta or an Intel Mac runs the x64 slice it is asserted, not shown.
 const CPU_TYPES = new Map([
   [0x01000007, 'x64'],
   [0x0100000c, 'arm64'],
@@ -239,13 +187,8 @@ const CPU_TYPES = new Map([
 ])
 
 /**
- * What a Mach-O file says about itself: the architectures it is for, and the
- * smallest size it could be and still be whole.
- *
- * `arches` is empty for a file that is not a Mach-O at all. `declared` is the
- * end of the last structure the header points at — the load commands for a thin
- * binary, the last slice for a fat one — so a file shorter than that has been
- * cut off somewhere between the build and here.
+ * A Mach-O's architectures and the smallest size it could be and still be whole: the end of the
+ * load commands (thin) or the last slice (fat). `arches` is empty for a non-Mach-O.
  */
 function machoHeader(path) {
   const head = Buffer.alloc(4096)
@@ -272,9 +215,7 @@ function machoHeader(path) {
       const at = 8 + i * stride
       if (at + stride > read) break
       arches.push(name(head.readUInt32BE(at)))
-      // fat_arch is {cputype, cpusubtype, offset, size, align} with 32-bit
-      // offset and size; fat_arch_64 widens both to 64 and adds a reserved
-      // word, which is the 20 versus 32 bytes above.
+      // fat_arch has 32-bit offset and size; fat_arch_64 widens both and adds a reserved word (20 vs 32).
       const offset = wide ? Number(head.readBigUInt64BE(at + 8)) : head.readUInt32BE(at + 8)
       const size = wide ? Number(head.readBigUInt64BE(at + 16)) : head.readUInt32BE(at + 12)
       declared = Math.max(declared, offset + size)
@@ -282,33 +223,26 @@ function machoHeader(path) {
     return { arches, declared }
   }
 
-  // A thin header carries its own byte order: MH_MAGIC read the right way
-  // round, MH_CIGAM read the wrong one.
+  // A thin header carries its own byte order: MH_MAGIC one way round, MH_CIGAM the other.
   for (const [magic, read32] of [
     [head.readUInt32LE(0), (at) => head.readUInt32LE(at)],
     [head.readUInt32BE(0), (at) => head.readUInt32BE(at)]
   ]) {
     if (magic !== 0xfeedface && magic !== 0xfeedfacf) continue
-    // mach_header is 28 bytes, mach_header_64 is 32; sizeofcmds sits at offset
-    // 20 in both, and the load commands follow the header immediately.
+    // mach_header is 28 bytes, mach_header_64 is 32; sizeofcmds is at offset 20 in both.
     const headerSize = magic === 0xfeedfacf ? 32 : 28
     return { arches: [name(read32(4))], declared: headerSize + (read >= 24 ? read32(20) : 0) }
   }
   return nothing
 }
 
-// Only for a package that ships prebuilds at all. `npm_config_build_from_source`
-// makes node-pty delete its whole `prebuilds` tree and compile into
-// build/Release instead, and such a package legitimately has neither directory
-// — it also could not have been merged into a universal app, so there is no
-// second slice to check.
+// `npm_config_build_from_source` makes node-pty delete `prebuilds` and compile into build/Release;
+// such a package legitimately has no darwin-* directories and no second slice to check.
 const prebuilds = join(ptyRoot, 'prebuilds')
 const shipsPrebuilds = existsSync(prebuilds) && readdirSync(prebuilds).some((entry) => entry.startsWith('darwin-'))
 
 if (process.platform === 'darwin' && shipsPrebuilds) {
-  // node-pty publishes a prebuild for both, and scripts/afterpack.mjs keeps
-  // every `darwin-*` set in every macOS package precisely so a universal app
-  // has both. One missing is a packaging fault whichever kind of build this is.
+  // scripts/afterpack.mjs keeps every `darwin-*` set in every macOS package; one missing is a fault.
   for (const arch of ['arm64', 'x64']) {
     const dir = join(prebuilds, `darwin-${arch}`)
     if (!existsSync(dir)) fail(`node-pty has no darwin-${arch} prebuild in ${ptyRoot}`)
@@ -317,9 +251,7 @@ if (process.platform === 'darwin' && shipsPrebuilds) {
       const path = join(dir, name)
       if (!existsSync(path)) fail(`${name} is missing from ${dir}`)
 
-      // The executable bit is demanded of spawn-helper alone, because that is
-      // the only one that is exec'd: node-pty dlopen's pty.node, and node-pty
-      // ships it 0644. Requiring it of both would fail a package that is fine.
+      // Only spawn-helper is exec'd; pty.node is dlopen'd and ships 0644.
       const mode = statSync(path).mode & 0o777
       if (name === 'spawn-helper' && !(mode & 0o111)) {
         fail(`${path} is not executable (mode ${mode.toString(8)}); every PTY spawn on ${arch} would fail`)
@@ -344,14 +276,11 @@ if (process.platform === 'darwin' && shipsPrebuilds) {
       ok(`darwin-${arch}/${name}: ${arches.join(', ')}, ${bytes} bytes, mode ${mode.toString(8)}`)
     }
   }
-  // Said plainly because the PASS line below must not be read as more than it
-  // is: this script runs the app, and the app runs as one architecture.
+  // Said plainly: the PASS line below runs the app as one architecture.
   ok(`both darwin slices check out statically; only ${process.arch} is executed below`)
 }
 
-// node-pty chooses its Windows backend at spawn time — ConPTY from conpty.node,
-// or winpty, which needs a DLL and a separate agent executable beside pty.node.
-// A missing one only shows up when a pane refuses to open, so name it here.
+// node-pty picks ConPTY or winpty at spawn time; a missing one only shows when a pane refuses to open.
 if (process.platform === 'win32') {
   const required = ['conpty.node', 'pty.node', 'winpty.dll', 'winpty-agent.exe']
   const missing = required.filter((name) => !existsSync(join(binaryDirs[0], name)))
@@ -388,12 +317,10 @@ ok(`fixture repository at ${repo}`)
 
 // --------------------------------------------------------- launch the app --
 
-// A throwaway --user-data-dir keeps this off the real profile, and keeps the
-// single-instance lock from handing the run to an app the developer already has
-// open. TEAMREE_BACKGROUND_LAUNCH stops the window from stealing focus.
+// A throwaway --user-data-dir keeps the single-instance lock from handing the run to an app the
+// developer already has open. TEAMREE_BACKGROUND_LAUNCH stops the window stealing focus.
 const child = spawn(app.binary, [`--user-data-dir=${userData}`, ...electronSandboxArgs()], {
-  // And the checkout it makes under the same scratch, so a verify run leaves
-  // nothing in the folder the real app lists.
+  // The checkout goes under the same scratch, so nothing lands in the folder the real app lists.
   env: { ...process.env, TEAMREE_BACKGROUND_LAUNCH: '1', TEAMREE_WORKTREES_ROOT: join(scratch, 'worktrees') },
   stdio: ['ignore', 'pipe', 'pipe']
 })
@@ -405,10 +332,7 @@ child.on('error', (error) => fail(`could not launch ${app.binary}`, String(error
 let exited = null
 child.on('exit', (code, signal) => (exited = { code, signal }))
 
-// The checkout goes under the scratch directory now (TEAMREE_WORKTREES_ROOT
-// above), but it is still handed back through the app first: a worktree removed
-// under a running runtime is one the runtime knows is gone, and the branch it
-// made in the fixture repository goes with it.
+// Handed back through the app first, so the runtime knows it is gone and the branch goes with it.
 let createdWorktree = null
 
 function cleanup() {
@@ -502,18 +426,9 @@ ok(`shipped CLI reached the packaged runtime (status: ${JSON.stringify(status.da
 
 // ------------------------------------------- what the app says about its CLI --
 
-// Everything the first-run offer says rests on this one read, and only a real
-// packaged app can answer it: the app finds its own CLI through
-// `process.resourcesPath`. Every claim is checked against the package on disk,
-// because a status naming a path with nothing at it is a panel offering to link
-// one — and an offer made from the wrong place costs somebody a password.
-//
-// The install itself is not driven from here. It writes to /usr/local/bin, and
-// that destination is deliberately not configurable: an environment variable
-// that moved it would let the environment choose the target of a symlink
-// written as root. Linking is covered against a temporary directory in
-// src/main/cli/cliService.test.ts and through the real dispatcher in
-// registerCliHandlers.test.ts; what only a packaged app can answer is here.
+// The first-run offer rests on this read, and only a packaged app can answer it (`process.resourcesPath`).
+// The install is not driven from here: it writes to /usr/local/bin as root, deliberately not configurable,
+// and is covered in src/main/cli/cliService.test.ts and registerCliHandlers.test.ts.
 const cliStatus = cliJson('cli', 'status').data
 const shippedCli = join(app.resources, 'cli', 'teamree')
 
@@ -537,17 +452,14 @@ if (wrong) {
   fail(`the packaged app is wrong about its own CLI: ${wrong}`, JSON.stringify(cliStatus, null, 2))
 }
 if (cliStatus.impermanent !== null) {
-  // Not a packaging fault and not a failure: it is what the app should say
-  // about a copy being run from the disk image, and from there it refuses to
-  // link rather than leaving a symlink that dangles at the eject.
+  // Not a failure: a copy run from the disk image refuses to link rather than dangle at the eject.
   ok(`the app knows it is running from somewhere a link cannot follow (${cliStatus.impermanent})`)
 }
 ok(`the app finds its own CLI at ${cliStatus.source}, with the bundle at ${cliStatus.bundle}`)
 
 cliJson('project', 'add', repo, '--name', 'verify')
 
-// Creation is asynchronous by design, so poll the list rather than leaning on
-// any one wait command staying in the CLI surface.
+// Creation is asynchronous, so poll the list.
 const created = cliJson('worktree', 'create', '--project', 'verify', '--name', 'verify').data
 let worktree = created
 const waitUntil = Date.now() + STEP_TIMEOUT_MS
@@ -576,8 +488,7 @@ const readUntil = Date.now() + STEP_TIMEOUT_MS
 while (Date.now() < readUntil) {
   await sleep(400)
   output = cliJson('terminal', 'read', terminal.id).data.data
-  // The echoed command line contains the marker too, so wait for it twice:
-  // once as the keystrokes, once as the shell's own output.
+  // The echoed command line holds the marker too, so wait for it twice.
   if (output.split(MARKER).length > 2) break
 }
 

@@ -1,17 +1,6 @@
-// electron-builder afterPack hook. Everything here is about node-pty, which is
-// the one part of this app that a naive package quietly breaks:
-//
-//   * its native binary and its `spawn-helper` executable have to live outside
-//     the asar archive (electron-builder.yml unpacks them),
-//   * `spawn-helper` has to keep its executable bit, or every PTY spawn fails
-//     with "posix_spawnp failed" — the same failure scripts/fix-pty-permissions.mjs
-//     repairs in a source checkout,
-//   * and its prebuilt binaries for four platforms are ~58 MB, of which one
-//     platform's worth is useful in any given artifact.
-//
-// The hook fixes the first two and prunes the third, then verifies rather than
-// assumes: a broken package here surfaces as a build failure, not as a terminal
-// that never opens on a user's machine.
+// electron-builder afterPack hook, all about node-pty: keeps it outside the asar, keeps `spawn-helper`
+// executable (else every spawn fails "posix_spawnp failed"), prunes ~58 MB of foreign prebuilds,
+// and verifies rather than assumes so a broken package fails the build, not a user's terminal.
 import { chmodSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -54,24 +43,9 @@ export default async function afterPack(context) {
   }
 
   // --- only this platform's prebuilt binaries are worth shipping ------------
-  //
-  // Platform, not architecture, and that distinction is load-bearing now that
-  // macOS ships as a single universal artifact. A universal app runs on Apple
-  // Silicon and on Intel, so it has to carry node-pty for both: `node-gyp-build`
-  // resolves `prebuilds/darwin-<arch>` from `process.arch` at run time, so an
-  // app pruned to the architecture it happened to be packed on would open no
-  // terminal at all on half the Macs it claims to support.
-  //
-  // It also makes the merge possible. electron-builder packs each architecture
-  // separately and lipos the results, and two trees that disagree about which
-  // prebuild directory exists are two trees that cannot be merged into one
-  // asar. Keeping every darwin prebuild in both makes them identical.
-  //
-  // `universal` is a third pass, not a third architecture. electron-builder
-  // packs x64, packs arm64, merges them, and runs this hook over the merged
-  // bundle with `arch` reported as `universal` — for which there is no prebuild
-  // and never will be. What that pass has to check is that *both* real ones
-  // survived the merge.
+  // Platform, not architecture: `node-gyp-build` picks `prebuilds/darwin-<arch>` at run time, so a
+  // universal app needs both, and two per-arch trees that disagree cannot be merged into one asar.
+  // `universal` is a third pass over the merged bundle, with no prebuild of its own; it checks both survived.
   const prebuilds = join(pty, 'prebuilds')
   const wantedArches = arch === 'universal' ? ['arm64', 'x64'] : [arch]
   const wanted = wantedArches.map((each) => `${electronPlatformName}-${each}`)
@@ -90,18 +64,13 @@ export default async function afterPack(context) {
   }
 
   // --- the native module has to exist for every target -----------------------
-  // The directory existing is not the same as the binary being in it: a failed
-  // node-gyp run leaves build/Release behind empty, so look for pty.node itself.
-  // One directory per architecture the artifact claims to run on, which is two
-  // for a universal build and one for everything else.
+  // A failed node-gyp run leaves build/Release behind empty, so look for pty.node itself.
   const compiled = join(pty, 'build', 'Release')
   const binaryDirs = wanted.map((name) => {
     const prebuilt = join(prebuilds, name)
     const found = [prebuilt, compiled].find((dir) => existsSync(join(dir, 'pty.node')))
     if (!found) {
-      // node-pty publishes no Linux prebuild: it is compiled by `npm install`,
-      // so a Linux artifact packaged on macOS or Windows would ship no PTY at
-      // all.
+      // node-pty publishes no Linux prebuild; a Linux artifact packaged elsewhere ships no PTY at all.
       throw new Error(
         `node-pty has no pty.node for ${name}: it is in neither ${prebuilt} nor ${compiled}. ` +
           `Package the ${electronPlatformName} artifact on ${electronPlatformName}, where npm install builds one.`
@@ -112,13 +81,10 @@ export default async function afterPack(context) {
   log(`node-pty binaries found for ${wanted.join(', ')}`)
 
   // --- spawn-helper has to stay executable ---------------------------------
-  // macOS only, and deliberately not "every platform that is not Windows":
-  // node-pty builds spawn-helper under `OS=="mac"` alone and calls it from a
-  // `#if defined(__APPLE__)` branch of pty.cc. Linux forks and execvp's in
-  // process, so demanding the helper there fails a package that is in fact fine.
+  // macOS only: node-pty builds spawn-helper under `OS=="mac"` alone; Linux execvp's in process,
+  // so demanding the helper there fails a package that is fine.
   if (electronPlatformName === 'darwin') {
-    // Every architecture's helper, not just the first: on a universal build the
-    // one that matters is whichever machine opens the terminal.
+    // Every architecture's helper: on a universal build the one that matters is whichever Mac opens it.
     for (const binaryDir of binaryDirs) {
       const helper = join(binaryDir, 'spawn-helper')
       if (!existsSync(helper)) {
@@ -138,12 +104,8 @@ export default async function afterPack(context) {
   }
 
   // --- the Windows PTY needs more than pty.node ----------------------------
-  // Windows is the platform this project cannot run, so its failures have to be
-  // made to happen here, on the Windows runner, rather than on a user's machine
-  // the first time they open a terminal. node-pty picks its backend at spawn
-  // time: ConPTY out of conpty.node, falling back to winpty, which is pty.node
-  // plus a DLL and a separate agent executable it launches. Any one of these
-  // missing is invisible until a pane fails to open, so all of them are checked.
+  // node-pty picks ConPTY (conpty.node) or winpty (pty.node + DLL + agent exe) at spawn time;
+  // any one missing is invisible until a pane fails to open.
   if (electronPlatformName === 'win32') {
     const required = ['conpty.node', 'pty.node', 'winpty.dll', 'winpty-agent.exe']
     const [binaryDir] = binaryDirs
@@ -157,9 +119,7 @@ export default async function afterPack(context) {
     }
     log(`Windows PTY backends present: ${required.join(', ')}`)
 
-    // The conpty/ sidecar carries the Windows Terminal ConPTY implementation
-    // node-pty prefers over the one in the OS. It is loaded by path, not by
-    // require, so nothing would complain at build time if it went missing.
+    // The conpty/ sidecar is loaded by path, not require, so nothing complains at build time if missing.
     const conpty = join(binaryDir, 'conpty')
     const sidecars = ['conpty.dll', 'OpenConsole.exe'].filter((name) => !existsSync(join(conpty, name)))
     if (sidecars.length > 0) {
@@ -169,27 +129,11 @@ export default async function afterPack(context) {
   }
 
   // --- the shipped launchers have to stay executable ------------------------
-  //
-  // Both of them, and it used to be one. `resources/cli/teamree` was repaired
-  // here and `resources/relay/teamree-relay` was not, which left the second one
-  // standing on nothing but `100755` in git surviving electron-builder's copy.
-  // That is true today and is not a property this hook was asserting.
-  //
-  // The two are run the same way and fail the same way. Neither is exec'd by
-  // Electron: the CLI launcher is what a `/usr/local/bin` symlink points at, and
-  // the relay launcher is handed to a login shell as the first word of a command
-  // line (see `shippedRelayCommand`, which quotes it and appends `deploy`). A
-  // shell asked to run a 0644 file answers "permission denied" and stops, so the
-  // Teamwork panel's one button would be dead for every .dmg user while the
-  // build that produced it looked clean.
-  //
-  // `verify-package.mjs` already refuses a relay launcher without the bit, but
-  // that is an optional step somebody runs; this one runs on every package, and
-  // it repairs rather than reports — which is what the CLI launcher has always
-  // had and what the file beside it was missing.
+  // Neither is exec'd by Electron: the CLI launcher is what the /usr/local/bin symlink points at, the
+  // relay launcher is the first word of a shell command (`shippedRelayCommand`). A 0644 file gets
+  // "permission denied" from the shell, so the Teamwork panel's button would be dead for every .dmg user.
   if (electronPlatformName !== 'win32') {
-    // `.cmd` on Windows is not a program, which is why this whole block is
-    // skipped there; on macOS and Linux both of these are `#!/bin/sh` scripts.
+    // `.cmd` on Windows is not a program; on macOS and Linux both are `#!/bin/sh` scripts.
     for (const [what, ...segments] of [
       ['CLI', 'cli', 'teamree'],
       ['relay', 'relay', 'teamree-relay']

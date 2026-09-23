@@ -1,19 +1,7 @@
 #!/usr/bin/env node
-// Two teamree peers on one machine.
-//
-// Teamwork will be debugged here far more often than it is debugged across two
-// laptops, because two laptops cannot be put under a debugger, restarted a
-// hundred times, or run in CI. So this stands up everything a real pair has
-// except the distance: two runtimes, in two processes, with their own user data
-// directories, their own identities, and their own clones of the same
-// repository — and it tears all of it down afterwards.
-//
-//   node scripts/teamwork/two-peers.mjs           # stand up, self-check, tear down
-//   node scripts/teamwork/two-peers.mjs --keep    # stand up and stay, for poking at
-//
-// The distance is the only thing it fakes, and it no longer fakes even that:
-// `linkPeers()` runs the real relay as a third child process on a real port,
-// and the two runtimes reach each other over it the way two laptops would.
+// Two teamree peers on one machine: two runtimes, two user data dirs, two clones,
+// a real relay between them, all torn down afterwards.
+//   node scripts/teamwork/two-peers.mjs [--keep]
 
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -32,21 +20,10 @@ const RUNTIME_HOST = join(REPO_ROOT, 'scripts', 'acceptance-host.mjs')
 const DISCOVERY_FILE = 'runtime.json'
 
 /**
- * What every clone here calls `origin`, and the one thing about this harness
- * that is a stand-in rather than the real article.
- *
- * What makes two checkouts the same project is a hash of the normalised
- * `origin` URL, and "normalised" needs a host: a bare path is not a URL at all,
- * and `file://localhost/…` loses its host to the URL standard, which folds that
- * host back to nothing. Either one has both runtimes answer "the origin remote
- * is not a URL teamree can compare with a teammate's" and sit there — which is
- * teamwork correctly switched off, not teamwork under test.
- *
- * So `origin` is the address two people on two laptops would share, and the
- * bare repository they actually push to is a second remote. Nothing dials this
- * one; `gitPush` and `gitPull` name the other. What is under test is that both
- * machines derive the same project key from the same string, which is exactly
- * what a real pair's two clones of one forge repository do.
+ * What every clone calls `origin`. The project key is a hash of the normalised
+ * origin URL, which needs a host: a bare path or `file://localhost/…` (host folded
+ * away by the URL standard) has both runtimes refuse to compare origins at all.
+ * Nothing dials this; `gitPush`/`gitPull` name `TRANSPORT_REMOTE`.
  */
 const PROJECT_REMOTE = 'git@teamree.invalid:teamree/ledger.git'
 
@@ -57,28 +34,11 @@ const TRANSPORT_REMOTE = 'seed'
 const RELAY_ENTRY = join(REPO_ROOT, 'relay', 'dist', 'node', 'index.js')
 
 /*
- * There is no shutdown budget in this file any more, and that is deliberate.
- *
- * `Peer.stop()` used to give an ordered shutdown a fixed number of milliseconds
- * — five seconds once, then twenty — and kill the tree when they ran out. Both
- * numbers were guesses at how long somebody else's process takes to close its
- * ptys, and both were wrong in the same direction on a machine with other work
- * on it: the runtime was merely slow, the harness killed it anyway, and the
- * discovery file the kill left behind was then reported as the runtime having
- * leaked it. The five second version was caught doing exactly that. Twenty was
- * the same bug with a longer fuse, and four copies of this suite running at
- * once was enough to light it.
- *
- * What the checks in `TwoPeers.stop()` are about is *order* — that a runtime
- * unlinks its socket and its discovery file before it exits — and order does
- * not care how long the exit took. So the wait below is for the exit itself,
- * with no deadline of its own. A runtime that never exits is a hang rather than
- * a slow shutdown, and a hang is what vitest's timeout on the hook is for.
- *
- * What made the stopwatch feel necessary was the fear of orphans: a harness
- * that has itself been killed cannot signal anything. That is handled where it
- * can be handled, by the runtime rather than by its parent — see the stdin
- * guard in `acceptance-host.mjs`.
+ * No shutdown deadline here, deliberately: a fixed budget (5s, then 20s) killed a
+ * merely slow runtime under load and the discovery file the kill left behind was
+ * reported as a leak. `TwoPeers.stop()` checks order, not speed; a hang is what
+ * vitest's hook timeout is for. Orphans are the runtime's job: see the stdin guard
+ * in `acceptance-host.mjs`.
  */
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -118,11 +78,8 @@ export async function startTwoPeers(options = {}) {
   const started = []
 
   try {
-    // One repository both peers clone from and push to. A bare repository
-    // stands in for the git host a real team shares, and it is the right
-    // stand-in: what membership actually depends on is push access, not which
-    // forge hosts it. Each clone reaches it under `TRANSPORT_REMOTE` and calls
-    // `PROJECT_REMOTE` its origin — see the note on that constant.
+    // One bare repository both peers clone from and push to, reached as
+    // `TRANSPORT_REMOTE`; `PROJECT_REMOTE` is what each clone calls origin.
     const seed = await createExampleRepo({ destination: join(root, 'seed'), withOrigin: true })
     const origin = seed.origin
     log(`origin at ${origin}`)
@@ -145,59 +102,42 @@ async function startPeer({ root, origin, handle, log }) {
   const userDataDir = join(home, 'userdata')
   const repoPath = join(home, 'ledger')
 
-  // The runtime opens its store and binds its socket inside this directory but
-  // does not create it, so a missing one surfaces much later as a failure to
-  // listen rather than as the missing directory it is.
+  // The runtime does not create this directory; a missing one surfaces later as
+  // a failure to listen.
   await mkdir(userDataDir, { recursive: true })
 
-  // A clone each, not a shared checkout. Two people do not share a working
-  // directory, and a harness where they did would never see the class of bug
-  // that only appears when two clones disagree about a branch.
+  // A clone each, not a shared checkout: two clones can disagree about a branch.
   await run('git', ['clone', '--quiet', origin, repoPath])
-  // Checked rather than assumed: a clone of a repository whose HEAD names a
-  // branch nobody pushed succeeds, and leaves an empty directory behind. Every
-  // later step then works on nothing, and the run passes while proving nothing.
+  // A clone of a repository whose HEAD names an unpushed branch succeeds and
+  // leaves an empty directory; every later step would then pass on nothing.
   if (!(await exists(join(repoPath, 'package.json')))) {
     throw new Error(`${handle}'s clone of ${origin} came up empty; check the origin's HEAD`)
   }
   await run('git', ['-C', repoPath, 'config', 'user.name', handle])
   await run('git', ['-C', repoPath, 'config', 'user.email', `${handle}@teamree.invalid`])
 
-  // The clone's `origin` becomes the transport remote and `origin` becomes the
-  // address the team shares. The rename carries the branch's tracking config
-  // with it, so pulling and pushing go on working without being told where.
+  // The rename carries the branch's tracking config with it, so pull and push go
+  // on working without being told where.
   await run('git', ['-C', repoPath, 'remote', 'rename', 'origin', TRANSPORT_REMOTE])
   await run('git', ['-C', repoPath, 'remote', 'add', 'origin', PROJECT_REMOTE])
 
-  // The host is a `.mjs` that imports TypeScript, so it needs a loader; tsx is
-  // what the acceptance suite already uses for exactly this. Reached through npx
-  // for the same reason it is there: so a clean checkout needs no extra step.
-  //
-  // `detached` is not optional here. npx puts two wrapper processes between us
-  // and the runtime, and a signal sent to the wrapper is not passed down — the
-  // runtime survives, holding its socket, and the next run inherits a stale
-  // endpoint whose owner is still alive. Detaching makes the child a process
-  // group leader so the whole tree can be signalled at once.
+  // `detached` is not optional: npx puts two wrappers between us and the runtime
+  // and a signal to the wrapper is not passed down, so the runtime would survive
+  // holding its socket. Detached, the child leads a group the whole tree is in.
   const child = spawn('npx', ['tsx', RUNTIME_HOST], {
     env: {
       ...process.env,
       TEAMREE_USER_DATA_DIR: userDataDir,
       TEAMREE_TEST_VERSION: `0.0.0-${handle}`,
-      // A home each, so that nothing a runtime writes under one is shared with
-      // the other peer or with the person running the suite. The checkouts are
-      // no longer part of that argument — `acceptance-host.mjs` now puts those
-      // under each peer's own `userDataDir` — but a home is read by git and by
-      // npm as well, and "torn down, nothing left running" has to be true of
-      // everything a peer touched and not only of the parts this file lists.
+      // A home each: git and npm read it too, and teardown has to cover
+      // everything a peer touched.
       HOME: home,
       USERPROFILE: home,
-      // npm's cache is keyed off the home it is given, so it is named back
-      // explicitly: without it every runtime would re-fetch `tsx` from the
-      // network, and this harness has to work offline.
+      // npm's cache is keyed off the home, so name it back or every runtime
+      // re-fetches `tsx`; this harness has to work offline.
       npm_config_cache: process.env.npm_config_cache ?? join(homedir(), '.npm')
     },
-    // A pipe rather than /dev/null, and never written to: it is how the runtime
-    // learns this process has died. See `acceptance-host.mjs`.
+    // A pipe, never written to: how the runtime learns this process has died.
     stdio: ['pipe', 'pipe', 'pipe'],
     detached: process.platform !== 'win32'
   })
@@ -235,9 +175,7 @@ async function startPeer({ root, origin, handle, log }) {
 
     return new Peer({ handle, home, userDataDir, repoPath, discoveryPath, discovery, client, child, output })
   } catch (error) {
-    // A runtime that never became usable is still a running process. Leaving it
-    // behind is how one bad run turns into a machine full of orphans, and how
-    // the next run fails for a reason that has nothing to do with the change.
+    // A runtime that never became usable is still a running process.
     killTree(child, 'SIGKILL')
     throw error
   }
@@ -268,18 +206,13 @@ class Peer {
   }
 
   /**
-   * Tells this runtime about its own clone, once.
-   *
-   * Lazy rather than done at startup because a runtime that has been told
-   * about no projects is a real state the harness wants to be able to observe,
-   * and because adding one is a thing a test may want to watch happen.
+   * Tells this runtime about its own clone, once. Lazy so a test can observe a
+   * runtime with no projects, or watch one being added.
    */
   async ensureProject() {
     if (this.projectId !== undefined) return this.projectId
-    // Matched on the resolved path, because the runtime stores the repository
-    // root it resolved and `$TMPDIR` is a symlink on macOS. Comparing the two
-    // spellings would have this add a project the runtime already has and be
-    // told, correctly, that it is a duplicate.
+    // Matched on the resolved path: the runtime stores the resolved root and
+    // `$TMPDIR` is a symlink on macOS, so the raw spelling reads as a duplicate.
     const mine = await realpath(this.repoPath)
     const tracked = await this.call('project.list')
     const known = await findAsync(tracked, async (project) => (await realpath(project.path)) === mine)
@@ -288,12 +221,8 @@ class Peer {
   }
 
   /**
-   * Who this installation is, according to the installation.
-   *
-   * The keypair is the runtime's, generated on its first run and kept in its
-   * own data directory. The harness used to mint one itself, which passed its
-   * own tests while proving nothing: a roster full of keys the app has never
-   * heard of authenticates nobody.
+   * Who this installation is, according to the installation: the keypair is
+   * the runtime's own, not one the harness minted.
    */
   async whoAmI() {
     const list = await this.call('members.list', { projectId: await this.ensureProject() })
@@ -302,13 +231,8 @@ class Peer {
   }
 
   /**
-   * Writes this peer's public key into its own clone, through the app.
-   *
-   * `members.join` is the Add my key button in the Start teamwork panel, and it
-   * writes the file and stops there — no staging, no commit, no push. Getting it
-   * into the repository is the step the runbook makes a person do on purpose,
-   * and a harness that did it silently would hide the one thing most likely to
-   * be forgotten.
+   * Writes this peer's public key into its own clone, through the app. Like the
+   * Add my key button it stops at the file: no commit, no push.
    */
   async addSelfToRoster() {
     const list = await this.call('members.join', { projectId: await this.ensureProject(), handle: this.handle })
@@ -321,30 +245,16 @@ class Peer {
     return readRoster(this.repoPath)
   }
 
-  /**
-   * How this peer's links to its teammates are going, in one project.
-   *
-   * A project the runtime has not read yet reports no links, because it knows
-   * of none — and that is what every caller here wants: all of them are waiting
-   * for links to come up, and "none yet" is the state they are waiting out.
-   */
+  /** This peer's links to its teammates; an unread project reports none. */
   async links() {
     const status = await this.call('teamwork.status', { projectId: await this.ensureProject() })
     return status.state === 'read' ? status.links : []
   }
 
   /**
-   * Waits until teamwork has caught up with a project this runtime was just
-   * given.
-   *
-   * `project.add` answers as soon as the project is in the store, and the peer
-   * service reconciles against it afterwards on the workspace bus. Until it
-   * has, `teamwork.status` answers `state: 'unread'` — the project exists and
-   * nothing has been read about it — so this waits for the read rather than for
-   * the call to stop failing. It used to wait for the latter, because the
-   * method used to refuse a project the store plainly had; a wait on a call
-   * that no longer throws is a wait that ends immediately and hands the next
-   * line a project with no facts in it.
+   * Waits until teamwork has reconciled a project this runtime was just given:
+   * `project.add` answers before the peer service has read it, and until then
+   * `teamwork.status` says `unread` rather than throwing.
    */
   async waitForTeamwork(options = {}) {
     await until(
@@ -352,8 +262,7 @@ class Peer {
         try {
           const status = await this.call('teamwork.status', { projectId: await this.ensureProject() })
           return status.state === 'read'
-          // A runtime still opening its socket, which is a different wait and
-          // one this loop is also the end of.
+          // A runtime still opening its socket.
         } catch {
           return false
         }
@@ -371,13 +280,9 @@ class Peer {
         seen = await this.links()
         return seen.some((link) => link.phase === 'connected')
       },
-      // The phases and whatever the runtime complained about, not just the
-      // fact. "dialling forever", "handshaking and dropping", and "no link at
-      // all because the peer service never started" read identically without
-      // them — and the last of those is invisible from this end, because
-      // `startRuntime` reports a peer service that failed to start and carries
-      // on serving. Every reader of this timeout has so far gone looking for a
-      // race in the relay; the runtime's own words come first now.
+      // Phases and the runtime's own words: a peer service that failed to start
+      // is invisible from this end, since `startRuntime` reports it and carries
+      // on serving, and without them every timeout reads as a relay race.
       () => `${this.handle} to connect to a teammate (last seen: ${JSON.stringify(seen)})${this.saidSoFar()}`,
       options.timeoutMs
     )
@@ -394,11 +299,8 @@ class Peer {
   }
 
   /**
-   * Rebase rather than fast-forward. Two people who each commit their own key
-   * onto the same base have diverged by the time the second one pulls, and
-   * `--ff-only` simply refuses — which is correct, and useless, because the two
-   * commits touch different files and the person is going to rebase anyway.
-   * This is the first thing a real pair hits, so the harness hits it too.
+   * Rebase rather than fast-forward: two people committing their own key onto
+   * the same base have diverged by the second pull, and `--ff-only` refuses.
    */
   async gitPull() {
     await run('git', ['-C', this.repoPath, 'pull', '--quiet', '--rebase', TRANSPORT_REMOTE, 'HEAD'])
@@ -414,31 +316,18 @@ class Peer {
     if (this.child.exitCode !== null || this.child.signalCode !== null) return
 
     const ended = new Promise((resolve) => this.child.once('exit', resolve))
-    // SIGTERM asks the runtime to shut its PTYs down in order and to take its
-    // discovery file and socket with it, which is the path worth exercising.
-    // Nothing kills it afterwards: a shutdown that is slow is still ordered,
-    // and the checks in `TwoPeers.stop()` are about what the runtime had done
-    // by the time it went, not about when it went.
+    // SIGTERM is the ordered shutdown path worth exercising; nothing kills it
+    // afterwards, since the checks in `TwoPeers.stop()` are about order not time.
     killTree(this.child, 'SIGTERM')
     await this.#wentQuietly()
     await ended
   }
 
   /**
-   * Waits for the *runtime* to go, not for the wrapper that spawned it.
-   *
-   * `npx` sits two processes above the runtime and both die the moment the
-   * process group is signalled, while the runtime under them is still closing
-   * ptys, flushing its store and unlinking its socket. A harness that waited on
-   * the wrapper and then asked whether the discovery file was gone would lose
-   * that race under load — and would lose it as "the runtime leaked", which is
-   * a lie about the code under test rather than a report about it.
-   *
-   * There is no deadline here on purpose; see the note above. What the exit
-   * is waited for is so that the questions asked afterwards — is the discovery
-   * file gone, is the socket gone — are asked of a runtime that has finished,
-   * which makes them questions about the order it did things in rather than
-   * about how fast this machine happened to be.
+   * Waits for the *runtime* to go, not the npx wrappers above it, which die the
+   * moment the group is signalled while the runtime is still unlinking its
+   * socket. Waiting on the wrapper loses that race under load as "leaked".
+   * No deadline on purpose; see the note at the top.
    */
   async #wentQuietly() {
     while (isAlive(this.discovery.pid)) await sleep(25)
@@ -469,24 +358,10 @@ export class TwoPeers {
   }
 
   /**
-   * Puts the two peers on a relay and waits until they have found each other.
-   *
-   * Everything here is the real thing. The relay is its own build, run as a
-   * third child process on a port the OS picks, torn down with the runtimes.
-   * Each peer opens an outbound WebSocket to it and neither listens, so neither
-   * needs an address. The relay splices the two streams and learns who is
-   * paired and when, and nothing else: the Noise `IK` handshake runs over the
-   * splice, each side authenticating the other against the static public key it
-   * read from `.teamree/members/<handle>.pub`, so the relay carries ciphertext.
-   * After that a teammate is a third transport onto the catalogue `call()`
-   * already speaks.
-   *
-   * The relay is committed rather than set per machine, because that is what
-   * `docs/trying-teamwork.md` tells a real pair to do and it is the order that
-   * matters: one person writes `.teamree/relay`, commits it and pushes, and the
-   * other gets the team's relay in a pull. Two machines each writing their own
-   * copy would leave two dirty checkouts and make the one team-wide fact a
-   * per-machine setting.
+   * Puts the two peers on a real relay (a third child process, OS-picked port)
+   * and waits until they have found each other. The relay is committed and
+   * pulled, not set per machine: that is the order `docs/trying-teamwork.md`
+   * gives a real pair.
    */
   async linkPeers(options = {}) {
     if (!relayIsBuilt()) throw new RelayNotBuilt()
@@ -499,18 +374,14 @@ export class TwoPeers {
     await this.leader.call('teamwork.setRelay', { projectId: this.leader.projectId, url: this.relay.url })
     await this.leader.commit('Point the team at a relay', ['.teamree'])
     await this.leader.gitPush()
-    // Nothing restarts. teamree watches `.teamree` in each checkout, so the
-    // pull that brings the relay in is what rebuilds the joiner's links — and
-    // a harness that restarted here would be proving a runbook step that says
-    // the opposite.
+    // Nothing restarts: teamree watches `.teamree`, so the pull is what rebuilds
+    // the joiner's links.
     await this.joiner.gitPull()
 
     try {
       await Promise.all(this.peers.map((peer) => peer.waitForLink(options)))
     } catch (error) {
-      // The relay is a dependency of this wait and not a participant in it, so
-      // its having died says more about the timeout than anything either peer
-      // could report about itself.
+      // A dead relay says more about the timeout than either peer can.
       const trouble = this.relay.trouble()
       throw trouble === '' ? error : new Error(`${error.message}\nand the relay is not well:\n${trouble}`)
     }
@@ -518,12 +389,8 @@ export class TwoPeers {
   }
 
   /**
-   * A third runtime, with its own clone, its own identity and its own data
-   * directory, on the relay the pair is already using.
-   *
-   * Who they are is decided by the repository and not by this call: a handle
-   * whose key nobody committed is a stranger, and the same runtime becomes a
-   * member the moment somebody pushes their `.pub`.
+   * A third runtime on the pair's relay. Member or stranger is decided by the
+   * repository, not by this call.
    */
   async addPeer(handle) {
     if (!this.relay) throw new Error('stand a relay up with linkPeers() first; a peer with no relay meets nobody')
@@ -539,16 +406,10 @@ export class TwoPeers {
     for (const peer of this.everyone) await peer.gitPull()
   }
 
-  /**
-   * Tears everything down and checks it actually went. Returns the leftovers it
-   * found, which should be empty: "nothing is still running" is the assertion a
-   * harness has to make about itself before anybody trusts a test it ran.
-   */
+  /** Tears everything down and returns whatever was left behind (should be empty). */
   async stop() {
     const leftovers = []
-    // Before the runtimes: a relay outliving the peers it spliced would hold
-    // its port into the next run, and the peers have nothing to say to it once
-    // they are being shut down anyway.
+    // Relay first: outliving the peers it would hold its port into the next run.
     await this.relay?.stop()
     this.relay = undefined
     for (const peer of this.everyone) {

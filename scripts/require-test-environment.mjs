@@ -1,42 +1,8 @@
-// Refuses to start the suite in a checkout that cannot run all of it.
-//
-// A run that ends "1952 passed" is read as "the project is proven", and for a
-// long time it was not: several of this project's strongest tests decide for
-// themselves whether to run, by looking for something on disk and skipping when
-// it is absent. `relayProcess.test.ts` and `relayWatch.test.ts` spawn the built
-// relay and drive real WebSockets through it — they are the only tests that
-// prove teamwork end to end rather than against a fake. The seven PTY suites
-// fork a real pty — this is a terminal application, and a run that could not
-// open a terminal is not a pass. Both groups skip on an absence, and a skip
-// nobody sees is a test that does not exist.
-//
-// This used to say so only when `CI` was set. That was the wrong way round, and
-// it is more wrong now that this repository has no GitHub Actions at all: a
-// local `npm test` is the only gate there is, and it was the one run where the
-// check printed a warning into the middle of a minute of vitest output and
-// exited 0.
-//
-// So the rule here is that an absence is never inferred. Every refusal below
-// names the command that fixes it, and every one of them can be stood down —
-// but only by typing the opt-out, never by lacking something:
-//
-//   TEAMREE_SKIP_RELAY_TESTS=1   the relay package is not built or installed
-//                                here, and the peer tests that drive it, plus
-//                                the relay's own suite, are to be left out.
-//   TEAMREE_SKIP_PTY_TESTS=1     this machine cannot fork a pty, and the seven
-//                                terminal suites are to be left out.
-//
-// `scripts/vitest-skip-allowlist.mjs` reads the same two variables and is what
-// makes them honest: it fails the run on any skip that is not accounted for, so
-// opting out here shows up there as a permitted absence rather than as silence.
-// It carries a third variable of its own, TEAMREE_SKIP_WORKERD_TESTS=1, for the
-// relay's three Worker suites. That one is not checked here because the relay's
-// own `workerdUnavailable()` already says precisely why the runtime is missing,
-// and restating it would be two answers to one question.
-//
-// Two entry points, one implementation: `pretest` runs this file as a script,
-// and `vitest.config.ts` names it as a globalSetup so that `npx vitest run`
-// cannot start a quieter suite than `npm test` would.
+// Refuses to start the suite in a checkout that cannot run all of it: the relay tests and the seven
+// PTY suites skip on an absence, and a skip nobody sees is a test that does not exist. An absence is
+// never inferred; only TEAMREE_SKIP_RELAY_TESTS=1 / TEAMREE_SKIP_PTY_TESTS=1 stand a refusal down, and
+// `scripts/vitest-skip-allowlist.mjs` reads the same two so the opt-out is a permitted absence there.
+// Run by `pretest` as a script and by `vitest.config.ts` as a globalSetup, so `npx vitest run` is no quieter.
 
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -70,13 +36,8 @@ function newestMtime(directory) {
 }
 
 /**
- * Why the relay under test is not the relay in the tree, or null when it is.
- *
- * `relay/dist` is gitignored, so it is per-machine state no commit keeps in
- * step, and nothing in the root `npm run build` touches it. Editing
- * `relay/src/**` and running `npm test` therefore used to be green with every
- * relay test driving the previously built relay — a pass that says nothing
- * about the code that was changed.
+ * Why the relay under test is not the relay in the tree, or null. `relay/dist` is gitignored and the
+ * root build never touches it, so an edit to `relay/src` would otherwise test the previous build.
  */
 function relayBuildDrift() {
   if (!existsSync(RELAY_DIST)) return null
@@ -87,14 +48,8 @@ function relayBuildDrift() {
 }
 
 /**
- * Whether a pty can be forked here.
- *
- * Deliberately the same two-line probe as `canSpawnPty()` in
- * `src/main/terminals/pty-test-support.ts`, rather than an import of it: that
- * file is TypeScript the suite loads through vite, and this runs as a plain
- * script before vite exists. Keep the pair in step — what is being asked is
- * "does node-pty work at all here", and the answer has to be the same one the
- * suites will get.
+ * Whether a pty can be forked here. The same probe as `canSpawnPty()` in
+ * `src/main/terminals/pty-test-support.ts`, copied because this runs before vite exists; keep in step.
  */
 function ptyFailure() {
   const require = createRequire(import.meta.url)
