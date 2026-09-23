@@ -536,7 +536,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'projects' })
       return project
     },
-    'project.setPaths': ({ projectId, linkedPaths, copiedPaths }) => {
+    'project.setPaths': ({ projectId, linkedPaths, copiedPaths, setupCommand }) => {
       const project = required(projects.get(projectId), 'project')
       const next: Project = { ...project }
       if (linkedPaths !== undefined) {
@@ -546,6 +546,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
       if (copiedPaths !== undefined) {
         if (copiedPaths.length === 0) delete next.copiedPaths
         else next.copiedPaths = [...copiedPaths]
+      }
+      if (setupCommand !== undefined) {
+        const trimmed = setupCommand.trim()
+        if (trimmed.length === 0) delete next.setupCommand
+        else next.setupCommand = trimmed
       }
       projects.set(next.id, next)
       announce({ type: 'projects' })

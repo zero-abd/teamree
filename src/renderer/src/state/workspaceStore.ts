@@ -812,16 +812,20 @@ type WorkspaceState = {
   /** Sets one agent's launch arguments, or clears them when given null. */
   setAgentArgs: (kind: string, args: string | null) => void
   /**
-   * Sets what one project's new worktrees carry over from its primary
-   * checkout. Each list given replaces the stored one; an omitted list is left
-   * alone.
+   * Sets what one project's new worktrees carry over from its primary checkout,
+   * and the command they run once they have it. Each field given replaces the
+   * stored one; an omitted field is left alone, and an empty list or an empty
+   * string clears it.
    *
    * Unlike the start point above, this is not a preference of this window: a
    * worktree created from the CLI has to be prepared the same way, so it lives
    * in the workspace beside the project's base ref rather than in local
    * storage.
    */
-  setProjectPaths: (projectId: string, paths: { linkedPaths?: string[]; copiedPaths?: string[] }) => Promise<void>
+  setProjectPaths: (
+    projectId: string,
+    settings: { linkedPaths?: string[]; copiedPaths?: string[]; setupCommand?: string }
+  ) => Promise<void>
   /** Sets one project's editor command, or clears it when given null. */
   setEditorCommand: (projectId: string, command: string | null) => void
   /** Asks the main process which editors are on PATH, once per run. */
@@ -2603,9 +2607,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       writeStoredAgentArgs(storage, agentArgs)
     },
 
-    async setProjectPaths(projectId, paths) {
+    async setProjectPaths(projectId, settings) {
       try {
-        const project = await runtimeClient.call('project.setPaths', { projectId, ...paths })
+        const project = await runtimeClient.call('project.setPaths', { projectId, ...settings })
         // Taken from the answer rather than from what was typed: the runtime
         // trims, de-duplicates and drops an empty list, and a field that went
         // on showing the typing would disagree with what is stored.

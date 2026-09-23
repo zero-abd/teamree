@@ -113,6 +113,15 @@ export const MAX_PANE_LABEL_CHARS = 512
  */
 export const MAX_AGENT_ARGS_CHARS = 4096
 
+/**
+ * How long a project's setup command may be.
+ *
+ * The same generous bound `MAX_AGENT_ARGS_CHARS` is, and for the same reason:
+ * the value is one shell line somebody wrote, and every string this contract
+ * stores is bounded somewhere.
+ */
+export const MAX_SETUP_COMMAND_CHARS = 4096
+
 export const Params = {
   statusGet: z.object({}),
   /**
@@ -145,7 +154,21 @@ export const Params = {
   projectSetPaths: z.object({
     projectId: z.string().min(1),
     linkedPaths: z.array(z.string().min(1).max(512)).max(64).optional(),
-    copiedPaths: z.array(z.string().min(1).max(512)).max(64).optional()
+    copiedPaths: z.array(z.string().min(1).max(512)).max(64).optional(),
+    /**
+     * The command every new worktree of this project runs once its checkout is
+     * ready. Additive and optional, and here rather than under a method of its
+     * own because it is set where the two lists are set, by the same field on
+     * the same settings panel and the same kind of CLI command: this one method
+     * is "what a new worktree of this project gets".
+     *
+     * Omitted leaves the stored command alone; an empty string clears it, which
+     * is how the lists above are cleared. Nothing about it is judged — not the
+     * program, not the syntax — because it runs in the developer's own shell in
+     * their own checkout, and a command this app second-guessed would be a
+     * command they could not write.
+     */
+    setupCommand: z.string().max(MAX_SETUP_COMMAND_CHARS).optional()
   }),
 
   worktreeList: z.object({ projectId: z.string().min(1).optional() }),

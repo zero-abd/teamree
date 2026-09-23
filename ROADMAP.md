@@ -561,6 +561,10 @@ session is an agent running `npm test` in a checkout with no `node_modules`.
 - [x] Two fields per project in Settings, and `teamree project linked` /
       `teamree project copied` from a shell, typed from one `project.setPaths`
       declaration
+- [x] One setup command per project, run once the checkout is ready in a pane of
+      it labelled `setup` — for a create from the window and a create from the CLI
+      alike, and for each worktree of a fan-out — with `teamree project setup` and
+      a third field beside the two above, on that same declaration
 
 ## M30 — Told when an agent stops, and what you missed
 
@@ -791,11 +795,14 @@ recorded so none of them is discovered by surprise later.
   one, which is a different operation with its own failure modes, and it is a
   follow-up rather than an omission.
 
-- **Nothing runs on create.** A new worktree gets its linked directories and its
-  copied files (M29) and no setup command: `npm ci`, a migration, a generator are
-  all still yours to type in the first pane. Running arbitrary code on create is a
-  separate decision about what this app does to a machine on your behalf, and it
-  has deliberately not been taken.
+- **A setup command runs on create, and it runs where you can see it.** The
+  decision this entry used to defer has been taken: a project may name one
+  command — `npm ci`, a migration, a generator — and every new worktree of it
+  runs that command once its checkout is ready. Opt-in, because a project that
+  has said nothing runs nothing; visible, because it runs in a pane of the new
+  worktree labelled `setup` rather than in a hidden child process; and
+  interruptible, because a pane is a pane — the output is the output and Ctrl-C
+  is Ctrl-C. Only on create, never on restore or relaunch.
 
 - **Unread is about this machine's own panes.** The mark is per terminal id against
   the moment that pane was last on screen here, and a teammate's pane is neither —

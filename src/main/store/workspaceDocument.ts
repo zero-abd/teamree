@@ -21,7 +21,11 @@ const ProjectSchema = z.object({
   // project with neither list, which is exactly what a project that carries
   // nothing over into its worktrees looks like.
   linkedPaths: z.array(z.string().min(1)).optional(),
-  copiedPaths: z.array(z.string().min(1)).optional()
+  copiedPaths: z.array(z.string().min(1)).optional(),
+  // Additive for the same reason, and never an empty string: the service
+  // deletes the field rather than storing one, so "" and "never configured"
+  // cannot both be on disk meaning the same thing.
+  setupCommand: z.string().min(1).optional()
 })
 
 const WorktreeSchema = z.object({
@@ -33,7 +37,11 @@ const WorktreeSchema = z.object({
   startedFrom: z.string().min(1),
   state: z.enum(['creating', 'ready', 'removing', 'failed']),
   error: z.string().optional(),
-  createdAt: z.number()
+  createdAt: z.number(),
+  // Which pane the setup command was started in. Kept across a relaunch so the
+  // record still says setup ran, though the pane itself comes back as whatever
+  // `session-restore` makes of it.
+  setupTerminalId: z.string().min(1).optional()
 })
 
 const PaneNodeSchema: z.ZodType<PaneNode> = z.lazy(() =>

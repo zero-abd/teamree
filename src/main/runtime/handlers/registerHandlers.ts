@@ -26,6 +26,7 @@ import type { MethodRegistry } from '../methodRegistry'
 import { CliService, createAdministratorRunner, findShippedCli, registerCliHandlers } from '../../cli'
 import { createEditorActions, registerEditorHandlers } from '../../editor'
 import { GitService, registerGitHandlers } from '../../git'
+import { startSetupCommand } from '../../git/worktreeSetup'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
@@ -176,7 +177,21 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     // Spread rather than passed as `undefined`, because `undefined` is a value
     // the option reader would have to know to ignore; an absent key is the
     // default, said once, in the service that owns it.
-    ...(options.worktreesRoot === undefined ? {} : { worktreesRoot: options.worktreesRoot })
+    ...(options.worktreesRoot === undefined ? {} : { worktreesRoot: options.worktreesRoot }),
+    // The one seam between "a checkout is ready" and "a pane is open in it".
+    // Git knows the moment, terminals own the pane, and this is where the two
+    // meet — for a create from the GUI and a create from the CLI alike, because
+    // both of them come through the same `worktree.create`.
+    startSetup: ({ worktree, command }) => {
+      const terminal = startSetupCommand(terminals.manager, { worktreeId: worktree.id, command })
+      // Announced by hand: the pane was opened by the runtime rather than by a
+      // `terminal.create` call, so the wrapper in workspaceEventSources.ts that
+      // usually says so never runs. Without this the setup pane is invisible to
+      // every window until something else invalidates the list.
+      workspaceEvents.emit({ type: 'terminals' })
+      workspaceEvents.emit({ type: 'layout', worktreeId: terminal.worktreeId })
+      return terminal.id
+    }
   })
   // A worktree removed takes its panes with it, and nothing else does this: a
   // terminal record is dropped only by an explicit close, so without this the

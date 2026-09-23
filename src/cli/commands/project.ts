@@ -12,7 +12,7 @@ export const projectCommands: readonly CommandSpec[] = [
     run: async (context) => {
       const projects = await context.client.call('project.list', {})
       return {
-        data: projects.map(withPathLists),
+        data: projects.map(withProjectDefaults),
         text: formatTable(
           ['ID', 'NAME', 'BASE REF', 'PATH'],
           projects.map((project) => [project.id, project.name, project.baseRef, project.path]),
@@ -44,7 +44,10 @@ export const projectCommands: readonly CommandSpec[] = [
       const path = resolve(context.cwd, context.args[0] as string)
       const name = readString(context.flags, 'name')
       const project = await context.client.call('project.add', name === undefined ? { path } : { path, name })
-      return { data: withPathLists(project), text: `added project ${project.name} (${project.id}) at ${project.path}` }
+      return {
+        data: withProjectDefaults(project),
+        text: `added project ${project.name} (${project.id}) at ${project.path}`
+      }
     }
   },
   pathsCommand('linked', {
@@ -63,6 +66,42 @@ export const projectCommands: readonly CommandSpec[] = [
     examples: ['teamree project copied api', 'teamree project copied api .env .env.local']
   }),
   {
+    path: ['project', 'setup'],
+    summary: 'Show or set the command every new worktree runs.',
+    details:
+      'Given no command, prints the stored one. Given one, replaces it; --clear removes it.\n' +
+      'It runs once the checkout is ready, in a pane of the new worktree labelled "setup", in your login ' +
+      'shell with the checkout as its cwd — so you watch it and can Ctrl-C it. It is not parsed: quote it ' +
+      'as one argument and it is typed into that pane verbatim.\n' +
+      'The pane is recorded on the worktree as setupTerminalId, which `worktree list --json` and ' +
+      '`worktree wait --json` carry once the checkout is ready.',
+    args: [
+      { name: 'project', description: 'Project id, name, or path.', required: true },
+      { name: 'command', description: 'One shell command. Quote it.', required: false }
+    ],
+    flags: [{ name: 'clear', kind: 'boolean', description: 'Remove the command.' }],
+    examples: ['teamree project setup api', 'teamree project setup api "npm ci"'],
+    run: async (context) => {
+      const project = await resolveProject(context.client, context.args[0] as string)
+      const command = context.args[1]
+      const clear = readBoolean(context.flags, 'clear')
+      // Naming no command reads as a question, exactly as it does for the two
+      // path lists above: removing what a project runs has to be typed on
+      // purpose.
+      const after =
+        clear || command !== undefined
+          ? await context.client.call('project.setPaths', {
+              projectId: project.id,
+              setupCommand: clear ? '' : (command as string)
+            })
+          : project
+      return {
+        data: withProjectDefaults(after),
+        text: after.setupCommand ?? `${after.name} runs nothing in a new worktree`
+      }
+    }
+  },
+  {
     path: ['project', 'remove'],
     summary: 'Stop tracking a repository.',
     args: [{ name: 'project', description: 'Project id, name, or path.', required: true }],
@@ -70,7 +109,7 @@ export const projectCommands: readonly CommandSpec[] = [
       const project = await resolveProject(context.client, context.args[0] as string)
       await context.client.call('project.remove', { projectId: project.id })
       return {
-        data: { removed: true, project: withPathLists(project) },
+        data: { removed: true, project: withProjectDefaults(project) },
         text: `removed project ${project.name} (${project.id})`
       }
     }
@@ -116,25 +155,33 @@ function pathsCommand(
         clear || paths.length > 0
           ? await context.client.call('project.setPaths', { projectId: project.id, ...change })
           : project
-      return { data: withPathLists(after), text: describePaths(after, kind) }
+      return { data: withProjectDefaults(after), text: describePaths(after, kind) }
     }
   }
 }
 
 /**
- * A project with both path lists present, empty when they are empty.
+ * A project with every worktree-creation setting present, empty when it is
+ * empty: both path lists, and the setup command.
  *
- * The store drops an empty list rather than keeping `[]`, because a record that
- * has never been configured has said nothing rather than "none" — see
- * `GitService.setProjectPaths`. That is the right shape for a file somebody
- * edits and the wrong one for a script: `teamree project linked api --json`
- * answered `{"id":...,"baseRef":"main"}`, from which no caller can tell an empty
- * list from a field this build does not have. So the absence is resolved here,
- * at the edge that promises a JSON shape, and the stored record keeps its own
- * meaning.
+ * The store drops an empty list and an empty command rather than keeping them,
+ * because a record that has never been configured has said nothing rather than
+ * "none" — see `GitService.setProjectPaths`. That is the right shape for a file
+ * somebody edits and the wrong one for a script: `teamree project linked api
+ * --json` answered `{"id":...,"baseRef":"main"}`, from which no caller can tell
+ * an empty list from a field this build does not have. So the absence is
+ * resolved here, at the edge that promises a JSON shape, and the stored record
+ * keeps its own meaning.
  */
-function withPathLists(project: Project): Project & { linkedPaths: string[]; copiedPaths: string[] } {
-  return { ...project, linkedPaths: project.linkedPaths ?? [], copiedPaths: project.copiedPaths ?? [] }
+function withProjectDefaults(
+  project: Project
+): Project & { linkedPaths: string[]; copiedPaths: string[]; setupCommand: string } {
+  return {
+    ...project,
+    linkedPaths: project.linkedPaths ?? [],
+    copiedPaths: project.copiedPaths ?? [],
+    setupCommand: project.setupCommand ?? ''
+  }
 }
 
 function describePaths(project: Project, kind: 'linked' | 'copied'): string {

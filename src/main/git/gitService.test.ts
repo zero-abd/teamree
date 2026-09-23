@@ -331,3 +331,113 @@ describe('handler seam', () => {
     expect(await handlers['project.remove']({ projectId: project.id })).toEqual({ removed: true })
   })
 })
+
+describe('the command a project runs in every new worktree', () => {
+  /** A `startSetup` that records rather than opening anything. */
+  function recorder(): { startSetup: GitServiceOptions['startSetup']; runs: Array<{ id: string; command: string }> } {
+    const runs: Array<{ id: string; command: string }> = []
+    return {
+      runs,
+      startSetup: ({ worktree, command }) => {
+        runs.push({ id: worktree.id, command })
+        return `t_setup_${runs.length}`
+      }
+    }
+  }
+
+  it('stores the command, trims it, and clears it with an empty string', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    expect(project.setupCommand).toBeUndefined()
+
+    const set = await service.setProjectPaths({ projectId: project.id, setupCommand: '  npm ci  ' })
+    expect(set.setupCommand).toBe('npm ci')
+    expect(service.listProjects()[0]?.setupCommand).toBe('npm ci')
+
+    // An omitted field leaves the stored one alone, the way an omitted list does.
+    const untouched = await service.setProjectPaths({ projectId: project.id, linkedPaths: [] })
+    expect(untouched.setupCommand).toBe('npm ci')
+
+    // Absent rather than empty: "" and "never configured" must not both be storable.
+    const cleared = await service.setProjectPaths({ projectId: project.id, setupCommand: '' })
+    expect('setupCommand' in cleared).toBe(false)
+  })
+
+  it('runs it once the checkout is ready, and records the pane on the worktree', async () => {
+    const repo = await newRepo()
+    const { startSetup, runs } = recorder()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.setProjectPaths({ projectId: project.id, setupCommand: 'npm ci' })
+
+    const worktree = await readyWorktree(service, project.id, 'runs setup')
+
+    expect(runs).toEqual([{ id: worktree.id, command: 'npm ci' }])
+    expect(worktree.setupTerminalId).toBe('t_setup_1')
+    // On the stored record too, so a later read answers the same thing.
+    expect((await service.getWorktree({ worktreeId: worktree.id })).setupTerminalId).toBe('t_setup_1')
+  })
+
+  it('runs it for every worktree of a fan-out, each in its own', async () => {
+    const repo = await newRepo()
+    const { startSetup, runs } = recorder()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.setProjectPaths({ projectId: project.id, setupCommand: 'npm ci' })
+
+    const first = await readyWorktree(service, project.id, 'attempt one')
+    const second = await readyWorktree(service, project.id, 'attempt two')
+
+    expect(runs.map((run) => run.id).sort()).toEqual([first.id, second.id].sort())
+    expect(first.setupTerminalId).not.toBe(second.setupTerminalId)
+  })
+
+  // The regression guard. A project that has said nothing must get exactly the
+  // panes it used to get, which is none.
+  it('opens nothing for a project that named no command', async () => {
+    const repo = await newRepo()
+    const { startSetup, runs } = recorder()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const worktree = await readyWorktree(service, project.id, 'no setup')
+
+    expect(runs).toEqual([])
+    expect(worktree.setupTerminalId).toBeUndefined()
+  })
+
+  it('reads the command as it stands when the checkout finishes, not as it stood when create was called', async () => {
+    const repo = await newRepo()
+    const { startSetup, runs } = recorder()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.setProjectPaths({ projectId: project.id, setupCommand: 'npm ci' })
+
+    const pending = await service.createWorktree({ projectId: project.id, name: 'late edit' })
+    await service.setProjectPaths({ projectId: project.id, setupCommand: 'npm ci --offline' })
+    await service.whenSettled(pending.id)
+
+    expect(runs.map((run) => run.command)).toEqual(['npm ci --offline'])
+  })
+
+  // A machine that cannot fork a pty must not lose a good checkout over a
+  // convenience: the worktree is ready, and the absent id says setup did not
+  // start.
+  it('keeps the worktree when the pane cannot be opened', async () => {
+    const repo = await newRepo()
+    const service = newService(repo, {
+      startSetup: () => {
+        throw new Error('no pty here')
+      }
+    })
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.setProjectPaths({ projectId: project.id, setupCommand: 'npm ci' })
+
+    const worktree = await readyWorktree(service, project.id, 'no pty')
+
+    expect(worktree.state).toBe('ready')
+    expect(worktree.setupTerminalId).toBeUndefined()
+  })
+})
