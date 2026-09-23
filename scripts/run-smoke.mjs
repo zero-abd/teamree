@@ -70,9 +70,16 @@ const plan = displayPlan(electron, [
 if (plan.note) console.log(`run-smoke: ${plan.note}`)
 if (plan.advice) console.error(`run-smoke: ${plan.advice}`)
 
-const result = spawnSync(plan.command, plan.args, { stdio: 'inherit' })
+// The checkouts the worktree checks make go under the same throwaway root as
+// the profile, and are gone with it. Without this every run left one behind in
+// `~/.teamree/worktrees/smoke/`, in the folder the real app lists.
+const result = spawnSync(plan.command, plan.args, {
+  stdio: 'inherit',
+  env: { ...process.env, TEAMREE_WORKTREES_ROOT: join(smokeRoot, 'worktrees') }
+})
 
 rmSync(peerBundle, { recursive: true, force: true })
+rmSync(smokeRoot, { recursive: true, force: true })
 rmSync(smokeRoot, { recursive: true, force: true })
 
 if (result.error) {

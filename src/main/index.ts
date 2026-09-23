@@ -232,6 +232,16 @@ if (!app.requestSingleInstanceLock()) {
       runtime = await startRuntime({
         userDataDir: app.getPath('userData'),
         version: APP_VERSION,
+        // Where checkouts go is not a fact about the profile — `~/.teamree/
+        // worktrees` is deliberately outside the app's data so that a reset of
+        // the app does not delete somebody's work — which is exactly why a gate
+        // run against a throwaway `--user-data-dir` still wrote its worktrees
+        // into the real one: eighty-eight `smoke-task-N` checkouts in a day,
+        // in the folder the sidebar lists. The gates set this; nothing else
+        // should, and nothing in the product reads it.
+        ...(process.env.TEAMREE_WORKTREES_ROOT === undefined
+          ? {}
+          : { worktreesRoot: process.env.TEAMREE_WORKTREES_ROOT }),
         // The one way this process opens a browser, handed over explicitly so
         // that the update check's download link is the only thing that can.
         openExternal: (url) => shell.openExternal(url),
