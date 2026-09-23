@@ -436,6 +436,36 @@ describe('selectors and flags reach the runtime', () => {
     })
   })
 
+  it('sets the setup command from the positional tail, and only when one was given', async () => {
+    const cli = await harness()
+
+    await cli.run(['project', 'setup', 'api', 'npm ci'])
+    expect(cli.stub.received.at(-1)).toMatchObject({
+      method: 'project.setPaths',
+      params: { projectId: 'p_api', setupCommand: 'npm ci' }
+    })
+
+    // Naming no command asks rather than clears, exactly as the path lists do.
+    await cli.run(['project', 'setup', 'api'])
+    expect(cli.stub.received.at(-1)).toMatchObject({ method: 'project.list' })
+
+    await cli.run(['project', 'setup', 'api', '--clear'])
+    expect(cli.stub.received.at(-1)).toMatchObject({
+      method: 'project.setPaths',
+      params: { projectId: 'p_api', setupCommand: '' }
+    })
+  })
+
+  it('prints the setup command on its own, and says so when there is none', async () => {
+    const cli = await harness((method, params, context) =>
+      method === 'project.setPaths'
+        ? { ...(PROJECTS[0] as Record<string, unknown>), setupCommand: 'npm ci' }
+        : defaultHandler(method, params, context)
+    )
+    expect((await cli.run(['project', 'setup', 'api', 'npm ci'])).out).toBe('npm ci\n')
+    expect((await cli.run(['project', 'setup', 'api'])).out).toMatch(/runs nothing in a new worktree/)
+  })
+
   it('prints a path list one per line, and says so when there is none', async () => {
     const cli = await harness()
     expect((await cli.run(['project', 'linked', 'api', 'node_modules', '.venv'])).out).toBe('node_modules\n.venv\n')
@@ -660,7 +690,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(52)
+    expect(data.commands.length).toBe(53)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })
@@ -788,6 +818,23 @@ describe('a project’s path lists in --json', () => {
     }
   })
 
+  // The setup command is the same promise in a different type: a script reading
+  // `setupCommand` must not have to tell "" apart from a build without it.
+  it('emits an empty setup command for a project that has never named one', async () => {
+    const cli = await harness(handler)
+    expect(dataOf((await cli.run(['project', 'setup', 'api', '--json'])).out)['setupCommand']).toBe('')
+    expect(dataOf((await cli.run(['project', 'linked', 'api', '--json'])).out)['setupCommand']).toBe('')
+  })
+
+  it('carries the setup command a project does have', async () => {
+    const cli = await harness((method, params, context) =>
+      method === 'project.setPaths' ? { ...BARE, setupCommand: 'npm ci' } : handler(method, params, context)
+    )
+    const data = dataOf((await cli.run(['project', 'setup', 'api', 'npm ci', '--json'])).out)
+    expect(data['setupCommand']).toBe('npm ci')
+    expect(data['linkedPaths']).toEqual([])
+  })
+
   it('emits them after a list is cleared, which is the same JSON as never having set one', async () => {
     const cli = await harness(handler)
     const data = dataOf((await cli.run(['project', 'linked', 'api', '--clear', '--json'])).out)
@@ -799,7 +846,7 @@ describe('a project’s path lists in --json', () => {
     const cli = await harness(handler)
 
     const listed = soleJsonDocument((await cli.run(['project', 'list', '--json'])).out)
-    expect(listed['data']).toEqual([{ ...BARE, linkedPaths: [], copiedPaths: [] }])
+    expect(listed['data']).toEqual([{ ...BARE, linkedPaths: [], copiedPaths: [], setupCommand: '' }])
 
     const added = dataOf((await cli.run(['project', 'add', './api', '--json'])).out)
     expect(added['linkedPaths']).toEqual([])

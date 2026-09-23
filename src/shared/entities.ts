@@ -32,6 +32,20 @@ export type Project = {
    * checkout's copy underneath everybody else.
    */
   copiedPaths?: string[]
+  /**
+   * One command run in every new worktree of this project — `npm ci`, a
+   * migration, a generator — once the checkout is ready.
+   *
+   * Opt-in and visible: it runs in a terminal pane of the new worktree labelled
+   * `setup`, in the login shell every other pane uses, so the developer watches
+   * it and can Ctrl-C it. Not parsed and not sanitised — it is their own
+   * command for their own project — and never run on restore or relaunch, only
+   * on create.
+   *
+   * Optional for the reason the two lists above are: a project nobody has
+   * configured has said nothing, not "run nothing".
+   */
+  setupCommand?: string
 }
 
 export type WorktreeState =
@@ -55,6 +69,15 @@ export type Worktree = {
   state: WorktreeState
   error?: string
   createdAt: number
+  /**
+   * The pane the project's setup command was started in, when it had one.
+   *
+   * Set once, at the moment the checkout became ready, and kept afterwards even
+   * though the pane may be closed: it is the record that setup was started for
+   * this worktree, which is what a script driving a create needs to be able to
+   * read back. Absent where the project named no command.
+   */
+  setupTerminalId?: string
 }
 
 /** Live git state for a worktree, refreshed independently of the row itself. */

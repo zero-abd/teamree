@@ -370,6 +370,30 @@ describe('what a new worktree carries over from the primary checkout', () => {
     fireEvent.blur(field)
     expect(setProjectPaths).toHaveBeenCalledWith('p1', { linkedPaths: [] })
   })
+
+  it('saves the setup command through the same method, trimmed, when the field is left', () => {
+    render(<SettingsView modifier={modifier} />)
+    const field = screen.getByLabelText('Setup command')
+    expect(field.getAttribute('placeholder')).toBe('npm ci')
+    fireEvent.change(field, { target: { value: '  npm ci  ' } })
+    expect(setProjectPaths).not.toHaveBeenCalled()
+    fireEvent.blur(field)
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { setupCommand: 'npm ci' })
+  })
+
+  it('shows the stored command, and writes an empty one when it is emptied', () => {
+    seed({ projects: [{ ...project, setupCommand: 'npm ci' }] })
+    render(<SettingsView modifier={modifier} />)
+    const field = screen.getByLabelText('Setup command') as HTMLInputElement
+    expect(field.value).toBe('npm ci')
+
+    fireEvent.blur(field)
+    expect(setProjectPaths).not.toHaveBeenCalled()
+
+    fireEvent.change(field, { target: { value: '' } })
+    fireEvent.blur(field)
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { setupCommand: '' })
+  })
 })
 
 describe('the start point a new task is offered first', () => {

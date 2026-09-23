@@ -583,12 +583,17 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
 /**
  * What a new worktree of this project gets that the branch does not carry.
  *
- * Two fields and two labels, and no paragraph under them: the reader is a
+ * Three fields and three labels, and no paragraph under them: the reader is a
  * developer looking at a box that says it symlinks `node_modules`, and a
  * paragraph explaining why a worktree has no `node_modules` is a paragraph
  * they will read once. What the lists refuse — a tracked path, a path that is
  * not ignored, a copy too large to be a copy — is said at the moment it is
  * refused, on the row that failed, where it is about a specific path.
+ *
+ * The setup command sits under them because it is the same subject and it runs
+ * after them: the checkout is linked and copied first, and the command then
+ * runs in a pane of it labelled `setup`, which is the whole of what needs
+ * saying and is said by the pane itself rather than here.
  */
 function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
   const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
@@ -611,7 +616,59 @@ function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
         paths={project.copiedPaths}
         save={(copiedPaths) => void setProjectPaths(project.id, { copiedPaths })}
       />
+      <SetupCommand project={project} />
     </>
+  )
+}
+
+/**
+ * The one command a new worktree runs, held as a draft and written on blur the
+ * way the fields around it are.
+ *
+ * One line, because it is one command line. It is stored verbatim and typed
+ * into the pane verbatim — `npm ci && npm run build` is a shell's business, not
+ * this field's.
+ */
+function SetupCommand({ project }: { project: Project }): React.JSX.Element {
+  const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
+  const stored = project.setupCommand ?? ''
+  const [draft, setDraft] = useState(stored)
+
+  useEffect(() => {
+    setDraft(stored)
+  }, [stored])
+
+  const commit = (): void => {
+    const next = draft.trim()
+    if (next === stored) return
+    void setProjectPaths(project.id, { setupCommand: next })
+  }
+
+  const id = `settings-setup-${project.id}`
+
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor={id}>
+        Setup command
+      </label>
+      <input
+        id={id}
+        className="settings-field__input"
+        type="text"
+        value={draft}
+        placeholder="npm ci"
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            commit()
+          }
+        }}
+      />
+    </div>
   )
 }
 

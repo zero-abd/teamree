@@ -45,6 +45,7 @@ import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
 import { normalizePreparedPaths, prepareWorktree, type PreparedPaths } from './worktreePreparation'
+import { normalizeSetupCommand } from './worktreeSetup'
 
 export type GitEvent =
   | { type: 'project.added'; project: Project }
@@ -91,6 +92,18 @@ export type GitServiceOptions = {
   startPointLimit?: number
   now?: () => number
   createId?: () => string
+  /**
+   * Runs a project's setup command in the worktree that has just been built,
+   * and answers with the id of the pane it opened.
+   *
+   * Handed in rather than reached for, because opening a pane needs the
+   * terminal service and this service has no business holding one: what git
+   * knows is the moment a checkout became usable, and that moment is all it
+   * contributes. A runtime with no terminals — the acceptance host, a vitest
+   * worker — passes nothing and no setup runs, which is the same answer a
+   * project that named no command gets.
+   */
+  startSetup?: (input: { worktree: Worktree; project: Project; command: string }) => string | undefined
 }
 
 /** What the runtime persists between launches. */
@@ -118,6 +131,7 @@ export class GitService {
   readonly #createTimeoutMs: number
   readonly #now: () => number
   readonly #createId: () => string
+  readonly #startSetup: GitServiceOptions['startSetup']
   readonly #ensureVersion: (cwd: string) => Promise<unknown>
 
   readonly #store: GitRecordStore
@@ -141,6 +155,7 @@ export class GitService {
     this.#startPointLimit = options.startPointLimit
     this.#now = options.now ?? Date.now
     this.#createId = options.createId ?? randomUUID
+    this.#startSetup = options.startSetup
     this.#ensureVersion = createVersionProbe(this.#runner)
   }
 
@@ -195,8 +210,9 @@ export class GitService {
 
   /**
    * Sets what a new worktree of this project carries over from the primary
-   * checkout. Each list given replaces the stored one; an omitted list is left
-   * as it was, and an empty one clears it.
+   * checkout, and the one command it runs once it has. Each field given
+   * replaces the stored one; an omitted field is left as it was, and an empty
+   * list or an empty string clears it.
    *
    * The paths are only shape-checked here. Whether `node_modules` exists, is
    * ignored and is untracked is a fact about the repository at the moment a
@@ -215,6 +231,14 @@ export class GitService {
       // a decision, and `[]` and "never configured" are the same instruction.
       if (paths.length === 0) delete next[field]
       else next[field] = paths
+    }
+    if (params.setupCommand !== undefined) {
+      // Absent rather than empty, for the reason the lists are: a project that
+      // stored "" would be saying the same thing as one that said nothing, in a
+      // second spelling every reader would have to know about.
+      const command = normalizeSetupCommand(params.setupCommand)
+      if (command === undefined) delete next.setupCommand
+      else next.setupCommand = command
     }
     this.#store.putProject(next)
     this.events.emit({ type: 'project.updated', project: next })
@@ -702,9 +726,22 @@ export class GitService {
         signal
       })
       this.#startPoints.set(worktreeId, start)
+      // In the same breath as the flip to 'ready', and deliberately: the pane
+      // belongs to a checkout that is finished, and the record that says setup
+      // was started has to be the same record that says the worktree is usable
+      // — one write, one event, nothing in between for a client to read a
+      // half-answer out of.
+      const setupTerminalId = this.#runSetup(worktree, settings)
       // What it branched from is now a fact, not a request: the name could move
       // or disappear, the sha cannot.
-      return this.#patch(worktreeId, { state: 'ready', startedFrom: start.sha, clearError: true }) ?? worktree
+      return (
+        this.#patch(worktreeId, {
+          state: 'ready',
+          startedFrom: start.sha,
+          clearError: true,
+          ...(setupTerminalId === undefined ? {} : { setupTerminalId })
+        }) ?? worktree
+      )
     } catch (error) {
       await this.#discardPartialCheckout(project, worktree, ourBranch, ourCheckout)
       const cancelled = error instanceof GitCommandError && error.cancelled
@@ -717,6 +754,27 @@ export class GitService {
     } finally {
       this.#creating.delete(worktreeId)
       this.#settling.delete(worktreeId)
+    }
+  }
+
+  /**
+   * Starts the project's setup command in the finished checkout, if it has one.
+   *
+   * Never a reason to fail a create. The checkout is built, prepared and
+   * correct by the time this is called, and throwing here would send it to the
+   * catch below, which discards it — so a machine that cannot fork a pty would
+   * lose the worktree over a convenience. The refusal is reported and the
+   * worktree is ready without a setup pane, which is what the absent
+   * `setupTerminalId` then says.
+   */
+  #runSetup(worktree: Worktree, project: Project): string | undefined {
+    const command = project.setupCommand
+    if (command === undefined || this.#startSetup === undefined) return undefined
+    try {
+      return this.#startSetup({ worktree, project, command })
+    } catch (error) {
+      console.error(`[git] could not run the setup command for worktree ${worktree.id}`, error)
+      return undefined
     }
   }
 
