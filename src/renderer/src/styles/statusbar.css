@@ -1,5 +1,6 @@
-/* The bottom rail. One line, tabular figures, and one thing clickable: the git
-   line opens the changes panel. */
+/* The bottom rail. One line, tabular figures, and three things clickable: the
+   git line opens the changes panel, and the two utilities beside the runtime
+   open small panels upward. */
 
 .statusbar {
   display: flex;
@@ -29,9 +30,9 @@
   color: var(--fg-muted);
 }
 
-/* The git line, as a button. Dressed as the segments around it rather than as
-   a button, because it is read as one of them first; the hover and the pressed
-   state are what say it can be pressed. */
+/* The git line and the two utilities, as buttons. Dressed as the segments
+   around them rather than as buttons, because each is read as one of them
+   first; the hover and the pressed state are what say it can be pressed. */
 .statusbar__button {
   padding: 0 var(--s1);
   margin: 0 calc(-1 * var(--s1));
@@ -108,4 +109,232 @@
   50% {
     opacity: 0.35;
   }
+}
+
+/* The keep-awake dot: lit while the mode holds the machine, quiet in `off`. */
+.statusbar__dot--awake-on {
+  background: var(--warning);
+}
+
+.statusbar__dot--awake-agent {
+  background: var(--info);
+}
+
+.statusbar__dot--awake-off {
+  background: var(--fg-muted);
+}
+
+/* A panel above the rail. Fixed to the viewport, because the rail clips its
+   overflow to stay one line high. */
+.statusbar__popover {
+  position: fixed;
+  z-index: 40;
+  min-width: 200px;
+  max-width: min(560px, calc(100vw - 2 * var(--s4)));
+  max-height: 60vh;
+  overflow: auto;
+  padding: var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  color: var(--fg);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Three rows, one of them marked. */
+.statusbar__radios {
+  display: flex;
+  flex-direction: column;
+}
+
+.statusbar__radio {
+  display: grid;
+  grid-template-columns: 12px auto 1fr;
+  align-items: center;
+  gap: var(--s2);
+  padding: 5px var(--s2);
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.statusbar__radio:hover,
+.statusbar__radio:focus-visible {
+  background: var(--bg-press);
+  outline: none;
+}
+
+.statusbar__radio-mark {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.statusbar__radio--on .statusbar__radio-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--bg-raised);
+}
+
+.statusbar__radio-note {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* The resources panel: totals, then the tree. */
+.resources {
+  min-width: 420px;
+}
+
+.resources__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: 4px var(--s2) 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.resources__total {
+  font-weight: 600;
+}
+
+.resources__refresh,
+.resources__kill {
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.resources__refresh:hover,
+.resources__refresh:focus-visible,
+.resources__kill:hover,
+.resources__kill:focus-visible {
+  background: var(--bg-press);
+  color: var(--fg);
+  outline: none;
+}
+
+/* Armed: painted as what the second press does. */
+.resources__kill--armed {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+
+.resources__kill-space {
+  width: 38px;
+}
+
+.resources__problem {
+  padding: 4px var(--s2);
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+.resources__groups,
+.resources__panes,
+.resources__processes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resources__group {
+  padding-top: var(--s1);
+}
+
+.resources__group--app {
+  margin-top: var(--s1);
+  border-top: 1px solid var(--line);
+}
+
+.resources__worktree {
+  padding: 3px var(--s2) 1px;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* One row: disclosure, name, sparkline, two numbers, one action. The numbers
+   are right-aligned columns so a list of them reads as a column. */
+.resources__row,
+.resources__process {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 54px 56px 64px 46px;
+  align-items: center;
+  gap: var(--s2);
+  padding: 2px var(--s2);
+  border-radius: var(--r1);
+}
+
+.resources__row:hover,
+.resources__process:hover {
+  background: var(--bg-hover);
+}
+
+.resources__process {
+  grid-template-columns: 16px 48px minmax(0, 1fr) 56px 64px 46px;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.resources__process > :first-child {
+  grid-column: 2;
+}
+
+.resources__disclosure {
+  width: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.resources__disclosure:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r1);
+}
+
+.resources__name,
+.resources__command {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resources__command,
+.resources__pid {
+  font-family: var(--font-mono);
+}
+
+.resources__cpu,
+.resources__rss {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.resources__spark polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }

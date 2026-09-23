@@ -1,21 +1,54 @@
 /** @vitest-environment jsdom */
 
-// The bottom rail, for the one thing on it that is now an action.
+// The bottom rail: the git segment that opens the changes panel, and the two
+// utilities at its left end — whether this Mac may sleep, and what everything
+// this app spawned is costing.
 //
-// The worktree used to have a header row of its own above the panes carrying a
-// `3 changed` button, and the rail below already printed the same fact as
-// `git 3 uncommitted`. The row is gone. The rail's git segment is where the
-// fact was always going to be read, so it is where the changes panel opens
-// from — which makes it the one segment here that is a button.
+// It shows state and never instructions. The keyboard legend that used to sit
+// at its right end is gone: the chords are in the menu bar, the palette and the
+// help page, and a strip of keycaps on every screen was a fourth copy of them.
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project, Worktree, WorktreeStatus } from '@shared/entities'
-import { resolvePlatformModifier } from '../keyboard/platformModifier'
+import type { Project, SystemResources, Worktree, WorktreeStatus } from '@shared/entities'
+
+const MB = 1024 * 1024
+
+const resources: SystemResources = {
+  sampledAt: 1000,
+  cpu: 105.2,
+  rss: 560 * MB,
+  panes: [
+    {
+      terminalId: 't_1',
+      worktreeId: 'w1',
+      pid: 600,
+      cpu: 102.9,
+      rss: 63 * MB,
+      processes: [
+        { pid: 600, ppid: 500, cpu: 0, rss: 3 * MB, command: 'zsh' },
+        { pid: 601, ppid: 600, cpu: 98.7, rss: 50 * MB, command: 'node' }
+      ]
+    }
+  ],
+  app: {
+    pid: 500,
+    cpu: 2.3,
+    rss: 497 * MB,
+    processes: [{ pid: 500, ppid: 1, cpu: 2.3, rss: 497 * MB, command: 'teamree' }]
+  }
+}
+
+const calls: Array<{ method: string; params: unknown }> = []
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
-    call: () => new Promise(() => {}),
+    call: (method: string, params: unknown) => {
+      calls.push({ method, params })
+      if (method === 'system.resources') return Promise.resolve(resources)
+      if (method === 'system.kill') return Promise.resolve({ signalled: true, pid: 601, group: false })
+      return new Promise(() => {})
+    },
     watchPane: () => new Promise(() => {}),
     subscribeTerminal: () => new Promise(() => {}),
     watchWorkspace: () => ({ close: () => {} }),
@@ -29,7 +62,6 @@ const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { StatusBar } = await import('./StatusBar')
 
 const INITIAL = useWorkspaceStore.getState()
-const MAC = resolvePlatformModifier('darwin')
 
 const project: Project = { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' }
 
@@ -67,11 +99,12 @@ function seed(overrides: Record<string, unknown> = {}): void {
 }
 
 const mount = (): void => {
-  render(<StatusBar modifier={MAC} />)
+  render(<StatusBar />)
 }
 
 beforeEach(() => {
   toggleChanges.mockReset()
+  calls.length = 0
   seed()
 })
 
@@ -111,5 +144,138 @@ describe('the git segment', () => {
   it('is not offered before the status has been read, because there is nothing to open on', () => {
     mount()
     expect(screen.queryByRole('button', { name: /Changes/ })).toBeNull()
+  })
+})
+
+describe('the rail as a whole', () => {
+  it('shows state and no keycaps', () => {
+    mount()
+    expect(document.querySelectorAll('kbd')).toHaveLength(0)
+    expect(screen.queryByText('split')).toBeNull()
+    expect(screen.queryByText('move')).toBeNull()
+  })
+})
+
+describe('keep awake', () => {
+  it('shows the mode, follows the agents by default, and offers the three modes upward', () => {
+    mount()
+    const button = screen.getByRole('button', { name: /Keep awake/ })
+    expect(button.textContent).toBe('Awake · agent')
+    fireEvent.click(button)
+    const radios = screen.getAllByRole('radio')
+    expect(radios.map((radio) => radio.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false'])
+    expect(screen.getByRole('dialog', { name: 'Keep awake' })).toBeTruthy()
+  })
+
+  it('changes the mode and remembers it', () => {
+    const setKeepAwake = vi.fn()
+    seed({ keepAwake: 'agent', setKeepAwake })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: /Keep awake/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /^On/ }))
+    expect(setKeepAwake).toHaveBeenCalledWith('on')
+  })
+
+  it('says so on the button once the mode is off', () => {
+    seed({ keepAwake: 'off' })
+    mount()
+    expect(screen.getByRole('button', { name: /Keep awake/ }).textContent).toBe('Sleep ok')
+  })
+
+  it('closes on Escape and gives the focus back to the button', () => {
+    mount()
+    const button = screen.getByRole('button', { name: /Keep awake/ })
+    fireEvent.click(button)
+    expect(screen.getByRole('dialog', { name: 'Keep awake' })).toBeTruthy()
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: 'Keep awake' })).toBeNull()
+    expect(document.activeElement).toBe(button)
+  })
+
+  it('closes on a press outside', () => {
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: /Keep awake/ }))
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('dialog', { name: 'Keep awake' })).toBeNull()
+  })
+})
+
+describe('resources', () => {
+  const flush = async (): Promise<void> => {
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
+  it('shows the total on the button and the tree in the popover', async () => {
+    seed({
+      terminals: {
+        t_1: {
+          id: 't_1',
+          worktreeId: 'w1',
+          title: 'claude',
+          cwd: '/',
+          shell: '/bin/zsh',
+          cols: 80,
+          rows: 24,
+          running: true,
+          busy: false,
+          lastOutputAt: 0,
+          agent: 'claude'
+        }
+      }
+    })
+    mount()
+    await flush()
+    const button = screen.getByRole('button', { name: /Resources/ })
+    expect(button.textContent).toBe('560 MB')
+    fireEvent.click(button)
+    await flush()
+    const popover = screen.getByRole('dialog', { name: 'Resources' })
+    expect(popover.textContent).toContain('105.2%')
+    expect(popover.textContent).toContain('Rewrite the pager')
+    expect(popover.textContent).toContain('claude')
+    expect(popover.textContent).toContain('63 MB')
+    // The app's own row, last.
+    expect(popover.textContent).toMatch(/teamree.*497 MB/)
+  })
+
+  it('opens a pane to its processes and kills one only on the second press', async () => {
+    mount()
+    await flush()
+    fireEvent.click(screen.getByRole('button', { name: /Resources/ }))
+    await flush()
+    fireEvent.click(screen.getByRole('button', { name: /Show processes of t_1/ }))
+    const row = screen.getByText('node').closest('li')
+    expect(row?.textContent).toContain('601')
+    const kill = screen.getByRole('button', { name: 'Kill 601' })
+    fireEvent.click(kill)
+    expect(calls.filter((call) => call.method === 'system.kill')).toHaveLength(0)
+    expect(kill.textContent).toBe('Confirm')
+    fireEvent.click(kill)
+    await flush()
+    expect(calls.filter((call) => call.method === 'system.kill')).toEqual([
+      { method: 'system.kill', params: { pid: 601 } }
+    ])
+  })
+
+  it('never offers to kill the app itself', async () => {
+    mount()
+    await flush()
+    fireEvent.click(screen.getByRole('button', { name: /Resources/ }))
+    await flush()
+    expect(screen.queryByRole('button', { name: 'Kill 500' })).toBeNull()
+  })
+
+  it('samples again on Refresh', async () => {
+    mount()
+    await flush()
+    fireEvent.click(screen.getByRole('button', { name: /Resources/ }))
+    await flush()
+    const before = calls.filter((call) => call.method === 'system.resources').length
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await flush()
+    expect(calls.filter((call) => call.method === 'system.resources').length).toBe(before + 1)
   })
 })

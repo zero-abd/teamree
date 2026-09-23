@@ -1140,6 +1140,57 @@ export function createSeededRuntimeClient(): RuntimeClient {
     // says this when it is chosen, which is what the real refusal looks like.
     'editor.list': () => ({ editors: [] }),
     'editor.open': () => ({ opened: false, reason: 'The demonstration workspace cannot start an editor.' }),
+    // Invented, like the panes: enough of a tree that the panel has rows, and
+    // a kill that does what the real one does to a row that has no process.
+    'system.resources': () => {
+      const open = [...terminals.values()].filter((entry) => entry.record.running)
+      const panes = open.map((entry, index) => {
+        const pid = 4000 + index * 10
+        const processes = [
+          { pid, ppid: 3000, cpu: 0.2, rss: 4 * 1024 * 1024, command: 'zsh' },
+          ...(entry.record.agent === undefined
+            ? []
+            : [
+                {
+                  pid: pid + 1,
+                  ppid: pid,
+                  cpu: 12 + (index % 3) * 20,
+                  rss: (90 + index * 15) * 1024 * 1024,
+                  command: 'node'
+                }
+              ])
+        ]
+        return {
+          terminalId: entry.record.id,
+          worktreeId: entry.record.worktreeId,
+          pid,
+          cpu: processes.reduce((sum, process) => sum + process.cpu, 0),
+          rss: processes.reduce((sum, process) => sum + process.rss, 0),
+          processes
+        }
+      })
+      const app = {
+        pid: 3000,
+        cpu: 3.1,
+        rss: 410 * 1024 * 1024,
+        processes: [
+          { pid: 3000, ppid: 1, cpu: 1.4, rss: 180 * 1024 * 1024, command: 'teamree' },
+          { pid: 3001, ppid: 3000, cpu: 1.2, rss: 150 * 1024 * 1024, command: 'teamree Helper (Renderer)' },
+          { pid: 3002, ppid: 3000, cpu: 0.5, rss: 80 * 1024 * 1024, command: 'teamree Helper (GPU)' }
+        ]
+      }
+      return {
+        sampledAt: Date.now(),
+        cpu: panes.reduce((sum, pane) => sum + pane.cpu, app.cpu),
+        rss: panes.reduce((sum, pane) => sum + pane.rss, app.rss),
+        panes,
+        app
+      }
+    },
+    'system.kill': ({ pid }) => {
+      if (pid < 4000) throw new Error(`pid ${pid} is not under any pane`)
+      return { signalled: true, pid, group: pid % 10 === 0 }
+    },
     'terminal.list': ({ worktreeId }) =>
       [...terminals.values()]
         .map((terminal) => terminal.record)

@@ -442,6 +442,68 @@ export type Terminal = {
 }
 
 /**
+ * One process, as one `ps` call reported it.
+ *
+ * `rss` is bytes, whatever unit the platform's `ps` printed in, and `cpu` is
+ * the platform's own percentage of one core — a decaying average on macOS, a
+ * lifetime average on Linux — so a reader can compare rows but should not
+ * read a single figure as this instant. `command` is the executable's
+ * basename: the path is the same for every helper of one app, and the name
+ * is the part somebody can recognise.
+ */
+export type ResourceProcess = {
+  pid: number
+  ppid: number
+  cpu: number
+  rss: number
+  command: string
+}
+
+/**
+ * Everything one pane's child has started, summed and listed.
+ *
+ * `pid` is the pty child the pane was spawned with, kept even when nothing
+ * under it was found: a pane whose child died between the pane list and the
+ * `ps` call is still a pane, and a row with nothing under it says so.
+ */
+export type PaneResources = {
+  terminalId: string
+  worktreeId: string
+  pid: number
+  cpu: number
+  rss: number
+  /** Root first, then its descendants. Empty when the child is gone. */
+  processes: ResourceProcess[]
+}
+
+/** The app's own processes — main, renderer, GPU and the rest — as one row. */
+export type AppResources = {
+  pid: number
+  cpu: number
+  rss: number
+  processes: ResourceProcess[]
+}
+
+/**
+ * What everything this app spawned is costing, at one instant, from one `ps`
+ * call: the panes' trees, the app's own tree, and the sum of both.
+ */
+export type SystemResources = {
+  sampledAt: number
+  cpu: number
+  rss: number
+  panes: PaneResources[]
+  app: AppResources
+}
+
+/** What `system.kill` did: the signal went to one process, or to its whole group. */
+export type ProcessKill = {
+  signalled: true
+  pid: number
+  group: boolean
+}
+
+/**
  * Pane layout for one worktree. A leaf holds a terminal; a split divides its
  * area between two or more children. Sizes are fractions summing to 1 and are
  * positionally matched to `children`.

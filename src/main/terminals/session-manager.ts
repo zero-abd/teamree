@@ -243,6 +243,18 @@ export class TerminalSessionManager {
     return scoped.map((session) => session.snapshot())
   }
 
+  /**
+   * Each running pane's pty child, for `system.resources`.
+   *
+   * Running ones only: an exited pane's pid names a process that has been
+   * reaped, and by the time anybody samples, possibly somebody else's.
+   */
+  paneProcesses(): { terminalId: string; worktreeId: string; pid: number }[] {
+    return [...this.sessions.values()]
+      .filter((session) => session.isRunning)
+      .map((session) => ({ terminalId: session.id, worktreeId: session.worktreeId, pid: session.pid }))
+  }
+
   /** Starts a terminal and gives it a pane at the top level of the worktree. */
   create(params: ParamsOf<'terminal.create'>): Terminal {
     const session = this.startSession(params)

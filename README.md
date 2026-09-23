@@ -103,6 +103,10 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
 - **Run it again.** An exited pane offers `Run claude again` beside its badge —
   same pane, same directory, fresh session — and so does
   `teamree terminal relaunch`.
+- **The machine, on the rail.** Bottom left: whether this Mac may sleep — always
+  awake, awake while an agent is working or waiting on you, or the system's own
+  rules — and what every pane and the app itself are costing, per process, with a
+  `Kill` that never reaches teamree. `teamree resources` prints the same tree.
 - **Told when an agent stops.** A system notification and a dock badge when an
   agent goes quiet or exits while you are elsewhere. Per machine: nothing,
   notify, or notify with sound.

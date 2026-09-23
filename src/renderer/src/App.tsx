@@ -113,7 +113,7 @@ export function App(): React.JSX.Element {
 
       <WorkspaceArea modifier={modifier} isAppChord={isAppChord} />
 
-      <StatusBar modifier={modifier} />
+      <StatusBar />
 
       {notices.length > 0 ? (
         <div className="notices" role="status" aria-live="polite">

@@ -1,15 +1,18 @@
 // The bottom rail: is the runtime there, what am I looking at, how much of it
-// is running. Everything here is a fact. One of them — the git line — is also
-// the way into the changes panel, because it is the line that already says what
-// the panel is about; the row above the panes that used to carry a button for
-// the same fact is gone.
+// is running, and — at the left end, beside the runtime — the two things the
+// machine itself is doing for this window: staying awake, and paying for it.
+// Everything here is a fact. Two of them are also the way into something: the
+// git line opens the changes panel, and the two utilities open small panels of
+// their own. It shows state and never instructions; the chords are in the
+// menu bar, the palette and the help page.
 
-import type { PlatformModifier } from '../keyboard/platformModifier'
-import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { collectTerminalIds } from '../panes/paneLayout'
 import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { useKeepAwake } from './keepAwake'
+import { KeepAwakeControl } from './KeepAwakeControl'
+import { ResourcesControl } from './ResourcesControl'
 
 const CONNECTION_LABEL: Record<string, string> = {
   connecting: 'Connecting',
@@ -18,7 +21,7 @@ const CONNECTION_LABEL: Record<string, string> = {
   offline: 'Runtime offline'
 }
 
-export function StatusBar({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
+export function StatusBar(): React.JSX.Element {
   const connection = useWorkspaceStore((state) => state.connection)
   const runtimeVersion = useWorkspaceStore((state) => state.runtimeVersion)
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
@@ -34,6 +37,10 @@ export function StatusBar({ modifier }: { modifier: PlatformModifier }): React.J
   const changesOpen = useWorkspaceStore((state) => state.rightPanelOpen && state.rightPanelTab === 'changes')
   const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
 
+  // The rail is always mounted, which makes it the right place to keep the
+  // main process told which way this Mac's sleep should go.
+  useKeepAwake()
+
   const paneCount = collectTerminalIds(layout?.root ?? null).length
   const summary = summarizeWorktreeStatus(status)
 
@@ -47,6 +54,9 @@ export function StatusBar({ modifier }: { modifier: PlatformModifier }): React.J
         {CONNECTION_LABEL[connection.phase] ?? connection.phase}
         {runtimeVersion ? <span className="statusbar__muted">{runtimeVersion}</span> : null}
       </span>
+
+      <KeepAwakeControl />
+      <ResourcesControl />
 
       <span className="statusbar__item">
         {worktree ? (
@@ -81,30 +91,6 @@ export function StatusBar({ modifier }: { modifier: PlatformModifier }): React.J
       <span className="statusbar__spacer" />
 
       {RUNTIME_IS_SEEDED ? <span className="statusbar__badge">seeded data</span> : null}
-
-      <span className="statusbar__item">
-        <span className="statusbar__muted">split</span>
-        <kbd>{shortcutHint('split-right', modifier)}</kbd>
-        <kbd>{shortcutHint('split-down', modifier)}</kbd>
-      </span>
-
-      <span className="statusbar__item">
-        <span className="statusbar__muted">find</span>
-        <kbd>{shortcutHint('find-in-pane', modifier)}</kbd>
-      </span>
-
-      {/* The four chords that go somewhere without the mouse, in the order they
-          move: down the sidebar, then around the panes of whatever it lands on.
-          Here rather than only in the help page because a chord nobody has been
-          told is a chord nobody presses, and this rail is where somebody's eye
-          already is while they are deciding to reach for the trackpad. */}
-      <span className="statusbar__item" title="Previous and next worktree, previous and next pane">
-        <span className="statusbar__muted">move</span>
-        <kbd>{shortcutHint('previous-worktree', modifier)}</kbd>
-        <kbd>{shortcutHint('next-worktree', modifier)}</kbd>
-        <kbd>{shortcutHint('focus-previous-pane', modifier)}</kbd>
-        <kbd>{shortcutHint('focus-next-pane', modifier)}</kbd>
-      </span>
 
       <span className="statusbar__item" title={`${totalTerminals} terminals across all worktrees`}>
         <span className="statusbar__muted">terminals</span>

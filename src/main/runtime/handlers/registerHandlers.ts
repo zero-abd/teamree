@@ -37,6 +37,7 @@ import type { AgentNotice } from '../../agentNotices'
 import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
+import { registerResourcesHandlers } from './resourcesHandlers'
 import { registerStatusHandler } from './statusHandler'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
 import { registerWorkspaceSubscribeHandler } from './workspaceSubscribeHandler'
@@ -185,6 +186,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // Wraps the handlers just registered, so every terminal and layout change
   // reaches the workspace stream whichever transport asked for it.
   publishTerminalEvents(registry, terminals, workspaceEvents)
+  // What the panes are costing, read from the pids the service holds. Not a
+  // terminal method: the app's own processes are on the answer too, and the
+  // kill is guarded by the sample rather than by a pane.
+  registerResourcesHandlers(registry, { panes: () => terminals.manager.paneProcesses() })
 
   const git = new GitService({
     store: registry.context.store,

@@ -161,6 +161,12 @@ describe('dispatcher', () => {
       // from its own primary checkout is nobody else's setting to change.
       'project.setPaths',
       'status.get',
+      // Local, and not peer-reachable: what this machine's processes cost is
+      // this machine's to read, and a signal to one of them is this machine's
+      // to send. The kill is guarded by a fresh sample as well, so it reaches
+      // nothing but what a pane started.
+      'system.kill',
+      'system.resources',
       // Stops a push this machine started, so it is local for exactly the
       // reason the push is: a teammate has no business halting a commit on
       // somebody else's laptop.

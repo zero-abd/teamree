@@ -87,7 +87,12 @@ describe('the renderer transport names one set of channels', () => {
       // the window publishes what it wants and which pane it is looking at, the
       // main process raises the notification and says which pane a click was
       // about. Named here for the reason above.
-      ...(await channelsNamedIn('src/main/agentNotices.ts'))
+      ...(await channelsNamedIn('src/main/agentNotices.ts')),
+      // And keep-awake's one, outward only: the window publishes the mode and
+      // whether an agent is busy, the main process holds or releases one
+      // power-save assertion, and nothing comes back. Named here for the
+      // reason above.
+      ...(await channelsNamedIn('src/main/keepAwake.ts'))
     ])
 
     expect([...preload].filter((channel) => !served.has(channel))).toEqual([])

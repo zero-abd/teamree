@@ -16,9 +16,11 @@ import {
   readStoredAgentArgs,
   readStoredDefaultAgent,
   readStoredDiffLayout,
+  readStoredKeepAwake,
   readStoredEditorCommands,
   readStoredStartPoints,
   readStoredTerminalFontSize,
+  KEEP_AWAKE_DEFAULT,
   TERMINAL_FONT_DEFAULT_PX,
   TERMINAL_FONT_MAX_PX,
   TERMINAL_FONT_MIN_PX,
@@ -28,6 +30,7 @@ import {
   writeStoredAgentArgs,
   writeStoredDefaultAgent,
   writeStoredDiffLayout,
+  writeStoredKeepAwake,
   writeStoredEditorCommands,
   writeStoredStartPoints,
   writeStoredTerminalFontSize
@@ -284,5 +287,32 @@ describe('the flag you always pass', () => {
     expect(readStoredAgentArgs(refusingStorage)).toEqual({})
     expect(() => writeStoredAgentArgs(refusingStorage, { claude: '--model opus' })).not.toThrow()
     expect(readStoredAgentArgs(undefined)).toEqual({})
+  })
+})
+
+describe('whether this Mac may sleep', () => {
+  it('remembers the mode', () => {
+    const storage = memoryStorage()
+    writeStoredKeepAwake(storage, 'on')
+    expect(readStoredKeepAwake(storage)).toBe('on')
+    writeStoredKeepAwake(storage, 'off')
+    expect(readStoredKeepAwake(storage)).toBe('off')
+  })
+
+  // Awake while an agent is on something, and free to sleep otherwise: the one
+  // default that costs nobody a night of fan noise and nobody a stopped run.
+  it('follows the agents until somebody says otherwise', () => {
+    expect(readStoredKeepAwake(memoryStorage())).toBe('agent')
+    expect(KEEP_AWAKE_DEFAULT).toBe('agent')
+  })
+
+  it('takes the default rather than a value that is not one of the three', () => {
+    expect(readStoredKeepAwake(memoryStorage({ 'teamree.keepAwake': 'forever' }))).toBe('agent')
+    expect(readStoredKeepAwake(memoryStorage({ 'teamree.keepAwake': '' }))).toBe('agent')
+  })
+
+  it('survives a storage that refuses, in both directions', () => {
+    expect(readStoredKeepAwake(refusingStorage)).toBe('agent')
+    expect(() => writeStoredKeepAwake(refusingStorage, 'on')).not.toThrow()
   })
 })

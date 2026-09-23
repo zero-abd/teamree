@@ -1,7 +1,8 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, powerSaveBlocker, shell } from 'electron'
 import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
 import { applicationMenuTemplate, type ApplicationMenuOptions } from './appMenu'
+import { installKeepAwake } from './keepAwake'
 import { installMenuBar } from './menuBar'
 import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
@@ -201,6 +202,15 @@ if (!app.requestSingleInstanceLock()) {
     // frame that published it; see src/main/menuBar.ts for both.
     installMenuBar(ipcMain, {
       install: (items, choose) => installMenu({ items, choose }),
+      fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
+    })
+
+    // Whether this Mac may sleep, as the window decides it: the mode somebody
+    // chose and whether an agent is on something both live there, and what
+    // arrives here is one start or one stop of the OS assertion. See
+    // src/main/keepAwake.ts for why the decision is not made in this process.
+    installKeepAwake(ipcMain, {
+      blocker: powerSaveBlocker,
       fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
     })
 
