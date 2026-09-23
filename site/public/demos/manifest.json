@@ -1,0 +1,59 @@
+{
+  "clips": [
+    {
+      "id": "new-task",
+      "file": "demos/new-task.mp4",
+      "poster": "demos/new-task.jpg",
+      "width": 1728,
+      "height": 1080,
+      "seconds": 17.6,
+      "bytes": 1295855,
+      "title": "Two agents, one task",
+      "caption": "Type the task once, pick claude and codex, and each starts in its own worktree with the task as its first prompt."
+    },
+    {
+      "id": "waiting-on-you",
+      "file": "demos/waiting-on-you.mp4",
+      "poster": "demos/waiting-on-you.jpg",
+      "width": 1728,
+      "height": 1080,
+      "seconds": 20.0,
+      "bytes": 2654676,
+      "title": "The pane that needs you",
+      "caption": "claude asks before editing; the dot and the All panes board say so until you answer, then it finishes."
+    },
+    {
+      "id": "review-and-ship",
+      "file": "demos/review-and-ship.mp4",
+      "poster": "demos/review-and-ship.jpg",
+      "width": 1728,
+      "height": 1080,
+      "seconds": 20.0,
+      "bytes": 2525466,
+      "title": "Stage, commit, push, review",
+      "caption": "Changed files, the patch, one hunk staged, a commit from the panel, a push, and the link to open the review."
+    },
+    {
+      "id": "pick-it-back-up",
+      "file": "demos/pick-it-back-up.mp4",
+      "poster": "demos/pick-it-back-up.jpg",
+      "width": 1728,
+      "height": 1080,
+      "seconds": 20.0,
+      "bytes": 4099653,
+      "title": "Quit, relaunch, carry on",
+      "caption": "Panes come back with their names, scrollback and a resumed badge, and claude still knows what it changed."
+    },
+    {
+      "id": "every-pane",
+      "file": "demos/every-pane.mp4",
+      "poster": "demos/every-pane.jpg",
+      "width": 1728,
+      "height": 1080,
+      "seconds": 20.0,
+      "bytes": 3827981,
+      "title": "Every pane at a glance",
+      "caption": "Five worktrees in the sidebar, the All panes board by what needs you, and ⌘K to jump between them."
+    }
+  ]
+}

@@ -11,8 +11,8 @@ public/
   icon-256.png   the same mark as PNG, for apple-touch-icon and older browsers
   og.png         1200x630 social card, generated (see below)
   screenshot.png the window; the hero clip's fallback, not docs/screenshot.png
-  demos/         showcase.* the hero tour, plus feature clips: <id>.webm,
-                 <id>.mp4, <id>.jpg, manifest.json
+  demos/         the hero clip and the feature clips: <id>.mp4, <id>.jpg,
+                 manifest.json
   _headers       security headers and cache lifetimes
   _redirects     /download/mac and /download
 og/
@@ -42,22 +42,20 @@ sh site/og/render.sh        # needs Google Chrome; CHROME=/path/to/chrome to ove
 
 ## The feature clips
 
-Four sections carry a short screen capture of the real application: `worktrees`,
-`terminals`, `cli`, `teamwork`. Each ships as `<id>.webm`, `<id>.mp4` and an
-`<id>.jpg` poster, listed in `public/demos/manifest.json` with a width, a height
-and a caption. The hero carries a fifth, `showcase.*`, which is a tour rather than
-one feature and is not in the manifest — `sync-demos.mjs` leaves it alone.
+Five short screen captures of the real application, shot on 0.2.0 from the
+packaged app: `new-task` in the hero, `every-pane` under "A worktree per task",
+`waiting-on-you` under "A state per pane". `review-and-ship` and
+`pick-it-back-up` are shot and listed but have no frame on the page yet, which
+`sync-demos.mjs` reports and otherwise leaves alone. Each ships as `<id>.mp4`
+(H.264, 1728x1080, no audio, under 6 MB) and an `<id>.jpg` poster, listed in
+`public/demos/manifest.json` with a width, a height, a title and a caption.
+`sync-demos.mjs` finds each by the `data-demo` id on its frame, un-parks its
+`<video>`, and writes the size and the caption from the manifest; a frame whose
+id is not in the manifest — `cli`, and `teamwork`, which needs two machines to
+shoot — stays parked in its comment and fires no 404s.
 
-**Everything captured so far predates 0.2.0 and shows it.** `public/demos/showcase.mp4`,
-`public/demos/showcase.webm`, its poster `public/demos/showcase.jpg` and the
-still `public/screenshot.png` were all shot on 0.1.2: the window in them is the
-old slate ground rather than the absolute black that now ships, the status rail
-reads `Runtime ready 0.1.2`, the teamwork panel is the one that did not ask which
-end you were on, and a teammate's pane is still the corner card it stopped being.
-The prose beside them was corrected; they cannot be, from anywhere but a Mac.
-Retaking them changes nothing else — the names carry no version — and the
-`aria-label` and `alt` text describe what they show rather than how they look, so
-those hold either way.
+The still `public/screenshot.png` is the hero's `<img>` fallback: the same
+window at 1440x900, one project, five worktrees, two panes open.
 
 The page hard-codes each clip's dimensions and caption, because a `<video>`
 without `width`/`height` shifts the layout while it loads, and the page's own
