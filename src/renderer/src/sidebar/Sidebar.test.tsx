@@ -149,8 +149,8 @@ describe('the sidebar’s own header', () => {
     expect(document.querySelector('.titlebar')).toBeNull()
   })
 
-  // The chord is taught in the menu bar, in Help and in the palette; a hover
-  // is not a fourth place.
+  // The chord is taught in the menu bar, in Help, in the palette and on the
+  // front door; a hover is not a fifth place.
   it('puts the sidebar away from its own header, without naming a chord', () => {
     mount()
     const hide = screen.getByRole('button', { name: 'Hide sidebar' })

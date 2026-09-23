@@ -313,8 +313,8 @@ describe('the pane buttons at the end of the strip', () => {
   })
 
   // They are icons, so the hover names what they do — and only that. The
-  // chords are taught in the menu bar, in Help and in the palette; a fourth
-  // place was the strip explaining itself.
+  // chords are taught in the menu bar, in Help, in the palette and on the
+  // front door; a fifth place was the strip explaining itself.
   it('names what each one does on hover, and no chord', () => {
     onePane()
     expect(screen.getByRole('button', { name: 'Split right' }).getAttribute('title')).toBe('Split right')

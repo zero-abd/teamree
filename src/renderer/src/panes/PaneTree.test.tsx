@@ -238,8 +238,8 @@ describe('what a pane is called', () => {
 })
 
 describe('closing the right pane', () => {
-  // The chord is taught in the menu bar, in Help and in the palette; the
-  // hover on a close button is not a fourth place.
+  // The chord is taught in the menu bar, in Help, in the palette and on the
+  // front door; the hover on a close button is not a fifth place.
   it('names which pane each button closes, and no chord', () => {
     mount(leaf('t1'), [terminal('t1', { title: 'claude' })])
     const button = screen.getByRole('button', { name: 'Close pane claude' })

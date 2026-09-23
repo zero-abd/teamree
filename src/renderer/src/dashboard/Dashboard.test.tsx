@@ -139,7 +139,7 @@ describe('where the keyboard lands', () => {
     const view = render(<Dashboard />)
     expect(screen.getByText('Nothing running')).toBeTruthy()
     // The heading is the whole of it. "Open a terminal with ⌘T." under it was
-    // an instruction where a state belongs, and a fifth place teaching a chord.
+    // an instruction where a state belongs, and a sixth place teaching a chord.
     expect(document.querySelector('.placeholder__body')).toBeNull()
     expect(document.querySelector('.placeholder kbd')).toBeNull()
     expect(screen.getByRole('button', { name: 'Back to the panes' }).getAttribute('title')).toBe('Back to the panes')

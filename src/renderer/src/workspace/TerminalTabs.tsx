@@ -185,10 +185,10 @@ export function TerminalTabs(): React.JSX.Element {
           it: three buttons wide is the most a row of panes can spare, and each
           of them is a row the palette already carries and the menu bar already
           names with its chord. The hover says what the button does and nothing
-          more — the chords are taught in the menu bar, Help and the palette,
-          and a strip that named them too was a fourth place. Only beside tabs:
-          with no pane to split, the placeholder under the strip is already
-          offering to open one. */}
+          more — the chords are taught in the menu bar, Help, the palette and
+          the front door, and a strip that named them too was a fifth place.
+          Only beside tabs: with no pane to split, the placeholder under the
+          strip is already offering to open one. */}
       {tabs.length === 0 ? null : (
         <div className="tabs__actions">
           <button
