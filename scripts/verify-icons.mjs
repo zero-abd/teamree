@@ -27,7 +27,7 @@
 //   1. `icp4` and `icp5` are a hard failure wherever they appear. Apple's own
 //      `iconutil` writes neither; it writes `ic04`/`ic05` as RLE ARGB instead.
 //   2. Every icon is decoded and its saturated pixels counted. The mark is
-//      black, white and one dark grey, so a correct icon has essentially none;
+//      an off-white and two near-blacks, so a correct icon has essentially none;
 //      the corrupt 16x16 had 218 of 256. For the .icns this runs against the
 //      file *extracted* with `iconutil`, which is the only reader whose opinion
 //      matters.
@@ -139,7 +139,7 @@ function describe(size) {
 // ------------------------------------------------------------- the pixels --
 
 /**
- * The mark is drawn in exactly three colours — #FFFFFF, #0A0C10 and #0B0D12 —
+ * The mark is drawn in exactly three colours — #F3F2EE, #101114 and #0B0C0E —
  * so every pixel in a correct icon is a grey, and the only spread between its
  * channels is whatever antialiasing introduces between two greys, which is
  * none. A corrupt payload read as the wrong format is the opposite: channel
@@ -235,7 +235,7 @@ function checkNotNoise(label, bytes) {
   if (fraction > SATURATION_LIMIT) {
     fail(
       label,
-      `is ${(fraction * 100).toFixed(0)}% saturated colour. The mark is black, white and one grey, so this is ` +
+      `is ${(fraction * 100).toFixed(0)}% saturated colour. The mark is an off-white on two near-blacks, so this is ` +
         'a corrupt payload — most likely the right pixels filed under an OSType macOS reads as raw ARGB.'
     )
   }
@@ -455,43 +455,37 @@ function checkIco(relativePath) {
  * site, the social card and the app icon are visibly different logos.
  *
  * They have drifted twice. Once silently, when the vectors were corrected and
- * the page kept the old branch and chevron; and once loudly, when a resync
- * script split the wordmark on its first `-->` to strip a header comment, the
- * file turned out to have several comments, and the card shipped with no mark
- * at all. Nothing caught either, because every file still existed and still
- * parsed.
+ * the page kept an older drawing; and once loudly, when a resync script split
+ * the lockup on its first `-->` to strip a header comment, the file turned out
+ * to have several comments, and the card shipped with no mark at all. Nothing
+ * caught either, because every file still existed and still parsed.
  *
  * So: extract the geometry from both sides, normalise whitespace, and insist
- * they are the same string.
+ * they are the same string under the same viewBox. The host's open tag is
+ * matched by its id or class alone, so a change to the vector's viewBox is a
+ * change to one file and a check, not to three files.
  */
 const INLINED = [
-  {
-    source: 'brand/mark.svg',
-    host: 'site/public/index.html',
-    open: '<symbol id="mark" viewBox="0 0 64 64" fill="currentColor">',
-    close: '</symbol>'
-  },
-  {
-    source: 'brand/mark-small.svg',
-    host: 'site/public/index.html',
-    open: '<symbol id="mark-sm" viewBox="0 0 64 64" fill="currentColor">',
-    close: '</symbol>'
-  },
-  {
-    source: 'brand/wordmark.svg',
-    host: 'site/og/card.html',
-    open: '<svg class="lockup" viewBox="0 0 274 64" fill="currentColor" role="img" aria-label="teamree">',
-    close: '</svg>'
-  }
+  { source: 'brand/mark.svg', host: 'site/public/index.html', open: '<symbol id="mark"', close: '</symbol>' },
+  { source: 'brand/mark-small.svg', host: 'site/public/index.html', open: '<symbol id="mark-sm"', close: '</symbol>' },
+  { source: 'brand/lockup.svg', host: 'site/og/card.html', open: '<svg class="lockup"', close: '</svg>' }
 ]
 
-/** An SVG file's drawable content: everything after its header comment, before the closing tag. */
+/**
+ * An SVG file's drawable content: everything after the root `<svg …>` tag,
+ * before the closing one. The header comment, if the file has one, is stripped
+ * with every other comment by `squash`, so a vector with no comment at all
+ * extracts just the same.
+ */
 function vectorBody(text) {
-  const start = text.indexOf('-->')
+  const root = text.indexOf('<svg')
+  const start = root < 0 ? -1 : text.indexOf('>', root)
   const end = text.lastIndexOf('</svg>')
   if (start < 0 || end < 0 || end <= start) return null
-  return text.slice(start + 3, end)
+  return text.slice(start + 1, end)
 }
+
+const viewBoxOf = (tag) => /viewBox="([^"]*)"/.exec(tag)?.[1] ?? null
 
 const squash = (text) =>
   text
@@ -504,31 +498,41 @@ function checkInlined({ source, host, open, close }) {
   const page = read(host)
   if (!vector || !page) return
 
-  const body = vectorBody(vector.toString('utf8'))
+  const text = vector.toString('utf8')
+  const body = vectorBody(text)
   if (!body) {
-    fail(source, 'has no header comment or no closing </svg>, so its geometry cannot be extracted.')
+    fail(source, 'has no root <svg> tag or no closing </svg>, so its geometry cannot be extracted.')
     return
   }
   const wanted = squash(body)
   // A sanity floor on the extraction itself. The failure that shipped was a
-  // three-line paste that looked like a successful one.
-  if (wanted.length < 400) {
+  // three-line paste that looked like a successful one; the mark is one path
+  // of some 180 characters, so anything shorter is a fragment of it.
+  if (wanted.length < 120) {
     fail(source, `extracted to only ${wanted.length} characters of geometry, which cannot be the whole mark.`)
     return
   }
 
-  const text = page.toString('utf8')
-  const at = text.indexOf(open)
+  const html = page.toString('utf8')
+  const at = html.indexOf(open)
   if (at < 0) {
-    fail(host, `does not contain \`${open.slice(0, 40)}…\`, so the inlined copy of ${source} could not be found.`)
+    fail(host, `does not contain \`${open}\`, so the inlined copy of ${source} could not be found.`)
     return
   }
-  const to = text.indexOf(close, at + open.length)
+  const tagEnd = html.indexOf('>', at)
+  const to = tagEnd < 0 ? -1 : html.indexOf(close, tagEnd)
   if (to < 0) {
     fail(host, `has an unterminated block where ${source} is inlined.`)
     return
   }
-  const found = squash(text.slice(at + open.length, to))
+  // The viewBox travels with the geometry: the same paths under a different
+  // box are a cropped or a floating copy of the mark, not the mark.
+  const wantedBox = viewBoxOf(text.slice(text.indexOf('<svg'), text.indexOf('>', text.indexOf('<svg'))))
+  const foundBox = viewBoxOf(html.slice(at, tagEnd))
+  if (wantedBox !== foundBox) {
+    fail(host, `inlines ${source} under viewBox "${foundBox}" where the vector says "${wantedBox}".`)
+  }
+  const found = squash(html.slice(tagEnd + 1, to))
   if (found !== wanted) {
     fail(
       host,
@@ -536,7 +540,7 @@ function checkInlined({ source, host, open, close }) {
         (found.length === wanted.length
           ? `same length (${found.length} characters), different geometry.`
           : `${found.length} characters against the vector's ${wanted.length}.`) +
-        " Re-paste everything between the vector's header comment and its closing tag."
+        " Re-paste everything between the vector's root <svg> tag and its closing tag."
     )
   }
 }

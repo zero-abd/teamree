@@ -6,7 +6,7 @@
 <title>teamree — run coding agents in parallel, one git worktree each</title>
 <meta name="description" content="An ADE built for teamwork. Run several coding agents at once, each in its own git worktree, and keep track of all of them in one window. Split terminals, a CLI the agents can drive, and teammates who can watch each other's panes and, once the owner allows it, type into them. Free, for macOS, and the source is on GitHub.">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#0B0C0E">
 <link rel="canonical" href="https://teamree.us/">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon-32.png" sizes="32x32" type="image/png">
@@ -46,31 +46,31 @@
    effective #1a1a1a). Two values deliberately depart from the reference design
    because the reference fails WCAG at those points; both are noted below. */
 :root{
-  --bg:#000;
+  --bg:#0B0C0E;
 
   /* Surfaces: washes, not greys. */
-  --wash-1:rgb(255 255 255 / 2%);
-  --wash-2:rgb(255 255 255 / 3%);
-  --wash-3:rgb(255 255 255 / 6%);
-  --hairline:rgb(255 255 255 / 8%);
-  --hairline-hover:rgb(99 102 241 / 40%);
+  --wash-1:#101114;
+  --wash-2:#141519;
+  --wash-3:#18191e;
+  --hairline:rgb(243 242 238 / 10%);
+  --hairline-hover:rgb(139 140 247 / 44%);
   /* Code recedes while cards advance: the well is darker and bluer than the
      page, where every card is lighter than it. A terminal is a hole; a card is
      a plate. That is the whole separation, now that everything is dark. */
-  --well:rgb(10 10 20 / 60%);
-  --well-2:rgb(10 10 20 / 80%);
+  --well:#101114;
+  --well-2:#0E0F12;
 
   /* Text. The reference puts its tertiary text at rgb(255 255 255 / 40%), which
      composites to #666 on black — 3.66:1, a fail. Ours is 58% (6.92:1 on black,
      6.60:1 on a wash card). Secondary at 72% is 10.5:1. */
-  --fg:#f0f0f5;
-  --fg-secondary:rgb(255 255 255 / 72%);
-  --fg-muted:rgb(255 255 255 / 58%);
+  --fg:#F3F2EE;
+  --fg-secondary:#C8C7C2;
+  --fg-muted:#A09F9B;
 
-  --accent:#6366f1;
-  --accent-bright:#818cf8;
-  --accent-soft:rgb(99 102 241 / 15%);
-  --accent-line:rgb(99 102 241 / 40%);
+  --accent:#8b8cf7;
+  --accent-bright:#A9AAFF;
+  --accent-soft:rgb(139 140 247 / 15%);
+  --accent-line:rgb(139 140 247 / 40%);
   /* The primary button is a gradient, as asked, but a shade deeper than the
      reference's #6366f1 -> #818cf8: white on #818cf8 is 2.98:1, so the
      reference's own call to action is unreadable across most of its fill. At
@@ -214,7 +214,7 @@ code,kbd{ font-family:var(--font-mono); }
 .skip:focus{ left:0; }
 
 /* --------------------------------------------------------------- branding -- */
-.brand{ display:inline-flex; align-items:center; gap:10px; color:#fff; font-weight:700; font-size:var(--text-md); letter-spacing:-.025em; white-space:nowrap; }
+.brand{ display:inline-flex; align-items:center; gap:10px; color:var(--fg); font-weight:700; font-size:var(--text-md); letter-spacing:-.025em; white-space:nowrap; }
 .brand:hover{ text-decoration:none; }
 /* The mark sits on a rounded tile everywhere it is shown as a badge. The tile is
    this box and the artwork is the image inside it, kept apart on purpose so the
@@ -222,13 +222,13 @@ code,kbd{ font-family:var(--font-mono); }
    small-size variant can drop in for the header without changing anything else. */
 .brand .tile{
   width:34px; height:34px; flex:none; border-radius:22.5%;
-  background:var(--wash-3); border:1px solid var(--hairline);
+  background:linear-gradient(to bottom,#101114,#0B0C0E); border:1px solid rgb(243 242 238 / 10%);
   display:flex; align-items:center; justify-content:center;
-  box-shadow:inset 0 1px 0 rgb(255 255 255 / 8%);
   transition:border-color var(--motion) var(--ease), background var(--motion) var(--ease);
 }
-.brand:hover .tile{ border-color:var(--hairline-hover); background:var(--accent-soft); }
-.brand .mark{ width:22px; height:22px; }
+.brand:hover .tile{ border-color:var(--hairline-hover); }
+.brand .mark{ width:22px; height:22px; color:#F3F2EE; }
+.brand .wordmark-svg{ width:92px; height:18px; color:var(--fg); }
 .brand .word{ display:inline-flex; align-items:baseline; gap:3px; }
 .brand .dot{ width:5px; height:5px; border-radius:50%; background:var(--accent-bright); flex:none; }
 
@@ -343,6 +343,7 @@ code,kbd{ font-family:var(--font-mono); }
 
 /* ------------------------------------------------------------------- hero -- */
 .hero{ padding-block:calc(var(--nav-top) + var(--nav-h) + var(--s10)) var(--s10); text-align:center; }
+.hero-icon{ width:112px; height:112px; display:block; margin:0 auto var(--s6); filter:drop-shadow(0 0 28px rgb(139 140 247 / 18%)); }
 /* The reservation is the pill's own two numbers plus a gap, so it cannot drift
    away from the pill: --nav-h is redefined alongside --nav-top in the same
    breakpoint that resizes the header, and this, and the scroll-padding that
@@ -354,7 +355,7 @@ code,kbd{ font-family:var(--font-mono); }
   .hero-section{ padding-top:0; }
   .hero{ padding-block:calc(var(--nav-top) + var(--nav-h) + var(--s8)) var(--s9); }
 }
-.hero h1{ margin-inline:auto; max-width:17ch; }
+.hero h1{ margin-inline:auto; max-width:17ch; font-size:clamp(2.75rem,1.7rem + 4vw,4.5rem); letter-spacing:-.045em; }
 .hero .lede{ margin-inline:auto; max-width:54ch; }
 h1 em{
   font-style:normal;
@@ -665,93 +666,22 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <defs>
-    <!-- The mark, from brand/mark.svg and brand/mark-small.svg. Everything is
-         currentColor, so `color` on the <use> is the whole of the theming.
-         Two forms on purpose: below about 32px the full mark's window contents
-         antialias into grey and the three windows close into one blob, so the
-         header, the footer and the browser tab all carry the reduced form and
-         agree with each other. The full mark appears at 72px and above. -->
-    <symbol id="mark" viewBox="0 0 64 64" fill="currentColor">
-      <!-- the root: a wide shallow crescent the trunk flares into -->
-        <path d="M15.90 58.66 Q32 49.00 48.10 58.66 Q32 55.50 15.90 58.66 Z"/>
-
-        <!-- the trunk, descending from the top window into the root -->
-        <path d="M30.09 21.63 H33.91 V57.06 H30.09 Z"/>
-
-        <!-- the two branches, sweeping down and inward from the lower windows -->
-        <g fill="none" stroke="currentColor" stroke-width="3.55" stroke-linecap="round">
-          <path d="M15.81 39.00 C15.81 45.00 32.00 47.00 28.85 55.00"/>
-          <path d="M48.19 39.00 C48.19 45.00 32.00 47.00 35.15 55.00"/>
-        </g>
-
-        <!--
-          The chevron where the branches meet the trunk. Each arm is a tapered wedge,
-          not a stroke: in the artwork it comes to a point at the top, widens as it
-          descends, and its outer edge then sweeps back in and flares into the trunk.
-          A constant-width round-capped stroke gets the tip 2 units too fat and the
-          foot 1.5 units too wide, which is the difference between an arrowhead and a
-          pair of sticks. The right edge runs to 30.60 rather than to the trunk's own
-          30.09 so the two shapes overlap instead of sharing an antialiased seam.
-        -->
-        <g>
-          <path d="M27.05 37.60 L25.09 40.02 C26.94 42.22 29.25 44.10 30.13 46.30 L30.60 46.30 L30.60 40.77 Z"/>
-          <path d="M36.95 37.60 L38.91 40.02 C37.06 42.22 34.75 44.10 33.87 46.30 L33.40 46.30 L33.40 40.77 Z"/>
-        </g>
-
-        <!--
-          The three windows. Each is one rounded rect with its contents knocked out
-          by fill-rule="evenodd": three chrome dots, a `>` prompt and a `_` cursor.
-          The counters never overlap, so the rule is unambiguous.
-        -->
-        <g fill-rule="evenodd">
-          <!-- top centre -->
-          <path d="M24.44 5.5 H39.56 A3.38 3.38 0 0 1 42.94 8.88 V18.5 A3.38 3.38 0 0 1 39.56 21.88 H24.44 A3.38 3.38 0 0 1 21.06 18.5 V8.88 A3.38 3.38 0 0 1 24.44 5.5 Z
-                   M23.5 8.88 A1.13 1.13 0 0 1 25.75 8.88 A1.13 1.13 0 0 1 23.5 8.88 Z
-                   M26.66 8.88 A1.13 1.13 0 0 1 28.91 8.88 A1.13 1.13 0 0 1 26.66 8.88 Z
-                   M29.81 8.88 A1.13 1.13 0 0 1 32.06 8.88 A1.13 1.13 0 0 1 29.81 8.88 Z
-                   M24.77 13.70 L27.34 15.69 L24.77 17.68 A0.84 0.84 0 0 0 25.80 19.01 L29.23 16.36 A0.84 0.84 0 0 0 29.23 15.02 L25.80 12.36 A0.84 0.84 0 0 0 24.77 13.70 Z
-                   M31.00 19.22 L34.81 19.22 A0.81 0.81 0 0 0 34.81 17.59 L31.00 17.59 A0.81 0.81 0 0 0 31.00 19.22 Z"/>
-          <!-- lower left -->
-          <path d="M5.38 23.31 H20.50 A3.38 3.38 0 0 1 23.88 26.69 V36.31 A3.38 3.38 0 0 1 20.50 39.69 H5.38 A3.38 3.38 0 0 1 2 36.31 V26.69 A3.38 3.38 0 0 1 5.38 23.31 Z
-                   M4.44 26.69 A1.13 1.13 0 0 1 6.69 26.69 A1.13 1.13 0 0 1 4.44 26.69 Z
-                   M7.59 26.69 A1.13 1.13 0 0 1 9.84 26.69 A1.13 1.13 0 0 1 7.59 26.69 Z
-                   M10.75 26.69 A1.13 1.13 0 0 1 13.00 26.69 A1.13 1.13 0 0 1 10.75 26.69 Z
-                   M5.70 31.51 L8.28 33.50 L5.70 35.49 A0.84 0.84 0 0 0 6.73 36.82 L10.17 34.17 A0.84 0.84 0 0 0 10.17 32.83 L6.73 30.18 A0.84 0.84 0 0 0 5.70 31.51 Z
-                   M11.94 37.03 L15.75 37.03 A0.81 0.81 0 0 0 15.75 35.41 L11.94 35.41 A0.81 0.81 0 0 0 11.94 37.03 Z"/>
-          <!-- lower right -->
-          <path d="M43.50 23.31 H58.63 A3.38 3.38 0 0 1 62 26.69 V36.31 A3.38 3.38 0 0 1 58.63 39.69 H43.50 A3.38 3.38 0 0 1 40.13 36.31 V26.69 A3.38 3.38 0 0 1 43.50 23.31 Z
-                   M42.56 26.69 A1.13 1.13 0 0 1 44.81 26.69 A1.13 1.13 0 0 1 42.56 26.69 Z
-                   M45.72 26.69 A1.13 1.13 0 0 1 47.97 26.69 A1.13 1.13 0 0 1 45.72 26.69 Z
-                   M48.88 26.69 A1.13 1.13 0 0 1 51.13 26.69 A1.13 1.13 0 0 1 48.88 26.69 Z
-                   M43.83 31.51 L46.40 33.50 L43.83 35.49 A0.84 0.84 0 0 0 44.86 36.82 L48.30 34.17 A0.84 0.84 0 0 0 48.30 32.83 L44.86 30.18 A0.84 0.84 0 0 0 43.83 31.51 Z
-                   M50.06 37.03 L53.88 37.03 A0.81 0.81 0 0 0 53.88 35.41 L50.06 35.41 A0.81 0.81 0 0 0 50.06 37.03 Z"/>
-        </g>
+    <!-- The full mark and reduced mark share the same two-slab idea. The
+         reduced form is used at 32px and below, where its slanted windows stay
+         crisp; the full form is reserved for larger placements. -->
+    <symbol id="mark" viewBox="0 0 256 256" fill="currentColor">
+  <path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/>
     </symbol>
-    <symbol id="mark-sm" viewBox="0 0 64 64" fill="currentColor">
-      <!-- the root -->
-        <path d="M14 58.8 Q32 45.6 50 58.8 Q32 54.2 14 58.8 Z"/>
-
-        <!-- the trunk -->
-        <path d="M29.2 18 H34.8 V57 H29.2 Z"/>
-
-        <!-- the branches -->
-        <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
-          <path d="M14.9 37 C14.9 43.8 32 45.8 29.2 54.4"/>
-          <path d="M49.1 37 C49.1 43.8 32 45.8 34.8 54.4"/>
-        </g>
-
-        <!-- the chevron where the branches meet the trunk -->
-        <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
-          <path d="M26.6 39.6 L32 46.4"/>
-          <path d="M37.4 39.6 L32 46.4"/>
-        </g>
-
-        <!-- the three windows, solid -->
-        <g>
-          <path d="M24.4 4.5 H39.6 A3.4 3.4 0 0 1 43 7.9 V16.1 A3.4 3.4 0 0 1 39.6 19.5 H24.4 A3.4 3.4 0 0 1 21 16.1 V7.9 A3.4 3.4 0 0 1 24.4 4.5 Z"/>
-          <path d="M5.4 23.5 H20.5 A3.4 3.4 0 0 1 23.9 26.9 V35.1 A3.4 3.4 0 0 1 20.5 38.5 H5.4 A3.4 3.4 0 0 1 2 35.1 V26.9 A3.4 3.4 0 0 1 5.4 23.5 Z"/>
-          <path d="M43.5 23.5 H58.6 A3.4 3.4 0 0 1 62 26.9 V35.1 A3.4 3.4 0 0 1 58.6 38.5 H43.5 A3.4 3.4 0 0 1 40.1 35.1 V26.9 A3.4 3.4 0 0 1 43.5 23.5 Z"/>
-        </g>
+    <symbol id="mark-sm" viewBox="0 0 256 256" fill="currentColor">
+  <path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM34 68L94 53V203L34 188ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM162 52L222 70V186L162 204Z"/>
+    </symbol>
+    <symbol id="wordmark" viewBox="0 10 440 82" fill="currentColor">
+  <path fill-rule="evenodd" d="M8 12H20V27H38V39H20V69Q20 78 30 78H39V90H28Q8 90 8 70V39H2V27H8ZM54 56Q54 25 78 25Q101 25 101 51V60H67Q69 78 84 78Q94 78 101 71V85Q93 90 81 90Q54 90 54 61ZM67 49H88Q88 37 78 37Q68 37 67 49ZM114 48Q114 25 138 25Q160 25 160 47V88H148V81Q140 90 129 90Q111 90 111 73Q111 55 134 55H148V48Q148 37 138 37Q128 37 128 48ZM148 66H135Q123 66 123 73Q123 79 132 79Q148 79 148 66ZM178 27H190V35Q197 25 209 25Q222 25 228 37Q235 25 248 25Q268 25 268 48V88H256V50Q256 38 247 38Q234 38 234 54V88H222V50Q222 38 213 38Q190 38 190 59V88H178ZM286 27H298V37Q305 25 319 25H324V38H318Q298 38 298 60V88H286ZM336 56Q336 25 360 25Q383 25 383 51V60H349Q351 78 366 78Q376 78 383 71V85Q375 90 363 90Q336 90 336 61ZM349 49H370Q370 37 360 37Q350 37 349 49ZM390 56Q390 25 414 25Q437 25 437 51V60H403Q405 78 420 78Q430 78 437 71V85Q429 90 417 90Q390 90 390 61ZM403 49H424Q424 37 414 37Q404 37 403 49Z"/>
+    </symbol>
+    <symbol id="app-icon" viewBox="0 0 1024 1024">
+  <defs><linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#101114"/><stop offset="1" stop-color="#0B0C0E"/></linearGradient></defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
+  <g fill="#F3F2EE" transform="translate(256.5 237.875) scale(2.1291667)"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></g>
     </symbol>
     <symbol id="chev" viewBox="0 0 16 16">
       <path d="M8 10.6 2.7 5.3l1.3-1.3L8 8l4-4 1.3 1.3z"/>
@@ -765,8 +695,8 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 <header class="site-header">
   <div class="header-row">
     <a class="brand" href="/" aria-label="teamree, home">
-      <span class="tile" aria-hidden="true"><svg class="mark" viewBox="0 0 64 64" focusable="false"><use href="#mark-sm"/></svg></span>
-      <span class="word">teamree<i class="dot" aria-hidden="true"></i></span>
+      <span class="tile" aria-hidden="true"><svg class="mark" viewBox="0 0 256 256" focusable="false"><use href="#mark-sm"/></svg></span>
+      <span class="word"><svg class="wordmark-svg" viewBox="0 10 440 82" aria-hidden="true" focusable="false"><use href="#wordmark"/></svg><i class="dot" aria-hidden="true"></i></span>
     </a>
     <a class="nav-toggle" href="#site-nav" aria-controls="site-nav">Menu<svg aria-hidden="true" focusable="false"><use href="#chev"/></svg></a>
     <nav class="nav" id="site-nav" aria-label="Primary">
@@ -787,6 +717,7 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 <div class="hero-glow" aria-hidden="true"></div>
 
 <div class="wrap hero">
+  <svg class="hero-icon" viewBox="0 0 1024 1024" role="img" aria-label="teamree app icon"><use href="#app-icon"/></svg>
   <h1>Agentic development, <em>built for teams.</em></h1>
   <p class="lede">
     Every task gets its own git worktree and its own terminals, with a coding agent in
@@ -1293,7 +1224,7 @@ demo:video:parked -->
   <div class="wrap">
     <div class="footer-row">
       <a class="brand" href="/" aria-label="teamree, home">
-        <span class="tile" aria-hidden="true"><svg class="mark" viewBox="0 0 64 64" focusable="false"><use href="#mark-sm"/></svg></span>
+        <span class="tile" aria-hidden="true"><svg class="mark" viewBox="0 0 256 256" focusable="false"><use href="#mark-sm"/></svg></span>
         <span class="word">teamree<i class="dot" aria-hidden="true"></i></span>
       </a>
       <nav class="footer-links" aria-label="Footer">
