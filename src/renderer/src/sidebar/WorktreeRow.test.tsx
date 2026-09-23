@@ -553,6 +553,16 @@ describe('renaming', () => {
     expect(handlers.onOpen).not.toHaveBeenCalled()
   })
 
+  it('still opens from the keyboard on Space and ⌘↓, as a Finder row does', () => {
+    mount()
+    fireEvent.keyDown(openButton(), { key: ' ' })
+    expect(screen.queryByRole('textbox')).toBeNull()
+
+    fireEvent.keyDown(openButton(), { key: 'ArrowDown', metaKey: true })
+    expect(handlers.onOpen).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('textbox')).toBeNull()
+  })
+
   it('puts the old name back on Escape', () => {
     mount()
     fireEvent.doubleClick(screen.getByText('Rewrite the pager'))

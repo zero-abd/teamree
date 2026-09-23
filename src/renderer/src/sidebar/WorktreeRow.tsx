@@ -207,10 +207,16 @@ export function WorktreeRow({
             className="worktree__open"
             ref={openControl}
             onClick={onOpen}
+            // As in Finder: Return renames, ⌘↓ opens. Space still opens, being the button's own key.
             onKeyDown={(event) => {
-              if (event.key !== 'Enter' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
-              event.preventDefault()
-              setRenaming(true)
+              const bare = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
+              if (event.key === 'Enter' && bare) {
+                event.preventDefault()
+                setRenaming(true)
+              } else if (event.key === 'ArrowDown' && event.metaKey && !event.ctrlKey && !event.altKey) {
+                event.preventDefault()
+                onOpen()
+              }
             }}
             disabled={creating || failed || missing}
             aria-current={active ? 'true' : undefined}
