@@ -18,6 +18,7 @@ import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type Applic
 import { FILE_SCHEME, FILE_SCHEME_PRIVILEGES, fileGrants, serveGrantedFile } from './files/fileProtocol'
 import { installKeepAwake } from './keepAwake'
 import { frontsExistingWindow, isBackgroundLaunch, launchData, userDataOverride } from './launchProfile'
+import { bringForward, revealLaunchWindow, watchActivation } from './launchReveal'
 import { installMenuBar } from './menuBar'
 import { DEFAULT_APPEARANCE, type Appearance } from '../shared/theme'
 import { installNativeAppearance, windowBackground } from './nativeAppearance'
@@ -87,9 +88,7 @@ function createWindow(): BrowserWindow {
   window.on('ready-to-show', () => {
     // Both modes show a hidden window, so a background launch applies neither.
     if (isBackgroundLaunch(process.env)) return
-    if (opened.maximized) window.maximize()
-    window.show()
-    if (opened.fullScreen) window.setFullScreen(true)
+    revealLaunchWindow(window, opened, { platform: process.platform, activated, app })
   })
 
   // A link in a pane arrives here via `window.open`; windowNavigation.ts decides.
@@ -151,6 +150,9 @@ if (profile) app.setPath('userData', profile)
 // At module load: AppKit consults it when the launch event arrives, before `ready`.
 optOutOfStateRestoration(process.platform, systemPreferences)
 
+// At module load: macOS activates a launch it fronts just after `ready`, long before the window can show.
+const activated = watchActivation(app)
+
 // Before `ready`, or Chromium will not stream or range-request the scheme. The smoke run
 // imports this module after `ready`, where the call throws; there media just loads unprivileged.
 if (!app.isReady()) protocol.registerSchemesAsPrivileged([{ scheme: FILE_SCHEME, privileges: FILE_SCHEME_PRIVILEGES }])
@@ -161,8 +163,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
   app.on('second-instance', (_event, _argv, _cwd, knocking) => {
     const [existing] = BrowserWindow.getAllWindows()
     if (!existing || !frontsExistingWindow(process.env, knocking)) return
-    if (existing.isMinimized()) existing.restore()
-    existing.focus()
+    bringForward(existing)
   })
 
   // The launch as one promise, because a quit arriving mid-way has to wait for
