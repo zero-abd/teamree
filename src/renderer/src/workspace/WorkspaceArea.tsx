@@ -7,6 +7,7 @@ import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shownRoot } from '../panes/paneLayout'
+import { PaneDragLayer } from '../panes/PaneDragLayer'
 import { PaneTree } from '../panes/PaneTree'
 import { SplitFrame } from '../panes/SplitFrame'
 import { SettingsView } from '../settings/SettingsView'
@@ -77,6 +78,7 @@ function WorkspaceMain({
     <div className="workspace-column">
       <TerminalTabs modifier={modifier} />
       <WorkspaceView modifier={modifier} isAppChord={isAppChord} />
+      <PaneDragLayer />
     </div>
   )
 }

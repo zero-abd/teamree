@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
 import { FileGlyph, UnsavedDot } from '../files/FileBar'
+import { usePaneDrag, useTabDrag } from '../panes/paneDrag'
 import { usePaneMenu } from './paneMenu'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { useStartMenuItems } from './startMenu'
@@ -50,6 +51,8 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const renaming = useWorkspaceStore((state) => state.editingPaneName)
   const setRenaming = useWorkspaceStore((state) => state.editPaneName)
   const paneMenu = usePaneMenu(modifier)
+  const startDrag = useTabDrag()
+  const dragged = usePaneDrag((state) => state.drag?.source.id)
   const plus = useRef<HTMLButtonElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   // Back on the `+`, so a keyboard user who opened the menu is where they were.
@@ -114,8 +117,15 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
             const unsaved = isFile && files.some((id) => unsavedFiles[id] === true)
             return (
               <div
-                className={`tab${active ? ' tab--active' : ''}${isUnread ? ' tab--unread' : ''}`}
+                className={`tab${active ? ' tab--active' : ''}${isUnread ? ' tab--unread' : ''}${
+                  dragged === tab.terminalId ? ' tab--dragged' : ''
+                }`}
                 key={tab.terminalId}
+                data-pane-id={tab.terminalId}
+                onPointerDown={(event) => {
+                  if (renaming !== tab.terminalId)
+                    startDrag(event, { kind: 'stop', id: tab.terminalId, label: tab.label })
+                }}
                 onContextMenu={(event) => {
                   if (renaming !== tab.terminalId) paneMenu.onContextMenu(tab.terminalId, tab.label, event)
                 }}
