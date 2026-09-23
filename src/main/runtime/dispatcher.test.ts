@@ -194,6 +194,8 @@ describe('dispatcher', () => {
       // Local: no asking GitHub, changing a preference or opening a browser page for a teammate.
       'update.check',
       'update.download',
+      'update.fetchInstaller',
+      'update.openInstaller',
       'update.setAutomatic',
       'update.state',
       'workspace.subscribe',

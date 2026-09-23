@@ -41,3 +41,25 @@ export function updateNotice(state: UpdateState | null): UpdateNotice | null {
 export function automaticUpdatesLabel(state: UpdateState | null): string {
   return state?.automatic === false ? 'Check for updates automatically' : 'Stop checking for updates automatically'
 }
+
+/** The one button that gets the release: in the app when it can be verified, else in the browser. */
+export type InstallerStep = {
+  kind: 'browser' | 'fetch' | 'progress' | 'open'
+  label: string
+  /** Why the last download failed, in one line. */
+  problem: string | null
+}
+
+export function installerStep(state: UpdateState | null): InstallerStep | null {
+  const release = state?.available ?? null
+  if (state === null || release === null) return null
+  if (!release.installer) return { kind: 'browser', label: updateNotice(state)?.action ?? '', problem: null }
+
+  const download = state.download?.version === release.version ? state.download : null
+  if (download?.state === 'downloading') {
+    const percent = Math.floor((download.received * 100) / Math.max(download.total, 1))
+    return { kind: 'progress', label: `Downloading ${percent}%`, problem: null }
+  }
+  if (download?.state === 'ready') return { kind: 'open', label: 'Open Installer', problem: null }
+  return { kind: 'fetch', label: 'Download', problem: download?.state === 'failed' ? download.problem : null }
+}

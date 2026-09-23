@@ -266,6 +266,8 @@ describe('what a teammate can reach', () => {
     // Nor ask GitHub anything, change a preference, or open a page in a browser.
     expect(PEER_METHODS).not.toHaveProperty('update.check')
     expect(PEER_METHODS).not.toHaveProperty('update.download')
+    expect(PEER_METHODS).not.toHaveProperty('update.fetchInstaller')
+    expect(PEER_METHODS).not.toHaveProperty('update.openInstaller')
     expect(PEER_METHODS).not.toHaveProperty('update.setAutomatic')
     expect(PEER_METHODS).not.toHaveProperty('update.state')
   })

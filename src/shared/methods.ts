@@ -303,6 +303,10 @@ export const Params = {
    * release the runtime already holds can be opened, so nobody aims a browser through this app.
    */
   updateDownload: z.object({}),
+  /** Fetches the newer release's `.dmg` into ~/Downloads and checks its size and SHA-256. Progress arrives as `updates`. */
+  updateFetchInstaller: z.object({}),
+  /** Opens the fetched `.dmg`, which mounts it. Takes no path: only the verified file can be opened. */
+  updateOpenInstaller: z.object({}),
 
   /** Everyone whose public key is committed to the project, and who this installation is. */
   membersList: z.object({ projectId: z.string().min(1) }),
@@ -618,6 +622,8 @@ export type MethodContract = {
   'update.setAutomatic': { params: z.infer<typeof Params.updateSetAutomatic>; result: UpdateState }
   /** Answers with the address that was opened, so a caller can say what it was. */
   'update.download': { params: z.infer<typeof Params.updateDownload>; result: { opened: string } }
+  'update.fetchInstaller': { params: z.infer<typeof Params.updateFetchInstaller>; result: UpdateState }
+  'update.openInstaller': { params: z.infer<typeof Params.updateOpenInstaller>; result: { opened: string } }
 
   'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
   'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }

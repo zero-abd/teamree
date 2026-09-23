@@ -208,6 +208,8 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
           ? {}
           : { worktreesRoot: process.env.TEAMREE_WORKTREES_ROOT }),
         openExternal: (url) => shell.openExternal(url),
+        downloadsDirectory: app.getPath('downloads'),
+        openPath: (path) => shell.openPath(path),
         onAgentNotice: (notice) => notices?.deliver(notice),
         // `teamree quit`: only `app.quit` runs `before-quit`. See quitSequence.ts.
         requestQuit: () => app.quit()

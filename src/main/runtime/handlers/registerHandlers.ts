@@ -47,6 +47,10 @@ export type RegisteredAreas = {
 export type RegisterHandlersOptions = {
   /** Opens a URL in the user's browser. Absent with no Electron around, where the download call refuses. */
   openExternal?: (url: string) => Promise<void>
+  /** Where the update's `.dmg` is saved. Absent with no Electron around, where fetching it refuses. */
+  downloadsDirectory?: string
+  /** `shell.openPath`: opens the fetched `.dmg`. Absent with no Electron around. */
+  openPath?: (path: string) => Promise<string>
   /** Where each pane's output is kept between launches. Absent, panes come back with nothing above their prompt. */
   scrollback?: ScrollbackRepository
   /**
@@ -214,6 +218,8 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
         rememberLatest: (version) => registry.context.store.rememberLatestVersion(version)
       },
       openExternal: options.openExternal,
+      downloadsDirectory: options.downloadsDirectory,
+      openPath: options.openPath,
       // A window hears about a check it did not start the way it hears about a
       // worktree the CLI made.
       onChange: () => workspaceEvents.emit({ type: 'updates' })

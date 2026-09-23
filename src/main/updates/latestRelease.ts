@@ -44,10 +44,22 @@ export type LatestRelease = {
   notes: string | null
   /** The `.dmg` to download, or null when the release published none. */
   downloadUrl: string | null
+  /** The `.dmg` with what GitHub says its size and SHA-256 are; null when either is missing. */
+  installer: DiskImage | null
   /** The release's own page, built from the tag rather than taken from the API. */
   releaseUrl: string
   /** Epoch milliseconds, or null when the date was missing or unreadable. */
   publishedAt: number | null
+}
+
+/** A release's disk image, with what a download of it has to match. */
+export type DiskImage = {
+  url: string
+  /** A plain file name: it becomes the name in ~/Downloads. */
+  name: string
+  size: number
+  /** Lowercase hex. */
+  sha256: string
 }
 
 /**
@@ -61,7 +73,16 @@ const ReleaseSchema = z.object({
   prerelease: z.boolean().optional(),
   published_at: z.string().nullish(),
   assets: z
-    .array(z.object({ name: z.string().optional(), browser_download_url: z.string().optional() }).passthrough())
+    .array(
+      z
+        .object({
+          name: z.string().optional(),
+          browser_download_url: z.string().optional(),
+          size: z.number().optional(),
+          digest: z.string().nullish()
+        })
+        .passthrough()
+    )
     .optional()
 })
 
@@ -147,6 +168,7 @@ function usable(raw: RawRelease, repository: string, channel: ReleaseChannel): L
     prerelease: prerelease || isPrereleaseVersion(version),
     notes: plainText(raw.body ?? ''),
     downloadUrl: diskImage(raw, repository),
+    installer: verifiableImage(raw, repository),
     // Built from a checked tag rather than read from `html_url`.
     releaseUrl: `https://${RELEASE_HOST}/${repository}/releases/tag/${tag}`,
     publishedAt: epoch(raw.published_at)
@@ -171,6 +193,19 @@ function diskImage(raw: RawRelease, repository: string): string | null {
     const url = asset.browser_download_url
     if (url === undefined) continue
     if (isReleaseDownload(url, repository)) return url
+  }
+  return null
+}
+
+/** The first `.dmg` GitHub gives a size and SHA-256 for, under a name safe to save as. */
+function verifiableImage(raw: RawRelease, repository: string): DiskImage | null {
+  for (const asset of raw.assets ?? []) {
+    const { name, browser_download_url: url, size, digest } = asset
+    if (name === undefined || url === undefined || !/^[A-Za-z0-9_-][A-Za-z0-9._-]*\.dmg$/.test(name)) continue
+    if (!isReleaseDownload(url, repository)) continue
+    const sha256 = /^sha256:([0-9a-f]{64})$/i.exec(digest ?? '')?.[1]?.toLowerCase()
+    if (sha256 === undefined || size === undefined || !Number.isSafeInteger(size) || size <= 0) continue
+    return { url, name, size, sha256 }
   }
   return null
 }

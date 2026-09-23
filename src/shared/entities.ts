@@ -1236,7 +1236,15 @@ export type UpdateRelease = {
   /** The release's page, which exists for every published tag. */
   releaseUrl: string
   publishedAt: number | null
+  /** The `.dmg` teamree can fetch and verify itself; absent or null when the release gives no size and checksum. */
+  installer?: { name: string; size: number } | null
 }
+
+/** Fetching the installer into ~/Downloads. `version` says which release it was for. */
+export type UpdateDownload =
+  | { state: 'downloading'; version: string; received: number; total: number }
+  | { state: 'ready'; version: string; path: string }
+  | { state: 'failed'; version: string; problem: string }
 
 /** What this build is, what is out there, and whether teamree is looking. */
 export type UpdateState = {
@@ -1260,4 +1268,6 @@ export type UpdateState = {
    * check that could not reach GitHub is not worth interrupting anybody for.
    */
   problem: string | null
+  /** The installer being fetched, fetched, or refused; absent or null before one was asked for. */
+  download?: UpdateDownload | null
 }

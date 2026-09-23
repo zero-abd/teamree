@@ -450,6 +450,10 @@ type WorkspaceState = {
   checkForUpdates: () => Promise<void>
   /** Opens the newer release's download in the browser. */
   downloadUpdate: () => Promise<void>
+  /** Fetches the verified `.dmg` into ~/Downloads; progress arrives as `update.download`. */
+  fetchInstaller: () => Promise<void>
+  /** Opens the fetched `.dmg`, which mounts it. */
+  openInstaller: () => Promise<void>
   /** Turns the automatic check on or off. Remembered between runs. */
   setAutomaticUpdates: (automatic: boolean) => Promise<void>
 
@@ -1787,6 +1791,23 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } catch (error) {
         // Said out loud, unlike a failed check: a pressed button that does nothing is the worst outcome here.
         failed('Could not open the download')(error)
+      }
+    },
+
+    async fetchInstaller() {
+      try {
+        set({ update: await runtimeClient.call('update.fetchInstaller', {}) })
+      } catch (error) {
+        failed('Could not download the update')(error)
+      }
+    },
+
+    async openInstaller() {
+      try {
+        await runtimeClient.call('update.openInstaller', {})
+      } catch (error) {
+        void get().loadUpdate()
+        failed('Could not open the installer')(error)
       }
     },
 

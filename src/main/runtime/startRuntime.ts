@@ -39,6 +39,10 @@ export type RuntimeOptions = {
    * so only code handed the means can open a browser, and a headless runtime has none.
    */
   openExternal?: (url: string) => Promise<void>
+  /** Where the update's `.dmg` is saved; `app.getPath('downloads')` in the app. */
+  downloadsDirectory?: string
+  /** Opens the fetched `.dmg`; `shell.openPath` in the app. */
+  openPath?: (path: string) => Promise<string>
   /** Announces an agent pane that has stopped. Passed in for the same reason `openExternal` is. */
   onAgentNotice?: (notice: AgentNotice) => void
   /** Ends the app, for `teamree quit`; `app.quit` in the main process. Absent, the method refuses. */
@@ -69,6 +73,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     serveTeamwork = true,
     checkForUpdates = true,
     openExternal,
+    downloadsDirectory,
+    openPath,
     onAgentNotice,
     requestQuit,
     onError
@@ -88,6 +94,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const registry = new MethodRegistry(context)
   const areas = registerHandlers(registry, {
     openExternal,
+    downloadsDirectory,
+    openPath,
     onAgentNotice,
     scrollback,
     worktreesRoot,

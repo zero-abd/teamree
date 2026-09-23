@@ -19,6 +19,8 @@ import {
 import { useNow } from '../state/useNow'
 import { modalOnScreen } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { InstallerButton } from '../updates/InstallerButton'
+import { installerStep } from '../updates/updateNotice'
 import { cliLine, relayPanel, updatePanel } from './settingsModel'
 
 const SECTIONS = [
@@ -270,6 +272,7 @@ function UpdatesSection(): React.JSX.Element {
   // "Last checked" changes while nothing happens, so the page re-renders itself.
   const now = useNow()
   const panel = updatePanel(update, now)
+  const step = installerStep(update)
 
   return (
     <section className="settings-section" aria-labelledby="settings-updates">
@@ -293,6 +296,14 @@ function UpdatesSection(): React.JSX.Element {
             </div>
           ) : null}
         </div>
+
+        {step !== null && update?.available ? (
+          <div className="settings-row">
+            <p className="settings-fact">teamree {update.available.version} available</p>
+            <InstallerButton step={step} className="button button--small" />
+          </div>
+        ) : null}
+        {step?.problem ? <p className="settings-error">{step.problem}</p> : null}
 
         {panel.offersCheck ? (
           <label className="settings-check">

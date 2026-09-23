@@ -114,3 +114,26 @@ it('puts the preference back when the runtime could not record it', async () => 
   expect(useWorkspaceStore.getState().update?.automatic).toBe(true)
   expect(notices()[0]).toContain('Could not change whether teamree checks for updates')
 })
+
+it('starts the installer download and keeps the state the runtime answers with', async () => {
+  reset()
+  const download = { state: 'downloading' as const, version: '0.2.0', received: 0, total: 10 }
+  call.mockResolvedValue(state({ download }))
+
+  await useWorkspaceStore.getState().fetchInstaller()
+
+  expect(call).toHaveBeenCalledWith('update.fetchInstaller', {})
+  expect(useWorkspaceStore.getState().update?.download).toEqual(download)
+})
+
+it('opens the installer, and says so when it could not', async () => {
+  reset()
+  call.mockResolvedValueOnce({ opened: '/Users/me/Downloads/teamree-0.2.0.dmg' })
+  await useWorkspaceStore.getState().openInstaller()
+  expect(call).toHaveBeenCalledWith('update.openInstaller', {})
+  expect(notices()).toEqual([])
+
+  call.mockRejectedValue(new Error('the file is gone'))
+  await useWorkspaceStore.getState().openInstaller()
+  expect(notices()[0]).toContain('Could not open the installer')
+})

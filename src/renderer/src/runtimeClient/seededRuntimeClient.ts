@@ -1075,6 +1075,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       return updateState()
     },
     'update.download': () => ({ opened: 'https://github.com/zero-abd/teamree/releases/latest' }),
+    'update.fetchInstaller': () => updateState(),
+    'update.openInstaller': () => ({ opened: '/Users/demo/Downloads/teamree.dmg' }),
     // No machine under it: nothing is on anybody's PATH. The row menu keeps its
     // Open in item and says this when chosen, which is what the real refusal looks like.
     'editor.list': () => ({ editors: [] }),
