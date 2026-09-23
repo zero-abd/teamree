@@ -13,6 +13,7 @@ export function SplitFrame({
   sizes,
   cells,
   onResize,
+  minPx,
   className
 }: {
   direction: 'row' | 'column'
@@ -21,6 +22,8 @@ export function SplitFrame({
   cells: readonly SplitCell[]
   /** The released position, for whoever owns these fractions to keep. */
   onResize: (sizes: number[]) => void
+  /** Each cell's least size along the axis, in pixels; a small fraction without it. */
+  minPx?: readonly number[]
   /** An extra class on the split itself, for a caller that has to place it. */
   className?: string
 }): React.JSX.Element {
@@ -46,13 +49,13 @@ export function SplitFrame({
 
     const move = (moveEvent: PointerEvent): void => {
       const delta = (direction === 'row' ? moveEvent.clientX : moveEvent.clientY) - start
-      setDraft(applyGutterDrag(origin, index, delta, total))
+      setDraft(applyGutterDrag(origin, index, delta, total, minPx))
     }
     const finish = (upEvent: PointerEvent | null): void => {
       setDraft(null)
       if (!upEvent) return
       const delta = (direction === 'row' ? upEvent.clientX : upEvent.clientY) - start
-      onResize(applyGutterDrag(origin, index, delta, total))
+      onResize(applyGutterDrag(origin, index, delta, total, minPx))
     }
     startDrag(event, direction === 'row' ? 'col-resize' : 'row-resize', move, finish)
   }
@@ -64,7 +67,7 @@ export function SplitFrame({
     const total = axisLength()
     if (total <= 0) return
     event.preventDefault()
-    onResize(applyGutterDrag(current, index, event.key === forward ? 24 : -24, total))
+    onResize(applyGutterDrag(current, index, event.key === forward ? 24 : -24, total, minPx))
   }
 
   return (

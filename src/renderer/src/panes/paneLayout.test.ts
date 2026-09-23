@@ -74,6 +74,17 @@ describe('applyGutterDrag', () => {
   it('is inert without a measured container', () => {
     expect(applyGutterDrag([0.5, 0.5], 0, 120, 0)).toEqual([0.5, 0.5])
   })
+
+  it('stops each side at its own least size in pixels', () => {
+    const sizes = applyGutterDrag([0.5, 0.5], 0, 10000, 1000, [100, 350])
+    expect(sizes[1]).toBeCloseTo(0.35)
+    expect(applyGutterDrag([0.5, 0.5], 0, -10000, 1000, [100, 350])[0]).toBeCloseTo(0.1)
+  })
+
+  it('lets a pane already under its least size grow but not shrink', () => {
+    expect(applyGutterDrag([0.2, 0.8], 0, -50, 1000, [300, 300])).toEqual([0.2, 0.8])
+    expect(applyGutterDrag([0.2, 0.8], 0, 50, 1000, [300, 300])[0]).toBeCloseTo(0.25)
+  })
 })
 
 describe('splitChildBases', () => {

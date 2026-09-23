@@ -8,6 +8,7 @@ import type { RestoredAs } from '../../shared/paneRestore'
 import type { AgentEvent, Layout, PaneNode, Terminal } from '../../shared/entities'
 import { fileLeavesIn } from '../../shared/filePane'
 import { evidenceLine } from '../../shared/outputEvidence'
+import { placePane, placePaneWithin, type Box } from '../../shared/paneRoom'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
 import {
   detectAgent,
@@ -26,7 +27,7 @@ import {
   writeHookSettings,
   type AgentHookOptions
 } from './agent-hooks'
-import { appendPane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
+import { leafPane, normalisePane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { CHECKPOINT_SOURCE_BYTES, ScrollbackCheckpoints } from './scrollbackCheckpoints'
@@ -147,6 +148,9 @@ export class TerminalSessionManager {
   private readonly records: SessionRepository
   private readonly scrollback: ScrollbackRepository | undefined
   private readonly checkpoints: ScrollbackCheckpoints | undefined
+  /** The grid the last window-opened pane was placed on; a landscape guess until then. */
+  private paneArea: Box = { width: 1200, height: 800 }
+  private minPane: Box | undefined
 
   constructor(private readonly options: TerminalSessionManagerOptions = {}) {
     this.layouts = options.layouts ?? new InMemoryLayoutRepository()
@@ -178,13 +182,18 @@ export class TerminalSessionManager {
       .map((session) => ({ terminalId: session.id, worktreeId: session.worktreeId, pid: session.pid }))
   }
 
-  /** Starts a terminal and gives it a pane at the top level of the worktree. */
+  /** Starts a terminal in the largest pane's place (`paneRoom.ts`), on the last grid a window reported. */
   create(params: ParamsOf<'terminal.create'>): Terminal {
+    if (params.area !== undefined) this.paneArea = params.area
+    if (params.minPane !== undefined) this.minPane = params.minPane
     const session = this.startSession(params)
     const layout = this.layoutFor(session.worktreeId)
+    const added = leafPane(session.id)
+    // The window refuses a pane with no room before asking; a CLI caller is not refused, only placed.
+    const fitted = this.minPane && placePaneWithin(layout.root, added, this.paneArea, this.minPane)
     this.saveLayout({
       worktreeId: session.worktreeId,
-      root: appendPane(layout.root, session.id),
+      root: normalisePane(fitted || placePane(layout.root, added, this.paneArea)),
       focusedTerminalId: session.id
     })
     return session.snapshot()

@@ -11,6 +11,7 @@ import { PaneTree } from '../panes/PaneTree'
 import { SplitFrame } from '../panes/SplitFrame'
 import { SettingsView } from '../settings/SettingsView'
 import { TeamworkView } from '../teamwork/TeamworkView'
+import { measureCell, minPaneBox } from '../terminal/paneMetrics'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { RightPanel } from './rightPanel/RightPanel'
 import { useMarkPanesSeen } from '../state/usePaneSeen'
@@ -110,6 +111,13 @@ function WorkspaceView({
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
   const helpOpen = useWorkspaceStore((state) => state.helpOpen)
 
+  const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
+  const fontFamily = useWorkspaceStore((state) => state.terminalOptions.fontFamily)
+  const minPane = useMemo(() => {
+    const cell = measureCell(fontSize, fontFamily, globalThis.document)
+    return cell && minPaneBox(cell)
+  }, [fontSize, fontFamily])
+
   // Read with the other hooks, above the early returns.
   const paneRoot = useMemo(
     () => shownRoot(layout?.root ?? null, expandedTerminalId),
@@ -179,6 +187,7 @@ function WorkspaceView({
               searchTerminalId={paneSearch?.terminalId ?? null}
               searchToken={paneSearch?.token ?? 0}
               onCloseSearch={closePaneSearch}
+              minPane={minPane}
             />
           ) : (
             <WorktreeStart worktree={worktree} modifier={modifier} />

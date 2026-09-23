@@ -298,6 +298,8 @@
   position: absolute;
   top: var(--s2);
   right: var(--s3);
+  /* In a narrow pane the field gives way; the bar never passes the left edge. */
+  max-width: calc(100% - 2 * var(--s3));
   /* Above every layer xterm stacks inside the surface next to it, the highest
      of which is 11; the surface is not a stacking context of its own. */
   z-index: 20;
@@ -311,7 +313,8 @@
 }
 
 .pane-search__field {
-  width: 180px;
+  flex: 0 1 180px;
+  min-width: 48px;
   padding: 2px var(--s2);
   border: 1px solid var(--line);
   border-radius: var(--r1);
@@ -319,6 +322,10 @@
   color: var(--fg);
   font: inherit;
   font-size: var(--text-sm);
+}
+
+.pane-search > .button {
+  flex: none;
 }
 
 .pane-search__field::placeholder {
@@ -333,6 +340,7 @@
 
 /* Reserved so the controls beside it do not shuffle as the count changes. */
 .pane-search__count {
+  flex: none;
   min-width: 76px;
   padding: 0 var(--s1);
   color: var(--fg-secondary);

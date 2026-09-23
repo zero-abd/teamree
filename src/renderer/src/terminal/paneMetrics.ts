@@ -3,6 +3,7 @@
 // any cell this misses.
 
 import type { PaneNode } from '@shared/entities'
+import { MIN_PANE_CELLS, paneRects, placePaneWithin } from '@shared/paneRoom'
 
 /** The line height every pane's emulator is built with. Stated once. */
 export const TERMINAL_LINE_HEIGHT = 1.25
@@ -14,6 +15,9 @@ export type Box = { width: number; height: number }
 
 /** The fraction of the pane grid a pane occupies, per axis. */
 export type PaneShare = { width: number; height: number }
+
+/** A new pane's size in cells, and the grid and floor it was worked out on, for the runtime to place it the same way. */
+export type NewPane = PaneSize & { area: Box; minPane: Box }
 
 /** xterm refuses to go below this, and so does the fit addon. */
 const MIN_CELLS = 2
@@ -30,13 +34,26 @@ export const PANE_GRID_SELECTOR = '.workspace__panes'
  */
 export const PANE_CHROME: Box = { width: 1 + 1 + 9 + 6, height: 1 + 24 + 1 + 1 + 6 + 6 }
 
-/** The share of the grid a pane appended now would get, by the same rule `appendPane` applies. */
-export function appendedPaneShare(root: PaneNode | null): PaneShare {
-  if (root === null) return { width: 1, height: 1 }
-  if (root.kind === 'split' && root.direction === 'row') {
-    return { width: 1 / (root.children.length + 1), height: 1 }
+/** Stands in for the pane not yet made; no terminal or file id looks like it. */
+const PROBE_ID = 'probe:new-pane'
+
+/** A pane of `MIN_PANE_CELLS`, chrome included, in pixels. */
+export function minPaneBox(cell: Box): Box {
+  return {
+    width: MIN_PANE_CELLS.cols * cell.width + PANE_CHROME.width,
+    height: MIN_PANE_CELLS.rows * cell.height + PANE_CHROME.height
   }
-  return { width: 0.5, height: 1 }
+}
+
+/** What `placePaneWithin` would give one more pane in `area`, in cells; `full` when it would give nothing. */
+export function roomForNewPane(root: PaneNode | null, cell: Box, area: Box): NewPane | 'full' {
+  const minPane = minPaneBox(cell)
+  const placed = placePaneWithin(root, { kind: 'leaf', terminalId: PROBE_ID }, area, minPane)
+  const rect = paneRects(placed, area).find((each) => each.id === PROBE_ID)
+  if (!rect) return 'full'
+  // Chrome comes off each pane after the split: two panes carry two sets of borders.
+  const size = paneSizeFrom({ width: rect.width - PANE_CHROME.width, height: rect.height - PANE_CHROME.height }, cell)
+  return size === undefined ? 'full' : { ...size, area, minPane }
 }
 
 /** Cells that fit in a share of a box as the fit addon counts them: floor, never below two. */
@@ -75,22 +92,30 @@ export function measureCell(fontSize: number, fontFamily: string, doc: Document 
   return { width: rect.width / PROBE_COLUMNS, height: rect.height * TERMINAL_LINE_HEIGHT }
 }
 
-/** The size to open a pane at, or nothing when the window cannot answer; the runtime default stands. */
-export function newPaneSize(
+/** The pane grid's content box and the least pane in it, as drawn now; nothing before there is a grid. */
+export function paneGrid(
+  fontSize: number,
+  fontFamily: string,
+  doc: Document | undefined = globalThis.document
+): { area: Box; minPane: Box; cell: Box } | undefined {
+  const grid = doc?.querySelector<HTMLElement>(PANE_GRID_SELECTOR)
+  const view = doc?.defaultView
+  const cell = measureCell(fontSize, fontFamily, doc)
+  if (!grid || !view || !cell) return undefined
+  const style = view.getComputedStyle(grid)
+  const px = (value: string): number => Number.parseFloat(value) || 0
+  const width = grid.clientWidth - px(style.paddingLeft) - px(style.paddingRight)
+  const height = grid.clientHeight - px(style.paddingTop) - px(style.paddingBottom)
+  return width > 0 && height > 0 ? { area: { width, height }, minPane: minPaneBox(cell), cell } : undefined
+}
+
+/** `roomForNewPane` on the window's grid, or nothing when the window cannot answer; the runtime's default stands. */
+export function newPaneRoom(
   fontSize: number,
   fontFamily: string,
   root: PaneNode | null,
   doc: Document | undefined = globalThis.document
-): PaneSize | undefined {
-  const grid = doc?.querySelector(PANE_GRID_SELECTOR)
-  if (!grid) return undefined
-  const cell = measureCell(fontSize, fontFamily, doc)
-  if (!cell) return undefined
-  const box = grid.getBoundingClientRect()
-  const share = appendedPaneShare(root)
-  // Chrome comes off each pane after the share: two panes carry two sets of borders.
-  return paneSizeFrom(
-    { width: box.width * share.width - PANE_CHROME.width, height: box.height * share.height - PANE_CHROME.height },
-    cell
-  )
+): NewPane | 'full' | undefined {
+  const grid = paneGrid(fontSize, fontFamily, doc)
+  return grid && roomForNewPane(root, grid.cell, grid.area)
 }

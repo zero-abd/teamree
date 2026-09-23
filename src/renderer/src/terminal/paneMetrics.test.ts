@@ -1,13 +1,15 @@
 // The arithmetic behind "open this pane the size it is going to be".
 //
 // Kept apart from the DOM reading above it so the two questions are answered
-// separately: what share of the grid a new pane gets, which is a fact about
-// `appendPane` and is asserted here against the same rule; and how many cells
+// separately: where in the grid a new pane lands, which is `placePaneWithin`'s
+// answer; and how many cells
 // fit in a box, which is the fit addon's own floor-and-never-below-two.
 
 import { describe, expect, it } from 'vitest'
 import type { PaneNode } from '@shared/entities'
-import { appendedPaneShare, measureCell, newPaneSize, PANE_CHROME, paneSizeFrom } from './paneMetrics'
+import { MIN_PANE_CELLS } from '@shared/paneRoom'
+import { GUTTER_PX } from '../panes/paneLayout'
+import { measureCell, minPaneBox, newPaneRoom, PANE_CHROME, paneSizeFrom, roomForNewPane } from './paneMetrics'
 
 const CELL = { width: 8, height: 17 }
 
@@ -15,35 +17,33 @@ function leaf(terminalId: string): PaneNode {
   return { kind: 'leaf', terminalId }
 }
 
-describe('the share of the grid a new pane takes', () => {
-  it('gives the whole grid to the first pane in a worktree', () => {
-    expect(appendedPaneShare(null)).toEqual({ width: 1, height: 1 })
+describe('where the next pane lands', () => {
+  const area = { width: 1000, height: 800 }
+
+  it('gives the first pane in a worktree the whole grid', () => {
+    expect(roomForNewPane(null, CELL, area)).toEqual({
+      ...paneSizeFrom({ width: 1000 - PANE_CHROME.width, height: 800 - PANE_CHROME.height }, CELL),
+      area,
+      minPane: minPaneBox(CELL)
+    })
   })
 
-  it('halves the grid when there is one pane to divide', () => {
-    expect(appendedPaneShare(leaf('t1'))).toEqual({ width: 0.5, height: 1 })
+  it('measures the half of the largest pane it will take', () => {
+    const room = roomForNewPane(leaf('t1'), CELL, area)
+    expect(room).toMatchObject(
+      paneSizeFrom({ width: (1000 - GUTTER_PX) / 2 - PANE_CHROME.width, height: 800 - PANE_CHROME.height }, CELL)!
+    )
   })
 
-  it('joins an existing row as one more equal column', () => {
-    const row: PaneNode = {
-      kind: 'split',
-      direction: 'row',
-      sizes: [0.5, 0.5],
-      children: [leaf('t1'), leaf('t2')]
-    }
-    // `appendPane` gives the newcomer 1/(children+1) and scales the rest, so a
-    // third pane in a row of two is a third of the width.
-    expect(appendedPaneShare(row)).toEqual({ width: 1 / 3, height: 1 })
+  it('stacks rather than squeezing a pane under the minimum width', () => {
+    const narrow = { width: 600, height: 500 }
+    const room = roomForNewPane(leaf('t1'), CELL, narrow)
+    expect(room).not.toBe('full')
+    if (room !== 'full') expect(room.cols).toBeGreaterThan(MIN_PANE_CELLS.cols)
   })
 
-  it('halves a column split rather than joining it, because appendPane does', () => {
-    const column: PaneNode = {
-      kind: 'split',
-      direction: 'column',
-      sizes: [0.5, 0.5],
-      children: [leaf('t1'), leaf('t2')]
-    }
-    expect(appendedPaneShare(column)).toEqual({ width: 0.5, height: 1 })
+  it('is full when every place leaves a pane under the minimum', () => {
+    expect(roomForNewPane(leaf('t1'), CELL, { width: 600, height: 200 })).toBe('full')
   })
 })
 
@@ -76,7 +76,7 @@ describe('with no window to measure', () => {
   })
 
   it('offers no size without a document', () => {
-    expect(newPaneSize(13, 'monospace', null, undefined)).toBeUndefined()
+    expect(newPaneRoom(13, 'monospace', null, undefined)).toBeUndefined()
   })
 })
 

@@ -48,6 +48,7 @@ import {
   collectTerminalIds,
   neighbourTerminalId,
   setSizesAt,
+  splitPane,
   splitPaneWith
 } from '../panes/paneLayout'
 import { worktreeAfter, worktreeOrder } from '../sidebar/worktreeOrder'
@@ -71,7 +72,8 @@ import {
 } from '../teamwork/startTeamwork'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
-import { newPaneSize } from '../terminal/paneMetrics'
+import { newPaneRoom, paneGrid, type Box, type NewPane } from '../terminal/paneMetrics'
+import { leavesRoom, placePaneWithin } from '@shared/paneRoom'
 import { shownText } from '../terminal/shownPanes'
 import { replayLines } from '@shared/outputEvidence'
 import {
@@ -603,6 +605,11 @@ type WorkspaceState = {
 
 let noticeSeq = 0
 
+/** The status-bar notice for a pane refused for want of room. */
+const NO_ROOM = 'No room for another pane'
+/** Stands in for the pane a split would make, to measure it before asking. */
+const SPLIT_PROBE_ID = 'probe:split'
+
 const storage = typeof window === 'undefined' ? undefined : window.localStorage
 
 /** What the last window in this installation was showing, read once at startup. */
@@ -698,8 +705,31 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
    * so a pane spawned at 80x24 and corrected a frame later stays drawn wrong (`paneMetrics.ts`). Nothing
    * lets the runtime's default stand, as it does for a pane the CLI opens.
    */
-  const paneSizeFor = (worktreeId: string): { cols?: number; rows?: number } =>
-    newPaneSize(get().terminalFontSize, get().terminalOptions.fontFamily, get().layouts[worktreeId]?.root ?? null) ?? {}
+  const paneRoomFor = (worktreeId: string): NewPane | 'full' | undefined =>
+    newPaneRoom(get().terminalFontSize, get().terminalOptions.fontFamily, get().layouts[worktreeId]?.root ?? null)
+  const paneSizeFor = (worktreeId: string): Partial<NewPane> => {
+    const room = paneRoomFor(worktreeId)
+    return room === undefined || room === 'full' ? {} : room
+  }
+  /** `paneSizeFor` for a pane somebody asked for here, or null, said, when every place is under `MIN_PANE_CELLS`. */
+  const roomOrRefuse = (worktreeId: string): Partial<NewPane> | null => {
+    const room = paneRoomFor(worktreeId)
+    if (room !== 'full') return room ?? {}
+    notify(NO_ROOM, 'info')
+    return null
+  }
+  /** `after` if it leaves every pane its floor, else `fallback`'s answer; null, said, when neither does. */
+  const withRoom = (
+    before: PaneNode | null,
+    after: PaneNode,
+    fallback: (grid: { area: Box; minPane: Box }) => PaneNode | null = () => null
+  ): PaneNode | null => {
+    const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+    if (!grid || leavesRoom(before, after, grid.area, grid.minPane)) return after
+    const placed = fallback(grid)
+    if (placed === null) notify(NO_ROOM, 'info')
+    return placed
+  }
 
   const refreshLayout = async (worktreeId: string): Promise<void> => {
     // Nothing on screen depends on the layout of a worktree with no tab open.
@@ -1439,6 +1469,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const layout = activeLayout()
       const terminalId = layout?.focusedTerminalId
       if (!layout || !terminalId) return
+      // Where the person put it or nowhere.
+      if (withRoom(layout.root, splitPane(layout.root, terminalId, direction, SPLIT_PROBE_ID)) === null) return
       try {
         const { terminal, layout: next } = await runtimeClient.call('terminal.split', { terminalId, direction })
         set((state) => ({
@@ -1581,12 +1613,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const files = fileLeavesIn(layout.root)
       // Files stack in one column beside the terminals, so each new one does not halve a shell.
       const besideFile = files.find((leaf) => leaf.terminalId === focused) ?? files.at(-1)
-      const root =
+      const root = withRoom(
+        layout.root,
         besideFile !== undefined
           ? splitPaneWith(layout.root, besideFile.terminalId, 'column', added)
           : focused !== null && collectTerminalIds(layout.root).includes(focused)
             ? splitPaneWith(layout.root, focused, 'row', added)
-            : appendPane(layout.root, added)
+            : appendPane(layout.root, added),
+        (grid) => placePaneWithin(layout.root, added, grid.area, grid.minPane)
+      )
+      if (root === null) return
       set({ namingMarkdown: null })
       persistLayout({ worktreeId, root, focusedTerminalId: added.terminalId })
     },
@@ -1625,8 +1661,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async createTerminal(worktreeId) {
+      const room = roomOrRefuse(worktreeId)
+      if (!room) return
       try {
-        const terminal = await runtimeClient.call('terminal.create', { worktreeId, ...paneSizeFor(worktreeId) })
+        const terminal = await runtimeClient.call('terminal.create', { worktreeId, ...room })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
         // The one focus a layout may bring with it: it was asked for here.
         panesAskedFor.add(terminal.id)
@@ -1810,14 +1848,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async startAgent(command) {
       const worktreeId = get().activeWorktreeId
-      if (!worktreeId) return
+      const room = worktreeId ? roomOrRefuse(worktreeId) : null
+      if (!worktreeId || !room) return
       try {
         // Straight through terminal.create: the runtime pins the session id, so a pane started here resumes like any other.
         const agentArgs = extraArgsFor(command)
         const terminal = await runtimeClient.call('terminal.create', {
           worktreeId,
           command,
-          ...paneSizeFor(worktreeId),
+          ...room,
           ...(agentArgs === undefined ? {} : { agentArgs })
         })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))

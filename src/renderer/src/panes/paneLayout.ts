@@ -3,12 +3,13 @@
 // DOM: the components below only translate the results into CSS.
 
 import type { PaneNode } from '@shared/entities'
+import { PANE_GUTTER_PX } from '@shared/paneRoom'
 
 /** Smallest slice of a split a pane may shrink to, as a fraction of the axis. */
 export const MIN_PANE_FRACTION = 0.08
 
 /** Thickness of the draggable gutter drawn between siblings, in CSS pixels. */
-export const GUTTER_PX = 5
+export const GUTTER_PX = PANE_GUTTER_PX
 
 export function leaf(terminalId: string): PaneNode {
   return { kind: 'leaf', terminalId }
@@ -68,24 +69,27 @@ export function normalizeSizes(sizes: readonly number[], count: number, min = MI
 }
 
 /**
- * Moves the boundary between `index` and `index + 1` by `deltaPx`, leaving
- * every other pane untouched — the behaviour a drag on one gutter implies.
+ * Moves the boundary between `index` and `index + 1` by `deltaPx`, leaving every other pane untouched.
+ * `min` is a floor fraction for all, or each child's least size in pixels (`minExtent`).
  */
 export function applyGutterDrag(
   sizes: readonly number[],
   index: number,
   deltaPx: number,
   containerPx: number,
-  min = MIN_PANE_FRACTION
+  min: number | readonly number[] = MIN_PANE_FRACTION
 ): number[] {
-  const next = normalizeSizes(sizes, sizes.length, min)
+  const next = normalizeSizes(sizes, sizes.length, typeof min === 'number' ? min : MIN_PANE_FRACTION)
   const before = next[index]
   const after = next[index + 1]
   if (before === undefined || after === undefined || containerPx <= 0) return next
 
-  const cap = Math.min(min, 1 / sizes.length)
-  const pair = before + after
-  const delta = clamp(deltaPx / containerPx, cap - before, pair - cap - before)
+  const floor = (at: number): number =>
+    typeof min === 'number' ? Math.min(min, 1 / sizes.length) : (min[at] ?? 0) / containerPx
+  // A side already under its floor may grow, never shrink further.
+  const lowest = Math.min(0, floor(index) - before)
+  const highest = Math.max(0, after - floor(index + 1))
+  const delta = clamp(deltaPx / containerPx, lowest, highest)
   next[index] = before + delta
   next[index + 1] = after - delta
   return next
